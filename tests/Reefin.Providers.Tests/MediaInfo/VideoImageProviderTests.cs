@@ -10,9 +10,9 @@ using MediaBrowser.Controller.Persistence;
 using MediaBrowser.Model.Drawing;
 using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Entities;
-using MediaBrowser.Providers.MediaInfo;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Reefin.Providers.MediaInfo;
 using Xunit;
 
 namespace Reefin.Providers.Tests.MediaInfo

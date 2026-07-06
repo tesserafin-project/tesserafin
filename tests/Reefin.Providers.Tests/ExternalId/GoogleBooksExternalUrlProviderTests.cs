@@ -1,7 +1,7 @@
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Model.Entities;
-using MediaBrowser.Providers.Books.GoogleBooks;
+using Reefin.Providers.Books.GoogleBooks;
 using Xunit;
 
 namespace Reefin.Providers.Tests.ExternalId

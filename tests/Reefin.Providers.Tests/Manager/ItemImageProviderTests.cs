@@ -19,9 +19,9 @@ using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.IO;
 using MediaBrowser.Model.MediaInfo;
 using MediaBrowser.Model.Providers;
-using MediaBrowser.Providers.Manager;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Reefin.Providers.Manager;
 using Xunit;
 
 namespace Reefin.Providers.Tests.Manager

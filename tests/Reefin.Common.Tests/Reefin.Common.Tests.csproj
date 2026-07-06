@@ -19,7 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../../Reefin.Common/Reefin.Common.csproj" />
-    <ProjectReference Include="../../MediaBrowser.Providers/MediaBrowser.Providers.csproj" />
+    <ProjectReference Include="../../Reefin.Providers/Reefin.Providers.csproj" />
   </ItemGroup>
 
 </Project>

@@ -2,8 +2,8 @@ using System;
 using System.IO;
 using System.Xml;
 using System.Xml.Serialization;
-using MediaBrowser.Providers.Plugins.MusicBrainz.Configuration;
 using Microsoft.Extensions.Logging;
+using Reefin.Providers.Plugins.MusicBrainz.Configuration;
 using Reefin.Server.Core;
 
 namespace Reefin.Server.Migrations.PreStartupRoutines;

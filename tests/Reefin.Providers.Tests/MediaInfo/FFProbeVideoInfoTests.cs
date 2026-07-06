@@ -4,8 +4,8 @@ using AutoFixture.AutoMoq;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Model.Configuration;
-using MediaBrowser.Providers.MediaInfo;
 using Moq;
+using Reefin.Providers.MediaInfo;
 using Xunit;
 
 namespace Reefin.Providers.Tests.MediaInfo;

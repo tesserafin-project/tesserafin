@@ -1,4 +1,4 @@
-using MediaBrowser.Providers.Plugins.Tmdb;
+using Reefin.Providers.Plugins.Tmdb;
 using Xunit;
 
 namespace Reefin.Providers.Tests.Tmdb

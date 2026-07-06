@@ -1,6 +1,6 @@
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Model.Entities;
-using MediaBrowser.Providers.TV;
+using Reefin.Providers.TV;
 using Xunit;
 
 namespace Reefin.Providers.Tests.ExternalId

@@ -1,6 +1,6 @@
 using System.IO;
 using MediaBrowser.Model.Lyrics;
-using MediaBrowser.Providers.Lyric;
+using Reefin.Providers.Lyric;
 using Xunit;
 
 namespace Reefin.Providers.Tests.Lyrics;

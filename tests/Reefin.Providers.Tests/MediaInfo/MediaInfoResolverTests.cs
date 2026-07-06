@@ -16,10 +16,10 @@ using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Globalization;
 using MediaBrowser.Model.IO;
 using MediaBrowser.Model.MediaInfo;
-using MediaBrowser.Providers.MediaInfo;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Reefin.Naming.Common;
+using Reefin.Providers.MediaInfo;
 using Xunit;
 
 namespace Reefin.Providers.Tests.MediaInfo;

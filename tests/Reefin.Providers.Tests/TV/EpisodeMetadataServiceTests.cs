@@ -7,10 +7,10 @@ using MediaBrowser.Controller.Persistence;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.IO;
-using MediaBrowser.Providers.Manager;
-using MediaBrowser.Providers.TV;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Reefin.Providers.Manager;
+using Reefin.Providers.TV;
 using Xunit;
 
 namespace Reefin.Providers.Tests.TV;

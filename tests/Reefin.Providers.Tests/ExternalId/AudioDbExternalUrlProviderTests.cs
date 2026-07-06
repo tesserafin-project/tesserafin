@@ -1,7 +1,7 @@
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Model.Entities;
-using MediaBrowser.Providers.Plugins.AudioDb;
+using Reefin.Providers.Plugins.AudioDb;
 using Xunit;
 
 namespace Reefin.Providers.Tests.ExternalId

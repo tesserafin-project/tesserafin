@@ -6,10 +6,10 @@ using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Configuration;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Providers;
-using MediaBrowser.Providers.Plugins.MusicBrainz;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Reefin.Common.Configuration;
+using Reefin.Providers.Plugins.MusicBrainz;
 using Reefin.XbmcMetadata.Parsers;
 using Xunit;
 

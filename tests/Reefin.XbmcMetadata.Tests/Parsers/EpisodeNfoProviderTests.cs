@@ -7,11 +7,11 @@ using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Configuration;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Providers;
-using MediaBrowser.Providers.Movies;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Reefin.Common.Configuration;
 using Reefin.Data.Enums;
+using Reefin.Providers.Movies;
 using Reefin.XbmcMetadata.Parsers;
 using Xunit;
 

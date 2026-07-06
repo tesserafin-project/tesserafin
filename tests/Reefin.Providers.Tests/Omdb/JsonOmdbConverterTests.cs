@@ -1,6 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using MediaBrowser.Providers.Plugins.Omdb;
+using Reefin.Providers.Plugins.Omdb;
 using Xunit;
 
 namespace Reefin.Providers.Tests.Omdb

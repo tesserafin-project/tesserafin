@@ -4,12 +4,12 @@ using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Serialization;
-using MediaBrowser.Providers.Plugins.MusicBrainz;
-using MediaBrowser.Providers.Plugins.MusicBrainz.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Reefin.Common;
 using Reefin.Common.Configuration;
+using Reefin.Providers.Plugins.MusicBrainz;
+using Reefin.Providers.Plugins.MusicBrainz.Configuration;
 using Xunit;
 
 namespace Reefin.Providers.Tests.ExternalId

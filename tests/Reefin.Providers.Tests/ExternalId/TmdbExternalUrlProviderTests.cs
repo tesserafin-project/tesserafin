@@ -4,8 +4,8 @@ using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Entities;
-using MediaBrowser.Providers.Plugins.Tmdb;
 using Moq;
+using Reefin.Providers.Plugins.Tmdb;
 using Xunit;
 
 namespace Reefin.Providers.Tests.ExternalId
