@@ -1,11 +1,11 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Reefin.Data.Events;
 using MediaBrowser.Controller.Net;
 using MediaBrowser.Model.Session;
 using MediaBrowser.Model.Tasks;
 using Microsoft.Extensions.Logging;
+using Reefin.Data.Events;
 
 namespace Reefin.Api.WebSocketListeners;
 

@@ -1,7 +1,7 @@
 using System;
 using System.Buffers.Binary;
-using Reefin.MediaEncoding.Keyframes.Matroska.Models;
 using NEbml.Core;
+using Reefin.MediaEncoding.Keyframes.Matroska.Models;
 
 namespace Reefin.MediaEncoding.Keyframes.Matroska.Extensions;
 

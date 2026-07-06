@@ -5,8 +5,6 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ATL;
-using Reefin.Data.Enums;
-using Reefin.Extensions;
 using MediaBrowser.Controller.Chapters;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
@@ -21,6 +19,8 @@ using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Extensions;
 using MediaBrowser.Model.MediaInfo;
 using Microsoft.Extensions.Logging;
+using Reefin.Data.Enums;
+using Reefin.Extensions;
 using static Reefin.Extensions.StringExtensions;
 
 namespace MediaBrowser.Providers.MediaInfo

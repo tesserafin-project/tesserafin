@@ -4,12 +4,12 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using Reefin.Data.Enums;
-using Reefin.Extensions;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Playlists;
 using MediaBrowser.Controller.Resolvers;
 using MediaBrowser.LocalMetadata.Savers;
+using Reefin.Data.Enums;
+using Reefin.Extensions;
 
 namespace Emby.Server.Implementations.Library.Resolvers
 {

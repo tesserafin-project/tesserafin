@@ -2,8 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using Reefin.Database.Implementations.DbConfiguration;
 using Microsoft.EntityFrameworkCore;
+using Reefin.Database.Implementations.DbConfiguration;
 
 namespace Reefin.Database.Implementations;
 

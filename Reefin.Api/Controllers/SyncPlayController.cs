@@ -4,8 +4,6 @@ using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Reefin.Api.Helpers;
-using Reefin.Api.Models.SyncPlayDtos;
 using MediaBrowser.Common.Api;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Session;
@@ -16,6 +14,8 @@ using MediaBrowser.Model.SyncPlay;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Reefin.Api.Helpers;
+using Reefin.Api.Models.SyncPlayDtos;
 
 namespace Reefin.Api.Controllers;
 

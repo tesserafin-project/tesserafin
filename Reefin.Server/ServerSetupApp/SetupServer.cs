@@ -9,8 +9,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using Emby.Server.Implementations.Configuration;
 using Emby.Server.Implementations.Serialization;
-using Reefin.Networking.Manager;
-using Reefin.Server.Extensions;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Net;
 using MediaBrowser.Controller;
@@ -24,6 +22,8 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Primitives;
+using Reefin.Networking.Manager;
+using Reefin.Server.Extensions;
 using Serilog;
 using ILogger = Microsoft.Extensions.Logging.ILogger;
 

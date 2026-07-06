@@ -1,9 +1,9 @@
 using System;
-using Reefin.Data.Enums;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Sorting;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Globalization;
+using Reefin.Data.Enums;
 
 namespace Emby.Server.Implementations.Sorting;
 

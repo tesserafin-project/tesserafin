@@ -4,8 +4,6 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Reefin.Data.Enums;
-using Reefin.Extensions;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Chapters;
 using MediaBrowser.Controller.Dto;
@@ -16,6 +14,8 @@ using MediaBrowser.Model.Globalization;
 using MediaBrowser.Model.IO;
 using MediaBrowser.Model.Tasks;
 using Microsoft.Extensions.Logging;
+using Reefin.Data.Enums;
+using Reefin.Extensions;
 
 namespace Emby.Server.Implementations.ScheduledTasks.Tasks;
 

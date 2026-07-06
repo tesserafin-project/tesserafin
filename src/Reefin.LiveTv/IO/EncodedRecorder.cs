@@ -11,8 +11,6 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using Reefin.Extensions;
-using Reefin.Extensions.Json;
 using MediaBrowser.Common;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller;
@@ -22,6 +20,8 @@ using MediaBrowser.Controller.MediaEncoding;
 using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.IO;
 using Microsoft.Extensions.Logging;
+using Reefin.Extensions;
+using Reefin.Extensions.Json;
 
 namespace Reefin.LiveTv.IO
 {

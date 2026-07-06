@@ -12,9 +12,6 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using Reefin.Extensions;
-using Reefin.Extensions.Json;
-using Reefin.Extensions.Json.Converters;
 using MediaBrowser.Common.Extensions;
 using MediaBrowser.Common.Net;
 using MediaBrowser.Controller;
@@ -28,6 +25,9 @@ using MediaBrowser.Model.LiveTv;
 using MediaBrowser.Model.MediaInfo;
 using MediaBrowser.Model.Net;
 using Microsoft.Extensions.Logging;
+using Reefin.Extensions;
+using Reefin.Extensions.Json;
+using Reefin.Extensions.Json.Converters;
 
 namespace Reefin.LiveTv.TunerHosts.HdHomerun
 {

@@ -1,9 +1,9 @@
 using System.Linq;
-using Reefin.Database.Implementations;
-using Reefin.Server.ServerSetupApp;
 using MediaBrowser.Model.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Reefin.Database.Implementations;
+using Reefin.Server.ServerSetupApp;
 
 namespace Reefin.Server.Migrations.Routines;
 

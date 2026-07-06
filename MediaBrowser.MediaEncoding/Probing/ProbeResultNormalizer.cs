@@ -8,8 +8,6 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml;
-using Reefin.Data.Enums;
-using Reefin.Extensions;
 using MediaBrowser.Controller.Extensions;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Dto;
@@ -17,6 +15,8 @@ using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Globalization;
 using MediaBrowser.Model.MediaInfo;
 using Microsoft.Extensions.Logging;
+using Reefin.Data.Enums;
+using Reefin.Extensions;
 
 namespace MediaBrowser.MediaEncoding.Probing
 {

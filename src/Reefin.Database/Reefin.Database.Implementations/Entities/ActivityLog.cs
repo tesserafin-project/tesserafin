@@ -1,8 +1,8 @@
 using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
-using Reefin.Database.Implementations.Interfaces;
 using Microsoft.Extensions.Logging;
+using Reefin.Database.Implementations.Interfaces;
 
 namespace Reefin.Database.Implementations.Entities
 {

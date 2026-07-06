@@ -1,11 +1,11 @@
 #pragma warning disable CS1591
 
 using System.Collections.Generic;
-using Reefin.Data.Enums;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.IO;
+using Reefin.Data.Enums;
 
 namespace MediaBrowser.Controller.Resolvers
 {

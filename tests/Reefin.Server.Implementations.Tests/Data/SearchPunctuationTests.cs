@@ -1,10 +1,10 @@
 using System;
 using AutoFixture;
 using AutoFixture.AutoMoq;
-using Reefin.Server.Implementations.Item;
 using MediaBrowser.Controller.Entities.TV;
 using Microsoft.Extensions.Configuration;
 using Moq;
+using Reefin.Server.Implementations.Item;
 using Xunit;
 
 namespace Reefin.Server.Implementations.Tests.Data

@@ -1,8 +1,8 @@
-using Reefin.Database.Implementations;
-using Reefin.Database.Implementations.Locking;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.Extensions.Logging.Abstractions;
+using Reefin.Database.Implementations;
+using Reefin.Database.Implementations.Locking;
 
 namespace Reefin.Database.Providers.Sqlite.Migrations
 {

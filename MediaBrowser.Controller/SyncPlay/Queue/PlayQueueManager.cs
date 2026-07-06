@@ -3,8 +3,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Reefin.Extensions;
 using MediaBrowser.Model.SyncPlay;
+using Reefin.Extensions;
 
 namespace MediaBrowser.Controller.SyncPlay.Queue
 {

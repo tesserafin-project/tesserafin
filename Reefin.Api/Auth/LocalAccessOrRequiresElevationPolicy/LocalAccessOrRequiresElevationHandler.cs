@@ -1,9 +1,9 @@
 using System.Threading.Tasks;
-using Reefin.Api.Constants;
 using MediaBrowser.Common.Extensions;
 using MediaBrowser.Common.Net;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
+using Reefin.Api.Constants;
 
 namespace Reefin.Api.Auth.LocalAccessOrRequiresElevationPolicy
 {

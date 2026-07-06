@@ -5,15 +5,15 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Emby.Server.Implementations.Data;
-using Reefin.Database.Implementations;
-using Reefin.Database.Implementations.Entities;
-using Reefin.Database.Implementations.Enums;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Dto;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Reefin.Database.Implementations;
+using Reefin.Database.Implementations.Entities;
+using Reefin.Database.Implementations.Enums;
 
 namespace Reefin.Server.Migrations.Routines
 {

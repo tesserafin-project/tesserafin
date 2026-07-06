@@ -1,8 +1,8 @@
 using System.Threading;
 using System.Threading.Tasks;
-using Reefin.LiveTv.Timers;
 using MediaBrowser.Controller.LiveTv;
 using Microsoft.Extensions.Hosting;
+using Reefin.LiveTv.Timers;
 
 namespace Reefin.LiveTv.Recordings;
 

@@ -1,10 +1,10 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Reefin.Database.Implementations;
-using Reefin.Database.Implementations.Entities.Security;
 using MediaBrowser.Controller.Security;
 using Microsoft.EntityFrameworkCore;
+using Reefin.Database.Implementations;
+using Reefin.Database.Implementations.Entities.Security;
 
 namespace Reefin.Server.Implementations.Security
 {

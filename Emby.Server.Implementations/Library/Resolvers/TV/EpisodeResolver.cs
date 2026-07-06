@@ -5,12 +5,12 @@ using System.IO;
 using System.Linq;
 using Emby.Naming.Common;
 using Emby.Server.Implementations.Library;
-using Reefin.Data.Enums;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Entities;
 using Microsoft.Extensions.Logging;
+using Reefin.Data.Enums;
 
 namespace Emby.Server.Implementations.Library.Resolvers.TV
 {

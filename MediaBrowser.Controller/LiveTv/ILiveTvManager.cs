@@ -6,13 +6,13 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using Reefin.Data.Events;
-using Reefin.Database.Implementations.Entities;
 using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.LiveTv;
 using MediaBrowser.Model.Querying;
+using Reefin.Data.Events;
+using Reefin.Database.Implementations.Entities;
 
 namespace MediaBrowser.Controller.LiveTv
 {

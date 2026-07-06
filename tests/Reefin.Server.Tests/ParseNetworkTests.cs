@@ -1,14 +1,14 @@
 using System;
 using System.Linq;
 using System.Net;
-using Reefin.Networking.Manager;
-using Reefin.Server.Extensions;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Net;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Reefin.Networking.Manager;
+using Reefin.Server.Extensions;
 using Xunit;
 using IConfigurationManager = MediaBrowser.Common.Configuration.IConfigurationManager;
 

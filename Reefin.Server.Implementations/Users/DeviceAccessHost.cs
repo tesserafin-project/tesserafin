@@ -1,14 +1,14 @@
 using System.Threading;
 using System.Threading.Tasks;
+using MediaBrowser.Controller.Devices;
+using MediaBrowser.Controller.Library;
+using MediaBrowser.Controller.Session;
+using Microsoft.Extensions.Hosting;
 using Reefin.Data;
 using Reefin.Data.Events;
 using Reefin.Data.Queries;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Database.Implementations.Enums;
-using MediaBrowser.Controller.Devices;
-using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.Session;
-using Microsoft.Extensions.Hosting;
 
 namespace Reefin.Server.Implementations.Users;
 

@@ -2,11 +2,11 @@
 
 #pragma warning disable CS1591
 
-using Reefin.Data.Enums;
-using Reefin.Database.Implementations.Entities;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Sorting;
+using Reefin.Data.Enums;
+using Reefin.Database.Implementations.Entities;
 
 namespace Emby.Server.Implementations.Sorting
 {

@@ -4,8 +4,6 @@ using System.ComponentModel;
 using System.Linq;
 using System.Reflection;
 using System.Text.Json.Nodes;
-using Reefin.Extensions;
-using Reefin.Server.Migrations;
 using MediaBrowser.Common.Plugins;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Net;
@@ -14,6 +12,8 @@ using MediaBrowser.Model.ApiClient;
 using MediaBrowser.Model.Session;
 using MediaBrowser.Model.SyncPlay;
 using Microsoft.OpenApi;
+using Reefin.Extensions;
+using Reefin.Server.Migrations;
 using Swashbuckle.AspNetCore.SwaggerGen;
 
 namespace Reefin.Server.Filters

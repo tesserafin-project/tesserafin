@@ -5,9 +5,6 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Reefin.Api.Extensions;
-using Reefin.Data.Enums;
-using Reefin.Extensions;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Extensions;
 using MediaBrowser.Controller.Configuration;
@@ -19,6 +16,9 @@ using MediaBrowser.Model.Dlna;
 using MediaBrowser.Model.Dto;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Net.Http.Headers;
+using Reefin.Api.Extensions;
+using Reefin.Data.Enums;
+using Reefin.Extensions;
 
 namespace Reefin.Api.Helpers;
 

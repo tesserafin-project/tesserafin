@@ -6,12 +6,12 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading;
-using Reefin.Data.Events;
-using Reefin.LiveTv.Recordings;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.LiveTv;
 using MediaBrowser.Model.LiveTv;
 using Microsoft.Extensions.Logging;
+using Reefin.Data.Events;
+using Reefin.LiveTv.Recordings;
 
 namespace Reefin.LiveTv.Timers
 {

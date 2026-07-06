@@ -1,11 +1,11 @@
 #nullable disable
 
-using Reefin.Data.Enums;
-using Reefin.Database.Implementations.Entities;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Sorting;
 using MediaBrowser.Model.Querying;
+using Reefin.Data.Enums;
+using Reefin.Database.Implementations.Entities;
 
 namespace Emby.Server.Implementations.Sorting
 {

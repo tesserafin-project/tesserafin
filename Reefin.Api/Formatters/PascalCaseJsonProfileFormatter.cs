@@ -1,7 +1,7 @@
 using System.Net.Mime;
-using Reefin.Extensions.Json;
 using Microsoft.AspNetCore.Mvc.Formatters;
 using Microsoft.Net.Http.Headers;
+using Reefin.Extensions.Json;
 
 namespace Reefin.Api.Formatters;
 

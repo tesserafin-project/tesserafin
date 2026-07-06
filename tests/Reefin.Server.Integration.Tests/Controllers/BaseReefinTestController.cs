@@ -1,5 +1,5 @@
-using Reefin.Api;
 using Microsoft.AspNetCore.Mvc;
+using Reefin.Api;
 
 namespace Reefin.Server.Integration.Tests.Controllers
 {

@@ -1,12 +1,6 @@
 using System;
 using System.IO;
 using Emby.Server.Implementations.Data;
-using Reefin.Data;
-using Reefin.Database.Implementations;
-using Reefin.Database.Implementations.Entities;
-using Reefin.Database.Implementations.Enums;
-using Reefin.Extensions.Json;
-using Reefin.Server.Implementations.Users;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Model.Configuration;
@@ -15,6 +9,12 @@ using MediaBrowser.Model.Users;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Reefin.Data;
+using Reefin.Database.Implementations;
+using Reefin.Database.Implementations.Entities;
+using Reefin.Database.Implementations.Enums;
+using Reefin.Extensions.Json;
+using Reefin.Server.Implementations.Users;
 using JsonSerializer = System.Text.Json.JsonSerializer;
 
 namespace Reefin.Server.Migrations.Routines;

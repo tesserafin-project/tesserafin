@@ -8,16 +8,6 @@ using System.Net.Mime;
 using System.Text;
 using Emby.Server.Implementations.EntryPoints;
 using Emby.Server.Implementations.Localization;
-using Reefin.Api.Middleware;
-using Reefin.Database.Implementations;
-using Reefin.LiveTv.Extensions;
-using Reefin.LiveTv.Recordings;
-using Reefin.MediaEncoding.Hls.Extensions;
-using Reefin.Networking;
-using Reefin.Networking.HappyEyeballs;
-using Reefin.Server.Extensions;
-using Reefin.Server.HealthChecks;
-using Reefin.Server.Implementations.Extensions;
 using MediaBrowser.Common.Net;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Extensions;
@@ -32,6 +22,16 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Primitives;
 using Prometheus;
+using Reefin.Api.Middleware;
+using Reefin.Database.Implementations;
+using Reefin.LiveTv.Extensions;
+using Reefin.LiveTv.Recordings;
+using Reefin.MediaEncoding.Hls.Extensions;
+using Reefin.Networking;
+using Reefin.Networking.HappyEyeballs;
+using Reefin.Server.Extensions;
+using Reefin.Server.HealthChecks;
+using Reefin.Server.Implementations.Extensions;
 
 namespace Reefin.Server
 {

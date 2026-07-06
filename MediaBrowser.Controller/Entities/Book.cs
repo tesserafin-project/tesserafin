@@ -5,8 +5,8 @@
 using System;
 using System.Linq;
 using System.Text.Json.Serialization;
-using Reefin.Data.Enums;
 using MediaBrowser.Controller.Providers;
+using Reefin.Data.Enums;
 
 namespace MediaBrowser.Controller.Entities
 {

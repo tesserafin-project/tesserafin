@@ -4,9 +4,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Reefin.Data.Enums;
-using Reefin.Database.Implementations;
-using Reefin.Database.Implementations.Entities;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Persistence;
@@ -16,6 +13,9 @@ using MediaBrowser.Model.IO;
 using MediaBrowser.Model.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Reefin.Data.Enums;
+using Reefin.Database.Implementations;
+using Reefin.Database.Implementations.Entities;
 
 namespace Emby.Server.Implementations.ScheduledTasks.Tasks;
 

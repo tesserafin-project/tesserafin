@@ -3,13 +3,13 @@ using System.Data.Common;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Logging;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Database.Implementations.Entities.Security;
 using Reefin.Database.Implementations.Interfaces;
 using Reefin.Database.Implementations.Locking;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
-using Microsoft.Extensions.Logging;
 
 namespace Reefin.Database.Implementations;
 

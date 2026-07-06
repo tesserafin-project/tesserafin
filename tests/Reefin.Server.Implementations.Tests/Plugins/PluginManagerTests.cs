@@ -6,13 +6,13 @@ using System.Threading.Tasks;
 using AutoFixture;
 using Emby.Server.Implementations.Library;
 using Emby.Server.Implementations.Plugins;
-using Reefin.Extensions;
-using Reefin.Extensions.Json;
-using Reefin.Extensions.Json.Converters;
 using MediaBrowser.Common.Plugins;
 using MediaBrowser.Model.Plugins;
 using MediaBrowser.Model.Updates;
 using Microsoft.Extensions.Logging.Abstractions;
+using Reefin.Extensions;
+using Reefin.Extensions.Json;
+using Reefin.Extensions.Json.Converters;
 using Xunit;
 
 namespace Reefin.Server.Implementations.Tests.Plugins

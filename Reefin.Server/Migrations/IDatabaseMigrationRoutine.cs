@@ -1,6 +1,6 @@
 using System;
-using Reefin.Server.Implementations;
 using Microsoft.EntityFrameworkCore;
+using Reefin.Server.Implementations;
 
 namespace Reefin.Server.Migrations;
 

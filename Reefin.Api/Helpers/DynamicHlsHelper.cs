@@ -7,10 +7,6 @@ using System.Security.Claims;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Reefin.Api.Extensions;
-using Reefin.Data.Enums;
-using Reefin.Database.Implementations.Entities;
-using Reefin.Extensions;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Extensions;
 using MediaBrowser.Common.Net;
@@ -26,6 +22,10 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Net.Http.Headers;
+using Reefin.Api.Extensions;
+using Reefin.Data.Enums;
+using Reefin.Database.Implementations.Entities;
+using Reefin.Extensions;
 
 namespace Reefin.Api.Helpers;
 

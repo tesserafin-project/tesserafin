@@ -6,8 +6,8 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using Emby.Naming.Common;
 using Emby.Naming.TV;
-using Reefin.Data.Enums;
 using MediaBrowser.Model.IO;
+using Reefin.Data.Enums;
 
 namespace Emby.Naming.Video
 {

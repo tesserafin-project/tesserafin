@@ -1,7 +1,7 @@
-using Reefin.LiveTv;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.LiveTv;
 using MediaBrowser.Model.Entities;
+using Reefin.LiveTv;
 using Xunit;
 
 namespace Reefin.LiveTv.Tests;

@@ -1,11 +1,3 @@
-using Reefin.Data.Events.System;
-using Reefin.Data.Events.Users;
-using Reefin.Server.Implementations.Events.Consumers.Library;
-using Reefin.Server.Implementations.Events.Consumers.Security;
-using Reefin.Server.Implementations.Events.Consumers.Session;
-using Reefin.Server.Implementations.Events.Consumers.System;
-using Reefin.Server.Implementations.Events.Consumers.Updates;
-using Reefin.Server.Implementations.Events.Consumers.Users;
 using MediaBrowser.Common.Updates;
 using MediaBrowser.Controller.Events;
 using MediaBrowser.Controller.Events.Authentication;
@@ -16,6 +8,14 @@ using MediaBrowser.Controller.Lyrics;
 using MediaBrowser.Controller.Subtitles;
 using MediaBrowser.Model.Tasks;
 using Microsoft.Extensions.DependencyInjection;
+using Reefin.Data.Events.System;
+using Reefin.Data.Events.Users;
+using Reefin.Server.Implementations.Events.Consumers.Library;
+using Reefin.Server.Implementations.Events.Consumers.Security;
+using Reefin.Server.Implementations.Events.Consumers.Session;
+using Reefin.Server.Implementations.Events.Consumers.System;
+using Reefin.Server.Implementations.Events.Consumers.Updates;
+using Reefin.Server.Implementations.Events.Consumers.Users;
 
 namespace Reefin.Server.Implementations.Events
 {

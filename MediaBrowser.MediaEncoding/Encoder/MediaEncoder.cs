@@ -12,10 +12,6 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using AsyncKeyedLock;
-using Reefin.Data.Enums;
-using Reefin.Extensions;
-using Reefin.Extensions.Json;
-using Reefin.Extensions.Json.Converters;
 using MediaBrowser.Common;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Extensions;
@@ -33,6 +29,10 @@ using MediaBrowser.Model.IO;
 using MediaBrowser.Model.MediaInfo;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Reefin.Data.Enums;
+using Reefin.Extensions;
+using Reefin.Extensions.Json;
+using Reefin.Extensions.Json.Converters;
 
 namespace MediaBrowser.MediaEncoding.Encoder
 {

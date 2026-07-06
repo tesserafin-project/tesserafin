@@ -5,10 +5,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Reefin.Data.Enums;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Model.Configuration;
 using MediaBrowser.Model.IO;
+using Reefin.Data.Enums;
 
 namespace MediaBrowser.Controller.Library
 {

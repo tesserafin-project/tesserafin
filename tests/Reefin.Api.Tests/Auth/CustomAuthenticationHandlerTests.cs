@@ -4,11 +4,6 @@ using System.Security.Claims;
 using System.Threading.Tasks;
 using AutoFixture;
 using AutoFixture.AutoMoq;
-using Reefin.Api.Auth;
-using Reefin.Api.Constants;
-using Reefin.Data;
-using Reefin.Database.Implementations.Entities;
-using Reefin.Database.Implementations.Enums;
 using MediaBrowser.Controller.Authentication;
 using MediaBrowser.Controller.Net;
 using Microsoft.AspNetCore.Authentication;
@@ -17,6 +12,11 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
+using Reefin.Api.Auth;
+using Reefin.Api.Constants;
+using Reefin.Data;
+using Reefin.Database.Implementations.Entities;
+using Reefin.Database.Implementations.Enums;
 using Xunit;
 
 namespace Reefin.Api.Tests.Auth

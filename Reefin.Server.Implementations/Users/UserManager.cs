@@ -8,14 +8,6 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using AsyncKeyedLock;
-using Reefin.Data;
-using Reefin.Data.Enums;
-using Reefin.Data.Events;
-using Reefin.Data.Events.Users;
-using Reefin.Database.Implementations;
-using Reefin.Database.Implementations.Entities;
-using Reefin.Database.Implementations.Enums;
-using Reefin.Extensions;
 using MediaBrowser.Common;
 using MediaBrowser.Common.Extensions;
 using MediaBrowser.Common.Net;
@@ -30,6 +22,14 @@ using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Users;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Reefin.Data;
+using Reefin.Data.Enums;
+using Reefin.Data.Events;
+using Reefin.Data.Events.Users;
+using Reefin.Database.Implementations;
+using Reefin.Database.Implementations.Entities;
+using Reefin.Database.Implementations.Enums;
+using Reefin.Extensions;
 
 namespace Reefin.Server.Implementations.Users
 {

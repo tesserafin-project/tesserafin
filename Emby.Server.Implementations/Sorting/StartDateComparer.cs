@@ -1,10 +1,10 @@
 #pragma warning disable CS1591
 
 using System;
-using Reefin.Data.Enums;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.LiveTv;
 using MediaBrowser.Controller.Sorting;
+using Reefin.Data.Enums;
 
 namespace Emby.Server.Implementations.Sorting
 {

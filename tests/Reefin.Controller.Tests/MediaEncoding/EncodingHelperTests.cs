@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using Reefin.Data.Enums;
+
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.IO;
 using MediaBrowser.Controller.Library;
@@ -13,8 +13,8 @@ using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.MediaInfo;
 using Moq;
+using Reefin.Data.Enums;
 using Xunit;
-
 using IConfiguration = Microsoft.Extensions.Configuration.IConfiguration;
 
 namespace Reefin.Controller.Tests.MediaEncoding;

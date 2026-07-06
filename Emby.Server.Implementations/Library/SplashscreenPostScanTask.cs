@@ -3,8 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Reefin.Data.Enums;
-using Reefin.Database.Implementations.Enums;
 using MediaBrowser.Controller.Drawing;
 using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Entities;
@@ -12,6 +10,8 @@ using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Persistence;
 using MediaBrowser.Model.Entities;
 using Microsoft.Extensions.Logging;
+using Reefin.Data.Enums;
+using Reefin.Database.Implementations.Enums;
 
 namespace Emby.Server.Implementations.Library;
 

@@ -2,8 +2,8 @@
 
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using Reefin.Database.Implementations.Entities;
 using MediaBrowser.Controller.Entities;
+using Reefin.Database.Implementations.Entities;
 
 namespace MediaBrowser.Controller.Library
 {

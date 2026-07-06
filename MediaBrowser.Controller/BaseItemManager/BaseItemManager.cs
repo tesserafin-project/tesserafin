@@ -1,10 +1,10 @@
 using System;
-using Reefin.Extensions;
 using MediaBrowser.Controller.Channels;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Configuration;
+using Reefin.Extensions;
 
 namespace MediaBrowser.Controller.BaseItemManager
 {

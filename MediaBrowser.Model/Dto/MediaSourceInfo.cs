@@ -4,10 +4,10 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Text.Json.Serialization;
-using Reefin.Data.Enums;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.MediaInfo;
 using MediaBrowser.Model.Session;
+using Reefin.Data.Enums;
 
 namespace MediaBrowser.Model.Dto
 {

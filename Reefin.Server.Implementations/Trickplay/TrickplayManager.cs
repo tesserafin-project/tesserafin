@@ -9,8 +9,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using AsyncKeyedLock;
 using J2N.Collections.Generic.Extensions;
-using Reefin.Database.Implementations;
-using Reefin.Database.Implementations.Entities;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Drawing;
@@ -23,6 +21,8 @@ using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.IO;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Reefin.Database.Implementations;
+using Reefin.Database.Implementations.Entities;
 
 namespace Reefin.Server.Implementations.Trickplay;
 

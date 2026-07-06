@@ -8,13 +8,6 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Reefin.Api.Attributes;
-using Reefin.Api.Extensions;
-using Reefin.Api.Helpers;
-using Reefin.Api.Models.StreamingDtos;
-using Reefin.Data.Enums;
-using Reefin.Extensions;
-using Reefin.MediaEncoding.Hls.Playlist;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Library;
@@ -30,6 +23,13 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using Reefin.Api.Attributes;
+using Reefin.Api.Extensions;
+using Reefin.Api.Helpers;
+using Reefin.Api.Models.StreamingDtos;
+using Reefin.Data.Enums;
+using Reefin.Extensions;
+using Reefin.MediaEncoding.Hls.Playlist;
 
 namespace Reefin.Api.Controllers;
 

@@ -1,8 +1,8 @@
 using System;
 using System.Globalization;
+using MediaBrowser.Model.MediaInfo;
 using Reefin.Data.Enums;
 using Reefin.Extensions;
-using MediaBrowser.Model.MediaInfo;
 
 namespace MediaBrowser.Model.Dlna
 {

@@ -4,9 +4,9 @@ using System.Globalization;
 using System.Linq;
 using System.Xml.Linq;
 using System.Xml.XPath;
-using Reefin.Data.Enums;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Providers;
+using Reefin.Data.Enums;
 
 namespace MediaBrowser.Providers.Books.ComicInfo;
 

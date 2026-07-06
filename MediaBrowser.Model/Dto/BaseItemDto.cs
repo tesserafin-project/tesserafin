@@ -4,13 +4,13 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using Reefin.Data.Enums;
-using Reefin.Database.Implementations.Entities;
 using MediaBrowser.Model.Drawing;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Library;
 using MediaBrowser.Model.LiveTv;
 using MediaBrowser.Model.Providers;
+using Reefin.Data.Enums;
+using Reefin.Database.Implementations.Entities;
 
 namespace MediaBrowser.Model.Dto
 {

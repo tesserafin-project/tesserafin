@@ -6,14 +6,14 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Xml;
-using Reefin.Data.Enums;
-using Reefin.Extensions;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Extensions;
 using MediaBrowser.Controller.Playlists;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Entities;
 using Microsoft.Extensions.Logging;
+using Reefin.Data.Enums;
+using Reefin.Extensions;
 
 namespace MediaBrowser.LocalMetadata.Parsers
 {

@@ -4,10 +4,10 @@ using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using Reefin.Server.ServerSetupApp;
 using MediaBrowser.Controller;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
+using Reefin.Server.ServerSetupApp;
 
 namespace Reefin.Server.Migrations.Routines;
 

@@ -3,16 +3,16 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Net;
 using System.Security.Claims;
-using Reefin.Api.Constants;
-using Reefin.Data;
-using Reefin.Database.Implementations.Entities;
-using Reefin.Database.Implementations.Enums;
-using Reefin.Server.Implementations.Users;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Configuration;
 using Microsoft.AspNetCore.Http;
 using Moq;
+using Reefin.Api.Constants;
+using Reefin.Data;
+using Reefin.Database.Implementations.Entities;
+using Reefin.Database.Implementations.Enums;
+using Reefin.Server.Implementations.Users;
 using AccessSchedule = Reefin.Database.Implementations.Entities.AccessSchedule;
 
 namespace Reefin.Api.Tests

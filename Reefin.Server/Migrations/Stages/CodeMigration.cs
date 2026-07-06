@@ -2,10 +2,10 @@ using System;
 using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
-using Reefin.Server.ServerSetupApp;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
+using Reefin.Server.ServerSetupApp;
 
 namespace Reefin.Server.Migrations.Stages;
 

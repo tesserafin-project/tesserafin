@@ -1,6 +1,6 @@
+using Microsoft.EntityFrameworkCore;
 using Reefin.Database.Providers.Sqlite.Migrations;
 using Reefin.Server.Implementations.Migrations;
-using Microsoft.EntityFrameworkCore;
 using Xunit;
 
 namespace Reefin.Server.Implementations.Tests.EfMigrations;

@@ -7,10 +7,6 @@ using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Emby.Server.Implementations.Serialization;
-using Reefin.Database.Implementations;
-using Reefin.Server.Implementations.SystemBackupService;
-using Reefin.Server.Migrations.Stages;
-using Reefin.Server.ServerSetupApp;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.SystemBackupService;
 using MediaBrowser.Model.Configuration;
@@ -19,6 +15,10 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
+using Reefin.Database.Implementations;
+using Reefin.Server.Implementations.SystemBackupService;
+using Reefin.Server.Migrations.Stages;
+using Reefin.Server.ServerSetupApp;
 
 namespace Reefin.Server.Migrations;
 

@@ -9,10 +9,9 @@ using System.Linq;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
-using Reefin.Extensions;
-using Reefin.XmlTv;
-using Reefin.XmlTv.Entities;
-using Reefin.XmlTv.Enums;
+using Jellyfin.XmlTv;
+using Jellyfin.XmlTv.Entities;
+using Jellyfin.XmlTv.Enums;
 using MediaBrowser.Common.Extensions;
 using MediaBrowser.Common.Net;
 using MediaBrowser.Controller.Configuration;
@@ -21,6 +20,7 @@ using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.IO;
 using MediaBrowser.Model.LiveTv;
 using Microsoft.Extensions.Logging;
+using Reefin.Extensions;
 
 namespace Reefin.LiveTv.Listings
 {

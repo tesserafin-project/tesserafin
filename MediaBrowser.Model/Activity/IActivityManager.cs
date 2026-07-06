@@ -1,9 +1,9 @@
 using System;
 using System.Threading.Tasks;
+using MediaBrowser.Model.Querying;
 using Reefin.Data.Events;
 using Reefin.Data.Queries;
 using Reefin.Database.Implementations.Entities;
-using MediaBrowser.Model.Querying;
 
 namespace MediaBrowser.Model.Activity;
 

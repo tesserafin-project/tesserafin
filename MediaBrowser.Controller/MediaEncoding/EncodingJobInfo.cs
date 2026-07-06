@@ -6,8 +6,6 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using Reefin.Data.Enums;
-using Reefin.Database.Implementations.Entities;
 using MediaBrowser.Model.Dlna;
 using MediaBrowser.Model.Drawing;
 using MediaBrowser.Model.Dto;
@@ -15,6 +13,8 @@ using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.MediaInfo;
 using MediaBrowser.Model.Net;
 using MediaBrowser.Model.Session;
+using Reefin.Data.Enums;
+using Reefin.Database.Implementations.Entities;
 
 namespace MediaBrowser.Controller.MediaEncoding
 {

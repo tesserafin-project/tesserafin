@@ -8,13 +8,13 @@ using System.Globalization;
 using System.Linq;
 using System.Text.Json.Serialization;
 using System.Threading;
-using Reefin.Data.Enums;
-using Reefin.Database.Implementations.Entities;
-using Reefin.Extensions;
 using MediaBrowser.Common;
 using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Querying;
+using Reefin.Data.Enums;
+using Reefin.Database.Implementations.Entities;
+using Reefin.Extensions;
 
 namespace MediaBrowser.Controller.Entities.TV
 {

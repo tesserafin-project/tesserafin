@@ -5,9 +5,6 @@ using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Reefin.Data.Events;
-using Reefin.Database.Implementations.Entities;
-using Reefin.Extensions;
 using MediaBrowser.Controller.Channels;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Entities;
@@ -19,6 +16,9 @@ using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Session;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Reefin.Data.Events;
+using Reefin.Database.Implementations.Entities;
+using Reefin.Extensions;
 
 namespace Emby.Server.Implementations.EntryPoints;
 

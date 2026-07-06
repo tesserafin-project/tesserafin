@@ -11,10 +11,10 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Emby.Server.Implementations.Session;
-using Reefin.Api.Models.SyncPlayDtos;
-using Reefin.Extensions.Json;
 using MediaBrowser.Controller.Net;
 using Microsoft.Extensions.DependencyInjection;
+using Reefin.Api.Models.SyncPlayDtos;
+using Reefin.Extensions.Json;
 using Xunit;
 
 namespace Reefin.Server.Integration.Tests;

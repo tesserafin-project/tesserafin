@@ -5,11 +5,11 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Threading.Tasks;
+using MediaBrowser.Model.Dto;
 using Reefin.Api.Models.StartupDtos;
 using Reefin.Api.Models.UserDtos;
 using Reefin.Extensions;
 using Reefin.Extensions.Json;
-using MediaBrowser.Model.Dto;
 using Xunit;
 
 namespace Reefin.Server.Integration.Tests

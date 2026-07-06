@@ -6,8 +6,6 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Xml;
-using Reefin.Data.Enums;
-using Reefin.Extensions;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Providers;
 using MediaBrowser.Controller.Entities;
@@ -20,6 +18,8 @@ using MediaBrowser.Model.Entities;
 using MediaBrowser.XbmcMetadata.Configuration;
 using MediaBrowser.XbmcMetadata.Savers;
 using Microsoft.Extensions.Logging;
+using Reefin.Data.Enums;
+using Reefin.Extensions;
 
 namespace MediaBrowser.XbmcMetadata.Parsers
 {

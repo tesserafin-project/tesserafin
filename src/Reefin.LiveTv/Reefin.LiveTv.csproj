@@ -12,7 +12,7 @@
 
   <ItemGroup>
     <PackageReference Include="AsyncKeyedLock" />
-    <PackageReference Include="Reefin.XmlTv" />
+    <PackageReference Include="Jellyfin.XmlTv" />
   </ItemGroup>
 
   <ItemGroup>

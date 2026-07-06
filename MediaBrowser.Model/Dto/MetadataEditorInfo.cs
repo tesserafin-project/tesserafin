@@ -1,8 +1,8 @@
 using System.Collections.Generic;
-using Reefin.Data.Enums;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Globalization;
 using MediaBrowser.Model.Providers;
+using Reefin.Data.Enums;
 
 namespace MediaBrowser.Model.Dto;
 

@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Text.Json.Nodes;
-using Reefin.Data.Attributes;
 using Microsoft.OpenApi;
+using Reefin.Data.Attributes;
 using Swashbuckle.AspNetCore.SwaggerGen;
 
 namespace Reefin.Server.Filters;

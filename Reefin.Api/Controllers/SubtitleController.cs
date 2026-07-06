@@ -10,10 +10,6 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Reefin.Api.Attributes;
-using Reefin.Api.Extensions;
-using Reefin.Api.Helpers;
-using Reefin.Api.Models.SubtitleDtos;
 using MediaBrowser.Common.Api;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Configuration;
@@ -31,6 +27,10 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using Reefin.Api.Attributes;
+using Reefin.Api.Extensions;
+using Reefin.Api.Helpers;
+using Reefin.Api.Models.SubtitleDtos;
 
 namespace Reefin.Api.Controllers;
 

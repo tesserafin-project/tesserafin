@@ -1,9 +1,9 @@
 #pragma warning disable CA1002
 
 using System.Collections.Generic;
-using Reefin.Database.Implementations.Entities;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Model.Dto;
+using Reefin.Database.Implementations.Entities;
 
 namespace MediaBrowser.Controller.Dto
 {

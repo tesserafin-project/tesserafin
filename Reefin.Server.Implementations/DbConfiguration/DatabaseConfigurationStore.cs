@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
-using Reefin.Database.Implementations.DbConfiguration;
 using MediaBrowser.Common.Configuration;
+using Reefin.Database.Implementations.DbConfiguration;
 
 namespace Reefin.Server.Implementations.DatabaseConfiguration;
 

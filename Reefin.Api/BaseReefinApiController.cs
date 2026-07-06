@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using System.Net.Mime;
+using Microsoft.AspNetCore.Mvc;
 using Reefin.Api.Results;
 using Reefin.Extensions.Json;
-using Microsoft.AspNetCore.Mvc;
 
 namespace Reefin.Api;
 

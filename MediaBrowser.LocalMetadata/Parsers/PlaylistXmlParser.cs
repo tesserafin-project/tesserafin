@@ -1,12 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Xml;
-using Reefin.Data.Enums;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Extensions;
 using MediaBrowser.Controller.Playlists;
 using MediaBrowser.Controller.Providers;
 using Microsoft.Extensions.Logging;
+using Reefin.Data.Enums;
 
 namespace MediaBrowser.LocalMetadata.Parsers
 {

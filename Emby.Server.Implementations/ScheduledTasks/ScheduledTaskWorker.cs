@@ -9,12 +9,12 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Emby.Server.Implementations.ScheduledTasks.Triggers;
-using Reefin.Data.Events;
-using Reefin.Extensions.Json;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Extensions;
 using MediaBrowser.Model.Tasks;
 using Microsoft.Extensions.Logging;
+using Reefin.Data.Events;
+using Reefin.Extensions.Json;
 
 namespace Emby.Server.Implementations.ScheduledTasks;
 

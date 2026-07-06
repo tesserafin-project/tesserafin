@@ -5,9 +5,9 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.Logging;
 using Reefin.Data.Enums;
 using Reefin.Extensions;
-using Microsoft.Extensions.Logging;
 
 namespace MediaBrowser.Controller.Entities.Audio
 {

@@ -3,13 +3,13 @@ using System.Collections.Generic;
 using AutoFixture;
 using AutoFixture.AutoMoq;
 using Emby.Server.Implementations.Data;
-using Reefin.Server.Implementations.Item;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Persistence;
 using MediaBrowser.Model.Entities;
 using Microsoft.Extensions.Configuration;
 using Moq;
+using Reefin.Server.Implementations.Item;
 using Xunit;
 
 namespace Reefin.Server.Implementations.Tests.Data

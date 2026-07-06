@@ -5,13 +5,13 @@ using System.Linq;
 using System.Threading.Tasks;
 using Emby.Naming.Audio;
 using Emby.Naming.Common;
-using Reefin.Data.Enums;
 using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Controller.Resolvers;
 using MediaBrowser.Model.Entities;
 using Microsoft.Extensions.Logging;
+using Reefin.Data.Enums;
 
 namespace Emby.Server.Implementations.Library.Resolvers.Audio
 {

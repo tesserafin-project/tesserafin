@@ -1,7 +1,9 @@
 using System.Collections.Generic;
+using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.IO;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.MediaEncoding;
+using MediaBrowser.Controller.Streaming;
 using MediaBrowser.Model.Configuration;
 using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Entities;
@@ -90,8 +92,14 @@ public class EncodingHelperVideoEncoderSelectionTests
     }
 
     [Theory]
-    [MemberData(nameof(H264HwBackends))]
-    public void GetH264Encoder_EncoderNotAdvertisedByFfmpeg_FallsBackToSoftware(HardwareAccelerationType hwType, string _)
+    [InlineData(HardwareAccelerationType.amf)]
+    [InlineData(HardwareAccelerationType.nvenc)]
+    [InlineData(HardwareAccelerationType.qsv)]
+    [InlineData(HardwareAccelerationType.vaapi)]
+    [InlineData(HardwareAccelerationType.videotoolbox)]
+    [InlineData(HardwareAccelerationType.v4l2m2m)]
+    [InlineData(HardwareAccelerationType.rkmpp)]
+    public void GetH264Encoder_EncoderNotAdvertisedByFfmpeg_FallsBackToSoftware(HardwareAccelerationType hwType)
     {
         var helper = CreateHelper(out var mediaEncoder);
         mediaEncoder.Setup(m => m.SupportsEncoder(It.IsAny<string>())).Returns(false);

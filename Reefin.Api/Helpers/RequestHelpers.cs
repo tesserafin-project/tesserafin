@@ -3,12 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
-using Reefin.Api.Constants;
-using Reefin.Api.Extensions;
-using Reefin.Data.Enums;
-using Reefin.Database.Implementations.Entities;
-using Reefin.Database.Implementations.Enums;
-using Reefin.Extensions;
 using MediaBrowser.Common.Extensions;
 using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Entities;
@@ -18,6 +12,12 @@ using MediaBrowser.Controller.Session;
 using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Querying;
 using Microsoft.AspNetCore.Http;
+using Reefin.Api.Constants;
+using Reefin.Api.Extensions;
+using Reefin.Data.Enums;
+using Reefin.Database.Implementations.Entities;
+using Reefin.Database.Implementations.Enums;
+using Reefin.Extensions;
 
 namespace Reefin.Api.Helpers;
 

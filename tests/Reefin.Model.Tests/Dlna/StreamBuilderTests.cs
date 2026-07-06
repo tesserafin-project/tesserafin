@@ -5,14 +5,14 @@ using System.Linq;
 using System.Runtime.Serialization;
 using System.Text.Json;
 using System.Threading.Tasks;
-using Reefin.Data.Enums;
-using Reefin.Extensions.Json;
 using MediaBrowser.Model.Dlna;
 using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Session;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Reefin.Data.Enums;
+using Reefin.Extensions.Json;
 using Xunit;
 
 namespace Reefin.Model.Tests

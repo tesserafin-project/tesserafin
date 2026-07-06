@@ -1,6 +1,5 @@
 using System;
 using System.Threading.Tasks;
-using Reefin.Database.Implementations.Entities;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Devices;
@@ -12,6 +11,7 @@ using MediaBrowser.Controller.Session;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Reefin.Database.Implementations.Entities;
 using Xunit;
 
 namespace Reefin.Server.Implementations.Tests.SessionManager;

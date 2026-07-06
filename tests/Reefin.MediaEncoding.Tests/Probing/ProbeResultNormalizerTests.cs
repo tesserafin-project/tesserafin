@@ -3,15 +3,15 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
-using Reefin.Data.Enums;
-using Reefin.Extensions.Json;
-using Reefin.Extensions.Json.Converters;
 using MediaBrowser.MediaEncoding.Probing;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Globalization;
 using MediaBrowser.Model.MediaInfo;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Reefin.Data.Enums;
+using Reefin.Extensions.Json;
+using Reefin.Extensions.Json.Converters;
 using Xunit;
 
 namespace Reefin.MediaEncoding.Tests.Probing

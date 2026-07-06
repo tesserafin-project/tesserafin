@@ -1,7 +1,6 @@
 using System;
 using System.Linq;
 using System.Threading;
-using Reefin.Data.Enums;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
@@ -12,6 +11,7 @@ using MediaBrowser.Model.Providers;
 using MediaBrowser.XbmcMetadata.Parsers;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Reefin.Data.Enums;
 using Xunit;
 
 namespace Reefin.XbmcMetadata.Tests.Parsers

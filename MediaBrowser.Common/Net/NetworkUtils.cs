@@ -5,9 +5,9 @@ using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Text.RegularExpressions;
-using Reefin.Extensions;
 using MediaBrowser.Model.Net;
 using Microsoft.Extensions.Logging;
+using Reefin.Extensions;
 
 namespace MediaBrowser.Common.Net;
 

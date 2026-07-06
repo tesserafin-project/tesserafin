@@ -2,10 +2,6 @@ using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using Reefin.Database.Implementations;
-using Reefin.Database.Implementations.Locking;
-using Reefin.Database.Providers.Sqlite;
-using Reefin.Server.Implementations.Users;
 using MediaBrowser.Common;
 using MediaBrowser.Common.Net;
 using MediaBrowser.Controller;
@@ -19,6 +15,10 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Reefin.Database.Implementations;
+using Reefin.Database.Implementations.Locking;
+using Reefin.Database.Providers.Sqlite;
+using Reefin.Server.Implementations.Users;
 using Xunit;
 
 namespace Reefin.Server.Implementations.Tests.Users

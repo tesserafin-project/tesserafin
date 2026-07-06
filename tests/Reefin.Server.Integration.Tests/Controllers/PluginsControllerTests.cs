@@ -3,8 +3,8 @@ using System.Net.Http.Json;
 using System.Net.Mime;
 using System.Text;
 using System.Threading.Tasks;
-using Reefin.Extensions.Json;
 using MediaBrowser.Model.Plugins;
+using Reefin.Extensions.Json;
 using Xunit;
 
 namespace Reefin.Server.Integration.Tests.Controllers;

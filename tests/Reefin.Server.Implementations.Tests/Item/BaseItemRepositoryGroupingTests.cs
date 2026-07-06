@@ -1,11 +1,6 @@
 using System;
 using System.Linq;
 using Emby.Server.Implementations.Data;
-using Reefin.Database.Implementations;
-using Reefin.Database.Implementations.Entities;
-using Reefin.Database.Implementations.Locking;
-using Reefin.Database.Providers.Sqlite;
-using Reefin.Server.Implementations.Item;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Entities;
@@ -15,6 +10,11 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Reefin.Database.Implementations;
+using Reefin.Database.Implementations.Entities;
+using Reefin.Database.Implementations.Locking;
+using Reefin.Database.Providers.Sqlite;
+using Reefin.Server.Implementations.Item;
 using Xunit;
 using BaseItemKind = Reefin.Data.Enums.BaseItemKind;
 

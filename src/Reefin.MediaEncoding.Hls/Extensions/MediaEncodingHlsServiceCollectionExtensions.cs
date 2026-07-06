@@ -1,8 +1,8 @@
 using System;
+using Microsoft.Extensions.DependencyInjection;
 using Reefin.MediaEncoding.Hls.Cache;
 using Reefin.MediaEncoding.Hls.Extractors;
 using Reefin.MediaEncoding.Hls.Playlist;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Reefin.MediaEncoding.Hls.Extensions;
 

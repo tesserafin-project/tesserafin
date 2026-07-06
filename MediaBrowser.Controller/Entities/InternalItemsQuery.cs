@@ -4,13 +4,13 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Diacritics.Extensions;
+using MediaBrowser.Controller.Dto;
+using MediaBrowser.Model.Entities;
+using MediaBrowser.Model.Querying;
 using Reefin.Data;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Database.Implementations.Enums;
-using MediaBrowser.Controller.Dto;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.Querying;
 
 namespace MediaBrowser.Controller.Entities
 {

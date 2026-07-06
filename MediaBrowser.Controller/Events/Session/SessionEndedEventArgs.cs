@@ -1,5 +1,5 @@
-using Reefin.Data.Events;
 using MediaBrowser.Controller.Session;
+using Reefin.Data.Events;
 
 namespace MediaBrowser.Controller.Events.Session
 {

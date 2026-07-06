@@ -1,14 +1,14 @@
 using System;
 using System.Threading.Tasks;
-using Reefin.Api.ModelBinders;
-using Reefin.Data.Enums;
-using Reefin.Database.Implementations.Enums;
 using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Querying;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Reefin.Api.ModelBinders;
+using Reefin.Data.Enums;
+using Reefin.Database.Implementations.Enums;
 
 namespace Reefin.Api.Controllers;
 

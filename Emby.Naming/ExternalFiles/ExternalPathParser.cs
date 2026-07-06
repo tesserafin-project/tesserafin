@@ -2,9 +2,9 @@ using System;
 using System.IO;
 using System.Linq;
 using Emby.Naming.Common;
-using Reefin.Extensions;
 using MediaBrowser.Model.Dlna;
 using MediaBrowser.Model.Globalization;
+using Reefin.Extensions;
 
 namespace Emby.Naming.ExternalFiles
 {

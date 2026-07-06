@@ -3,6 +3,14 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using MediaBrowser.Common.Extensions;
+using MediaBrowser.Controller.Devices;
+using MediaBrowser.Controller.Library;
+using MediaBrowser.Model.Devices;
+using MediaBrowser.Model.Dto;
+using MediaBrowser.Model.Querying;
+using MediaBrowser.Model.Session;
+using Microsoft.EntityFrameworkCore;
 using Reefin.Data;
 using Reefin.Data.Dtos;
 using Reefin.Data.Events;
@@ -12,14 +20,6 @@ using Reefin.Database.Implementations.Entities;
 using Reefin.Database.Implementations.Entities.Security;
 using Reefin.Database.Implementations.Enums;
 using Reefin.Extensions;
-using MediaBrowser.Common.Extensions;
-using MediaBrowser.Controller.Devices;
-using MediaBrowser.Controller.Library;
-using MediaBrowser.Model.Devices;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.Querying;
-using MediaBrowser.Model.Session;
-using Microsoft.EntityFrameworkCore;
 
 namespace Reefin.Server.Implementations.Devices
 {

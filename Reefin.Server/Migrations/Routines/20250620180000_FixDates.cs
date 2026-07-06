@@ -3,10 +3,10 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Reefin.Database.Implementations;
-using Reefin.Server.ServerSetupApp;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Reefin.Database.Implementations;
+using Reefin.Server.ServerSetupApp;
 
 namespace Reefin.Server.Migrations.Routines;
 

@@ -1,6 +1,6 @@
 using System.Collections.Generic;
-using Reefin.Api.Attributes;
 using Microsoft.OpenApi;
+using Reefin.Api.Attributes;
 using Swashbuckle.AspNetCore.SwaggerGen;
 
 namespace Reefin.Server.Filters

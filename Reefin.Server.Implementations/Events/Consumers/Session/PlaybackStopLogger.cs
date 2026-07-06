@@ -1,8 +1,6 @@
 using System;
 using System.Globalization;
 using System.Threading.Tasks;
-using Reefin.Data.Enums;
-using Reefin.Database.Implementations.Entities;
 using MediaBrowser.Controller.Events;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Activity;
@@ -11,6 +9,8 @@ using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Globalization;
 using MediaBrowser.Model.Notifications;
 using Microsoft.Extensions.Logging;
+using Reefin.Data.Enums;
+using Reefin.Database.Implementations.Entities;
 
 namespace Reefin.Server.Implementations.Events.Consumers.Session
 {

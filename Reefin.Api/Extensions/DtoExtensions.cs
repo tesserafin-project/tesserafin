@@ -1,7 +1,7 @@
 using System.Collections.Generic;
-using Reefin.Data.Enums;
 using MediaBrowser.Controller.Dto;
 using MediaBrowser.Model.Entities;
+using Reefin.Data.Enums;
 
 namespace Reefin.Api.Extensions;
 

@@ -1,8 +1,8 @@
 #pragma warning disable CS1591
 
 using System.Threading.Tasks;
-using Reefin.Database.Implementations.Entities;
 using MediaBrowser.Model.Users;
+using Reefin.Database.Implementations.Entities;
 
 namespace MediaBrowser.Controller.Authentication
 {

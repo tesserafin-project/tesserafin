@@ -1,14 +1,14 @@
 using System.Threading.Tasks;
-using Reefin.Api.Constants;
-using Reefin.Api.Extensions;
-using Reefin.Data;
-using Reefin.Database.Implementations.Enums;
-using Reefin.Extensions;
 using MediaBrowser.Common.Extensions;
 using MediaBrowser.Common.Net;
 using MediaBrowser.Controller.Library;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
+using Reefin.Api.Constants;
+using Reefin.Api.Extensions;
+using Reefin.Data;
+using Reefin.Database.Implementations.Enums;
+using Reefin.Extensions;
 
 namespace Reefin.Api.Auth.DefaultAuthorizationPolicy
 {

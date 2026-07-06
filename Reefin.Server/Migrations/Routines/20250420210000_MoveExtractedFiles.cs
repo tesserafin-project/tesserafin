@@ -10,16 +10,16 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Reefin.Data.Enums;
-using Reefin.Database.Implementations;
-using Reefin.Database.Implementations.Entities;
-using Reefin.Server.ServerSetupApp;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Extensions;
 using MediaBrowser.Controller.IO;
 using MediaBrowser.Model.IO;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Reefin.Data.Enums;
+using Reefin.Database.Implementations;
+using Reefin.Database.Implementations.Entities;
+using Reefin.Server.ServerSetupApp;
 
 namespace Reefin.Server.Migrations.Routines;
 

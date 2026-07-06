@@ -3,12 +3,12 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json.Serialization;
-using Reefin.Data.Enums;
-using Reefin.Database.Implementations.Entities;
 using MediaBrowser.Common;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Playlists;
 using MediaBrowser.Model.Querying;
+using Reefin.Data.Enums;
+using Reefin.Database.Implementations.Entities;
 
 namespace Emby.Server.Implementations.Playlists
 {

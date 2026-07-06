@@ -4,9 +4,6 @@ using System;
 using System.Collections.Generic;
 using System.Net;
 using System.Threading.Tasks;
-using Reefin.Data.Queries;
-using Reefin.Database.Implementations;
-using Reefin.Extensions;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Devices;
@@ -15,6 +12,9 @@ using MediaBrowser.Controller.Net;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Net.Http.Headers;
+using Reefin.Data.Queries;
+using Reefin.Database.Implementations;
+using Reefin.Extensions;
 
 namespace Reefin.Server.Implementations.Security
 {

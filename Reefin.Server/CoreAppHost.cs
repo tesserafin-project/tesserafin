@@ -3,18 +3,6 @@ using System.Collections.Generic;
 using System.Reflection;
 using Emby.Server.Implementations;
 using Emby.Server.Implementations.Session;
-using Reefin.Api.WebSocketListeners;
-using Reefin.Database.Implementations;
-using Reefin.Drawing;
-using Reefin.Drawing.Skia;
-using Reefin.LiveTv;
-using Reefin.Server.Implementations.Activity;
-using Reefin.Server.Implementations.Devices;
-using Reefin.Server.Implementations.Events;
-using Reefin.Server.Implementations.Extensions;
-using Reefin.Server.Implementations.Security;
-using Reefin.Server.Implementations.Trickplay;
-using Reefin.Server.Implementations.Users;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Authentication;
 using MediaBrowser.Controller.BaseItemManager;
@@ -31,6 +19,18 @@ using MediaBrowser.Providers.Lyric;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Reefin.Api.WebSocketListeners;
+using Reefin.Database.Implementations;
+using Reefin.Drawing;
+using Reefin.Drawing.Skia;
+using Reefin.LiveTv;
+using Reefin.Server.Implementations.Activity;
+using Reefin.Server.Implementations.Devices;
+using Reefin.Server.Implementations.Events;
+using Reefin.Server.Implementations.Extensions;
+using Reefin.Server.Implementations.Security;
+using Reefin.Server.Implementations.Trickplay;
+using Reefin.Server.Implementations.Users;
 
 namespace Reefin.Server
 {

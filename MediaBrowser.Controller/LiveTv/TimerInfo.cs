@@ -5,8 +5,8 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
-using Reefin.Extensions;
 using MediaBrowser.Model.LiveTv;
+using Reefin.Extensions;
 
 namespace MediaBrowser.Controller.LiveTv
 {

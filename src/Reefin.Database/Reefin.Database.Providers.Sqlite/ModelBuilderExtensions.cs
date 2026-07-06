@@ -1,7 +1,7 @@
 using System;
-using Reefin.Database.Providers.Sqlite.ValueConverters;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+using Reefin.Database.Providers.Sqlite.ValueConverters;
 
 namespace Reefin.Database.Providers.Sqlite;
 

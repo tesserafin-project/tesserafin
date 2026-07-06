@@ -8,9 +8,9 @@ using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
 using System.Text.Json.Serialization;
-using Reefin.Data.Enums;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Dto;
+using Reefin.Data.Enums;
 
 namespace MediaBrowser.Controller.Entities.Audio
 {

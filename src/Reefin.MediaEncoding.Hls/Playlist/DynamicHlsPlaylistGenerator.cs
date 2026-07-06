@@ -5,11 +5,11 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
-using Reefin.MediaEncoding.Hls.Extractors;
-using Reefin.MediaEncoding.Keyframes;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.MediaEncoding;
+using Reefin.MediaEncoding.Hls.Extractors;
+using Reefin.MediaEncoding.Keyframes;
 
 namespace Reefin.MediaEncoding.Hls.Playlist;
 

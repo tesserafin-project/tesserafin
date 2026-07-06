@@ -1,10 +1,10 @@
 #pragma warning disable CS1591
 
 using System.Threading.Tasks;
-using Reefin.Data;
-using Reefin.Database.Implementations.Enums;
 using MediaBrowser.Controller.Net;
 using Microsoft.AspNetCore.Http;
+using Reefin.Data;
+using Reefin.Database.Implementations.Enums;
 
 namespace Emby.Server.Implementations.HttpServer.Security
 {

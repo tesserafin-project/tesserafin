@@ -1,5 +1,5 @@
-using Reefin.Data.Events;
 using MediaBrowser.Model.Plugins;
+using Reefin.Data.Events;
 
 namespace MediaBrowser.Controller.Events.Updates
 {

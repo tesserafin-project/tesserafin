@@ -4,8 +4,6 @@ using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Threading.Tasks;
 using AutoFixture.Xunit3;
-using Reefin.Api.Controllers;
-using Reefin.Database.Implementations.Entities;
 using MediaBrowser.Common.Net;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Devices;
@@ -19,6 +17,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nikse.SubtitleEdit.Core.Common;
+using Reefin.Api.Controllers;
+using Reefin.Database.Implementations.Entities;
 using Xunit;
 
 namespace Reefin.Api.Tests.Controllers;

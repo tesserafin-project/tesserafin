@@ -1,12 +1,12 @@
 using System;
-using Reefin.LiveTv.Configuration;
-using Reefin.LiveTv.Listings;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.LiveTv;
 using MediaBrowser.Model.LiveTv;
 using MediaBrowser.Model.Tasks;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Reefin.LiveTv.Configuration;
+using Reefin.LiveTv.Listings;
 using Xunit;
 
 namespace Reefin.LiveTv.Tests.Listings;

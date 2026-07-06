@@ -4,11 +4,11 @@
 
 using System;
 using System.Collections.Generic;
-using Reefin.Data.Enums;
 using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Model.Library;
 using MediaBrowser.Model.Querying;
+using Reefin.Data.Enums;
 
 namespace MediaBrowser.Controller.Library
 {

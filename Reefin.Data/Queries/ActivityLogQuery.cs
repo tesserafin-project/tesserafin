@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
+using Microsoft.Extensions.Logging;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Enums;
-using Microsoft.Extensions.Logging;
 
 namespace Reefin.Data.Queries;
 

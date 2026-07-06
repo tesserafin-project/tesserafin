@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using Emby.Naming.Common;
 using Emby.Naming.Video;
-using Reefin.Data.Enums;
 using MediaBrowser.Model.Entities;
+using Reefin.Data.Enums;
 using Xunit;
 
 namespace Reefin.Naming.Tests.Video

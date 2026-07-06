@@ -12,11 +12,6 @@ using System.Text;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
-using Reefin.Data;
-using Reefin.Data.Enums;
-using Reefin.Database.Implementations.Entities;
-using Reefin.Database.Implementations.Enums;
-using Reefin.Extensions;
 using MediaBrowser.Common.Extensions;
 using MediaBrowser.Controller.Channels;
 using MediaBrowser.Controller.Chapters;
@@ -35,6 +30,11 @@ using MediaBrowser.Model.Library;
 using MediaBrowser.Model.LiveTv;
 using MediaBrowser.Model.MediaInfo;
 using Microsoft.Extensions.Logging;
+using Reefin.Data;
+using Reefin.Data.Enums;
+using Reefin.Database.Implementations.Entities;
+using Reefin.Database.Implementations.Enums;
+using Reefin.Extensions;
 
 namespace MediaBrowser.Controller.Entities
 {

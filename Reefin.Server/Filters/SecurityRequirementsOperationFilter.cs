@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.OpenApi;
 using Reefin.Api.Auth.DefaultAuthorizationPolicy;
 using Reefin.Api.Constants;
 using Reefin.Extensions;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.OpenApi;
 using Swashbuckle.AspNetCore.SwaggerGen;
 
 namespace Reefin.Server.Filters;

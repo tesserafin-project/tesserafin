@@ -18,10 +18,6 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using AsyncKeyedLock;
-using Reefin.Extensions;
-using Reefin.Extensions.Json;
-using Reefin.LiveTv.Guide;
-using Reefin.LiveTv.Listings.SchedulesDirectDtos;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Net;
 using MediaBrowser.Controller.Authentication;
@@ -30,6 +26,10 @@ using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.LiveTv;
 using Microsoft.Extensions.Logging;
+using Reefin.Extensions;
+using Reefin.Extensions.Json;
+using Reefin.LiveTv.Guide;
+using Reefin.LiveTv.Listings.SchedulesDirectDtos;
 
 namespace Reefin.LiveTv.Listings
 {

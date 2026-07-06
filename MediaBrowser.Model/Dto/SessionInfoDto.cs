@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
-using Reefin.Data.Enums;
 using MediaBrowser.Model.Session;
+using Reefin.Data.Enums;
 
 namespace MediaBrowser.Model.Dto;
 

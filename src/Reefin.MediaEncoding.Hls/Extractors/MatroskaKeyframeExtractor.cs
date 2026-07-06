@@ -1,7 +1,7 @@
 using System;
 using System.Diagnostics.CodeAnalysis;
-using Reefin.MediaEncoding.Keyframes;
 using Microsoft.Extensions.Logging;
+using Reefin.MediaEncoding.Keyframes;
 using Extractor = Reefin.MediaEncoding.Keyframes.Matroska.MatroskaKeyframeExtractor;
 
 namespace Reefin.MediaEncoding.Hls.Extractors;

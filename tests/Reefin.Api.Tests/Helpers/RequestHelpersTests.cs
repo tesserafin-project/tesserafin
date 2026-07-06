@@ -2,11 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Security.Claims;
+using MediaBrowser.Controller.Net;
 using Reefin.Api.Constants;
 using Reefin.Api.Helpers;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Enums;
-using MediaBrowser.Controller.Net;
 using Xunit;
 
 namespace Reefin.Api.Tests.Helpers

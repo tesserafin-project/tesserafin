@@ -1,9 +1,9 @@
 using System;
 using System.IO;
-using Reefin.Extensions;
 using MediaBrowser.Controller.Lyrics;
 using MediaBrowser.Controller.Resolvers;
 using MediaBrowser.Model.Lyrics;
+using Reefin.Extensions;
 
 namespace MediaBrowser.Providers.Lyric;
 

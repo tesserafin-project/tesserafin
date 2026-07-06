@@ -2,13 +2,13 @@ using System;
 using System.Globalization;
 using System.IO;
 using Emby.Server.Implementations.AppBase;
-using Reefin.Data.Events;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Model.Configuration;
 using MediaBrowser.Model.Serialization;
 using Microsoft.Extensions.Logging;
+using Reefin.Data.Events;
 
 namespace Emby.Server.Implementations.Configuration
 {

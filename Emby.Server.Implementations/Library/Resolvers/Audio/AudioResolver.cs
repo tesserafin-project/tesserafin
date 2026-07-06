@@ -10,12 +10,12 @@ using Emby.Naming.Audio;
 using Emby.Naming.AudioBook;
 using Emby.Naming.Common;
 using Emby.Naming.Video;
-using Reefin.Data.Enums;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Controller.Resolvers;
 using MediaBrowser.Model.IO;
+using Reefin.Data.Enums;
 
 namespace Emby.Server.Implementations.Library.Resolvers.Audio
 {

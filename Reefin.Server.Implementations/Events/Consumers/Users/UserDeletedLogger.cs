@@ -1,11 +1,11 @@
 using System;
 using System.Globalization;
 using System.Threading.Tasks;
-using Reefin.Data.Events.Users;
-using Reefin.Database.Implementations.Entities;
 using MediaBrowser.Controller.Events;
 using MediaBrowser.Model.Activity;
 using MediaBrowser.Model.Globalization;
+using Reefin.Data.Events.Users;
+using Reefin.Database.Implementations.Entities;
 
 namespace Reefin.Server.Implementations.Events.Consumers.Users
 {

@@ -2,11 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using Reefin.Data.Events.Users;
 using MediaBrowser.Controller.Events;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Session;
 using MediaBrowser.Model.Session;
+using Reefin.Data.Events.Users;
 
 namespace Reefin.Server.Implementations.Events.Consumers.Users
 {

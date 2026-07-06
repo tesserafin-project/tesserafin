@@ -1,6 +1,6 @@
 using System.Collections.Generic;
-using Reefin.Data.Enums;
 using MediaBrowser.Controller.Entities;
+using Reefin.Data.Enums;
 
 namespace MediaBrowser.Controller.Sorting
 {

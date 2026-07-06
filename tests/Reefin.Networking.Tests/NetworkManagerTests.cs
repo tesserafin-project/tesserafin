@@ -1,9 +1,9 @@
 using System.Net;
-using Reefin.Networking.Manager;
 using MediaBrowser.Common.Net;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Reefin.Networking.Manager;
 using Xunit;
 
 namespace Reefin.Networking.Tests

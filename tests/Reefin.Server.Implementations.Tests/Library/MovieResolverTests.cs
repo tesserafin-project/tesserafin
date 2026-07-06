@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using Emby.Naming.Common;
 using Emby.Naming.Video;
 using Emby.Server.Implementations.Library.Resolvers.Movies;
-using Reefin.Data.Enums;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Drawing;
 using MediaBrowser.Controller.Entities;
@@ -13,6 +12,7 @@ using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.IO;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Reefin.Data.Enums;
 using Xunit;
 
 namespace Reefin.Server.Implementations.Tests.Library;

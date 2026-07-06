@@ -5,9 +5,9 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
-using Reefin.Extensions;
 using MediaBrowser.Controller.Providers;
 using Microsoft.Extensions.Logging;
+using Reefin.Extensions;
 
 namespace MediaBrowser.Controller.Entities
 {

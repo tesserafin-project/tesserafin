@@ -4,9 +4,9 @@
 
 using System;
 using System.Linq;
-using Reefin.Extensions;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Model.Providers;
+using Reefin.Extensions;
 
 namespace MediaBrowser.Controller.Providers
 {

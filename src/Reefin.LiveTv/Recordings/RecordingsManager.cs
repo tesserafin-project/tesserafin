@@ -9,11 +9,6 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using AsyncKeyedLock;
-using Reefin.Data.Enums;
-using Reefin.Database.Implementations.Enums;
-using Reefin.LiveTv.Configuration;
-using Reefin.LiveTv.IO;
-using Reefin.LiveTv.Timers;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Dto;
@@ -31,6 +26,11 @@ using MediaBrowser.Model.LiveTv;
 using MediaBrowser.Model.MediaInfo;
 using MediaBrowser.Model.Providers;
 using Microsoft.Extensions.Logging;
+using Reefin.Data.Enums;
+using Reefin.Database.Implementations.Enums;
+using Reefin.LiveTv.Configuration;
+using Reefin.LiveTv.IO;
+using Reefin.LiveTv.Timers;
 
 namespace Reefin.LiveTv.Recordings;
 

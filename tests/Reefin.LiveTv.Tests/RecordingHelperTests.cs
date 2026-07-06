@@ -1,6 +1,6 @@
 using System;
-using Reefin.LiveTv.Recordings;
 using MediaBrowser.Controller.LiveTv;
+using Reefin.LiveTv.Recordings;
 using Xunit;
 
 namespace Reefin.LiveTv.Tests

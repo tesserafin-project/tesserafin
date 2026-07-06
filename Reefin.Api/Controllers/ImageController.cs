@@ -11,10 +11,6 @@ using System.Net.Mime;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
-using Reefin.Api.Attributes;
-using Reefin.Api.Extensions;
-using Reefin.Api.Helpers;
-using Reefin.Extensions;
 using MediaBrowser.Common.Api;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Configuration;
@@ -33,6 +29,10 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Net.Http.Headers;
+using Reefin.Api.Attributes;
+using Reefin.Api.Extensions;
+using Reefin.Api.Helpers;
+using Reefin.Extensions;
 
 namespace Reefin.Api.Controllers;
 

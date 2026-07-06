@@ -3,14 +3,14 @@ using System.IO;
 using System.Linq;
 using Emby.Naming.Common;
 using Emby.Naming.Video;
-using Reefin.Data.Enums;
-using Reefin.Extensions;
 using MediaBrowser.Controller.Drawing;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Controller.Resolvers;
 using MediaBrowser.Model.Entities;
+using Reefin.Data.Enums;
+using Reefin.Extensions;
 
 namespace Emby.Server.Implementations.Library.Resolvers
 {

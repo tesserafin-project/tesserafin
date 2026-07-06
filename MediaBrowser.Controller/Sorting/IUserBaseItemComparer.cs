@@ -1,7 +1,7 @@
 #nullable disable
 
-using Reefin.Database.Implementations.Entities;
 using MediaBrowser.Controller.Library;
+using Reefin.Database.Implementations.Entities;
 
 namespace MediaBrowser.Controller.Sorting
 {

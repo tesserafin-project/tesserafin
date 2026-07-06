@@ -11,9 +11,6 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using Reefin.Data.Events;
-using Reefin.Extensions;
-using Reefin.Extensions.Json;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Net;
 using MediaBrowser.Common.Plugins;
@@ -25,6 +22,9 @@ using MediaBrowser.Controller.Events.Updates;
 using MediaBrowser.Model.Plugins;
 using MediaBrowser.Model.Updates;
 using Microsoft.Extensions.Logging;
+using Reefin.Data.Events;
+using Reefin.Extensions;
+using Reefin.Extensions.Json;
 
 namespace Emby.Server.Implementations.Updates
 {

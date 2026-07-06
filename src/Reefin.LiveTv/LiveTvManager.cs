@@ -8,12 +8,6 @@ using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Reefin.Data;
-using Reefin.Data.Enums;
-using Reefin.Data.Events;
-using Reefin.Database.Implementations.Entities;
-using Reefin.Database.Implementations.Enums;
-using Reefin.LiveTv.Configuration;
 using MediaBrowser.Common.Extensions;
 using MediaBrowser.Controller.Channels;
 using MediaBrowser.Controller.Configuration;
@@ -28,6 +22,12 @@ using MediaBrowser.Model.Globalization;
 using MediaBrowser.Model.LiveTv;
 using MediaBrowser.Model.Querying;
 using Microsoft.Extensions.Logging;
+using Reefin.Data;
+using Reefin.Data.Enums;
+using Reefin.Data.Events;
+using Reefin.Database.Implementations.Entities;
+using Reefin.Database.Implementations.Enums;
+using Reefin.LiveTv.Configuration;
 
 namespace Reefin.LiveTv
 {

@@ -7,12 +7,12 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text.Json.Serialization;
+using MediaBrowser.Controller.Providers;
+using MediaBrowser.Model.Querying;
 using Reefin.Data;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Database.Implementations.Enums;
-using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Querying;
 
 namespace MediaBrowser.Controller.Entities.Movies
 {

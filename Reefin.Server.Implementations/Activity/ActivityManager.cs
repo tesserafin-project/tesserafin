@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Threading.Tasks;
+using MediaBrowser.Model.Activity;
+using MediaBrowser.Model.Querying;
+using Microsoft.EntityFrameworkCore;
 using Reefin.Data.Enums;
 using Reefin.Data.Events;
 using Reefin.Data.Queries;
@@ -10,9 +13,6 @@ using Reefin.Database.Implementations;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Database.Implementations.Enums;
 using Reefin.Extensions;
-using MediaBrowser.Model.Activity;
-using MediaBrowser.Model.Querying;
-using Microsoft.EntityFrameworkCore;
 
 namespace Reefin.Server.Implementations.Activity;
 

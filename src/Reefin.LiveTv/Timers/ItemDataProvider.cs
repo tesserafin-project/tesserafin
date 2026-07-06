@@ -7,8 +7,8 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
-using Reefin.Extensions.Json;
 using Microsoft.Extensions.Logging;
+using Reefin.Extensions.Json;
 
 namespace Reefin.LiveTv.Timers
 {

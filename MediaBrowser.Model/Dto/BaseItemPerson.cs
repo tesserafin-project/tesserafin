@@ -3,8 +3,8 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Text.Json.Serialization;
-using Reefin.Data.Enums;
 using MediaBrowser.Model.Entities;
+using Reefin.Data.Enums;
 
 namespace MediaBrowser.Model.Dto
 {

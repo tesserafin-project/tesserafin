@@ -6,13 +6,13 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using Reefin.Database.Implementations.Entities;
-using Reefin.Database.Implementations.Entities.Security;
 using MediaBrowser.Controller.Authentication;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Session;
 using MediaBrowser.Model.SyncPlay;
+using Reefin.Database.Implementations.Entities;
+using Reefin.Database.Implementations.Entities.Security;
 
 namespace MediaBrowser.Controller.Session
 {

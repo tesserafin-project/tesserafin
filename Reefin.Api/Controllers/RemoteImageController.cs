@@ -5,9 +5,6 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Reefin.Api.Constants;
-using Reefin.Api.Extensions;
-using Reefin.Api.Helpers;
 using MediaBrowser.Common.Api;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Entities;
@@ -18,6 +15,9 @@ using MediaBrowser.Model.Providers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Reefin.Api.Constants;
+using Reefin.Api.Extensions;
+using Reefin.Api.Helpers;
 
 namespace Reefin.Api.Controllers;
 

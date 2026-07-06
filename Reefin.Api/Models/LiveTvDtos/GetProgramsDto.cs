@@ -2,11 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Text.Json.Serialization;
+using MediaBrowser.Model.Entities;
+using MediaBrowser.Model.Querying;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Enums;
 using Reefin.Extensions.Json.Converters;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.Querying;
 
 namespace Reefin.Api.Models.LiveTvDtos;
 

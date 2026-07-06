@@ -1,6 +1,6 @@
-using Reefin.Database.Implementations.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Reefin.Database.Implementations.Entities;
 
 namespace Reefin.Database.Implementations.ModelConfiguration
 {

@@ -1,11 +1,11 @@
 using System.Threading.Tasks;
-using Reefin.Api.Extensions;
-using Reefin.Data.Enums;
-using Reefin.Database.Implementations.Enums;
 using MediaBrowser.Common.Extensions;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.SyncPlay;
 using Microsoft.AspNetCore.Authorization;
+using Reefin.Api.Extensions;
+using Reefin.Data.Enums;
+using Reefin.Database.Implementations.Enums;
 
 namespace Reefin.Api.Auth.SyncPlayAccessPolicy
 {

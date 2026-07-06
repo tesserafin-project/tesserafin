@@ -1,11 +1,11 @@
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations;
 using Reefin.Server.ServerSetupApp;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 
 namespace Reefin.Server.Migrations.Routines;
 

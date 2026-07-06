@@ -4,10 +4,10 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Threading.Tasks;
-using Reefin.Api.Models.LibraryStructureDto;
-using Reefin.Extensions.Json;
 using MediaBrowser.Model.Configuration;
 using MediaBrowser.Model.Entities;
+using Reefin.Api.Models.LibraryStructureDto;
+using Reefin.Extensions.Json;
 using Xunit;
 using Xunit.v3.Priority;
 

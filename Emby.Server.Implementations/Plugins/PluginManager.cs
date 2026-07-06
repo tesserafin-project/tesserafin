@@ -10,8 +10,6 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Emby.Server.Implementations.Library;
-using Reefin.Extensions.Json;
-using Reefin.Extensions.Json.Converters;
 using MediaBrowser.Common.Extensions;
 using MediaBrowser.Common.Net;
 using MediaBrowser.Common.Plugins;
@@ -23,6 +21,8 @@ using MediaBrowser.Model.Plugins;
 using MediaBrowser.Model.Updates;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Reefin.Extensions.Json;
+using Reefin.Extensions.Json.Converters;
 
 namespace Emby.Server.Implementations.Plugins
 {

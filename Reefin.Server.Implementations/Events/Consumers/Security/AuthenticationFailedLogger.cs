@@ -1,12 +1,12 @@
 using System;
 using System.Globalization;
 using System.Threading.Tasks;
-using Reefin.Database.Implementations.Entities;
 using MediaBrowser.Controller.Events;
 using MediaBrowser.Controller.Events.Authentication;
 using MediaBrowser.Model.Activity;
 using MediaBrowser.Model.Globalization;
 using Microsoft.Extensions.Logging;
+using Reefin.Database.Implementations.Entities;
 
 namespace Reefin.Server.Implementations.Events.Consumers.Security
 {

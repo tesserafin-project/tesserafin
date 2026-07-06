@@ -7,11 +7,11 @@ using System.Globalization;
 using System.Linq;
 using System.Text.Json.Serialization;
 using System.Threading;
+using MediaBrowser.Controller.Entities;
+using MediaBrowser.Model.Querying;
 using Reefin.Data;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Database.Implementations.Enums;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Model.Querying;
 
 namespace MediaBrowser.Controller.Channels
 {

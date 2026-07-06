@@ -4,17 +4,17 @@ using System.Security.Claims;
 using System.Threading.Tasks;
 using AutoFixture;
 using AutoFixture.AutoMoq;
-using Reefin.Api.Auth.DefaultAuthorizationPolicy;
-using Reefin.Api.Auth.FirstTimeSetupPolicy;
-using Reefin.Api.Constants;
-using Reefin.Database.Implementations.Entities;
-using Reefin.Database.Implementations.Enums;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Library;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
+using Reefin.Api.Auth.DefaultAuthorizationPolicy;
+using Reefin.Api.Auth.FirstTimeSetupPolicy;
+using Reefin.Api.Constants;
+using Reefin.Database.Implementations.Entities;
+using Reefin.Database.Implementations.Enums;
 using Xunit;
 
 namespace Reefin.Api.Tests.Auth.FirstTimeSetupPolicy

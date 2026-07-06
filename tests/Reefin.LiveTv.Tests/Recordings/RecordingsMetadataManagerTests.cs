@@ -3,8 +3,6 @@ using System.Globalization;
 using System.IO;
 using System.Threading.Tasks;
 using System.Xml;
-using Reefin.Extensions;
-using Reefin.LiveTv.Recordings;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
@@ -13,6 +11,8 @@ using MediaBrowser.Model.Configuration;
 using MediaBrowser.Model.LiveTv;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Reefin.Extensions;
+using Reefin.LiveTv.Recordings;
 using Xunit;
 
 namespace Reefin.LiveTv.Tests.Recordings;

@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Reefin.Extensions.Tests.Json.Models;
 using MediaBrowser.Model.Session;
+using Reefin.Extensions.Tests.Json.Models;
 using Xunit;
 
 namespace Reefin.Extensions.Tests.Json.Converters
