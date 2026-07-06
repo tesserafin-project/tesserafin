@@ -2,11 +2,11 @@
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Runtime.Versioning;
 using System.Text.RegularExpressions;
+using System.Threading;
 using MediaBrowser.Controller.MediaEncoding;
 using Microsoft.Extensions.Logging;
 
@@ -188,16 +188,21 @@ namespace MediaBrowser.MediaEncoding.Encoder
             { "libpostproc", new Version(55, 9) }
         };
 
+        private static readonly TimeSpan _probeTimeout = TimeSpan.FromSeconds(20);
+
         private readonly ILogger _logger;
 
         private readonly string _encoderPath;
 
+        private readonly IFfmpegProcessRunner _processRunner;
+
         private readonly Version _minFFmpegMultiThreadedCli = new Version(7, 0);
 
-        public EncoderValidator(ILogger logger, string encoderPath)
+        public EncoderValidator(ILogger logger, string encoderPath, IFfmpegProcessRunner? processRunner = null)
         {
             _logger = logger;
             _encoderPath = encoderPath;
+            _processRunner = processRunner ?? new FfmpegProcessRunner();
         }
 
         private enum Codec
@@ -635,53 +640,26 @@ namespace MediaBrowser.MediaEncoding.Encoder
 
         private string GetProcessOutput(string path, string arguments, bool readStdErr, string? testKey)
         {
-            var redirectStandardIn = !string.IsNullOrEmpty(testKey);
-            using (var process = new Process
-            {
-                StartInfo = new ProcessStartInfo(path, arguments)
-                {
-                    CreateNoWindow = true,
-                    UseShellExecute = false,
-                    WindowStyle = ProcessWindowStyle.Hidden,
-                    ErrorDialog = false,
-                    RedirectStandardInput = redirectStandardIn,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true
-                }
-            })
-            {
-                _logger.LogDebug("Running {Path} {Arguments}", path, arguments);
+            _logger.LogDebug("Running {Path} {Arguments}", path, arguments);
 
-                process.Start();
+            var command = FfmpegCommand.FromArgumentLine(path, arguments);
+            var result = _processRunner.RunProbeAsync(command, _probeTimeout, CancellationToken.None, testKey)
+                .GetAwaiter().GetResult();
 
-                if (redirectStandardIn)
-                {
-                    using var writer = process.StandardInput;
-                    writer.Write(testKey);
-                }
-
-                using var reader = readStdErr ? process.StandardError : process.StandardOutput;
-                return reader.ReadToEnd();
-            }
+            return readStdErr ? result.StandardError : result.StandardOutput;
         }
 
         private bool GetProcessExitCode(string path, string arguments)
         {
-            using var process = new Process();
-            process.StartInfo = new ProcessStartInfo(path, arguments)
-            {
-                CreateNoWindow = true,
-                UseShellExecute = false,
-                WindowStyle = ProcessWindowStyle.Hidden,
-                ErrorDialog = false
-            };
             _logger.LogDebug("Running {Path} {Arguments}", path, arguments);
 
             try
             {
-                process.Start();
-                process.WaitForExit();
-                return process.ExitCode == 0;
+                var command = FfmpegCommand.FromArgumentLine(path, arguments);
+                var result = _processRunner.RunProbeAsync(command, _probeTimeout, CancellationToken.None)
+                    .GetAwaiter().GetResult();
+
+                return !result.TimedOut && result.ExitCode == 0;
             }
             catch (Exception ex)
             {
