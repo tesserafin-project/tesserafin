@@ -10,7 +10,7 @@ using Microsoft.Extensions.Configuration;
 using Moq;
 using SharpFuzz;
 
-namespace Emby.Server.Implementations.Fuzz
+namespace Reefin.Server.Implementations.Fuzz
 {
     public static class Program
     {
