@@ -2,10 +2,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using AutoFixture;
 using AutoFixture.AutoMoq;
-using MediaBrowser.MediaEncoding.Subtitles;
 using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.MediaInfo;
+using Reefin.MediaEncoding.Subtitles;
 using Xunit;
 
 namespace Reefin.MediaEncoding.Subtitles.Tests

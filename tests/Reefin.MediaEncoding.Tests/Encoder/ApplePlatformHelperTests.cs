@@ -1,6 +1,6 @@
 using System;
 using System.Runtime.Versioning;
-using MediaBrowser.MediaEncoding.Encoder;
+using Reefin.MediaEncoding.Encoder;
 using Xunit;
 
 namespace Reefin.MediaEncoding.Tests;

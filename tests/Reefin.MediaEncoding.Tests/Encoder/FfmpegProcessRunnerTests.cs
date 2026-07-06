@@ -4,7 +4,7 @@ using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.MediaEncoding;
-using MediaBrowser.MediaEncoding.Encoder;
+using Reefin.MediaEncoding.Encoder;
 using Xunit;
 
 namespace Reefin.MediaEncoding.Tests.Encoder;

@@ -17,7 +17,7 @@
     <ProjectReference Include="..\Reefin.LocalMetadata\Reefin.LocalMetadata.csproj" />
     <ProjectReference Include="..\Reefin.Photos\Reefin.Photos.csproj" />
     <ProjectReference Include="..\src\Reefin.Drawing\Reefin.Drawing.csproj" />
-    <ProjectReference Include="..\MediaBrowser.MediaEncoding\MediaBrowser.MediaEncoding.csproj" />
+    <ProjectReference Include="..\Reefin.MediaEncoding\Reefin.MediaEncoding.csproj" />
     <ProjectReference Include="..\src\Reefin.Database\Reefin.Database.Implementations\Reefin.Database.Implementations.csproj" />
   </ItemGroup>
 

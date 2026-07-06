@@ -71,9 +71,6 @@ using MediaBrowser.Controller.Sorting;
 using MediaBrowser.Controller.Subtitles;
 using MediaBrowser.Controller.SyncPlay;
 using MediaBrowser.Controller.TV;
-using MediaBrowser.MediaEncoding.BdInfo;
-using MediaBrowser.MediaEncoding.Subtitles;
-using MediaBrowser.MediaEncoding.Transcoding;
 using MediaBrowser.Model.Cryptography;
 using MediaBrowser.Model.Globalization;
 using MediaBrowser.Model.IO;
@@ -102,7 +99,10 @@ using Prometheus.DotNetRuntime;
 using Reefin.Api.Helpers;
 using Reefin.Drawing;
 using Reefin.LocalMetadata.Savers;
+using Reefin.MediaEncoding.BdInfo;
 using Reefin.MediaEncoding.Hls.Playlist;
+using Reefin.MediaEncoding.Subtitles;
+using Reefin.MediaEncoding.Transcoding;
 using Reefin.Networking.Manager;
 using Reefin.Networking.Udp;
 using Reefin.Photos;
@@ -542,7 +542,7 @@ namespace Emby.Server.Implementations
             serviceCollection.AddSingleton<IKeyframeRepository, KeyframeRepository>();
             serviceCollection.AddSingleton<IItemTypeLookup, ItemTypeLookup>();
 
-            serviceCollection.AddSingleton<IMediaEncoder, MediaBrowser.MediaEncoding.Encoder.MediaEncoder>();
+            serviceCollection.AddSingleton<IMediaEncoder, Reefin.MediaEncoding.Encoder.MediaEncoder>();
             serviceCollection.AddSingleton<EncodingHelper>();
             serviceCollection.AddSingleton<IPathManager, PathManager>();
             serviceCollection.AddSingleton<IExternalDataManager, ExternalDataManager>();
@@ -603,7 +603,7 @@ namespace Emby.Server.Implementations
             serviceCollection.AddSingleton<ISubtitleEncoder, SubtitleEncoder>();
             serviceCollection.AddSingleton<IKeyframeManager, KeyframeManager>();
 
-            serviceCollection.AddSingleton<IAttachmentExtractor, MediaBrowser.MediaEncoding.Attachments.AttachmentExtractor>();
+            serviceCollection.AddSingleton<IAttachmentExtractor, Reefin.MediaEncoding.Attachments.AttachmentExtractor>();
 
             serviceCollection.AddSingleton<ITranscodeManager, TranscodeManager>();
             serviceCollection.AddScoped<MediaInfoHelper>();
@@ -882,7 +882,7 @@ namespace Emby.Server.Implementations
             yield return typeof(InstallationManager).Assembly;
 
             // MediaEncoding
-            yield return typeof(MediaBrowser.MediaEncoding.Encoder.MediaEncoder).Assembly;
+            yield return typeof(Reefin.MediaEncoding.Encoder.MediaEncoder).Assembly;
 
             // Local metadata
             yield return typeof(BoxSetXmlSaver).Assembly;

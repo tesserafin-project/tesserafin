@@ -13,7 +13,6 @@ using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.MediaEncoding;
 using MediaBrowser.Controller.Streaming;
-using MediaBrowser.MediaEncoding.Encoder;
 using MediaBrowser.Model.Configuration;
 using MediaBrowser.Model.Dlna;
 using MediaBrowser.Model.Entities;
@@ -29,6 +28,7 @@ using Reefin.Api.Helpers;
 using Reefin.Api.Models.StreamingDtos;
 using Reefin.Data.Enums;
 using Reefin.Extensions;
+using Reefin.MediaEncoding.Encoder;
 using Reefin.MediaEncoding.Hls.Playlist;
 
 namespace Reefin.Api.Controllers;

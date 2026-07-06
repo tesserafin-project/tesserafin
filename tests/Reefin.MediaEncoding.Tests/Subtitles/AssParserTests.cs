@@ -1,8 +1,8 @@
 using System;
 using System.Globalization;
 using System.IO;
-using MediaBrowser.MediaEncoding.Subtitles;
 using Microsoft.Extensions.Logging.Abstractions;
+using Reefin.MediaEncoding.Subtitles;
 using Xunit;
 
 namespace Reefin.MediaEncoding.Subtitles.Tests

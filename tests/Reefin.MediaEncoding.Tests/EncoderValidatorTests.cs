@@ -1,6 +1,6 @@
 using System;
-using MediaBrowser.MediaEncoding.Encoder;
 using Microsoft.Extensions.Logging.Abstractions;
+using Reefin.MediaEncoding.Encoder;
 using Xunit;
 
 namespace Reefin.MediaEncoding.Tests
