@@ -2,13 +2,13 @@ using System;
 using System.Globalization;
 using System.Xml;
 using Emby.Naming.TV;
-using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Extensions;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Entities;
 using Microsoft.Extensions.Logging;
+using Reefin.Common.Configuration;
 
 namespace Reefin.XbmcMetadata.Parsers
 {

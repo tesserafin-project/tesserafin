@@ -1,7 +1,6 @@
 using System;
 using Emby.Server.Implementations.Dto;
 using Emby.Server.Implementations.Playlists;
-using MediaBrowser.Common;
 using MediaBrowser.Controller.Chapters;
 using MediaBrowser.Controller.Drawing;
 using MediaBrowser.Controller.Dto;
@@ -13,6 +12,7 @@ using MediaBrowser.Controller.Providers;
 using MediaBrowser.Controller.Trickplay;
 using MediaBrowser.Model.Entities;
 using Moq;
+using Reefin.Common;
 using Reefin.Data.Enums;
 using Xunit;
 

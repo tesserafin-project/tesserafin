@@ -5,8 +5,6 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Common.Configuration;
-using MediaBrowser.Common.Extensions;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
@@ -17,6 +15,8 @@ using MediaBrowser.Model.Dto;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Net.Http.Headers;
 using Reefin.Api.Extensions;
+using Reefin.Common.Configuration;
+using Reefin.Common.Extensions;
 using Reefin.Data.Enums;
 using Reefin.Extensions;
 

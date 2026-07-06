@@ -9,7 +9,7 @@ using Reefin.Data.Enums;
 
 namespace MediaBrowser.Controller.Entities
 {
-    [Common.RequiresSourceSerialisation]
+    [Reefin.Common.RequiresSourceSerialisation]
     public class AudioBook : Audio.Audio, IHasSeries, IHasLookupInfo<SongInfo>
     {
         [JsonIgnore]

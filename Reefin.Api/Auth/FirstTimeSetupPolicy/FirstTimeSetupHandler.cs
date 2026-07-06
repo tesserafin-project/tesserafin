@@ -1,8 +1,8 @@
 using System.Threading.Tasks;
-using MediaBrowser.Common.Configuration;
 using Microsoft.AspNetCore.Authorization;
 using Reefin.Api.Constants;
 using Reefin.Api.Extensions;
+using Reefin.Common.Configuration;
 
 namespace Reefin.Api.Auth.FirstTimeSetupPolicy
 {

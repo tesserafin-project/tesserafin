@@ -1,7 +1,7 @@
 using FsCheck;
 using FsCheck.Fluent;
 using FsCheck.Xunit;
-using MediaBrowser.Common.Net;
+using Reefin.Common.Net;
 using Xunit;
 
 namespace Reefin.Networking.Tests

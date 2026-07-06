@@ -1,7 +1,6 @@
 using System;
 using System.Linq;
 using System.Threading;
-using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
@@ -11,6 +10,7 @@ using MediaBrowser.Model.Providers;
 using MediaBrowser.Providers.Movies;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Reefin.Common.Configuration;
 using Reefin.Data.Enums;
 using Reefin.XbmcMetadata.Parsers;
 using Xunit;

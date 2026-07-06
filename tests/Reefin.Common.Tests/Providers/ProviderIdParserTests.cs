@@ -1,5 +1,5 @@
 using System;
-using MediaBrowser.Common.Providers;
+using Reefin.Common.Providers;
 using Xunit;
 
 namespace Reefin.Common.Tests.Providers

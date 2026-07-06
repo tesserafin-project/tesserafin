@@ -2,12 +2,12 @@
 
 using System;
 using System.Collections.Generic;
-using MediaBrowser.Common.Configuration;
-using MediaBrowser.Common.Plugins;
 using MediaBrowser.Controller.Plugins;
 using MediaBrowser.Model.Plugins;
 using MediaBrowser.Model.Serialization;
 using MediaBrowser.Providers.Plugins.StudioImages.Configuration;
+using Reefin.Common.Configuration;
+using Reefin.Common.Plugins;
 
 namespace MediaBrowser.Providers.Plugins.StudioImages
 {

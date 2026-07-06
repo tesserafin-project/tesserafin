@@ -11,8 +11,6 @@ using System.Net.Mime;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Common.Api;
-using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Drawing;
 using MediaBrowser.Controller.Entities;
@@ -32,6 +30,8 @@ using Microsoft.Net.Http.Headers;
 using Reefin.Api.Attributes;
 using Reefin.Api.Extensions;
 using Reefin.Api.Helpers;
+using Reefin.Common.Api;
+using Reefin.Common.Configuration;
 using Reefin.Extensions;
 
 namespace Reefin.Api.Controllers;

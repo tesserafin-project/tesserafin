@@ -4,7 +4,6 @@ using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Net.Mime;
 using System.Threading.Tasks;
-using MediaBrowser.Common.Extensions;
 using MediaBrowser.Controller.Devices;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
@@ -18,6 +17,7 @@ using Reefin.Api.Attributes;
 using Reefin.Api.Extensions;
 using Reefin.Api.Helpers;
 using Reefin.Api.Models.MediaInfoDtos;
+using Reefin.Common.Extensions;
 using Reefin.Extensions;
 
 namespace Reefin.Api.Controllers;

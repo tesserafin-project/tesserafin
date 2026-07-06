@@ -1,8 +1,8 @@
 using System.Threading.Tasks;
-using MediaBrowser.Common.Extensions;
-using MediaBrowser.Common.Net;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
+using Reefin.Common.Extensions;
+using Reefin.Common.Net;
 
 namespace Reefin.Api.Auth.AnonymousLanAccessPolicy
 {

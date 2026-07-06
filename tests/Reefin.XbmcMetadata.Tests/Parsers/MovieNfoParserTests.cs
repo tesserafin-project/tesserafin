@@ -1,7 +1,6 @@
 using System;
 using System.Linq;
 using System.Threading;
-using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Library;
@@ -13,6 +12,7 @@ using MediaBrowser.Model.Providers;
 using MediaBrowser.Providers.Plugins.Tmdb.Movies;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Reefin.Common.Configuration;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
 using Reefin.XbmcMetadata.Parsers;

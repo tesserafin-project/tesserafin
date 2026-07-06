@@ -1,4 +1,4 @@
-using MediaBrowser.Common.Net;
+using Reefin.Common.Net;
 using Xunit;
 
 namespace Reefin.Networking.Tests.Configuration;

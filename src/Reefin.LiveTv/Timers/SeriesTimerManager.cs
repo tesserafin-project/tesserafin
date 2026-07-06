@@ -2,9 +2,9 @@
 
 using System;
 using System.IO;
-using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.LiveTv;
 using Microsoft.Extensions.Logging;
+using Reefin.Common.Configuration;
 
 namespace Reefin.LiveTv.Timers
 {

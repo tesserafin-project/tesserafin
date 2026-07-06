@@ -1,9 +1,9 @@
 #pragma warning disable CS1591
 
 using System;
-using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Model.Configuration;
+using Reefin.Common.Configuration;
 
 namespace MediaBrowser.Controller.Library
 {

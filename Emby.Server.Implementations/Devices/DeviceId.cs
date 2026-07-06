@@ -5,8 +5,8 @@ using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Threading;
-using MediaBrowser.Common.Configuration;
 using Microsoft.Extensions.Logging;
+using Reefin.Common.Configuration;
 
 namespace Emby.Server.Implementations.Devices
 {

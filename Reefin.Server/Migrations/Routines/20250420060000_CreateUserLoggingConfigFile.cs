@@ -2,8 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using MediaBrowser.Common.Configuration;
 using Newtonsoft.Json.Linq;
+using Reefin.Common.Configuration;
 
 namespace Reefin.Server.Migrations.Routines
 {

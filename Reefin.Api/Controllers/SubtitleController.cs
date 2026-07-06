@@ -10,8 +10,6 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Common.Api;
-using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
@@ -31,6 +29,8 @@ using Reefin.Api.Attributes;
 using Reefin.Api.Extensions;
 using Reefin.Api.Helpers;
 using Reefin.Api.Models.SubtitleDtos;
+using Reefin.Common.Api;
+using Reefin.Common.Configuration;
 
 namespace Reefin.Api.Controllers;
 

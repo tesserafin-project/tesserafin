@@ -1,11 +1,11 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Threading.Tasks;
-using MediaBrowser.Common.Extensions;
 using MediaBrowser.Controller.Configuration;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.Extensions.Logging;
+using Reefin.Common.Extensions;
 
 namespace Reefin.Api.Middleware;
 

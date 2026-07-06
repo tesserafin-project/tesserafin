@@ -1,5 +1,5 @@
-using MediaBrowser.Common.Configuration;
 using MediaBrowser.Model.Configuration;
+using Reefin.Common.Configuration;
 
 namespace MediaBrowser.Controller.Configuration
 {

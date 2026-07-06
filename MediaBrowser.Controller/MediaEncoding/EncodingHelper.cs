@@ -13,7 +13,6 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
-using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Extensions;
 using MediaBrowser.Controller.IO;
 using MediaBrowser.Model.Configuration;
@@ -23,11 +22,12 @@ using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.MediaInfo;
 using MediaBrowser.Model.Session;
 using Microsoft.Extensions.Configuration;
+using Reefin.Common.Configuration;
 using Reefin.Data;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Enums;
 using Reefin.Extensions;
-using IConfigurationManager = MediaBrowser.Common.Configuration.IConfigurationManager;
+using IConfigurationManager = Reefin.Common.Configuration.IConfigurationManager;
 
 namespace MediaBrowser.Controller.MediaEncoding
 {

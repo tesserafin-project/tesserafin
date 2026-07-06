@@ -1,6 +1,5 @@
 using System;
 using Emby.Server.Implementations.Dto;
-using MediaBrowser.Common;
 using MediaBrowser.Controller.Chapters;
 using MediaBrowser.Controller.Drawing;
 using MediaBrowser.Controller.Dto;
@@ -13,6 +12,7 @@ using MediaBrowser.Controller.Trickplay;
 using MediaBrowser.Model.Entities;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Reefin.Common;
 using Xunit;
 
 namespace Reefin.Server.Implementations.Tests.Dto;

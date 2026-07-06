@@ -5,12 +5,12 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Common.Configuration;
-using MediaBrowser.Common.Net;
 using MediaBrowser.Controller;
 using MediaBrowser.Model.ApiClient;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Reefin.Common.Configuration;
+using Reefin.Common.Net;
 
 namespace Reefin.Networking;
 

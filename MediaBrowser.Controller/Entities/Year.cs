@@ -13,7 +13,7 @@ namespace MediaBrowser.Controller.Entities
     /// <summary>
     /// Class Year.
     /// </summary>
-    [Common.RequiresSourceSerialisation]
+    [Reefin.Common.RequiresSourceSerialisation]
     public class Year : BaseItem, IItemByName
     {
         [JsonIgnore]

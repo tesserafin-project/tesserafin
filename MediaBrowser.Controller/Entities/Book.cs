@@ -10,7 +10,7 @@ using Reefin.Data.Enums;
 
 namespace MediaBrowser.Controller.Entities
 {
-    [Common.RequiresSourceSerialisation]
+    [Reefin.Common.RequiresSourceSerialisation]
     public class Book : BaseItem, IHasLookupInfo<BookInfo>, IHasSeries
     {
         public Book()

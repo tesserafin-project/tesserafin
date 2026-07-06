@@ -1,10 +1,10 @@
 using System.Net;
 using System.Threading.Tasks;
 using System.Web;
-using MediaBrowser.Common.Extensions;
-using MediaBrowser.Common.Net;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using Reefin.Common.Extensions;
+using Reefin.Common.Net;
 
 namespace Reefin.Api.Middleware;
 

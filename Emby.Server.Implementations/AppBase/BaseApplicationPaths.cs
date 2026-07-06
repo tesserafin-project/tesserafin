@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using MediaBrowser.Common.Configuration;
+using Reefin.Common.Configuration;
 using Reefin.Extensions;
 
 namespace Emby.Server.Implementations.AppBase

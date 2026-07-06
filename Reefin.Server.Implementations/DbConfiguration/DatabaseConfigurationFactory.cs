@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using MediaBrowser.Common.Configuration;
+using Reefin.Common.Configuration;
 
 namespace Reefin.Server.Implementations.DatabaseConfiguration;
 

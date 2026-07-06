@@ -1,7 +1,7 @@
 using System;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
-using MediaBrowser.Common.Providers;
+using Reefin.Common.Providers;
 
 namespace Emby.Server.Implementations.Library
 {

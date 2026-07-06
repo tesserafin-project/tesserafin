@@ -1,6 +1,6 @@
 using System;
 using System.Text;
-using MediaBrowser.Common;
+using Reefin.Common;
 using Xunit;
 
 namespace Reefin.Common.Tests

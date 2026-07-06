@@ -3,7 +3,6 @@
 #pragma warning disable CS1591
 
 using System.Collections.Generic;
-using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Drawing;
 using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Entities;
@@ -13,6 +12,7 @@ using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.IO;
 using MediaBrowser.Model.Querying;
+using Reefin.Common.Configuration;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Enums;
 

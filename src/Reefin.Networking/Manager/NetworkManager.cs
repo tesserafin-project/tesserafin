@@ -8,14 +8,14 @@ using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Threading;
 using J2N.Collections.Generic.Extensions;
-using MediaBrowser.Common.Configuration;
-using MediaBrowser.Common.Net;
 using MediaBrowser.Model.Net;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Reefin.Common.Configuration;
+using Reefin.Common.Net;
 using static MediaBrowser.Controller.Extensions.ConfigurationExtensions;
-using IConfigurationManager = MediaBrowser.Common.Configuration.IConfigurationManager;
+using IConfigurationManager = Reefin.Common.Configuration.IConfigurationManager;
 
 namespace Reefin.Networking.Manager;
 

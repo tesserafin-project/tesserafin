@@ -4,7 +4,6 @@ using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
-using MediaBrowser.Common.Extensions;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.MediaEncoding;
@@ -20,6 +19,7 @@ using Reefin.Api.Attributes;
 using Reefin.Api.Helpers;
 using Reefin.Api.ModelBinders;
 using Reefin.Api.Models.StreamingDtos;
+using Reefin.Common.Extensions;
 using Reefin.Data.Enums;
 using Reefin.Extensions;
 

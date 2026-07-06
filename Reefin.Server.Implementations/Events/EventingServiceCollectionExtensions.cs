@@ -1,4 +1,3 @@
-using MediaBrowser.Common.Updates;
 using MediaBrowser.Controller.Events;
 using MediaBrowser.Controller.Events.Authentication;
 using MediaBrowser.Controller.Events.Session;
@@ -8,6 +7,7 @@ using MediaBrowser.Controller.Lyrics;
 using MediaBrowser.Controller.Subtitles;
 using MediaBrowser.Model.Tasks;
 using Microsoft.Extensions.DependencyInjection;
+using Reefin.Common.Updates;
 using Reefin.Data.Events.System;
 using Reefin.Data.Events.Users;
 using Reefin.Server.Implementations.Events.Consumers.Library;

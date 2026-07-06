@@ -5,10 +5,10 @@ using System.Net.Http;
 using System.Net.Http.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Common.Net;
 using MediaBrowser.Providers.Plugins.ListenBrainz.Api.Models;
 using MediaBrowser.Providers.Plugins.ListenBrainz.Configuration;
 using Microsoft.Extensions.Logging;
+using Reefin.Common.Net;
 
 namespace MediaBrowser.Providers.Plugins.ListenBrainz.Api;
 

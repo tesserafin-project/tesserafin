@@ -1,6 +1,5 @@
 using System;
 using System.Globalization;
-using MediaBrowser.Common.Net;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Devices;
 using MediaBrowser.Controller.Library;
@@ -10,6 +9,7 @@ using MediaBrowser.Model.MediaInfo;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Reefin.Api.Helpers;
+using Reefin.Common.Net;
 using Xunit;
 
 namespace Reefin.Api.Tests.Helpers

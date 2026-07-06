@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 
 namespace MediaBrowser.Controller.Entities
 {
-    [Common.RequiresSourceSerialisation]
+    [Reefin.Common.RequiresSourceSerialisation]
     public class PhotoAlbum : Folder
     {
         [JsonIgnore]

@@ -1,11 +1,11 @@
 using System.IO;
 using System.Threading;
-using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.IO;
 using Microsoft.Extensions.Logging;
+using Reefin.Common.Configuration;
 using Reefin.XbmcMetadata.Parsers;
 
 namespace Reefin.XbmcMetadata.Providers

@@ -10,7 +10,7 @@
     <ProjectReference Include="..\Reefin.Api\Reefin.Api.csproj" />
     <ProjectReference Include="..\Reefin.Server.Implementations\Reefin.Server.Implementations.csproj" />
     <ProjectReference Include="..\MediaBrowser.Model\MediaBrowser.Model.csproj" />
-    <ProjectReference Include="..\MediaBrowser.Common\MediaBrowser.Common.csproj" />
+    <ProjectReference Include="..\Reefin.Common\Reefin.Common.csproj" />
     <ProjectReference Include="..\MediaBrowser.Controller\MediaBrowser.Controller.csproj" />
     <ProjectReference Include="..\MediaBrowser.Providers\MediaBrowser.Providers.csproj" />
     <ProjectReference Include="..\Reefin.XbmcMetadata\Reefin.XbmcMetadata.csproj" />

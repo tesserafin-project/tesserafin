@@ -3,12 +3,12 @@ using System.IO;
 using System.Text;
 using System.Threading;
 using System.Xml;
-using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Extensions;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
 using Microsoft.Extensions.Logging;
+using Reefin.Common.Configuration;
 
 namespace Reefin.XbmcMetadata.Parsers
 {

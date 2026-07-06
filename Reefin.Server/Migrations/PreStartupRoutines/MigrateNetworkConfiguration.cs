@@ -5,8 +5,8 @@ using System.IO;
 using System.Xml;
 using System.Xml.Serialization;
 using Emby.Server.Implementations;
-using MediaBrowser.Common.Net;
 using Microsoft.Extensions.Logging;
+using Reefin.Common.Net;
 
 namespace Reefin.Server.Migrations.PreStartupRoutines;
 

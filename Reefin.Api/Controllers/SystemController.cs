@@ -4,10 +4,6 @@ using System.ComponentModel.DataAnnotations;
 using System.IO;
 using System.Linq;
 using System.Net.Mime;
-using MediaBrowser.Common.Api;
-using MediaBrowser.Common.Configuration;
-using MediaBrowser.Common.Extensions;
-using MediaBrowser.Common.Net;
 using MediaBrowser.Controller;
 using MediaBrowser.Model.IO;
 using MediaBrowser.Model.Net;
@@ -18,6 +14,10 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Reefin.Api.Attributes;
 using Reefin.Api.Models.SystemInfoDtos;
+using Reefin.Common.Api;
+using Reefin.Common.Configuration;
+using Reefin.Common.Extensions;
+using Reefin.Common.Net;
 
 namespace Reefin.Api.Controllers;
 

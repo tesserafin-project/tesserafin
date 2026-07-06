@@ -11,8 +11,6 @@ using System.Net;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Common.Extensions;
-using MediaBrowser.Common.Net;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Library;
@@ -24,6 +22,8 @@ using MediaBrowser.Model.LiveTv;
 using MediaBrowser.Model.MediaInfo;
 using Microsoft.Extensions.Logging;
 using Microsoft.Net.Http.Headers;
+using Reefin.Common.Extensions;
+using Reefin.Common.Net;
 using Reefin.Extensions;
 
 namespace Reefin.LiveTv.TunerHosts

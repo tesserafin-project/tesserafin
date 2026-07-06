@@ -1,8 +1,8 @@
 using System.Net;
-using MediaBrowser.Common.Net;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Reefin.Common.Net;
 using Reefin.Networking.Manager;
 using Xunit;
 

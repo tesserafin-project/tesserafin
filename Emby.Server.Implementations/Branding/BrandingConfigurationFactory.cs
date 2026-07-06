@@ -1,6 +1,6 @@
 using System.Collections.Generic;
-using MediaBrowser.Common.Configuration;
 using MediaBrowser.Model.Branding;
+using Reefin.Common.Configuration;
 
 namespace Emby.Server.Implementations.Branding
 {

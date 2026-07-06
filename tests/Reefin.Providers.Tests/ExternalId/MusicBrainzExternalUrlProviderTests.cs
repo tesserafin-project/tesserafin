@@ -1,7 +1,5 @@
 using System;
 using System.Reflection;
-using MediaBrowser.Common;
-using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Model.Entities;
@@ -10,6 +8,8 @@ using MediaBrowser.Providers.Plugins.MusicBrainz;
 using MediaBrowser.Providers.Plugins.MusicBrainz.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Reefin.Common;
+using Reefin.Common.Configuration;
 using Xunit;
 
 namespace Reefin.Providers.Tests.ExternalId

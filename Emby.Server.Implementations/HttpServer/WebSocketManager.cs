@@ -8,10 +8,10 @@ using System.Globalization;
 using System.Linq;
 using System.Net.WebSockets;
 using System.Threading.Tasks;
-using MediaBrowser.Common.Extensions;
 using MediaBrowser.Controller.Net;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using Reefin.Common.Extensions;
 
 namespace Emby.Server.Implementations.HttpServer
 {

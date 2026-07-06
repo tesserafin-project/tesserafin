@@ -3,7 +3,6 @@ using System.ComponentModel.DataAnnotations;
 using System.Net.Mime;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Common.Extensions;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.MediaEncoding;
@@ -12,6 +11,7 @@ using Microsoft.AspNetCore.Mvc;
 using Reefin.Api.Attributes;
 using Reefin.Api.Extensions;
 using Reefin.Api.Helpers;
+using Reefin.Common.Extensions;
 
 namespace Reefin.Api.Controllers;
 

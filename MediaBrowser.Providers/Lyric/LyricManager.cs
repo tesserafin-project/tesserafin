@@ -6,7 +6,6 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Common.Extensions;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Library;
@@ -19,6 +18,7 @@ using MediaBrowser.Model.IO;
 using MediaBrowser.Model.Lyrics;
 using MediaBrowser.Model.Providers;
 using Microsoft.Extensions.Logging;
+using Reefin.Common.Extensions;
 using Reefin.Extensions;
 
 namespace MediaBrowser.Providers.Lyric;

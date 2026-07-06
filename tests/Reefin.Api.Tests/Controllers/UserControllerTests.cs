@@ -4,7 +4,6 @@ using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Threading.Tasks;
 using AutoFixture.Xunit3;
-using MediaBrowser.Common.Net;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Devices;
 using MediaBrowser.Controller.Library;
@@ -18,6 +17,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using Nikse.SubtitleEdit.Core.Common;
 using Reefin.Api.Controllers;
+using Reefin.Common.Net;
 using Reefin.Database.Implementations.Entities;
 using Xunit;
 

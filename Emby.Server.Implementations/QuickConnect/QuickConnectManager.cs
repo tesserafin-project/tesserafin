@@ -4,7 +4,6 @@ using System.Globalization;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
-using MediaBrowser.Common.Extensions;
 using MediaBrowser.Controller.Authentication;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Net;
@@ -12,6 +11,7 @@ using MediaBrowser.Controller.QuickConnect;
 using MediaBrowser.Controller.Session;
 using MediaBrowser.Model.QuickConnect;
 using Microsoft.Extensions.Logging;
+using Reefin.Common.Extensions;
 
 namespace Emby.Server.Implementations.QuickConnect
 {
