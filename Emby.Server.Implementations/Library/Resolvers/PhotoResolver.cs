@@ -1,8 +1,6 @@
 using System;
 using System.IO;
 using System.Linq;
-using Emby.Naming.Common;
-using Emby.Naming.Video;
 using MediaBrowser.Controller.Drawing;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
@@ -11,6 +9,8 @@ using MediaBrowser.Controller.Resolvers;
 using MediaBrowser.Model.Entities;
 using Reefin.Data.Enums;
 using Reefin.Extensions;
+using Reefin.Naming.Common;
+using Reefin.Naming.Video;
 
 namespace Emby.Server.Implementations.Library.Resolvers
 {

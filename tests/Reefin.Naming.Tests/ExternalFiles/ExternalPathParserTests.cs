@@ -1,9 +1,9 @@
 using System.Text.RegularExpressions;
-using Emby.Naming.Common;
-using Emby.Naming.ExternalFiles;
 using MediaBrowser.Model.Dlna;
 using MediaBrowser.Model.Globalization;
 using Moq;
+using Reefin.Naming.Common;
+using Reefin.Naming.ExternalFiles;
 using Xunit;
 
 namespace Reefin.Naming.Tests.ExternalFiles;

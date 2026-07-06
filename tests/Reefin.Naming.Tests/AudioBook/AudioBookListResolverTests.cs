@@ -1,8 +1,8 @@
 using System;
 using System.Linq;
-using Emby.Naming.AudioBook;
-using Emby.Naming.Common;
 using MediaBrowser.Model.IO;
+using Reefin.Naming.AudioBook;
+using Reefin.Naming.Common;
 using Xunit;
 
 namespace Reefin.Naming.Tests.AudioBook

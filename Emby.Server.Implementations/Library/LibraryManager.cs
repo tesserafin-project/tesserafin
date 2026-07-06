@@ -11,9 +11,6 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using BitFaster.Caching.Lru;
-using Emby.Naming.Common;
-using Emby.Naming.TV;
-using Emby.Naming.Video;
 using Emby.Server.Implementations.Library.Resolvers;
 using Emby.Server.Implementations.Library.Validators;
 using Emby.Server.Implementations.Playlists;
@@ -50,11 +47,14 @@ using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Database.Implementations.Enums;
 using Reefin.Extensions;
+using Reefin.Naming.Common;
+using Reefin.Naming.TV;
+using Reefin.Naming.Video;
 using Episode = MediaBrowser.Controller.Entities.TV.Episode;
-using EpisodeInfo = Emby.Naming.TV.EpisodeInfo;
+using EpisodeInfo = Reefin.Naming.TV.EpisodeInfo;
 using Genre = MediaBrowser.Controller.Entities.Genre;
 using Person = MediaBrowser.Controller.Entities.Person;
-using VideoResolver = Emby.Naming.Video.VideoResolver;
+using VideoResolver = Reefin.Naming.Video.VideoResolver;
 
 namespace Emby.Server.Implementations.Library
 {

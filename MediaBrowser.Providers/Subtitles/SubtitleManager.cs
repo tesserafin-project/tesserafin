@@ -7,7 +7,6 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Emby.Naming.Common;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Entities.TV;
@@ -23,6 +22,7 @@ using MediaBrowser.Model.Providers;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Extensions;
 using Reefin.Extensions;
+using Reefin.Naming.Common;
 
 namespace MediaBrowser.Providers.Subtitles
 {

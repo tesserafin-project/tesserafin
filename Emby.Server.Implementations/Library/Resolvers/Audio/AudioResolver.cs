@@ -6,16 +6,16 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using Emby.Naming.Audio;
-using Emby.Naming.AudioBook;
-using Emby.Naming.Common;
-using Emby.Naming.Video;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Controller.Resolvers;
 using MediaBrowser.Model.IO;
 using Reefin.Data.Enums;
+using Reefin.Naming.Audio;
+using Reefin.Naming.AudioBook;
+using Reefin.Naming.Common;
+using Reefin.Naming.Video;
 
 namespace Emby.Server.Implementations.Library.Resolvers.Audio
 {

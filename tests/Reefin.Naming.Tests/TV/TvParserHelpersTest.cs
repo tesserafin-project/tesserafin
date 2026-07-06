@@ -1,5 +1,5 @@
-using Emby.Naming.TV;
 using MediaBrowser.Model.Entities;
+using Reefin.Naming.TV;
 using Xunit;
 
 namespace Reefin.Naming.Tests.TV;

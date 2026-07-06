@@ -1,9 +1,9 @@
-using Emby.Naming.Common;
-using Emby.Naming.Video;
 using MediaBrowser.Model.Entities;
+using Reefin.Naming.Common;
+using Reefin.Naming.Video;
 using Xunit;
 
-using MediaType = Emby.Naming.Common.MediaType;
+using MediaType = Reefin.Naming.Common.MediaType;
 
 namespace Reefin.Naming.Tests.Video
 {

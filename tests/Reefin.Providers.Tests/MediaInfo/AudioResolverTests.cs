@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using Emby.Naming.Common;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Entities;
@@ -15,6 +14,7 @@ using MediaBrowser.Model.IO;
 using MediaBrowser.Providers.MediaInfo;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Reefin.Naming.Common;
 using Xunit;
 
 namespace Reefin.Providers.Tests.MediaInfo;

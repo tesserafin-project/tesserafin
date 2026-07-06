@@ -1,11 +1,11 @@
 using System;
 using System.IO;
-using Emby.Naming.Audio;
-using Emby.Naming.Common;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Resolvers;
 using MediaBrowser.Model.IO;
+using Reefin.Naming.Audio;
+using Reefin.Naming.Common;
 
 namespace Emby.Server.Implementations.Library
 {

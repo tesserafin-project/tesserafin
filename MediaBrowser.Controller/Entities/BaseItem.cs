@@ -1345,7 +1345,7 @@ namespace MediaBrowser.Controller.Entities
         /// "- Greyscale" / "- Colorized"). It prefers a structural delimiter ('-', '_', '.') so a
         /// token shared by the descriptors but separated only by spaces (e.g. a common "2160p ") is
         /// kept in the label, falling back to a space only when no structural delimiter is shared. The
-        /// separators mirror the version delimiters recognised by the naming layer (Emby.Naming
+        /// separators mirror the version delimiters recognised by the naming layer (Reefin.Naming
         /// VideoFlagDelimiters).
         /// </summary>
         /// <param name="fileNames">The version file names without extension; must contain at least one entry.</param>

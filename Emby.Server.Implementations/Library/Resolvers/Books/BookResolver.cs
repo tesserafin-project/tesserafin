@@ -3,12 +3,12 @@
 using System;
 using System.IO;
 using System.Linq;
-using Emby.Naming.Book;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Resolvers;
 using Reefin.Data.Enums;
 using Reefin.Extensions;
+using Reefin.Naming.Book;
 
 namespace Emby.Server.Implementations.Library.Resolvers.Books
 {

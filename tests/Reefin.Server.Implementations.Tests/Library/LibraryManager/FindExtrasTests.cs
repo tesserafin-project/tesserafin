@@ -4,7 +4,6 @@ using System.IO;
 using System.Linq;
 using AutoFixture;
 using AutoFixture.AutoMoq;
-using Emby.Naming.Common;
 using Emby.Server.Implementations.Library.Resolvers.Audio;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Entities;
@@ -19,6 +18,7 @@ using MediaBrowser.Controller.Sorting;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.IO;
 using Moq;
+using Reefin.Naming.Common;
 using Xunit;
 
 namespace Reefin.Server.Implementations.Tests.Library.LibraryManager;

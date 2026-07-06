@@ -1,5 +1,5 @@
-using Emby.Naming.AudioBook;
-using Emby.Naming.Common;
+using Reefin.Naming.AudioBook;
+using Reefin.Naming.Common;
 using Xunit;
 
 namespace Reefin.Naming.Tests.AudioBook

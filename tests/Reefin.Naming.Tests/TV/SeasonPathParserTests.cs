@@ -1,4 +1,4 @@
-using Emby.Naming.TV;
+using Reefin.Naming.TV;
 using Xunit;
 
 namespace Reefin.Naming.Tests.TV;

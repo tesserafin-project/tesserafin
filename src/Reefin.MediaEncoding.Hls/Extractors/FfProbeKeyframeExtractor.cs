@@ -1,11 +1,11 @@
 using System;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
-using Emby.Naming.Common;
 using MediaBrowser.Controller.MediaEncoding;
 using Microsoft.Extensions.Logging;
 using Reefin.Extensions;
 using Reefin.MediaEncoding.Keyframes;
+using Reefin.Naming.Common;
 using Extractor = Reefin.MediaEncoding.Keyframes.FfProbe.FfProbeKeyframeExtractor;
 
 namespace Reefin.MediaEncoding.Hls.Extractors;

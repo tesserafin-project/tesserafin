@@ -3,7 +3,6 @@
 using System;
 using System.IO;
 using System.Linq;
-using Emby.Naming.Common;
 using Emby.Server.Implementations.Library;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
@@ -11,6 +10,7 @@ using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Entities;
 using Microsoft.Extensions.Logging;
 using Reefin.Data.Enums;
+using Reefin.Naming.Common;
 
 namespace Emby.Server.Implementations.Library.Resolvers.TV
 {

@@ -1,4 +1,4 @@
-using Emby.Naming.Common;
+using Reefin.Naming.Common;
 using Xunit;
 
 namespace Reefin.Naming.Tests.Common

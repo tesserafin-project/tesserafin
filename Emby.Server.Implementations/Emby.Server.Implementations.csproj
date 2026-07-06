@@ -6,7 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Emby.Naming\Emby.Naming.csproj" />
+    <ProjectReference Include="..\Reefin.Naming\Reefin.Naming.csproj" />
     <ProjectReference Include="..\Reefin.Api\Reefin.Api.csproj" />
     <ProjectReference Include="..\Reefin.Server.Implementations\Reefin.Server.Implementations.csproj" />
     <ProjectReference Include="..\MediaBrowser.Model\MediaBrowser.Model.csproj" />

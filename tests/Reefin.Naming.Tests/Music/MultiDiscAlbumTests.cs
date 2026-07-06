@@ -1,5 +1,5 @@
-using Emby.Naming.Audio;
-using Emby.Naming.Common;
+using Reefin.Naming.Audio;
+using Reefin.Naming.Common;
 using Xunit;
 
 namespace Reefin.Naming.Tests.Music

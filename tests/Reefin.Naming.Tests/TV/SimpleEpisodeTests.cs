@@ -1,6 +1,6 @@
 using System.IO;
-using Emby.Naming.Common;
-using Emby.Naming.TV;
+using Reefin.Naming.Common;
+using Reefin.Naming.TV;
 using Xunit;
 
 namespace Reefin.Naming.Tests.TV

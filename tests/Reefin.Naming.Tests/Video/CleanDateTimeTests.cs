@@ -1,6 +1,6 @@
 using System.IO;
-using Emby.Naming.Common;
-using Emby.Naming.Video;
+using Reefin.Naming.Common;
+using Reefin.Naming.Video;
 using Xunit;
 
 namespace Reefin.Naming.Tests.Video

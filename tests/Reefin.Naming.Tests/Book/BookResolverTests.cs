@@ -1,4 +1,4 @@
-using Emby.Naming.Book;
+using Reefin.Naming.Book;
 using Xunit;
 
 namespace Reefin.Naming.Tests.Book;

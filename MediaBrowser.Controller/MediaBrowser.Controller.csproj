@@ -23,7 +23,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../Emby.Naming/Emby.Naming.csproj" />
+    <ProjectReference Include="../Reefin.Naming/Reefin.Naming.csproj" />
     <ProjectReference Include="../MediaBrowser.Model/MediaBrowser.Model.csproj" />
     <ProjectReference Include="../Reefin.Common/Reefin.Common.csproj" />
     <ProjectReference Include="../src/Reefin.MediaEncoding.Keyframes/Reefin.MediaEncoding.Keyframes.csproj" />

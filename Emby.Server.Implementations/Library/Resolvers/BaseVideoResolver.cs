@@ -6,13 +6,13 @@ using System;
 using System.IO;
 using System.Linq;
 using DiscUtils.Udf;
-using Emby.Naming.Common;
-using Emby.Naming.Video;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Entities;
 using Microsoft.Extensions.Logging;
+using Reefin.Naming.Common;
+using Reefin.Naming.Video;
 
 namespace Emby.Server.Implementations.Library.Resolvers
 {

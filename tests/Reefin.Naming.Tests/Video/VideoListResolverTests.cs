@@ -1,8 +1,8 @@
 using System;
 using System.Linq;
-using Emby.Naming.Common;
-using Emby.Naming.Video;
 using MediaBrowser.Model.Entities;
+using Reefin.Naming.Common;
+using Reefin.Naming.Video;
 using Xunit;
 
 namespace Reefin.Naming.Tests.Video
