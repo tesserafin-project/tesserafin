@@ -8,7 +8,7 @@ using MediaBrowser.Controller.Providers;
 using Microsoft.Extensions.Logging;
 using Reefin.Data.Enums;
 
-namespace MediaBrowser.LocalMetadata.Parsers
+namespace Reefin.LocalMetadata.Parsers
 {
     /// <summary>
     /// Playlist xml parser.

@@ -12,7 +12,7 @@ using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.IO;
 using Reefin.Extensions;
 
-namespace MediaBrowser.LocalMetadata.Images
+namespace Reefin.LocalMetadata.Images
 {
     /// <summary>
     /// Local image provider.

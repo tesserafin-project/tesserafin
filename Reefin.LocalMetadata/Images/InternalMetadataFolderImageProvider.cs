@@ -7,7 +7,7 @@ using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.IO;
 using Microsoft.Extensions.Logging;
 
-namespace MediaBrowser.LocalMetadata.Images
+namespace Reefin.LocalMetadata.Images
 {
     /// <summary>
     /// Internal metadata folder image provider.

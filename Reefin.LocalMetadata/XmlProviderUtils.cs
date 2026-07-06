@@ -1,4 +1,4 @@
-namespace MediaBrowser.LocalMetadata
+namespace Reefin.LocalMetadata
 {
     /// <summary>
     /// The xml provider utils.

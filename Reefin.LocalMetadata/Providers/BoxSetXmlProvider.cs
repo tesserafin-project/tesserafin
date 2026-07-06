@@ -2,11 +2,11 @@ using System.IO;
 using System.Threading;
 using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.LocalMetadata.Parsers;
 using MediaBrowser.Model.IO;
 using Microsoft.Extensions.Logging;
+using Reefin.LocalMetadata.Parsers;
 
-namespace MediaBrowser.LocalMetadata.Providers
+namespace Reefin.LocalMetadata.Providers
 {
     /// <summary>
     /// Class BoxSetXmlProvider.

@@ -5,7 +5,7 @@ using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Providers;
 using Microsoft.Extensions.Logging;
 
-namespace MediaBrowser.LocalMetadata.Parsers
+namespace Reefin.LocalMetadata.Parsers
 {
     /// <summary>
     /// The box set xml parser.

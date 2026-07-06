@@ -17,7 +17,7 @@ using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.IO;
 using Microsoft.Extensions.Logging;
 
-namespace MediaBrowser.LocalMetadata.Savers
+namespace Reefin.LocalMetadata.Savers
 {
     /// <inheritdoc />
     public abstract class BaseXmlSaver : IMetadataFileSaver

@@ -15,7 +15,7 @@ using Microsoft.Extensions.Logging;
 using Reefin.Data.Enums;
 using Reefin.Extensions;
 
-namespace MediaBrowser.LocalMetadata.Parsers
+namespace Reefin.LocalMetadata.Parsers
 {
     /// <summary>
     /// Provides a base class for parsing metadata xml.

@@ -8,7 +8,7 @@ using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.IO;
 using Microsoft.Extensions.Logging;
 
-namespace MediaBrowser.LocalMetadata.Savers
+namespace Reefin.LocalMetadata.Savers
 {
     /// <summary>
     /// Box set xml saver.

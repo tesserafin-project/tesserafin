@@ -1,12 +1,12 @@
 using System.Threading;
 using MediaBrowser.Controller.Playlists;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.LocalMetadata.Parsers;
-using MediaBrowser.LocalMetadata.Savers;
 using MediaBrowser.Model.IO;
 using Microsoft.Extensions.Logging;
+using Reefin.LocalMetadata.Parsers;
+using Reefin.LocalMetadata.Savers;
 
-namespace MediaBrowser.LocalMetadata.Providers
+namespace Reefin.LocalMetadata.Providers
 {
     /// <summary>
     /// Playlist xml provider.

@@ -9,7 +9,7 @@ using MediaBrowser.Model.IO;
 using Microsoft.Extensions.Logging;
 using Reefin.Data.Enums;
 
-namespace MediaBrowser.LocalMetadata.Savers
+namespace Reefin.LocalMetadata.Savers
 {
     /// <summary>
     /// Playlist xml saver.

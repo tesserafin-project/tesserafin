@@ -5,7 +5,7 @@ using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.IO;
 
-namespace MediaBrowser.LocalMetadata
+namespace Reefin.LocalMetadata
 {
     /// <summary>
     /// The BaseXmlProvider.

@@ -3,7 +3,7 @@ using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.IO;
 
-namespace MediaBrowser.LocalMetadata.Images
+namespace Reefin.LocalMetadata.Images
 {
     /// <summary>
     /// Collection folder local image provider.
