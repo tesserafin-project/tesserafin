@@ -10,13 +10,13 @@ using System.Text.RegularExpressions;
 using System.Xml;
 using MediaBrowser.Controller.Extensions;
 using MediaBrowser.Controller.Library;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.Globalization;
-using MediaBrowser.Model.MediaInfo;
 using Microsoft.Extensions.Logging;
 using Reefin.Data.Enums;
 using Reefin.Extensions;
+using Reefin.Model.Dto;
+using Reefin.Model.Entities;
+using Reefin.Model.Globalization;
+using Reefin.Model.MediaInfo;
 
 namespace Reefin.MediaEncoding.Probing
 {

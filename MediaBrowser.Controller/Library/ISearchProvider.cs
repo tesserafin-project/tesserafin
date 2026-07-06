@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Model.Configuration;
+using Reefin.Model.Configuration;
 
 namespace MediaBrowser.Controller.Library;
 

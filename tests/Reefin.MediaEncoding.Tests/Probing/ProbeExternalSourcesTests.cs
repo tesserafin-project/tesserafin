@@ -1,13 +1,13 @@
 using System;
 using System.Collections.Generic;
 using MediaBrowser.Controller.Configuration;
-using MediaBrowser.Model.Globalization;
-using MediaBrowser.Model.IO;
-using MediaBrowser.Model.MediaInfo;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Reefin.MediaEncoding.Encoder;
+using Reefin.Model.Globalization;
+using Reefin.Model.IO;
+using Reefin.Model.MediaInfo;
 using Xunit;
 
 namespace Reefin.MediaEncoding.Tests.Probing
@@ -29,7 +29,7 @@ namespace Reefin.MediaEncoding.Tests.Probing
             var userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)";
             var req = new MediaBrowser.Controller.MediaEncoding.MediaInfoRequest()
             {
-                MediaSource = new MediaBrowser.Model.Dto.MediaSourceInfo
+                MediaSource = new Reefin.Model.Dto.MediaSourceInfo
                 {
                     Path = "/path/to/stream",
                     Protocol = MediaProtocol.Http,
@@ -39,7 +39,7 @@ namespace Reefin.MediaEncoding.Tests.Probing
                     }
                 },
                 ExtractChapters = false,
-                MediaType = MediaBrowser.Model.Dlna.DlnaProfileType.Video,
+                MediaType = Reefin.Model.Dlna.DlnaProfileType.Video,
             };
 
             var extraArg = encoder.GetExtraArguments(req);

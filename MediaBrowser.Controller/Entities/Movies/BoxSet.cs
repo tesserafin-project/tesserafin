@@ -8,11 +8,11 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text.Json.Serialization;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Querying;
 using Reefin.Data;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Database.Implementations.Enums;
+using Reefin.Model.Querying;
 
 namespace MediaBrowser.Controller.Entities.Movies
 {
@@ -37,7 +37,7 @@ namespace MediaBrowser.Controller.Entities.Movies
 
         /// <inheritdoc />
         [JsonIgnore]
-        public IReadOnlyList<BaseItem> LocalTrailers => GetExtras([Model.Entities.ExtraType.Trailer]).ToArray();
+        public IReadOnlyList<BaseItem> LocalTrailers => GetExtras([Reefin.Model.Entities.ExtraType.Trailer]).ToArray();
 
         /// <summary>
         /// Gets or sets the display order.

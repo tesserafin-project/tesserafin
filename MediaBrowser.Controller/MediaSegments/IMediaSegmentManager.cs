@@ -3,10 +3,10 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Entities;
-using MediaBrowser.Model.Configuration;
-using MediaBrowser.Model.MediaSegments;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Database.Implementations.Enums;
+using Reefin.Model.Configuration;
+using Reefin.Model.MediaSegments;
 
 namespace MediaBrowser.Controller.MediaSegments;
 

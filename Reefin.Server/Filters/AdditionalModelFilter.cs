@@ -7,12 +7,12 @@ using System.Text.Json.Nodes;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Net;
 using MediaBrowser.Controller.Net.WebSocketMessages;
-using MediaBrowser.Model.ApiClient;
-using MediaBrowser.Model.Session;
-using MediaBrowser.Model.SyncPlay;
 using Microsoft.OpenApi;
 using Reefin.Common.Plugins;
 using Reefin.Extensions;
+using Reefin.Model.ApiClient;
+using Reefin.Model.Session;
+using Reefin.Model.SyncPlay;
 using Reefin.Server.Migrations;
 using Swashbuckle.AspNetCore.SwaggerGen;
 
@@ -24,7 +24,7 @@ namespace Reefin.Server.Filters
     public class AdditionalModelFilter : IDocumentFilter
     {
         // Array of options that should not be visible in the api spec.
-        private static readonly Type[] _ignoredConfigurations = [typeof(MigrationOptions), typeof(MediaBrowser.Model.Branding.BrandingOptions)];
+        private static readonly Type[] _ignoredConfigurations = [typeof(MigrationOptions), typeof(Reefin.Model.Branding.BrandingOptions)];
         private readonly IServerConfigurationManager _serverConfigurationManager;
 
         /// <summary>

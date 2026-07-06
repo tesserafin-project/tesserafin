@@ -10,11 +10,11 @@ using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.MediaEncoding;
 using MediaBrowser.Controller.Persistence;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Drawing;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.MediaInfo;
 using Microsoft.Extensions.Logging;
+using Reefin.Model.Drawing;
+using Reefin.Model.Dto;
+using Reefin.Model.Entities;
+using Reefin.Model.MediaInfo;
 
 namespace Reefin.Providers.MediaInfo
 {

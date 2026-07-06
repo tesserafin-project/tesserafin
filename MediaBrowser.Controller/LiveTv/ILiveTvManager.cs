@@ -8,11 +8,11 @@ using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Entities;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.LiveTv;
-using MediaBrowser.Model.Querying;
 using Reefin.Data.Events;
 using Reefin.Database.Implementations.Entities;
+using Reefin.Model.Dto;
+using Reefin.Model.LiveTv;
+using Reefin.Model.Querying;
 
 namespace MediaBrowser.Controller.LiveTv
 {

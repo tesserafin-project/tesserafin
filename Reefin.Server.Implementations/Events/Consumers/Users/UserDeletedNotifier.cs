@@ -5,8 +5,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Events;
 using MediaBrowser.Controller.Session;
-using MediaBrowser.Model.Session;
 using Reefin.Data.Events.Users;
+using Reefin.Model.Session;
 
 namespace Reefin.Server.Implementations.Events.Consumers.Users
 {

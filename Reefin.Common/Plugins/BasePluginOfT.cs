@@ -5,9 +5,9 @@ using System;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
-using MediaBrowser.Model.Plugins;
-using MediaBrowser.Model.Serialization;
 using Reefin.Common.Configuration;
+using Reefin.Model.Plugins;
+using Reefin.Model.Serialization;
 
 namespace Reefin.Common.Plugins
 {

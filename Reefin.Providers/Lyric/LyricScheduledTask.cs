@@ -8,12 +8,12 @@ using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Lyrics;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.Globalization;
-using MediaBrowser.Model.Lyrics;
-using MediaBrowser.Model.Tasks;
 using Microsoft.Extensions.Logging;
 using Reefin.Data.Enums;
+using Reefin.Model.Entities;
+using Reefin.Model.Globalization;
+using Reefin.Model.Lyrics;
+using Reefin.Model.Tasks;
 
 namespace Reefin.Providers.Lyric;
 

@@ -1,6 +1,6 @@
 #nullable disable
 
-using MediaBrowser.Model.Dto;
+using Reefin.Model.Dto;
 
 namespace MediaBrowser.Controller.Authentication;
 

@@ -8,12 +8,12 @@ using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Threading;
 using J2N.Collections.Generic.Extensions;
-using MediaBrowser.Model.Net;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Configuration;
 using Reefin.Common.Net;
+using Reefin.Model.Net;
 using static MediaBrowser.Controller.Extensions.ConfigurationExtensions;
 using IConfigurationManager = Reefin.Common.Configuration.IConfigurationManager;
 

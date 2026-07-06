@@ -3,11 +3,11 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using MediaBrowser.Model.Configuration;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.Users;
 using Reefin.Data.Events;
 using Reefin.Database.Implementations.Entities;
+using Reefin.Model.Configuration;
+using Reefin.Model.Dto;
+using Reefin.Model.Users;
 
 namespace MediaBrowser.Controller.Library
 {

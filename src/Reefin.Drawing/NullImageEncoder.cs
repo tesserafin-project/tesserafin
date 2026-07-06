@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using MediaBrowser.Controller.Drawing;
-using MediaBrowser.Model.Drawing;
+using Reefin.Model.Drawing;
 
 namespace Reefin.Drawing;
 

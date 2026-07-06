@@ -7,10 +7,10 @@ using System.Threading.Tasks;
 using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
-using MediaBrowser.Model.Globalization;
-using MediaBrowser.Model.Tasks;
 using Reefin.Data.Enums;
 using Reefin.MediaEncoding.Hls.Extractors;
+using Reefin.Model.Globalization;
+using Reefin.Model.Tasks;
 
 namespace Reefin.MediaEncoding.Hls.ScheduledTasks;
 

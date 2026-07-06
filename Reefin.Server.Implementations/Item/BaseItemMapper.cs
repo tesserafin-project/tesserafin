@@ -11,13 +11,13 @@ using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.LiveTv;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.LiveTv;
 using Microsoft.Extensions.Logging;
 using Reefin.Common;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Extensions;
 using Reefin.Extensions.Json;
+using Reefin.Model.Entities;
+using Reefin.Model.LiveTv;
 using BaseItemDto = MediaBrowser.Controller.Entities.BaseItem;
 using BaseItemEntity = Reefin.Database.Implementations.Entities.BaseItemEntity;
 

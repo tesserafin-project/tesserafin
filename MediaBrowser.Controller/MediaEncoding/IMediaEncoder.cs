@@ -7,12 +7,12 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Model.Configuration;
-using MediaBrowser.Model.Dlna;
-using MediaBrowser.Model.Drawing;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.MediaInfo;
+using Reefin.Model.Configuration;
+using Reefin.Model.Dlna;
+using Reefin.Model.Drawing;
+using Reefin.Model.Dto;
+using Reefin.Model.Entities;
+using Reefin.Model.MediaInfo;
 
 namespace MediaBrowser.Controller.MediaEncoding
 {

@@ -11,11 +11,11 @@ using System.Threading.Tasks;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.IO;
-using MediaBrowser.Model.Providers;
 using Reefin.Common.Net;
 using Reefin.Extensions;
+using Reefin.Model.Entities;
+using Reefin.Model.IO;
+using Reefin.Model.Providers;
 
 namespace Reefin.Providers.Plugins.StudioImages
 {

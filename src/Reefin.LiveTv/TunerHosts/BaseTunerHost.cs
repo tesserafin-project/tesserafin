@@ -13,11 +13,11 @@ using System.Threading.Tasks;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.LiveTv;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.IO;
-using MediaBrowser.Model.LiveTv;
 using Microsoft.Extensions.Logging;
 using Reefin.LiveTv.Configuration;
+using Reefin.Model.Dto;
+using Reefin.Model.IO;
+using Reefin.Model.LiveTv;
 
 namespace Reefin.LiveTv.TunerHosts
 {

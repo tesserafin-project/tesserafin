@@ -16,15 +16,15 @@ using MediaBrowser.Controller.MediaEncoding;
 using MediaBrowser.Controller.Persistence;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Controller.Subtitles;
-using MediaBrowser.Model.Configuration;
-using MediaBrowser.Model.Dlna;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.Globalization;
-using MediaBrowser.Model.MediaInfo;
 using Microsoft.Extensions.Logging;
 using Reefin.Data.Enums;
 using Reefin.Extensions;
+using Reefin.Model.Configuration;
+using Reefin.Model.Dlna;
+using Reefin.Model.Dto;
+using Reefin.Model.Entities;
+using Reefin.Model.Globalization;
+using Reefin.Model.MediaInfo;
 
 namespace Reefin.Providers.MediaInfo
 {
@@ -82,7 +82,7 @@ namespace Reefin.Providers.MediaInfo
         {
             BlurayDiscInfo? blurayDiscInfo = null;
 
-            MediaBrowser.Model.MediaInfo.MediaInfo? mediaInfoResult = null;
+            Reefin.Model.MediaInfo.MediaInfo? mediaInfoResult = null;
 
             if (!item.IsShortcut || options.EnableRemoteContentProbe)
             {
@@ -152,7 +152,7 @@ namespace Reefin.Providers.MediaInfo
             return ItemUpdateType.MetadataImport;
         }
 
-        private Task<MediaBrowser.Model.MediaInfo.MediaInfo> GetMediaInfo(
+        private Task<Reefin.Model.MediaInfo.MediaInfo> GetMediaInfo(
             Video item,
             CancellationToken cancellationToken)
         {
@@ -186,7 +186,7 @@ namespace Reefin.Providers.MediaInfo
         protected async Task Fetch(
             Video video,
             CancellationToken cancellationToken,
-            MediaBrowser.Model.MediaInfo.MediaInfo? mediaInfo,
+            Reefin.Model.MediaInfo.MediaInfo? mediaInfo,
             BlurayDiscInfo? blurayInfo,
             MetadataRefreshOptions options)
         {
@@ -386,7 +386,7 @@ namespace Reefin.Providers.MediaInfo
             }
         }
 
-        private void FetchEmbeddedInfo(Video video, MediaBrowser.Model.MediaInfo.MediaInfo data, MetadataRefreshOptions refreshOptions, LibraryOptions libraryOptions)
+        private void FetchEmbeddedInfo(Video video, Reefin.Model.MediaInfo.MediaInfo data, MetadataRefreshOptions refreshOptions, LibraryOptions libraryOptions)
         {
             var replaceData = refreshOptions.ReplaceAllMetadata;
 
@@ -496,7 +496,7 @@ namespace Reefin.Providers.MediaInfo
             }
         }
 
-        private void FetchPeople(Video video, MediaBrowser.Model.MediaInfo.MediaInfo data, MetadataRefreshOptions options)
+        private void FetchPeople(Video video, Reefin.Model.MediaInfo.MediaInfo data, MetadataRefreshOptions options)
         {
             if (video.IsLocked
                 || video.LockedFields.Contains(MetadataField.Cast)

@@ -1,7 +1,7 @@
 using System;
 using System.Threading.Tasks;
-using MediaBrowser.Model.Tasks;
 using Microsoft.Extensions.Logging;
+using Reefin.Model.Tasks;
 
 namespace Reefin.Server.Core.ScheduledTasks.Triggers;
 

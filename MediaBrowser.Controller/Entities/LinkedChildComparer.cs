@@ -4,7 +4,7 @@
 
 using System;
 using System.Collections.Generic;
-using MediaBrowser.Model.IO;
+using Reefin.Model.IO;
 
 namespace MediaBrowser.Controller.Entities
 {

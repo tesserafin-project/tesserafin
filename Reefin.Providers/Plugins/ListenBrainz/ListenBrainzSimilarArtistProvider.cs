@@ -5,9 +5,9 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Library;
-using MediaBrowser.Model.Configuration;
-using MediaBrowser.Model.Entities;
 using Microsoft.Extensions.Logging;
+using Reefin.Model.Configuration;
+using Reefin.Model.Entities;
 using Reefin.Providers.Plugins.ListenBrainz.Api;
 
 namespace Reefin.Providers.Plugins.ListenBrainz;

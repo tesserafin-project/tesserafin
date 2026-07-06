@@ -4,7 +4,7 @@
 
 using System;
 using System.Collections.Generic;
-using MediaBrowser.Model.Dlna;
+using Reefin.Model.Dlna;
 
 namespace MediaBrowser.Controller.MediaEncoding
 {

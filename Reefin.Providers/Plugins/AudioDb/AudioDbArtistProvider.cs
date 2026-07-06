@@ -13,13 +13,13 @@ using System.Threading.Tasks;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.IO;
-using MediaBrowser.Model.Providers;
 using Reefin.Common.Configuration;
 using Reefin.Common.Extensions;
 using Reefin.Common.Net;
 using Reefin.Extensions.Json;
+using Reefin.Model.Entities;
+using Reefin.Model.IO;
+using Reefin.Model.Providers;
 using Reefin.Providers.Music;
 
 namespace Reefin.Providers.Plugins.AudioDb

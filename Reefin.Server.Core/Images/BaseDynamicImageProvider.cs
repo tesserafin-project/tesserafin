@@ -16,10 +16,10 @@ using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Playlists;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.IO;
-using MediaBrowser.Model.Net;
 using Reefin.Common.Configuration;
+using Reefin.Model.Entities;
+using Reefin.Model.IO;
+using Reefin.Model.Net;
 
 namespace Reefin.Server.Core.Images
 {

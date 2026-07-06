@@ -3,7 +3,7 @@
 using System;
 using System.IO;
 using System.Reflection;
-using MediaBrowser.Model.Plugins;
+using Reefin.Model.Plugins;
 
 namespace Reefin.Common.Plugins
 {

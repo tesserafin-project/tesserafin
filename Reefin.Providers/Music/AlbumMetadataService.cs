@@ -10,10 +10,10 @@ using MediaBrowser.Controller.IO;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Persistence;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.IO;
 using Microsoft.Extensions.Logging;
 using Reefin.Data.Enums;
+using Reefin.Model.Entities;
+using Reefin.Model.IO;
 using Reefin.Providers.Manager;
 
 namespace Reefin.Providers.Music;

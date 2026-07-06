@@ -2,8 +2,8 @@
 
 using System.Collections.Generic;
 using MediaBrowser.Controller.Entities;
-using MediaBrowser.Model.Dto;
 using Reefin.Database.Implementations.Entities;
+using Reefin.Model.Dto;
 
 namespace MediaBrowser.Controller.Dto
 {

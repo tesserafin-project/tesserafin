@@ -1,4 +1,4 @@
-using MediaBrowser.Model.Plugins;
+using Reefin.Model.Plugins;
 
 namespace Reefin.Providers.Plugins.MusicBrainz.Configuration;
 

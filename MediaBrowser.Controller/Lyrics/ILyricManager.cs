@@ -5,9 +5,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
-using MediaBrowser.Model.Configuration;
-using MediaBrowser.Model.Lyrics;
-using MediaBrowser.Model.Providers;
+using Reefin.Model.Configuration;
+using Reefin.Model.Lyrics;
+using Reefin.Model.Providers;
 
 namespace MediaBrowser.Controller.Lyrics;
 

@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.LiveTv;
+using Reefin.Model.Dto;
+using Reefin.Model.LiveTv;
 
 namespace MediaBrowser.Controller.LiveTv;
 

@@ -8,10 +8,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.IO;
 using Microsoft.Extensions.Logging;
 using Reefin.Data.Enums;
 using Reefin.Extensions.Json;
+using Reefin.Model.IO;
 using Reefin.Providers.Books.ComicBookInfo.Models;
 
 namespace Reefin.Providers.Books.ComicBookInfo;

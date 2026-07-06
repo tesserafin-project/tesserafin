@@ -4,8 +4,8 @@ using System.Threading.Tasks;
 using System.Xml;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.IO;
 using Microsoft.Extensions.Logging;
+using Reefin.Model.IO;
 
 namespace Reefin.Providers.Books.OpenPackagingFormat
 {

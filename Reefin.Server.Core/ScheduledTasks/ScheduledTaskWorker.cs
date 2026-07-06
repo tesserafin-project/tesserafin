@@ -8,12 +8,12 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Model.Tasks;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Configuration;
 using Reefin.Common.Extensions;
 using Reefin.Data.Events;
 using Reefin.Extensions.Json;
+using Reefin.Model.Tasks;
 using Reefin.Server.Core.ScheduledTasks.Triggers;
 
 namespace Reefin.Server.Core.ScheduledTasks;

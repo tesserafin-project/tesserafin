@@ -3,8 +3,8 @@ using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
-using MediaBrowser.Model.Entities;
 using Moq;
+using Reefin.Model.Entities;
 using Reefin.Providers.Plugins.Tmdb;
 using Xunit;
 

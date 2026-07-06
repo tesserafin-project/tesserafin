@@ -3,7 +3,6 @@ using System.ComponentModel.DataAnnotations;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Collections;
 using MediaBrowser.Controller.Dto;
-using MediaBrowser.Model.Collections;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -11,6 +10,7 @@ using Reefin.Api.Constants;
 using Reefin.Api.Extensions;
 using Reefin.Api.ModelBinders;
 using Reefin.Common.Api;
+using Reefin.Model.Collections;
 
 namespace Reefin.Api.Controllers;
 

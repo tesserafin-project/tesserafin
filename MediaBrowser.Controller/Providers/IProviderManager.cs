@@ -9,10 +9,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
-using MediaBrowser.Model.Configuration;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.Providers;
 using Reefin.Data.Events;
+using Reefin.Model.Configuration;
+using Reefin.Model.Entities;
+using Reefin.Model.Providers;
 
 namespace MediaBrowser.Controller.Providers
 {

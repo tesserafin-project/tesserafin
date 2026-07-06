@@ -4,7 +4,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Linq;
 using MediaBrowser.Controller;
-using MediaBrowser.Model.Dto;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -13,6 +12,7 @@ using Reefin.Api.Helpers;
 using Reefin.Common.Extensions;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Database.Implementations.Enums;
+using Reefin.Model.Dto;
 
 namespace Reefin.Api.Controllers;
 

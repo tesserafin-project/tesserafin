@@ -1,5 +1,5 @@
 using System;
-using MediaBrowser.Model.Entities;
+using Reefin.Model.Entities;
 
 namespace Reefin.Naming.Video
 {

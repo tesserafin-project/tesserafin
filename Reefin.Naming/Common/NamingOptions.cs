@@ -4,7 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
-using MediaBrowser.Model.Entities;
+using Reefin.Model.Entities;
 using Reefin.Naming.Video;
 
 // ReSharper disable StringLiteralTypo

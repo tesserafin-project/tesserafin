@@ -5,12 +5,12 @@ using System.Threading.Tasks;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.LiveTv;
 using MediaBrowser.Controller.Session;
-using MediaBrowser.Model.Session;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Reefin.Data;
 using Reefin.Data.Events;
 using Reefin.Database.Implementations.Enums;
+using Reefin.Model.Session;
 
 namespace Reefin.LiveTv.Recordings
 {

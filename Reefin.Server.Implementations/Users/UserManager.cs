@@ -14,9 +14,6 @@ using MediaBrowser.Controller.Drawing;
 using MediaBrowser.Controller.Events;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Net;
-using MediaBrowser.Model.Configuration;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.Users;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Reefin.Common;
@@ -30,6 +27,9 @@ using Reefin.Database.Implementations;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Database.Implementations.Enums;
 using Reefin.Extensions;
+using Reefin.Model.Configuration;
+using Reefin.Model.Dto;
+using Reefin.Model.Users;
 
 namespace Reefin.Server.Implementations.Users
 {

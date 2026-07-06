@@ -1,6 +1,6 @@
-using MediaBrowser.Model.Configuration;
-using MediaBrowser.Model.LiveTv;
 using Reefin.Common.Configuration;
+using Reefin.Model.Configuration;
+using Reefin.Model.LiveTv;
 
 namespace Reefin.LiveTv.Configuration;
 

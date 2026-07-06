@@ -4,8 +4,8 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
-using MediaBrowser.Model.IO;
 using Reefin.Data.Enums;
+using Reefin.Model.IO;
 using Reefin.Naming.Common;
 using Reefin.Naming.TV;
 

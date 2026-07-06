@@ -9,12 +9,12 @@ using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.TV;
-using MediaBrowser.Model.Querying;
 using Reefin.Data;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Database.Implementations.Enums;
 using Reefin.Extensions;
+using Reefin.Model.Querying;
 using Episode = MediaBrowser.Controller.Entities.TV.Episode;
 using Series = MediaBrowser.Controller.Entities.TV.Series;
 

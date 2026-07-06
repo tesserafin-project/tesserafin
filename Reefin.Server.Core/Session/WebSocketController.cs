@@ -9,8 +9,8 @@ using System.Threading.Tasks;
 using MediaBrowser.Controller.Net;
 using MediaBrowser.Controller.Net.WebSocketMessages;
 using MediaBrowser.Controller.Session;
-using MediaBrowser.Model.Session;
 using Microsoft.Extensions.Logging;
+using Reefin.Model.Session;
 
 namespace Reefin.Server.Core.Session
 {

@@ -1,7 +1,7 @@
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Sorting;
-using MediaBrowser.Model.Querying;
 using Reefin.Data.Enums;
+using Reefin.Model.Querying;
 
 namespace Reefin.Server.Core.Sorting
 {

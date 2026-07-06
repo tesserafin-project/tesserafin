@@ -1,5 +1,5 @@
 using System.Text.Json.Serialization;
-using MediaBrowser.Model.Session;
+using Reefin.Model.Session;
 
 namespace MediaBrowser.Controller.Net;
 

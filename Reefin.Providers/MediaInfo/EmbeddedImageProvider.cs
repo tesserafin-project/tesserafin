@@ -12,12 +12,12 @@ using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.MediaEncoding;
 using MediaBrowser.Controller.Persistence;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Drawing;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.MediaInfo;
-using MediaBrowser.Model.Net;
 using Microsoft.Extensions.Logging;
+using Reefin.Model.Drawing;
+using Reefin.Model.Dto;
+using Reefin.Model.Entities;
+using Reefin.Model.MediaInfo;
+using Reefin.Model.Net;
 
 namespace Reefin.Providers.MediaInfo
 {

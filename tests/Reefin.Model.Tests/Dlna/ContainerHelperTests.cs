@@ -1,6 +1,6 @@
 using System;
-using MediaBrowser.Model.Dlna;
-using MediaBrowser.Model.Extensions;
+using Reefin.Model.Dlna;
+using Reefin.Model.Extensions;
 using Xunit;
 
 namespace Reefin.Model.Tests.Dlna;

@@ -4,7 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using MediaBrowser.Controller.Session;
-using MediaBrowser.Model.SyncPlay;
+using Reefin.Model.SyncPlay;
 
 namespace MediaBrowser.Controller.SyncPlay.PlaybackRequests
 {

@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using MediaBrowser.Model.System;
+using Reefin.Model.System;
 
 namespace Reefin.Api.Models.SystemInfoDtos;
 

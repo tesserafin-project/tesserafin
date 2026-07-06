@@ -15,7 +15,7 @@
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
-    <ProjectReference Include="..\MediaBrowser.Model\MediaBrowser.Model.csproj" />
+    <ProjectReference Include="..\Reefin.Model\Reefin.Model.csproj" />
   </ItemGroup>
 
   <ItemGroup>

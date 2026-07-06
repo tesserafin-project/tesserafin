@@ -5,10 +5,10 @@ using System.IO;
 using System.Linq;
 using System.Security;
 using MediaBrowser.Controller.IO;
-using MediaBrowser.Model.IO;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Configuration;
 using Reefin.Extensions;
+using Reefin.Model.IO;
 
 namespace Reefin.Server.Core.IO
 {

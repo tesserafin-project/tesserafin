@@ -3,8 +3,8 @@
 using System.Threading;
 using MediaBrowser.Controller.Session;
 using MediaBrowser.Controller.SyncPlay.PlaybackRequests;
-using MediaBrowser.Model.SyncPlay;
 using Microsoft.Extensions.Logging;
+using Reefin.Model.SyncPlay;
 
 namespace MediaBrowser.Controller.SyncPlay.GroupStates
 {

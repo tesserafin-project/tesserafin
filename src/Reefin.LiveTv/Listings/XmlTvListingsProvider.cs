@@ -14,13 +14,13 @@ using Jellyfin.XmlTv.Entities;
 using Jellyfin.XmlTv.Enums;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.LiveTv;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.IO;
-using MediaBrowser.Model.LiveTv;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Extensions;
 using Reefin.Common.Net;
 using Reefin.Extensions;
+using Reefin.Model.Dto;
+using Reefin.Model.IO;
+using Reefin.Model.LiveTv;
 
 namespace Reefin.LiveTv.Listings
 {

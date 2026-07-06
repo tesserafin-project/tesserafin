@@ -1,4 +1,4 @@
-using MediaBrowser.Model.SyncPlay;
+using Reefin.Model.SyncPlay;
 
 namespace Reefin.Api.Models.SyncPlayDtos;
 

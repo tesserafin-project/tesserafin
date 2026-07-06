@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Configuration;
-using MediaBrowser.Model.Activity;
-using MediaBrowser.Model.Globalization;
-using MediaBrowser.Model.Tasks;
+using Reefin.Model.Activity;
+using Reefin.Model.Globalization;
+using Reefin.Model.Tasks;
 
 namespace Reefin.Server.Core.ScheduledTasks.Tasks;
 

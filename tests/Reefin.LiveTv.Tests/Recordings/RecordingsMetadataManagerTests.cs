@@ -6,13 +6,13 @@ using System.Xml;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.LiveTv;
-using MediaBrowser.Model.Configuration;
-using MediaBrowser.Model.LiveTv;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Reefin.Common.Configuration;
 using Reefin.Extensions;
 using Reefin.LiveTv.Recordings;
+using Reefin.Model.Configuration;
+using Reefin.Model.LiveTv;
 using Xunit;
 
 namespace Reefin.LiveTv.Tests.Recordings;

@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Model.Lyrics;
-using MediaBrowser.Model.Providers;
+using Reefin.Model.Lyrics;
+using Reefin.Model.Providers;
 
 namespace MediaBrowser.Controller.Lyrics;
 

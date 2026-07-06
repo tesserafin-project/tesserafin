@@ -3,8 +3,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using MediaBrowser.Model.Entities;
 using Reefin.Data.Enums;
+using Reefin.Model.Entities;
 
 namespace MediaBrowser.Controller.Entities
 {

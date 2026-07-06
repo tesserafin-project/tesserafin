@@ -4,8 +4,8 @@
 
 using System;
 using System.IO;
-using MediaBrowser.Model.Drawing;
-using MediaBrowser.Model.MediaInfo;
+using Reefin.Model.Drawing;
+using Reefin.Model.MediaInfo;
 
 namespace MediaBrowser.Controller.Providers
 {

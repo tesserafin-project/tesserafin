@@ -1,6 +1,6 @@
 using System.ComponentModel;
-using MediaBrowser.Model.Session;
-using MediaBrowser.Model.SyncPlay;
+using Reefin.Model.Session;
+using Reefin.Model.SyncPlay;
 
 namespace MediaBrowser.Controller.Net.WebSocketMessages.Outbound;
 

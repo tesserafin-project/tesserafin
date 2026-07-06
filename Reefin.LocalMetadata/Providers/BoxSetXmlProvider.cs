@@ -2,9 +2,9 @@ using System.IO;
 using System.Threading;
 using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.IO;
 using Microsoft.Extensions.Logging;
 using Reefin.LocalMetadata.Parsers;
+using Reefin.Model.IO;
 
 namespace Reefin.LocalMetadata.Providers
 {

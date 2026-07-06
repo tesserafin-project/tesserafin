@@ -5,14 +5,14 @@ using System.Linq;
 using System.Runtime.Serialization;
 using System.Text.Json;
 using System.Threading.Tasks;
-using MediaBrowser.Model.Dlna;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.Session;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Reefin.Data.Enums;
 using Reefin.Extensions.Json;
+using Reefin.Model.Dlna;
+using Reefin.Model.Dto;
+using Reefin.Model.Entities;
+using Reefin.Model.Session;
 using Xunit;
 
 namespace Reefin.Model.Tests
@@ -609,7 +609,7 @@ namespace Reefin.Model.Tests
             var path = href[0];
 
             var queryString = href.ElementAtOrDefault(1);
-            var query = string.IsNullOrEmpty(queryString) ? System.Web.HttpUtility.ParseQueryString(queryString ?? string.Empty) : new NameValueCollection();
+            var query = string.IsNullOrEmpty(queryString) ? global::System.Web.HttpUtility.ParseQueryString(queryString ?? string.Empty) : new NameValueCollection();
 
             var filename = Path.GetFileNameWithoutExtension(path);
             var extension = Path.GetExtension(path);

@@ -8,9 +8,9 @@ using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Library;
-using MediaBrowser.Model.IO;
 using Microsoft.Extensions.Logging;
 using Reefin.Extensions;
+using Reefin.Model.IO;
 
 namespace Reefin.XbmcMetadata.Savers
 {

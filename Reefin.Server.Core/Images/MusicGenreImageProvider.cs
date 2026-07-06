@@ -9,12 +9,12 @@ using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.IO;
-using MediaBrowser.Model.Querying;
 using Reefin.Common.Configuration;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Enums;
+using Reefin.Model.Entities;
+using Reefin.Model.IO;
+using Reefin.Model.Querying;
 
 namespace Reefin.Server.Core.Images
 {

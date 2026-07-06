@@ -12,13 +12,13 @@ using MediaBrowser.Controller;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.LiveTv;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.LiveTv;
-using MediaBrowser.Model.MediaInfo;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Extensions;
 using Reefin.LiveTv.IO;
+using Reefin.Model.Dto;
+using Reefin.Model.Entities;
+using Reefin.Model.LiveTv;
+using Reefin.Model.MediaInfo;
 
 namespace Reefin.LiveTv
 {

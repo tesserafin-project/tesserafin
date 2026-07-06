@@ -2,7 +2,7 @@
 
 using System.Linq;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Entities;
+using Reefin.Model.Entities;
 
 namespace Reefin.Providers.Music
 {

@@ -1,12 +1,12 @@
 using System.Globalization;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Events;
-using MediaBrowser.Model.Activity;
-using MediaBrowser.Model.Globalization;
-using MediaBrowser.Model.Notifications;
 using Microsoft.Extensions.Logging;
 using Reefin.Data.Events.Users;
 using Reefin.Database.Implementations.Entities;
+using Reefin.Model.Activity;
+using Reefin.Model.Globalization;
+using Reefin.Model.Notifications;
 
 namespace Reefin.Server.Implementations.Events.Consumers.Users
 {

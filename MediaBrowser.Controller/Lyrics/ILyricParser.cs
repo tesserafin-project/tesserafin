@@ -1,5 +1,5 @@
 using MediaBrowser.Controller.Resolvers;
-using MediaBrowser.Model.Lyrics;
+using Reefin.Model.Lyrics;
 
 namespace MediaBrowser.Controller.Lyrics;
 

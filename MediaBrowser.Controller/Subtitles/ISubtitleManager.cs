@@ -4,8 +4,8 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Entities;
-using MediaBrowser.Model.Configuration;
-using MediaBrowser.Model.Providers;
+using Reefin.Model.Configuration;
+using Reefin.Model.Providers;
 
 namespace MediaBrowser.Controller.Subtitles
 {

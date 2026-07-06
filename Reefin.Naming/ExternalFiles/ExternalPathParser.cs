@@ -1,9 +1,9 @@
 using System;
 using System.IO;
 using System.Linq;
-using MediaBrowser.Model.Dlna;
-using MediaBrowser.Model.Globalization;
 using Reefin.Extensions;
+using Reefin.Model.Dlna;
+using Reefin.Model.Globalization;
 using Reefin.Naming.Common;
 
 namespace Reefin.Naming.ExternalFiles

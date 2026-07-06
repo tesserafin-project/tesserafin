@@ -7,9 +7,9 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text.Json.Serialization;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.Providers;
 using Reefin.Data.Enums;
+using Reefin.Model.Entities;
+using Reefin.Model.Providers;
 
 namespace MediaBrowser.Controller.Entities
 {

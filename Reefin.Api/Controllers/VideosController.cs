@@ -12,12 +12,6 @@ using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.MediaEncoding;
 using MediaBrowser.Controller.Streaming;
-using MediaBrowser.Model.Dlna;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.MediaInfo;
-using MediaBrowser.Model.Net;
-using MediaBrowser.Model.Querying;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -29,6 +23,12 @@ using Reefin.Common.Api;
 using Reefin.Common.Configuration;
 using Reefin.Common.Net;
 using Reefin.Extensions;
+using Reefin.Model.Dlna;
+using Reefin.Model.Dto;
+using Reefin.Model.Entities;
+using Reefin.Model.MediaInfo;
+using Reefin.Model.Net;
+using Reefin.Model.Querying;
 
 namespace Reefin.Api.Controllers;
 

@@ -1,5 +1,5 @@
-using MediaBrowser.Model.Updates;
 using Reefin.Data.Events;
+using Reefin.Model.Updates;
 
 namespace MediaBrowser.Controller.Events.Updates
 {

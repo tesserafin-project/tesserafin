@@ -1,12 +1,12 @@
 using System.ComponentModel.DataAnnotations;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Security;
-using MediaBrowser.Model.Querying;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Reefin.Api.Constants;
 using Reefin.Common.Api;
+using Reefin.Model.Querying;
 
 namespace Reefin.Api.Controllers;
 

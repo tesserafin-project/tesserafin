@@ -21,13 +21,6 @@ using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.MediaSegments;
 using MediaBrowser.Controller.Persistence;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.Globalization;
-using MediaBrowser.Model.IO;
-using MediaBrowser.Model.Library;
-using MediaBrowser.Model.LiveTv;
-using MediaBrowser.Model.MediaInfo;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Extensions;
 using Reefin.Data;
@@ -35,6 +28,13 @@ using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Database.Implementations.Enums;
 using Reefin.Extensions;
+using Reefin.Model.Dto;
+using Reefin.Model.Entities;
+using Reefin.Model.Globalization;
+using Reefin.Model.IO;
+using Reefin.Model.Library;
+using Reefin.Model.LiveTv;
+using Reefin.Model.MediaInfo;
 
 namespace MediaBrowser.Controller.Entities
 {
@@ -76,15 +76,15 @@ namespace MediaBrowser.Controller.Entities
         /// </summary>
         public static readonly IReadOnlyCollection<ExtraType> DisplayExtraTypes = new HashSet<ExtraType>
         {
-            Model.Entities.ExtraType.Unknown,
-            Model.Entities.ExtraType.BehindTheScenes,
-            Model.Entities.ExtraType.Clip,
-            Model.Entities.ExtraType.DeletedScene,
-            Model.Entities.ExtraType.Interview,
-            Model.Entities.ExtraType.Sample,
-            Model.Entities.ExtraType.Scene,
-            Model.Entities.ExtraType.Featurette,
-            Model.Entities.ExtraType.Short
+            Reefin.Model.Entities.ExtraType.Unknown,
+            Reefin.Model.Entities.ExtraType.BehindTheScenes,
+            Reefin.Model.Entities.ExtraType.Clip,
+            Reefin.Model.Entities.ExtraType.DeletedScene,
+            Reefin.Model.Entities.ExtraType.Interview,
+            Reefin.Model.Entities.ExtraType.Sample,
+            Reefin.Model.Entities.ExtraType.Scene,
+            Reefin.Model.Entities.ExtraType.Featurette,
+            Reefin.Model.Entities.ExtraType.Short
         };
 
         private static readonly char[] VersionDelimiters = ['-', '_', '.'];
@@ -214,7 +214,7 @@ namespace MediaBrowser.Controller.Entities
         public ExtraType? ExtraType { get; set; }
 
         [JsonIgnore]
-        public bool IsThemeMedia => ExtraType.HasValue && (ExtraType.Value == Model.Entities.ExtraType.ThemeSong || ExtraType.Value == Model.Entities.ExtraType.ThemeVideo);
+        public bool IsThemeMedia => ExtraType.HasValue && (ExtraType.Value == Reefin.Model.Entities.ExtraType.ThemeSong || ExtraType.Value == Reefin.Model.Entities.ExtraType.ThemeVideo);
 
         [JsonIgnore]
         public string OriginalTitle { get; set; }
@@ -2841,7 +2841,7 @@ namespace MediaBrowser.Controller.Entities
 
         public IReadOnlyList<BaseItem> GetThemeSongs(User user, IEnumerable<(ItemSortBy SortBy, SortOrder SortOrder)> orderBy)
         {
-            return LibraryManager.Sort(GetExtras(user).Where(e => e.ExtraType == Model.Entities.ExtraType.ThemeSong), user, orderBy).ToArray();
+            return LibraryManager.Sort(GetExtras(user).Where(e => e.ExtraType == Reefin.Model.Entities.ExtraType.ThemeSong), user, orderBy).ToArray();
         }
 
         public IReadOnlyList<BaseItem> GetThemeVideos(User user = null)
@@ -2851,7 +2851,7 @@ namespace MediaBrowser.Controller.Entities
 
         public IReadOnlyList<BaseItem> GetThemeVideos(User user, IEnumerable<(ItemSortBy SortBy, SortOrder SortOrder)> orderBy)
         {
-            return LibraryManager.Sort(GetExtras(user).Where(e => e.ExtraType == Model.Entities.ExtraType.ThemeVideo), user, orderBy).ToArray();
+            return LibraryManager.Sort(GetExtras(user).Where(e => e.ExtraType == Reefin.Model.Entities.ExtraType.ThemeVideo), user, orderBy).ToArray();
         }
 
         /// <summary>

@@ -6,9 +6,9 @@ using System.Linq;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Entities;
 using Microsoft.Extensions.Logging;
 using Reefin.Data.Enums;
+using Reefin.Model.Entities;
 using Reefin.Naming.Common;
 using Reefin.Server.Core.Library;
 

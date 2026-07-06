@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Net.NetworkInformation;
-using MediaBrowser.Model.Net;
 using Microsoft.AspNetCore.Http;
+using Reefin.Model.Net;
 
 namespace Reefin.Common.Net
 {

@@ -1,6 +1,6 @@
 using System;
 using System.IO;
-using MediaBrowser.Model.Configuration;
+using Reefin.Model.Configuration;
 
 namespace Reefin.Common.Configuration
 {

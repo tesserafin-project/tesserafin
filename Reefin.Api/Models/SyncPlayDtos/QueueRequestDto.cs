@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using MediaBrowser.Model.SyncPlay;
+using Reefin.Model.SyncPlay;
 
 namespace Reefin.Api.Models.SyncPlayDtos;
 

@@ -3,7 +3,7 @@ using System.Threading.Tasks;
 using MediaBrowser.Controller.Events;
 using MediaBrowser.Controller.Events.Updates;
 using MediaBrowser.Controller.Session;
-using MediaBrowser.Model.Session;
+using Reefin.Model.Session;
 
 namespace Reefin.Server.Implementations.Events.Consumers.Updates
 {

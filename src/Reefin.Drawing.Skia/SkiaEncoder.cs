@@ -5,11 +5,11 @@ using System.IO;
 using System.Linq;
 using BlurHashSharp.SkiaSharp;
 using MediaBrowser.Controller.Drawing;
-using MediaBrowser.Model.Drawing;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Configuration;
 using Reefin.Common.Extensions;
 using Reefin.Extensions;
+using Reefin.Model.Drawing;
 using SkiaSharp;
 using Svg.Skia;
 

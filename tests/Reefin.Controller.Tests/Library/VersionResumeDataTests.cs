@@ -1,7 +1,7 @@
 using System;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
-using MediaBrowser.Model.Dto;
+using Reefin.Model.Dto;
 using Xunit;
 
 namespace Reefin.Controller.Tests.Library;

@@ -7,12 +7,12 @@ using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.Providers;
 using MetaBrainz.MusicBrainz;
 using MetaBrainz.MusicBrainz.Interfaces.Entities;
 using MetaBrainz.MusicBrainz.Interfaces.Searches;
 using Reefin.Extensions;
+using Reefin.Model.Entities;
+using Reefin.Model.Providers;
 using Reefin.Providers.Music;
 
 namespace Reefin.Providers.Plugins.MusicBrainz;

@@ -4,10 +4,10 @@
 using System;
 using System.Collections.Generic;
 using MediaBrowser.Controller.Plugins;
-using MediaBrowser.Model.Plugins;
-using MediaBrowser.Model.Serialization;
 using Reefin.Common.Configuration;
 using Reefin.Common.Plugins;
+using Reefin.Model.Plugins;
+using Reefin.Model.Serialization;
 
 namespace Reefin.Providers.Plugins.Omdb
 {

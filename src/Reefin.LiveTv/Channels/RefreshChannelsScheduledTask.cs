@@ -4,9 +4,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Channels;
 using MediaBrowser.Controller.Library;
-using MediaBrowser.Model.Globalization;
-using MediaBrowser.Model.Tasks;
 using Microsoft.Extensions.Logging;
+using Reefin.Model.Globalization;
+using Reefin.Model.Tasks;
 
 namespace Reefin.LiveTv.Channels
 {

@@ -9,9 +9,9 @@ using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Net;
 using MediaBrowser.Controller.QuickConnect;
 using MediaBrowser.Controller.Session;
-using MediaBrowser.Model.QuickConnect;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Extensions;
+using Reefin.Model.QuickConnect;
 
 namespace Reefin.Server.Core.QuickConnect
 {

@@ -6,7 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Session;
 using MediaBrowser.Controller.SyncPlay.Queue;
-using MediaBrowser.Model.SyncPlay;
+using Reefin.Model.SyncPlay;
 
 namespace MediaBrowser.Controller.SyncPlay
 {

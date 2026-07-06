@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Threading.Tasks;
-using MediaBrowser.Model.Plugins;
-using MediaBrowser.Model.Updates;
 using Microsoft.Extensions.DependencyInjection;
+using Reefin.Model.Plugins;
+using Reefin.Model.Updates;
 
 namespace Reefin.Common.Plugins
 {

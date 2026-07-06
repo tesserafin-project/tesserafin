@@ -1,6 +1,6 @@
 using System.Linq;
-using MediaBrowser.Model.Extensions;
-using MediaBrowser.Model.Providers;
+using Reefin.Model.Extensions;
+using Reefin.Model.Providers;
 using Xunit;
 
 namespace Reefin.Model.Tests.Extensions;

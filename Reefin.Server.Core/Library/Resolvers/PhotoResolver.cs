@@ -6,9 +6,9 @@ using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Controller.Resolvers;
-using MediaBrowser.Model.Entities;
 using Reefin.Data.Enums;
 using Reefin.Extensions;
+using Reefin.Model.Entities;
 using Reefin.Naming.Common;
 using Reefin.Naming.Video;
 

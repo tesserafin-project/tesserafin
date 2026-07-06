@@ -3,7 +3,7 @@
 using System;
 using System.Collections.Generic;
 using MediaBrowser.Controller.Entities;
-using MediaBrowser.Model.Querying;
+using Reefin.Model.Querying;
 
 namespace MediaBrowser.Controller.Persistence;
 

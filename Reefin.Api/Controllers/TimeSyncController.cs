@@ -1,7 +1,7 @@
 using System;
-using MediaBrowser.Model.SyncPlay;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Reefin.Model.SyncPlay;
 
 namespace Reefin.Api.Controllers;
 

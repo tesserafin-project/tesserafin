@@ -11,9 +11,6 @@ using MediaBrowser.Controller.Net;
 using MediaBrowser.Controller.Playlists;
 using MediaBrowser.Controller.QuickConnect;
 using MediaBrowser.Controller.Session;
-using MediaBrowser.Model.Configuration;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.Users;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -28,6 +25,9 @@ using Reefin.Common.Net;
 using Reefin.Data;
 using Reefin.Database.Implementations.Enums;
 using Reefin.Extensions;
+using Reefin.Model.Configuration;
+using Reefin.Model.Dto;
+using Reefin.Model.Users;
 
 namespace Reefin.Api.Controllers;
 

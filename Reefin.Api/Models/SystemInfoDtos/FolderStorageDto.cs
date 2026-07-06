@@ -1,4 +1,4 @@
-using MediaBrowser.Model.System;
+using Reefin.Model.System;
 
 namespace Reefin.Api.Models.SystemInfoDtos;
 

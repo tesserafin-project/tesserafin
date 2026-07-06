@@ -10,11 +10,11 @@ using System.Reflection;
 using System.Text.Json;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Configuration;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.Globalization;
 using Microsoft.Extensions.Logging;
 using Reefin.Extensions;
 using Reefin.Extensions.Json;
+using Reefin.Model.Entities;
+using Reefin.Model.Globalization;
 
 namespace Reefin.Server.Core.Localization
 {

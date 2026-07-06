@@ -5,9 +5,9 @@ using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Events;
 using MediaBrowser.Controller.Subtitles;
-using MediaBrowser.Model.Activity;
-using MediaBrowser.Model.Globalization;
 using Reefin.Database.Implementations.Entities;
+using Reefin.Model.Activity;
+using Reefin.Model.Globalization;
 using Episode = MediaBrowser.Controller.Entities.TV.Episode;
 
 namespace Reefin.Server.Implementations.Events.Consumers.Library

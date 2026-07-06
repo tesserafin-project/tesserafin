@@ -4,13 +4,13 @@ using System.Diagnostics.CodeAnalysis;
 using System.Net.Http.Headers;
 using System.Threading;
 using MediaBrowser.Controller.Plugins;
-using MediaBrowser.Model.Plugins;
-using MediaBrowser.Model.Serialization;
 using MetaBrainz.MusicBrainz;
 using Microsoft.Extensions.Logging;
 using Reefin.Common;
 using Reefin.Common.Configuration;
 using Reefin.Common.Plugins;
+using Reefin.Model.Plugins;
+using Reefin.Model.Serialization;
 using Reefin.Providers.Plugins.MusicBrainz.Configuration;
 
 namespace Reefin.Providers.Plugins.MusicBrainz;

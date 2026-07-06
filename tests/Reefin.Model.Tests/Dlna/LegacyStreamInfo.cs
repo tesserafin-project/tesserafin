@@ -2,10 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using MediaBrowser.Model.Dlna;
-using MediaBrowser.Model.Dto;
 using Reefin.Data.Enums;
 using Reefin.Extensions;
+using Reefin.Model.Dlna;
+using Reefin.Model.Dto;
 
 namespace Reefin.Model.Tests.Dlna;
 

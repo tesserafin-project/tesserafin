@@ -12,12 +12,12 @@ using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.LiveTv;
 using MediaBrowser.Controller.MediaEncoding;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.Globalization;
-using MediaBrowser.Model.IO;
-using MediaBrowser.Model.MediaInfo;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Reefin.Model.Entities;
+using Reefin.Model.Globalization;
+using Reefin.Model.IO;
+using Reefin.Model.MediaInfo;
 using Reefin.Naming.Common;
 using Reefin.Providers.MediaInfo;
 using Xunit;
@@ -55,7 +55,7 @@ public class MediaInfoResolverTests
 
         var mediaEncoder = new Mock<IMediaEncoder>(MockBehavior.Strict);
         mediaEncoder.Setup(me => me.GetMediaInfo(It.IsAny<MediaInfoRequest>(), It.IsAny<CancellationToken>()))
-            .Returns<MediaInfoRequest, CancellationToken>((_, _) => Task.FromResult(new MediaBrowser.Model.MediaInfo.MediaInfo
+            .Returns<MediaInfoRequest, CancellationToken>((_, _) => Task.FromResult(new Reefin.Model.MediaInfo.MediaInfo
             {
                 MediaStreams = new List<MediaStream>
                 {
@@ -286,7 +286,7 @@ public class MediaInfoResolverTests
 
         var mediaEncoder = new Mock<IMediaEncoder>(MockBehavior.Strict);
         mediaEncoder.Setup(me => me.GetMediaInfo(It.IsAny<MediaInfoRequest>(), It.IsAny<CancellationToken>()))
-            .Returns<MediaInfoRequest, CancellationToken>((_, _) => Task.FromResult(new MediaBrowser.Model.MediaInfo.MediaInfo
+            .Returns<MediaInfoRequest, CancellationToken>((_, _) => Task.FromResult(new Reefin.Model.MediaInfo.MediaInfo
             {
                 MediaStreams = inputStreams.ToList()
             }));
@@ -362,7 +362,7 @@ public class MediaInfoResolverTests
 
         var mediaEncoder = new Mock<IMediaEncoder>(MockBehavior.Strict);
         mediaEncoder.Setup(me => me.GetMediaInfo(It.IsAny<MediaInfoRequest>(), It.IsAny<CancellationToken>()))
-            .Returns<MediaInfoRequest, CancellationToken>((_, _) => Task.FromResult(new MediaBrowser.Model.MediaInfo.MediaInfo
+            .Returns<MediaInfoRequest, CancellationToken>((_, _) => Task.FromResult(new Reefin.Model.MediaInfo.MediaInfo
             {
                 MediaStreams = GenerateMediaStreams()
             }));

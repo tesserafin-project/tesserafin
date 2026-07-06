@@ -2,8 +2,8 @@
 
 #pragma warning disable CS1591
 
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.IO;
+using Reefin.Model.Entities;
+using Reefin.Model.IO;
 
 namespace MediaBrowser.Controller.Providers
 {

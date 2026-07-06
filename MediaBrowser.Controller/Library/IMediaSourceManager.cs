@@ -9,10 +9,10 @@ using System.Threading.Tasks;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.LiveTv;
 using MediaBrowser.Controller.Persistence;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.MediaInfo;
 using Reefin.Database.Implementations.Entities;
+using Reefin.Model.Dto;
+using Reefin.Model.Entities;
+using Reefin.Model.MediaInfo;
 
 namespace MediaBrowser.Controller.Library
 {

@@ -4,8 +4,8 @@ using System.Net.Mime;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
-using MediaBrowser.Model.LiveTv;
 using Reefin.Extensions.Json;
+using Reefin.Model.LiveTv;
 using Xunit;
 
 namespace Reefin.Server.Integration.Tests.Controllers;

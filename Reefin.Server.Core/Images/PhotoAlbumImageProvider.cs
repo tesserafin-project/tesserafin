@@ -4,8 +4,8 @@ using MediaBrowser.Controller.Drawing;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.IO;
 using Reefin.Common.Configuration;
+using Reefin.Model.IO;
 
 namespace Reefin.Server.Core.Images
 {

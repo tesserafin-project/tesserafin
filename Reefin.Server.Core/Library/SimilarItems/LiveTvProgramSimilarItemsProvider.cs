@@ -6,9 +6,9 @@ using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.LiveTv;
-using MediaBrowser.Model.Configuration;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Enums;
+using Reefin.Model.Configuration;
 
 namespace Reefin.Server.Core.Library.SimilarItems;
 

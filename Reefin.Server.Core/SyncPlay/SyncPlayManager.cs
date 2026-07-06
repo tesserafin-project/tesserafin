@@ -8,8 +8,8 @@ using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Session;
 using MediaBrowser.Controller.SyncPlay;
 using MediaBrowser.Controller.SyncPlay.Requests;
-using MediaBrowser.Model.SyncPlay;
 using Microsoft.Extensions.Logging;
+using Reefin.Model.SyncPlay;
 
 namespace Reefin.Server.Core.SyncPlay
 {

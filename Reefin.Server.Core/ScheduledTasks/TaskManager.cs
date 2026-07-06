@@ -3,10 +3,10 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using MediaBrowser.Model.Tasks;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Configuration;
 using Reefin.Data.Events;
+using Reefin.Model.Tasks;
 
 namespace Reefin.Server.Core.ScheduledTasks;
 

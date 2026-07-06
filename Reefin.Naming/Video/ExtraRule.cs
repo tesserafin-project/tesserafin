@@ -1,10 +1,10 @@
-using MediaBrowser.Model.Entities;
+using Reefin.Model.Entities;
 using MediaType = Reefin.Naming.Common.MediaType;
 
 namespace Reefin.Naming.Video
 {
     /// <summary>
-    /// A rule used to match a file path with an <see cref="MediaBrowser.Model.Entities.ExtraType"/>.
+    /// A rule used to match a file path with an <see cref="Reefin.Model.Entities.ExtraType"/>.
     /// </summary>
     public class ExtraRule
     {

@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 using MediaBrowser.Controller.Channels;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
-using MediaBrowser.Model.Dto;
+using Reefin.Model.Dto;
 
 namespace Reefin.LiveTv.Channels
 {

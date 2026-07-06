@@ -5,12 +5,12 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading;
-using MediaBrowser.Model.Configuration;
-using MediaBrowser.Model.Serialization;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Configuration;
 using Reefin.Common.Events;
 using Reefin.Common.Extensions;
+using Reefin.Model.Configuration;
+using Reefin.Model.Serialization;
 
 namespace Reefin.Server.Core.AppBase
 {

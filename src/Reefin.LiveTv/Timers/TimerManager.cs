@@ -7,11 +7,11 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using MediaBrowser.Controller.LiveTv;
-using MediaBrowser.Model.LiveTv;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Configuration;
 using Reefin.Data.Events;
 using Reefin.LiveTv.Recordings;
+using Reefin.Model.LiveTv;
 
 namespace Reefin.LiveTv.Timers
 {

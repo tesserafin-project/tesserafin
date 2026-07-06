@@ -8,8 +8,6 @@ using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Net;
 using MediaBrowser.Controller.Session;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.Querying;
 using Microsoft.AspNetCore.Http;
 using Reefin.Api.Constants;
 using Reefin.Api.Extensions;
@@ -18,6 +16,8 @@ using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Database.Implementations.Enums;
 using Reefin.Extensions;
+using Reefin.Model.Dto;
+using Reefin.Model.Querying;
 
 namespace Reefin.Api.Helpers;
 

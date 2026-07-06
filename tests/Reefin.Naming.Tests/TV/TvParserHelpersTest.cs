@@ -1,4 +1,4 @@
-using MediaBrowser.Model.Entities;
+using Reefin.Model.Entities;
 using Reefin.Naming.TV;
 using Xunit;
 

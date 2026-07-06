@@ -1,7 +1,7 @@
 using System.Linq;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.IO;
 using Moq;
+using Reefin.Model.IO;
 using Xunit;
 
 namespace Reefin.Controller.Tests

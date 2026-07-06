@@ -1,7 +1,7 @@
 #pragma warning disable CS1591
 
-using MediaBrowser.Model.Configuration;
 using Reefin.Common.Configuration;
+using Reefin.Model.Configuration;
 
 namespace Reefin.XbmcMetadata.Configuration
 {

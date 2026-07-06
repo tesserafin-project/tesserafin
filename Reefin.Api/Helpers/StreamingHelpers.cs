@@ -10,8 +10,6 @@ using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.MediaEncoding;
 using MediaBrowser.Controller.Streaming;
-using MediaBrowser.Model.Dlna;
-using MediaBrowser.Model.Dto;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Net.Http.Headers;
 using Reefin.Api.Extensions;
@@ -19,6 +17,8 @@ using Reefin.Common.Configuration;
 using Reefin.Common.Extensions;
 using Reefin.Data.Enums;
 using Reefin.Extensions;
+using Reefin.Model.Dlna;
+using Reefin.Model.Dto;
 
 namespace Reefin.Api.Helpers;
 

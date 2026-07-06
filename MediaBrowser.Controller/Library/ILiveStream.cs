@@ -6,7 +6,7 @@ using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Model.Dto;
+using Reefin.Model.Dto;
 
 namespace MediaBrowser.Controller.Library
 {

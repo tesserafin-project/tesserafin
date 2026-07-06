@@ -7,7 +7,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Library;
-using MediaBrowser.Model.Dto;
+using Reefin.Model.Dto;
 
 namespace MediaBrowser.Controller.LiveTv
 {

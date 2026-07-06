@@ -4,12 +4,12 @@ using System.ComponentModel.DataAnnotations;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.MediaEncoding;
 using MediaBrowser.Controller.Streaming;
-using MediaBrowser.Model.Dlna;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Reefin.Api.Attributes;
 using Reefin.Api.Helpers;
 using Reefin.Api.Models.StreamingDtos;
+using Reefin.Model.Dlna;
 
 namespace Reefin.Api.Controllers;
 

@@ -15,12 +15,12 @@ using MediaBrowser.Controller.IO;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Persistence;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Configuration;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.IO;
-using MediaBrowser.Model.Providers;
 using Microsoft.Extensions.Logging;
 using Reefin.Extensions;
+using Reefin.Model.Configuration;
+using Reefin.Model.Entities;
+using Reefin.Model.IO;
+using Reefin.Model.Providers;
 
 namespace Reefin.Providers.Manager
 {

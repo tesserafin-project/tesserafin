@@ -9,15 +9,15 @@ using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.LiveTv;
 using MediaBrowser.Controller.Persistence;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.IO;
-using MediaBrowser.Model.LiveTv;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Configuration;
 using Reefin.Data.Enums;
 using Reefin.Extensions;
 using Reefin.LiveTv;
 using Reefin.LiveTv.Configuration;
+using Reefin.Model.Entities;
+using Reefin.Model.IO;
+using Reefin.Model.LiveTv;
 
 namespace Reefin.LiveTv.Guide;
 

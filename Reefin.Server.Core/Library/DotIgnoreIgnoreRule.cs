@@ -6,7 +6,7 @@ using BitFaster.Caching.Lru;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.IO;
 using MediaBrowser.Controller.Resolvers;
-using MediaBrowser.Model.IO;
+using Reefin.Model.IO;
 
 namespace Reefin.Server.Core.Library;
 

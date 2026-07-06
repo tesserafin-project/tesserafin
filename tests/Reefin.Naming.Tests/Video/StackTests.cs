@@ -1,5 +1,5 @@
 using System.Linq;
-using MediaBrowser.Model.IO;
+using Reefin.Model.IO;
 using Reefin.Naming.Common;
 using Reefin.Naming.Video;
 using Xunit;

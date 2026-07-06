@@ -3,10 +3,10 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using BDInfo;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.IO;
-using MediaBrowser.Model.MediaInfo;
 using Reefin.Extensions;
+using Reefin.Model.Entities;
+using Reefin.Model.IO;
+using Reefin.Model.MediaInfo;
 
 namespace Reefin.MediaEncoding.BdInfo;
 

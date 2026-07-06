@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using BDInfo.IO;
-using MediaBrowser.Model.IO;
+using Reefin.Model.IO;
 
 namespace Reefin.MediaEncoding.BdInfo;
 

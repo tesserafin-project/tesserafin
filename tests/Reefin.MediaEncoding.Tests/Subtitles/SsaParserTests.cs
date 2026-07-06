@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
-using MediaBrowser.Model.MediaInfo;
 using Microsoft.Extensions.Logging.Abstractions;
 using Reefin.MediaEncoding.Subtitles;
+using Reefin.Model.MediaInfo;
 using Xunit;
 
 namespace Reefin.MediaEncoding.Subtitles.Tests

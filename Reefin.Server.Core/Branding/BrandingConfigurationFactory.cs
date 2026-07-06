@@ -1,6 +1,6 @@
 using System.Collections.Generic;
-using MediaBrowser.Model.Branding;
 using Reefin.Common.Configuration;
+using Reefin.Model.Branding;
 
 namespace Reefin.Server.Core.Branding
 {

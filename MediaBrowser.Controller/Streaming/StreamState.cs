@@ -1,7 +1,7 @@
 using System;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.MediaEncoding;
-using MediaBrowser.Model.Dlna;
+using Reefin.Model.Dlna;
 
 namespace MediaBrowser.Controller.Streaming;
 

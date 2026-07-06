@@ -2,8 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.RegularExpressions;
-using MediaBrowser.Model.Entities;
 using Reefin.Data.Enums;
+using Reefin.Model.Entities;
 using TMDbLib.Objects.General;
 
 namespace Reefin.Providers.Plugins.Tmdb

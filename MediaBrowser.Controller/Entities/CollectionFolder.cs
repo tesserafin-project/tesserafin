@@ -15,13 +15,13 @@ using System.Threading.Tasks;
 using MediaBrowser.Controller.IO;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Configuration;
-using MediaBrowser.Model.IO;
-using MediaBrowser.Model.Serialization;
 using Microsoft.Extensions.Logging;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Extensions.Json;
+using Reefin.Model.Configuration;
+using Reefin.Model.IO;
+using Reefin.Model.Serialization;
 
 namespace MediaBrowser.Controller.Entities
 {

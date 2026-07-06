@@ -2,8 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Model.Updates;
 using Reefin.Common.Plugins;
+using Reefin.Model.Updates;
 
 namespace Reefin.Common.Updates
 {

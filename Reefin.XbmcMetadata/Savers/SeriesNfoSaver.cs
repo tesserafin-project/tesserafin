@@ -6,9 +6,9 @@ using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.IO;
 using Microsoft.Extensions.Logging;
+using Reefin.Model.Entities;
+using Reefin.Model.IO;
 
 namespace Reefin.XbmcMetadata.Savers
 {

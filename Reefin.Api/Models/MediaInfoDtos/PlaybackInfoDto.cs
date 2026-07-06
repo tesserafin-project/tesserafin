@@ -1,5 +1,5 @@
 using System;
-using MediaBrowser.Model.Dlna;
+using Reefin.Model.Dlna;
 
 namespace Reefin.Api.Models.MediaInfoDtos;
 

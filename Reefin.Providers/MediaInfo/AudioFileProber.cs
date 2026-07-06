@@ -13,14 +13,14 @@ using MediaBrowser.Controller.Lyrics;
 using MediaBrowser.Controller.MediaEncoding;
 using MediaBrowser.Controller.Persistence;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Dlna;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.Extensions;
-using MediaBrowser.Model.MediaInfo;
 using Microsoft.Extensions.Logging;
 using Reefin.Data.Enums;
 using Reefin.Extensions;
+using Reefin.Model.Dlna;
+using Reefin.Model.Dto;
+using Reefin.Model.Entities;
+using Reefin.Model.Extensions;
+using Reefin.Model.MediaInfo;
 using static Reefin.Extensions.StringExtensions;
 
 namespace Reefin.Providers.MediaInfo
@@ -125,13 +125,13 @@ namespace Reefin.Providers.MediaInfo
         /// Fetches the specified audio.
         /// </summary>
         /// <param name="audio">The <see cref="Audio"/>.</param>
-        /// <param name="mediaInfo">The <see cref="MediaBrowser.Model.MediaInfo.MediaInfo"/>.</param>
+        /// <param name="mediaInfo">The <see cref="Reefin.Model.MediaInfo.MediaInfo"/>.</param>
         /// <param name="options">The <see cref="MetadataRefreshOptions"/>.</param>
         /// <param name="cancellationToken">The <see cref="CancellationToken"/>.</param>
         /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
         private async Task FetchAsync(
             Audio audio,
-            MediaBrowser.Model.MediaInfo.MediaInfo mediaInfo,
+            Reefin.Model.MediaInfo.MediaInfo mediaInfo,
             MetadataRefreshOptions options,
             CancellationToken cancellationToken)
         {
@@ -168,10 +168,10 @@ namespace Reefin.Providers.MediaInfo
         /// Fetches data from the tags.
         /// </summary>
         /// <param name="audio">The <see cref="Audio"/>.</param>
-        /// <param name="mediaInfo">The <see cref="MediaBrowser.Model.MediaInfo.MediaInfo"/>.</param>
+        /// <param name="mediaInfo">The <see cref="Reefin.Model.MediaInfo.MediaInfo"/>.</param>
         /// <param name="options">The <see cref="MetadataRefreshOptions"/>.</param>
         /// <param name="tryExtractEmbeddedLyrics">Whether to extract embedded lyrics to lrc file. </param>
-        private async Task FetchDataFromTags(Audio audio, MediaBrowser.Model.MediaInfo.MediaInfo mediaInfo, MetadataRefreshOptions options, bool tryExtractEmbeddedLyrics)
+        private async Task FetchDataFromTags(Audio audio, Reefin.Model.MediaInfo.MediaInfo mediaInfo, MetadataRefreshOptions options, bool tryExtractEmbeddedLyrics)
         {
             var libraryOptions = _libraryManager.GetLibraryOptions(audio);
             Track track = new Track(audio.Path);

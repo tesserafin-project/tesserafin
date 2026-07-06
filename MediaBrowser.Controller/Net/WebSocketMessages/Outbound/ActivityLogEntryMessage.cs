@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
-using MediaBrowser.Model.Activity;
-using MediaBrowser.Model.Session;
+using Reefin.Model.Activity;
+using Reefin.Model.Session;
 
 namespace MediaBrowser.Controller.Net.WebSocketMessages.Outbound;
 

@@ -11,10 +11,6 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Plugins;
-using MediaBrowser.Model.Configuration;
-using MediaBrowser.Model.IO;
-using MediaBrowser.Model.Plugins;
-using MediaBrowser.Model.Updates;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Extensions;
@@ -22,6 +18,10 @@ using Reefin.Common.Net;
 using Reefin.Common.Plugins;
 using Reefin.Extensions.Json;
 using Reefin.Extensions.Json.Converters;
+using Reefin.Model.Configuration;
+using Reefin.Model.IO;
+using Reefin.Model.Plugins;
+using Reefin.Model.Updates;
 using Reefin.Server.Core.Library;
 
 namespace Reefin.Server.Core.Plugins

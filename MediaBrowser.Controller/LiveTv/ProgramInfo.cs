@@ -2,7 +2,7 @@
 
 using System;
 using System.Collections.Generic;
-using MediaBrowser.Model.LiveTv;
+using Reefin.Model.LiveTv;
 
 namespace MediaBrowser.Controller.LiveTv
 {

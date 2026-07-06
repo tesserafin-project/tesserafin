@@ -3,9 +3,9 @@ using System.Threading;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Persistence;
-using MediaBrowser.Model.Entities;
 using Microsoft.Extensions.Logging;
 using Reefin.Data.Enums;
+using Reefin.Model.Entities;
 
 namespace Reefin.Server.Migrations.Routines
 {

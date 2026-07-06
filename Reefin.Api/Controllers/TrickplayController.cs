@@ -6,12 +6,12 @@ using System.Threading.Tasks;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Trickplay;
-using MediaBrowser.Model;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Reefin.Api.Attributes;
 using Reefin.Api.Extensions;
+using Reefin.Model;
 
 namespace Reefin.Api.Controllers;
 

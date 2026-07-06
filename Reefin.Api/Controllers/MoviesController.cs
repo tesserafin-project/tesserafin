@@ -5,9 +5,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Library;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.Querying;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -15,6 +12,9 @@ using Reefin.Api.Extensions;
 using Reefin.Api.Helpers;
 using Reefin.Api.ModelBinders;
 using Reefin.Extensions;
+using Reefin.Model.Dto;
+using Reefin.Model.Entities;
+using Reefin.Model.Querying;
 
 namespace Reefin.Api.Controllers;
 

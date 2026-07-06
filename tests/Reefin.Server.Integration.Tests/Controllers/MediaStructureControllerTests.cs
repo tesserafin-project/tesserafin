@@ -4,9 +4,9 @@ using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Threading.Tasks;
-using MediaBrowser.Model.Configuration;
 using Reefin.Api.Models.LibraryStructureDto;
 using Reefin.Extensions.Json;
+using Reefin.Model.Configuration;
 using Xunit;
 
 namespace Reefin.Server.Integration.Tests.Controllers

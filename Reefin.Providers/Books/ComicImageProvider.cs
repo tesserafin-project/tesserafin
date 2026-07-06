@@ -6,11 +6,11 @@ using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Drawing;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.IO;
 using Microsoft.Extensions.Logging;
 using Reefin.Extensions;
+using Reefin.Model.Drawing;
+using Reefin.Model.Entities;
+using Reefin.Model.IO;
 using SharpCompress.Archives;
 
 namespace Reefin.Providers.Books;

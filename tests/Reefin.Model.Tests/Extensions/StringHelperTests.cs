@@ -2,7 +2,7 @@ using System;
 using FsCheck;
 using FsCheck.Fluent;
 using FsCheck.Xunit;
-using MediaBrowser.Model.Extensions;
+using Reefin.Model.Extensions;
 using Xunit;
 
 namespace Reefin.Model.Tests.Extensions

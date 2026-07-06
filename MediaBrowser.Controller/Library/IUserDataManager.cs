@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Threading;
 using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Entities;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.Entities;
 using Reefin.Database.Implementations.Entities;
+using Reefin.Model.Dto;
+using Reefin.Model.Entities;
 
 namespace MediaBrowser.Controller.Library
 {

@@ -8,8 +8,8 @@ using LrcParser.Model;
 using LrcParser.Parser;
 using MediaBrowser.Controller.Lyrics;
 using MediaBrowser.Controller.Resolvers;
-using MediaBrowser.Model.Lyrics;
 using Reefin.Extensions;
+using Reefin.Model.Lyrics;
 
 namespace Reefin.Providers.Lyric;
 

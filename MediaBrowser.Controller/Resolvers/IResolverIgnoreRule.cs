@@ -1,5 +1,5 @@
 using MediaBrowser.Controller.Entities;
-using MediaBrowser.Model.IO;
+using Reefin.Model.IO;
 
 namespace MediaBrowser.Controller.Resolvers
 {

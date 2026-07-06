@@ -3,8 +3,8 @@
 using System;
 using System.Globalization;
 using System.IO;
-using MediaBrowser.Model.Configuration;
 using Reefin.Common.Configuration;
+using Reefin.Model.Configuration;
 
 namespace Reefin.MediaEncoding.Configuration
 {

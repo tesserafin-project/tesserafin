@@ -13,14 +13,14 @@ using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.LiveTv;
 using MediaBrowser.Controller.Persistence;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.IO;
-using MediaBrowser.Model.MediaInfo;
 using Microsoft.Extensions.Logging;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Extensions;
+using Reefin.Model.Dto;
+using Reefin.Model.Entities;
+using Reefin.Model.IO;
+using Reefin.Model.MediaInfo;
 
 namespace MediaBrowser.Controller.Entities
 {
@@ -67,17 +67,17 @@ namespace MediaBrowser.Controller.Entities
                 var extraType = ExtraType;
                 if (extraType.HasValue)
                 {
-                    if (extraType.Value == Model.Entities.ExtraType.Sample)
+                    if (extraType.Value == Reefin.Model.Entities.ExtraType.Sample)
                     {
                         return false;
                     }
 
-                    if (extraType.Value == Model.Entities.ExtraType.ThemeVideo)
+                    if (extraType.Value == Reefin.Model.Entities.ExtraType.ThemeVideo)
                     {
                         return false;
                     }
 
-                    if (extraType.Value == Model.Entities.ExtraType.Trailer)
+                    if (extraType.Value == Reefin.Model.Entities.ExtraType.Trailer)
                     {
                         return false;
                     }
@@ -282,7 +282,7 @@ namespace MediaBrowser.Controller.Entities
         /// <inheritdoc />
         public override string GetInheritedOriginalLanguage()
         {
-            if (ExtraType.GetValueOrDefault() == Model.Entities.ExtraType.Trailer)
+            if (ExtraType.GetValueOrDefault() == Reefin.Model.Entities.ExtraType.Trailer)
             {
                 return GetOwner()?.GetInheritedOriginalLanguage();
             }

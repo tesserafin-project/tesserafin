@@ -4,7 +4,6 @@ using System.Globalization;
 using System.Net;
 using System.Security.Claims;
 using MediaBrowser.Controller.Library;
-using MediaBrowser.Model.Configuration;
 using Microsoft.AspNetCore.Http;
 using Moq;
 using Reefin.Api.Constants;
@@ -12,6 +11,7 @@ using Reefin.Common.Configuration;
 using Reefin.Data;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Database.Implementations.Enums;
+using Reefin.Model.Configuration;
 using Reefin.Server.Implementations.Users;
 using AccessSchedule = Reefin.Database.Implementations.Entities.AccessSchedule;
 

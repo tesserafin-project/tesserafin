@@ -6,10 +6,10 @@ using System.Threading;
 using System.Xml;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.Net;
 using Microsoft.Extensions.Logging;
 using Reefin.Data.Enums;
+using Reefin.Model.Entities;
+using Reefin.Model.Net;
 
 namespace Reefin.Providers.Books.OpenPackagingFormat
 {

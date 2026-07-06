@@ -1,6 +1,6 @@
 using System;
 using System.IO;
-using MediaBrowser.Model.Serialization;
+using Reefin.Model.Serialization;
 
 namespace Reefin.Server.Core.AppBase
 {

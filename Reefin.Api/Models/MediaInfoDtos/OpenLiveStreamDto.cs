@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
-using MediaBrowser.Model.Dlna;
-using MediaBrowser.Model.MediaInfo;
+using Reefin.Model.Dlna;
+using Reefin.Model.MediaInfo;
 
 namespace Reefin.Api.Models.MediaInfoDtos;
 

@@ -4,8 +4,8 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using MediaBrowser.Model.Session;
 using Reefin.Extensions.Tests.Json.Models;
+using Reefin.Model.Session;
 using Xunit;
 
 namespace Reefin.Extensions.Tests.Json.Converters

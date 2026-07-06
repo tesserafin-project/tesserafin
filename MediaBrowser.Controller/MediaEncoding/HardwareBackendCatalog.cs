@@ -2,7 +2,7 @@ using System;
 using System.Collections.Immutable;
 using System.IO;
 using System.Runtime.InteropServices;
-using MediaBrowser.Model.Entities;
+using Reefin.Model.Entities;
 
 namespace MediaBrowser.Controller.MediaEncoding;
 

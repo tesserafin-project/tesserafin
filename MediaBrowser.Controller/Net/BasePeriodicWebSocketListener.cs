@@ -11,9 +11,9 @@ using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Net.WebSocketMessages;
-using MediaBrowser.Model.Session;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using Reefin.Model.Session;
 
 namespace MediaBrowser.Controller.Net
 {

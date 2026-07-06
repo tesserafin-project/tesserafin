@@ -7,11 +7,11 @@ using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.MediaEncoding;
 using MediaBrowser.Controller.Persistence;
-using MediaBrowser.Model.Drawing;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.Entities;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Reefin.Model.Drawing;
+using Reefin.Model.Dto;
+using Reefin.Model.Entities;
 using Reefin.Providers.MediaInfo;
 using Xunit;
 

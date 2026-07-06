@@ -1,5 +1,5 @@
 using System.ComponentModel;
-using MediaBrowser.Model.Session;
+using Reefin.Model.Session;
 
 namespace MediaBrowser.Controller.Net.WebSocketMessages.Outbound;
 

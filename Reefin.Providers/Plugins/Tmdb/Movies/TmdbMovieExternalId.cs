@@ -1,8 +1,8 @@
 using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.LiveTv;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.Providers;
+using Reefin.Model.Entities;
+using Reefin.Model.Providers;
 
 namespace Reefin.Providers.Plugins.Tmdb.Movies
 {

@@ -6,9 +6,9 @@ using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.IO;
 using Reefin.Common.Configuration;
+using Reefin.Model.Entities;
+using Reefin.Model.IO;
 using Reefin.Server.Core.Images;
 
 namespace Reefin.Server.Core.Collections

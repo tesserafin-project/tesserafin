@@ -9,13 +9,13 @@ using MediaBrowser.Controller.Session;
 using MediaBrowser.Controller.SyncPlay;
 using MediaBrowser.Controller.SyncPlay.PlaybackRequests;
 using MediaBrowser.Controller.SyncPlay.Requests;
-using MediaBrowser.Model.SyncPlay;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Reefin.Api.Helpers;
 using Reefin.Api.Models.SyncPlayDtos;
 using Reefin.Common.Api;
+using Reefin.Model.SyncPlay;
 
 namespace Reefin.Api.Controllers;
 

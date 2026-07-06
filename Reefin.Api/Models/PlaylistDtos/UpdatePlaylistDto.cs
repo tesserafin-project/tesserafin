@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
-using MediaBrowser.Model.Entities;
 using Reefin.Extensions.Json.Converters;
+using Reefin.Model.Entities;
 
 namespace Reefin.Api.Models.PlaylistDtos;
 

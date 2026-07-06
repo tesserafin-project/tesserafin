@@ -1,9 +1,9 @@
 using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.MediaEncoding;
-using MediaBrowser.Model.Dlna;
-using MediaBrowser.Model.Globalization;
-using MediaBrowser.Model.IO;
 using Microsoft.Extensions.Logging;
+using Reefin.Model.Dlna;
+using Reefin.Model.Globalization;
+using Reefin.Model.IO;
 using Reefin.Naming.Common;
 
 namespace Reefin.Providers.MediaInfo;

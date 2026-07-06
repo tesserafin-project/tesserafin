@@ -5,8 +5,8 @@ using MediaBrowser.Controller.Drawing;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Resolvers;
-using MediaBrowser.Model.Entities;
 using Reefin.Data.Enums;
+using Reefin.Model.Entities;
 using Reefin.Naming.Common;
 
 namespace Reefin.Server.Core.Library.Resolvers

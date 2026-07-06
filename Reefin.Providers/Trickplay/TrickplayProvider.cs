@@ -7,7 +7,7 @@ using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Controller.Trickplay;
-using MediaBrowser.Model.Configuration;
+using Reefin.Model.Configuration;
 
 namespace Reefin.Providers.Trickplay;
 

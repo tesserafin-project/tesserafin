@@ -10,11 +10,11 @@ using System.Text.Json.Serialization;
 using System.Threading;
 using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Querying;
 using Reefin.Common;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Extensions;
+using Reefin.Model.Querying;
 
 namespace MediaBrowser.Controller.Entities.TV
 {

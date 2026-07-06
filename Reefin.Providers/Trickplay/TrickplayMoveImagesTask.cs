@@ -6,10 +6,10 @@ using System.Threading.Tasks;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Trickplay;
-using MediaBrowser.Model.Globalization;
-using MediaBrowser.Model.Tasks;
 using Microsoft.Extensions.Logging;
 using Reefin.Data.Enums;
+using Reefin.Model.Globalization;
+using Reefin.Model.Tasks;
 
 namespace Reefin.Providers.Trickplay;
 

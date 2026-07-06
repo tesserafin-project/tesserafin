@@ -11,9 +11,9 @@ using System.Threading.Tasks;
 using MediaBrowser.Controller.Net;
 using MediaBrowser.Controller.Net.WebSocketMessages;
 using MediaBrowser.Controller.Net.WebSocketMessages.Outbound;
-using MediaBrowser.Model.Session;
 using Microsoft.Extensions.Logging;
 using Reefin.Extensions.Json;
+using Reefin.Model.Session;
 
 namespace Reefin.Server.Core.HttpServer
 {

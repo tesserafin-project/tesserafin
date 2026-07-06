@@ -9,9 +9,6 @@ using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Lyrics;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.IO;
-using MediaBrowser.Model.Lyrics;
-using MediaBrowser.Model.Providers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -19,6 +16,9 @@ using Reefin.Api.Attributes;
 using Reefin.Api.Extensions;
 using Reefin.Common.Api;
 using Reefin.Extensions;
+using Reefin.Model.IO;
+using Reefin.Model.Lyrics;
+using Reefin.Model.Providers;
 
 namespace Reefin.Api.Controllers;
 

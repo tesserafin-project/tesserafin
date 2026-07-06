@@ -2,8 +2,8 @@
 
 using System;
 using System.Linq;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.IO;
+using Reefin.Model.Entities;
+using Reefin.Model.IO;
 
 namespace MediaBrowser.Controller.Entities
 {

@@ -7,14 +7,14 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.LiveTv;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.LiveTv;
-using MediaBrowser.Model.Tasks;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Configuration;
 using Reefin.Common.Extensions;
 using Reefin.LiveTv.Configuration;
 using Reefin.LiveTv.Guide;
+using Reefin.Model.Dto;
+using Reefin.Model.LiveTv;
+using Reefin.Model.Tasks;
 
 namespace Reefin.LiveTv.Listings;
 

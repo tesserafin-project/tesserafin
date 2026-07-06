@@ -1,9 +1,9 @@
 using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.IO;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Configuration;
+using Reefin.Model.IO;
 
 namespace Reefin.XbmcMetadata.Providers
 {

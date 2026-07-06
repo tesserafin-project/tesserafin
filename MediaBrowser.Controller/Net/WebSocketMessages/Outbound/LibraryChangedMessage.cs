@@ -1,6 +1,6 @@
 using System.ComponentModel;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.Session;
+using Reefin.Model.Entities;
+using Reefin.Model.Session;
 
 namespace MediaBrowser.Controller.Net.WebSocketMessages.Outbound;
 

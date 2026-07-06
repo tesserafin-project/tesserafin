@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Entities;
-using MediaBrowser.Model;
-using MediaBrowser.Model.MediaSegments;
+using Reefin.Model;
+using Reefin.Model.MediaSegments;
 
 namespace MediaBrowser.Controller.MediaSegments;
 

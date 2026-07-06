@@ -9,12 +9,12 @@ using System.Linq;
 using System.Text.Json.Serialization;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.LiveTv;
-using MediaBrowser.Model.Providers;
 using Reefin.Common.Configuration;
 using Reefin.Data.Enums;
 using Reefin.Extensions;
+using Reefin.Model.Entities;
+using Reefin.Model.LiveTv;
+using Reefin.Model.Providers;
 
 namespace MediaBrowser.Controller.LiveTv
 {

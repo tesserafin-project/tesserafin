@@ -5,9 +5,9 @@ using System.Threading;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.IO;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Configuration;
+using Reefin.Model.IO;
 using Reefin.XbmcMetadata.Parsers;
 using Reefin.XbmcMetadata.Savers;
 

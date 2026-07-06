@@ -1,6 +1,6 @@
 using System;
-using MediaBrowser.Model.Configuration;
-using MediaBrowser.Model.Entities;
+using Reefin.Model.Configuration;
+using Reefin.Model.Entities;
 
 namespace MediaBrowser.Controller.MediaEncoding;
 

@@ -15,11 +15,6 @@ using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.LiveTv;
 using MediaBrowser.Controller.Sorting;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.Globalization;
-using MediaBrowser.Model.LiveTv;
-using MediaBrowser.Model.Querying;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Extensions;
 using Reefin.Data;
@@ -28,6 +23,11 @@ using Reefin.Data.Events;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Database.Implementations.Enums;
 using Reefin.LiveTv.Configuration;
+using Reefin.Model.Dto;
+using Reefin.Model.Entities;
+using Reefin.Model.Globalization;
+using Reefin.Model.LiveTv;
+using Reefin.Model.Querying;
 
 namespace Reefin.LiveTv
 {
@@ -1282,7 +1282,7 @@ namespace Reefin.LiveTv
                 .OrderBy(i => i.SortName)
                 .ToList();
 
-            var channels = await _channelManager.GetChannelsInternalAsync(new MediaBrowser.Model.Channels.ChannelQuery
+            var channels = await _channelManager.GetChannelsInternalAsync(new Reefin.Model.Channels.ChannelQuery
             {
                 UserId = user.Id,
                 IsRecordingsFolder = true,

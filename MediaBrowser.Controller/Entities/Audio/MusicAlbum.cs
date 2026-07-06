@@ -11,12 +11,12 @@ using System.Threading.Tasks;
 using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Entities;
 using Reefin.Data;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Database.Implementations.Enums;
-using MetadataProvider = MediaBrowser.Model.Entities.MetadataProvider;
+using Reefin.Model.Entities;
+using MetadataProvider = Reefin.Model.Entities.MetadataProvider;
 
 namespace MediaBrowser.Controller.Entities.Audio
 {

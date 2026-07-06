@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Model.Querying;
-using MediaBrowser.Model.Search;
+using Reefin.Model.Querying;
+using Reefin.Model.Search;
 
 namespace MediaBrowser.Controller.Library;
 

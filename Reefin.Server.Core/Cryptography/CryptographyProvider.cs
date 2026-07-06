@@ -2,8 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Security.Cryptography;
-using MediaBrowser.Model.Cryptography;
-using static MediaBrowser.Model.Cryptography.Constants;
+using Reefin.Model.Cryptography;
+using static Reefin.Model.Cryptography.Constants;
 
 namespace Reefin.Server.Core.Cryptography
 {

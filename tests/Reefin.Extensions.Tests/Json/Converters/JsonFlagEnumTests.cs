@@ -1,6 +1,6 @@
 using System.Text.Json;
-using MediaBrowser.Model.Session;
 using Reefin.Extensions.Json.Converters;
+using Reefin.Model.Session;
 using Xunit;
 
 namespace Reefin.Extensions.Tests.Json.Converters;

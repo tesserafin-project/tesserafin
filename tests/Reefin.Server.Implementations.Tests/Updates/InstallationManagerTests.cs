@@ -6,9 +6,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using AutoFixture;
 using AutoFixture.AutoMoq;
-using MediaBrowser.Model.Updates;
 using Moq;
 using Moq.Protected;
+using Reefin.Model.Updates;
 using Reefin.Server.Core.Updates;
 using Xunit;
 

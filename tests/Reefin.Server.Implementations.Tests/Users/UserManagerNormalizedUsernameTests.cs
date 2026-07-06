@@ -8,7 +8,6 @@ using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Drawing;
 using MediaBrowser.Controller.Events;
 using MediaBrowser.Controller.Library;
-using MediaBrowser.Model.Cryptography;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -18,6 +17,7 @@ using Reefin.Common.Net;
 using Reefin.Database.Implementations;
 using Reefin.Database.Implementations.Locking;
 using Reefin.Database.Providers.Sqlite;
+using Reefin.Model.Cryptography;
 using Reefin.Server.Implementations.Users;
 using Xunit;
 

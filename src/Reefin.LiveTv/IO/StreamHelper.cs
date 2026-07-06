@@ -5,7 +5,7 @@ using System.Buffers;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Model.IO;
+using Reefin.Model.IO;
 
 namespace Reefin.LiveTv.IO
 {

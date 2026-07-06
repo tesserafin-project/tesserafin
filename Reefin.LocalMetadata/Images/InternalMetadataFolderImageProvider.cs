@@ -4,8 +4,8 @@ using System.Linq;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.IO;
 using Microsoft.Extensions.Logging;
+using Reefin.Model.IO;
 
 namespace Reefin.LocalMetadata.Images
 {

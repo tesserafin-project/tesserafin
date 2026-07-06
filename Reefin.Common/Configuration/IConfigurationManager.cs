@@ -2,7 +2,7 @@
 
 using System;
 using System.Collections.Generic;
-using MediaBrowser.Model.Configuration;
+using Reefin.Model.Configuration;
 
 namespace Reefin.Common.Configuration
 {

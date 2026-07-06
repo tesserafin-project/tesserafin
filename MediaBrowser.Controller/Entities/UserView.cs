@@ -10,10 +10,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Controller.TV;
-using MediaBrowser.Model.Querying;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Extensions;
+using Reefin.Model.Querying;
 
 namespace MediaBrowser.Controller.Entities
 {

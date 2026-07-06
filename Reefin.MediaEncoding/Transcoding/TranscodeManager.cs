@@ -15,11 +15,6 @@ using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.MediaEncoding;
 using MediaBrowser.Controller.Session;
 using MediaBrowser.Controller.Streaming;
-using MediaBrowser.Model.Dlna;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.IO;
-using MediaBrowser.Model.MediaInfo;
-using MediaBrowser.Model.Session;
 using Microsoft.Extensions.Logging;
 using Reefin.Common;
 using Reefin.Common.Configuration;
@@ -27,6 +22,11 @@ using Reefin.Common.Extensions;
 using Reefin.Data;
 using Reefin.Database.Implementations.Enums;
 using Reefin.Extensions;
+using Reefin.Model.Dlna;
+using Reefin.Model.Entities;
+using Reefin.Model.IO;
+using Reefin.Model.MediaInfo;
+using Reefin.Model.Session;
 
 namespace Reefin.MediaEncoding.Transcoding;
 

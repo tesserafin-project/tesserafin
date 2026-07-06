@@ -3,8 +3,8 @@ using System.Collections.Concurrent;
 using System.IO;
 using System.Xml;
 using System.Xml.Serialization;
-using MediaBrowser.Model.IO;
-using MediaBrowser.Model.Serialization;
+using Reefin.Model.IO;
+using Reefin.Model.Serialization;
 
 namespace Reefin.Server.Core.Serialization
 {

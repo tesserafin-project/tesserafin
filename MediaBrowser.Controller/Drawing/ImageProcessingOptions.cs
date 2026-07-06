@@ -7,7 +7,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using MediaBrowser.Controller.Entities;
-using MediaBrowser.Model.Drawing;
+using Reefin.Model.Drawing;
 
 namespace MediaBrowser.Controller.Drawing
 {

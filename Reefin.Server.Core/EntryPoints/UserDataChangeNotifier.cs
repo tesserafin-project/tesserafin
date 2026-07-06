@@ -6,9 +6,9 @@ using System.Threading.Tasks;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Session;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.Session;
 using Microsoft.Extensions.Hosting;
+using Reefin.Model.Entities;
+using Reefin.Model.Session;
 
 namespace Reefin.Server.Core.EntryPoints
 {

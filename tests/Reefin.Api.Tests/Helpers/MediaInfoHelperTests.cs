@@ -4,12 +4,12 @@ using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Devices;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.MediaEncoding;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.MediaInfo;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Reefin.Api.Helpers;
 using Reefin.Common.Net;
+using Reefin.Model.Dto;
+using Reefin.Model.MediaInfo;
 using Xunit;
 
 namespace Reefin.Api.Tests.Helpers

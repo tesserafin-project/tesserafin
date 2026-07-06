@@ -3,8 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Mime;
-using MediaBrowser.Model.Net;
-using MediaBrowser.Model.Plugins;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -13,6 +11,8 @@ using Reefin.Api.Attributes;
 using Reefin.Api.Models;
 using Reefin.Common.Api;
 using Reefin.Common.Plugins;
+using Reefin.Model.Net;
+using Reefin.Model.Plugins;
 
 namespace Reefin.Api.Controllers;
 

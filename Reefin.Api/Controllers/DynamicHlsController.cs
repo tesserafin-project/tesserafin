@@ -12,11 +12,6 @@ using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.MediaEncoding;
 using MediaBrowser.Controller.Streaming;
-using MediaBrowser.Model.Configuration;
-using MediaBrowser.Model.Dlna;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.IO;
-using MediaBrowser.Model.Net;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -30,6 +25,11 @@ using Reefin.Data.Enums;
 using Reefin.Extensions;
 using Reefin.MediaEncoding.Encoder;
 using Reefin.MediaEncoding.Hls.Playlist;
+using Reefin.Model.Configuration;
+using Reefin.Model.Dlna;
+using Reefin.Model.Entities;
+using Reefin.Model.IO;
+using Reefin.Model.Net;
 
 namespace Reefin.Api.Controllers;
 

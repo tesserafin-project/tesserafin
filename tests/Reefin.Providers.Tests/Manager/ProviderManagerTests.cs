@@ -15,12 +15,12 @@ using MediaBrowser.Controller.Lyrics;
 using MediaBrowser.Controller.MediaSegments;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Controller.Subtitles;
-using MediaBrowser.Model.Configuration;
-using MediaBrowser.Model.IO;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Reefin.Model.Configuration;
+using Reefin.Model.IO;
 using Reefin.Providers.Manager;
 using Xunit;
 

@@ -21,15 +21,15 @@ using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.LibraryTaskScheduler;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.IO;
-using MediaBrowser.Model.Querying;
 using Microsoft.Extensions.Logging;
 using Reefin.Data;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Database.Implementations.Enums;
 using Reefin.Extensions;
+using Reefin.Model.Dto;
+using Reefin.Model.IO;
+using Reefin.Model.Querying;
 using Episode = MediaBrowser.Controller.Entities.TV.Episode;
 using MusicAlbum = MediaBrowser.Controller.Entities.Audio.MusicAlbum;
 using Season = MediaBrowser.Controller.Entities.TV.Season;
@@ -1679,7 +1679,7 @@ namespace MediaBrowser.Controller.Entities
                 if (child is not IItemByName)
                 {
                     var childProtocol = childOwner.PathProtocol;
-                    if (!childProtocol.HasValue || childProtocol.Value != Model.MediaInfo.MediaProtocol.File)
+                    if (!childProtocol.HasValue || childProtocol.Value != Reefin.Model.MediaInfo.MediaProtocol.File)
                     {
                         if (!childOwner.IsVisibleStandalone(user))
                         {

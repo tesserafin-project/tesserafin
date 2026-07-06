@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using MediaBrowser.Model.Dlna;
+using Reefin.Model.Dlna;
 using Xunit;
 
 namespace Reefin.Model.Tests.Dlna;

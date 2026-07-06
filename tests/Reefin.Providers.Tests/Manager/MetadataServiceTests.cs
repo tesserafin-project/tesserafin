@@ -6,7 +6,7 @@ using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Entities;
+using Reefin.Model.Entities;
 using Reefin.Providers.Manager;
 using Xunit;
 

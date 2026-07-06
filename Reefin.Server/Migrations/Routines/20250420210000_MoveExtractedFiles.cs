@@ -11,7 +11,6 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.IO;
-using MediaBrowser.Model.IO;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Configuration;
@@ -19,6 +18,7 @@ using Reefin.Common.Extensions;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations;
 using Reefin.Database.Implementations.Entities;
+using Reefin.Model.IO;
 using Reefin.Server.ServerSetupApp;
 
 namespace Reefin.Server.Migrations.Routines;

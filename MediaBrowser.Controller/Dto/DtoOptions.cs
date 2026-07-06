@@ -1,13 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.Querying;
+using Reefin.Model.Entities;
+using Reefin.Model.Querying;
 
 namespace MediaBrowser.Controller.Dto
 {
     /// <summary>
-    /// Options that control which fields and images are populated when building a <see cref="MediaBrowser.Model.Dto.BaseItemDto"/>.
+    /// Options that control which fields and images are populated when building a <see cref="Reefin.Model.Dto.BaseItemDto"/>.
     /// </summary>
     public class DtoOptions
     {

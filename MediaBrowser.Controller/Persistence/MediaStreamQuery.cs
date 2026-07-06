@@ -1,7 +1,7 @@
 #pragma warning disable CS1591
 
 using System;
-using MediaBrowser.Model.Entities;
+using Reefin.Model.Entities;
 
 namespace MediaBrowser.Controller.Persistence
 {

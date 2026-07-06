@@ -6,9 +6,9 @@ using System;
 using System.Collections.Generic;
 using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Entities;
-using MediaBrowser.Model.Library;
-using MediaBrowser.Model.Querying;
 using Reefin.Data.Enums;
+using Reefin.Model.Library;
+using Reefin.Model.Querying;
 
 namespace MediaBrowser.Controller.Library
 {

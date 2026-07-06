@@ -1,5 +1,5 @@
 using System.IO;
-using MediaBrowser.Model.Lyrics;
+using Reefin.Model.Lyrics;
 using Reefin.Providers.Lyric;
 using Xunit;
 

@@ -12,11 +12,11 @@ using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Controller.Resolvers;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.IO;
 using Microsoft.Extensions.Logging;
 using Reefin.Data.Enums;
 using Reefin.Extensions;
+using Reefin.Model.Entities;
+using Reefin.Model.IO;
 using Reefin.Naming.Common;
 using Reefin.Naming.Video;
 

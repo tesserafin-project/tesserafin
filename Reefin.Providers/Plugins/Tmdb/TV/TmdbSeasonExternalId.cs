@@ -1,7 +1,7 @@
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.Providers;
+using Reefin.Model.Entities;
+using Reefin.Model.Providers;
 
 namespace Reefin.Providers.Plugins.Tmdb.TV
 {

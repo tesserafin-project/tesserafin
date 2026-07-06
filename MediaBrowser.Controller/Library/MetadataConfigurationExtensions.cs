@@ -2,8 +2,8 @@
 
 using System;
 using MediaBrowser.Controller.Configuration;
-using MediaBrowser.Model.Configuration;
 using Reefin.Common.Configuration;
+using Reefin.Model.Configuration;
 
 namespace MediaBrowser.Controller.Library
 {

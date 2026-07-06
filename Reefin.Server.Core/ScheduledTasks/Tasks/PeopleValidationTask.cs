@@ -8,14 +8,14 @@ using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Persistence;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Globalization;
-using MediaBrowser.Model.IO;
-using MediaBrowser.Model.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations;
 using Reefin.Database.Implementations.Entities;
+using Reefin.Model.Globalization;
+using Reefin.Model.IO;
+using Reefin.Model.Tasks;
 
 namespace Reefin.Server.Core.ScheduledTasks.Tasks;
 
@@ -238,7 +238,7 @@ public class PeopleValidationTask : IScheduledTask, IConfigurableScheduledTask
                 return false;
             }
 
-            var hasImage = item.HasImage(MediaBrowser.Model.Entities.ImageType.Primary);
+            var hasImage = item.HasImage(Reefin.Model.Entities.ImageType.Primary);
             var hasOverview = !string.IsNullOrEmpty(item.Overview);
 
             var options = new MetadataRefreshOptions(new DirectoryService(_fileSystem))

@@ -3,7 +3,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Model.Session;
+using Reefin.Model.Session;
 
 namespace MediaBrowser.Controller.Session
 {

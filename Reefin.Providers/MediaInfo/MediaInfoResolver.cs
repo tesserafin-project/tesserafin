@@ -8,13 +8,13 @@ using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.MediaEncoding;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Dlna;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.Globalization;
-using MediaBrowser.Model.IO;
-using MediaBrowser.Model.MediaInfo;
 using Microsoft.Extensions.Logging;
+using Reefin.Model.Dlna;
+using Reefin.Model.Dto;
+using Reefin.Model.Entities;
+using Reefin.Model.Globalization;
+using Reefin.Model.IO;
+using Reefin.Model.MediaInfo;
 using Reefin.Naming.Common;
 using Reefin.Naming.ExternalFiles;
 
@@ -311,7 +311,7 @@ namespace Reefin.Providers.MediaInfo
         /// <param name="type">The <see cref="DlnaProfileType"/>.</param>
         /// <param name="cancellationToken">The cancellation token to cancel operation.</param>
         /// <returns>The media info for the given file.</returns>
-        private Task<MediaBrowser.Model.MediaInfo.MediaInfo> GetMediaInfo(string path, DlnaProfileType type, CancellationToken cancellationToken)
+        private Task<Reefin.Model.MediaInfo.MediaInfo> GetMediaInfo(string path, DlnaProfileType type, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
 

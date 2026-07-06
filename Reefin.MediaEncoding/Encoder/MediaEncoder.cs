@@ -15,14 +15,6 @@ using AsyncKeyedLock;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Extensions;
 using MediaBrowser.Controller.MediaEncoding;
-using MediaBrowser.Model.Configuration;
-using MediaBrowser.Model.Dlna;
-using MediaBrowser.Model.Drawing;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.Globalization;
-using MediaBrowser.Model.IO;
-using MediaBrowser.Model.MediaInfo;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Reefin.Common;
@@ -33,6 +25,14 @@ using Reefin.Extensions;
 using Reefin.Extensions.Json;
 using Reefin.Extensions.Json.Converters;
 using Reefin.MediaEncoding.Probing;
+using Reefin.Model.Configuration;
+using Reefin.Model.Dlna;
+using Reefin.Model.Drawing;
+using Reefin.Model.Dto;
+using Reefin.Model.Entities;
+using Reefin.Model.Globalization;
+using Reefin.Model.IO;
+using Reefin.Model.MediaInfo;
 
 namespace Reefin.MediaEncoding.Encoder
 {

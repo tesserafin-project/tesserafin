@@ -1,5 +1,5 @@
 using MediaBrowser.Controller.MediaEncoding;
-using MediaBrowser.Model.Entities;
+using Reefin.Model.Entities;
 using Xunit;
 
 namespace Reefin.Controller.Tests.MediaEncoding;

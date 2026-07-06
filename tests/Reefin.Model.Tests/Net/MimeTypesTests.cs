@@ -1,4 +1,4 @@
-using MediaBrowser.Model.Net;
+using Reefin.Model.Net;
 using Xunit;
 
 namespace Reefin.Model.Tests.Net
@@ -89,7 +89,7 @@ namespace Reefin.Model.Tests.Net
         [InlineData(".xsp", "audio/xsp")]
         public void GetMimeType_Valid_ReturnsCorrectResult(string input, string expectedResult)
         {
-            Assert.Equal(expectedResult, MimeTypes.GetMimeType(input, null));
+            Assert.Equal(expectedResult, Reefin.Model.Net.MimeTypes.GetMimeType(input, null));
         }
 
         [Theory]
@@ -165,7 +165,7 @@ namespace Reefin.Model.Tests.Net
         [InlineData("video/x-msvideo", ".avi")]
         public void ToExtension_Valid_ReturnsCorrectResult(string input, string expectedResult)
         {
-            Assert.Equal(expectedResult, MimeTypes.ToExtension(input));
+            Assert.Equal(expectedResult, Reefin.Model.Net.MimeTypes.ToExtension(input));
         }
     }
 }

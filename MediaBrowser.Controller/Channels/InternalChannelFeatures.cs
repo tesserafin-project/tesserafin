@@ -3,7 +3,7 @@
 #pragma warning disable CA1002, CA2227, CS1591
 
 using System.Collections.Generic;
-using MediaBrowser.Model.Channels;
+using Reefin.Model.Channels;
 
 namespace MediaBrowser.Controller.Channels
 {

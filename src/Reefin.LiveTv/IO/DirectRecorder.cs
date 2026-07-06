@@ -7,10 +7,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Streaming;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.IO;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Net;
+using Reefin.Model.Dto;
+using Reefin.Model.IO;
 
 namespace Reefin.LiveTv.IO
 {

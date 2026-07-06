@@ -1,6 +1,6 @@
 using System;
 using MediaBrowser.Controller.Entities;
-using MediaBrowser.Model.Querying;
+using Reefin.Model.Querying;
 using Xunit;
 
 namespace Reefin.Controller.Tests.Entities;

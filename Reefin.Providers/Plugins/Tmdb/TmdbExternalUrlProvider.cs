@@ -4,7 +4,7 @@ using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Entities;
+using Reefin.Model.Entities;
 using TMDbLib.Objects.TvShows;
 
 namespace Reefin.Providers.Plugins.Tmdb;

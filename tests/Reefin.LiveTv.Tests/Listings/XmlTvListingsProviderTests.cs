@@ -6,10 +6,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using AutoFixture;
 using AutoFixture.AutoMoq;
-using MediaBrowser.Model.LiveTv;
 using Moq;
 using Moq.Protected;
 using Reefin.LiveTv.Listings;
+using Reefin.Model.LiveTv;
 using Xunit;
 
 namespace Reefin.LiveTv.Tests.Listings;

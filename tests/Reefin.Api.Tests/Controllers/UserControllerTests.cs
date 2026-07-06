@@ -11,7 +11,6 @@ using MediaBrowser.Controller.Net;
 using MediaBrowser.Controller.Playlists;
 using MediaBrowser.Controller.QuickConnect;
 using MediaBrowser.Controller.Session;
-using MediaBrowser.Model.Users;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -19,6 +18,7 @@ using Nikse.SubtitleEdit.Core.Common;
 using Reefin.Api.Controllers;
 using Reefin.Common.Net;
 using Reefin.Database.Implementations.Entities;
+using Reefin.Model.Users;
 using Xunit;
 
 namespace Reefin.Api.Tests.Controllers;

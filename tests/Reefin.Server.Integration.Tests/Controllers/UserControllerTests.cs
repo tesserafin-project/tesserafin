@@ -5,9 +5,9 @@ using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Threading.Tasks;
-using MediaBrowser.Model.Dto;
 using Reefin.Api.Models.UserDtos;
 using Reefin.Extensions.Json;
+using Reefin.Model.Dto;
 using Xunit;
 using Xunit.v3.Priority;
 

@@ -3,7 +3,7 @@ using AutoFixture;
 using AutoFixture.AutoMoq;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Entities;
-using MediaBrowser.Model.Entities;
+using Reefin.Model.Entities;
 using Microsoft.Extensions.Configuration;
 using Moq;
 using Reefin.Server.Core.Data;

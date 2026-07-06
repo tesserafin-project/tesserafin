@@ -3,8 +3,8 @@ using MediaBrowser.Controller.BaseItemManager;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
-using MediaBrowser.Model.Configuration;
 using Moq;
+using Reefin.Model.Configuration;
 using Xunit;
 
 namespace Reefin.Controller.Tests

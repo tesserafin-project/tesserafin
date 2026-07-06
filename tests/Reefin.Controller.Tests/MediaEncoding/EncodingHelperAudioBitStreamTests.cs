@@ -2,11 +2,11 @@ using System;
 using System.Globalization;
 using MediaBrowser.Controller.IO;
 using MediaBrowser.Controller.MediaEncoding;
-using MediaBrowser.Model.Dlna;
-using MediaBrowser.Model.Entities;
 using Microsoft.Extensions.Configuration;
 using Moq;
 using Reefin.Common.Configuration;
+using Reefin.Model.Dlna;
+using Reefin.Model.Entities;
 using Xunit;
 using IConfigurationManager = Reefin.Common.Configuration.IConfigurationManager;
 

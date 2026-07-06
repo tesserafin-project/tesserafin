@@ -10,12 +10,12 @@ using System.Text.Json.Serialization;
 using System.Threading;
 using MediaBrowser.Controller.MediaEncoding;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Dlna;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.IO;
 using Microsoft.Extensions.Logging;
 using Reefin.Data.Enums;
 using Reefin.Extensions;
+using Reefin.Model.Dlna;
+using Reefin.Model.Entities;
+using Reefin.Model.IO;
 
 namespace MediaBrowser.Controller.Entities.TV
 {
@@ -28,7 +28,7 @@ namespace MediaBrowser.Controller.Entities.TV
 
         /// <inheritdoc />
         [JsonIgnore]
-        public IReadOnlyList<BaseItem> LocalTrailers => GetExtras([Model.Entities.ExtraType.Trailer]).ToArray();
+        public IReadOnlyList<BaseItem> LocalTrailers => GetExtras([Reefin.Model.Entities.ExtraType.Trailer]).ToArray();
 
         /// <summary>
         /// Gets or sets the season in which it aired.

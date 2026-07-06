@@ -8,15 +8,15 @@ using System.Globalization;
 using System.Linq;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.TV;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.Querying;
 using Microsoft.Extensions.Logging;
 using Reefin.Data;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Database.Implementations.Enums;
 using Reefin.Extensions;
-using MetadataProvider = MediaBrowser.Model.Entities.MetadataProvider;
+using Reefin.Model.Entities;
+using Reefin.Model.Querying;
+using MetadataProvider = Reefin.Model.Entities.MetadataProvider;
 
 namespace MediaBrowser.Controller.Entities
 {

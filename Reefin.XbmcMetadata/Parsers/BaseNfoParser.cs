@@ -12,12 +12,12 @@ using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Extensions;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Entities;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Configuration;
 using Reefin.Common.Providers;
 using Reefin.Data.Enums;
 using Reefin.Extensions;
+using Reefin.Model.Entities;
 using Reefin.XbmcMetadata.Configuration;
 using Reefin.XbmcMetadata.Savers;
 

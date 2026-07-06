@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using MediaBrowser.Model.Cryptography;
+using Reefin.Model.Cryptography;
 using Xunit;
 
 namespace Reefin.Model.Tests.Cryptography

@@ -1,12 +1,12 @@
 using System.Collections.Generic;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.MediaEncoding;
-using MediaBrowser.Model.Configuration;
-using MediaBrowser.Model.MediaInfo;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Reefin.MediaEncoding.Encoder;
+using Reefin.Model.Configuration;
+using Reefin.Model.MediaInfo;
 using Xunit;
 
 namespace Reefin.MediaEncoding.Tests.Encoder;
@@ -131,9 +131,9 @@ public class MediaEncoderCapabilityTests
         return new MediaEncoder(
             NullLogger<MediaEncoder>.Instance,
             serverConfig.Object,
-            Mock.Of<MediaBrowser.Model.IO.IFileSystem>(),
+            Mock.Of<Reefin.Model.IO.IFileSystem>(),
             Mock.Of<IBlurayExaminer>(),
-            Mock.Of<MediaBrowser.Model.Globalization.ILocalizationManager>(),
+            Mock.Of<Reefin.Model.Globalization.ILocalizationManager>(),
             configuration,
             serverConfig.Object);
     }

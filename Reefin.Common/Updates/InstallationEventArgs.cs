@@ -1,7 +1,7 @@
 #nullable disable
 
 using System;
-using MediaBrowser.Model.Updates;
+using Reefin.Model.Updates;
 
 namespace Reefin.Common.Updates
 {

@@ -4,7 +4,7 @@ using System.Net.Mime;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
-using MediaBrowser.Model.Branding;
+using Reefin.Model.Branding;
 using Xunit;
 
 namespace Reefin.Server.Integration.Tests

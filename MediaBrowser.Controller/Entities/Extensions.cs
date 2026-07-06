@@ -1,7 +1,7 @@
 using System;
 using System.Linq;
-using MediaBrowser.Model.Entities;
 using Reefin.Extensions;
+using Reefin.Model.Entities;
 
 namespace MediaBrowser.Controller.Entities
 {

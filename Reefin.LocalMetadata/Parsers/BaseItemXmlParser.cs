@@ -10,10 +10,10 @@ using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Extensions;
 using MediaBrowser.Controller.Playlists;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Entities;
 using Microsoft.Extensions.Logging;
 using Reefin.Data.Enums;
 using Reefin.Extensions;
+using Reefin.Model.Entities;
 
 namespace Reefin.LocalMetadata.Parsers
 {

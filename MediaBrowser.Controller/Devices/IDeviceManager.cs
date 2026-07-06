@@ -1,14 +1,14 @@
 using System;
 using System.Threading.Tasks;
-using MediaBrowser.Model.Devices;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.Querying;
-using MediaBrowser.Model.Session;
 using Reefin.Data.Dtos;
 using Reefin.Data.Events;
 using Reefin.Data.Queries;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Database.Implementations.Entities.Security;
+using Reefin.Model.Devices;
+using Reefin.Model.Dto;
+using Reefin.Model.Querying;
+using Reefin.Model.Session;
 
 namespace MediaBrowser.Controller.Devices;
 

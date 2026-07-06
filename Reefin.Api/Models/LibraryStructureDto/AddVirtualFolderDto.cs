@@ -1,4 +1,4 @@
-using MediaBrowser.Model.Configuration;
+using Reefin.Model.Configuration;
 
 namespace Reefin.Api.Models.LibraryStructureDto;
 

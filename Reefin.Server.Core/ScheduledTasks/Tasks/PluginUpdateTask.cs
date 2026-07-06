@@ -5,10 +5,10 @@ using System.Linq;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Model.Globalization;
-using MediaBrowser.Model.Tasks;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Updates;
+using Reefin.Model.Globalization;
+using Reefin.Model.Tasks;
 
 namespace Reefin.Server.Core.ScheduledTasks.Tasks;
 

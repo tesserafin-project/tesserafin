@@ -2,8 +2,8 @@
 
 using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.Providers;
+using Reefin.Model.Entities;
+using Reefin.Model.Providers;
 
 namespace Reefin.Providers.Plugins.AudioDb
 {

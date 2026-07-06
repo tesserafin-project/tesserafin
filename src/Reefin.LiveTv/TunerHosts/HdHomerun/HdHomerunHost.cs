@@ -16,18 +16,18 @@ using MediaBrowser.Controller;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.LiveTv;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.IO;
-using MediaBrowser.Model.LiveTv;
-using MediaBrowser.Model.MediaInfo;
-using MediaBrowser.Model.Net;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Extensions;
 using Reefin.Common.Net;
 using Reefin.Extensions;
 using Reefin.Extensions.Json;
 using Reefin.Extensions.Json.Converters;
+using Reefin.Model.Dto;
+using Reefin.Model.Entities;
+using Reefin.Model.IO;
+using Reefin.Model.LiveTv;
+using Reefin.Model.MediaInfo;
+using Reefin.Model.Net;
 
 namespace Reefin.LiveTv.TunerHosts.HdHomerun
 {

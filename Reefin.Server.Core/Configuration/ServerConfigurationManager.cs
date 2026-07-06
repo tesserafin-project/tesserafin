@@ -3,11 +3,11 @@ using System.Globalization;
 using System.IO;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Configuration;
-using MediaBrowser.Model.Configuration;
-using MediaBrowser.Model.Serialization;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Configuration;
 using Reefin.Data.Events;
+using Reefin.Model.Configuration;
+using Reefin.Model.Serialization;
 using Reefin.Server.Core.AppBase;
 
 namespace Reefin.Server.Core.Configuration

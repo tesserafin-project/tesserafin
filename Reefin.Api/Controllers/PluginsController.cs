@@ -5,8 +5,6 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
-using MediaBrowser.Model.Net;
-using MediaBrowser.Model.Plugins;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -15,6 +13,8 @@ using Reefin.Common.Api;
 using Reefin.Common.Plugins;
 using Reefin.Common.Updates;
 using Reefin.Extensions.Json;
+using Reefin.Model.Net;
+using Reefin.Model.Plugins;
 
 namespace Reefin.Api.Controllers;
 

@@ -4,10 +4,10 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Model.Configuration;
-using MediaBrowser.Model.IO;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Configuration;
+using Reefin.Model.Configuration;
+using Reefin.Model.IO;
 
 namespace MediaBrowser.Controller.MediaEncoding;
 

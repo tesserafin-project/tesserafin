@@ -3,8 +3,8 @@ using AutoFixture;
 using AutoFixture.AutoMoq;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Entities;
-using MediaBrowser.Model.Configuration;
 using Moq;
+using Reefin.Model.Configuration;
 using Reefin.Providers.MediaInfo;
 using Xunit;
 

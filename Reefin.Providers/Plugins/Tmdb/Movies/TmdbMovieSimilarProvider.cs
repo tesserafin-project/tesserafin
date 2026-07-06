@@ -4,9 +4,9 @@ using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using MediaBrowser.Controller.Library;
-using MediaBrowser.Model.Configuration;
-using MediaBrowser.Model.Entities;
 using Microsoft.Extensions.Logging;
+using Reefin.Model.Configuration;
+using Reefin.Model.Entities;
 using Movie = MediaBrowser.Controller.Entities.Movies.Movie;
 
 namespace Reefin.Providers.Plugins.Tmdb.Movies;

@@ -16,11 +16,6 @@ using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.MediaEncoding;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Controller.Subtitles;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.IO;
-using MediaBrowser.Model.Net;
-using MediaBrowser.Model.Providers;
-using MediaBrowser.Model.Subtitles;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -31,6 +26,11 @@ using Reefin.Api.Helpers;
 using Reefin.Api.Models.SubtitleDtos;
 using Reefin.Common.Api;
 using Reefin.Common.Configuration;
+using Reefin.Model.Entities;
+using Reefin.Model.IO;
+using Reefin.Model.Net;
+using Reefin.Model.Providers;
+using Reefin.Model.Subtitles;
 
 namespace Reefin.Api.Controllers;
 

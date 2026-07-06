@@ -9,9 +9,9 @@ using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Library;
-using MediaBrowser.Model.Querying;
 using Reefin.Database.Implementations.Entities;
+using Reefin.Model.Library;
+using Reefin.Model.Querying;
 
 namespace MediaBrowser.Controller.Entities
 {

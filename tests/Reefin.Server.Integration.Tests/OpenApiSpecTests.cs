@@ -1,7 +1,7 @@
 using System.IO;
 using System.Reflection;
 using System.Threading.Tasks;
-using MediaBrowser.Model.IO;
+using Reefin.Model.IO;
 using Xunit;
 
 namespace Reefin.Server.Integration.Tests

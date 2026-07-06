@@ -8,10 +8,10 @@ using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.LiveTv;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Controller.Trickplay;
-using MediaBrowser.Model.Entities;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Reefin.Common;
+using Reefin.Model.Entities;
 using Reefin.Server.Core.Dto;
 using Xunit;
 

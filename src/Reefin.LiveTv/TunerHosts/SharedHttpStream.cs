@@ -9,13 +9,13 @@ using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Library;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.IO;
-using MediaBrowser.Model.LiveTv;
-using MediaBrowser.Model.MediaInfo;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Configuration;
 using Reefin.Common.Net;
+using Reefin.Model.Dto;
+using Reefin.Model.IO;
+using Reefin.Model.LiveTv;
+using Reefin.Model.MediaInfo;
 
 namespace Reefin.LiveTv.TunerHosts
 {

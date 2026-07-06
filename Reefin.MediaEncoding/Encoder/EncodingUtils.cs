@@ -4,7 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using MediaBrowser.Model.MediaInfo;
+using Reefin.Model.MediaInfo;
 
 namespace Reefin.MediaEncoding.Encoder
 {

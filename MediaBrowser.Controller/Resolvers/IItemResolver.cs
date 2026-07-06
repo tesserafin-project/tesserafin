@@ -4,8 +4,8 @@ using System.Collections.Generic;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.IO;
 using Reefin.Data.Enums;
+using Reefin.Model.IO;
 
 namespace MediaBrowser.Controller.Resolvers
 {

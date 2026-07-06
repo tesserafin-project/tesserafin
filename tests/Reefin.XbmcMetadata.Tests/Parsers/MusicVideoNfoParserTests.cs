@@ -4,12 +4,12 @@ using System.Threading;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Configuration;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.Providers;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Reefin.Common.Configuration;
+using Reefin.Model.Configuration;
+using Reefin.Model.Entities;
+using Reefin.Model.Providers;
 using Reefin.XbmcMetadata.Parsers;
 using Xunit;
 

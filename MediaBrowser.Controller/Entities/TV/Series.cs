@@ -11,13 +11,13 @@ using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.Querying;
 using Reefin.Data;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Database.Implementations.Enums;
-using MetadataProvider = MediaBrowser.Model.Entities.MetadataProvider;
+using Reefin.Model.Entities;
+using Reefin.Model.Querying;
+using MetadataProvider = Reefin.Model.Entities.MetadataProvider;
 
 namespace MediaBrowser.Controller.Entities.TV
 {
@@ -52,7 +52,7 @@ namespace MediaBrowser.Controller.Entities.TV
 
         /// <inheritdoc />
         [JsonIgnore]
-        public IReadOnlyList<BaseItem> LocalTrailers => GetExtras([Model.Entities.ExtraType.Trailer]).ToArray();
+        public IReadOnlyList<BaseItem> LocalTrailers => GetExtras([Reefin.Model.Entities.ExtraType.Trailer]).ToArray();
 
         /// <summary>
         /// Gets or sets the display order.

@@ -11,8 +11,6 @@ using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.LiveTv;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.Search;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -20,6 +18,8 @@ using Reefin.Api.Helpers;
 using Reefin.Api.ModelBinders;
 using Reefin.Data.Enums;
 using Reefin.Extensions;
+using Reefin.Model.Entities;
+using Reefin.Model.Search;
 
 namespace Reefin.Api.Controllers;
 

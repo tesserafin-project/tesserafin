@@ -16,13 +16,6 @@ using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.IO;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Activity;
-using MediaBrowser.Model.Configuration;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.Globalization;
-using MediaBrowser.Model.Net;
-using MediaBrowser.Model.Querying;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -38,6 +31,13 @@ using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Database.Implementations.Enums;
 using Reefin.Extensions;
+using Reefin.Model.Activity;
+using Reefin.Model.Configuration;
+using Reefin.Model.Dto;
+using Reefin.Model.Entities;
+using Reefin.Model.Globalization;
+using Reefin.Model.Net;
+using Reefin.Model.Querying;
 
 namespace Reefin.Api.Controllers;
 
@@ -586,7 +586,7 @@ public class LibraryController : BaseReefinApiController
             {
                 EnableImages = false
             }
-        }).Where(i => string.Equals(tvdbId, i.GetProviderId(MediaBrowser.Model.Entities.MetadataProvider.Tvdb), StringComparison.OrdinalIgnoreCase)).ToArray();
+        }).Where(i => string.Equals(tvdbId, i.GetProviderId(Reefin.Model.Entities.MetadataProvider.Tvdb), StringComparison.OrdinalIgnoreCase)).ToArray();
 
         foreach (var item in series)
         {
@@ -620,11 +620,11 @@ public class LibraryController : BaseReefinApiController
 
         if (!string.IsNullOrWhiteSpace(imdbId))
         {
-            movies = movies.Where(i => string.Equals(imdbId, i.GetProviderId(MediaBrowser.Model.Entities.MetadataProvider.Imdb), StringComparison.OrdinalIgnoreCase)).ToList();
+            movies = movies.Where(i => string.Equals(imdbId, i.GetProviderId(Reefin.Model.Entities.MetadataProvider.Imdb), StringComparison.OrdinalIgnoreCase)).ToList();
         }
         else if (!string.IsNullOrWhiteSpace(tmdbId))
         {
-            movies = movies.Where(i => string.Equals(tmdbId, i.GetProviderId(MediaBrowser.Model.Entities.MetadataProvider.Tmdb), StringComparison.OrdinalIgnoreCase)).ToList();
+            movies = movies.Where(i => string.Equals(tmdbId, i.GetProviderId(Reefin.Model.Entities.MetadataProvider.Tmdb), StringComparison.OrdinalIgnoreCase)).ToList();
         }
         else
         {

@@ -1,6 +1,6 @@
 using System.Collections.Generic;
-using MediaBrowser.Model.LiveTv;
 using Reefin.Common.Configuration;
+using Reefin.Model.LiveTv;
 
 namespace Reefin.LiveTv.Configuration;
 

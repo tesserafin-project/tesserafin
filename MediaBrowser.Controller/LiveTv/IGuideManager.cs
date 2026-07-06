@@ -1,7 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Model.LiveTv;
+using Reefin.Model.LiveTv;
 
 namespace MediaBrowser.Controller.LiveTv;
 

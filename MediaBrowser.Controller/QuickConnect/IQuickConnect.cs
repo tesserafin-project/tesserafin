@@ -2,7 +2,7 @@ using System;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Authentication;
 using MediaBrowser.Controller.Net;
-using MediaBrowser.Model.QuickConnect;
+using Reefin.Model.QuickConnect;
 
 namespace MediaBrowser.Controller.QuickConnect
 {

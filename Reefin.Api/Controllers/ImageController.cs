@@ -16,12 +16,6 @@ using MediaBrowser.Controller.Drawing;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Branding;
-using MediaBrowser.Model.Drawing;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.IO;
-using MediaBrowser.Model.Net;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -33,6 +27,12 @@ using Reefin.Api.Helpers;
 using Reefin.Common.Api;
 using Reefin.Common.Configuration;
 using Reefin.Extensions;
+using Reefin.Model.Branding;
+using Reefin.Model.Drawing;
+using Reefin.Model.Dto;
+using Reefin.Model.Entities;
+using Reefin.Model.IO;
+using Reefin.Model.Net;
 
 namespace Reefin.Api.Controllers;
 

@@ -15,14 +15,14 @@ using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.LiveTv;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Configuration;
-using MediaBrowser.Model.Drawing;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.IO;
-using MediaBrowser.Model.MediaInfo;
-using MediaBrowser.Model.Net;
-using MediaBrowser.Model.Providers;
 using Microsoft.Extensions.Logging;
+using Reefin.Model.Configuration;
+using Reefin.Model.Drawing;
+using Reefin.Model.Entities;
+using Reefin.Model.IO;
+using Reefin.Model.MediaInfo;
+using Reefin.Model.Net;
+using Reefin.Model.Providers;
 
 namespace Reefin.Providers.Manager
 {

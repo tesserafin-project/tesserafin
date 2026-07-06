@@ -15,16 +15,16 @@ using MediaBrowser.Controller;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.LiveTv;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.IO;
-using MediaBrowser.Model.LiveTv;
-using MediaBrowser.Model.MediaInfo;
 using Microsoft.Extensions.Logging;
 using Microsoft.Net.Http.Headers;
 using Reefin.Common.Extensions;
 using Reefin.Common.Net;
 using Reefin.Extensions;
+using Reefin.Model.Dto;
+using Reefin.Model.Entities;
+using Reefin.Model.IO;
+using Reefin.Model.LiveTv;
+using Reefin.Model.MediaInfo;
 
 namespace Reefin.LiveTv.TunerHosts
 {

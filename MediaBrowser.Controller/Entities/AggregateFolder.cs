@@ -12,8 +12,8 @@ using System.Threading.Tasks;
 using MediaBrowser.Controller.IO;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.IO;
 using Reefin.Extensions;
+using Reefin.Model.IO;
 
 namespace MediaBrowser.Controller.Entities
 {

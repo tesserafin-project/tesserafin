@@ -9,7 +9,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Library;
-using MediaBrowser.Model.Dto;
+using Reefin.Model.Dto;
 
 namespace Reefin.LiveTv.IO
 {

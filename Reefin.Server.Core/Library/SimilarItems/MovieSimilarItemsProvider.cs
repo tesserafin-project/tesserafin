@@ -9,12 +9,12 @@ using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Persistence;
-using MediaBrowser.Model.Configuration;
 using Microsoft.EntityFrameworkCore;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Extensions;
+using Reefin.Model.Configuration;
 using BaseItemDto = MediaBrowser.Controller.Entities.BaseItem;
 
 namespace Reefin.Server.Core.Library.SimilarItems;

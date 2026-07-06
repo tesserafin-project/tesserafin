@@ -1,5 +1,5 @@
 using System;
-using MediaBrowser.Model.Cryptography;
+using Reefin.Model.Cryptography;
 using Reefin.Server.Core.Cryptography;
 using Xunit;
 

@@ -1,6 +1,6 @@
 using System;
 using MediaBrowser.Controller.Authentication;
-using MediaBrowser.Model.Dto;
+using Reefin.Model.Dto;
 
 namespace MediaBrowser.Controller.Events.Authentication;
 

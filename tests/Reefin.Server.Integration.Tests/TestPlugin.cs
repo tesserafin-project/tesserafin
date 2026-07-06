@@ -2,10 +2,10 @@
 
 using System;
 using System.Collections.Generic;
-using MediaBrowser.Model.Plugins;
-using MediaBrowser.Model.Serialization;
 using Reefin.Common.Configuration;
 using Reefin.Common.Plugins;
+using Reefin.Model.Plugins;
+using Reefin.Model.Serialization;
 
 namespace Reefin.Server.Integration.Tests
 {

@@ -1,5 +1,5 @@
 using MediaBrowser.Controller.Entities;
-using MediaBrowser.Model.Configuration;
+using Reefin.Model.Configuration;
 
 namespace MediaBrowser.Controller.BaseItemManager
 {

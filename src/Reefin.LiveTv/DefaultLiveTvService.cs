@@ -14,8 +14,6 @@ using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.LiveTv;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.LiveTv;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Extensions;
 using Reefin.Data.Enums;
@@ -24,6 +22,8 @@ using Reefin.Database.Implementations.Enums;
 using Reefin.Extensions;
 using Reefin.LiveTv.Configuration;
 using Reefin.LiveTv.Timers;
+using Reefin.Model.Dto;
+using Reefin.Model.LiveTv;
 
 namespace Reefin.LiveTv
 {

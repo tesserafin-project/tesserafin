@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Entities;
+using Reefin.Model.Entities;
 
 namespace Reefin.Providers.Plugins.AudioDb;
 

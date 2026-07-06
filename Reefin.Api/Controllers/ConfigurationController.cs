@@ -4,14 +4,14 @@ using System.Net.Mime;
 using System.Text.Json;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.MediaEncoding;
-using MediaBrowser.Model.Branding;
-using MediaBrowser.Model.Configuration;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Reefin.Api.Attributes;
 using Reefin.Common.Api;
 using Reefin.Extensions.Json;
+using Reefin.Model.Branding;
+using Reefin.Model.Configuration;
 
 namespace Reefin.Api.Controllers;
 

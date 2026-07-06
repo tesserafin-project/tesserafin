@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
-using MediaBrowser.Model.Plugins;
+using Reefin.Model.Plugins;
 
 namespace Reefin.Common.Plugins
 {

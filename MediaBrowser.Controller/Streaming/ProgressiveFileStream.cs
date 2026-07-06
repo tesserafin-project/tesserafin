@@ -4,7 +4,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.MediaEncoding;
-using MediaBrowser.Model.IO;
+using Reefin.Model.IO;
 
 namespace MediaBrowser.Controller.Streaming;
 

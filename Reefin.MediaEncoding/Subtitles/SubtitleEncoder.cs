@@ -17,10 +17,6 @@ using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.IO;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.MediaEncoding;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.IO;
-using MediaBrowser.Model.MediaInfo;
 using Microsoft.Extensions.Logging;
 using Nikse.SubtitleEdit.Core.Common;
 using Nikse.SubtitleEdit.Core.SubtitleFormats;
@@ -28,8 +24,12 @@ using Reefin.Common;
 using Reefin.Common.Configuration;
 using Reefin.Common.Extensions;
 using Reefin.Common.Net;
+using Reefin.Model.Dto;
+using Reefin.Model.Entities;
+using Reefin.Model.IO;
+using Reefin.Model.MediaInfo;
 using UtfUnknown;
-using SubtitleFormat = MediaBrowser.Model.MediaInfo.SubtitleFormat;
+using SubtitleFormat = Reefin.Model.MediaInfo.SubtitleFormat;
 
 namespace Reefin.MediaEncoding.Subtitles
 {

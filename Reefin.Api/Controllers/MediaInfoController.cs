@@ -7,7 +7,6 @@ using System.Threading.Tasks;
 using MediaBrowser.Controller.Devices;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
-using MediaBrowser.Model.MediaInfo;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -19,6 +18,7 @@ using Reefin.Api.Helpers;
 using Reefin.Api.Models.MediaInfoDtos;
 using Reefin.Common.Extensions;
 using Reefin.Extensions;
+using Reefin.Model.MediaInfo;
 
 namespace Reefin.Api.Controllers;
 

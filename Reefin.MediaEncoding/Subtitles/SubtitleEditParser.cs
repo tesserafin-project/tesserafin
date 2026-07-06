@@ -3,10 +3,10 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using MediaBrowser.Model.MediaInfo;
 using Microsoft.Extensions.Logging;
 using Nikse.SubtitleEdit.Core.Common;
 using Reefin.Extensions;
+using Reefin.Model.MediaInfo;
 using SubtitleFormat = Nikse.SubtitleEdit.Core.SubtitleFormats.SubtitleFormat;
 
 namespace Reefin.MediaEncoding.Subtitles

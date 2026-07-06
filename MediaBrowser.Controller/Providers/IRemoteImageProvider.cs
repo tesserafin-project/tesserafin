@@ -3,8 +3,8 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Entities;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.Providers;
+using Reefin.Model.Entities;
+using Reefin.Model.Providers;
 
 namespace MediaBrowser.Controller.Providers
 {

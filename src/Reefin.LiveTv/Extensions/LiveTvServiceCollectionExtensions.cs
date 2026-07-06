@@ -1,6 +1,5 @@
 using MediaBrowser.Controller.Channels;
 using MediaBrowser.Controller.LiveTv;
-using MediaBrowser.Model.IO;
 using Microsoft.Extensions.DependencyInjection;
 using Reefin.LiveTv.Channels;
 using Reefin.LiveTv.Guide;
@@ -10,6 +9,7 @@ using Reefin.LiveTv.Recordings;
 using Reefin.LiveTv.Timers;
 using Reefin.LiveTv.TunerHosts;
 using Reefin.LiveTv.TunerHosts.HdHomerun;
+using Reefin.Model.IO;
 
 namespace Reefin.LiveTv.Extensions;
 

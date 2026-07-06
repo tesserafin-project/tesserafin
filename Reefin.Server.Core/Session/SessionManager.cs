@@ -20,12 +20,6 @@ using MediaBrowser.Controller.Events.Session;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Net;
 using MediaBrowser.Controller.Session;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.Library;
-using MediaBrowser.Model.Querying;
-using MediaBrowser.Model.Session;
-using MediaBrowser.Model.SyncPlay;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -39,6 +33,12 @@ using Reefin.Database.Implementations.Entities;
 using Reefin.Database.Implementations.Entities.Security;
 using Reefin.Database.Implementations.Enums;
 using Reefin.Extensions;
+using Reefin.Model.Dto;
+using Reefin.Model.Entities;
+using Reefin.Model.Library;
+using Reefin.Model.Querying;
+using Reefin.Model.Session;
+using Reefin.Model.SyncPlay;
 using Episode = MediaBrowser.Controller.Entities.TV.Episode;
 
 namespace Reefin.Server.Core.Session

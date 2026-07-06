@@ -7,10 +7,10 @@ using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Entities;
-using MediaBrowser.Model.Dto;
-using MediaBrowser.Model.Session;
 using Microsoft.Extensions.Logging;
 using Reefin.Data.Enums;
+using Reefin.Model.Dto;
+using Reefin.Model.Session;
 
 namespace MediaBrowser.Controller.Session
 {

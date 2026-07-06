@@ -1,7 +1,7 @@
 #pragma warning disable CS1591
 
 using System.IO;
-using MediaBrowser.Model.MediaInfo;
+using Reefin.Model.MediaInfo;
 
 namespace Reefin.MediaEncoding.Subtitles
 {

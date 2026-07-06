@@ -1,10 +1,10 @@
 #pragma warning disable CS1591
 
 using System;
-using MediaBrowser.Model.Plugins;
-using MediaBrowser.Model.Serialization;
 using Reefin.Common.Configuration;
 using Reefin.Common.Plugins;
+using Reefin.Model.Plugins;
+using Reefin.Model.Serialization;
 
 namespace Reefin.Server.Integration.Tests
 {

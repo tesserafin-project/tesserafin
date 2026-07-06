@@ -9,8 +9,8 @@ using MediaBrowser.Controller;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Resolvers;
-using MediaBrowser.Model.IO;
 using Reefin.Data.Enums;
+using Reefin.Model.IO;
 
 namespace Reefin.Server.Core.Library.Resolvers
 {

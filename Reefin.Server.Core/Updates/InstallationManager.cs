@@ -15,8 +15,6 @@ using MediaBrowser.Controller;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Events;
 using MediaBrowser.Controller.Events.Updates;
-using MediaBrowser.Model.Plugins;
-using MediaBrowser.Model.Updates;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Configuration;
 using Reefin.Common.Net;
@@ -25,6 +23,8 @@ using Reefin.Common.Updates;
 using Reefin.Data.Events;
 using Reefin.Extensions;
 using Reefin.Extensions.Json;
+using Reefin.Model.Plugins;
+using Reefin.Model.Updates;
 
 namespace Reefin.Server.Core.Updates
 {

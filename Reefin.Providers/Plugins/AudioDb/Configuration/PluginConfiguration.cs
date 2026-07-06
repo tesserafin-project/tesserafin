@@ -1,6 +1,6 @@
 #pragma warning disable CS1591
 
-using MediaBrowser.Model.Plugins;
+using Reefin.Model.Plugins;
 
 namespace Reefin.Providers.Plugins.AudioDb
 {

@@ -1,11 +1,11 @@
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.IO;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Reefin.Data.Enums;
+using Reefin.Model.Entities;
+using Reefin.Model.IO;
 using Reefin.Naming.Common;
 using Reefin.Server.Core.Library.Resolvers.TV;
 using Xunit;

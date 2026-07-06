@@ -3,10 +3,10 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.MediaEncoding;
-using MediaBrowser.Model.Configuration;
-using MediaBrowser.Model.Entities;
 using Microsoft.Extensions.Logging.Abstractions;
 using Reefin.MediaEncoding.Encoder;
+using Reefin.Model.Configuration;
+using Reefin.Model.Entities;
 using Xunit;
 
 namespace Reefin.MediaEncoding.Tests.Encoder;

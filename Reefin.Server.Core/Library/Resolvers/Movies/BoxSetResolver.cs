@@ -5,7 +5,7 @@ using System.IO;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Library;
-using MediaBrowser.Model.Entities;
+using Reefin.Model.Entities;
 
 namespace Reefin.Server.Core.Library.Resolvers.Movies
 {

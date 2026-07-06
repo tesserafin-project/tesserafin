@@ -1,7 +1,7 @@
 using System;
 using System.Net;
 using System.Net.Sockets;
-using MediaBrowser.Model.Net;
+using Reefin.Model.Net;
 
 namespace Reefin.Networking.Udp;
 

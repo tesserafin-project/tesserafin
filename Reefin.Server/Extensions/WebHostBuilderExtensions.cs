@@ -4,13 +4,13 @@ using System.IO;
 using System.Net;
 using System.Security.Cryptography.X509Certificates;
 using MediaBrowser.Controller.Extensions;
-using MediaBrowser.Model.Net;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Configuration;
+using Reefin.Model.Net;
 using Reefin.Server.Helpers;
 
 namespace Reefin.Server.Extensions;

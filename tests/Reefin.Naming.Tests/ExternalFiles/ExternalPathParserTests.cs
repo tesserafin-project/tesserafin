@@ -1,7 +1,7 @@
 using System.Text.RegularExpressions;
-using MediaBrowser.Model.Dlna;
-using MediaBrowser.Model.Globalization;
 using Moq;
+using Reefin.Model.Dlna;
+using Reefin.Model.Globalization;
 using Reefin.Naming.Common;
 using Reefin.Naming.ExternalFiles;
 using Xunit;

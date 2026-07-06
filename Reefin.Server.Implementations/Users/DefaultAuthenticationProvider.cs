@@ -3,9 +3,9 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Authentication;
-using MediaBrowser.Model.Cryptography;
 using Microsoft.Extensions.Logging;
 using Reefin.Database.Implementations.Entities;
+using Reefin.Model.Cryptography;
 
 namespace Reefin.Server.Implementations.Users
 {

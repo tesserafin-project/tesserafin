@@ -2,7 +2,7 @@
 
 #pragma warning disable CS1591
 
-using MediaBrowser.Model.LiveTv;
+using Reefin.Model.LiveTv;
 
 namespace MediaBrowser.Controller.LiveTv
 {

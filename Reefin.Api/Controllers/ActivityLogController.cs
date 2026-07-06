@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using MediaBrowser.Model.Activity;
-using MediaBrowser.Model.Querying;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -11,6 +9,8 @@ using Reefin.Common.Api;
 using Reefin.Data.Enums;
 using Reefin.Data.Queries;
 using Reefin.Database.Implementations.Enums;
+using Reefin.Model.Activity;
+using Reefin.Model.Querying;
 
 namespace Reefin.Api.Controllers;
 

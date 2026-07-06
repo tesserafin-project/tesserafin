@@ -2,12 +2,12 @@ using System;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Authentication;
 using MediaBrowser.Controller.Net;
-using MediaBrowser.Model.Activity;
-using MediaBrowser.Model.Session;
 using Microsoft.Extensions.Logging;
 using Reefin.Data;
 using Reefin.Data.Events;
 using Reefin.Database.Implementations.Enums;
+using Reefin.Model.Activity;
+using Reefin.Model.Session;
 
 namespace Reefin.Api.WebSocketListeners;
 

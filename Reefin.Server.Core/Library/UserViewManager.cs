@@ -12,15 +12,15 @@ using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.LiveTv;
-using MediaBrowser.Model.Channels;
-using MediaBrowser.Model.Globalization;
-using MediaBrowser.Model.Library;
-using MediaBrowser.Model.Querying;
 using Reefin.Data;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Database.Implementations.Enums;
 using Reefin.Extensions;
+using Reefin.Model.Channels;
+using Reefin.Model.Globalization;
+using Reefin.Model.Library;
+using Reefin.Model.Querying;
 
 namespace Reefin.Server.Core.Library
 {

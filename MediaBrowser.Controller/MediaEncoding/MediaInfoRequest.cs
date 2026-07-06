@@ -2,8 +2,8 @@
 
 #pragma warning disable CS1591
 
-using MediaBrowser.Model.Dlna;
-using MediaBrowser.Model.Dto;
+using Reefin.Model.Dlna;
+using Reefin.Model.Dto;
 
 namespace MediaBrowser.Controller.MediaEncoding
 {
