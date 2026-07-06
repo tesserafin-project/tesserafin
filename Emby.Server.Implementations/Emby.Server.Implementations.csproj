@@ -13,7 +13,7 @@
     <ProjectReference Include="..\MediaBrowser.Common\MediaBrowser.Common.csproj" />
     <ProjectReference Include="..\MediaBrowser.Controller\MediaBrowser.Controller.csproj" />
     <ProjectReference Include="..\MediaBrowser.Providers\MediaBrowser.Providers.csproj" />
-    <ProjectReference Include="..\MediaBrowser.XbmcMetadata\MediaBrowser.XbmcMetadata.csproj" />
+    <ProjectReference Include="..\Reefin.XbmcMetadata\Reefin.XbmcMetadata.csproj" />
     <ProjectReference Include="..\Reefin.LocalMetadata\Reefin.LocalMetadata.csproj" />
     <ProjectReference Include="..\Reefin.Photos\Reefin.Photos.csproj" />
     <ProjectReference Include="..\src\Reefin.Drawing\Reefin.Drawing.csproj" />

@@ -11,7 +11,6 @@ using Emby.Server.Implementations.Localization;
 using MediaBrowser.Common.Net;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Extensions;
-using MediaBrowser.XbmcMetadata;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Localization;
@@ -32,6 +31,7 @@ using Reefin.Networking.HappyEyeballs;
 using Reefin.Server.Extensions;
 using Reefin.Server.HealthChecks;
 using Reefin.Server.Implementations.Extensions;
+using Reefin.XbmcMetadata;
 
 namespace Reefin.Server
 {

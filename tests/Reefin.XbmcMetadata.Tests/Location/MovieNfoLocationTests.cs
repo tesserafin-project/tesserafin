@@ -3,7 +3,7 @@ using System.Linq;
 using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Entities;
-using MediaBrowser.XbmcMetadata.Savers;
+using Reefin.XbmcMetadata.Savers;
 using Xunit;
 
 namespace Reefin.XbmcMetadata.Tests.Location

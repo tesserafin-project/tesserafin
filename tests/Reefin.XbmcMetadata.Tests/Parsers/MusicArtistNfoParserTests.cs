@@ -8,9 +8,9 @@ using MediaBrowser.Model.Configuration;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Providers;
 using MediaBrowser.Providers.Plugins.MusicBrainz;
-using MediaBrowser.XbmcMetadata.Parsers;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Reefin.XbmcMetadata.Parsers;
 using Xunit;
 
 namespace Reefin.XbmcMetadata.Tests.Parsers

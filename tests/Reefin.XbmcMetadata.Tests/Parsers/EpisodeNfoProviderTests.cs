@@ -9,10 +9,10 @@ using MediaBrowser.Model.Configuration;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Providers;
 using MediaBrowser.Providers.Movies;
-using MediaBrowser.XbmcMetadata.Parsers;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Reefin.Data.Enums;
+using Reefin.XbmcMetadata.Parsers;
 using Xunit;
 
 namespace Reefin.XbmcMetadata.Tests.Parsers
