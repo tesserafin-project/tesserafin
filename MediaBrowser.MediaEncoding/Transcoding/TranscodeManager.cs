@@ -501,6 +501,19 @@ public sealed class TranscodeManager : ITranscodeManager, IDisposable
         _logger.LogDebug("Launched FFmpeg process");
         state.TranscodingJob = transcodingJob;
 
+        if (state.VideoRequest is not null)
+        {
+            // Diagnostic only - logs what EncodingHelper decided, does not feed back into the
+            // command that was already built and started above. See TranscodePlanner remarks.
+            var plan = TranscodePlanner.CreatePlan(_encodingHelper, state, _serverConfigurationManager.GetEncodingOptions());
+            _logger.LogDebug(
+                "Transcode plan: codec={VideoCodec} requestedHwAccel={RequestedHwAccel} selectedEncoder={SelectedEncoder} isHardware={IsHardware}",
+                plan.VideoCodec,
+                plan.RequestedHardwareAccelerationType,
+                plan.SelectedVideoEncoder,
+                plan.IsHardwareEncoder);
+        }
+
         // Important - don't await the log task or we won't be able to kill FFmpeg when the user stops playback
         _ = new JobLogger(_logger).StartStreamingLog(state, process.StandardError, logStream);
 
