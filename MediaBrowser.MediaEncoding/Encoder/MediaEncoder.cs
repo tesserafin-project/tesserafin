@@ -225,29 +225,29 @@ namespace MediaBrowser.MediaEncoding.Encoder
                 _isLowPriorityHwDecodeSupported = validator.CheckSupportedHwaccelFlag("low_priority");
                 _proberSupportsFirstVideoFrame = validator.CheckSupportedProberOption("only_first_vframe", _ffprobePath);
 
-                // Auto-select VAAPI if hardware encoding is enabled but no backend has been
-                // chosen, and a real trial encode against the configured device succeeds. This is
-                // the one runtime, hardware-verifying probe in the auto-detection plan - it costs
-                // startup latency and spins the GPU once, which is why it is gated this narrowly:
-                // it never runs, and never overrides anything, once a backend is explicitly set.
-                if (OperatingSystem.IsLinux()
-                    && options.EnableHardwareEncoding
-                    && options.HardwareAccelerationType == HardwareAccelerationType.none
-                    && SupportsHwaccel("vaapi")
-                    && !string.IsNullOrEmpty(options.VaapiDevice)
-                    && File.Exists(options.VaapiDevice))
+                // Auto-select a hardware acceleration backend if hardware encoding is enabled but
+                // none has been chosen, trying candidates in priority order and only ever
+                // accepting one that passes a real trial encode. This is the runtime,
+                // hardware-verifying probing in the auto-detection plan - it costs startup latency
+                // and spins the GPU once per candidate tried, which is why it is gated this
+                // narrowly: it never runs, and never overrides anything, once a backend is
+                // explicitly set (see MediaEncoder.ShouldAutoSelectHardwareAcceleration).
+                if (ShouldAutoSelectHardwareAcceleration(options))
                 {
-                    var probe = new VaapiHardwareProbe(new FfmpegProcessRunner(), _logger);
-                    var probeSucceeded = probe.ProbeAsync(_ffmpegPath, options.VaapiDevice, CancellationToken.None).GetAwaiter().GetResult();
-                    var autoSelected = DetermineAutoSelectedHardwareAccelerationType(options, probeSucceeded);
+                    var probe = new HardwareBackendProbe(new FfmpegProcessRunner(), _logger);
+                    var autoSelected = HardwareBackendSelector.SelectFirstVerified(
+                        HardwareBackendCatalog.CandidatesInPriorityOrder,
+                        options,
+                        _capabilities.Ffmpeg,
+                        (candidate, arguments) => probe.ProbeAsync(_ffmpegPath, arguments, CancellationToken.None).GetAwaiter().GetResult());
+
                     if (autoSelected is not null)
                     {
                         options.HardwareAccelerationType = autoSelected.Value;
                         _configurationManager.SaveConfiguration("encoding", options);
                         _logger.LogInformation(
-                            "Auto-selected {HardwareAccelerationType} hardware acceleration after a successful startup probe of {DevicePath}",
-                            autoSelected,
-                            options.VaapiDevice);
+                            "Auto-selected {HardwareAccelerationType} hardware acceleration after a successful startup probe",
+                            autoSelected);
                     }
                 }
 
@@ -309,29 +309,21 @@ namespace MediaBrowser.MediaEncoding.Encoder
         }
 
         /// <summary>
-        /// Decides whether to auto-select VAAPI hardware acceleration: only when hardware
-        /// encoding is enabled but no backend has been explicitly chosen yet, and a real device
-        /// probe succeeded. Never overrides an explicit user choice - including an explicit
-        /// <see cref="HardwareAccelerationType.none"/> with hardware encoding left enabled, which
-        /// is indistinguishable here from "not yet configured" and is deliberately treated the
-        /// same way, since <see cref="EncodingOptions.EnableHardwareEncoding"/> defaults to
-        /// <c>true</c> while <see cref="EncodingOptions.HardwareAccelerationType"/> defaults to
-        /// <see cref="HardwareAccelerationType.none"/> on every fresh install.
+        /// Decides whether auto-selection should run at all: only when hardware encoding is
+        /// enabled but no backend has been explicitly chosen yet. Never true once a backend is
+        /// explicitly set - including an explicit <see cref="HardwareAccelerationType.none"/> with
+        /// hardware encoding left enabled, which is indistinguishable here from "not yet
+        /// configured" and is deliberately treated the same way, since
+        /// <see cref="EncodingOptions.EnableHardwareEncoding"/> defaults to <c>true</c> while
+        /// <see cref="EncodingOptions.HardwareAccelerationType"/> defaults to
+        /// <see cref="HardwareAccelerationType.none"/> on every fresh install. Which backend (if
+        /// any) gets selected once this gate passes is <see cref="HardwareBackendSelector"/>'s
+        /// decision, not this method's.
         /// </summary>
         /// <param name="options">The current encoding options.</param>
-        /// <param name="vaapiDeviceVerified">Whether a real trial encode against the configured VAAPI device succeeded.</param>
-        /// <returns>The auto-selected type, or <c>null</c> if nothing should change.</returns>
-        internal static HardwareAccelerationType? DetermineAutoSelectedHardwareAccelerationType(EncodingOptions options, bool vaapiDeviceVerified)
-        {
-            if (options.EnableHardwareEncoding
-                && options.HardwareAccelerationType == HardwareAccelerationType.none
-                && vaapiDeviceVerified)
-            {
-                return HardwareAccelerationType.vaapi;
-            }
-
-            return null;
-        }
+        /// <returns><c>true</c> if auto-selection should be attempted.</returns>
+        internal static bool ShouldAutoSelectHardwareAcceleration(EncodingOptions options)
+            => options.EnableHardwareEncoding && options.HardwareAccelerationType == HardwareAccelerationType.none;
 
         /// <summary>
         /// Validates the supplied FQPN to ensure it is a ffmpeg utility.
