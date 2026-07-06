@@ -68,22 +68,11 @@ namespace MediaBrowser.MediaEncoding.Encoder
         // MediaEncoder is registered as a Singleton
         private readonly JsonSerializerOptions _jsonSerializerOptions;
 
-        private List<string> _encoders = new List<string>();
-        private List<string> _decoders = new List<string>();
-        private List<string> _hwaccels = new List<string>();
-        private List<string> _filters = new List<string>();
-        private IDictionary<FilterOptionType, bool> _filtersWithOption = new Dictionary<FilterOptionType, bool>();
-        private IDictionary<BitStreamFilterOptionType, bool> _bitStreamFiltersWithOption = new Dictionary<BitStreamFilterOptionType, bool>();
+        private HardwareCapabilitySnapshot _capabilities = HardwareCapabilitySnapshot.Empty;
 
         private bool _isPkeyPauseSupported = false;
         private bool _isLowPriorityHwDecodeSupported = false;
         private bool _proberSupportsFirstVideoFrame = false;
-
-        private bool _isVaapiDeviceAmd = false;
-        private bool _isVaapiDeviceInteliHD = false;
-        private bool _isVaapiDeviceInteli965 = false;
-        private bool _isVaapiDeviceSupportVulkanDrmModifier = false;
-        private bool _isVaapiDeviceSupportVulkanDrmInterop = false;
 
         private bool _canSetProcessPriority = true;
 
@@ -151,19 +140,19 @@ namespace MediaBrowser.MediaEncoding.Encoder
         public bool IsPkeyPauseSupported => _isPkeyPauseSupported;
 
         /// <inheritdoc />
-        public bool IsVaapiDeviceAmd => _isVaapiDeviceAmd;
+        public bool IsVaapiDeviceAmd => _capabilities.PrimaryDeviceVendor == HardwareDeviceVendor.Amd;
 
         /// <inheritdoc />
-        public bool IsVaapiDeviceInteliHD => _isVaapiDeviceInteliHD;
+        public bool IsVaapiDeviceInteliHD => _capabilities.PrimaryDeviceVendor == HardwareDeviceVendor.IntelIHD;
 
         /// <inheritdoc />
-        public bool IsVaapiDeviceInteli965 => _isVaapiDeviceInteli965;
+        public bool IsVaapiDeviceInteli965 => _capabilities.PrimaryDeviceVendor == HardwareDeviceVendor.IntelI965;
 
         /// <inheritdoc />
-        public bool IsVaapiDeviceSupportVulkanDrmModifier => _isVaapiDeviceSupportVulkanDrmModifier;
+        public bool IsVaapiDeviceSupportVulkanDrmModifier => _capabilities.PrimaryDeviceSupportsVulkanDrmModifier;
 
         /// <inheritdoc />
-        public bool IsVaapiDeviceSupportVulkanDrmInterop => _isVaapiDeviceSupportVulkanDrmInterop;
+        public bool IsVaapiDeviceSupportVulkanDrmInterop => _capabilities.PrimaryDeviceSupportsVulkanDrmInterop;
 
         public bool IsVideoToolboxAv1DecodeAvailable => _isVideoToolboxAv1DecodeAvailable;
 
@@ -242,31 +231,41 @@ namespace MediaBrowser.MediaEncoding.Encoder
                     && !string.IsNullOrEmpty(options.VaapiDevice)
                     && options.HardwareAccelerationType == HardwareAccelerationType.vaapi)
                 {
-                    _isVaapiDeviceAmd = validator.CheckVaapiDeviceByDriverName("Mesa Gallium driver", options.VaapiDevice);
-                    _isVaapiDeviceInteliHD = validator.CheckVaapiDeviceByDriverName("Intel iHD driver", options.VaapiDevice);
-                    _isVaapiDeviceInteli965 = validator.CheckVaapiDeviceByDriverName("Intel i965 driver", options.VaapiDevice);
-                    _isVaapiDeviceSupportVulkanDrmModifier = validator.CheckVulkanDrmDeviceByExtensionName(options.VaapiDevice, _vulkanImageDrmFmtModifierExts);
-                    _isVaapiDeviceSupportVulkanDrmInterop = validator.CheckVulkanDrmDeviceByExtensionName(options.VaapiDevice, _vulkanExternalMemoryDmaBufExts);
+                    var isVaapiDeviceAmd = validator.CheckVaapiDeviceByDriverName("Mesa Gallium driver", options.VaapiDevice);
+                    var isVaapiDeviceInteliHD = validator.CheckVaapiDeviceByDriverName("Intel iHD driver", options.VaapiDevice);
+                    var isVaapiDeviceInteli965 = validator.CheckVaapiDeviceByDriverName("Intel i965 driver", options.VaapiDevice);
+                    var vendor = isVaapiDeviceAmd ? HardwareDeviceVendor.Amd
+                        : isVaapiDeviceInteliHD ? HardwareDeviceVendor.IntelIHD
+                        : isVaapiDeviceInteli965 ? HardwareDeviceVendor.IntelI965
+                        : HardwareDeviceVendor.Unknown;
+                    var supportsVulkanDrmModifier = validator.CheckVulkanDrmDeviceByExtensionName(options.VaapiDevice, _vulkanImageDrmFmtModifierExts);
+                    var supportsVulkanDrmInterop = validator.CheckVulkanDrmDeviceByExtensionName(options.VaapiDevice, _vulkanExternalMemoryDmaBufExts);
 
-                    if (_isVaapiDeviceAmd)
+                    _capabilities = _capabilities.WithSingleDevice(new HardwareDeviceCapabilities(
+                        options.VaapiDevice,
+                        vendor,
+                        supportsVulkanDrmModifier,
+                        supportsVulkanDrmInterop));
+
+                    if (isVaapiDeviceAmd)
                     {
                         _logger.LogInformation("VAAPI device {RenderNodePath} is AMD GPU", options.VaapiDevice);
                     }
-                    else if (_isVaapiDeviceInteliHD)
+                    else if (isVaapiDeviceInteliHD)
                     {
                         _logger.LogInformation("VAAPI device {RenderNodePath} is Intel GPU (iHD)", options.VaapiDevice);
                     }
-                    else if (_isVaapiDeviceInteli965)
+                    else if (isVaapiDeviceInteli965)
                     {
                         _logger.LogInformation("VAAPI device {RenderNodePath} is Intel GPU (i965)", options.VaapiDevice);
                     }
 
-                    if (_isVaapiDeviceSupportVulkanDrmModifier)
+                    if (supportsVulkanDrmModifier)
                     {
                         _logger.LogInformation("VAAPI device {RenderNodePath} supports Vulkan DRM modifier", options.VaapiDevice);
                     }
 
-                    if (_isVaapiDeviceSupportVulkanDrmInterop)
+                    if (supportsVulkanDrmInterop)
                     {
                         _logger.LogInformation("VAAPI device {RenderNodePath} supports Vulkan DRM interop", options.VaapiDevice);
                     }
@@ -325,32 +324,32 @@ namespace MediaBrowser.MediaEncoding.Encoder
 
         public void SetAvailableEncoders(IEnumerable<string> list)
         {
-            _encoders = list.ToList();
+            _capabilities = _capabilities.WithFfmpeg(_capabilities.Ffmpeg.WithEncoders(list));
         }
 
         public void SetAvailableDecoders(IEnumerable<string> list)
         {
-            _decoders = list.ToList();
+            _capabilities = _capabilities.WithFfmpeg(_capabilities.Ffmpeg.WithDecoders(list));
         }
 
         public void SetAvailableHwaccels(IEnumerable<string> list)
         {
-            _hwaccels = list.ToList();
+            _capabilities = _capabilities.WithFfmpeg(_capabilities.Ffmpeg.WithHwaccels(list));
         }
 
         public void SetAvailableFilters(IEnumerable<string> list)
         {
-            _filters = list.ToList();
+            _capabilities = _capabilities.WithFfmpeg(_capabilities.Ffmpeg.WithFilters(list));
         }
 
         public void SetAvailableFiltersWithOption(IDictionary<FilterOptionType, bool> dict)
         {
-            _filtersWithOption = dict;
+            _capabilities = _capabilities.WithFfmpeg(_capabilities.Ffmpeg.WithFiltersWithOption(dict));
         }
 
         public void SetAvailableBitStreamFiltersWithOption(IDictionary<BitStreamFilterOptionType, bool> dict)
         {
-            _bitStreamFiltersWithOption = dict;
+            _capabilities = _capabilities.WithFfmpeg(_capabilities.Ffmpeg.WithBitStreamFiltersWithOption(dict));
         }
 
         public void SetMediaEncoderVersion(EncoderValidator validator)
@@ -361,36 +360,36 @@ namespace MediaBrowser.MediaEncoding.Encoder
         /// <inheritdoc />
         public bool SupportsEncoder(string encoder)
         {
-            return _encoders.Contains(encoder, StringComparer.OrdinalIgnoreCase);
+            return _capabilities.Ffmpeg.SupportsEncoder(encoder);
         }
 
         /// <inheritdoc />
         public bool SupportsDecoder(string decoder)
         {
-            return _decoders.Contains(decoder, StringComparer.OrdinalIgnoreCase);
+            return _capabilities.Ffmpeg.SupportsDecoder(decoder);
         }
 
         /// <inheritdoc />
         public bool SupportsHwaccel(string hwaccel)
         {
-            return _hwaccels.Contains(hwaccel, StringComparer.OrdinalIgnoreCase);
+            return _capabilities.Ffmpeg.SupportsHwaccel(hwaccel);
         }
 
         /// <inheritdoc />
         public bool SupportsFilter(string filter)
         {
-            return _filters.Contains(filter, StringComparer.OrdinalIgnoreCase);
+            return _capabilities.Ffmpeg.SupportsFilter(filter);
         }
 
         /// <inheritdoc />
         public bool SupportsFilterWithOption(FilterOptionType option)
         {
-            return _filtersWithOption.TryGetValue(option, out var val) && val;
+            return _capabilities.Ffmpeg.SupportsFilterWithOption(option);
         }
 
         public bool SupportsBitStreamFilterWithOption(BitStreamFilterOptionType option)
         {
-            return _bitStreamFiltersWithOption.TryGetValue(option, out var val) && val;
+            return _capabilities.Ffmpeg.SupportsBitStreamFilterWithOption(option);
         }
 
         public bool CanEncodeToAudioCodec(string codec)
