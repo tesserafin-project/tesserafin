@@ -32,7 +32,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Reefin.Data\Reefin.Data.csproj" />
-    <ProjectReference Include="..\MediaBrowser.Controller\MediaBrowser.Controller.csproj" />
+    <ProjectReference Include="..\Reefin.Controller\Reefin.Controller.csproj" />
     <ProjectReference Include="..\Reefin.Model\Reefin.Model.csproj" />
     <ProjectReference Include="..\src\Reefin.Database\Reefin.Database.Implementations\Reefin.Database.Implementations.csproj" />
     <ProjectReference Include="..\src\Reefin.Database\Reefin.Database.Providers.Sqlite\Reefin.Database.Providers.Sqlite.csproj" />

@@ -2,9 +2,9 @@ using System;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using MediaBrowser.Controller;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller;
 using Reefin.Server.Core.Data;
 
 namespace Reefin.Server.Migrations.Routines;
@@ -37,7 +37,7 @@ internal class RemoveDuplicateExtras : IMigrationRoutine
         using (var transaction = connection.BeginTransaction())
         {
             // Query the database for the ids of duplicate extras
-            var queryResult = connection.Query("SELECT t1.Path FROM TypedBaseItems AS t1, TypedBaseItems AS t2 WHERE t1.Path=t2.Path AND t1.Type!=t2.Type AND t1.Type='MediaBrowser.Controller.Entities.Video'");
+            var queryResult = connection.Query("SELECT t1.Path FROM TypedBaseItems AS t1, TypedBaseItems AS t2 WHERE t1.Path=t2.Path AND t1.Type!=t2.Type AND t1.Type='Reefin.Controller.Entities.Video'");
             var bads = string.Join(", ", queryResult.Select(x => x.GetString(0)));
 
             // Do nothing if no duplicate extras were detected
@@ -69,7 +69,7 @@ internal class RemoveDuplicateExtras : IMigrationRoutine
 
             // Delete all duplicate extras
             _logger.LogInformation("Removing found duplicated extras for the following items: {DuplicateExtras}", bads);
-            connection.Execute("DELETE FROM TypedBaseItems WHERE rowid IN (SELECT t1.rowid FROM TypedBaseItems AS t1, TypedBaseItems AS t2 WHERE t1.Path=t2.Path AND t1.Type!=t2.Type AND t1.Type='MediaBrowser.Controller.Entities.Video')");
+            connection.Execute("DELETE FROM TypedBaseItems WHERE rowid IN (SELECT t1.rowid FROM TypedBaseItems AS t1, TypedBaseItems AS t2 WHERE t1.Path=t2.Path AND t1.Type!=t2.Type AND t1.Type='Reefin.Controller.Entities.Video')");
             transaction.Commit();
         }
     }

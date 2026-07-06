@@ -6,8 +6,8 @@ using System.Text;
 using System.Text.RegularExpressions;
 using LrcParser.Model;
 using LrcParser.Parser;
-using MediaBrowser.Controller.Lyrics;
-using MediaBrowser.Controller.Resolvers;
+using Reefin.Controller.Lyrics;
+using Reefin.Controller.Resolvers;
 using Reefin.Extensions;
 using Reefin.Model.Lyrics;
 

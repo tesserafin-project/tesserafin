@@ -1,8 +1,8 @@
 using System;
 using AutoFixture;
 using AutoFixture.AutoMoq;
-using MediaBrowser.Controller;
-using MediaBrowser.Controller.Entities;
+using Reefin.Controller;
+using Reefin.Controller.Entities;
 using Reefin.Model.Entities;
 using Microsoft.Extensions.Configuration;
 using Moq;
@@ -56,10 +56,10 @@ namespace Reefin.Server.Implementations.Fuzz
                 .Returns((string x) => x.Replace(MetaDataPath, VirtualMetaDataPath, StringComparison.Ordinal));
 
             var configSection = new Mock<IConfigurationSection>();
-            configSection.SetupGet(x => x[It.Is<string>(s => s == MediaBrowser.Controller.Extensions.ConfigurationExtensions.SqliteCacheSizeKey)])
+            configSection.SetupGet(x => x[It.Is<string>(s => s == Reefin.Controller.Extensions.ConfigurationExtensions.SqliteCacheSizeKey)])
                 .Returns("0");
             var config = new Mock<IConfiguration>();
-            config.Setup(x => x.GetSection(It.Is<string>(s => s == MediaBrowser.Controller.Extensions.ConfigurationExtensions.SqliteCacheSizeKey)))
+            config.Setup(x => x.GetSection(It.Is<string>(s => s == Reefin.Controller.Extensions.ConfigurationExtensions.SqliteCacheSizeKey)))
                 .Returns(configSection.Object);
 
             IFixture fixture = new Fixture().Customize(new AutoMoqCustomization { ConfigureMembers = true });

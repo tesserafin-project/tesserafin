@@ -11,7 +11,7 @@
     <ProjectReference Include="..\Reefin.Server.Implementations\Reefin.Server.Implementations.csproj" />
     <ProjectReference Include="..\Reefin.Model\Reefin.Model.csproj" />
     <ProjectReference Include="..\Reefin.Common\Reefin.Common.csproj" />
-    <ProjectReference Include="..\MediaBrowser.Controller\MediaBrowser.Controller.csproj" />
+    <ProjectReference Include="..\Reefin.Controller\Reefin.Controller.csproj" />
     <ProjectReference Include="..\Reefin.Providers\Reefin.Providers.csproj" />
     <ProjectReference Include="..\Reefin.XbmcMetadata\Reefin.XbmcMetadata.csproj" />
     <ProjectReference Include="..\Reefin.LocalMetadata\Reefin.LocalMetadata.csproj" />

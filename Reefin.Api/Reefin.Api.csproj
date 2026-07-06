@@ -18,7 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\MediaBrowser.Controller\MediaBrowser.Controller.csproj" />
+    <ProjectReference Include="..\Reefin.Controller\Reefin.Controller.csproj" />
     <ProjectReference Include="..\Reefin.MediaEncoding\Reefin.MediaEncoding.csproj" />
     <ProjectReference Include="..\src\Reefin.MediaEncoding.Hls\Reefin.MediaEncoding.Hls.csproj" />
     <ProjectReference Include="..\src\Reefin.Networking\Reefin.Networking.csproj" />

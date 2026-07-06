@@ -3,10 +3,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller.Library;
+using Reefin.Controller.Persistence;
 using Reefin.Database.Implementations;
 using Reefin.Server.ServerSetupApp;
 
@@ -123,7 +123,7 @@ public class FixIncorrectOwnerIdRelationships : IAsyncMigrationRoutine
             var itemToKeep = itemsWithPath
                 .OrderByDescending(i => i.HasDirectChildren)
                 .ThenByDescending(i => i.HasOwnedExtras)
-                .ThenByDescending(i => i.Type != "MediaBrowser.Controller.Entities.Folder")
+                .ThenByDescending(i => i.Type != "Reefin.Controller.Entities.Folder")
                 .ThenByDescending(i => i.DateCreated)
                 .First();
             if (itemToKeep is null)
@@ -180,10 +180,10 @@ public class FixIncorrectOwnerIdRelationships : IAsyncMigrationRoutine
         var incorrectChildrenWithParent = await context.BaseItems
             .Where(b => b.OwnerId.HasValue
                 && (b.ExtraType == null || b.ExtraType == 0)
-                && (b.Type == "MediaBrowser.Controller.Entities.Video" || b.Type == "MediaBrowser.Controller.Entities.Movies.Movie"))
+                && (b.Type == "Reefin.Controller.Entities.Video" || b.Type == "Reefin.Controller.Entities.Movies.Movie"))
             .Where(b => context.BaseItems.Any(parent =>
                 parent.Id.Equals(b.OwnerId!.Value)
-                && (parent.Type == "MediaBrowser.Controller.Entities.Video" || parent.Type == "MediaBrowser.Controller.Entities.Movies.Movie")))
+                && (parent.Type == "Reefin.Controller.Entities.Video" || parent.Type == "Reefin.Controller.Entities.Movies.Movie")))
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -191,7 +191,7 @@ public class FixIncorrectOwnerIdRelationships : IAsyncMigrationRoutine
         var orphanedChildren = await context.BaseItems
             .Where(b => b.OwnerId.HasValue
                 && (b.ExtraType == null || b.ExtraType == 0)
-                && (b.Type == "MediaBrowser.Controller.Entities.Video" || b.Type == "MediaBrowser.Controller.Entities.Movies.Movie"))
+                && (b.Type == "Reefin.Controller.Entities.Video" || b.Type == "Reefin.Controller.Entities.Movies.Movie"))
             .Where(b => !context.BaseItems.Any(parent => parent.Id.Equals(b.OwnerId!.Value)))
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -249,8 +249,8 @@ public class FixIncorrectOwnerIdRelationships : IAsyncMigrationRoutine
         // Load all potential parent video/movies with paths in one query
         var videoTypes = new[]
         {
-            "MediaBrowser.Controller.Entities.Video",
-            "MediaBrowser.Controller.Entities.Movies.Movie"
+            "Reefin.Controller.Entities.Video",
+            "Reefin.Controller.Entities.Movies.Movie"
         };
         var potentialParents = await context.BaseItems
             .Where(b => b.Path != null && videoTypes.Contains(b.Type))

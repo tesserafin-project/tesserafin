@@ -1,14 +1,14 @@
 using System;
 using System.Globalization;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Entities.Audio;
-using MediaBrowser.Controller.Events;
-using MediaBrowser.Controller.Lyrics;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Entities.Audio;
+using Reefin.Controller.Events;
+using Reefin.Controller.Lyrics;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Model.Activity;
 using Reefin.Model.Globalization;
-using Episode = MediaBrowser.Controller.Entities.TV.Episode;
+using Episode = Reefin.Controller.Entities.TV.Episode;
 
 namespace Reefin.Server.Implementations.Events.Consumers.Library;
 

@@ -1,10 +1,10 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Dto;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Entities.TV;
-using MediaBrowser.Controller.Library;
+using Reefin.Controller.Dto;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Entities.TV;
+using Reefin.Controller.Library;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Enums;
 using Reefin.Model.Configuration;

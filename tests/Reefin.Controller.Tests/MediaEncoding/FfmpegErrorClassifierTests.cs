@@ -1,4 +1,4 @@
-using MediaBrowser.Controller.MediaEncoding;
+using Reefin.Controller.MediaEncoding;
 using Xunit;
 
 namespace Reefin.Controller.Tests.MediaEncoding;

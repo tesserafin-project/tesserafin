@@ -1,7 +1,7 @@
 using System;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Entities.Audio;
-using MediaBrowser.Controller.Sorting;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Entities.Audio;
+using Reefin.Controller.Sorting;
 using Reefin.Server.Core.Sorting;
 using Xunit;
 

@@ -7,8 +7,8 @@ using System.Linq;
 using System.Runtime.Versioning;
 using System.Text.RegularExpressions;
 using System.Threading;
-using MediaBrowser.Controller.MediaEncoding;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller.MediaEncoding;
 
 namespace Reefin.MediaEncoding.Encoder
 {

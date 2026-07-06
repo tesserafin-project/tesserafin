@@ -5,10 +5,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller.Library;
+using Reefin.Controller.Persistence;
 using Reefin.Database.Implementations;
 using Reefin.Server.ServerSetupApp;
 
@@ -27,7 +27,7 @@ namespace Reefin.Server.Migrations.Routines;
 [ReefinMigrationBackup(ReefinDb = true)]
 public class MergeDuplicatePeople : IAsyncMigrationRoutine
 {
-    private const string PersonType = "MediaBrowser.Controller.Entities.Person";
+    private const string PersonType = "Reefin.Controller.Entities.Person";
 
     private readonly IStartupLogger<MergeDuplicatePeople> _logger;
     private readonly IDbContextFactory<ReefinDbContext> _dbContextFactory;

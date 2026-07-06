@@ -1,16 +1,16 @@
 using System;
 using System.Threading.Tasks;
-using MediaBrowser.Controller;
-using MediaBrowser.Controller.Configuration;
-using MediaBrowser.Controller.Devices;
-using MediaBrowser.Controller.Drawing;
-using MediaBrowser.Controller.Dto;
-using MediaBrowser.Controller.Events;
-using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.Session;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Reefin.Controller;
+using Reefin.Controller.Configuration;
+using Reefin.Controller.Devices;
+using Reefin.Controller.Drawing;
+using Reefin.Controller.Dto;
+using Reefin.Controller.Events;
+using Reefin.Controller.Library;
+using Reefin.Controller.Session;
 using Reefin.Database.Implementations.Entities;
 using Xunit;
 

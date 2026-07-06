@@ -2,12 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 
-using MediaBrowser.Controller.IO;
-using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.MediaEncoding;
-using MediaBrowser.Controller.Streaming;
 using Moq;
 using Reefin.Common.Configuration;
+using Reefin.Controller.IO;
+using Reefin.Controller.Library;
+using Reefin.Controller.MediaEncoding;
+using Reefin.Controller.Streaming;
 using Reefin.Data.Enums;
 using Reefin.Model.Configuration;
 using Reefin.Model.Dlna;

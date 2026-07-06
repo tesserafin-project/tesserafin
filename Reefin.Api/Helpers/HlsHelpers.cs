@@ -3,10 +3,10 @@ using System.Globalization;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.MediaEncoding;
-using MediaBrowser.Controller.Streaming;
 using Microsoft.Extensions.Logging;
 using Reefin.Api.Models.StreamingDtos;
+using Reefin.Controller.MediaEncoding;
+using Reefin.Controller.Streaming;
 using Reefin.Model.IO;
 
 namespace Reefin.Api.Helpers;

@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using CommandLine;
 using Reefin.Server.Configuration;
 using Reefin.Server.Core;
-using static MediaBrowser.Controller.Extensions.ConfigurationExtensions;
+using static Reefin.Controller.Extensions.ConfigurationExtensions;
 
 namespace Reefin.Server
 {

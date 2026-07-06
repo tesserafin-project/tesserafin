@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Entities.Movies;
-using MediaBrowser.Controller.Entities.TV;
-using MediaBrowser.Controller.Providers;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Entities.Movies;
+using Reefin.Controller.Entities.TV;
+using Reefin.Controller.Providers;
 using Reefin.Model.Entities;
 using TMDbLib.Objects.TvShows;
 

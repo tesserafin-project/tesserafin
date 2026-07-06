@@ -1,11 +1,11 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.Providers;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Configuration;
+using Reefin.Controller.Library;
+using Reefin.Controller.Providers;
 using Reefin.Model.Entities;
 using Reefin.XbmcMetadata.Configuration;
 using Reefin.XbmcMetadata.Savers;

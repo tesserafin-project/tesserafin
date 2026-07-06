@@ -1,8 +1,8 @@
 using System;
-using MediaBrowser.Controller;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Reefin.Controller;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Server.Implementations.Item;
 using Xunit;
@@ -60,7 +60,7 @@ public class BaseItemRepositoryTests
         var entity = new BaseItemEntity
         {
             Id = Guid.NewGuid(),
-            Type = "MediaBrowser.Controller.Entities.Movies.Movie"
+            Type = "Reefin.Controller.Entities.Movies.Movie"
         };
 
         // Act

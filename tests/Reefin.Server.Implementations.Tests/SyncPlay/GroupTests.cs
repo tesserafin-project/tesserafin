@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.Session;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Library;
+using Reefin.Controller.Session;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Server.Core.SyncPlay;
 using Xunit;

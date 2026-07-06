@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Configuration;
+using Reefin.Controller.Configuration;
 using Reefin.Model.Activity;
 using Reefin.Model.Globalization;
 using Reefin.Model.Tasks;

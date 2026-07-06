@@ -4,11 +4,11 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading;
-using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.Session;
-using MediaBrowser.Controller.SyncPlay;
-using MediaBrowser.Controller.SyncPlay.Requests;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller.Library;
+using Reefin.Controller.Session;
+using Reefin.Controller.SyncPlay;
+using Reefin.Controller.SyncPlay.Requests;
 using Reefin.Model.SyncPlay;
 
 namespace Reefin.Server.Core.SyncPlay

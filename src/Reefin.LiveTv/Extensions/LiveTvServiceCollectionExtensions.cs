@@ -1,6 +1,6 @@
-using MediaBrowser.Controller.Channels;
-using MediaBrowser.Controller.LiveTv;
 using Microsoft.Extensions.DependencyInjection;
+using Reefin.Controller.Channels;
+using Reefin.Controller.LiveTv;
 using Reefin.LiveTv.Channels;
 using Reefin.LiveTv.Guide;
 using Reefin.LiveTv.IO;

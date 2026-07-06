@@ -2,8 +2,8 @@ using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Authentication;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller.Authentication;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Model.Cryptography;
 

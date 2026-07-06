@@ -6,10 +6,10 @@ using System.Linq;
 using System.Net.WebSockets;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Net;
-using MediaBrowser.Controller.Net.WebSocketMessages;
-using MediaBrowser.Controller.Session;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller.Net;
+using Reefin.Controller.Net.WebSocketMessages;
+using Reefin.Controller.Session;
 using Reefin.Model.Session;
 
 namespace Reefin.Server.Core.Session

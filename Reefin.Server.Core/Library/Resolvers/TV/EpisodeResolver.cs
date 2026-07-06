@@ -3,10 +3,10 @@
 using System;
 using System.IO;
 using System.Linq;
-using MediaBrowser.Controller.Entities.TV;
-using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.Providers;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller.Entities.TV;
+using Reefin.Controller.Library;
+using Reefin.Controller.Providers;
 using Reefin.Data.Enums;
 using Reefin.Model.Entities;
 using Reefin.Naming.Common;

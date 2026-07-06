@@ -1,5 +1,5 @@
 using System;
-using MediaBrowser.Controller.Configuration;
+using Reefin.Controller.Configuration;
 using Reefin.Model.System;
 
 namespace Reefin.Server.Migrations.Routines;

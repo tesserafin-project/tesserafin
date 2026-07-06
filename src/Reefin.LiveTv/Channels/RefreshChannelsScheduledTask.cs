@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Channels;
-using MediaBrowser.Controller.Library;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller.Channels;
+using Reefin.Controller.Library;
 using Reefin.Model.Globalization;
 using Reefin.Model.Tasks;
 

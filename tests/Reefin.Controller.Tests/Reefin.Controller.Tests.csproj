@@ -18,7 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../../MediaBrowser.Controller/MediaBrowser.Controller.csproj" />
+    <ProjectReference Include="../../Reefin.Controller/Reefin.Controller.csproj" />
   </ItemGroup>
 
 </Project>

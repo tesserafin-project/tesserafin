@@ -1,4 +1,4 @@
-using MediaBrowser.Controller.Streaming;
+using Reefin.Controller.Streaming;
 
 namespace Reefin.Api.Models.StreamingDtos;
 

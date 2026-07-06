@@ -1,7 +1,7 @@
 using System.Collections.Generic;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Entities.Audio;
-using MediaBrowser.Controller.Providers;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Entities.Audio;
+using Reefin.Controller.Providers;
 using Reefin.Model.Entities;
 
 namespace Reefin.Providers.Plugins.MusicBrainz;

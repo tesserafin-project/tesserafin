@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using MediaBrowser.Controller.Dto;
+using Reefin.Controller.Dto;
 using Reefin.Data.Enums;
 using Reefin.Model.Entities;
 

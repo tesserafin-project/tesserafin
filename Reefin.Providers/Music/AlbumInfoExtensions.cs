@@ -1,7 +1,7 @@
 #pragma warning disable CS1591
 
 using System.Linq;
-using MediaBrowser.Controller.Providers;
+using Reefin.Controller.Providers;
 using Reefin.Model.Entities;
 
 namespace Reefin.Providers.Music

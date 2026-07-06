@@ -1,8 +1,8 @@
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.Providers;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Configuration;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Library;
+using Reefin.Controller.Providers;
 using Reefin.Model.IO;
 
 namespace Reefin.XbmcMetadata.Providers

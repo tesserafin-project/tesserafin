@@ -2,11 +2,11 @@ using System;
 using System.Collections.Generic;
 using AutoFixture;
 using AutoFixture.AutoMoq;
-using MediaBrowser.Controller;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Persistence;
 using Microsoft.Extensions.Configuration;
 using Moq;
+using Reefin.Controller;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Persistence;
 using Reefin.Model.Entities;
 using Reefin.Server.Core.Data;
 using Reefin.Server.Implementations.Item;
@@ -32,11 +32,11 @@ namespace Reefin.Server.Implementations.Tests.Data
 
             var configSection = new Mock<IConfigurationSection>();
             configSection
-                .SetupGet(x => x[It.Is<string>(s => s == MediaBrowser.Controller.Extensions.ConfigurationExtensions.SqliteCacheSizeKey)])
+                .SetupGet(x => x[It.Is<string>(s => s == Reefin.Controller.Extensions.ConfigurationExtensions.SqliteCacheSizeKey)])
                 .Returns("0");
             var config = new Mock<IConfiguration>();
             config
-                .Setup(x => x.GetSection(It.Is<string>(s => s == MediaBrowser.Controller.Extensions.ConfigurationExtensions.SqliteCacheSizeKey)))
+                .Setup(x => x.GetSection(It.Is<string>(s => s == Reefin.Controller.Extensions.ConfigurationExtensions.SqliteCacheSizeKey)))
                 .Returns(configSection.Object);
 
             _fixture = new Fixture().Customize(new AutoMoqCustomization { ConfigureMembers = true });

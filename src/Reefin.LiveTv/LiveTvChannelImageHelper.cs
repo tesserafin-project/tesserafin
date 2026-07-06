@@ -1,4 +1,4 @@
-using MediaBrowser.Controller.Entities;
+using Reefin.Controller.Entities;
 using Reefin.Model.Entities;
 
 namespace Reefin.LiveTv;

@@ -1,8 +1,8 @@
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Events;
-using MediaBrowser.Controller.Events.Updates;
-using MediaBrowser.Controller.Session;
+using Reefin.Controller.Events;
+using Reefin.Controller.Events.Updates;
+using Reefin.Controller.Session;
 using Reefin.Model.Session;
 
 namespace Reefin.Server.Implementations.Events.Consumers.Updates

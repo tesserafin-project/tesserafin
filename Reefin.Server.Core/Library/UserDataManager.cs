@@ -6,17 +6,17 @@ using System.Globalization;
 using System.Linq;
 using System.Threading;
 using BitFaster.Caching.Lru;
-using MediaBrowser.Controller.Configuration;
-using MediaBrowser.Controller.Dto;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Library;
 using Microsoft.EntityFrameworkCore;
+using Reefin.Controller.Configuration;
+using Reefin.Controller.Dto;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Library;
 using Reefin.Database.Implementations;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Model.Dto;
 using Reefin.Model.Entities;
-using AudioBook = MediaBrowser.Controller.Entities.AudioBook;
-using Book = MediaBrowser.Controller.Entities.Book;
+using AudioBook = Reefin.Controller.Entities.AudioBook;
+using Book = Reefin.Controller.Entities.Book;
 
 namespace Reefin.Server.Core.Library
 {

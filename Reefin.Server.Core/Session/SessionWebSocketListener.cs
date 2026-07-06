@@ -4,14 +4,14 @@ using System.Linq;
 using System.Net.WebSockets;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.Net;
-using MediaBrowser.Controller.Net.WebSocketMessages.Outbound;
-using MediaBrowser.Controller.Session;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Reefin.Api.Extensions;
 using Reefin.Api.Helpers;
+using Reefin.Controller.Library;
+using Reefin.Controller.Net;
+using Reefin.Controller.Net.WebSocketMessages.Outbound;
+using Reefin.Controller.Session;
 
 namespace Reefin.Server.Core.Session
 {

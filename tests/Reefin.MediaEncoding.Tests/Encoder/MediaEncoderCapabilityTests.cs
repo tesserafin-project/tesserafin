@@ -1,9 +1,9 @@
 using System.Collections.Generic;
-using MediaBrowser.Controller.Configuration;
-using MediaBrowser.Controller.MediaEncoding;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Reefin.Controller.Configuration;
+using Reefin.Controller.MediaEncoding;
 using Reefin.MediaEncoding.Encoder;
 using Reefin.Model.Configuration;
 using Reefin.Model.MediaInfo;

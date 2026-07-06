@@ -6,19 +6,19 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
-using MediaBrowser.Controller;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Entities.Audio;
-using MediaBrowser.Controller.Entities.TV;
-using MediaBrowser.Controller.LiveTv;
 using Microsoft.Extensions.Logging;
 using Reefin.Common;
+using Reefin.Controller;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Entities.Audio;
+using Reefin.Controller.Entities.TV;
+using Reefin.Controller.LiveTv;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Extensions;
 using Reefin.Extensions.Json;
 using Reefin.Model.Entities;
 using Reefin.Model.LiveTv;
-using BaseItemDto = MediaBrowser.Controller.Entities.BaseItem;
+using BaseItemDto = Reefin.Controller.Entities.BaseItem;
 using BaseItemEntity = Reefin.Database.Implementations.Entities.BaseItemEntity;
 
 namespace Reefin.Server.Implementations.Item;
@@ -190,7 +190,7 @@ public static class BaseItemMapper
                     .Select(e => new LinkedChild
                     {
                         ItemId = e.ChildId,
-                        Type = (MediaBrowser.Controller.Entities.LinkedChildType)e.ChildType
+                        Type = (Reefin.Controller.Entities.LinkedChildType)e.ChildType
                     })
                     .ToArray();
             }

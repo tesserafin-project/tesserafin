@@ -1,10 +1,10 @@
 using System.Globalization;
 using System.Xml;
-using MediaBrowser.Controller.Entities.TV;
-using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.Providers;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Configuration;
+using Reefin.Controller.Entities.TV;
+using Reefin.Controller.Library;
+using Reefin.Controller.Providers;
 
 namespace Reefin.XbmcMetadata.Parsers
 {

@@ -4,8 +4,8 @@ using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Threading;
-using MediaBrowser.Controller.Persistence;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller.Persistence;
 using Reefin.MediaEncoding.Hls.Extractors;
 using Reefin.MediaEncoding.Keyframes;
 

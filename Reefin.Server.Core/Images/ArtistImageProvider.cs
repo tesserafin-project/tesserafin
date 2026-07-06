@@ -2,11 +2,11 @@
 
 using System;
 using System.Collections.Generic;
-using MediaBrowser.Controller.Drawing;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Entities.Audio;
-using MediaBrowser.Controller.Providers;
 using Reefin.Common.Configuration;
+using Reefin.Controller.Drawing;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Entities.Audio;
+using Reefin.Controller.Providers;
 using Reefin.Model.IO;
 
 namespace Reefin.Server.Core.Images

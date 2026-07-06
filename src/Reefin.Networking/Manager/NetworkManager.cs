@@ -14,7 +14,7 @@ using Microsoft.Extensions.Logging;
 using Reefin.Common.Configuration;
 using Reefin.Common.Net;
 using Reefin.Model.Net;
-using static MediaBrowser.Controller.Extensions.ConfigurationExtensions;
+using static Reefin.Controller.Extensions.ConfigurationExtensions;
 using IConfigurationManager = Reefin.Common.Configuration.IConfigurationManager;
 
 namespace Reefin.Networking.Manager;

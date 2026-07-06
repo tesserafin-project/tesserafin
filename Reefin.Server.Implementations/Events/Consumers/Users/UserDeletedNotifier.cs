@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Events;
-using MediaBrowser.Controller.Session;
+using Reefin.Controller.Events;
+using Reefin.Controller.Session;
 using Reefin.Data.Events.Users;
 using Reefin.Model.Session;
 

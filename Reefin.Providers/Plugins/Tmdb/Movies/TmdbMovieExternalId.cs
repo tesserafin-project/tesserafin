@@ -1,6 +1,6 @@
-using MediaBrowser.Controller.Entities.Movies;
-using MediaBrowser.Controller.LiveTv;
-using MediaBrowser.Controller.Providers;
+using Reefin.Controller.Entities.Movies;
+using Reefin.Controller.LiveTv;
+using Reefin.Controller.Providers;
 using Reefin.Model.Entities;
 using Reefin.Model.Providers;
 

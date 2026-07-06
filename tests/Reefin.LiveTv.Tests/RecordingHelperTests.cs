@@ -1,5 +1,5 @@
 using System;
-using MediaBrowser.Controller.LiveTv;
+using Reefin.Controller.LiveTv;
 using Reefin.LiveTv.Recordings;
 using Xunit;
 

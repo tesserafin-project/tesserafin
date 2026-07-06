@@ -3,11 +3,11 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
-using MediaBrowser.Controller;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Library;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Library;
 using Reefin.Database.Implementations;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Extensions;
@@ -49,16 +49,16 @@ internal class MigrateLinkedChildren : IDatabaseMigrationRoutine
 
         var containerTypes = new[]
         {
-            "MediaBrowser.Controller.Entities.Movies.BoxSet",
-            "MediaBrowser.Controller.Playlists.Playlist",
-            "MediaBrowser.Controller.Entities.CollectionFolder"
+            "Reefin.Controller.Entities.Movies.BoxSet",
+            "Reefin.Controller.Playlists.Playlist",
+            "Reefin.Controller.Entities.CollectionFolder"
         };
 
         var videoTypes = new[]
         {
-            "MediaBrowser.Controller.Entities.Video",
-            "MediaBrowser.Controller.Entities.Movies.Movie",
-            "MediaBrowser.Controller.Entities.TV.Episode"
+            "Reefin.Controller.Entities.Video",
+            "Reefin.Controller.Entities.Movies.Movie",
+            "Reefin.Controller.Entities.TV.Episode"
         };
 
         var itemsWithData = context.BaseItems
@@ -110,7 +110,7 @@ internal class MigrateLinkedChildren : IDatabaseMigrationRoutine
                     continue;
                 }
 
-                var isPlaylist = item.Type == "MediaBrowser.Controller.Playlists.Playlist";
+                var isPlaylist = item.Type == "Reefin.Controller.Playlists.Playlist";
                 var sortOrder = 0;
                 foreach (var childElement in linkedChildrenElement.EnumerateArray())
                 {

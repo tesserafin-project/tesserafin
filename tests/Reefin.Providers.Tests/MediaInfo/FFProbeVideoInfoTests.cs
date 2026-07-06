@@ -1,9 +1,9 @@
 using System;
 using AutoFixture;
 using AutoFixture.AutoMoq;
-using MediaBrowser.Controller.Configuration;
-using MediaBrowser.Controller.Entities;
 using Moq;
+using Reefin.Controller.Configuration;
+using Reefin.Controller.Entities;
 using Reefin.Model.Configuration;
 using Reefin.Providers.MediaInfo;
 using Xunit;

@@ -159,9 +159,9 @@ public sealed class AlternateVersionQueryTranslationTests : IDisposable
         var user = new User("test", "auth-provider", "reset-provider");
         ctx.Users.Add(user);
 
-        var primary = new BaseItemEntity { Id = Guid.NewGuid(), Type = "MediaBrowser.Controller.Entities.Movies.Movie" };
-        var version = new BaseItemEntity { Id = Guid.NewGuid(), Type = "MediaBrowser.Controller.Entities.Movies.Movie", PrimaryVersionId = primary.Id };
-        var other = new BaseItemEntity { Id = Guid.NewGuid(), Type = "MediaBrowser.Controller.Entities.Movies.Movie" };
+        var primary = new BaseItemEntity { Id = Guid.NewGuid(), Type = "Reefin.Controller.Entities.Movies.Movie" };
+        var version = new BaseItemEntity { Id = Guid.NewGuid(), Type = "Reefin.Controller.Entities.Movies.Movie", PrimaryVersionId = primary.Id };
+        var other = new BaseItemEntity { Id = Guid.NewGuid(), Type = "Reefin.Controller.Entities.Movies.Movie" };
         ctx.BaseItems.AddRange(primary, version, other);
 
         // Progress only on the alternate version.
@@ -185,9 +185,9 @@ public sealed class AlternateVersionQueryTranslationTests : IDisposable
         var user = new User("test", "auth-provider", "reset-provider");
         ctx.Users.Add(user);
 
-        var primary = new BaseItemEntity { Id = Guid.NewGuid(), Type = "MediaBrowser.Controller.Entities.Movies.Movie" };
-        var versionA = new BaseItemEntity { Id = Guid.NewGuid(), Type = "MediaBrowser.Controller.Entities.Movies.Movie", PrimaryVersionId = primary.Id };
-        var versionB = new BaseItemEntity { Id = Guid.NewGuid(), Type = "MediaBrowser.Controller.Entities.Movies.Movie", PrimaryVersionId = primary.Id };
+        var primary = new BaseItemEntity { Id = Guid.NewGuid(), Type = "Reefin.Controller.Entities.Movies.Movie" };
+        var versionA = new BaseItemEntity { Id = Guid.NewGuid(), Type = "Reefin.Controller.Entities.Movies.Movie", PrimaryVersionId = primary.Id };
+        var versionB = new BaseItemEntity { Id = Guid.NewGuid(), Type = "Reefin.Controller.Entities.Movies.Movie", PrimaryVersionId = primary.Id };
         ctx.BaseItems.AddRange(primary, versionA, versionB);
 
         // Both versions in progress with the exact same LastPlayedDate - the tie that a strict '>' cannot break.

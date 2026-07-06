@@ -3,11 +3,11 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Threading;
-using MediaBrowser.Controller.Library;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller.Library;
 using Reefin.Model.Configuration;
 using Reefin.Model.Entities;
-using Movie = MediaBrowser.Controller.Entities.Movies.Movie;
+using Movie = Reefin.Controller.Entities.Movies.Movie;
 
 namespace Reefin.Providers.Plugins.Tmdb.Movies;
 

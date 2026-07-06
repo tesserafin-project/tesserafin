@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Net;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller.Net;
 using Reefin.Data.Events;
 using Reefin.Model.Session;
 using Reefin.Model.Tasks;

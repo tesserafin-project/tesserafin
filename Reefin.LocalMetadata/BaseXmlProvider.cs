@@ -1,8 +1,8 @@
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Providers;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Providers;
 using Reefin.Model.IO;
 
 namespace Reefin.LocalMetadata

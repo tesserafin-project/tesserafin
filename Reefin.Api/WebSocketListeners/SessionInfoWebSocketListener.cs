@@ -1,11 +1,11 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Authentication;
-using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.Net;
-using MediaBrowser.Controller.Session;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller.Authentication;
+using Reefin.Controller.Library;
+using Reefin.Controller.Net;
+using Reefin.Controller.Session;
 using Reefin.Data;
 using Reefin.Database.Implementations.Enums;
 using Reefin.Model.Dto;

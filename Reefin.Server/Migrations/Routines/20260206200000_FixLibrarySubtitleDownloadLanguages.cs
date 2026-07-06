@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Library;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Library;
 using Reefin.Model.Globalization;
 using Reefin.Server.ServerSetupApp;
 

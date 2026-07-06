@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Xml;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Entities.Movies;
-using MediaBrowser.Controller.Providers;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Entities.Movies;
+using Reefin.Controller.Providers;
 
 namespace Reefin.LocalMetadata.Parsers
 {

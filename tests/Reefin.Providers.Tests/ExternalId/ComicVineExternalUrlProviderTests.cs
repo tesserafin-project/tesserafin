@@ -1,5 +1,5 @@
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Entities.TV;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Entities.TV;
 using Reefin.Model.Entities;
 using Reefin.Providers.Books.ComicVine;
 using Xunit;

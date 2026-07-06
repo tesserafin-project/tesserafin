@@ -1,6 +1,6 @@
 #pragma warning disable CS1591
 
-using MediaBrowser.Controller.Library;
+using Reefin.Controller.Library;
 
 namespace Reefin.Providers.Manager
 {

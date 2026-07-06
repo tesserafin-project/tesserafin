@@ -1,13 +1,13 @@
 using System;
 using System.Linq;
 using System.Threading.Tasks;
-using MediaBrowser.Controller;
-using MediaBrowser.Controller.Configuration;
-using MediaBrowser.Controller.Library;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Hosting;
 using Reefin.Common.Configuration;
 using Reefin.Common.Updates;
+using Reefin.Controller;
+using Reefin.Controller.Configuration;
+using Reefin.Controller.Library;
 using Reefin.Model.System;
 using Reefin.Server.Implementations.StorageHelpers;
 

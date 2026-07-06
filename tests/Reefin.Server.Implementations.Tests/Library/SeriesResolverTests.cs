@@ -1,8 +1,8 @@
-using MediaBrowser.Controller;
-using MediaBrowser.Controller.Entities.TV;
-using MediaBrowser.Controller.Library;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Reefin.Controller;
+using Reefin.Controller.Entities.TV;
+using Reefin.Controller.Library;
 using Reefin.Data.Enums;
 using Reefin.Model.Entities;
 using Reefin.Model.IO;
@@ -29,7 +29,7 @@ namespace Reefin.Server.Implementations.Tests.Library
             _resolver = new SeriesResolver(Mock.Of<ILogger<SeriesResolver>>(), _namingOptions);
         }
 
-        private MediaBrowser.Controller.Library.ItemResolveArgs MakeTvArgs(string path) =>
+        private Reefin.Controller.Library.ItemResolveArgs MakeTvArgs(string path) =>
             new(Mock.Of<IServerApplicationPaths>(), _libraryManagerMock.Object)
             {
                 CollectionType = CollectionType.tvshows,
@@ -105,7 +105,7 @@ namespace Reefin.Server.Implementations.Tests.Library
         {
             // Without CollectionType.tvshows, a plain folder with no tvshow.nfo and
             // no season/episode children should not resolve as a Series.
-            var args = new MediaBrowser.Controller.Library.ItemResolveArgs(
+            var args = new Reefin.Controller.Library.ItemResolveArgs(
                 Mock.Of<IServerApplicationPaths>(),
                 _libraryManagerMock.Object)
             {

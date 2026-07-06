@@ -1,9 +1,9 @@
 using System;
 using AutoFixture;
 using AutoFixture.AutoMoq;
-using MediaBrowser.Controller.Entities.TV;
 using Microsoft.Extensions.Configuration;
 using Moq;
+using Reefin.Controller.Entities.TV;
 using Reefin.Server.Implementations.Item;
 using Xunit;
 
@@ -16,7 +16,7 @@ namespace Reefin.Server.Implementations.Tests.Data
 
         public SearchPunctuationTests()
         {
-            var appHost = new Mock<MediaBrowser.Controller.IServerApplicationHost>();
+            var appHost = new Mock<Reefin.Controller.IServerApplicationHost>();
             appHost.Setup(x => x.ExpandVirtualPath(It.IsAny<string>()))
                 .Returns((string x) => x);
             appHost.Setup(x => x.ReverseVirtualPath(It.IsAny<string>()))
@@ -24,11 +24,11 @@ namespace Reefin.Server.Implementations.Tests.Data
 
             var configSection = new Mock<IConfigurationSection>();
             configSection
-                .SetupGet(x => x[It.Is<string>(s => s == MediaBrowser.Controller.Extensions.ConfigurationExtensions.SqliteCacheSizeKey)])
+                .SetupGet(x => x[It.Is<string>(s => s == Reefin.Controller.Extensions.ConfigurationExtensions.SqliteCacheSizeKey)])
                 .Returns("0");
             var config = new Mock<IConfiguration>();
             config
-                .Setup(x => x.GetSection(It.Is<string>(s => s == MediaBrowser.Controller.Extensions.ConfigurationExtensions.SqliteCacheSizeKey)))
+                .Setup(x => x.GetSection(It.Is<string>(s => s == Reefin.Controller.Extensions.ConfigurationExtensions.SqliteCacheSizeKey)))
                 .Returns(configSection.Object);
 
             _fixture = new Fixture().Customize(new AutoMoqCustomization { ConfigureMembers = true });

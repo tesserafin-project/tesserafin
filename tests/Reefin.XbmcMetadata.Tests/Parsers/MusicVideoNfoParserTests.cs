@@ -1,12 +1,12 @@
 using System;
 using System.Linq;
 using System.Threading;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.Providers;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Reefin.Common.Configuration;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Library;
+using Reefin.Controller.Providers;
 using Reefin.Model.Configuration;
 using Reefin.Model.Entities;
 using Reefin.Model.Providers;

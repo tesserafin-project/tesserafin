@@ -1,7 +1,7 @@
 using System;
 using System.IO;
-using MediaBrowser.Controller.Lyrics;
-using MediaBrowser.Controller.Resolvers;
+using Reefin.Controller.Lyrics;
+using Reefin.Controller.Resolvers;
 using Reefin.Extensions;
 using Reefin.Model.Lyrics;
 

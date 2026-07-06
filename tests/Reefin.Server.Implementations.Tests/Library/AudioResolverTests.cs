@@ -1,7 +1,7 @@
 using System.Linq;
-using MediaBrowser.Controller.Entities.Audio;
-using MediaBrowser.Controller.Library;
 using Moq;
+using Reefin.Controller.Entities.Audio;
+using Reefin.Controller.Library;
 using Reefin.Data.Enums;
 using Reefin.Model.IO;
 using Reefin.Naming.Common;

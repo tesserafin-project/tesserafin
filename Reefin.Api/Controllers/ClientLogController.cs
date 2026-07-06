@@ -1,13 +1,13 @@
 using System.Net.Mime;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.ClientEvent;
-using MediaBrowser.Controller.Configuration;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Reefin.Api.Attributes;
 using Reefin.Api.Extensions;
 using Reefin.Api.Models.ClientLogDtos;
+using Reefin.Controller.ClientEvent;
+using Reefin.Controller.Configuration;
 
 namespace Reefin.Api.Controllers;
 

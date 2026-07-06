@@ -1,7 +1,7 @@
 #pragma warning disable CS1591
 
-using MediaBrowser.Controller.Entities.Audio;
-using MediaBrowser.Controller.Providers;
+using Reefin.Controller.Entities.Audio;
+using Reefin.Controller.Providers;
 using Reefin.Model.Entities;
 using Reefin.Model.Providers;
 

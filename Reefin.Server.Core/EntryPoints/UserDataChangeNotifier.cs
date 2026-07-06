@@ -3,10 +3,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.Session;
 using Microsoft.Extensions.Hosting;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Library;
+using Reefin.Controller.Session;
 using Reefin.Model.Entities;
 using Reefin.Model.Session;
 

@@ -3,7 +3,7 @@ using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.MediaEncoding;
+using Reefin.Controller.MediaEncoding;
 using Reefin.MediaEncoding.Encoder;
 using Xunit;
 

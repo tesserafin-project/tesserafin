@@ -3,11 +3,11 @@
 using System;
 using System.Linq;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Entities.Audio;
-using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.Providers;
-using MediaBrowser.Controller.Resolvers;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller.Entities.Audio;
+using Reefin.Controller.Library;
+using Reefin.Controller.Providers;
+using Reefin.Controller.Resolvers;
 using Reefin.Data.Enums;
 using Reefin.Model.Entities;
 using Reefin.Naming.Audio;

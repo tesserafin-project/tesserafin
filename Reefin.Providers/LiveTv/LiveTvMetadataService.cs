@@ -1,10 +1,10 @@
-using MediaBrowser.Controller.Configuration;
-using MediaBrowser.Controller.IO;
-using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.LiveTv;
-using MediaBrowser.Controller.Persistence;
-using MediaBrowser.Controller.Providers;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller.Configuration;
+using Reefin.Controller.IO;
+using Reefin.Controller.Library;
+using Reefin.Controller.LiveTv;
+using Reefin.Controller.Persistence;
+using Reefin.Controller.Providers;
 using Reefin.Model.IO;
 using Reefin.Providers.Manager;
 

@@ -1,11 +1,11 @@
 using System;
 using System.IO;
 using System.Linq;
-using MediaBrowser.Controller.Drawing;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.Providers;
-using MediaBrowser.Controller.Resolvers;
+using Reefin.Controller.Drawing;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Library;
+using Reefin.Controller.Providers;
+using Reefin.Controller.Resolvers;
 using Reefin.Data.Enums;
 using Reefin.Extensions;
 using Reefin.Model.Entities;

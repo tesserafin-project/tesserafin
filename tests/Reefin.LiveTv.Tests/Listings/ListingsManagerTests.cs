@@ -1,8 +1,8 @@
 using System;
-using MediaBrowser.Controller.LiveTv;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Reefin.Common.Configuration;
+using Reefin.Controller.LiveTv;
 using Reefin.LiveTv.Configuration;
 using Reefin.LiveTv.Listings;
 using Reefin.Model.LiveTv;

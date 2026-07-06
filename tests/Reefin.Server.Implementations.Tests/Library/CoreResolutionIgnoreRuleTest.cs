@@ -1,8 +1,8 @@
 using System;
 using System.IO;
-using MediaBrowser.Controller;
-using MediaBrowser.Controller.Entities;
 using Moq;
+using Reefin.Controller;
+using Reefin.Controller.Entities;
 using Reefin.Model.Entities;
 using Reefin.Model.IO;
 using Reefin.Naming.Common;

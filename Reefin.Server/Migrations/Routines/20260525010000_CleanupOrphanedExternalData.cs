@@ -5,10 +5,10 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Controller;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Configuration;
+using Reefin.Controller;
 using Reefin.Database.Implementations;
 using Reefin.Server.ServerSetupApp;
 

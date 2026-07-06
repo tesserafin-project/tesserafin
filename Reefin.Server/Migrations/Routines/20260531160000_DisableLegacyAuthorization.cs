@@ -1,6 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Configuration;
+using Reefin.Controller.Configuration;
 
 namespace Reefin.Server.Migrations.Routines;
 

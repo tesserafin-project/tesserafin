@@ -1,11 +1,11 @@
 using System.IO;
 using System.Threading.Tasks;
 using System.Xml;
-using MediaBrowser.Controller.Configuration;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Entities.Movies;
-using MediaBrowser.Controller.Library;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller.Configuration;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Entities.Movies;
+using Reefin.Controller.Library;
 using Reefin.Model.IO;
 
 namespace Reefin.LocalMetadata.Savers

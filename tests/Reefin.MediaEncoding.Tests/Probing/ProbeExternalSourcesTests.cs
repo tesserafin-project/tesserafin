@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using MediaBrowser.Controller.Configuration;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Reefin.Controller.Configuration;
 using Reefin.MediaEncoding.Encoder;
 using Reefin.Model.Globalization;
 using Reefin.Model.IO;
@@ -27,7 +27,7 @@ namespace Reefin.MediaEncoding.Tests.Probing
                 Mock.Of<IServerConfigurationManager>());
 
             var userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)";
-            var req = new MediaBrowser.Controller.MediaEncoding.MediaInfoRequest()
+            var req = new Reefin.Controller.MediaEncoding.MediaInfoRequest()
             {
                 MediaSource = new Reefin.Model.Dto.MediaSourceInfo
                 {

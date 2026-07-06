@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
 using BitFaster.Caching.Lru;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.IO;
-using MediaBrowser.Controller.Resolvers;
+using Reefin.Controller.Entities;
+using Reefin.Controller.IO;
+using Reefin.Controller.Resolvers;
 using Reefin.Model.IO;
 
 namespace Reefin.Server.Core.Library;

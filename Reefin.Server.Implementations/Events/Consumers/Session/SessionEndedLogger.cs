@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Events;
-using MediaBrowser.Controller.Events.Session;
+using Reefin.Controller.Events;
+using Reefin.Controller.Events.Session;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Model.Activity;
 using Reefin.Model.Globalization;

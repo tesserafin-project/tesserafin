@@ -1,9 +1,9 @@
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Devices;
-using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.Session;
 using Microsoft.Extensions.Hosting;
+using Reefin.Controller.Devices;
+using Reefin.Controller.Library;
+using Reefin.Controller.Session;
 using Reefin.Data;
 using Reefin.Data.Events;
 using Reefin.Data.Queries;

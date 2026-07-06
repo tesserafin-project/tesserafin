@@ -6,10 +6,10 @@ using System;
 using System.IO;
 using System.Linq;
 using DiscUtils.Udf;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.Providers;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Library;
+using Reefin.Controller.Providers;
 using Reefin.Model.Entities;
 using Reefin.Naming.Common;
 using Reefin.Naming.Video;
@@ -20,7 +20,7 @@ namespace Reefin.Server.Core.Library.Resolvers
     /// Resolves a Path into a Video or Video subclass.
     /// </summary>
     /// <typeparam name="T">The type of item to resolve.</typeparam>
-    public abstract class BaseVideoResolver<T> : MediaBrowser.Controller.Resolvers.ItemResolver<T>
+    public abstract class BaseVideoResolver<T> : Reefin.Controller.Resolvers.ItemResolver<T>
         where T : Video, new()
     {
         private readonly ILogger _logger;

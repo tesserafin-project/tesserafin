@@ -11,8 +11,8 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.LiveTv;
 using Reefin.Common;
+using Reefin.Controller.LiveTv;
 
 namespace Reefin.LiveTv.TunerHosts.HdHomerun
 {

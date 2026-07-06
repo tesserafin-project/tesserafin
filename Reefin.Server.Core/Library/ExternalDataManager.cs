@@ -2,12 +2,12 @@ using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Chapters;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.IO;
-using MediaBrowser.Controller.MediaSegments;
-using MediaBrowser.Controller.Trickplay;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller.Chapters;
+using Reefin.Controller.Entities;
+using Reefin.Controller.IO;
+using Reefin.Controller.MediaSegments;
+using Reefin.Controller.Trickplay;
 
 namespace Reefin.Server.Core.Library;
 

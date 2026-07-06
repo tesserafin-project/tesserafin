@@ -2,12 +2,12 @@ using System.Globalization;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Authentication;
-using MediaBrowser.Controller.Net;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Reefin.Api.Constants;
+using Reefin.Controller.Authentication;
+using Reefin.Controller.Net;
 using Reefin.Data;
 using Reefin.Database.Implementations.Enums;
 

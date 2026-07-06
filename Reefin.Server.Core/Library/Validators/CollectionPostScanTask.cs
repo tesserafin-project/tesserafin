@@ -3,11 +3,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Collections;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Entities.Movies;
-using MediaBrowser.Controller.Library;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller.Collections;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Entities.Movies;
+using Reefin.Controller.Library;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Enums;
 

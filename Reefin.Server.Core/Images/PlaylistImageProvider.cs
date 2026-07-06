@@ -4,13 +4,13 @@
 
 using System.Collections.Generic;
 using System.Linq;
-using MediaBrowser.Controller.Drawing;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Entities.Audio;
-using MediaBrowser.Controller.Entities.TV;
-using MediaBrowser.Controller.Playlists;
-using MediaBrowser.Controller.Providers;
 using Reefin.Common.Configuration;
+using Reefin.Controller.Drawing;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Entities.Audio;
+using Reefin.Controller.Entities.TV;
+using Reefin.Controller.Playlists;
+using Reefin.Controller.Providers;
 using Reefin.Model.Entities;
 using Reefin.Model.IO;
 

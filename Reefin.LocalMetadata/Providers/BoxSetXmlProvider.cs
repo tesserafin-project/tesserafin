@@ -1,8 +1,8 @@
 using System.IO;
 using System.Threading;
-using MediaBrowser.Controller.Entities.Movies;
-using MediaBrowser.Controller.Providers;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller.Entities.Movies;
+using Reefin.Controller.Providers;
 using Reefin.LocalMetadata.Parsers;
 using Reefin.Model.IO;
 

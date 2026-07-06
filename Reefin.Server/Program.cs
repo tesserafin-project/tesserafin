@@ -8,7 +8,6 @@ using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using CommandLine;
-using MediaBrowser.Controller;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -18,6 +17,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Reefin.Common.Configuration;
 using Reefin.Common.Net;
+using Reefin.Controller;
 using Reefin.Database.Implementations;
 using Reefin.Server.Core;
 using Reefin.Server.Core.Configuration;
@@ -33,7 +33,7 @@ using Reefin.Server.Migrations.Stages;
 using Reefin.Server.ServerSetupApp;
 using Serilog;
 using Serilog.Extensions.Logging;
-using static MediaBrowser.Controller.Extensions.ConfigurationExtensions;
+using static Reefin.Controller.Extensions.ConfigurationExtensions;
 using ILogger = Microsoft.Extensions.Logging.ILogger;
 
 namespace Reefin.Server

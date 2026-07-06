@@ -1,12 +1,12 @@
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Configuration;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Entities.Movies;
-using MediaBrowser.Controller.Entities.TV;
-using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.Providers;
-using MediaBrowser.Controller.Trickplay;
+using Reefin.Controller.Configuration;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Entities.Movies;
+using Reefin.Controller.Entities.TV;
+using Reefin.Controller.Library;
+using Reefin.Controller.Providers;
+using Reefin.Controller.Trickplay;
 using Reefin.Model.Configuration;
 
 namespace Reefin.Providers.Trickplay;

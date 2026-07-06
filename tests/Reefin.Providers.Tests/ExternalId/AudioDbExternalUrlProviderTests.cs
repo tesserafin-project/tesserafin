@@ -1,5 +1,5 @@
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Entities.Audio;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Entities.Audio;
 using Reefin.Model.Entities;
 using Reefin.Providers.Plugins.AudioDb;
 using Xunit;

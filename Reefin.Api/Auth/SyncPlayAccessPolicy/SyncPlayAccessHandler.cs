@@ -1,9 +1,9 @@
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.SyncPlay;
 using Microsoft.AspNetCore.Authorization;
 using Reefin.Api.Extensions;
 using Reefin.Common.Extensions;
+using Reefin.Controller.Library;
+using Reefin.Controller.SyncPlay;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Enums;
 

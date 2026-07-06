@@ -1,5 +1,5 @@
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.LiveTv;
+using Reefin.Controller.Entities;
+using Reefin.Controller.LiveTv;
 using Reefin.LiveTv;
 using Reefin.Model.Entities;
 using Xunit;

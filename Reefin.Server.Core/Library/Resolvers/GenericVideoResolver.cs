@@ -1,8 +1,8 @@
 #nullable disable
 
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Providers;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Providers;
 using Reefin.Naming.Common;
 
 namespace Reefin.Server.Core.Library.Resolvers

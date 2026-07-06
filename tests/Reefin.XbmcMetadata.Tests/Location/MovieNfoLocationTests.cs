@@ -1,7 +1,7 @@
 using System;
 using System.Linq;
-using MediaBrowser.Controller.Entities.Movies;
-using MediaBrowser.Controller.Providers;
+using Reefin.Controller.Entities.Movies;
+using Reefin.Controller.Providers;
 using Reefin.Model.Entities;
 using Reefin.XbmcMetadata.Savers;
 using Xunit;

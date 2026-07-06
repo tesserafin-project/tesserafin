@@ -5,9 +5,9 @@ using System.Linq;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Providers;
 using Reefin.Common.Net;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Providers;
 using Reefin.Model.Entities;
 using Reefin.Model.Providers;
 
@@ -41,7 +41,7 @@ namespace Reefin.Providers.Plugins.Tmdb.TV
         /// <inheritdoc />
         public bool Supports(BaseItem item)
         {
-            return item is MediaBrowser.Controller.Entities.TV.Episode;
+            return item is Reefin.Controller.Entities.TV.Episode;
         }
 
         /// <inheritdoc />
@@ -53,7 +53,7 @@ namespace Reefin.Providers.Plugins.Tmdb.TV
         /// <inheritdoc />
         public async Task<IEnumerable<RemoteImageInfo>> GetImages(BaseItem item, CancellationToken cancellationToken)
         {
-            var episode = (MediaBrowser.Controller.Entities.TV.Episode)item;
+            var episode = (Reefin.Controller.Entities.TV.Episode)item;
             var series = episode.Series;
 
             var seriesTmdbId = Convert.ToInt32(series?.GetProviderId(MetadataProvider.Tmdb), CultureInfo.InvariantCulture);

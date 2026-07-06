@@ -1,10 +1,10 @@
 using System;
 using System.Globalization;
-using MediaBrowser.Controller.IO;
-using MediaBrowser.Controller.MediaEncoding;
 using Microsoft.Extensions.Configuration;
 using Moq;
 using Reefin.Common.Configuration;
+using Reefin.Controller.IO;
+using Reefin.Controller.MediaEncoding;
 using Reefin.Model.Dlna;
 using Reefin.Model.Entities;
 using Xunit;

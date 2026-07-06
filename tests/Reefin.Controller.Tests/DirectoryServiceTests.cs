@@ -1,6 +1,6 @@
 using System.Linq;
-using MediaBrowser.Controller.Providers;
 using Moq;
+using Reefin.Controller.Providers;
 using Reefin.Model.IO;
 using Xunit;
 

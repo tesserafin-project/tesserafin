@@ -3,14 +3,14 @@ using System.IO;
 using System.Net.Mime;
 using System.Net.Sockets;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Authentication;
-using MediaBrowser.Controller.Configuration;
-using MediaBrowser.Controller.Net;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Extensions;
+using Reefin.Controller.Authentication;
+using Reefin.Controller.Configuration;
+using Reefin.Controller.Net;
 
 namespace Reefin.Api.Middleware;
 

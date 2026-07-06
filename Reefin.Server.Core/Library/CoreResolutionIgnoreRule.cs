@@ -1,8 +1,8 @@
 using System;
 using System.IO;
-using MediaBrowser.Controller;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Resolvers;
+using Reefin.Controller;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Resolvers;
 using Reefin.Model.IO;
 using Reefin.Naming.Audio;
 using Reefin.Naming.Common;

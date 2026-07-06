@@ -1,7 +1,7 @@
 #pragma warning disable CS1591
 
-using MediaBrowser.Controller.Entities.TV;
-using MediaBrowser.Controller.Providers;
+using Reefin.Controller.Entities.TV;
+using Reefin.Controller.Providers;
 using Reefin.Model.Entities;
 using Reefin.Model.Providers;
 

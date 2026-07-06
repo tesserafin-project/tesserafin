@@ -1,8 +1,8 @@
 using System;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Configuration;
 using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.AspNetCore.Http;
+using Reefin.Controller.Configuration;
 
 namespace Reefin.Server.Configuration
 {

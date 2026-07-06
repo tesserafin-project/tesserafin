@@ -1,7 +1,7 @@
 using System.Threading;
-using MediaBrowser.Controller.Playlists;
-using MediaBrowser.Controller.Providers;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller.Playlists;
+using Reefin.Controller.Providers;
 using Reefin.LocalMetadata.Parsers;
 using Reefin.LocalMetadata.Savers;
 using Reefin.Model.IO;

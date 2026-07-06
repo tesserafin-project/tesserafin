@@ -1,5 +1,5 @@
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Authentication;
+using Reefin.Controller.Authentication;
 using Reefin.Database.Implementations.Entities;
 
 namespace Reefin.Server.Implementations.Users

@@ -1,9 +1,9 @@
 #pragma warning disable CS1591
 
 using System;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.LiveTv;
-using MediaBrowser.Controller.Sorting;
+using Reefin.Controller.Entities;
+using Reefin.Controller.LiveTv;
+using Reefin.Controller.Sorting;
 using Reefin.Data.Enums;
 
 namespace Reefin.Server.Core.Sorting

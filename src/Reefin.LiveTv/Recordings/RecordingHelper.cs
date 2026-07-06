@@ -1,7 +1,7 @@
 using System;
 using System.Globalization;
 using System.Text;
-using MediaBrowser.Controller.LiveTv;
+using Reefin.Controller.LiveTv;
 
 namespace Reefin.LiveTv.Recordings
 {

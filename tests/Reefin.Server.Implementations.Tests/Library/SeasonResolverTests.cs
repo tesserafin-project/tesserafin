@@ -1,7 +1,7 @@
-using MediaBrowser.Controller;
-using MediaBrowser.Controller.Entities.TV;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Reefin.Controller;
+using Reefin.Controller.Entities.TV;
 using Reefin.Model.Configuration;
 using Reefin.Model.Entities;
 using Reefin.Model.Globalization;
@@ -42,7 +42,7 @@ namespace Reefin.Server.Implementations.Tests.Library
         {
             var series = new Series { Path = "/media/Show" };
 
-            var args = new MediaBrowser.Controller.Library.ItemResolveArgs(
+            var args = new Reefin.Controller.Library.ItemResolveArgs(
                 Mock.Of<IServerApplicationPaths>(),
                 null)
             {
@@ -67,7 +67,7 @@ namespace Reefin.Server.Implementations.Tests.Library
         {
             var series = new Series { Path = "/media/Show" };
 
-            var args = new MediaBrowser.Controller.Library.ItemResolveArgs(
+            var args = new Reefin.Controller.Library.ItemResolveArgs(
                 Mock.Of<IServerApplicationPaths>(),
                 null)
             {
@@ -96,7 +96,7 @@ namespace Reefin.Server.Implementations.Tests.Library
             // The season should only pick up its own ID, not the series-level one.
             var series = new Series { Path = "/media/Show [tvdbid=11111]" };
 
-            var args = new MediaBrowser.Controller.Library.ItemResolveArgs(
+            var args = new Reefin.Controller.Library.ItemResolveArgs(
                 Mock.Of<IServerApplicationPaths>(),
                 null)
             {
@@ -121,7 +121,7 @@ namespace Reefin.Server.Implementations.Tests.Library
         {
             var series = new Series { Path = "/media/Show" };
 
-            var args = new MediaBrowser.Controller.Library.ItemResolveArgs(
+            var args = new Reefin.Controller.Library.ItemResolveArgs(
                 Mock.Of<IServerApplicationPaths>(),
                 null)
             {

@@ -1,10 +1,10 @@
 using System;
 using System.IO;
-using MediaBrowser.Controller;
-using MediaBrowser.Controller.Entities;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller;
+using Reefin.Controller.Entities;
 using Reefin.Data;
 using Reefin.Database.Implementations;
 using Reefin.Database.Implementations.Entities;

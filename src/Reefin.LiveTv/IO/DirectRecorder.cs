@@ -5,10 +5,10 @@ using System.IO;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.Streaming;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Net;
+using Reefin.Controller.Library;
+using Reefin.Controller.Streaming;
 using Reefin.Model.Dto;
 using Reefin.Model.IO;
 

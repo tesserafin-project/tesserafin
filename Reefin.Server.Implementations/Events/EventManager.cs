@@ -1,9 +1,9 @@
 using System;
 using System.Threading.Tasks;
-using MediaBrowser.Controller;
-using MediaBrowser.Controller.Events;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller;
+using Reefin.Controller.Events;
 
 namespace Reefin.Server.Implementations.Events
 {

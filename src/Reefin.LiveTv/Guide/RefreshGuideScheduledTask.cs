@@ -2,8 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.LiveTv;
 using Reefin.Common.Configuration;
+using Reefin.Controller.LiveTv;
 using Reefin.LiveTv.Configuration;
 using Reefin.Model.Tasks;
 

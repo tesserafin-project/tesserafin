@@ -1,11 +1,11 @@
 using System;
 using System.Reflection;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Entities.Audio;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Reefin.Common;
 using Reefin.Common.Configuration;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Entities.Audio;
 using Reefin.Model.Entities;
 using Reefin.Model.Serialization;
 using Reefin.Providers.Plugins.MusicBrainz;

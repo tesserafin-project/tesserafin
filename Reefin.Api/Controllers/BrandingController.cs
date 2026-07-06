@@ -1,7 +1,7 @@
-using MediaBrowser.Controller.Configuration;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Reefin.Common.Configuration;
+using Reefin.Controller.Configuration;
 using Reefin.Model.Branding;
 
 namespace Reefin.Api.Controllers;

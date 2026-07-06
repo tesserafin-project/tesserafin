@@ -1,11 +1,11 @@
 using System.IO;
 using System.Threading.Tasks;
 using System.Xml;
-using MediaBrowser.Controller.Configuration;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.Playlists;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller.Configuration;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Library;
+using Reefin.Controller.Playlists;
 using Reefin.Data.Enums;
 using Reefin.Model.IO;
 

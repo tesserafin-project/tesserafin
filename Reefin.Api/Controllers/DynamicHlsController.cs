@@ -8,10 +8,6 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Configuration;
-using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.MediaEncoding;
-using MediaBrowser.Controller.Streaming;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -21,6 +17,10 @@ using Reefin.Api.Extensions;
 using Reefin.Api.Helpers;
 using Reefin.Api.Models.StreamingDtos;
 using Reefin.Common.Configuration;
+using Reefin.Controller.Configuration;
+using Reefin.Controller.Library;
+using Reefin.Controller.MediaEncoding;
+using Reefin.Controller.Streaming;
 using Reefin.Data.Enums;
 using Reefin.Extensions;
 using Reefin.MediaEncoding.Encoder;
@@ -43,7 +43,7 @@ public class DynamicHlsController : BaseReefinApiController
 {
     private const EncoderPreset DefaultVodEncoderPreset = EncoderPreset.veryfast;
     private const EncoderPreset DefaultEventEncoderPreset = EncoderPreset.superfast;
-    private const TranscodingJobType TranscodingJobType = MediaBrowser.Controller.MediaEncoding.TranscodingJobType.Hls;
+    private const TranscodingJobType TranscodingJobType = Reefin.Controller.MediaEncoding.TranscodingJobType.Hls;
 
     private readonly Version _minFFmpegFlacInMp4 = new Version(6, 0);
     private readonly Version _minFFmpegX265BframeInFmp4 = new Version(7, 0, 1);

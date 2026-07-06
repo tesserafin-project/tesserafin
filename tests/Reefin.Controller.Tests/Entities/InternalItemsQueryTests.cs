@@ -1,5 +1,5 @@
 using System;
-using MediaBrowser.Controller.Entities;
+using Reefin.Controller.Entities;
 using Reefin.Model.Querying;
 using Xunit;
 

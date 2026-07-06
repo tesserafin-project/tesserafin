@@ -4,19 +4,19 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using MediaBrowser.Controller.Configuration;
-using MediaBrowser.Controller.Dto;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.TV;
+using Reefin.Controller.Configuration;
+using Reefin.Controller.Dto;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Library;
+using Reefin.Controller.TV;
 using Reefin.Data;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Database.Implementations.Enums;
 using Reefin.Extensions;
 using Reefin.Model.Querying;
-using Episode = MediaBrowser.Controller.Entities.TV.Episode;
-using Series = MediaBrowser.Controller.Entities.TV.Series;
+using Episode = Reefin.Controller.Entities.TV.Episode;
+using Series = Reefin.Controller.Entities.TV.Series;
 
 namespace Reefin.Server.Core.TV
 {
@@ -179,7 +179,7 @@ namespace Reefin.Server.Core.TV
         }
 
         private Episode? DetermineNextEpisode(
-            MediaBrowser.Controller.Persistence.NextUpEpisodeBatchResult result,
+            Reefin.Controller.Persistence.NextUpEpisodeBatchResult result,
             User user,
             bool includeSpecials,
             bool includeResumable,
@@ -240,7 +240,7 @@ namespace Reefin.Server.Core.TV
         }
 
         private Episode? DetermineNextEpisodeForRewatching(
-            MediaBrowser.Controller.Persistence.NextUpEpisodeBatchResult result,
+            Reefin.Controller.Persistence.NextUpEpisodeBatchResult result,
             User user,
             bool includeSpecials)
         {

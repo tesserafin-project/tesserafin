@@ -1,7 +1,7 @@
 #pragma warning disable CS1591
 
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Sorting;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Sorting;
 using Reefin.Data.Enums;
 using Reefin.Model.Querying;
 

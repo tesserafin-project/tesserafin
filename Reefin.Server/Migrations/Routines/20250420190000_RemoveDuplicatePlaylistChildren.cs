@@ -1,9 +1,9 @@
 using System;
 using System.Linq;
 using System.Threading;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.Playlists;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Library;
+using Reefin.Controller.Playlists;
 using Reefin.Data.Enums;
 
 namespace Reefin.Server.Migrations.Routines;

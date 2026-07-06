@@ -1,12 +1,12 @@
 using System;
 using System.Globalization;
 using System.Xml;
-using MediaBrowser.Controller.Entities.TV;
-using MediaBrowser.Controller.Extensions;
-using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.Providers;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Configuration;
+using Reefin.Controller.Entities.TV;
+using Reefin.Controller.Extensions;
+using Reefin.Controller.Library;
+using Reefin.Controller.Providers;
 using Reefin.Model.Entities;
 using Reefin.Naming.TV;
 

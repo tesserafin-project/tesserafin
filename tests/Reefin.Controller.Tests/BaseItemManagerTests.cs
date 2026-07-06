@@ -1,9 +1,9 @@
 using System;
-using MediaBrowser.Controller.BaseItemManager;
-using MediaBrowser.Controller.Configuration;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Entities.Audio;
 using Moq;
+using Reefin.Controller.BaseItemManager;
+using Reefin.Controller.Configuration;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Entities.Audio;
 using Reefin.Model.Configuration;
 using Xunit;
 
@@ -38,7 +38,7 @@ namespace Reefin.Controller.Tests
             serverConfigurationManager.Setup(scm => scm.Configuration)
                 .Returns(serverConfiguration);
 
-            var baseItemManager = new BaseItemManager(serverConfigurationManager.Object);
+            var baseItemManager = new Reefin.Controller.BaseItemManager.BaseItemManager(serverConfigurationManager.Object);
             var actual = baseItemManager.IsMetadataFetcherEnabled(item, libraryTypeOptions, fetcherName);
 
             Assert.Equal(expected, actual);
@@ -71,7 +71,7 @@ namespace Reefin.Controller.Tests
             serverConfigurationManager.Setup(scm => scm.Configuration)
                 .Returns(serverConfiguration);
 
-            var baseItemManager = new BaseItemManager(serverConfigurationManager.Object);
+            var baseItemManager = new Reefin.Controller.BaseItemManager.BaseItemManager(serverConfigurationManager.Object);
             var actual = baseItemManager.IsImageFetcherEnabled(item, libraryTypeOptions, fetcherName);
 
             Assert.Equal(expected, actual);

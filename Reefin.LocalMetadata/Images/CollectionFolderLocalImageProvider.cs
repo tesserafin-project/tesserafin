@@ -1,6 +1,6 @@
 using System.Collections.Generic;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Providers;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Providers;
 using Reefin.Model.IO;
 
 namespace Reefin.LocalMetadata.Images

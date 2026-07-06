@@ -1,12 +1,12 @@
 #pragma warning disable CS1591
 
 using System.Collections.Generic;
-using MediaBrowser.Controller.Drawing;
-using MediaBrowser.Controller.Dto;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.Providers;
 using Reefin.Common.Configuration;
+using Reefin.Controller.Drawing;
+using Reefin.Controller.Dto;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Library;
+using Reefin.Controller.Providers;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Enums;
 using Reefin.Model.Entities;

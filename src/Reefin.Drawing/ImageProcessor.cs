@@ -9,19 +9,19 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using AsyncKeyedLock;
-using MediaBrowser.Controller;
-using MediaBrowser.Controller.Configuration;
-using MediaBrowser.Controller.Drawing;
-using MediaBrowser.Controller.Entities;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Extensions;
+using Reefin.Controller;
+using Reefin.Controller.Configuration;
+using Reefin.Controller.Drawing;
+using Reefin.Controller.Entities;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Model.Drawing;
 using Reefin.Model.Dto;
 using Reefin.Model.Entities;
 using Reefin.Model.IO;
 using Reefin.Model.Net;
-using Photo = MediaBrowser.Controller.Entities.Photo;
+using Photo = Reefin.Controller.Entities.Photo;
 
 namespace Reefin.Drawing;
 

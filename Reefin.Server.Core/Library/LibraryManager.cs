@@ -11,24 +11,24 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using BitFaster.Caching.Lru;
-using MediaBrowser.Controller;
-using MediaBrowser.Controller.Configuration;
-using MediaBrowser.Controller.Drawing;
-using MediaBrowser.Controller.Dto;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Entities.Audio;
-using MediaBrowser.Controller.Entities.Movies;
-using MediaBrowser.Controller.IO;
-using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.LiveTv;
-using MediaBrowser.Controller.MediaEncoding;
-using MediaBrowser.Controller.Persistence;
-using MediaBrowser.Controller.Playlists;
-using MediaBrowser.Controller.Providers;
-using MediaBrowser.Controller.Resolvers;
-using MediaBrowser.Controller.Sorting;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Extensions;
+using Reefin.Controller;
+using Reefin.Controller.Configuration;
+using Reefin.Controller.Drawing;
+using Reefin.Controller.Dto;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Entities.Audio;
+using Reefin.Controller.Entities.Movies;
+using Reefin.Controller.IO;
+using Reefin.Controller.Library;
+using Reefin.Controller.LiveTv;
+using Reefin.Controller.MediaEncoding;
+using Reefin.Controller.Persistence;
+using Reefin.Controller.Playlists;
+using Reefin.Controller.Providers;
+using Reefin.Controller.Resolvers;
+using Reefin.Controller.Sorting;
 using Reefin.Data;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
@@ -50,10 +50,10 @@ using Reefin.Server.Core.Library.Validators;
 using Reefin.Server.Core.Playlists;
 using Reefin.Server.Core.ScheduledTasks.Tasks;
 using Reefin.Server.Core.Sorting;
-using Episode = MediaBrowser.Controller.Entities.TV.Episode;
+using Episode = Reefin.Controller.Entities.TV.Episode;
 using EpisodeInfo = Reefin.Naming.TV.EpisodeInfo;
-using Genre = MediaBrowser.Controller.Entities.Genre;
-using Person = MediaBrowser.Controller.Entities.Person;
+using Genre = Reefin.Controller.Entities.Genre;
+using Person = Reefin.Controller.Entities.Person;
 using VideoResolver = Reefin.Naming.Video.VideoResolver;
 
 namespace Reefin.Server.Core.Library
@@ -1784,7 +1784,7 @@ namespace Reefin.Server.Core.Library
         }
 
         /// <inheritdoc />
-        public IReadOnlyDictionary<string, MediaBrowser.Controller.Persistence.NextUpEpisodeBatchResult> GetNextUpEpisodesBatch(
+        public IReadOnlyDictionary<string, Reefin.Controller.Persistence.NextUpEpisodeBatchResult> GetNextUpEpisodesBatch(
             InternalItemsQuery query,
             IReadOnlyList<string> seriesKeys,
             bool includeSpecials,
@@ -2202,7 +2202,7 @@ namespace Reefin.Server.Core.Library
         {
             ArgumentNullException.ThrowIfNull(video);
 
-            var linkedIds = _linkedChildrenService.GetLinkedChildrenIds(video.Id, (int)MediaBrowser.Controller.Entities.LinkedChildType.LocalAlternateVersion);
+            var linkedIds = _linkedChildrenService.GetLinkedChildrenIds(video.Id, (int)Reefin.Controller.Entities.LinkedChildType.LocalAlternateVersion);
             if (linkedIds.Count > 0)
             {
                 return linkedIds;
@@ -2216,7 +2216,7 @@ namespace Reefin.Server.Core.Library
         {
             ArgumentNullException.ThrowIfNull(video);
 
-            var linkedIds = _linkedChildrenService.GetLinkedChildrenIds(video.Id, (int)MediaBrowser.Controller.Entities.LinkedChildType.LinkedAlternateVersion);
+            var linkedIds = _linkedChildrenService.GetLinkedChildrenIds(video.Id, (int)Reefin.Controller.Entities.LinkedChildType.LinkedAlternateVersion);
             if (linkedIds.Count > 0)
             {
                 return linkedIds
@@ -2230,7 +2230,7 @@ namespace Reefin.Server.Core.Library
         }
 
         /// <inheritdoc />
-        public void UpsertLinkedChild(Guid parentId, Guid childId, MediaBrowser.Controller.Entities.LinkedChildType childType)
+        public void UpsertLinkedChild(Guid parentId, Guid childId, Reefin.Controller.Entities.LinkedChildType childType)
         {
             _linkedChildrenService.UpsertLinkedChild(parentId, childId, childType);
         }

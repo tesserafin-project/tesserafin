@@ -1,14 +1,14 @@
 using System;
 using System.ComponentModel.DataAnnotations;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Authentication;
-using MediaBrowser.Controller.Net;
-using MediaBrowser.Controller.QuickConnect;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Reefin.Api.Helpers;
 using Reefin.Common.Extensions;
+using Reefin.Controller.Authentication;
+using Reefin.Controller.Net;
+using Reefin.Controller.QuickConnect;
 using Reefin.Model.QuickConnect;
 
 namespace Reefin.Api.Controllers;

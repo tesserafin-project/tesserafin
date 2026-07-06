@@ -5,10 +5,10 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using MediaBrowser.Controller.Entities.TV;
-using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.Resolvers;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller.Entities.TV;
+using Reefin.Controller.Library;
+using Reefin.Controller.Resolvers;
 using Reefin.Data.Enums;
 using Reefin.Model.Entities;
 using Reefin.Model.IO;

@@ -1,7 +1,7 @@
 using System;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Library;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Library;
 
 namespace Reefin.Server.Migrations.Routines;
 

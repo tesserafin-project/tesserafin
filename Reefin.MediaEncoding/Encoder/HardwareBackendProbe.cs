@@ -1,8 +1,8 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.MediaEncoding;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller.MediaEncoding;
 
 namespace Reefin.MediaEncoding.Encoder;
 

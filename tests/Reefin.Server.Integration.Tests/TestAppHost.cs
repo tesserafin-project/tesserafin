@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using System.Reflection;
-using MediaBrowser.Controller;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller;
 using Reefin.Server.Core;
 
 namespace Reefin.Server.Integration.Tests

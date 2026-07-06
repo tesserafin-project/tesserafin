@@ -8,10 +8,10 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Net;
-using MediaBrowser.Controller.Net.WebSocketMessages;
-using MediaBrowser.Controller.Net.WebSocketMessages.Outbound;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller.Net;
+using Reefin.Controller.Net.WebSocketMessages;
+using Reefin.Controller.Net.WebSocketMessages.Outbound;
 using Reefin.Extensions.Json;
 using Reefin.Model.Session;
 

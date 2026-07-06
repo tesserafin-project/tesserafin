@@ -9,22 +9,22 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Configuration;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Entities.Audio;
-using MediaBrowser.Controller.IO;
-using MediaBrowser.Controller.Library;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Configuration;
+using Reefin.Controller.Configuration;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Entities.Audio;
+using Reefin.Controller.IO;
+using Reefin.Controller.Library;
 using Reefin.Extensions;
 using Reefin.Model.Configuration;
 using Reefin.Model.Entities;
 using Reefin.Model.IO;
 using Reefin.Model.Net;
-using Episode = MediaBrowser.Controller.Entities.TV.Episode;
-using MusicAlbum = MediaBrowser.Controller.Entities.Audio.MusicAlbum;
-using Person = MediaBrowser.Controller.Entities.Person;
-using Season = MediaBrowser.Controller.Entities.TV.Season;
+using Episode = Reefin.Controller.Entities.TV.Episode;
+using MusicAlbum = Reefin.Controller.Entities.Audio.MusicAlbum;
+using Person = Reefin.Controller.Entities.Person;
+using Season = Reefin.Controller.Entities.TV.Season;
 
 namespace Reefin.Providers.Manager
 {

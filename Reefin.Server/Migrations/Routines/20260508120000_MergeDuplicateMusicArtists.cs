@@ -5,10 +5,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller.Library;
+using Reefin.Controller.Persistence;
 using Reefin.Database.Implementations;
 using Reefin.Server.ServerSetupApp;
 
@@ -24,7 +24,7 @@ namespace Reefin.Server.Migrations.Routines;
 [ReefinMigrationBackup(ReefinDb = true)]
 public class MergeDuplicateMusicArtists : IAsyncMigrationRoutine
 {
-    private const string MusicArtistType = "MediaBrowser.Controller.Entities.Audio.MusicArtist";
+    private const string MusicArtistType = "Reefin.Controller.Entities.Audio.MusicArtist";
 
     private readonly IStartupLogger<MergeDuplicateMusicArtists> _logger;
     private readonly IDbContextFactory<ReefinDbContext> _dbContextFactory;

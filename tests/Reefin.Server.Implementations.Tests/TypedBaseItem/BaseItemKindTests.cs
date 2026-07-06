@@ -19,7 +19,7 @@ namespace Reefin.Server.Implementations.Tests.TypedBaseItem
                     var baseItemTypes = assembly.GetTypes()
                         .Where(targetType => targetType.IsClass
                                              && !targetType.IsAbstract
-                                             && targetType.IsSubclassOf(typeof(MediaBrowser.Controller.Entities.BaseItem)));
+                                             && targetType.IsSubclassOf(typeof(Reefin.Controller.Entities.BaseItem)));
                     foreach (var baseItemType in baseItemTypes)
                     {
                         data.Add(baseItemType);
@@ -43,7 +43,7 @@ namespace Reefin.Server.Implementations.Tests.TypedBaseItem
         public void GetBaseItemKind_WhenCalledAfterDefaultCtor_DoesNotThrow(Type baseItemDescendantType)
         {
             var defaultConstructor = baseItemDescendantType.GetConstructor(Type.EmptyTypes);
-            var instance = (MediaBrowser.Controller.Entities.BaseItem)defaultConstructor!.Invoke(null);
+            var instance = (Reefin.Controller.Entities.BaseItem)defaultConstructor!.Invoke(null);
             var exception = Record.Exception(() => instance.GetBaseItemKind());
             Assert.Null(exception);
         }

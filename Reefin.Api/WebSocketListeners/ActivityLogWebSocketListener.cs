@@ -1,8 +1,8 @@
 using System;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Authentication;
-using MediaBrowser.Controller.Net;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller.Authentication;
+using Reefin.Controller.Net;
 using Reefin.Data;
 using Reefin.Data.Events;
 using Reefin.Database.Implementations.Enums;

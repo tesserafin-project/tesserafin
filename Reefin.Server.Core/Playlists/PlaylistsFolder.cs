@@ -3,9 +3,9 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json.Serialization;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Playlists;
 using Reefin.Common;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Playlists;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Model.Querying;

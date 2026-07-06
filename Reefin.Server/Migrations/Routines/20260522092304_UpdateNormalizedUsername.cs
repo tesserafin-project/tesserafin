@@ -1,8 +1,8 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Configuration;
 using Microsoft.EntityFrameworkCore;
+using Reefin.Controller.Configuration;
 using Reefin.Database.Implementations;
 
 namespace Reefin.Server.Migrations.Routines;

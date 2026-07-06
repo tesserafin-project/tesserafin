@@ -1,9 +1,9 @@
 using System;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Entities.Movies;
-using MediaBrowser.Controller.Entities.TV;
-using MediaBrowser.Controller.Library;
 using Moq;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Entities.Movies;
+using Reefin.Controller.Entities.TV;
+using Reefin.Controller.Library;
 using Reefin.Model.Entities;
 using Reefin.Providers.Plugins.Tmdb;
 using Xunit;

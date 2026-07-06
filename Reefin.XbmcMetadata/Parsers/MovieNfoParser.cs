@@ -2,13 +2,13 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Xml;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Entities.Movies;
-using MediaBrowser.Controller.Extensions;
-using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.Providers;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Configuration;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Entities.Movies;
+using Reefin.Controller.Extensions;
+using Reefin.Controller.Library;
+using Reefin.Controller.Providers;
 using Reefin.Model.Entities;
 
 namespace Reefin.XbmcMetadata.Parsers

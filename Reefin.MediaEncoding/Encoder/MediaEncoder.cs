@@ -12,14 +12,14 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using AsyncKeyedLock;
-using MediaBrowser.Controller.Configuration;
-using MediaBrowser.Controller.Extensions;
-using MediaBrowser.Controller.MediaEncoding;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Reefin.Common;
 using Reefin.Common.Configuration;
 using Reefin.Common.Extensions;
+using Reefin.Controller.Configuration;
+using Reefin.Controller.Extensions;
+using Reefin.Controller.MediaEncoding;
 using Reefin.Data.Enums;
 using Reefin.Extensions;
 using Reefin.Extensions.Json;
@@ -112,7 +112,7 @@ namespace Reefin.MediaEncoding.Encoder
             _localization = localization;
             _config = config;
             _serverConfig = serverConfig;
-            _startupOptionFFmpegPath = config.GetValue<string>(MediaBrowser.Controller.Extensions.ConfigurationExtensions.FfmpegPathKey) ?? string.Empty;
+            _startupOptionFFmpegPath = config.GetValue<string>(Reefin.Controller.Extensions.ConfigurationExtensions.FfmpegPathKey) ?? string.Empty;
 
             _jsonSerializerOptions = new JsonSerializerOptions(JsonDefaults.Options);
             _jsonSerializerOptions.Converters.Add(new JsonBoolStringConverter());

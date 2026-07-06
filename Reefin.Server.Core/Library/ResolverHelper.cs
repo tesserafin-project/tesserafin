@@ -1,9 +1,9 @@
 using System;
 using System.IO;
 using System.Linq;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.Providers;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Library;
+using Reefin.Controller.Providers;
 using Reefin.Model.IO;
 
 namespace Reefin.Server.Core.Library

@@ -2,10 +2,10 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Channels;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Library;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller.Channels;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Library;
 using Reefin.Data.Enums;
 
 namespace Reefin.LiveTv.Channels

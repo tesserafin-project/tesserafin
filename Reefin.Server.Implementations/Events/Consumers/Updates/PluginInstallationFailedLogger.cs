@@ -1,8 +1,8 @@
 using System;
 using System.Globalization;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Events;
 using Reefin.Common.Updates;
+using Reefin.Controller.Events;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Model.Activity;
 using Reefin.Model.Globalization;

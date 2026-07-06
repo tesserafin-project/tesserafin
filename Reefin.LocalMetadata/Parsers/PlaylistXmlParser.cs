@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Xml;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Extensions;
-using MediaBrowser.Controller.Playlists;
-using MediaBrowser.Controller.Providers;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Extensions;
+using Reefin.Controller.Playlists;
+using Reefin.Controller.Providers;
 using Reefin.Data.Enums;
 
 namespace Reefin.LocalMetadata.Parsers

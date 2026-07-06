@@ -2,9 +2,9 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Xml;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Providers;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Providers;
 using Reefin.Model.IO;
 
 namespace Reefin.Providers.Books.OpenPackagingFormat

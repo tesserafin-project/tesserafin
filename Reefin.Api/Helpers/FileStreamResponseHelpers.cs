@@ -4,12 +4,12 @@ using System.Net.Http;
 using System.Net.Mime;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.MediaEncoding;
-using MediaBrowser.Controller.Streaming;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Net.Http.Headers;
 using Reefin.Api.Extensions;
+using Reefin.Controller.MediaEncoding;
+using Reefin.Controller.Streaming;
 
 namespace Reefin.Api.Helpers;
 

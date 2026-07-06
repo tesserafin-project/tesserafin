@@ -1,5 +1,5 @@
 using System;
-using MediaBrowser.Controller.Entities;
+using Reefin.Controller.Entities;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Server.Implementations.Item;

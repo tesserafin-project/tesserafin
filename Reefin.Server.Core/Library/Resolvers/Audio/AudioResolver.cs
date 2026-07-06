@@ -6,10 +6,10 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.Providers;
-using MediaBrowser.Controller.Resolvers;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Library;
+using Reefin.Controller.Providers;
+using Reefin.Controller.Resolvers;
 using Reefin.Data.Enums;
 using Reefin.Model.IO;
 using Reefin.Naming.Audio;
@@ -22,7 +22,7 @@ namespace Reefin.Server.Core.Library.Resolvers.Audio
     /// <summary>
     /// Class AudioResolver.
     /// </summary>
-    public class AudioResolver : ItemResolver<MediaBrowser.Controller.Entities.Audio.Audio>, IMultiItemResolver
+    public class AudioResolver : ItemResolver<Reefin.Controller.Entities.Audio.Audio>, IMultiItemResolver
     {
         private readonly NamingOptions _namingOptions;
 
@@ -49,7 +49,7 @@ namespace Reefin.Server.Core.Library.Resolvers.Audio
             {
                 foreach (var item in result.Items)
                 {
-                    SetInitialItemValues((MediaBrowser.Controller.Entities.Audio.Audio)item, null);
+                    SetInitialItemValues((Reefin.Controller.Entities.Audio.Audio)item, null);
                 }
             }
 
@@ -74,7 +74,7 @@ namespace Reefin.Server.Core.Library.Resolvers.Audio
         /// </summary>
         /// <param name="args">The args.</param>
         /// <returns>Entities.Audio.Audio.</returns>
-        protected override MediaBrowser.Controller.Entities.Audio.Audio Resolve(ItemResolveArgs args)
+        protected override Reefin.Controller.Entities.Audio.Audio Resolve(ItemResolveArgs args)
         {
             // Return audio if the path is a file and has a matching extension
 
@@ -110,7 +110,7 @@ namespace Reefin.Server.Core.Library.Resolvers.Audio
                     return null;
                 }
 
-                MediaBrowser.Controller.Entities.Audio.Audio item = null;
+                Reefin.Controller.Entities.Audio.Audio item = null;
 
                 var isMusicCollectionType = collectionType == CollectionType.music;
 
@@ -119,7 +119,7 @@ namespace Reefin.Server.Core.Library.Resolvers.Audio
                     args.Parent is null ||
                     isMusicCollectionType)
                 {
-                    item = new MediaBrowser.Controller.Entities.Audio.Audio();
+                    item = new Reefin.Controller.Entities.Audio.Audio();
                 }
                 else if (isBooksCollectionType)
                 {

@@ -4,13 +4,13 @@ using System.Globalization;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Authentication;
-using MediaBrowser.Controller.Configuration;
-using MediaBrowser.Controller.Net;
-using MediaBrowser.Controller.QuickConnect;
-using MediaBrowser.Controller.Session;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Extensions;
+using Reefin.Controller.Authentication;
+using Reefin.Controller.Configuration;
+using Reefin.Controller.Net;
+using Reefin.Controller.QuickConnect;
+using Reefin.Controller.Session;
 using Reefin.Model.QuickConnect;
 
 namespace Reefin.Server.Core.QuickConnect

@@ -2,9 +2,9 @@
 
 using System;
 using System.IO;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Entities.Movies;
-using MediaBrowser.Controller.Library;
+using Reefin.Controller.Entities;
+using Reefin.Controller.Entities.Movies;
+using Reefin.Controller.Library;
 using Reefin.Model.Entities;
 
 namespace Reefin.Server.Core.Library.Resolvers.Movies

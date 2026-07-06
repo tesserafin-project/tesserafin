@@ -1,8 +1,8 @@
 using System;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
-using MediaBrowser.Controller.MediaEncoding;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller.MediaEncoding;
 using Reefin.Extensions;
 using Reefin.MediaEncoding.Keyframes;
 using Reefin.Naming.Common;

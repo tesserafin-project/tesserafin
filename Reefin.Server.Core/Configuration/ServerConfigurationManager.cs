@@ -1,10 +1,10 @@
 using System;
 using System.Globalization;
 using System.IO;
-using MediaBrowser.Controller;
-using MediaBrowser.Controller.Configuration;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Configuration;
+using Reefin.Controller;
+using Reefin.Controller.Configuration;
 using Reefin.Data.Events;
 using Reefin.Model.Configuration;
 using Reefin.Model.Serialization;

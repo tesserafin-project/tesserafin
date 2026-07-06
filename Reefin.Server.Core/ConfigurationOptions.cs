@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using static MediaBrowser.Controller.Extensions.ConfigurationExtensions;
+using static Reefin.Controller.Extensions.ConfigurationExtensions;
 
 namespace Reefin.Server.Core
 {

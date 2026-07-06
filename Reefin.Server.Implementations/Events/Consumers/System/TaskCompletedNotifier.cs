@@ -1,7 +1,7 @@
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.Events;
-using MediaBrowser.Controller.Session;
+using Reefin.Controller.Events;
+using Reefin.Controller.Session;
 using Reefin.Model.Session;
 using Reefin.Model.Tasks;
 

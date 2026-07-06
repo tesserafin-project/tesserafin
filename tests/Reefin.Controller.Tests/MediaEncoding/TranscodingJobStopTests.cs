@@ -1,7 +1,7 @@
 using System;
 using System.Diagnostics;
-using MediaBrowser.Controller.MediaEncoding;
 using Microsoft.Extensions.Logging.Abstractions;
+using Reefin.Controller.MediaEncoding;
 using Xunit;
 
 namespace Reefin.Controller.Tests.MediaEncoding;
