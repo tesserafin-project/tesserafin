@@ -20,6 +20,13 @@ namespace MediaBrowser.Controller.MediaEncoding
             _logger = logger;
         }
 
+        /// <summary>
+        /// Gets the most specific <see cref="FfmpegErrorCategory"/> found in stderr so far, or
+        /// <see cref="FfmpegErrorCategory.Unknown"/> if nothing has matched yet. Diagnostic only -
+        /// nothing currently acts on this.
+        /// </summary>
+        public FfmpegErrorCategory DetectedErrorCategory { get; private set; }
+
         public async Task StartStreamingLog(EncodingJobInfo state, StreamReader reader, Stream target)
         {
             try
@@ -31,6 +38,7 @@ namespace MediaBrowser.Controller.MediaEncoding
                     while (line is not null && reader.BaseStream.CanRead)
                     {
                         ParseLogLine(line, state);
+                        ClassifyLine(line);
 
                         var bytes = Encoding.UTF8.GetBytes(Environment.NewLine + line);
 
@@ -158,6 +166,18 @@ namespace MediaBrowser.Controller.MediaEncoding
             {
                 state.ReportTranscodingProgress(transcodingPosition, framerate, percent, bytesTranscoded, bitRate);
             }
+        }
+
+        private void ClassifyLine(string line)
+        {
+            var category = FfmpegErrorClassifier.Classify(line);
+            if (category == FfmpegErrorCategory.Unknown || category == DetectedErrorCategory)
+            {
+                return;
+            }
+
+            DetectedErrorCategory = category;
+            _logger.LogDebug("Ffmpeg diagnostic: possible {Category}", category);
         }
     }
 }
