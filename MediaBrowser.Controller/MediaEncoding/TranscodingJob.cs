@@ -57,9 +57,19 @@ public sealed class TranscodingJob : IDisposable
     public TranscodingJobType Type { get; set; }
 
     /// <summary>
-    /// Gets or sets the process.
+    /// Gets or sets the current attempt. A job survives across attempts; today there is always
+    /// exactly one, but this is the seam a future multi-attempt fallback would swap.
     /// </summary>
-    public Process? Process { get; set; }
+    public TranscodeAttempt? CurrentAttempt { get; set; }
+
+    /// <summary>
+    /// Gets or sets the process of the current attempt.
+    /// </summary>
+    public Process? Process
+    {
+        get => CurrentAttempt?.Process;
+        set => (CurrentAttempt ??= new TranscodeAttempt()).Process = value;
+    }
 
     /// <summary>
     /// Gets or sets the active request count.
@@ -77,14 +87,22 @@ public sealed class TranscodingJob : IDisposable
     public CancellationTokenSource? CancellationTokenSource { get; set; }
 
     /// <summary>
-    /// Gets or sets a value indicating whether has exited.
+    /// Gets or sets a value indicating whether the current attempt's process has exited.
     /// </summary>
-    public bool HasExited { get; set; }
+    public bool HasExited
+    {
+        get => CurrentAttempt?.HasExited ?? false;
+        set => (CurrentAttempt ??= new TranscodeAttempt()).HasExited = value;
+    }
 
     /// <summary>
-    /// Gets or sets exit code.
+    /// Gets or sets the current attempt's process exit code.
     /// </summary>
-    public int ExitCode { get; set; }
+    public int ExitCode
+    {
+        get => CurrentAttempt?.ExitCode ?? 0;
+        set => (CurrentAttempt ??= new TranscodeAttempt()).ExitCode = value;
+    }
 
     /// <summary>
     /// Gets or sets a value indicating whether is user paused.
@@ -236,7 +254,7 @@ public sealed class TranscodingJob : IDisposable
     }
 
     /// <summary>
-    /// Stops the transcoding job.
+    /// Stops the transcoding job: session-scoped throttling/cleanup, then the current attempt's process.
     /// </summary>
     public void Stop()
     {
@@ -245,37 +263,17 @@ public sealed class TranscodingJob : IDisposable
 #pragma warning disable CA1849 // Can't await in lock block
             TranscodingThrottler?.Stop().GetAwaiter().GetResult();
             TranscodingSegmentCleaner?.Stop();
-
-            var process = Process;
-
-            if (!HasExited)
-            {
-                try
-                {
-                    _logger.LogInformation("Stopping ffmpeg process with q command for {Path}", Path);
-
-                    process!.StandardInput.WriteLine("q");
-
-                    // Need to wait because killing is asynchronous.
-                    if (!process.WaitForExit(5000))
-                    {
-                        _logger.LogInformation("Killing FFmpeg process for {Path}", Path);
-                        process.Kill();
-                    }
-                }
-                catch (InvalidOperationException)
-                {
-                }
-            }
 #pragma warning restore CA1849
+
+            CurrentAttempt?.Stop(_logger, Path);
         }
     }
 
     /// <inheritdoc />
     public void Dispose()
     {
-        Process?.Dispose();
-        Process = null;
+        CurrentAttempt?.Dispose();
+        CurrentAttempt = null;
         _killTimer?.Dispose();
         _killTimer = null;
         CancellationTokenSource?.Dispose();
