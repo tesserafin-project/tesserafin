@@ -1,4 +1,4 @@
-using Emby.Server.Implementations.Library;
+using Reefin.Server.Core.Library;
 using Xunit;
 
 namespace Reefin.Server.Implementations.Tests.Library

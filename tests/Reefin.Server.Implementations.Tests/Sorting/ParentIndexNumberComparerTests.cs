@@ -1,8 +1,8 @@
 using System;
-using Emby.Server.Implementations.Sorting;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Sorting;
+using Reefin.Server.Core.Sorting;
 using Xunit;
 
 namespace Reefin.Server.Implementations.Tests.Sorting;

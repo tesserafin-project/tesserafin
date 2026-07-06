@@ -4,7 +4,6 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Emby.Server.Implementations.Data;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Dto;
@@ -14,6 +13,7 @@ using Microsoft.Extensions.Logging;
 using Reefin.Database.Implementations;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Database.Implementations.Enums;
+using Reefin.Server.Core.Data;
 
 namespace Reefin.Server.Migrations.Routines
 {

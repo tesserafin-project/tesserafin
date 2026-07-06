@@ -23,8 +23,8 @@ public class SessionManagerTests
     [InlineData(null, typeof(ArgumentNullException))]
     public async Task GetAuthorizationToken_Should_ThrowException(string? deviceId, Type exceptionType)
     {
-        await using var sessionManager = new Emby.Server.Implementations.Session.SessionManager(
-            NullLogger<Emby.Server.Implementations.Session.SessionManager>.Instance,
+        await using var sessionManager = new Reefin.Server.Core.Session.SessionManager(
+            NullLogger<Reefin.Server.Core.Session.SessionManager>.Instance,
             Mock.Of<IEventManager>(),
             Mock.Of<IUserDataManager>(),
             Mock.Of<IServerConfigurationManager>(),
@@ -50,8 +50,8 @@ public class SessionManagerTests
     [MemberData(nameof(AuthenticateNewSessionInternal_Exception_TestData))]
     public async Task AuthenticateNewSessionInternal_Should_ThrowException(AuthenticationRequest authenticationRequest, Type exceptionType)
     {
-        await using var sessionManager = new Emby.Server.Implementations.Session.SessionManager(
-            NullLogger<Emby.Server.Implementations.Session.SessionManager>.Instance,
+        await using var sessionManager = new Reefin.Server.Core.Session.SessionManager(
+            NullLogger<Reefin.Server.Core.Session.SessionManager>.Instance,
             Mock.Of<IEventManager>(),
             Mock.Of<IUserDataManager>(),
             Mock.Of<IServerConfigurationManager>(),

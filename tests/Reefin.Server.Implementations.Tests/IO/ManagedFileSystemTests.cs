@@ -4,8 +4,8 @@ using System.IO;
 using System.Runtime.InteropServices;
 using AutoFixture;
 using AutoFixture.AutoMoq;
-using Emby.Server.Implementations.IO;
 using Reefin.Extensions;
+using Reefin.Server.Core.IO;
 using Xunit;
 
 namespace Reefin.Server.Implementations.Tests.IO;

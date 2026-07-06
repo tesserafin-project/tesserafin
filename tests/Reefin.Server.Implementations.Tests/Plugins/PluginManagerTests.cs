@@ -4,8 +4,6 @@ using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
 using AutoFixture;
-using Emby.Server.Implementations.Library;
-using Emby.Server.Implementations.Plugins;
 using MediaBrowser.Model.Plugins;
 using MediaBrowser.Model.Updates;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -13,6 +11,8 @@ using Reefin.Common.Plugins;
 using Reefin.Extensions;
 using Reefin.Extensions.Json;
 using Reefin.Extensions.Json.Converters;
+using Reefin.Server.Core.Library;
+using Reefin.Server.Core.Plugins;
 using Xunit;
 
 namespace Reefin.Server.Implementations.Tests.Plugins

@@ -60,7 +60,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\src\Reefin.Drawing\Reefin.Drawing.csproj" />
-    <ProjectReference Include="..\Emby.Server.Implementations\Emby.Server.Implementations.csproj" />
+    <ProjectReference Include="..\Reefin.Server.Core\Reefin.Server.Core.csproj" />
     <ProjectReference Include="..\src\Reefin.Drawing.Skia\Reefin.Drawing.Skia.csproj" />
     <ProjectReference Include="..\src\Reefin.LiveTv\Reefin.LiveTv.csproj" />
     <ProjectReference Include="..\Reefin.Server.Implementations\Reefin.Server.Implementations.csproj" />

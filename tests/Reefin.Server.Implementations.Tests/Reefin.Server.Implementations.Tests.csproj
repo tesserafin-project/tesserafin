@@ -27,7 +27,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Emby.Server.Implementations\Emby.Server.Implementations.csproj" />
+    <ProjectReference Include="..\..\Reefin.Server.Core\Reefin.Server.Core.csproj" />
     <ProjectReference Include="..\..\Reefin.Server.Implementations\Reefin.Server.Implementations.csproj" />
     <ProjectReference Include="..\Reefin.Server.Integration.Tests\Reefin.Server.Integration.Tests.csproj" />
     <ProjectReference Include="..\..\src\Reefin.Database\Reefin.Database.Implementations\Reefin.Database.Implementations.csproj" />

@@ -1,4 +1,3 @@
-using Emby.Server.Implementations.Library.Resolvers.TV;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.TV;
@@ -10,6 +9,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using Reefin.Data.Enums;
 using Reefin.Naming.Common;
+using Reefin.Server.Core.Library.Resolvers.TV;
 using Xunit;
 
 namespace Reefin.Server.Implementations.Tests.Library
@@ -45,7 +45,7 @@ namespace Reefin.Server.Implementations.Tests.Library
             var series = new Series { Name = "Extras" };
 
             // Have to create a mock because of moq proxies not being castable to a concrete implementation
-            // https://github.com/jellyfin/jellyfin/blob/ab0cff8556403e123642dc9717ba778329554634/Emby.Server.Implementations/Library/Resolvers/BaseVideoResolver.cs#L48
+            // https://github.com/jellyfin/jellyfin/blob/ab0cff8556403e123642dc9717ba778329554634/Reefin.Server.Core/Library/Resolvers/BaseVideoResolver.cs#L48
             var episodeResolver = new EpisodeResolverMock(Mock.Of<ILogger<EpisodeResolver>>(), _namingOptions, Mock.Of<IDirectoryService>());
             var itemResolveArgs = new ItemResolveArgs(
                 Mock.Of<IServerApplicationPaths>(),

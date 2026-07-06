@@ -2,8 +2,8 @@ using System;
 using System.Buffers;
 using System.IO;
 using System.Text.Json;
-using Emby.Server.Implementations.HttpServer;
 using Microsoft.Extensions.Logging.Abstractions;
+using Reefin.Server.Core.HttpServer;
 using Xunit;
 
 namespace Reefin.Server.Implementations.Tests.HttpServer

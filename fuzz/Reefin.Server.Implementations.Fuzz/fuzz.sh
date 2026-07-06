@@ -2,9 +2,9 @@
 
 set -e
 
-dotnet build -c Release ../../Emby.Server.Implementations/Emby.Server.Implementations.csproj --output bin
-sharpfuzz bin/Emby.Server.Implementations.dll
-cp bin/Emby.Server.Implementations.dll .
+dotnet build -c Release ../../Reefin.Server.Core/Reefin.Server.Core.csproj --output bin
+sharpfuzz bin/Reefin.Server.Core.dll
+cp bin/Reefin.Server.Core.dll .
 
 dotnet build
 mkdir -p Findings

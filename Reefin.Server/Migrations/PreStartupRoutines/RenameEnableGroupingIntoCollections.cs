@@ -3,8 +3,8 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Xml.Linq;
-using Emby.Server.Implementations;
 using Microsoft.Extensions.Logging;
+using Reefin.Server.Core;
 
 namespace Reefin.Server.Migrations.PreStartupRoutines;
 

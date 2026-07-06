@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
-using Emby.Server.Implementations;
-using Emby.Server.Implementations.Session;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Authentication;
 using MediaBrowser.Controller.BaseItemManager;
@@ -24,6 +22,8 @@ using Reefin.Database.Implementations;
 using Reefin.Drawing;
 using Reefin.Drawing.Skia;
 using Reefin.LiveTv;
+using Reefin.Server.Core;
+using Reefin.Server.Core.Session;
 using Reefin.Server.Implementations.Activity;
 using Reefin.Server.Implementations.Devices;
 using Reefin.Server.Implementations.Events;

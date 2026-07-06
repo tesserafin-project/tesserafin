@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using Emby.Server.Implementations.Data;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Model.Configuration;
@@ -14,6 +13,7 @@ using Reefin.Database.Implementations;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Database.Implementations.Enums;
 using Reefin.Extensions.Json;
+using Reefin.Server.Core.Data;
 using Reefin.Server.Implementations.Users;
 using JsonSerializer = System.Text.Json.JsonSerializer;
 
@@ -106,7 +106,7 @@ public class MigrateUserDb : IMigrationRoutine
                     ? (UserPolicy?)_xmlSerializer.DeserializeFromFile(typeof(UserPolicy), policyPath) ?? new UserPolicy()
                     : new UserPolicy();
                 policy.AuthenticationProviderId = policy.AuthenticationProviderId?.Replace(
-                    "Emby.Server.Implementations.Library",
+                    "Reefin.Server.Core.Library",
                     "Reefin.Server.Implementations.Users",
                     StringComparison.Ordinal)
                     ?? typeof(DefaultAuthenticationProvider).FullName;

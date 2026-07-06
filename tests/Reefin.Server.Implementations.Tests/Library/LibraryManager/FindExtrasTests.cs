@@ -4,7 +4,6 @@ using System.IO;
 using System.Linq;
 using AutoFixture;
 using AutoFixture.AutoMoq;
-using Emby.Server.Implementations.Library.Resolvers.Audio;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
@@ -19,13 +18,14 @@ using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.IO;
 using Moq;
 using Reefin.Naming.Common;
+using Reefin.Server.Core.Library.Resolvers.Audio;
 using Xunit;
 
 namespace Reefin.Server.Implementations.Tests.Library.LibraryManager;
 
 public class FindExtrasTests
 {
-    private readonly Emby.Server.Implementations.Library.LibraryManager _libraryManager;
+    private readonly Reefin.Server.Core.Library.LibraryManager _libraryManager;
     private readonly Mock<IFileSystem> _fileSystemMock;
 
     public FindExtrasTests()
@@ -38,7 +38,7 @@ public class FindExtrasTests
         itemRepository.Setup(i => i.RetrieveItem(It.IsAny<Guid>())).Returns<BaseItem>(null);
         _fileSystemMock = fixture.Freeze<Mock<IFileSystem>>();
         _fileSystemMock.Setup(f => f.GetFileInfo(It.IsAny<string>())).Returns<string>(path => new FileSystemMetadata { FullName = path });
-        _libraryManager = fixture.Build<Emby.Server.Implementations.Library.LibraryManager>().Do(s => s.AddParts(
+        _libraryManager = fixture.Build<Reefin.Server.Core.Library.LibraryManager>().Do(s => s.AddParts(
                 fixture.Create<IEnumerable<IResolverIgnoreRule>>(),
                 new List<IItemResolver> { new AudioResolver(fixture.Create<NamingOptions>()) },
                 fixture.Create<IEnumerable<IIntroProvider>>(),

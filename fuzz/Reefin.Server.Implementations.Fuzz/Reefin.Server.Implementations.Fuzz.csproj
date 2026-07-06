@@ -6,8 +6,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Reference Include="Emby.Server.Implementations">
-      <HintPath>Emby.Server.Implementations.dll</HintPath>
+    <Reference Include="Reefin.Server.Core">
+      <HintPath>Reefin.Server.Core.dll</HintPath>
     </Reference>
   </ItemGroup>
 

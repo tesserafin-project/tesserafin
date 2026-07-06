@@ -1,6 +1,6 @@
 using System;
-using Emby.Server.Implementations.Cryptography;
 using MediaBrowser.Model.Cryptography;
+using Reefin.Server.Core.Cryptography;
 using Xunit;
 
 namespace Reefin.Server.Implementations.Tests.Cryptography;

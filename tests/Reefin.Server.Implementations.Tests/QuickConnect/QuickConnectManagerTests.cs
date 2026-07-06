@@ -3,13 +3,13 @@ using System.Linq;
 using System.Threading.Tasks;
 using AutoFixture;
 using AutoFixture.AutoMoq;
-using Emby.Server.Implementations.QuickConnect;
 using MediaBrowser.Controller.Authentication;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Net;
 using MediaBrowser.Model.Configuration;
 using Moq;
 using Reefin.Common.Extensions;
+using Reefin.Server.Core.QuickConnect;
 using Xunit;
 
 namespace Reefin.Server.Implementations.Tests.QuickConnect

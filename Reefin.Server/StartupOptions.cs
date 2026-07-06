@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using CommandLine;
-using Emby.Server.Implementations;
 using Reefin.Server.Configuration;
+using Reefin.Server.Core;
 using static MediaBrowser.Controller.Extensions.ConfigurationExtensions;
 
 namespace Reefin.Server

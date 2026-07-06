@@ -1,4 +1,3 @@
-using Emby.Server.Implementations.Library.Resolvers.TV;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Model.Configuration;
@@ -8,6 +7,7 @@ using MediaBrowser.Model.IO;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Reefin.Naming.Common;
+using Reefin.Server.Core.Library.Resolvers.TV;
 using Xunit;
 
 namespace Reefin.Server.Implementations.Tests.Library

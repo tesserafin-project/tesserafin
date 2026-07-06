@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
-using Emby.Server.Implementations.Data;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Library;
 using Microsoft.Data.Sqlite;
@@ -10,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Reefin.Database.Implementations;
 using Reefin.Database.Implementations.Entities.Security;
+using Reefin.Server.Core.Data;
 
 namespace Reefin.Server.Migrations.Routines
 {

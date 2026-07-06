@@ -21,7 +21,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Reefin.Drawing", "src\Reefi
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Reefin.Photos", "Reefin.Photos\Reefin.Photos.csproj", "{89AB4548-770D-41FD-A891-8DAFF44F452C}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Emby.Server.Implementations", "Emby.Server.Implementations\Emby.Server.Implementations.csproj", "{E383961B-9356-4D5D-8233-9A1079D03055}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Reefin.Server.Core", "Reefin.Server.Core\Reefin.Server.Core.csproj", "{E383961B-9356-4D5D-8233-9A1079D03055}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Reefin.Naming", "Reefin.Naming\Reefin.Naming.csproj", "{E5AF7B26-2239-4CE0-B477-0AA2018EDAA2}"
 EndProject

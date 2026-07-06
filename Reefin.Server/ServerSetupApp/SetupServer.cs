@@ -7,8 +7,6 @@ using System.Linq;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
-using Emby.Server.Implementations.Configuration;
-using Emby.Server.Implementations.Serialization;
 using MediaBrowser.Controller;
 using MediaBrowser.Model.System;
 using Microsoft.AspNetCore.Builder;
@@ -23,6 +21,8 @@ using Microsoft.Extensions.Primitives;
 using Reefin.Common.Configuration;
 using Reefin.Common.Net;
 using Reefin.Networking.Manager;
+using Reefin.Server.Core.Configuration;
+using Reefin.Server.Core.Serialization;
 using Reefin.Server.Extensions;
 using Serilog;
 using ILogger = Microsoft.Extensions.Logging.ILogger;
@@ -192,7 +192,7 @@ public sealed class SetupServer : IDisposable
                                         });
                                     });
 
-                                    var version = typeof(Emby.Server.Implementations.ApplicationHost).Assembly.GetName().Version!;
+                                    var version = typeof(Reefin.Server.Core.ApplicationHost).Assembly.GetName().Version!;
                                     app.Run(async (context) =>
                                     {
                                         context.Response.StatusCode = (int)HttpStatusCode.ServiceUnavailable;

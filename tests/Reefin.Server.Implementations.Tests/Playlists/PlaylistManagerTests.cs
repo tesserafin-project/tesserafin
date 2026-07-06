@@ -1,4 +1,4 @@
-using Emby.Server.Implementations.Playlists;
+using Reefin.Server.Core.Playlists;
 using Xunit;
 
 namespace Reefin.Server.Implementations.Tests.Playlists;

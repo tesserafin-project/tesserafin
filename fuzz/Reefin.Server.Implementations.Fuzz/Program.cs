@@ -1,13 +1,13 @@
 using System;
 using AutoFixture;
 using AutoFixture.AutoMoq;
-using Emby.Server.Implementations.Data;
-using Emby.Server.Implementations.Library;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Model.Entities;
 using Microsoft.Extensions.Configuration;
 using Moq;
+using Reefin.Server.Core.Data;
+using Reefin.Server.Core.Library;
 using SharpFuzz;
 
 namespace Reefin.Server.Implementations.Fuzz

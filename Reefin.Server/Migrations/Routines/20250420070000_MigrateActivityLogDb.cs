@@ -1,13 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using Emby.Server.Implementations.Data;
 using MediaBrowser.Controller;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Reefin.Database.Implementations;
 using Reefin.Database.Implementations.Entities;
+using Reefin.Server.Core.Data;
 
 namespace Reefin.Server.Migrations.Routines
 {

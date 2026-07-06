@@ -1,12 +1,12 @@
 using System;
 using System.Collections.Generic;
-using Emby.Server.Implementations.SyncPlay;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Session;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Reefin.Database.Implementations.Entities;
+using Reefin.Server.Core.SyncPlay;
 using Xunit;
 
 namespace Reefin.Server.Implementations.Tests.SyncPlay;
@@ -15,7 +15,7 @@ public class GroupTests
 {
     public GroupTests()
     {
-        var mockLogger = new Mock<ILogger<Emby.Server.Implementations.SyncPlay.Group>>();
+        var mockLogger = new Mock<ILogger<Reefin.Server.Core.SyncPlay.Group>>();
         MockLoggerFactory = new Mock<ILoggerFactory>();
         MockLoggerFactory.Setup(x => x.CreateLogger(It.IsAny<string>())).Returns(mockLogger.Object);
 
@@ -41,7 +41,7 @@ public class GroupTests
     {
         MockLibraryManager.Setup(m => m.GetItemById(It.IsAny<Guid>())).Returns(MockItem.Object);
 
-        var group = new Emby.Server.Implementations.SyncPlay.Group(MockLoggerFactory.Object, MockUserManager.Object, MockSessionManager.Object, MockLibraryManager.Object);
+        var group = new Reefin.Server.Core.SyncPlay.Group(MockLoggerFactory.Object, MockUserManager.Object, MockSessionManager.Object, MockLibraryManager.Object);
         var itemId = Guid.NewGuid();
         var playlist = new List<Guid> { itemId };
         group.PlayQueue.Reset();
@@ -63,7 +63,7 @@ public class GroupTests
 
         Assert.Null(MockLibraryManager.Object.GetItemById(Guid.NewGuid()));
 
-        var group = new Emby.Server.Implementations.SyncPlay.Group(MockLoggerFactory.Object, MockUserManager.Object, MockSessionManager.Object, MockLibraryManager.Object);
+        var group = new Reefin.Server.Core.SyncPlay.Group(MockLoggerFactory.Object, MockUserManager.Object, MockSessionManager.Object, MockLibraryManager.Object);
         var itemId = Guid.NewGuid();
         var playlist = new List<Guid> { itemId };
         group.PlayQueue.Reset();

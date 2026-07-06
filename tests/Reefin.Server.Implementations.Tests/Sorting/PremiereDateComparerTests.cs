@@ -1,7 +1,7 @@
 using System;
-using Emby.Server.Implementations.Sorting;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Movies;
+using Reefin.Server.Core.Sorting;
 using Xunit;
 
 namespace Reefin.Server.Implementations.Tests.Sorting

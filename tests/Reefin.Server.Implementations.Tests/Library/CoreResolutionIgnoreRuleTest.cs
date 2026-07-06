@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using Emby.Server.Implementations.Library;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Model.Entities;
@@ -8,6 +7,7 @@ using MediaBrowser.Model.IO;
 using Moq;
 using Reefin.Naming.Common;
 using Reefin.Naming.Video;
+using Reefin.Server.Core.Library;
 using Xunit;
 
 namespace Reefin.Server.Implementations.Tests.Library;

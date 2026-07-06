@@ -4,8 +4,6 @@ using System.Linq;
 using AutoFixture;
 using AutoFixture.AutoMoq;
 using Castle.Components.DictionaryAdapter;
-using Emby.Server.Implementations.IO;
-using Emby.Server.Implementations.Library;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.LiveTv;
@@ -17,6 +15,8 @@ using MediaBrowser.Model.IO;
 using MediaBrowser.Model.MediaInfo;
 using Moq;
 using Reefin.Database.Implementations.Entities;
+using Reefin.Server.Core.IO;
+using Reefin.Server.Core.Library;
 using Xunit;
 
 namespace Reefin.Server.Implementations.Tests.Library
