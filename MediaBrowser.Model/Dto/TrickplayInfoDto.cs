@@ -1,5 +1,5 @@
 using System;
-using Jellyfin.Database.Implementations.Entities;
+using Reefin.Database.Implementations.Entities;
 
 namespace MediaBrowser.Model.Dto;
 

@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using Jellyfin.Database.Implementations;
+using Reefin.Database.Implementations;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Globalization;
 using MediaBrowser.Model.Tasks;
@@ -11,13 +11,13 @@ using Microsoft.Extensions.Logging;
 namespace Emby.Server.Implementations.ScheduledTasks.Tasks;
 
 /// <summary>
-/// Optimizes Jellyfin's database by issuing a VACUUM command.
+/// Optimizes Reefin's database by issuing a VACUUM command.
 /// </summary>
 public class OptimizeDatabaseTask : IScheduledTask, IConfigurableScheduledTask
 {
     private readonly ILogger<OptimizeDatabaseTask> _logger;
     private readonly ILocalizationManager _localization;
-    private readonly IJellyfinDatabaseProvider _jellyfinDatabaseProvider;
+    private readonly IReefinDatabaseProvider _reefinDatabaseProvider;
     private readonly ILibraryManager _libraryManager;
 
     /// <summary>
@@ -25,17 +25,17 @@ public class OptimizeDatabaseTask : IScheduledTask, IConfigurableScheduledTask
     /// </summary>
     /// <param name="logger">Instance of the <see cref="ILogger"/> interface.</param>
     /// <param name="localization">Instance of the <see cref="ILocalizationManager"/> interface.</param>
-    /// <param name="jellyfinDatabaseProvider">Instance of the JellyfinDatabaseProvider that can be used for provider specific operations.</param>
+    /// <param name="reefinDatabaseProvider">Instance of the ReefinDatabaseProvider that can be used for provider specific operations.</param>
     /// <param name="libraryManager">Instance of the <see cref="ILibraryManager"/> interface.</param>
     public OptimizeDatabaseTask(
         ILogger<OptimizeDatabaseTask> logger,
         ILocalizationManager localization,
-        IJellyfinDatabaseProvider jellyfinDatabaseProvider,
+        IReefinDatabaseProvider reefinDatabaseProvider,
         ILibraryManager libraryManager)
     {
         _logger = logger;
         _localization = localization;
-        _jellyfinDatabaseProvider = jellyfinDatabaseProvider;
+        _reefinDatabaseProvider = reefinDatabaseProvider;
         _libraryManager = libraryManager;
     }
 
@@ -82,15 +82,15 @@ public class OptimizeDatabaseTask : IScheduledTask, IConfigurableScheduledTask
             return;
         }
 
-        _logger.LogInformation("Optimizing and vacuuming jellyfin.db...");
+        _logger.LogInformation("Optimizing and vacuuming reefin.db...");
 
         try
         {
-            await _jellyfinDatabaseProvider.RunScheduledOptimisation(cancellationToken).ConfigureAwait(false);
+            await _reefinDatabaseProvider.RunScheduledOptimisation(cancellationToken).ConfigureAwait(false);
         }
         catch (Exception e)
         {
-            _logger.LogError(e, "Error while optimizing jellyfin.db");
+            _logger.LogError(e, "Error while optimizing reefin.db");
         }
     }
 }

@@ -4,8 +4,8 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using Jellyfin.Data.Enums;
-using Jellyfin.Database.Implementations.Entities;
+using Reefin.Data.Enums;
+using Reefin.Database.Implementations.Entities;
 using MediaBrowser.Model.Drawing;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Library;

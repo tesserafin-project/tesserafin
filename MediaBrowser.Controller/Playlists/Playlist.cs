@@ -9,10 +9,10 @@ using System.Linq;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
-using Jellyfin.Data;
-using Jellyfin.Data.Enums;
-using Jellyfin.Database.Implementations.Entities;
-using Jellyfin.Database.Implementations.Enums;
+using Reefin.Data;
+using Reefin.Data.Enums;
+using Reefin.Database.Implementations.Entities;
+using Reefin.Database.Implementations.Enums;
 using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
@@ -70,7 +70,7 @@ namespace MediaBrowser.Controller.Playlists
         public override bool SupportsInheritedParentImages => false;
 
         [JsonIgnore]
-        public override bool SupportsPlayedStatus => MediaType == Jellyfin.Data.Enums.MediaType.Video;
+        public override bool SupportsPlayedStatus => MediaType == Reefin.Data.Enums.MediaType.Video;
 
         [JsonIgnore]
         public override bool AlwaysScanInternalMetadataPath => true;

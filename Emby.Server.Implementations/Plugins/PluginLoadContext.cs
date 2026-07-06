@@ -4,7 +4,7 @@ using System.Runtime.Loader;
 namespace Emby.Server.Implementations.Plugins;
 
 /// <summary>
-/// A custom <see cref="AssemblyLoadContext"/> for loading Jellyfin plugins.
+/// A custom <see cref="AssemblyLoadContext"/> for loading Reefin plugins.
 /// </summary>
 public class PluginLoadContext : AssemblyLoadContext
 {

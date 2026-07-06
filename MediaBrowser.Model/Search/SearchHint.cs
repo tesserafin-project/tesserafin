@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using Jellyfin.Data.Enums;
+using Reefin.Data.Enums;
 
 namespace MediaBrowser.Model.Search
 {
@@ -17,7 +17,7 @@ namespace MediaBrowser.Model.Search
         {
             Name = string.Empty;
             MatchedTerm = string.Empty;
-            MediaType = Jellyfin.Data.Enums.MediaType.Unknown;
+            MediaType = Reefin.Data.Enums.MediaType.Unknown;
             Artists = Array.Empty<string>();
         }
 

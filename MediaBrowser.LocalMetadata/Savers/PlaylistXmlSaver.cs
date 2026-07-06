@@ -1,7 +1,7 @@
 using System.IO;
 using System.Threading.Tasks;
 using System.Xml;
-using Jellyfin.Data.Enums;
+using Reefin.Data.Enums;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;

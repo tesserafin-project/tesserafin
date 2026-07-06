@@ -1,7 +1,7 @@
 #pragma warning disable CS1591
 
 using System.Collections.Generic;
-using Jellyfin.Data.Enums;
+using Reefin.Data.Enums;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;

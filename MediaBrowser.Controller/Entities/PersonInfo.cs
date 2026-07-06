@@ -4,7 +4,7 @@
 
 using System;
 using System.Collections.Generic;
-using Jellyfin.Data.Enums;
+using Reefin.Data.Enums;
 using MediaBrowser.Model.Entities;
 
 namespace MediaBrowser.Controller.Entities

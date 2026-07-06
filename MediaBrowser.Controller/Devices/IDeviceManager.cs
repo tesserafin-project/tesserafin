@@ -1,10 +1,10 @@
 using System;
 using System.Threading.Tasks;
-using Jellyfin.Data.Dtos;
-using Jellyfin.Data.Events;
-using Jellyfin.Data.Queries;
-using Jellyfin.Database.Implementations.Entities;
-using Jellyfin.Database.Implementations.Entities.Security;
+using Reefin.Data.Dtos;
+using Reefin.Data.Events;
+using Reefin.Data.Queries;
+using Reefin.Database.Implementations.Entities;
+using Reefin.Database.Implementations.Entities.Security;
 using MediaBrowser.Model.Devices;
 using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Querying;

@@ -1,7 +1,7 @@
 #nullable disable
 using System;
 using System.Collections.Generic;
-using Jellyfin.Data.Events;
+using Reefin.Data.Events;
 
 namespace MediaBrowser.Model.Tasks
 {

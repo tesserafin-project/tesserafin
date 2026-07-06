@@ -1,4 +1,4 @@
-<h1 align="center">Jellyfin</h1>
+<h1 align="center">Reefin</h1>
 <h3 align="center">The Free Software Media System</h3>
 
 ---
@@ -39,11 +39,11 @@
 
 ---
 
-Jellyfin is a Free Software Media System that puts you in control of managing and streaming your media. It is an alternative to the proprietary Emby and Plex, to provide media from a dedicated server to end-user devices via multiple apps. Jellyfin is descended from Emby's 3.5.2 release and ported to the .NET platform to enable full cross-platform support.
+Reefin is a Free Software Media System that puts you in control of managing and streaming your media. It is an alternative to the proprietary Emby and Plex, to provide media from a dedicated server to end-user devices via multiple apps. Reefin is descended from Emby's 3.5.2 release and ported to the .NET platform to enable full cross-platform support.
 
 There are no strings attached, no premium licenses or features, and no hidden agendas: just a team that wants to build something better and work together to achieve it. We welcome anyone who is interested in joining us in our quest!
 
-For further details, please see [our documentation page](https://jellyfin.org/docs/). To receive the latest updates, get help with Jellyfin, and join the community, please visit [one of our communication channels](https://jellyfin.org/docs/general/getting-help). For more information about the project, please see our [about page](https://jellyfin.org/docs/general/about).
+For further details, please see [our documentation page](https://jellyfin.org/docs/). To receive the latest updates, get help with Reefin, and join the community, please visit [one of our communication channels](https://jellyfin.org/docs/general/getting-help). For more information about the project, please see our [about page](https://jellyfin.org/docs/general/about).
 
 <strong>Want to get started?</strong><br/>
 Check out our <a href="https://jellyfin.org/downloads">downloads page</a> or our <a href="https://jellyfin.org/docs/general/installation/">installation guide</a>, then see our <a href="https://jellyfin.org/docs/general/quick-start">quick start guide</a>. You can also <a href="https://jellyfin.org/docs/general/installation/source">build from source</a>.<br/>
@@ -57,8 +57,8 @@ Check out our <a href="https://jellyfin.org/contribute">contributing choose-your
 <strong>New idea or improvement?</strong><br/>
 Check out our <a href="https://features.jellyfin.org/?view=most-wanted">feature request hub</a>.<br/>
 
-<strong>Don't see Jellyfin in your language?</strong><br/>
-Check out our <a href="https://translate.jellyfin.org">Weblate instance</a> to help translate Jellyfin and its subprojects.<br/>
+<strong>Don't see Reefin in your language?</strong><br/>
+Check out our <a href="https://translate.jellyfin.org">Weblate instance</a> to help translate Reefin and its subprojects.<br/>
 
 <a href="https://translate.jellyfin.org/engage/jellyfin/?utm_source=widget">
 <img src="https://translate.jellyfin.org/widgets/jellyfin/-/jellyfin-web/multi-auto.svg" alt="Detailed Translation Status"/>
@@ -66,9 +66,9 @@ Check out our <a href="https://translate.jellyfin.org">Weblate instance</a> to h
 
 ---
 
-## Jellyfin Server
+## Reefin Server
 
-This repository contains the code for Jellyfin's backend server. Note that this is only one of many projects under the Jellyfin GitHub [organization](https://github.com/jellyfin/) on GitHub. If you want to contribute, you can start by checking out our [documentation](https://jellyfin.org/docs/general/contributing/index.html) to see what to work on.
+This repository contains the code for Reefin's backend server. Note that this is only one of many projects under the Reefin GitHub [organization](https://github.com/jellyfin/) on GitHub. If you want to contribute, you can start by checking out our [documentation](https://jellyfin.org/docs/general/contributing/index.html) to see what to work on.
 
 ## Server Development
 
@@ -99,7 +99,7 @@ Note that it is recommended for development to [host the web client separately](
 There are two options to get the files for the web client.
 
 1. Build them from source following the instructions on the [jellyfin-web repository](https://github.com/jellyfin/jellyfin-web)
-2. Get the pre-built files from an existing installation of the server. For example, with a Windows server installation the client files are located at `C:\Program Files\Jellyfin\Server\jellyfin-web`
+2. Get the pre-built files from an existing installation of the server. For example, with a Windows server installation the client files are located at `C:\Program Files\Reefin\Server\jellyfin-web`
 
 ### Running The Server
 
@@ -119,11 +119,11 @@ After the required extensions are installed, you can run the server by pressing 
 
 #### Running From the Command Line
 
-To run the server from the command line you can use the `dotnet run` command. The example below shows how to do this if you have cloned the repository into a directory named `jellyfin` (the default directory name) and should work on all operating systems.
+To run the server from the command line you can use the `dotnet run` command. The example below shows how to do this if you have cloned the repository into a directory named `reefin` (the default directory name) and should work on all operating systems.
 
 ```bash
-cd jellyfin                          # Move into the repository directory
-dotnet run --project Jellyfin.Server --webdir /absolute/path/to/jellyfin-web/dist # Run the server startup project
+cd reefin                          # Move into the repository directory
+dotnet run --project Reefin.Server --webdir /absolute/path/to/jellyfin-web/dist # Run the server startup project
 ```
 
 A second option is to build the project and then run the resulting executable file directly. When running the executable directly you can easily add command line options. Add the `--help` flag to list details on all the supported command line options.
@@ -132,10 +132,10 @@ A second option is to build the project and then run the resulting executable fi
 
 ```bash
 dotnet build                       # Build the project
-cd Jellyfin.Server/bin/Debug/net10.0 # Change into the build output directory
+cd Reefin.Server/bin/Debug/net10.0 # Change into the build output directory
 ```
 
-2. Execute the build output. On Linux, Mac, etc. use `./jellyfin` and on Windows use `jellyfin.exe`.
+2. Execute the build output. On Linux, Mac, etc. use `./reefin` and on Windows use `reefin.exe`.
 
 #### Accessing the Hosted Web Client
 
@@ -146,7 +146,7 @@ API documentation can be viewed at `http://localhost:8096/api-docs/swagger/index
 
 ### Running from GitHub Codespaces
 
-As Jellyfin will run on a container on a GitHub hosted server, JF needs to handle some things differently.
+As Reefin will run on a container on a GitHub hosted server, JF needs to handle some things differently.
 
 **NOTE:** Depending on the selected configuration (if you just click 'create codespace' it will create a default configuration one) it might take 20-30 seconds to load all extensions and prepare the environment while VS Code is already open. Just give it some time and wait until you see `Downloading .NET version(s) 7.0.15~x64 ...... Done!` in the output tab.
 
@@ -155,12 +155,12 @@ As Jellyfin will run on a container on a GitHub hosted server, JF needs to handl
 **NOTE:** When first opening the server instance with any WebUI, you will be sent to the login instead of the setup page. Refresh the login page once and you should be redirected to the Setup.
 
 There are two configurations for you to choose from.
-#### Default - Development Jellyfin Server
-This creates a container that has everything to run and debug the Jellyfin Media server but does not setup anything else. Each time you create a new container you have to run through the whole setup again. There is also no ffmpeg, webclient or media preloaded. Use the `.NET Launch (nowebclient)` launch config to start the server.
+#### Default - Development Reefin Server
+This creates a container that has everything to run and debug the Reefin Media server but does not setup anything else. Each time you create a new container you have to run through the whole setup again. There is also no ffmpeg, webclient or media preloaded. Use the `.NET Launch (nowebclient)` launch config to start the server.
 
 > Keep in mind that as this has no web client you have to connect to it via an external client. This can be just another codespace container running the WebUI. vuejs does not work from the get-go as it does not support the setup steps.
 
-#### Development Jellyfin Server ffmpeg
+#### Development Reefin Server ffmpeg
 this extends the default server with a default installation of ffmpeg6 though the means described here: https://jellyfin.org/docs/general/installation/linux#repository-manual
 If you want to install a specific ffmpeg version, follow the comments embedded in the `.devcontainer/Dev - Server Ffmpeg/install.ffmpeg.sh` file.
 
@@ -184,9 +184,9 @@ The following sections describe some more advanced scenarios for running the ser
 It is not necessary to host the frontend web client as part of the backend server. Hosting these two components separately may be useful for frontend developers who would prefer to host the client in a separate webpack development server for a tighter development loop. See the [jellyfin-web](https://github.com/jellyfin/jellyfin-web#getting-started) repo for instructions on how to do this.
 
 To instruct the server not to host the web content, there is a `nowebclient` configuration flag that must be set. This can be specified using the command line
-switch `--nowebclient` or the environment variable `JELLYFIN_NOWEBCONTENT=true`.
+switch `--nowebclient` or the environment variable `REEFIN_NOWEBCONTENT=true`.
 
-Since this is a common scenario, there is also a separate launch profile defined for Visual Studio called `Jellyfin.Server (nowebcontent)` that can be selected from the 'Start Debugging' dropdown in the main toolbar.
+Since this is a common scenario, there is also a separate launch profile defined for Visual Studio called `Reefin.Server (nowebcontent)` that can be selected from the 'Start Debugging' dropdown in the main toolbar.
 
 **NOTE:** The setup wizard cannot be run if the web client is hosted separately.
 

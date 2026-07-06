@@ -3,10 +3,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Jellyfin.Data.Enums;
-using Jellyfin.Database.Implementations;
-using Jellyfin.Database.Implementations.Entities;
-using Jellyfin.Extensions;
+using Reefin.Data.Enums;
+using Reefin.Database.Implementations;
+using Reefin.Database.Implementations.Entities;
+using Reefin.Extensions;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Entities;
@@ -50,7 +50,7 @@ public sealed class MovieSimilarItemsProvider : ILocalSimilarItemsProvider<Movie
 
     private static readonly string[] _scoredPersonTypes = [.. _personTypeWeights.Keys];
 
-    private readonly IDbContextFactory<JellyfinDbContext> _dbProvider;
+    private readonly IDbContextFactory<ReefinDbContext> _dbProvider;
     private readonly IItemQueryHelpers _queryHelpers;
     private readonly IServerConfigurationManager _serverConfigurationManager;
 
@@ -61,7 +61,7 @@ public sealed class MovieSimilarItemsProvider : ILocalSimilarItemsProvider<Movie
     /// <param name="queryHelpers">The shared query helpers.</param>
     /// <param name="serverConfigurationManager">The server configuration manager.</param>
     public MovieSimilarItemsProvider(
-        IDbContextFactory<JellyfinDbContext> dbProvider,
+        IDbContextFactory<ReefinDbContext> dbProvider,
         IItemQueryHelpers queryHelpers,
         IServerConfigurationManager serverConfigurationManager)
     {
@@ -228,7 +228,7 @@ public sealed class MovieSimilarItemsProvider : ILocalSimilarItemsProvider<Movie
         }
     }
 
-    private static async Task<Dictionary<Guid, Dictionary<Guid, int>>> ComputeBatchScoresAsync(List<Guid> sourceIds, JellyfinDbContext context, CancellationToken cancellationToken)
+    private static async Task<Dictionary<Guid, Dictionary<Guid, int>>> ComputeBatchScoresAsync(List<Guid> sourceIds, ReefinDbContext context, CancellationToken cancellationToken)
     {
         var result = new Dictionary<Guid, Dictionary<Guid, int>>();
         foreach (var id in sourceIds)

@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.RegularExpressions;
-using Jellyfin.Data.Enums;
+using Reefin.Data.Enums;
 using MediaBrowser.Model.Entities;
 using TMDbLib.Objects.General;
 
@@ -63,10 +63,10 @@ namespace MediaBrowser.Providers.Plugins.Tmdb
         }
 
         /// <summary>
-        /// Maps the TMDb provided roles for crew members to Jellyfin roles.
+        /// Maps the TMDb provided roles for crew members to Reefin roles.
         /// </summary>
-        /// <param name="crew">Crew member to map against the Jellyfin person types.</param>
-        /// <returns>The Jellyfin person type.</returns>
+        /// <param name="crew">Crew member to map against the Reefin person types.</param>
+        /// <returns>The Reefin person type.</returns>
         public static PersonKind MapCrewToPersonType(Crew crew)
         {
             if (string.Equals(crew.Department, "directing", StringComparison.OrdinalIgnoreCase)

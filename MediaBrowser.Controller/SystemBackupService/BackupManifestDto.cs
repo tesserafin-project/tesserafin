@@ -8,7 +8,7 @@ namespace MediaBrowser.Controller.SystemBackupService;
 public class BackupManifestDto
 {
     /// <summary>
-    /// Gets or sets the jellyfin version this backup was created with.
+    /// Gets or sets the reefin version this backup was created with.
     /// </summary>
     public required Version ServerVersion { get; set; }
 

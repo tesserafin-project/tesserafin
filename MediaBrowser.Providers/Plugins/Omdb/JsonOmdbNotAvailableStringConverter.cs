@@ -1,7 +1,7 @@
 using System;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Jellyfin.Extensions.Json;
+using Reefin.Extensions.Json;
 
 namespace MediaBrowser.Providers.Plugins.Omdb
 {

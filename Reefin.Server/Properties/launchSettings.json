@@ -1,0 +1,29 @@
+{
+  "profiles": {
+    "Reefin.Server": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "applicationUrl": "http://localhost:8096",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    },
+    "Reefin.Server (nowebclient)": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "commandLineArgs": "--nowebclient"
+    },
+    "Reefin.Server (API Docs)": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "launchUrl": "api-docs/swagger",
+      "applicationUrl": "http://localhost:8096",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "commandLineArgs": "--nowebclient"
+    }
+  }
+}

@@ -1,4 +1,4 @@
-using Jellyfin.Data.Events;
+using Reefin.Data.Events;
 using MediaBrowser.Controller.Session;
 
 namespace MediaBrowser.Controller.Events.Session

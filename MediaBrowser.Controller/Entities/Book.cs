@@ -5,7 +5,7 @@
 using System;
 using System.Linq;
 using System.Text.Json.Serialization;
-using Jellyfin.Data.Enums;
+using Reefin.Data.Enums;
 using MediaBrowser.Controller.Providers;
 
 namespace MediaBrowser.Controller.Entities

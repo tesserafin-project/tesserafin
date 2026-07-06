@@ -3,8 +3,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Jellyfin.Database.Implementations.Enums;
-using Jellyfin.Extensions;
+using Reefin.Database.Implementations.Enums;
+using Reefin.Extensions;
 using MediaBrowser.Model.Entities;
 
 namespace Emby.Server.Implementations.Library

@@ -1,6 +1,6 @@
 #nullable disable
 
-using Jellyfin.Database.Implementations.Entities;
+using Reefin.Database.Implementations.Entities;
 using MediaBrowser.Controller.Library;
 
 namespace MediaBrowser.Controller.Sorting

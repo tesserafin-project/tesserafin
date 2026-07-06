@@ -44,15 +44,15 @@ namespace MediaBrowser.Providers.Plugins.StudioImages
         public override string Name => "Studio Images";
 
         /// <inheritdoc/>
-        public override string Description => "Get artwork for studios from any Jellyfin-compatible repository.";
+        public override string Description => "Get artwork for studios from any Reefin-compatible repository.";
 
         // TODO remove when plugin removed from server.
 
         /// <inheritdoc/>
-        public override string ConfigurationFileName => "Jellyfin.Plugin.StudioImages.xml";
+        public override string ConfigurationFileName => "Reefin.Plugin.StudioImages.xml";
 
         /// <inheritdoc/>
-        public string ImageResourceName => GetType().Namespace + ".jellyfin-plugin-studioimages.svg";
+        public string ImageResourceName => GetType().Namespace + ".reefin-plugin-studioimages.svg";
 
         /// <inheritdoc/>
         public IEnumerable<PluginPageInfo> GetPages()

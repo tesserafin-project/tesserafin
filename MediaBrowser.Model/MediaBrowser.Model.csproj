@@ -6,8 +6,8 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <Authors>Jellyfin Contributors</Authors>
-    <PackageId>Jellyfin.Model</PackageId>
+    <Authors>Reefin Contributors</Authors>
+    <PackageId>Reefin.Model</PackageId>
     <VersionPrefix>12.0.0</VersionPrefix>
     <RepositoryUrl>https://github.com/jellyfin/jellyfin</RepositoryUrl>
     <PackageLicenseExpression>GPL-3.0-only</PackageLicenseExpression>
@@ -63,8 +63,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../Jellyfin.Data/Jellyfin.Data.csproj" />
-    <ProjectReference Include="../src/Jellyfin.Extensions/Jellyfin.Extensions.csproj" />
+    <ProjectReference Include="../Reefin.Data/Reefin.Data.csproj" />
+    <ProjectReference Include="../src/Reefin.Extensions/Reefin.Extensions.csproj" />
   </ItemGroup>
 
 </Project>

@@ -20,13 +20,13 @@ fi
 
 shared_version_file="./SharedVersion.cs"
 # csproj files for nuget packages
-jellyfin_subprojects=(
+reefin_subprojects=(
   MediaBrowser.Common/MediaBrowser.Common.csproj
-  Jellyfin.Data/Jellyfin.Data.csproj
+  Reefin.Data/Reefin.Data.csproj
   MediaBrowser.Controller/MediaBrowser.Controller.csproj
   MediaBrowser.Model/MediaBrowser.Model.csproj
   Emby.Naming/Emby.Naming.csproj
-  src/Jellyfin.Extensions/Jellyfin.Extensions.csproj
+  src/Reefin.Extensions/Reefin.Extensions.csproj
 )
 issue_template_file="./.github/ISSUE_TEMPLATE/issue report.yml"
 
@@ -43,7 +43,7 @@ echo old assembly version: $old_version
 sed -i "s|${old_version}|${new_version_sed}|g" ${shared_version_file}
 
 # update nuget package version
-for subproject in ${jellyfin_subprojects[@]}; do
+for subproject in ${reefin_subprojects[@]}; do
     echo ${subproject}
     # Parse the version from the *.csproj file
     old_version="$(

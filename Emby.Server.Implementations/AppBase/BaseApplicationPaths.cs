@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using Jellyfin.Extensions;
+using Reefin.Extensions;
 using MediaBrowser.Common.Configuration;
 
 namespace Emby.Server.Implementations.AppBase
@@ -73,7 +73,7 @@ namespace Emby.Server.Implementations.AppBase
         public string CachePath { get; set; }
 
         /// <inheritdoc/>
-        public string TempDirectory => Path.Join(Path.GetTempPath(), "jellyfin");
+        public string TempDirectory => Path.Join(Path.GetTempPath(), "reefin");
 
         /// <inheritdoc />
         public string TrickplayPath => Path.Combine(DataPath, "trickplay");
@@ -98,7 +98,7 @@ namespace Emby.Server.Implementations.AppBase
         {
             Directory.CreateDirectory(path);
 
-            CheckOrCreateMarker(path, $".jellyfin-{markerName}", recursive);
+            CheckOrCreateMarker(path, $".reefin-{markerName}", recursive);
         }
 
         /// <summary>
@@ -115,7 +115,7 @@ namespace Emby.Server.Implementations.AppBase
                 File.WriteAllText(
                     tagPath,
                     "Signature: 8a477f597d28d172789f06886806bc55\n"
-                    + "# This file is a cache directory tag created by Jellyfin.\n"
+                    + "# This file is a cache directory tag created by Reefin.\n"
                     + "# For information about cache directory tags, see:\n"
                     + "#\thttps://bford.info/cachedir/\n");
             }
@@ -123,7 +123,7 @@ namespace Emby.Server.Implementations.AppBase
 
         private IEnumerable<string> GetMarkers(string path, bool recursive = false)
         {
-            return Directory.EnumerateFiles(path, ".jellyfin-*", recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly);
+            return Directory.EnumerateFiles(path, ".reefin-*", recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly);
         }
 
         private void CheckOrCreateMarker(string path, string markerName, bool recursive = false)

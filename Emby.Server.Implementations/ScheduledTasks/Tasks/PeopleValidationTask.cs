@@ -4,9 +4,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Jellyfin.Data.Enums;
-using Jellyfin.Database.Implementations;
-using Jellyfin.Database.Implementations.Entities;
+using Reefin.Data.Enums;
+using Reefin.Database.Implementations;
+using Reefin.Database.Implementations.Entities;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Persistence;
@@ -26,7 +26,7 @@ public class PeopleValidationTask : IScheduledTask, IConfigurableScheduledTask
 {
     private readonly ILibraryManager _libraryManager;
     private readonly ILocalizationManager _localization;
-    private readonly IDbContextFactory<JellyfinDbContext> _dbContextFactory;
+    private readonly IDbContextFactory<ReefinDbContext> _dbContextFactory;
     private readonly IFileSystem _fileSystem;
     private readonly ILogger<PeopleValidationTask> _logger;
     private readonly IItemTypeLookup _itemTypeLookup;
@@ -43,7 +43,7 @@ public class PeopleValidationTask : IScheduledTask, IConfigurableScheduledTask
     public PeopleValidationTask(
         ILibraryManager libraryManager,
         ILocalizationManager localization,
-        IDbContextFactory<JellyfinDbContext> dbContextFactory,
+        IDbContextFactory<ReefinDbContext> dbContextFactory,
         IFileSystem fileSystem,
         ILogger<PeopleValidationTask> logger,
         IItemTypeLookup itemTypeLookup)

@@ -2,7 +2,7 @@
 
 using System;
 using System.Linq;
-using Jellyfin.Extensions;
+using Reefin.Extensions;
 
 namespace MediaBrowser.Controller.Entities
 {

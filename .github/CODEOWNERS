@@ -2,10 +2,10 @@
 bump_version                                            @joshuaboniface
 .github/ISSUE_TEMPLATE                                  @joshuaboniface
 MediaBrowser.Common/MediaBrowser.Common.csproj          @joshuaboniface
-Jellyfin.Data/Jellyfin.Data.csproj                      @joshuaboniface
+Reefin.Data/Reefin.Data.csproj                      @joshuaboniface
 MediaBrowser.Controller/MediaBrowser.Controller.csproj  @joshuaboniface
 MediaBrowser.Model/MediaBrowser.Model.csproj            @joshuaboniface
 Emby.Naming/Emby.Naming.csproj                          @joshuaboniface
-src/Jellyfin.Extensions/Jellyfin.Extensions.csproj      @joshuaboniface
+src/Reefin.Extensions/Reefin.Extensions.csproj      @joshuaboniface
 # Core must approve all changes within the repo config
-.github/                                                @jellyfin/core
+.github/                                                @reefin/core

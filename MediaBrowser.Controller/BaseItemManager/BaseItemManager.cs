@@ -1,5 +1,5 @@
 using System;
-using Jellyfin.Extensions;
+using Reefin.Extensions;
 using MediaBrowser.Controller.Channels;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Entities;

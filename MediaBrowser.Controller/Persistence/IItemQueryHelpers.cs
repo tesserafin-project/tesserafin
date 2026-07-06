@@ -1,7 +1,7 @@
 using System;
 using System.Linq;
-using Jellyfin.Database.Implementations;
-using Jellyfin.Database.Implementations.Entities;
+using Reefin.Database.Implementations;
+using Reefin.Database.Implementations.Entities;
 using MediaBrowser.Controller.Entities;
 
 namespace MediaBrowser.Controller.Persistence;
@@ -21,7 +21,7 @@ public interface IItemQueryHelpers
     /// <returns>The filtered queryable.</returns>
     IQueryable<BaseItemEntity> TranslateQuery(
         IQueryable<BaseItemEntity> baseQuery,
-        JellyfinDbContext context,
+        ReefinDbContext context,
         InternalItemsQuery filter);
 
     /// <summary>
@@ -30,7 +30,7 @@ public interface IItemQueryHelpers
     /// <param name="context">The database context.</param>
     /// <param name="filter">The query filter.</param>
     /// <returns>The prepared queryable.</returns>
-    IQueryable<BaseItemEntity> PrepareItemQuery(JellyfinDbContext context, InternalItemsQuery filter);
+    IQueryable<BaseItemEntity> PrepareItemQuery(ReefinDbContext context, InternalItemsQuery filter);
 
     /// <summary>
     /// Applies user access filtering (library access, parental controls, tags) to a query.
@@ -40,7 +40,7 @@ public interface IItemQueryHelpers
     /// <param name="filter">The query filter containing access settings.</param>
     /// <returns>The access-filtered queryable.</returns>
     IQueryable<BaseItemEntity> ApplyAccessFiltering(
-        JellyfinDbContext context,
+        ReefinDbContext context,
         IQueryable<BaseItemEntity> baseQuery,
         InternalItemsQuery filter);
 
@@ -64,7 +64,7 @@ public interface IItemQueryHelpers
     IQueryable<BaseItemEntity> ApplyOrder(
         IQueryable<BaseItemEntity> query,
         InternalItemsQuery filter,
-        JellyfinDbContext context);
+        ReefinDbContext context);
 
     /// <summary>
     /// Builds a query for descendants of an ancestor with user access filtering applied.
@@ -74,7 +74,7 @@ public interface IItemQueryHelpers
     /// <param name="ancestorId">The ancestor item ID.</param>
     /// <returns>The filtered descendant queryable.</returns>
     IQueryable<BaseItemEntity> BuildAccessFilteredDescendantsQuery(
-        JellyfinDbContext context,
+        ReefinDbContext context,
         InternalItemsQuery filter,
         Guid ancestorId);
 
@@ -87,7 +87,7 @@ public interface IItemQueryHelpers
     /// <param name="user">The user for access filtering and played status.</param>
     /// <returns>An <see cref="IQueryable{Guid}"/> of fully-played folder IDs.</returns>
     IQueryable<Guid> GetFullyPlayedFolderIdsQuery(
-        JellyfinDbContext context,
+        ReefinDbContext context,
         IQueryable<Guid> folderIds,
         User user);
 

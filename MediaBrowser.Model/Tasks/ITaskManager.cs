@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using Jellyfin.Data.Events;
+using Reefin.Data.Events;
 
 namespace MediaBrowser.Model.Tasks
 {

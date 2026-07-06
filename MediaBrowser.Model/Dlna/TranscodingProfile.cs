@@ -1,7 +1,7 @@
 using System;
 using System.ComponentModel;
 using System.Xml.Serialization;
-using Jellyfin.Data.Enums;
+using Reefin.Data.Enums;
 
 namespace MediaBrowser.Model.Dlna;
 

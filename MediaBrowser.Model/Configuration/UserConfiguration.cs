@@ -1,7 +1,7 @@
 #pragma warning disable CS1591
 
 using System;
-using Jellyfin.Database.Implementations.Enums;
+using Reefin.Database.Implementations.Enums;
 
 namespace MediaBrowser.Model.Configuration
 {

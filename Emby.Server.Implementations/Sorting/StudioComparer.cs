@@ -2,8 +2,8 @@
 
 using System;
 using System.Globalization;
-using Jellyfin.Data.Enums;
-using Jellyfin.Extensions;
+using Reefin.Data.Enums;
+using Reefin.Extensions;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Sorting;
 

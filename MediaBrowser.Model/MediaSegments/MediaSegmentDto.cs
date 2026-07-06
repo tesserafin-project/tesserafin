@@ -1,6 +1,6 @@
 using System;
 using System.ComponentModel;
-using Jellyfin.Database.Implementations.Enums;
+using Reefin.Database.Implementations.Enums;
 
 namespace MediaBrowser.Model.MediaSegments;
 

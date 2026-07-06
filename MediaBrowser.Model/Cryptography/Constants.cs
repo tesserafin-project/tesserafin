@@ -1,7 +1,7 @@
 namespace MediaBrowser.Model.Cryptography
 {
     /// <summary>
-    /// Class containing global constants for Jellyfin Cryptography.
+    /// Class containing global constants for Reefin Cryptography.
     /// </summary>
     public static class Constants
     {

@@ -67,7 +67,7 @@ public class PlaylistMetadataService : MetadataService<Playlist, ItemLookupInfo>
         {
             targetItem.PlaylistMediaType = sourceItem.PlaylistMediaType;
 
-            // Only merge LinkedChildren from metadata for external playlists (not managed by Jellyfin).
+            // Only merge LinkedChildren from metadata for external playlists (not managed by Reefin).
             // For internal playlists, the database LinkedChildren table is the source of truth.
             var targetPath = targetItem.Path;
             if (!string.IsNullOrEmpty(targetPath)

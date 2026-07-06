@@ -1,6 +1,6 @@
 using System;
 using System.Diagnostics.CodeAnalysis;
-using Jellyfin.Database.Implementations.Entities;
+using Reefin.Database.Implementations.Entities;
 
 namespace MediaBrowser.Controller.Net
 {

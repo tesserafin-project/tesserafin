@@ -2,7 +2,7 @@ using System;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using Emby.Naming.Common;
-using Jellyfin.Extensions;
+using Reefin.Extensions;
 
 namespace Emby.Naming.Video
 {

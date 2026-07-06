@@ -6,8 +6,8 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <Authors>Jellyfin Contributors</Authors>
-    <PackageId>Jellyfin.Controller</PackageId>
+    <Authors>Reefin Contributors</Authors>
+    <PackageId>Reefin.Controller</PackageId>
     <VersionPrefix>12.0.0</VersionPrefix>
     <RepositoryUrl>https://github.com/jellyfin/jellyfin</RepositoryUrl>
     <PackageLicenseExpression>GPL-3.0-only</PackageLicenseExpression>
@@ -26,7 +26,7 @@
     <ProjectReference Include="../Emby.Naming/Emby.Naming.csproj" />
     <ProjectReference Include="../MediaBrowser.Model/MediaBrowser.Model.csproj" />
     <ProjectReference Include="../MediaBrowser.Common/MediaBrowser.Common.csproj" />
-    <ProjectReference Include="../src/Jellyfin.MediaEncoding.Keyframes/Jellyfin.MediaEncoding.Keyframes.csproj" />
+    <ProjectReference Include="../src/Reefin.MediaEncoding.Keyframes/Reefin.MediaEncoding.Keyframes.csproj" />
   </ItemGroup>
 
   <ItemGroup>

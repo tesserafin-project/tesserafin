@@ -8,9 +8,9 @@ using System.Linq;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
-using Jellyfin.Data.Enums;
-using Jellyfin.Database.Implementations.Entities;
-using Jellyfin.Extensions;
+using Reefin.Data.Enums;
+using Reefin.Database.Implementations.Entities;
+using Reefin.Extensions;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Controller.TV;
 using MediaBrowser.Model.Querying;
@@ -21,19 +21,19 @@ namespace MediaBrowser.Controller.Entities
     {
         private static readonly CollectionType?[] _viewTypesEligibleForGrouping =
         {
-            Jellyfin.Data.Enums.CollectionType.movies,
-            Jellyfin.Data.Enums.CollectionType.tvshows,
+            Reefin.Data.Enums.CollectionType.movies,
+            Reefin.Data.Enums.CollectionType.tvshows,
             null
         };
 
         private static readonly CollectionType?[] _originalFolderViewTypes =
         {
-            Jellyfin.Data.Enums.CollectionType.books,
-            Jellyfin.Data.Enums.CollectionType.musicvideos,
-            Jellyfin.Data.Enums.CollectionType.homevideos,
-            Jellyfin.Data.Enums.CollectionType.photos,
-            Jellyfin.Data.Enums.CollectionType.music,
-            Jellyfin.Data.Enums.CollectionType.boxsets
+            Reefin.Data.Enums.CollectionType.books,
+            Reefin.Data.Enums.CollectionType.musicvideos,
+            Reefin.Data.Enums.CollectionType.homevideos,
+            Reefin.Data.Enums.CollectionType.photos,
+            Reefin.Data.Enums.CollectionType.music,
+            Reefin.Data.Enums.CollectionType.boxsets
         };
 
         public static ITVSeriesManager TVSeriesManager { get; set; }
@@ -165,7 +165,7 @@ namespace MediaBrowser.Controller.Entities
                 return true;
             }
 
-            return collectionFolder.CollectionType == Jellyfin.Data.Enums.CollectionType.playlists;
+            return collectionFolder.CollectionType == Reefin.Data.Enums.CollectionType.playlists;
         }
 
         public static bool IsEligibleForGrouping(Folder folder)

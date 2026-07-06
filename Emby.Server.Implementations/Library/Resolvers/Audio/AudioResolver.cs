@@ -10,7 +10,7 @@ using Emby.Naming.Audio;
 using Emby.Naming.AudioBook;
 using Emby.Naming.Common;
 using Emby.Naming.Video;
-using Jellyfin.Data.Enums;
+using Reefin.Data.Enums;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;

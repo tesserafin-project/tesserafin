@@ -5,8 +5,8 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Jellyfin.Data.Enums;
-using Jellyfin.Database.Implementations;
+using Reefin.Data.Enums;
+using Reefin.Database.Implementations;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.IO;
 using MediaBrowser.Controller.Library;
@@ -20,13 +20,13 @@ public class CleanDatabaseScheduledTask : ILibraryPostScanTask
 {
     private readonly ILibraryManager _libraryManager;
     private readonly ILogger<CleanDatabaseScheduledTask> _logger;
-    private readonly IDbContextFactory<JellyfinDbContext> _dbProvider;
+    private readonly IDbContextFactory<ReefinDbContext> _dbProvider;
     private readonly IPathManager _pathManager;
 
     public CleanDatabaseScheduledTask(
         ILibraryManager libraryManager,
         ILogger<CleanDatabaseScheduledTask> logger,
-        IDbContextFactory<JellyfinDbContext> dbProvider,
+        IDbContextFactory<ReefinDbContext> dbProvider,
         IPathManager pathManager)
     {
         _libraryManager = libraryManager;

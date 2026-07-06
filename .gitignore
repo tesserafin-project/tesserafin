@@ -246,7 +246,7 @@ debian/.debhelper/
 debian/*.debhelper
 debian/debhelper-build-stamp
 debian/files
-debian/jellyfin.substvars
+debian/reefin.substvars
 debian/jellyfin/
 # Don't ignore the debian/bin folder
 !debian/bin/
@@ -256,7 +256,7 @@ deployment/**/pkg-dist/
 deployment/**/pkg-dist-tmp/
 deployment/collect-dist/
 
-jellyfin_version.ini
+reefin_version.ini
 
 ci/
 

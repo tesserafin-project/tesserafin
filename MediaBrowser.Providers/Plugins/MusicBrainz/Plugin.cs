@@ -38,7 +38,7 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages, IHasEmbedde
         Instance = this;
         _logger = logger;
 
-        // TODO: Change this to "JellyfinMusicBrainzPlugin" once we take it out of the server repo.
+        // TODO: Change this to "ReefinMusicBrainzPlugin" once we take it out of the server repo.
         Query.DefaultUserAgent.Add(new ProductInfoHeaderValue(applicationHost.Name.Replace(' ', '-'), applicationHost.ApplicationVersionString));
         Query.DefaultUserAgent.Add(new ProductInfoHeaderValue($"({applicationHost.ApplicationUserAgentAddress})"));
 
@@ -65,10 +65,10 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages, IHasEmbedde
 
     /// <inheritdoc />
     // TODO remove when plugin removed from server.
-    public override string ConfigurationFileName => "Jellyfin.Plugin.MusicBrainz.xml";
+    public override string ConfigurationFileName => "Reefin.Plugin.MusicBrainz.xml";
 
     /// <inheritdoc />
-    public string ImageResourceName => GetType().Namespace + ".jellyfin-plugin-musicbrainz.svg";
+    public string ImageResourceName => GetType().Namespace + ".reefin-plugin-musicbrainz.svg";
 
     /// <summary>
     /// Gets the current MusicBrainz query client.

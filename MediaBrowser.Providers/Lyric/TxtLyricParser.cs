@@ -1,6 +1,6 @@
 using System;
 using System.IO;
-using Jellyfin.Extensions;
+using Reefin.Extensions;
 using MediaBrowser.Controller.Lyrics;
 using MediaBrowser.Controller.Resolvers;
 using MediaBrowser.Model.Lyrics;

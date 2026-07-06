@@ -12,10 +12,10 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using AsyncKeyedLock;
-using Jellyfin.Data.Enums;
-using Jellyfin.Extensions;
-using Jellyfin.Extensions.Json;
-using Jellyfin.Extensions.Json.Converters;
+using Reefin.Data.Enums;
+using Reefin.Extensions;
+using Reefin.Extensions.Json;
+using Reefin.Extensions.Json.Converters;
 using MediaBrowser.Common;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Extensions;
@@ -865,7 +865,7 @@ namespace MediaBrowser.MediaEncoding.Encoder
                 }
             }
 
-            // A new EncodingOptions instance must be used as to not disable HW acceleration for all of Jellyfin.
+            // A new EncodingOptions instance must be used as to not disable HW acceleration for all of Reefin.
             // Additionally, we must set a few fields without defaults to prevent null pointer exceptions.
             if (!allowHwAccel)
             {

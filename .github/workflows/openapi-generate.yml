@@ -33,12 +33,12 @@ jobs:
         dotnet-version: '10.0.x'
 
     - name: Create File
-      run: dotnet test tests/Jellyfin.Server.Integration.Tests/Jellyfin.Server.Integration.Tests.csproj -c Release --filter Jellyfin.Server.Integration.Tests.OpenApiSpecTests
+      run: dotnet test tests/Reefin.Server.Integration.Tests/Reefin.Server.Integration.Tests.csproj -c Release --filter Reefin.Server.Integration.Tests.OpenApiSpecTests
 
     - name: Upload Artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: ${{ inputs.artifact }}
-        path: tests/Jellyfin.Server.Integration.Tests/bin/Release/net10.0/openapi.json
+        path: tests/Reefin.Server.Integration.Tests/bin/Release/net10.0/openapi.json
         retention-days: 14
         if-no-files-found: error

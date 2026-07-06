@@ -4,7 +4,7 @@ using System.Globalization;
 using System.Linq;
 using System.Xml.Linq;
 using System.Xml.XPath;
-using Jellyfin.Data.Enums;
+using Reefin.Data.Enums;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Providers;
 
@@ -30,7 +30,7 @@ public static class ComicInfoReader
         var book = new Book();
         var hasFoundMetadata = false;
 
-        // this value is only used internally since Jellyfin has no manga flag
+        // this value is only used internally since Reefin has no manga flag
         var isManga = false;
 
         hasFoundMetadata |= ReadStringInto(xml, "ComicInfo/Title", title => book.Name = title);

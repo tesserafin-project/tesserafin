@@ -28,7 +28,7 @@ jobs:
 
       - name: Run DotNet CLI Tests
         run: >
-          dotnet test Jellyfin.sln
+          dotnet test Reefin.sln
           --configuration Release
           --collect:"XPlat Code Coverage"
           --settings tests/coverletArgs.runsettings

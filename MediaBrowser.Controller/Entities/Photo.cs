@@ -3,7 +3,7 @@
 #pragma warning disable CS1591
 
 using System.Text.Json.Serialization;
-using Jellyfin.Data.Enums;
+using Reefin.Data.Enums;
 using MediaBrowser.Model.Drawing;
 
 namespace MediaBrowser.Controller.Entities

@@ -1,4 +1,4 @@
-# Jellyfin fuzzing
+# Reefin fuzzing
 
 ## Setup
 
