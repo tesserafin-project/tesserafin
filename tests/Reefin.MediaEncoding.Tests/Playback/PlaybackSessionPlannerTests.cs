@@ -35,6 +35,7 @@ public class PlaybackSessionPlannerTests
         Assert.Equal(expected.PlayMethod, plan.PlayMethod);
         Assert.Equal(PlayMethod.DirectPlay, expected.PlayMethod);
         Assert.Equal(expected.TranscodeReasons, plan.TranscodeReasons);
+        Assert.NotNull(plan.StreamInfo);
         Assert.Equal(expected.Container, plan.StreamInfo.Container);
     }
 
@@ -52,6 +53,7 @@ public class PlaybackSessionPlannerTests
         Assert.Equal(PlayMethod.Transcode, expected.PlayMethod);
         Assert.Equal(expected.TranscodeReasons, plan.TranscodeReasons);
         Assert.Equal(TranscodeReason.AudioCodecNotSupported, plan.TranscodeReasons);
+        Assert.NotNull(plan.StreamInfo);
         Assert.Equal(expected.Container, plan.StreamInfo.Container);
     }
 

@@ -24,6 +24,17 @@ public interface IPlaybackSessionManager
     PlaybackSession? Patch(PlaybackSessionId id, PlaybackSessionRequest request);
 
     /// <summary>
+    /// Records a session whose plan was already decided elsewhere — e.g. a controller that
+    /// received an already-decided play method and codecs from the client — without invoking
+    /// <see cref="IPlaybackSessionPlanner"/>. Use <see cref="Create"/> instead when the plan
+    /// should be derived from <see cref="Reefin.Model.Dlna.MediaOptions"/>.
+    /// </summary>
+    /// <param name="kind">Whether this is an audio or video session.</param>
+    /// <param name="plan">The already-decided plan to record.</param>
+    /// <returns>The created session.</returns>
+    PlaybackSession Track(PlaybackMediaKind kind, PlaybackPlan plan);
+
+    /// <summary>
     /// Removes a session.
     /// </summary>
     /// <param name="id">The session to remove.</param>

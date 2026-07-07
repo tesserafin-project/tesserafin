@@ -2,6 +2,7 @@ using Moq;
 using Reefin.Controller.MediaEncoding;
 using Reefin.MediaEncoding.Playback;
 using Reefin.Model.Dlna;
+using Reefin.Model.Session;
 using Xunit;
 
 namespace Reefin.MediaEncoding.Tests.Playback;
@@ -16,7 +17,7 @@ public class PlaybackSessionManagerTests
     public void Create_ViablePlan_StoresAndReturnsSession()
     {
         var options = CreateOptions();
-        var plan = new PlaybackPlan(CreateStreamInfo());
+        var plan = CreatePlan();
         var manager = GetManager(planner => planner.Setup(p => p.PlanVideo(options)).Returns(plan));
 
         var session = manager.Create(new PlaybackSessionRequest(PlaybackMediaKind.Video, options));
@@ -42,8 +43,8 @@ public class PlaybackSessionManagerTests
     {
         var initialOptions = CreateOptions();
         var patchedOptions = CreateOptions();
-        var initialPlan = new PlaybackPlan(CreateStreamInfo());
-        var patchedPlan = new PlaybackPlan(CreateStreamInfo());
+        var initialPlan = CreatePlan();
+        var patchedPlan = new PlaybackPlan(PlayMethod.Transcode, TranscodeReason.AudioCodecNotSupported);
         var mockPlanner = new Mock<IPlaybackSessionPlanner>();
         mockPlanner.Setup(p => p.PlanVideo(initialOptions)).Returns(initialPlan);
         mockPlanner.Setup(p => p.PlanVideo(patchedOptions)).Returns(patchedPlan);
@@ -73,7 +74,7 @@ public class PlaybackSessionManagerTests
     public void Delete_ExistingSession_RemovesIt()
     {
         var options = CreateOptions();
-        var plan = new PlaybackPlan(CreateStreamInfo());
+        var plan = CreatePlan();
         var manager = GetManager(planner => planner.Setup(p => p.PlanVideo(options)).Returns(plan));
         var session = manager.Create(new PlaybackSessionRequest(PlaybackMediaKind.Video, options));
         Assert.NotNull(session);
@@ -92,6 +93,20 @@ public class PlaybackSessionManagerTests
         Assert.False(manager.Delete(PlaybackSessionId.NewId()));
     }
 
+    [Fact]
+    public void Track_StoresSessionWithoutCallingPlanner()
+    {
+        var manager = GetManager(_ => { });
+        var plan = new PlaybackPlan(PlayMethod.DirectStream, default);
+
+        var session = manager.Track(PlaybackMediaKind.Video, plan);
+
+        Assert.Equal(PlaybackMediaKind.Video, session.Kind);
+        Assert.Null(session.Request);
+        Assert.Same(plan, session.Plan);
+        Assert.Equal(session, manager.Get(session.Id));
+    }
+
     private static PlaybackSessionManager GetManager(System.Action<Mock<IPlaybackSessionPlanner>> setup)
     {
         var mockPlanner = new Mock<IPlaybackSessionPlanner>();
@@ -101,5 +116,5 @@ public class PlaybackSessionManagerTests
 
     private static MediaOptions CreateOptions() => new() { Profile = new DeviceProfile() };
 
-    private static StreamInfo CreateStreamInfo() => new() { DeviceProfile = new DeviceProfile() };
+    private static PlaybackPlan CreatePlan() => new(PlayMethod.DirectPlay, default);
 }

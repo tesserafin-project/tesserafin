@@ -29,7 +29,7 @@ public class PlaybackSessionManager : IPlaybackSessionManager
         }
 
         var now = DateTimeOffset.UtcNow;
-        var session = new PlaybackSession(PlaybackSessionId.NewId(), request, plan, now, now);
+        var session = new PlaybackSession(PlaybackSessionId.NewId(), request.Kind, request, plan, now, now);
         _sessions[session.Id] = session;
         return session;
     }
@@ -48,9 +48,18 @@ public class PlaybackSessionManager : IPlaybackSessionManager
             return null;
         }
 
-        var updated = existing with { Request = request, Plan = plan, UpdatedAt = DateTimeOffset.UtcNow };
+        var updated = existing with { Kind = request.Kind, Request = request, Plan = plan, UpdatedAt = DateTimeOffset.UtcNow };
         _sessions[id] = updated;
         return updated;
+    }
+
+    /// <inheritdoc/>
+    public PlaybackSession Track(PlaybackMediaKind kind, PlaybackPlan plan)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var session = new PlaybackSession(PlaybackSessionId.NewId(), kind, null, plan, now, now);
+        _sessions[session.Id] = session;
+        return session;
     }
 
     /// <inheritdoc/>

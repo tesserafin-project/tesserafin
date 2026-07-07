@@ -30,6 +30,7 @@ using Reefin.Model.Dlna;
 using Reefin.Model.Entities;
 using Reefin.Model.IO;
 using Reefin.Model.Net;
+using Reefin.Model.Session;
 
 namespace Reefin.Api.Controllers;
 
@@ -60,6 +61,7 @@ public class DynamicHlsController : BaseReefinApiController
     private readonly EncodingHelper _encodingHelper;
     private readonly IDynamicHlsPlaylistGenerator _dynamicHlsPlaylistGenerator;
     private readonly DynamicHlsHelper _dynamicHlsHelper;
+    private readonly IPlaybackSessionManager _playbackSessionManager;
     private readonly EncodingOptions _encodingOptions;
 
     /// <summary>
@@ -76,6 +78,7 @@ public class DynamicHlsController : BaseReefinApiController
     /// <param name="dynamicHlsHelper">Instance of <see cref="DynamicHlsHelper"/>.</param>
     /// <param name="encodingHelper">Instance of <see cref="EncodingHelper"/>.</param>
     /// <param name="dynamicHlsPlaylistGenerator">Instance of <see cref="IDynamicHlsPlaylistGenerator"/>.</param>
+    /// <param name="playbackSessionManager">Instance of the <see cref="IPlaybackSessionManager"/> interface.</param>
     public DynamicHlsController(
         ILibraryManager libraryManager,
         IUserManager userManager,
@@ -87,7 +90,8 @@ public class DynamicHlsController : BaseReefinApiController
         ILogger<DynamicHlsController> logger,
         DynamicHlsHelper dynamicHlsHelper,
         EncodingHelper encodingHelper,
-        IDynamicHlsPlaylistGenerator dynamicHlsPlaylistGenerator)
+        IDynamicHlsPlaylistGenerator dynamicHlsPlaylistGenerator,
+        IPlaybackSessionManager playbackSessionManager)
     {
         _libraryManager = libraryManager;
         _userManager = userManager;
@@ -100,6 +104,7 @@ public class DynamicHlsController : BaseReefinApiController
         _dynamicHlsHelper = dynamicHlsHelper;
         _encodingHelper = encodingHelper;
         _dynamicHlsPlaylistGenerator = dynamicHlsPlaylistGenerator;
+        _playbackSessionManager = playbackSessionManager;
 
         _encodingOptions = serverConfigurationManager.GetEncodingOptions();
     }
@@ -1403,6 +1408,15 @@ public class DynamicHlsController : BaseReefinApiController
         var mediaSourceId = state.BaseRequest.MediaSourceId;
         double fps = state.TargetFramerate ?? 0.0f;
         int segmentLength = state.SegmentLength * 1000;
+
+        // Track this session for diagnostics using the play method/reasons the client already
+        // decided (this controller does not itself plan direct-play-vs-transcode). Session end
+        // is not wired yet — the transcode job outlives this request and has no completion hook
+        // to key a Delete off (see plan doc, point 1 tracking).
+        var playMethod = EncodingHelper.IsCopyCodec(state.OutputVideoCodec) && EncodingHelper.IsCopyCodec(state.OutputAudioCodec)
+            ? PlayMethod.DirectStream
+            : PlayMethod.Transcode;
+        _playbackSessionManager.Track(PlaybackMediaKind.Video, new PlaybackPlan(playMethod, state.TranscodeReasons));
 
         // If video is transcoded and framerate is fractional (i.e. 23.976), we need to slightly adjust segment length
         if (!EncodingHelper.IsCopyCodec(state.OutputVideoCodec) && Math.Abs(fps - Math.Floor(fps + 0.001f)) > 0.001)

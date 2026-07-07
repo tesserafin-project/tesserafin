@@ -28,16 +28,11 @@ public interface IPlaybackSessionPlanner
 /// <summary>
 /// The result of a playback planning decision.
 /// </summary>
-/// <param name="StreamInfo">The underlying stream info produced by the planner.</param>
-public sealed record PlaybackPlan(StreamInfo StreamInfo)
-{
-    /// <summary>
-    /// Gets the chosen play method (direct play, direct stream, or transcode).
-    /// </summary>
-    public PlayMethod PlayMethod => StreamInfo.PlayMethod;
-
-    /// <summary>
-    /// Gets the reasons a transcode was required, if any.
-    /// </summary>
-    public TranscodeReason TranscodeReasons => StreamInfo.TranscodeReasons;
-}
+/// <param name="PlayMethod">The chosen play method (direct play, direct stream, or transcode).</param>
+/// <param name="TranscodeReasons">The reasons a transcode was required, if any.</param>
+/// <param name="StreamInfo">
+/// The stream info the decision was derived from, when planned by <see cref="IPlaybackSessionPlanner"/>.
+/// <c>null</c> when the plan instead records a decision made elsewhere (see
+/// <see cref="IPlaybackSessionManager.Track(PlaybackMediaKind, PlaybackPlan)"/>).
+/// </param>
+public sealed record PlaybackPlan(PlayMethod PlayMethod, TranscodeReason TranscodeReasons, StreamInfo? StreamInfo = null);

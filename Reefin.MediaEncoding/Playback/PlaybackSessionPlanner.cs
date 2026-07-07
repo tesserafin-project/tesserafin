@@ -26,7 +26,7 @@ public class PlaybackSessionPlanner : IPlaybackSessionPlanner
     {
         var streamBuilder = new StreamBuilder(_mediaEncoder, _logger);
         var streamInfo = streamBuilder.GetOptimalAudioStream(options);
-        return streamInfo is null ? null : new PlaybackPlan(streamInfo);
+        return streamInfo is null ? null : new PlaybackPlan(streamInfo.PlayMethod, streamInfo.TranscodeReasons, streamInfo);
     }
 
     /// <inheritdoc/>
@@ -34,6 +34,6 @@ public class PlaybackSessionPlanner : IPlaybackSessionPlanner
     {
         var streamBuilder = new StreamBuilder(_mediaEncoder, _logger);
         var streamInfo = streamBuilder.GetOptimalVideoStream(options);
-        return streamInfo is null ? null : new PlaybackPlan(streamInfo);
+        return streamInfo is null ? null : new PlaybackPlan(streamInfo.PlayMethod, streamInfo.TranscodeReasons, streamInfo);
     }
 }
