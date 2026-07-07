@@ -164,7 +164,53 @@ Leçon méthode (même famille que le bug de résolution ancêtre-namespace du p
 
 Les entités `BaseItem`/`Folder`/etc. sont des POCO sans DI. Toute méthode d'instance qui lit un static et qui est elle-même invoquée via une chaîne de dispatch virtuel très sollicitée (`IsVisible`, `IsPlayed`, `LoadChildren`→`Children`) a un rayon d'action imprévisible au moment de l'audit initial — seul un vrai comptage d'appelants de CHAQUE méthode intermédiaire de la chaîne le révèle, pas juste la méthode qui lit le static. Seules les méthodes "feuilles" appelées directement par du code service déjà muni de DI (cas de `FillUserDataDtoValues`, appelée par `UserDataManager`/`DtoService`) sont sûres à convertir sans threading profond. Il en reste peu parmi les statics restants — la plupart alimentent des méthodes de filtrage/tri/affichage appelées en boucle par les services de bibliothèque.
 
-Point 4 confirmé comme le "chantier pluriannuel" que le plan redoutait, au-delà de ce que l'audit de fichiers-lecteurs seul laissait penser. Décision à prendre avec l'utilisateur : continuer feuille par feuille (rendement décroissant) ou mettre en pause au profit d'une autre zone du plan.
+Point 4 confirmé comme le "chantier pluriannuel" que le plan redoutait, au-delà de ce que l'audit de fichiers-lecteurs seul laissait penser.
+
+## Carte complète point 4 (2026-07-07) — les 20 statics restants, un par un
+
+Demandé explicitement par l'utilisateur : vue exhaustive avant de reprendre, tracée ici pour reprise ultérieure même si aucun code n'en sort cette session. Liste **corrigée et complète** — `SetStaticProperties()` (`Reefin.Server.Core/ApplicationHost.cs`) assigne en réalité 20 statics, pas 16 : le premier audit avait raté `Folder.CollectionManager`, `Folder.LimitedConcurrencyLibraryScheduler`, `Episode.MediaEncoder`, `UserView.TVSeriesManager`, `Video.RecordingsManager`.
+
+Tentative de délégation à un agent Explore avec méthode corrigée (compter les appelants de la méthode contenante, tracer les chaînes virtuelles, détecter les classes à DI manuelle) — **agent coupé net par une limite de session/quota, output partiel inexploitable**. Carte ci-dessous faite manuellement à la place, avec la même méthode, profondeur variable selon les cas (notée par entrée).
+
+Méthode : pour chaque static, trouver le(s) site(s) de lecture, la méthode contenante, si elle est virtuelle (et si oui : combien d'overrides + combien d'appelants réels dans tout le repo), et si un appelant externe utilise un pattern d'injection manuelle (comme `IsPlayedComparer`) plutôt que DI par constructeur.
+
+### Tractable maintenant (petit, borné, pas de cascade virtuelle)
+
+- **`Video.RecordingsManager`** — 1 lecture, dans `IsActiveRecording()` (`protected override`, seule implémentation dans toute la hiérarchie, 0 appelant externe trouvé via `.IsActiveRecording(` — accès probablement uniquement interne via une propriété calculée). À vérifier en détail mais signal très faible.
+
+### Tractable avec effort modéré (une couche virtuelle, appelants bornés, plusieurs fichiers à toucher)
+
+- **`MediaSegmentManager`** — 2 lectures, toutes deux dans `GetVersionInfo` (`private`, 1 seul appelant interne : `GetMediaSources(bool)`, `public virtual`, **1 override** `LiveTvChannel`, **10 appelants** réels dans le repo). Même chaîne que `MediaSourceManager` ci-dessous — les deux pourraient être traités ensemble puisqu'ils partagent le même point de passage.
+- **`MediaSourceManager`** — 3 clusters distincts :
+  - `GetVersionInfo` (même chaîne que `MediaSegmentManager` ci-dessus, 1 override, 10 appelants).
+  - `GetMediaStreams()` (`public virtual`, **1 override** `LiveTvChannel`, **8 appelants**).
+  - `PathProtocol` (propriété, pas de paramètre possible — changement de forme requis ; **6 lecteurs externes**, tous dans `Reefin.Providers` — classes déjà construites par DI, coût d'ajout de dépendance faible par site, mais 6 sites + 2 internes).
+- **`ChannelManager`** — 3 clusters, statuts différents :
+  - `EnableMediaSourceDisplay` (propriété, changement de forme requis, **4 lecteurs externes** : `DtoService`×2, `BaseItemManager`×2 — petit).
+  - `CanDelete()` (`public virtual`, **16 overrides** dans toute la hiérarchie d'entités, mais seulement **4 appelants** réels — large mécaniquement mais peu profond : ajouter un paramètre inutilisé à 16 signatures d'override est fastidieux, pas risqué).
+  - Lectures dans `GetItemsInternal` (`Season.cs`, `Series.cs`, `Folder.cs`) — voir cluster `GetItemsInternal` ci-dessous, partagé avec `Folder.CollectionManager` et `Folder.UserViewManager`.
+- **Cluster `GetItemsInternal`** (partagé par `ChannelManager`, `Folder.CollectionManager` via `PostFilterAndSort`, `Folder.UserViewManager` via les overrides `UserView`/`UserRootFolder`) — `protected virtual QueryResult<BaseItem> GetItemsInternal(InternalItemsQuery)` sur `Folder`, **6 overrides** (`PlaylistsFolder`, `UserView`, `UserRootFolder`, `Series`, `Season`, `Channel`). Appelé en interne par `Folder.GetItems(query)` (**5 appelants externes réels**, pas la centaine redoutée) et `Folder.GetItemList(query)` (compte brut = 103, mais **probablement en grande partie des faux positifs** — collision de nom avec `ILibraryManager.GetItemList`, une méthode totalement différente sur une autre interface, jamais désambiguïsé faute de temps). **Avant tout code sur ce cluster : lever cette ambiguïté** (combien des 103 sont vraiment `Folder.GetItemList` vs `ILibraryManager.GetItemList`).
+- **`Episode.MediaEncoder`** — 1 lecture, dans `BeforeMetadataRefresh(bool)` (`public override`). **15 overrides** dans toute la hiérarchie, **17 appelants** (pipeline de refresh de métadonnées, utilisé par la plupart des types d'items) — même profil que `CanDelete` : large mécaniquement (15 fichiers), pas nécessairement risqué en profondeur, mais gros volume de fichiers touchés pour peu de bénéfice individuel.
+- **`Folder.LimitedConcurrencyLibraryScheduler`** — 1 lecture, dans `RunTasks<T>` (`private`, 2 appelants internes dans `Folder.cs`, lignes 762/810 — pipeline de scan de bibliothèque). Pas poussé plus loin : reste à vérifier si ces 2 sites sont eux-mêmes dans des méthodes à fort trafic ou seulement invoqués pendant un scan (probable, donc pas un chemin chaud).
+- **`CollectionFolder.ApplicationHost`** — 5 sites, 3 sous-groupes :
+  - `LoadLibraryOptions`/`SaveLibraryOptions` (statiques, cache clé-valeur) — voir `CollectionFolder.XmlSerializer` ci-dessous, même exposition.
+  - `CreateResolveArgs` (`private`, dupliqué dans `CollectionFolder.cs` et `AggregateFolder.cs`, 2 appelants internes chacun — pipeline de résolution de fichiers pendant le scan, pas un chemin chaud de navigation).
+  - `RefreshLinkedChildren` (`protected virtual`, **1 override** `CollectionFolder`, **1 appelant** `Folder.cs:1788` — petit).
+
+### Bloqué par une chaîne virtuelle déjà identifiée
+
+- **`BaseItem.ItemRepository`** — cascade `GetCachedChildren` → `LoadChildren` (virtual, 4 overrides externes) → propriété `Children` (lazy, probablement très utilisée, pas comptée). Cf. constat PR8.
+- **`BaseItem.LocalizationManager`** — cascade `IsParentalAllowed` → `BoxSet.IsVisible` (override d'une méthode virtuelle de filtrage bibliothèque probablement très utilisée). Setter `OriginalLanguage` : changement de forme requis, 8 sites. `GetParentalRatingScore` seul seule serait tractable (0 override, 11 appelants) mais gain partiel. Cf. constat post-PR8.
+
+### Reporté par volume — pas creusé en profondeur, trop gros pour cette passe
+
+Comptage brut de sites de lecture dans les fichiers d'entités principaux (`BaseItem.cs`, `Folder.cs`, `Video.cs`) : `LibraryManager` **100**, `FileSystem` **24**, `Logger` **24**, `UserDataManager` **13**, `ConfigurationManager` **11**, `ProviderManager` **10**. Même à supposer que la moitié de ces sites sont dans une poignée de méthodes partagées (comme `GetVersionInfo` l'était pour `MediaSourceManager`/`MediaSegmentManager`), le volume à lui seul exclut une passe rapide — chacun demande le même niveau d'analyse par méthode contenante que ci-dessus, multiplié par 10 à 20 méthodes distinctes. `LibraryManager` reste confirmé le plus dur (déjà noté par le premier audit, et par le plan lui-même : à faire en dernier, après avoir stabilisé le reste).
+
+- **`CollectionFolder.XmlSerializer`** — techniquement borné (`LoadLibraryOptions`/`SaveLibraryOptions`, static utilities, 7 appels qualifiés tous dans `Reefin.Server.Core/Library/LibraryManager.cs`), mais **reporté par choix, pas par difficulté** : la seule dépendance à ajouter atterrirait sur le constructeur de `LibraryManager` (déjà 23 paramètres, cible du point 5) — contradiction avec l'ordre du plan (point 4 avant point 5, justement pour ne pas continuer à faire grossir `LibraryManager` avant son découpage).
+
+### Décision à prendre par l'utilisateur
+
+Aucun code écrit cette session sur ce chantier au-delà de la carte. Candidats les plus immédiatement actionnables si reprise : `MediaSegmentManager`+`MediaSourceManager` (chaîne `GetVersionInfo`/`GetMediaSources`/`GetMediaStreams`, effort partagé), ou `ChannelManager.EnableMediaSourceDisplay`+`MediaSourceManager.PathProtocol` (propriétés à petit lectorat). Le cluster `GetItemsInternal` (3 statics à la fois) est prometteur mais bloqué tant que l'ambiguïté `GetItemList` n'est pas levée.
 
 ## Ordre recommandé (reprend celui du plan, réordonné sur le point 3 ci-dessus)
 1. Sessions de lecture + protocole capacités v2 (point 1-2) — priorité confirmée, zone la mieux comprise.
