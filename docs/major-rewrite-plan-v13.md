@@ -109,14 +109,16 @@ Grep exhaustif post-commit final : **zéro** référence restante à `MediaBrows
   Tests ajoutés dans `PlaybackSessionManagerTests` : dédoublonnage `Create` par PlaySessionId, suppression sur `PlaybackStopped`, balayage TTL (session expirée supprimée, session fraîche conservée). `MediaInfoHelperTests` mis à jour (mock `IPlaybackSessionManager` au lieu de l'ancien `IPlaybackSessionPlanner`, signature déjà obsolète depuis PR1).
   Build 41 projets 0 erreur, suite complète solution : 0 échec hors les 2 échecs réseau pré-existants confirmés indépendants (`Reefin.Server.Tests.ParseNetworkTests`).
 
-- [ ] PR6/N — reste à faire : façade `DynamicHlsController` (remplacer les 11 dépendances par `playbackSessions.CreateAsync(...)` / équivalent), en s'appuyant sur le `Track()` déjà câblé en PR3. J1 (cycle de vie étanche) est atteint après PR5 ; PR6 est le début de J2 (diagnostic exposé).
+- [x] PR6/N — premier pas de façade, scope minimal tranché avec l'utilisateur (squelette plutôt qu'un endpoint complet ou un audit) : `IPlaybackSessionManager.TrackTranscodeOutput(outputVideoCodec, outputAudioCodec, transcodeReasons, playSessionId)` encapsule la dérivation `PlayMethod` (copy codecs vidéo+audio → `DirectStream`, sinon `Transcode`, via `EncodingHelper.IsCopyCodec`) qui vivait auparavant dans `DynamicHlsController.GetVariantPlaylistInternal`. Le controller appelle désormais une seule méthode au lieu de calculer le plan à la main puis appeler `Track()`. Aucune des 10 autres dépendances du controller ni les autres endpoints touchés — reste pour un futur PR7+. Build 41 projets 0 erreur, suite complète 0 échec hors les 2 échecs réseau pré-existants.
+
+- [ ] PR7/N — reste à faire : étendre la façade aux 10 autres dépendances de `DynamicHlsController` (`ILibraryManager`, `IUserManager`, `IMediaSourceManager`, `IServerConfigurationManager`, `IMediaEncoder`, `IFileSystem`, `ITranscodeManager`, `DynamicHlsHelper`, `EncodingHelper`) et/ou aux autres endpoints (`live.m3u8`, `master.m3u8`, segments) — 2095 lignes au total, gros rayon d'action. Scope à retrancher avec l'utilisateur avant construction, comme PR6.
 
 ## Jalons de compatibilité (point 1-2) — définis 2026-07-07
 
 Le verdict global exige des jalons de compatibilité ; les voici pour la zone active. Le protocole v2 reste interne jusqu'à preuve de parité, la bascule client vient en dernier :
 
 1. **J1 — cycle de vie étanche (interne)** : tout chemin de lecture crée et termine une session (transcodage via `TranscodingJobEnded` ; direct play via `PlaybackStopped` ; probe via TTL). Critère mesurable : le compteur de sessions revient à zéro après arrêt de toutes les lectures. Cible : fin de PR5.
-2. **J2 — diagnostic exposé** : endpoint lecture seule (admin) listant les sessions, utilisé pour valider la parité des décisions v2 vs `/PlaybackInfo` en usage réel.
+2. **J2 — diagnostic exposé** : endpoint lecture seule (admin) listant les sessions, utilisé pour valider la parité des décisions v2 vs `/PlaybackInfo` en usage réel. PR6 amorce le nettoyage côté controller nécessaire, pas encore l'endpoint lui-même.
 3. **J3 — API v2 create/patch/delete** exposée à côté de `/PlaybackInfo` (aucun retrait), migration des clients officiels un par un.
 4. **J4 — retrait compat** : `/PlaybackInfo` + query params HLS dépréciés seulement après adoption par les clients officiels (dernière étape du plan, inchangée).
 

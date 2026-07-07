@@ -1409,13 +1409,10 @@ public class DynamicHlsController : BaseReefinApiController
         double fps = state.TargetFramerate ?? 0.0f;
         int segmentLength = state.SegmentLength * 1000;
 
-        // Track this session for diagnostics using the play method/reasons the client already
-        // decided (this controller does not itself plan direct-play-vs-transcode). The session
-        // ends automatically when the transcoding job with this PlaySessionId ends.
-        var playMethod = EncodingHelper.IsCopyCodec(state.OutputVideoCodec) && EncodingHelper.IsCopyCodec(state.OutputAudioCodec)
-            ? PlayMethod.DirectStream
-            : PlayMethod.Transcode;
-        _playbackSessionManager.Track(PlaybackMediaKind.Video, new PlaybackPlan(playMethod, state.TranscodeReasons), streamingRequest.PlaySessionId);
+        // Track this session for diagnostics using the codecs/reasons the client already decided
+        // (this controller does not itself plan direct-play-vs-transcode). The session ends
+        // automatically when the transcoding job with this PlaySessionId ends.
+        _playbackSessionManager.TrackTranscodeOutput(state.OutputVideoCodec, state.OutputAudioCodec, state.TranscodeReasons, streamingRequest.PlaySessionId);
 
         // If video is transcoded and framerate is fractional (i.e. 23.976), we need to slightly adjust segment length
         if (!EncodingHelper.IsCopyCodec(state.OutputVideoCodec) && Math.Abs(fps - Math.Floor(fps + 0.001f)) > 0.001)

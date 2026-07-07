@@ -5,6 +5,7 @@ using System.Threading;
 using Reefin.Controller.Library;
 using Reefin.Controller.MediaEncoding;
 using Reefin.Controller.Session;
+using Reefin.Model.Session;
 
 namespace Reefin.MediaEncoding.Playback;
 
@@ -76,6 +77,15 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
     /// <inheritdoc/>
     public PlaybackSession Track(PlaybackMediaKind kind, PlaybackPlan plan, string? playSessionId = null)
         => StoreOrReplace(kind, playSessionId, null, plan);
+
+    /// <inheritdoc/>
+    public PlaybackSession TrackTranscodeOutput(string outputVideoCodec, string outputAudioCodec, TranscodeReason transcodeReasons, string? playSessionId = null)
+    {
+        var playMethod = EncodingHelper.IsCopyCodec(outputVideoCodec) && EncodingHelper.IsCopyCodec(outputAudioCodec)
+            ? PlayMethod.DirectStream
+            : PlayMethod.Transcode;
+        return Track(PlaybackMediaKind.Video, new PlaybackPlan(playMethod, transcodeReasons), playSessionId);
+    }
 
     /// <inheritdoc/>
     public bool Delete(PlaybackSessionId id)
