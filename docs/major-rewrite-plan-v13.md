@@ -111,7 +111,27 @@ Grep exhaustif post-commit final : **zéro** référence restante à `MediaBrows
 
 - [x] PR6/N — premier pas de façade, scope minimal tranché avec l'utilisateur (squelette plutôt qu'un endpoint complet ou un audit) : `IPlaybackSessionManager.TrackTranscodeOutput(outputVideoCodec, outputAudioCodec, transcodeReasons, playSessionId)` encapsule la dérivation `PlayMethod` (copy codecs vidéo+audio → `DirectStream`, sinon `Transcode`, via `EncodingHelper.IsCopyCodec`) qui vivait auparavant dans `DynamicHlsController.GetVariantPlaylistInternal`. Le controller appelle désormais une seule méthode au lieu de calculer le plan à la main puis appeler `Track()`. Aucune des 10 autres dépendances du controller ni les autres endpoints touchés — reste pour un futur PR7+. Build 41 projets 0 erreur, suite complète 0 échec hors les 2 échecs réseau pré-existants.
 
-- [ ] PR7/N — reste à faire : étendre la façade aux 10 autres dépendances de `DynamicHlsController` (`ILibraryManager`, `IUserManager`, `IMediaSourceManager`, `IServerConfigurationManager`, `IMediaEncoder`, `IFileSystem`, `ITranscodeManager`, `DynamicHlsHelper`, `EncodingHelper`) et/ou aux autres endpoints (`live.m3u8`, `master.m3u8`, segments) — 2095 lignes au total, gros rayon d'action. Scope à retrancher avec l'utilisateur avant construction, comme PR6.
+### Audit PR7 (2026-07-07) — mapping dépendances × endpoints, `DynamicHlsController.cs` (2095 lignes)
+
+Fait avant tout code, sur demande explicite (scope "auditer d'abord" retenu sur 3 propositions). Méthode : grep de chaque champ injecté, résolution manuelle de la méthode contenante par plage de lignes (7 endpoints publics + ~14 méthodes privées).
+
+Endpoints et ce qu'ils utilisent réellement :
+- `GetMasterHlsVideoPlaylist`/`GetMasterHlsAudioPlaylist` (L414-753, master.m3u8) : **une seule** dépendance chacun, `DynamicHlsHelper` (L525, L692). Déjà proprement isolés, rien à faire.
+- `GetVariantHlsVideoPlaylist`/`GetVariantHlsAudioPlaylist` (L754-1095) : **zéro** dépendance directe — construisent un DTO et délèguent à `GetVariantPlaylistInternal`.
+- `GetHlsVideoSegment`/`GetHlsAudioSegment` (L1096-1392) : **zéro** dépendance directe — délèguent à `GetDynamicSegment`.
+- `GetLiveHlsStream` (L173-413, live.m3u8) : le plus lourd, 8 dépendances directes (`_mediaSourceManager`, `_userManager`, `_libraryManager`, `_serverConfigurationManager`, `_mediaEncoder`, `_encodingHelper`, `_transcodeManager`, `_logger`).
+
+Cause racine des "11 dépendances" : **`StreamingHelpers.GetStreamingState(...)` est appelé 3 fois** (`GetLiveHlsStream` L1395, `GetVariantPlaylistInternal` L1395-1407, `GetDynamicSegment` équivalent L1438+) avec exactement les 7 mêmes arguments à chaque fois (`_mediaSourceManager`, `_userManager`, `_libraryManager`, `_serverConfigurationManager`, `_mediaEncoder`, `_encodingHelper`, `_transcodeManager`). Ce n'est pas de la logique controller — c'est du passthrough dupliqué 3×. C'est la vraie cible de la façade, pas les 11 dépendances prises une par une.
+
+Déjà propres, pas des cibles PR7 :
+- `_dynamicHlsHelper` : 1 seul point d'usage (master playlists), déjà isolé.
+- `_dynamicHlsPlaylistGenerator` : 1 seul point d'usage (`GetVariantPlaylistInternal` L1433), déjà isolé.
+- `_fileSystem` : cantonné à la fin de chaîne segment (`GetCurrentTranscodingIndex`, `DeleteLastFile`, `DeleteFile`) ; `GetLastTranscodingFile` le reçoit déjà en paramètre, pas en champ — découplage partiel déjà en place.
+- `_transcodeManager` et `_encodingHelper` : usage large (cycle de vie du job de transcodage, construction des arguments ffmpeg dans `GetCommandLineArguments`/`GetAudioArguments`/`GetVideoArguments`). Logique domaine dense, risque élevé à extraire ici — relève plutôt du point 1-2 (abandon DLNA comme modèle interne), un chantier séparé du plan, pas de PR7.
+
+Conclusion : la seule extraction à faible risque et fort ROI immédiat est de collapser les 3 appels dupliqués à `StreamingHelpers.GetStreamingState(...)` derrière un seul point (méthode privée du controller ou méthode sur la façade session). Ça ne réduit pas le nombre de dépendances injectées (les champs restent nécessaires), mais supprime la duplication et prépare le terrain si `IPlaybackSessionManager` (ou un nouveau service dédié) doit un jour posséder la résolution de `StreamState`.
+
+- [ ] PR7/N — scope à trancher avec l'utilisateur sur la base de cet audit (candidats : collapser les 3 appels `GetStreamingState` dupliqués ; ou ne rien faire ici et traiter `_transcodeManager`/`_encodingHelper` comme faisant partie du chantier point 1-2 plutôt que du point 3).
 
 ## Jalons de compatibilité (point 1-2) — définis 2026-07-07
 
