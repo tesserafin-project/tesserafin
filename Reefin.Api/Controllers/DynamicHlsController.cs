@@ -286,18 +286,7 @@ public class DynamicHlsController : BaseReefinApiController
         // Due to CTS.Token calling ThrowIfDisposed (https://github.com/dotnet/runtime/issues/29970) we have to "cache" the token
         // since it gets disposed when ffmpeg exits
         var cancellationToken = cancellationTokenSource.Token;
-        var state = await StreamingHelpers.GetStreamingState(
-                streamingRequest,
-                HttpContext,
-                _mediaSourceManager,
-                _userManager,
-                _libraryManager,
-                _serverConfigurationManager,
-                _mediaEncoder,
-                _encodingHelper,
-                _transcodeManager,
-                TranscodingJobType,
-                cancellationToken)
+        var state = await ResolveStreamingState(streamingRequest, cancellationToken)
             .ConfigureAwait(false);
 
         TranscodingJob? job = null;
@@ -1390,20 +1379,26 @@ public class DynamicHlsController : BaseReefinApiController
             .ConfigureAwait(false);
     }
 
+    // Resolves the StreamState for a streaming request. Called from GetLiveHlsStream,
+    // GetVariantPlaylistInternal, and GetDynamicSegment, each with the same 7 dependencies —
+    // collapsed here instead of duplicating the call at each site.
+    private Task<StreamState> ResolveStreamingState(StreamingRequestDto streamingRequest, CancellationToken cancellationToken)
+        => StreamingHelpers.GetStreamingState(
+            streamingRequest,
+            HttpContext,
+            _mediaSourceManager,
+            _userManager,
+            _libraryManager,
+            _serverConfigurationManager,
+            _mediaEncoder,
+            _encodingHelper,
+            _transcodeManager,
+            TranscodingJobType,
+            cancellationToken);
+
     private async Task<ActionResult> GetVariantPlaylistInternal(StreamingRequestDto streamingRequest, CancellationTokenSource cancellationTokenSource)
     {
-        using var state = await StreamingHelpers.GetStreamingState(
-                streamingRequest,
-                HttpContext,
-                _mediaSourceManager,
-                _userManager,
-                _libraryManager,
-                _serverConfigurationManager,
-                _mediaEncoder,
-                _encodingHelper,
-                _transcodeManager,
-                TranscodingJobType,
-                cancellationTokenSource.Token)
+        using var state = await ResolveStreamingState(streamingRequest, cancellationTokenSource.Token)
             .ConfigureAwait(false);
         var mediaSourceId = state.BaseRequest.MediaSourceId;
         double fps = state.TargetFramerate ?? 0.0f;
@@ -1446,18 +1441,7 @@ public class DynamicHlsController : BaseReefinApiController
         var cancellationTokenSource = new CancellationTokenSource();
         var cancellationToken = cancellationTokenSource.Token;
 
-        var state = await StreamingHelpers.GetStreamingState(
-                streamingRequest,
-                HttpContext,
-                _mediaSourceManager,
-                _userManager,
-                _libraryManager,
-                _serverConfigurationManager,
-                _mediaEncoder,
-                _encodingHelper,
-                _transcodeManager,
-                TranscodingJobType,
-                cancellationToken)
+        var state = await ResolveStreamingState(streamingRequest, cancellationToken)
             .ConfigureAwait(false);
 
         var playlistPath = Path.ChangeExtension(state.OutputFilePath, ".m3u8");
