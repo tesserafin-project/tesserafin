@@ -1,6 +1,9 @@
+using System;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Reefin.Controller.Library;
 using Reefin.Controller.MediaEncoding;
+using Reefin.Controller.Session;
 using Reefin.MediaEncoding.Playback;
 using Reefin.Model.Dlna;
 using Reefin.Model.Session;
@@ -49,7 +52,7 @@ public class PlaybackSessionManagerTests
         var mockPlanner = new Mock<IPlaybackSessionPlanner>();
         mockPlanner.Setup(p => p.PlanVideo(initialOptions)).Returns(initialPlan);
         mockPlanner.Setup(p => p.PlanVideo(patchedOptions)).Returns(patchedPlan);
-        var manager = new PlaybackSessionManager(mockPlanner.Object, new Mock<ITranscodeManager>().Object);
+        var manager = new PlaybackSessionManager(mockPlanner.Object, new Mock<ITranscodeManager>().Object, new Mock<ISessionManager>().Object);
         var session = manager.Create(new PlaybackSessionRequest(PlaybackMediaKind.Video, initialOptions));
         Assert.NotNull(session);
 
@@ -137,7 +140,7 @@ public class PlaybackSessionManagerTests
     public void TranscodingJobEnded_RemovesSessionWithMatchingPlaySessionId()
     {
         var mockTranscodeManager = new Mock<ITranscodeManager>();
-        var manager = new PlaybackSessionManager(new Mock<IPlaybackSessionPlanner>().Object, mockTranscodeManager.Object);
+        var manager = new PlaybackSessionManager(new Mock<IPlaybackSessionPlanner>().Object, mockTranscodeManager.Object, new Mock<ISessionManager>().Object);
         var session = manager.Track(PlaybackMediaKind.Video, new PlaybackPlan(PlayMethod.Transcode, default), "play-session-1");
 
         var job = new TranscodingJob(NullLogger<TranscodingJob>.Instance) { PlaySessionId = "play-session-1" };
@@ -146,11 +149,69 @@ public class PlaybackSessionManagerTests
         Assert.Null(manager.Get(session.Id));
     }
 
+    [Fact]
+    public void Create_SamePlaySessionIdTwice_ReplacesInsteadOfAdding()
+    {
+        var initialOptions = CreateOptions();
+        var patchedOptions = CreateOptions();
+        var initialPlan = CreatePlan();
+        var patchedPlan = new PlaybackPlan(PlayMethod.Transcode, TranscodeReason.AudioCodecNotSupported);
+        var mockPlanner = new Mock<IPlaybackSessionPlanner>();
+        mockPlanner.Setup(p => p.PlanVideo(initialOptions)).Returns(initialPlan);
+        mockPlanner.Setup(p => p.PlanVideo(patchedOptions)).Returns(patchedPlan);
+        var manager = new PlaybackSessionManager(mockPlanner.Object, new Mock<ITranscodeManager>().Object, new Mock<ISessionManager>().Object);
+
+        var first = manager.Create(new PlaybackSessionRequest(PlaybackMediaKind.Video, initialOptions), "play-session-1");
+        var second = manager.Create(new PlaybackSessionRequest(PlaybackMediaKind.Video, patchedOptions), "play-session-1");
+
+        Assert.NotNull(first);
+        Assert.NotNull(second);
+        Assert.Equal(first.Id, second.Id);
+        Assert.Same(patchedPlan, manager.Get(first.Id)?.Plan);
+    }
+
+    [Fact]
+    public void PlaybackStopped_RemovesSessionWithMatchingPlaySessionId()
+    {
+        var mockSessionManager = new Mock<ISessionManager>();
+        var manager = new PlaybackSessionManager(new Mock<IPlaybackSessionPlanner>().Object, new Mock<ITranscodeManager>().Object, mockSessionManager.Object);
+        var session = manager.Track(PlaybackMediaKind.Video, new PlaybackPlan(PlayMethod.DirectPlay, default), "play-session-1");
+
+        var args = new PlaybackStopEventArgs { PlaySessionId = "play-session-1" };
+        mockSessionManager.Raise(m => m.PlaybackStopped += null, mockSessionManager.Object, args);
+
+        Assert.Null(manager.Get(session.Id));
+    }
+
+    [Fact]
+    public void SweepExpired_PastTtl_RemovesSession()
+    {
+        var manager = new PlaybackSessionManager(new Mock<IPlaybackSessionPlanner>().Object, new Mock<ITranscodeManager>().Object, new Mock<ISessionManager>().Object);
+        var session = manager.Track(PlaybackMediaKind.Video, new PlaybackPlan(PlayMethod.DirectPlay, default), "play-session-1");
+
+        var removed = manager.SweepExpired(DateTimeOffset.UtcNow.AddHours(7));
+
+        Assert.Equal(1, removed);
+        Assert.Null(manager.Get(session.Id));
+    }
+
+    [Fact]
+    public void SweepExpired_WithinTtl_KeepsSession()
+    {
+        var manager = new PlaybackSessionManager(new Mock<IPlaybackSessionPlanner>().Object, new Mock<ITranscodeManager>().Object, new Mock<ISessionManager>().Object);
+        var session = manager.Track(PlaybackMediaKind.Video, new PlaybackPlan(PlayMethod.DirectPlay, default), "play-session-1");
+
+        var removed = manager.SweepExpired(DateTimeOffset.UtcNow.AddHours(1));
+
+        Assert.Equal(0, removed);
+        Assert.NotNull(manager.Get(session.Id));
+    }
+
     private static PlaybackSessionManager GetManager(System.Action<Mock<IPlaybackSessionPlanner>> setup)
     {
         var mockPlanner = new Mock<IPlaybackSessionPlanner>();
         setup(mockPlanner);
-        return new PlaybackSessionManager(mockPlanner.Object, new Mock<ITranscodeManager>().Object);
+        return new PlaybackSessionManager(mockPlanner.Object, new Mock<ITranscodeManager>().Object, new Mock<ISessionManager>().Object);
     }
 
     private static MediaOptions CreateOptions() => new() { Profile = new DeviceProfile() };

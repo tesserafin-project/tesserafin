@@ -44,7 +44,7 @@ public class MediaInfoHelper
     private readonly ILogger<MediaInfoHelper> _logger;
     private readonly INetworkManager _networkManager;
     private readonly IDeviceManager _deviceManager;
-    private readonly IPlaybackSessionPlanner _playbackSessionPlanner;
+    private readonly IPlaybackSessionManager _playbackSessionManager;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MediaInfoHelper"/> class.
@@ -57,7 +57,7 @@ public class MediaInfoHelper
     /// <param name="logger">Instance of the <see cref="ILogger{MediaInfoHelper}"/> interface.</param>
     /// <param name="networkManager">Instance of the <see cref="INetworkManager"/> interface.</param>
     /// <param name="deviceManager">Instance of the <see cref="IDeviceManager"/> interface.</param>
-    /// <param name="playbackSessionPlanner">Instance of the <see cref="IPlaybackSessionPlanner"/> interface.</param>
+    /// <param name="playbackSessionManager">Instance of the <see cref="IPlaybackSessionManager"/> interface.</param>
     public MediaInfoHelper(
         IUserManager userManager,
         ILibraryManager libraryManager,
@@ -67,7 +67,7 @@ public class MediaInfoHelper
         ILogger<MediaInfoHelper> logger,
         INetworkManager networkManager,
         IDeviceManager deviceManager,
-        IPlaybackSessionPlanner playbackSessionPlanner)
+        IPlaybackSessionManager playbackSessionManager)
     {
         _userManager = userManager;
         _libraryManager = libraryManager;
@@ -77,7 +77,7 @@ public class MediaInfoHelper
         _logger = logger;
         _networkManager = networkManager;
         _deviceManager = deviceManager;
-        _playbackSessionPlanner = playbackSessionPlanner;
+        _playbackSessionManager = playbackSessionManager;
     }
 
     /// <summary>
@@ -255,10 +255,9 @@ public class MediaInfoHelper
         }
 
         // Beginning of Playback Determination
-        var plan = item.MediaType == MediaType.Audio
-            ? _playbackSessionPlanner.PlanAudio(options)
-            : _playbackSessionPlanner.PlanVideo(options);
-        var streamInfo = plan?.StreamInfo;
+        var kind = item.MediaType == MediaType.Audio ? PlaybackMediaKind.Audio : PlaybackMediaKind.Video;
+        var session = _playbackSessionManager.Create(new PlaybackSessionRequest(kind, options), playSessionId);
+        var streamInfo = session?.Plan.StreamInfo;
 
         if (streamInfo is not null)
         {

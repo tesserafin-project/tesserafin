@@ -5,7 +5,10 @@ namespace Reefin.Controller.MediaEncoding;
 /// <see cref="IPlaybackSessionPlanner"/> decisions. This is the session bookkeeping half
 /// of the point-1 protocol, kept separate from the pure planning decision so each can be
 /// verified independently. Sessions tied to a play session id are ended automatically when
-/// the corresponding transcoding job ends (via <see cref="ITranscodeManager.TranscodingJobEnded"/>).
+/// the corresponding transcoding job ends (via <see cref="ITranscodeManager.TranscodingJobEnded"/>)
+/// or playback stops (direct play has no transcoding job to signal this). A time-to-live sweep
+/// is the backstop for sessions that never receive either signal (e.g. a PlaybackInfo probe with
+/// no playback that follows).
 /// </summary>
 public interface IPlaybackSessionManager
 {
@@ -13,8 +16,13 @@ public interface IPlaybackSessionManager
     /// Plans and stores a new session.
     /// </summary>
     /// <param name="request">The request to plan.</param>
-    /// <returns>The created session, or <c>null</c> if no viable plan exists.</returns>
-    PlaybackSession? Create(PlaybackSessionRequest request);
+    /// <param name="playSessionId">
+    /// The client-facing play session id, when known. At most one session is kept per play
+    /// session id: creating with the same id again replaces that session's plan and request,
+    /// and the session is removed automatically when the transcoding job with that id ends.
+    /// </param>
+    /// <returns>The created (or updated) session, or <c>null</c> if no viable plan exists.</returns>
+    PlaybackSession? Create(PlaybackSessionRequest request, string? playSessionId = null);
 
     /// <summary>
     /// Re-plans an existing session with a new request, replacing its stored plan.
