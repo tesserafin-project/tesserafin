@@ -1,0 +1,69 @@
+# Plan implémentation refactor pipeline FFmpeg (préalable autodétection HWA)
+
+Basé sur analyse graphify + lecture code réel. Fichiers/lignes cités = état actuel du repo.
+
+## État actuel confirmé (fichiers clés)
+
+| Classe | Fichier | Lignes | Rôle actuel |
+|---|---|---|---|
+| `EncodingHelper` | `MediaBrowser.Controller/MediaEncoding/EncodingHelper.cs` | 7987 | tout: décodeur, encodeur, device args, filtres, HLS, tone mapping |
+| `EncodingJobInfo` | `MediaBrowser.Controller/MediaEncoding/EncodingJobInfo.cs` | 735 | base mutable partagée API/encoding (commentaire L21: "common base class... for now") |
+| `StreamState` | `MediaBrowser.Controller/Streaming/StreamState.cs` | 183 | hérite EncodingJobInfo, ajoute HTTP + live source + `Dispose()` synchrone (L171-176, commentaire "REVIEW" L170) |
+| `TranscodingJob` | `MediaBrowser.Controller/MediaEncoding/TranscodingJob.cs` | 288 | 1 `Process` unique par job |
+| `TranscodeManager` | `MediaBrowser.MediaEncoding/Transcoding/TranscodeManager.cs` | 757 | `StartFfMpeg()` L371-540: construit `Process` brut direct (L417-435), attend fichier de sortie en polling (L510-513) |
+| `JobLogger` | `MediaBrowser.Controller/MediaEncoding/JobLogger.cs` | 164 | `ParseLogLine()` L62-161: split `stderr` sur espaces, cherche `fps=`/`time=`/`size=`/`bitrate=` |
+| `EncoderValidator` | `MediaBrowser.MediaEncoding/Encoder/EncoderValidator.cs` | 699 | `GetProcessOutput()` L636-665: ne lit qu'UN flux (stdout OU stderr) selon param `readStdErr` — l'autre non consommé |
+| `MediaEncoder` | `MediaBrowser.MediaEncoding/Encoder/MediaEncoder.cs` | 1404 | singleton, listes globales encodeurs/décodeurs/hwaccels |
+
+**Mutation env globale confirmée** — `EncodingHelper.cs`:
+- L1053-1054: `Environment.SetEnvironmentVariable("LIBVA_DRIVER_NAME", "i965")` + `..._JELLYFIN`
+- L1072: `Environment.SetEnvironmentVariable("AMD_DEBUG", "noefc")`
+
+Ces deux lignes mutent le process serveur entier, pas seulement le futur process FFmpeg. Confirme le point 7 du diagnostic original.
+
+**Device args backends** déjà séparés par méthode (bonne nouvelle, base réutilisable) :
+- `GetRkmppDeviceArgs()` L825, `GetVideoToolboxDeviceArgs()` L833, `GetVaapiDeviceArgs()` L910, `GetQsvDeviceArgs()` L947, `GetHwaccelType()` L6587.
+
+---
+
+## Ordre de PR (identique à la proposition initiale, confirmé faisable)
+
+### PR 1 — Tests de caractérisation
+Aucun fichier à toucher. Construire matrice de commandes attendues (software/VAAPI/QSV/NVENC/AMF/VideoToolbox/RKMPP × HDR/SDR × sous-titres × H264/HEVC/AV1 × progressive/HLS/live) en snapshot-testant `EncodingHelper.GetVideoEncoder()` (L480) et consorts tels quels. Zéro risque, sert de filet pour tout le reste.
+
+### PR 2 — `FfmpegCommand` + `IFfmpegProcessRunner`
+Nouveaux types dans `MediaBrowser.Controller/MediaEncoding/`:
+```csharp
+public sealed record FfmpegCommand(string Executable, ImmutableArray<string> Arguments, ImmutableDictionary<string, string> Environment, string? WorkingDirectory);
+```
+Point d'injection unique: `TranscodeManager.StartFfMpeg()` L417-435 construit aujourd'hui `Process`/`ProcessStartInfo` en dur. Remplacer par `IFfmpegProcessRunner.StartTranscodeAsync(command, ct)`.
+`EncoderValidator.GetProcessOutput()` L636-665 et `GetProcessExitCode()` L668-691 basculent sur `RunProbeAsync()` — corrige au passage le bug de flux non consommé (L663: un seul de `StandardError`/`StandardOutput` est lu, l'autre peut saturer son buffer et bloquer le process).
+Les deux `Environment.SetEnvironmentVariable` globaux (L1053-1072) deviennent des entrées dans `FfmpegCommand.Environment`, plus jamais posés sur le process serveur.
+
+### PR 3 — Progression structurée + classification erreurs
+Remplacer `JobLogger.ParseLogLine()` (L62-161, parsing `stderr` humain fragile) par lancement avec `-progress pipe:1 -nostats`, parsing clé=valeur strict (`out_time_us`, `total_size`, `progress=continue/end`). `stderr` reste réservé diagnostics → alimente un nouveau `FfmpegErrorClassifier` (catégories: DeviceUnavailable, PermissionDenied, UnsupportedCodec, EncoderSessionLimit, DeviceInitializationFailed, FilterInitializationFailed, InvalidInput, ResourceExhausted, Unknown).
+Touche `TranscodeManager.StartFfMpeg()` L505 (`new JobLogger(...).StartStreamingLog(...)`) et l'appel `state.ReportTranscodingProgress()` L159 de `JobLogger`.
+
+### PR 4 — `TranscodeSession` / `TranscodeAttempt`
+`TranscodingJob` (288 lignes, un seul `Process`) devient conteneur de session ; nouvelle classe `TranscodeAttempt` porte `Process` + `FfmpegCommand` + log + résultat. `TranscodeManager.OnFfMpegProcessExited()` L640 et `OnTranscodeBeginning()` L576-609 adaptés pour créer une tentative au lieu de fermer directement la session. Toujours 1 seule tentative activée dans cette PR — le fallback multi-tentatives vient en PR 9.
+
+### PR 5 — Extraction renderers par backend
+`EncodingHelper.cs` (7987 lignes) éclaté. Les méthodes device-args (L825-953) et `GetHwaccelType()` (L6587) sont déjà isolées — bon point de départ pour extraire `VaapiPipelineRenderer`, `QsvPipelineRenderer`, etc. Chaque renderer reçoit un `TranscodePlan` déjà décidé, ne relit pas la config globale. Un backend à la fois, avec les tests PR 1 comme garde-fou de non-régression.
+
+### PR 6 — Capacités par périphérique
+`MediaEncoder` (1404 lignes, singleton, listes globales `SupportsEncoder`/`SupportsDecoder`/`SupportsHwaccel`) devient producteur de `HardwareCapabilitySnapshot` par device. Point de départ concret de l'autodétection.
+
+### PR 7-9 — Planner diagnostic → sélection auto → fallback
+Dans cet ordre, chacun activable/désactivable indépendamment.
+
+---
+
+## Refactor transverse à faire en parallèle (pas bloquant, mais à ne pas oublier)
+
+- **`EncodingJobInfo`/`StreamState`** (PR indépendante, peut suivre PR 4) : séparer en `StreamingRequest` (immuable) / `TranscodeRequirements` / `TranscodePlan` / `TranscodeRuntimeState` mutable. `StreamState.Dispose()` L161-182 ferme une source live de façon synchrone dans un `Dispose()` — à corriger en même temps (le commentaire `// REVIEW` L170 le signale déjà comme suspect dans le code même).
+- **Nullable reference types** : `EncodingHelper`, `EncodingJobInfo`, `IMediaEncoder`, `MediaEncoder`, `JobLogger` ont `#nullable disable` en tête de fichier (confirmé L1 de `JobLogger.cs` et `EncodingJobInfo.cs`). Ne pas convertir tout le fichier existant — mais chaque nouvelle classe extraite (renderers, `FfmpegCommand`, `TranscodeSession`) naît nullable-enabled dès le départ.
+
+## Ce qui NE doit PAS être fait avant l'autodétection
+- Déplacer bêtement les branches VAAPI/QSV/NVENC/AMF/VideoToolbox/RKMPP dans 6 fichiers sans changer le couplage (réduit taille fichier, pas dette).
+- "Grand nettoyage" du service locator / statics (`BaseItem`, `Episode`) — trop transversal, à faire domaine par domaine plus tard, pas un préalable HWA.
+- Réécriture Rust — écarté: coût GPU/codec est dans FFmpeg pas dans l'orchestrateur C#, casserait le système de plugins .NET existant, ne résout aucune des règles fonctionnelles (Dolby Vision, profils client, HLS timestamps).
