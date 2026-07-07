@@ -11,6 +11,13 @@ namespace Reefin.Controller.MediaEncoding;
 public interface ITranscodeManager
 {
     /// <summary>
+    /// Raised when a transcoding job ends: killed, failed to start, or its ffmpeg process
+    /// exited. May be raised more than once for the same job (a kill also triggers the
+    /// process-exit path), so handlers must be idempotent.
+    /// </summary>
+    public event EventHandler<TranscodingJob>? TranscodingJobEnded;
+
+    /// <summary>
     /// Get transcoding job.
     /// </summary>
     /// <param name="playSessionId">Playback session id.</param>

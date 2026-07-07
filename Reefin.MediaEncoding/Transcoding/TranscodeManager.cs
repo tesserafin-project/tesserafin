@@ -97,6 +97,9 @@ public sealed class TranscodeManager : ITranscodeManager, IDisposable
     }
 
     /// <inheritdoc />
+    public event EventHandler<TranscodingJob>? TranscodingJobEnded;
+
+    /// <inheritdoc />
     public TranscodingJob? GetTranscodingJob(string playSessionId)
     {
         lock (_activeTranscodingJobs)
@@ -234,6 +237,8 @@ public sealed class TranscodeManager : ITranscodeManager, IDisposable
         }
 
         job.Stop();
+
+        TranscodingJobEnded?.Invoke(this, job);
 
         if (delete(job.Path!))
         {
@@ -634,14 +639,20 @@ public sealed class TranscodeManager : ITranscodeManager, IDisposable
 
     private void OnTranscodeFailedToStart(string path, TranscodingJobType type, StreamState state)
     {
+        TranscodingJob? job;
         lock (_activeTranscodingJobs)
         {
-            var job = _activeTranscodingJobs.FirstOrDefault(j => j.Type == type && string.Equals(j.Path, path, StringComparison.OrdinalIgnoreCase));
+            job = _activeTranscodingJobs.FirstOrDefault(j => j.Type == type && string.Equals(j.Path, path, StringComparison.OrdinalIgnoreCase));
 
             if (job is not null)
             {
                 _activeTranscodingJobs.Remove(job);
             }
+        }
+
+        if (job is not null)
+        {
+            TranscodingJobEnded?.Invoke(this, job);
         }
 
         if (!string.IsNullOrWhiteSpace(state.Request.DeviceId))
@@ -668,6 +679,8 @@ public sealed class TranscodeManager : ITranscodeManager, IDisposable
         {
             _logger.LogError("FFmpeg exited with code {0}", process.ExitCode);
         }
+
+        TranscodingJobEnded?.Invoke(this, job);
 
         job.Dispose();
     }

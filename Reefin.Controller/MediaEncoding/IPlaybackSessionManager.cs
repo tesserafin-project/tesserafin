@@ -2,9 +2,10 @@ namespace Reefin.Controller.MediaEncoding;
 
 /// <summary>
 /// Tracks the lifecycle of planned playback sessions (create/patch/delete), on top of
-/// <see cref="IPlaybackSessionPlanner"/> decisions. Not wired into any controller yet —
-/// this is the session bookkeeping half of the point-1 protocol, kept separate from the
-/// pure planning decision so each can be verified independently.
+/// <see cref="IPlaybackSessionPlanner"/> decisions. This is the session bookkeeping half
+/// of the point-1 protocol, kept separate from the pure planning decision so each can be
+/// verified independently. Sessions tied to a play session id are ended automatically when
+/// the corresponding transcoding job ends (via <see cref="ITranscodeManager.TranscodingJobEnded"/>).
 /// </summary>
 public interface IPlaybackSessionManager
 {
@@ -31,8 +32,13 @@ public interface IPlaybackSessionManager
     /// </summary>
     /// <param name="kind">Whether this is an audio or video session.</param>
     /// <param name="plan">The already-decided plan to record.</param>
-    /// <returns>The created session.</returns>
-    PlaybackSession Track(PlaybackMediaKind kind, PlaybackPlan plan);
+    /// <param name="playSessionId">
+    /// The client-supplied play session id, when known. At most one session is kept per play
+    /// session id: tracking the same id again replaces that session's plan, and the session is
+    /// removed automatically when the transcoding job with that id ends.
+    /// </param>
+    /// <returns>The created (or updated) session.</returns>
+    PlaybackSession Track(PlaybackMediaKind kind, PlaybackPlan plan, string? playSessionId = null);
 
     /// <summary>
     /// Removes a session.
@@ -40,6 +46,13 @@ public interface IPlaybackSessionManager
     /// <param name="id">The session to remove.</param>
     /// <returns><c>true</c> if a session was removed; <c>false</c> if it did not exist.</returns>
     bool Delete(PlaybackSessionId id);
+
+    /// <summary>
+    /// Removes the session tied to the given play session id, if any.
+    /// </summary>
+    /// <param name="playSessionId">The play session id.</param>
+    /// <returns><c>true</c> if a session was removed; <c>false</c> if none was tied to that id.</returns>
+    bool DeleteByPlaySessionId(string playSessionId);
 
     /// <summary>
     /// Gets a session by id, for diagnostics.
