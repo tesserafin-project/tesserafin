@@ -8,6 +8,7 @@ using Reefin.Controller.Entities;
 using Reefin.Controller.Library;
 using Reefin.Controller.LiveTv;
 using Reefin.Controller.MediaEncoding;
+using Reefin.Controller.Persistence;
 using Reefin.Controller.Providers;
 using Reefin.Controller.Trickplay;
 using Reefin.Data.Enums;
@@ -111,6 +112,7 @@ public class DtoServiceImageInheritanceTests
         var liveTvManager = new Mock<ILiveTvManager>();
         var trickplayManager = new Mock<ITrickplayManager>();
         var chapterManager = new Mock<IChapterManager>();
+        var itemCountService = new Mock<IItemCountService>();
         var logger = new Mock<Microsoft.Extensions.Logging.ILogger<DtoService>>();
 
         libraryManager
@@ -132,6 +134,7 @@ public class DtoServiceImageInheritanceTests
             mediaSourceManager.Object,
             new Lazy<ILiveTvManager>(() => liveTvManager.Object),
             trickplayManager.Object,
-            chapterManager.Object);
+            chapterManager.Object,
+            itemCountService.Object);
     }
 }

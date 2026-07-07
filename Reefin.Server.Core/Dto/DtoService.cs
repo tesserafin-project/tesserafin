@@ -16,6 +16,7 @@ using Reefin.Controller.Entities;
 using Reefin.Controller.Entities.Audio;
 using Reefin.Controller.Library;
 using Reefin.Controller.LiveTv;
+using Reefin.Controller.Persistence;
 using Reefin.Controller.Playlists;
 using Reefin.Controller.Providers;
 using Reefin.Controller.Trickplay;
@@ -125,6 +126,7 @@ namespace Reefin.Server.Core.Dto
 
         private readonly ITrickplayManager _trickplayManager;
         private readonly IChapterManager _chapterManager;
+        private readonly IItemCountService _itemCountService;
 
         public DtoService(
             ILogger<DtoService> logger,
@@ -137,7 +139,8 @@ namespace Reefin.Server.Core.Dto
             IMediaSourceManager mediaSourceManager,
             Lazy<ILiveTvManager> livetvManagerFactory,
             ITrickplayManager trickplayManager,
-            IChapterManager chapterManager)
+            IChapterManager chapterManager,
+            IItemCountService itemCountService)
         {
             _logger = logger;
             _libraryManager = libraryManager;
@@ -150,6 +153,7 @@ namespace Reefin.Server.Core.Dto
             _livetvManagerFactory = livetvManagerFactory;
             _trickplayManager = trickplayManager;
             _chapterManager = chapterManager;
+            _itemCountService = itemCountService;
         }
 
         private ILiveTvManager LivetvManager => _livetvManagerFactory.Value;
@@ -562,7 +566,7 @@ namespace Reefin.Server.Core.Dto
                         dto.UserData = GetUserItemDataDto(userData, item.Id);
                         (int Played, int Total)? precomputed = playedCountBatch is not null
                             && playedCountBatch.TryGetValue(item.Id, out var counts) ? counts : null;
-                        item.FillUserDataDtoValues(dto.UserData, userData, dto, user, options, precomputed);
+                        item.FillUserDataDtoValues(dto.UserData, userData, dto, user, options, _itemCountService, precomputed);
                     }
                     else
                     {
@@ -609,7 +613,7 @@ namespace Reefin.Server.Core.Dto
                     {
                         // Use pre-fetched user data
                         dto.UserData = GetUserItemDataDto(userData, item.Id);
-                        item.FillUserDataDtoValues(dto.UserData, userData, dto, user, options);
+                        item.FillUserDataDtoValues(dto.UserData, userData, dto, user, options, _itemCountService);
 
                         // For items with alternate versions, the most recently played version drives resume.
                         resumeData?.ApplyTo(dto.UserData);

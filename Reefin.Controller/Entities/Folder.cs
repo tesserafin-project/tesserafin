@@ -21,6 +21,7 @@ using Reefin.Controller.Entities.Audio;
 using Reefin.Controller.Entities.Movies;
 using Reefin.Controller.Library;
 using Reefin.Controller.LibraryTaskScheduler;
+using Reefin.Controller.Persistence;
 using Reefin.Controller.Providers;
 using Reefin.Data;
 using Reefin.Data.Enums;
@@ -1933,6 +1934,7 @@ namespace Reefin.Controller.Entities
             BaseItemDto itemDto,
             User user,
             DtoOptions fields,
+            IItemCountService itemCountService,
             (int Played, int Total)? precomputedCounts = null)
         {
             if (!SupportsUserDataFromChildren)
@@ -1957,11 +1959,11 @@ namespace Reefin.Controller.Entities
 
                     if (LinkedChildren.Length > 0)
                     {
-                        (playedCount, totalCount) = ItemCountService.GetPlayedAndTotalCountFromLinkedChildren(query, Id);
+                        (playedCount, totalCount) = itemCountService.GetPlayedAndTotalCountFromLinkedChildren(query, Id);
                     }
                     else
                     {
-                        (playedCount, totalCount) = ItemCountService.GetPlayedAndTotalCount(query, Id);
+                        (playedCount, totalCount) = itemCountService.GetPlayedAndTotalCount(query, Id);
                     }
                 }
 

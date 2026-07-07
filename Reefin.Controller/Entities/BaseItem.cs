@@ -498,8 +498,6 @@ namespace Reefin.Controller.Entities
 
         public static IItemRepository ItemRepository { get; set; }
 
-        public static IItemCountService ItemCountService { get; set; }
-
         public static IChapterManager ChapterManager { get; set; }
 
         public static IFileSystem FileSystem { get; set; }
@@ -2621,6 +2619,7 @@ namespace Reefin.Controller.Entities
             BaseItemDto itemDto,
             User user,
             DtoOptions fields,
+            IItemCountService itemCountService,
             (int Played, int Total)? precomputedCounts = null)
         {
             if (RunTimeTicks.HasValue)

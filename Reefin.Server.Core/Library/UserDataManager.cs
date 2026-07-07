@@ -11,6 +11,7 @@ using Reefin.Controller.Configuration;
 using Reefin.Controller.Dto;
 using Reefin.Controller.Entities;
 using Reefin.Controller.Library;
+using Reefin.Controller.Persistence;
 using Reefin.Database.Implementations;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Model.Dto;
@@ -27,6 +28,7 @@ namespace Reefin.Server.Core.Library
     {
         private readonly IServerConfigurationManager _config;
         private readonly IDbContextFactory<ReefinDbContext> _repository;
+        private readonly IItemCountService _itemCountService;
         private readonly FastConcurrentLru<string, UserItemData> _cache;
 
         /// <summary>
@@ -34,12 +36,15 @@ namespace Reefin.Server.Core.Library
         /// </summary>
         /// <param name="config">Instance of the <see cref="IServerConfigurationManager"/> interface.</param>
         /// <param name="repository">Instance of the <see cref="IDbContextFactory{ReefinDbContext}"/> interface.</param>
+        /// <param name="itemCountService">Instance of the <see cref="IItemCountService"/> interface.</param>
         public UserDataManager(
             IServerConfigurationManager config,
-            IDbContextFactory<ReefinDbContext> repository)
+            IDbContextFactory<ReefinDbContext> repository,
+            IItemCountService itemCountService)
         {
             _config = config;
             _repository = repository;
+            _itemCountService = itemCountService;
             _cache = new FastConcurrentLru<string, UserItemData>(Environment.ProcessorCount, _config.Configuration.CacheSize, StringComparer.OrdinalIgnoreCase);
         }
 
@@ -377,7 +382,7 @@ namespace Reefin.Server.Core.Library
 
             var dto = GetUserItemDataDto(userData, item.Id);
 
-            item.FillUserDataDtoValues(dto, userData, itemDto, user, options);
+            item.FillUserDataDtoValues(dto, userData, itemDto, user, options, _itemCountService);
 
             // For an item with alternate versions, surface the most recently played version's resume point.
             GetResumeUserData(user, item)?.ApplyTo(dto);

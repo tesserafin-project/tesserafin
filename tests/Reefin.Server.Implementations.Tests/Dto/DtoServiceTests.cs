@@ -9,6 +9,7 @@ using Reefin.Controller.Entities;
 using Reefin.Controller.Entities.TV;
 using Reefin.Controller.Library;
 using Reefin.Controller.LiveTv;
+using Reefin.Controller.Persistence;
 using Reefin.Controller.Providers;
 using Reefin.Controller.Trickplay;
 using Reefin.Model.Entities;
@@ -49,7 +50,8 @@ public class DtoServiceTests
             new Mock<IMediaSourceManager>().Object,
             new Lazy<ILiveTvManager>(() => new Mock<ILiveTvManager>().Object),
             new Mock<ITrickplayManager>().Object,
-            new Mock<IChapterManager>().Object);
+            new Mock<IChapterManager>().Object,
+            new Mock<IItemCountService>().Object);
 
         // Episode.Series / Episode.Season resolve through the static BaseItem.LibraryManager.
         BaseItem.LibraryManager = _libraryManagerMock.Object;

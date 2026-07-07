@@ -677,7 +677,6 @@ namespace Reefin.Server.Core
             BaseItem.ConfigurationManager = ConfigurationManager;
             BaseItem.FileSystem = Resolve<IFileSystem>();
             BaseItem.ItemRepository = Resolve<IItemRepository>();
-            BaseItem.ItemCountService = Resolve<IItemCountService>();
             BaseItem.LibraryManager = Resolve<ILibraryManager>();
             BaseItem.LocalizationManager = Resolve<ILocalizationManager>();
             BaseItem.Logger = Resolve<ILogger<BaseItem>>();
