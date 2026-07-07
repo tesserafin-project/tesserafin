@@ -142,6 +142,20 @@ Le verdict global exige des jalons de compatibilité ; les voici pour la zone ac
 3. **J3 — API v2 create/patch/delete** exposée à côté de `/PlaybackInfo` (aucun retrait), migration des clients officiels un par un.
 4. **J4 — retrait compat** : `/PlaybackInfo` + query params HLS dépréciés seulement après adoption par les clients officiels (dernière étape du plan, inchangée).
 
+## Audit point 4 (2026-07-07) — `SetStaticProperties` / statics `BaseItem`
+
+16 statics au total : 13 sur `BaseItem` (`Logger`, `LibraryManager`, `ConfigurationManager`, `ProviderManager`, `LocalizationManager`, `ItemRepository`, `ItemCountService`, `ChapterManager`, `FileSystem`, `UserDataManager`, `ChannelManager`, `MediaSourceManager`, `MediaSegmentManager`), plus `CollectionFolder.XmlSerializer`, `CollectionFolder.ApplicationHost`, `Folder.UserViewManager`.
+
+Premier passage (agent Explore) : compte de fichiers où chaque static est **lu** (qualifié `BaseItem.X` + non qualifié dans `BaseItem.cs`/sous-classes). Classement obtenu, du plus petit au plus grand rayon d'action apparent : `LocalizationManager`/`ChapterManager`/`ItemRepository`/`ItemCountService`/`CollectionFolder.XmlSerializer` (1 fichier chacun) → ... → `LibraryManager` (29 fichiers, 148 lectures, appelants externes réels dans `Reefin.Providers`, confirmé le plus dur, à faire en dernier comme déjà noté).
+
+**Correction après vérification manuelle** : ce compte de fichiers sous-estime le vrai risque. La métrique qui compte, c'est le nombre d'appelants de la **méthode qui contient** la lecture du static — pas le nombre de fichiers qui la lisent. Deux cas concrets qui inversent le classement naïf :
+- `ChapterManager` semblait le plus simple (1 fichier, `BaseItem.cs` uniquement). En vérité, une des deux lectures est dans `GetImageInfo(ImageType, int)`, qui a **31 appelants** dans le repo — le vrai outlier du groupe "facile".
+- `LocalizationManager` a une lecture dans le **setter** de la propriété `OriginalLanguage` (`BaseItem.cs:226`). Impossible d'ajouter un paramètre à un setter : supprimer ce static demande un changement de forme (méthode explicite plutôt que propriété) partout où `item.OriginalLanguage = ...` est appelé (8 sites trouvés). Les deux autres lectures (`IsParentalAllowed`, `GetParentalRatingScore`) n'ont qu'1 appelant chacune.
+- `ItemRepository` (`Folder.cs`) : lectures dans `GetCachedChildren` (1 appelant) et `IsPlayed` (override, 3 appelants) — raisonnablement petit, confirmé.
+- `ItemCountService` (`Folder.cs`) : lecture dans `FillUserDataDtoValues` (override, 3 appelants) — raisonnablement petit, confirmé.
+
+Leçon méthode (même famille que le bug de résolution ancêtre-namespace du point 13) : **pour ce genre de refactor, l'audit doit compter les appelants de la méthode contenante, pas les fichiers qui lisent le static.** À refaire avant de scoper la suite de ce chantier.
+
 ## Ordre recommandé (reprend celui du plan, réordonné sur le point 3 ci-dessus)
 1. Sessions de lecture + protocole capacités v2 (point 1-2) — priorité confirmée, zone la mieux comprise.
 2. Suppression `SetStaticProperties` / statics `BaseItem` (point 4) **avant** découpage `LibraryManager`.
