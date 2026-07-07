@@ -608,6 +608,7 @@ namespace Reefin.Server.Core
 
             serviceCollection.AddSingleton<ITranscodeManager, TranscodeManager>();
             serviceCollection.AddSingleton<IPlaybackSessionPlanner, PlaybackSessionPlanner>();
+            serviceCollection.AddSingleton<IPlaybackSessionManager, PlaybackSessionManager>();
             serviceCollection.AddScoped<MediaInfoHelper>();
             serviceCollection.AddScoped<AudioHelper>();
             serviceCollection.AddScoped<DynamicHlsHelper>();
