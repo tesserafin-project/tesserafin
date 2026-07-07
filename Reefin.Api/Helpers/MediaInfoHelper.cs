@@ -44,6 +44,7 @@ public class MediaInfoHelper
     private readonly ILogger<MediaInfoHelper> _logger;
     private readonly INetworkManager _networkManager;
     private readonly IDeviceManager _deviceManager;
+    private readonly IPlaybackSessionPlanner _playbackSessionPlanner;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MediaInfoHelper"/> class.
@@ -56,6 +57,7 @@ public class MediaInfoHelper
     /// <param name="logger">Instance of the <see cref="ILogger{MediaInfoHelper}"/> interface.</param>
     /// <param name="networkManager">Instance of the <see cref="INetworkManager"/> interface.</param>
     /// <param name="deviceManager">Instance of the <see cref="IDeviceManager"/> interface.</param>
+    /// <param name="playbackSessionPlanner">Instance of the <see cref="IPlaybackSessionPlanner"/> interface.</param>
     public MediaInfoHelper(
         IUserManager userManager,
         ILibraryManager libraryManager,
@@ -64,7 +66,8 @@ public class MediaInfoHelper
         IServerConfigurationManager serverConfigurationManager,
         ILogger<MediaInfoHelper> logger,
         INetworkManager networkManager,
-        IDeviceManager deviceManager)
+        IDeviceManager deviceManager,
+        IPlaybackSessionPlanner playbackSessionPlanner)
     {
         _userManager = userManager;
         _libraryManager = libraryManager;
@@ -74,6 +77,7 @@ public class MediaInfoHelper
         _logger = logger;
         _networkManager = networkManager;
         _deviceManager = deviceManager;
+        _playbackSessionPlanner = playbackSessionPlanner;
     }
 
     /// <summary>
@@ -188,8 +192,6 @@ public class MediaInfoHelper
         bool alwaysBurnInSubtitleWhenTranscoding,
         IPAddress ipAddress)
     {
-        var streamBuilder = new StreamBuilder(_mediaEncoder, _logger);
-
         var options = new MediaOptions
         {
             MediaSources = new[] { mediaSource },
@@ -253,9 +255,10 @@ public class MediaInfoHelper
         }
 
         // Beginning of Playback Determination
-        var streamInfo = item.MediaType == MediaType.Audio
-            ? streamBuilder.GetOptimalAudioStream(options)
-            : streamBuilder.GetOptimalVideoStream(options);
+        var plan = item.MediaType == MediaType.Audio
+            ? _playbackSessionPlanner.PlanAudio(options)
+            : _playbackSessionPlanner.PlanVideo(options);
+        var streamInfo = plan?.StreamInfo;
 
         if (streamInfo is not null)
         {

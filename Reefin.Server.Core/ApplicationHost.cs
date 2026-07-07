@@ -58,6 +58,7 @@ using Reefin.Drawing;
 using Reefin.LocalMetadata.Savers;
 using Reefin.MediaEncoding.BdInfo;
 using Reefin.MediaEncoding.Hls.Playlist;
+using Reefin.MediaEncoding.Playback;
 using Reefin.MediaEncoding.Subtitles;
 using Reefin.MediaEncoding.Transcoding;
 using Reefin.Model.Cryptography;
@@ -606,6 +607,7 @@ namespace Reefin.Server.Core
             serviceCollection.AddSingleton<IAttachmentExtractor, Reefin.MediaEncoding.Attachments.AttachmentExtractor>();
 
             serviceCollection.AddSingleton<ITranscodeManager, TranscodeManager>();
+            serviceCollection.AddSingleton<IPlaybackSessionPlanner, PlaybackSessionPlanner>();
             serviceCollection.AddScoped<MediaInfoHelper>();
             serviceCollection.AddScoped<AudioHelper>();
             serviceCollection.AddScoped<DynamicHlsHelper>();

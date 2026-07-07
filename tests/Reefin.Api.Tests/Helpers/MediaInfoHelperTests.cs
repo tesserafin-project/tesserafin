@@ -26,7 +26,8 @@ namespace Reefin.Api.Tests.Helpers
                 Mock.Of<IServerConfigurationManager>(),
                 Mock.Of<ILogger<MediaInfoHelper>>(),
                 Mock.Of<INetworkManager>(),
-                Mock.Of<IDeviceManager>());
+                Mock.Of<IDeviceManager>(),
+                Mock.Of<IPlaybackSessionPlanner>());
         }
 
         private static MediaSourceInfo CreateSource(Guid itemId, int bitrate, bool supportsDirectPlay = true)
