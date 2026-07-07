@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Reefin.Model.Session;
 
 namespace Reefin.Controller.MediaEncoding;
@@ -87,4 +88,10 @@ public interface IPlaybackSessionManager
     /// <param name="id">The session to look up.</param>
     /// <returns>The session, or <c>null</c> if it does not exist.</returns>
     PlaybackSession? Get(PlaybackSessionId id);
+
+    /// <summary>
+    /// Gets a snapshot of all currently tracked sessions, for diagnostics.
+    /// </summary>
+    /// <returns>The current sessions.</returns>
+    IReadOnlyList<PlaybackSession> GetAll();
 }

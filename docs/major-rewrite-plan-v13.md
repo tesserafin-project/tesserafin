@@ -138,7 +138,7 @@ Conclusion : la seule extraction à faible risque et fort ROI immédiat est de c
 Le verdict global exige des jalons de compatibilité ; les voici pour la zone active. Le protocole v2 reste interne jusqu'à preuve de parité, la bascule client vient en dernier :
 
 1. **J1 — cycle de vie étanche (interne)** : tout chemin de lecture crée et termine une session (transcodage via `TranscodingJobEnded` ; direct play via `PlaybackStopped` ; probe via TTL). Critère mesurable : le compteur de sessions revient à zéro après arrêt de toutes les lectures. Cible : fin de PR5.
-2. **J2 — diagnostic exposé** : endpoint lecture seule (admin) listant les sessions, utilisé pour valider la parité des décisions v2 vs `/PlaybackInfo` en usage réel. PR6 amorce le nettoyage côté controller nécessaire, pas encore l'endpoint lui-même.
+2. **J2 — diagnostic exposé** : **fait (PR9/N, 2026-07-07)**. `IPlaybackSessionManager.GetAll()` (snapshot, sous verrou) + `PlaybackSessionsController` (`GET System/PlaybackSessions`, `[Authorize(Policy = Policies.RequiresElevation)]`, calqué sur `ActivityLogController`). Retourne `PlaybackSession` brut, pas de DTO dédié — diagnostic admin, pas un contrat public stable à ce stade. Build 41 projets 0 erreur, suite complète 0 échec hors les 2 échecs réseau pré-existants.
 3. **J3 — API v2 create/patch/delete** exposée à côté de `/PlaybackInfo` (aucun retrait), migration des clients officiels un par un.
 4. **J4 — retrait compat** : `/PlaybackInfo` + query params HLS dépréciés seulement après adoption par les clients officiels (dernière étape du plan, inchangée).
 

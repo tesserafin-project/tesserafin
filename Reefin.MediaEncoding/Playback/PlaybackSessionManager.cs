@@ -115,6 +115,15 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
     }
 
     /// <inheritdoc/>
+    public IReadOnlyList<PlaybackSession> GetAll()
+    {
+        lock (_lock)
+        {
+            return _sessions.Values.ToList();
+        }
+    }
+
+    /// <inheritdoc/>
     public void Dispose()
     {
         if (_disposed)

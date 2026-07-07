@@ -13,7 +13,7 @@ namespace Reefin.MediaEncoding.Tests.Playback;
 
 /// <summary>
 /// Lifecycle tests for <see cref="PlaybackSessionManager"/>: create/patch/delete bookkeeping
-/// on top of an <see cref="IPlaybackSessionPlanner"/> stub. Not wired into any controller yet.
+/// on top of an <see cref="IPlaybackSessionPlanner"/> stub.
 /// </summary>
 public class PlaybackSessionManagerTests
 {
@@ -205,6 +205,20 @@ public class PlaybackSessionManagerTests
 
         Assert.Equal(0, removed);
         Assert.NotNull(manager.Get(session.Id));
+    }
+
+    [Fact]
+    public void GetAll_ReturnsSnapshotOfAllTrackedSessions()
+    {
+        var manager = new PlaybackSessionManager(new Mock<IPlaybackSessionPlanner>().Object, new Mock<ITranscodeManager>().Object, new Mock<ISessionManager>().Object);
+        var first = manager.Track(PlaybackMediaKind.Video, new PlaybackPlan(PlayMethod.DirectPlay, default), "play-session-1");
+        var second = manager.Track(PlaybackMediaKind.Audio, new PlaybackPlan(PlayMethod.Transcode, default), "play-session-2");
+
+        var all = manager.GetAll();
+
+        Assert.Equal(2, all.Count);
+        Assert.Contains(all, s => s.Id == first.Id);
+        Assert.Contains(all, s => s.Id == second.Id);
     }
 
     private static PlaybackSessionManager GetManager(System.Action<Mock<IPlaybackSessionPlanner>> setup)
