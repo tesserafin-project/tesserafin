@@ -72,6 +72,8 @@ namespace Reefin.Controller.Entities.TV
         /// <value>The status.</value>
         public SeriesStatus? Status { get; set; }
 
+        public override bool SupportsRawQueryItems => false;
+
         public override double GetDefaultPrimaryImageAspectRatio()
         {
             double value = 2;

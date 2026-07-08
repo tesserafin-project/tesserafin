@@ -48,6 +48,8 @@ namespace Reefin.Controller.Entities
         [JsonIgnore]
         public override bool IsPreSorted => true;
 
+        public override bool SupportsRawQueryItems => false;
+
         private void ClearCache()
         {
             lock (_childIdsLock)

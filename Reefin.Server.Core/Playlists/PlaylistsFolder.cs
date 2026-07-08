@@ -33,6 +33,12 @@ namespace Reefin.Server.Core.Playlists
         [JsonIgnore]
         public override CollectionType? CollectionType => Reefin.Data.Enums.CollectionType.playlists;
 
+        // Only unsafe when query.User is set (the base routing is used as-is for query.User is
+        // null, cf. the base.GetItemsInternal call in GetItemsInternal below) - kept false
+        // unconditionally anyway.
+        [JsonIgnore]
+        public override bool SupportsRawQueryItems => false;
+
         protected override IEnumerable<BaseItem> GetEligibleChildrenForRecursiveChildren(User user)
         {
             return base.GetEligibleChildrenForRecursiveChildren(user).OfType<Playlist>();

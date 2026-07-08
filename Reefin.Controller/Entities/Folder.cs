@@ -101,6 +101,20 @@ namespace Reefin.Controller.Entities
         [JsonIgnore]
         public virtual bool SupportsDateLastMediaAdded => false;
 
+        // Whether GetRawQueryItems + PostFilterAndSort (the base GetItemsInternal's own routing,
+        // cf. major rewrite plan PR24) is a correct substitute for calling GetItemsInternal through
+        // full virtual dispatch, for THIS type - regardless of the query shape. ItemQueryService
+        // (Reefin.Server.Core) reads this before taking its fast path (PR25) rather than
+        // enumerating known subtypes itself: entity-hierarchy knowledge stays on the hierarchy, not
+        // leaked into the service. Overridden to false by every type whose GetItemsInternal diverges
+        // from the base routing (PlaylistsFolder, UserView, UserRootFolder, Series, Season, Channel -
+        // the 6 known overrides, cf. PR11). Some of them (PlaylistsFolder, Season) are only unsafe
+        // when query.User is set and would in principle be fine for query.User is null - kept false
+        // unconditionally anyway: conservative per-type is simpler and safer than a per-query check
+        // duplicated on both sides of the fast-path decision.
+        [JsonIgnore]
+        public virtual bool SupportsRawQueryItems => true;
+
         [JsonIgnore]
         public override string FileNameWithoutExtension
         {

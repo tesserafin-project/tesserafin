@@ -90,6 +90,11 @@ namespace Reefin.Controller.Entities.TV
         [JsonIgnore]
         public Guid SeriesId { get; set; }
 
+        // Only unsafe when query.User is set (the base routing is used as-is for query.User is
+        // null, cf. the base.GetItemsInternal call in GetItemsInternal below) - kept false
+        // unconditionally anyway.
+        public override bool SupportsRawQueryItems => false;
+
         public override double GetDefaultPrimaryImageAspectRatio()
         {
             double value = 2;

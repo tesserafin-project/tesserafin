@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Reefin.Controller.Channels;
 using Reefin.Controller.Collections;
@@ -198,5 +199,127 @@ public class ItemQueryServiceTests
         Assert.Equal(expected.Items.Select(i => i.Name), actual.Items.Select(i => i.Name));
         Assert.Single(actual.Items);
         Assert.Equal(expectedName, actual.Items[0].Name);
+    }
+
+    // Wiring tests (major rewrite plan, PR25/N): GetItems/GetItemList now take a fast path
+    // (GetRawQueryItems + PostFilterAndSort) for folders where Folder.SupportsRawQueryItems is
+    // true. For the safe case the fast path is behaviorally equivalent to the old folder.GetItems
+    // call by construction (Folder.GetItemsInternal routes through the same GetRawQueryItems,
+    // PR24) - not worth re-proving here. What IS worth proving: the 4 cases where taking the fast
+    // path would be a silent correctness bug (SupportsRawQueryItems false, Recursive, ItemIds,
+    // channel source) actually fall back to the old, still-correct path instead.
+
+    [Fact]
+    public void GetItems_RecursiveQuery_FallsBackInsteadOfRawQueryItems()
+    {
+        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager);
+
+        var folder = new Folder { Id = Guid.NewGuid() };
+        // Present in Children so a wrongly-taken fast path would return this instead of the sentinel below.
+        folder.Children = new BaseItem[] { new Movie { Id = Guid.NewGuid() } };
+
+        var sentinel = new Movie { Id = Guid.NewGuid() };
+        var libraryManager = new Mock<ILibraryManager>();
+        libraryManager
+            .Setup(x => x.GetItemsResult(It.IsAny<InternalItemsQuery>()))
+            .Returns(new QueryResult<BaseItem>(0, 1, new BaseItem[] { sentinel }));
+        BaseItem.LibraryManager = libraryManager.Object;
+        BaseItem.UserDataManager = new Mock<IUserDataManager>().Object;
+        BaseItem.ConfigurationManager = Mock.Of<IServerConfigurationManager>(x => x.Configuration == new ServerConfiguration());
+
+        var result = service.GetItems(folder, new InternalItemsQuery { Recursive = true });
+
+        Assert.Single(result.Items);
+        Assert.Equal(sentinel, result.Items[0]);
+    }
+
+    [Fact]
+    public void GetItems_ItemIdsQuery_FallsBackInsteadOfRawQueryItems()
+    {
+        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager);
+
+        var folder = new Folder { Id = Guid.NewGuid() };
+        folder.Children = new BaseItem[] { new Movie { Id = Guid.NewGuid() } };
+
+        var sentinel = new Movie { Id = Guid.NewGuid() };
+        var libraryManager = new Mock<ILibraryManager>();
+        libraryManager
+            .Setup(x => x.GetItemsResult(It.IsAny<InternalItemsQuery>()))
+            .Returns(new QueryResult<BaseItem>(0, 1, new BaseItem[] { sentinel }));
+        BaseItem.LibraryManager = libraryManager.Object;
+        BaseItem.UserDataManager = new Mock<IUserDataManager>().Object;
+
+        var result = service.GetItems(folder, new InternalItemsQuery { ItemIds = new[] { sentinel.Id } });
+
+        Assert.Single(result.Items);
+        Assert.Equal(sentinel, result.Items[0]);
+    }
+
+    [Fact]
+    public void GetItems_ChannelFolder_FallsBackInsteadOfRawQueryItems()
+    {
+        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager);
+
+        var folder = new Folder { Id = Guid.NewGuid(), ChannelId = Guid.NewGuid() };
+        folder.Children = new BaseItem[] { new Movie { Id = Guid.NewGuid() } };
+
+        var channelItem = new Movie { Id = Guid.NewGuid() };
+        channelManager
+            .Setup(x => x.GetChannelItemsInternal(It.IsAny<InternalItemsQuery>(), It.IsAny<IProgress<double>>(), It.IsAny<System.Threading.CancellationToken>()))
+            .ReturnsAsync(new QueryResult<BaseItem>(0, 1, new BaseItem[] { channelItem }));
+
+        var result = service.GetItems(folder, new InternalItemsQuery());
+
+        Assert.Single(result.Items);
+        Assert.Equal(channelItem, result.Items[0]);
+    }
+
+    [Fact]
+    public void GetItems_UserView_FallsBackInsteadOfRawQueryItems()
+    {
+        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager);
+
+        // UserView.SupportsRawQueryItems is false - its own GetItemsInternal (resolving
+        // DisplayParentId to a channel-sourced Folder, cf. FolderTests' equivalent test) must be
+        // used, not the base GetRawQueryItems on the UserView itself (which has no Children set here
+        // and would silently return an empty result if the fast path were wrongly taken).
+        var displayParent = new Folder { Id = Guid.NewGuid(), ChannelId = Guid.NewGuid() };
+        var userView = new UserView { Id = Guid.NewGuid(), DisplayParentId = displayParent.Id };
+        var channelItem = new Movie { Id = Guid.NewGuid() };
+
+        var libraryManager = new Mock<ILibraryManager>();
+        libraryManager.Setup(x => x.GetItemById(displayParent.Id)).Returns(displayParent);
+        BaseItem.LibraryManager = libraryManager.Object;
+        BaseItem.UserDataManager = new Mock<IUserDataManager>().Object;
+        BaseItem.Logger = NullLogger<BaseItem>.Instance;
+
+        channelManager
+            .Setup(x => x.GetChannelItemsInternal(It.IsAny<InternalItemsQuery>(), It.IsAny<IProgress<double>>(), It.IsAny<System.Threading.CancellationToken>()))
+            .ReturnsAsync(new QueryResult<BaseItem>(0, 1, new BaseItem[] { channelItem }));
+
+        var result = service.GetItems(userView, new InternalItemsQuery());
+
+        Assert.Single(result.Items);
+        Assert.Equal(channelItem, result.Items[0]);
+    }
+
+    [Fact]
+    public void GetItemList_FastPath_ForcesEnableTotalRecordCountFalse()
+    {
+        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager);
+
+        var folder = new Folder { Id = Guid.NewGuid() };
+        var child = new Movie { Id = Guid.NewGuid() };
+        folder.Children = new BaseItem[] { child };
+        BaseItem.LibraryManager = new Mock<ILibraryManager>().Object;
+        BaseItem.UserDataManager = new Mock<IUserDataManager>().Object;
+
+        var query = new InternalItemsQuery { EnableTotalRecordCount = true };
+
+        var result = service.GetItemList(folder, query);
+
+        Assert.Single(result);
+        Assert.Equal(child, result[0]);
+        Assert.False(query.EnableTotalRecordCount);
     }
 }

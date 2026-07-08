@@ -35,10 +35,38 @@ namespace Reefin.Server.Core.Library
         }
 
         public QueryResult<BaseItem> GetItems(Folder folder, InternalItemsQuery query)
-            => folder.GetItems(query, _channelManager, _collectionManager, _userViewManager, _tvSeriesManager);
+        {
+            if (!CanUseRawQueryItemsFastPath(folder, query))
+            {
+                return folder.GetItems(query, _channelManager, _collectionManager, _userViewManager, _tvSeriesManager);
+            }
+
+            return PostFilterAndSort(folder, folder.GetRawQueryItems(query), query);
+        }
 
         public IReadOnlyList<BaseItem> GetItemList(Folder folder, InternalItemsQuery query)
-            => folder.GetItemList(query, _channelManager, _collectionManager, _userViewManager, _tvSeriesManager);
+        {
+            if (!CanUseRawQueryItemsFastPath(folder, query))
+            {
+                return folder.GetItemList(query, _channelManager, _collectionManager, _userViewManager, _tvSeriesManager);
+            }
+
+            // Mirrors Folder.GetItemList's own unconditional mutation before it delegates further.
+            query.EnableTotalRecordCount = false;
+            return PostFilterAndSort(folder, folder.GetRawQueryItems(query), query).Items;
+        }
+
+        // GetRawQueryItems + PostFilterAndSort is only equivalent to the full GetItems/GetItemList
+        // pipeline when none of the branches that precede or replace it in Folder are in play:
+        // folder.SupportsRawQueryItems (PR25) rules out the 6 known GetItemsInternal overrides that
+        // build items differently; query.ItemIds mirrors Folder.GetItems/GetItemList's own early
+        // return (LibraryManager.GetItemsResult/GetItemList, never reaches GetItemsInternal at all);
+        // SourceType.Channel and query.Recursive mirror GetItemsInternal's own first two checks.
+        private static bool CanUseRawQueryItemsFastPath(Folder folder, InternalItemsQuery query)
+            => folder.SupportsRawQueryItems
+                && query.ItemIds.Length == 0
+                && folder.SourceType != SourceType.Channel
+                && !query.Recursive;
 
         // Relocation of Folder.PostFilterAndSort (and its private helpers) per the major rewrite
         // plan's point 5 (PR23/N): not wired into GetItems/GetItemList yet (Folder keeps its own

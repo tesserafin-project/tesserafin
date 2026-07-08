@@ -73,6 +73,9 @@ namespace Reefin.Controller.Entities
         public override bool SupportsPeople => false;
 
         /// <inheritdoc />
+        public override bool SupportsRawQueryItems => false;
+
+        /// <inheritdoc />
         public override IEnumerable<Guid> GetIdsForAncestorQuery()
         {
             if (!DisplayParentId.IsEmpty())

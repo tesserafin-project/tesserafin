@@ -26,6 +26,8 @@ namespace Reefin.Controller.Channels
         [JsonIgnore]
         public override SourceType SourceType => SourceType.Channel;
 
+        public override bool SupportsRawQueryItems => false;
+
         public override bool IsVisible(User user, bool skipAllowedTagsCheck = false)
         {
             var blockedChannelsPreference = user.GetPreferenceValues<Guid>(PreferenceKind.BlockedChannels);
