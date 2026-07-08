@@ -423,7 +423,7 @@ namespace Reefin.Server.Core.Dto
 
             if (item is Audio audio)
             {
-                dto.HasLyrics = audio.GetMediaStreams().Any(s => s.Type == MediaStreamType.Lyric);
+                dto.HasLyrics = audio.GetMediaStreams(_mediaSourceManager).Any(s => s.Type == MediaStreamType.Lyric);
             }
 
             return dto;

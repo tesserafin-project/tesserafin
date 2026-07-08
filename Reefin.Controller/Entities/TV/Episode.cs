@@ -338,10 +338,14 @@ namespace Reefin.Controller.Entities.TV
                     {
                         try
                         {
+                            // BeforeMetadataRefresh isn't part of the GetMediaSources/GetMediaStreams
+                            // chain the mediaSourceManager/mediaSegmentManager/channelManager
+                            // parameters were threaded through (out of scope: a much wider virtual
+                            // with 15 overrides/17 callers) — falls back to the statics here.
                             var mediaInfo = MediaEncoder.GetMediaInfo(
                                 new MediaInfoRequest
                                 {
-                                    MediaSource = GetMediaSources(false)[0],
+                                    MediaSource = GetMediaSources(false, MediaSourceManager, MediaSegmentManager, ChannelManager)[0],
                                     MediaType = DlnaProfileType.Video
                                 },
                                 CancellationToken.None).GetAwaiter().GetResult();

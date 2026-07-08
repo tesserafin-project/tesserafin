@@ -3,6 +3,7 @@ using System.Threading;
 using Microsoft.Extensions.Logging;
 using Reefin.Controller.Entities;
 using Reefin.Controller.Entities.Audio;
+using Reefin.Controller.Library;
 using Reefin.Controller.Persistence;
 using Reefin.Data.Enums;
 using Reefin.Model.Entities;
@@ -22,16 +23,19 @@ namespace Reefin.Server.Migrations.Routines
         private readonly IItemRepository _itemRepository;
         private readonly IItemCountService _countService;
         private readonly IItemPersistenceService _persistenceService;
+        private readonly IMediaSourceManager _mediaSourceManager;
 
         public FixAudioData(
             ILoggerFactory loggerFactory,
             IItemRepository itemRepository,
             IItemCountService countService,
-            IItemPersistenceService persistenceService)
+            IItemPersistenceService persistenceService,
+            IMediaSourceManager mediaSourceManager)
         {
             _itemRepository = itemRepository;
             _countService = countService;
             _persistenceService = persistenceService;
+            _mediaSourceManager = mediaSourceManager;
             _logger = loggerFactory.CreateLogger<FixAudioData>();
         }
 
@@ -59,7 +63,7 @@ namespace Reefin.Server.Migrations.Routines
 
                 foreach (var audio in results)
                 {
-                    var lyricMediaStreams = audio.GetMediaStreams().Where(s => s.Type == MediaStreamType.Lyric).Select(s => s.Path).ToList();
+                    var lyricMediaStreams = audio.GetMediaStreams(_mediaSourceManager).Where(s => s.Type == MediaStreamType.Lyric).Select(s => s.Path).ToList();
                     if (lyricMediaStreams.Count > 0)
                     {
                         audio.HasLyrics = true;

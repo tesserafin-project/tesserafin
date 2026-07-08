@@ -4,10 +4,12 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using Reefin.Controller.Channels;
 using Reefin.Controller.Configuration;
 using Reefin.Controller.Dto;
 using Reefin.Controller.Entities;
 using Reefin.Controller.Library;
+using Reefin.Controller.MediaSegments;
 using Reefin.Controller.TV;
 using Reefin.Data;
 using Reefin.Data.Enums;
@@ -25,12 +27,24 @@ namespace Reefin.Server.Core.TV
         private readonly IUserDataManager _userDataManager;
         private readonly ILibraryManager _libraryManager;
         private readonly IServerConfigurationManager _configurationManager;
+        private readonly IMediaSourceManager _mediaSourceManager;
+        private readonly IMediaSegmentManager _mediaSegmentManager;
+        private readonly IChannelManager _channelManager;
 
-        public TVSeriesManager(IUserDataManager userDataManager, ILibraryManager libraryManager, IServerConfigurationManager configurationManager)
+        public TVSeriesManager(
+            IUserDataManager userDataManager,
+            ILibraryManager libraryManager,
+            IServerConfigurationManager configurationManager,
+            IMediaSourceManager mediaSourceManager,
+            IMediaSegmentManager mediaSegmentManager,
+            IChannelManager channelManager)
         {
             _userDataManager = userDataManager;
             _libraryManager = libraryManager;
             _configurationManager = configurationManager;
+            _mediaSourceManager = mediaSourceManager;
+            _mediaSegmentManager = mediaSegmentManager;
+            _channelManager = channelManager;
         }
 
         public QueryResult<BaseItem> GetNextUp(NextUpQuery query, DtoOptions options)
@@ -293,7 +307,7 @@ namespace Reefin.Server.Core.TV
 
             // Match by version name
             var playedVersionId = playedVersion.Id.ToString("N", CultureInfo.InvariantCulture);
-            var playedVersionName = lastWatchedVideo.GetMediaSources(false)
+            var playedVersionName = lastWatchedVideo.GetMediaSources(false, _mediaSourceManager, _mediaSegmentManager, _channelManager)
                 .FirstOrDefault(source => string.Equals(source.Id, playedVersionId, StringComparison.OrdinalIgnoreCase))?.Name;
 
             if (string.IsNullOrEmpty(playedVersionName))
@@ -301,7 +315,7 @@ namespace Reefin.Server.Core.TV
                 return nextEpisode;
             }
 
-            var matchingSource = nextEpisode.GetMediaSources(false)
+            var matchingSource = nextEpisode.GetMediaSources(false, _mediaSourceManager, _mediaSegmentManager, _channelManager)
                 .FirstOrDefault(source => string.Equals(source.Name, playedVersionName, StringComparison.OrdinalIgnoreCase));
 
             if (matchingSource is not null

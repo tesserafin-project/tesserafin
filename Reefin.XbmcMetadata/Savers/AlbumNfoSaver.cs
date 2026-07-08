@@ -28,14 +28,16 @@ namespace Reefin.XbmcMetadata.Savers
         /// <param name="userManager">The user manager.</param>
         /// <param name="userDataManager">The user data manager.</param>
         /// <param name="logger">The logger.</param>
+        /// <param name="mediaSourceManager">The media source manager.</param>
         public AlbumNfoSaver(
             IFileSystem fileSystem,
             IServerConfigurationManager configurationManager,
             ILibraryManager libraryManager,
             IUserManager userManager,
             IUserDataManager userDataManager,
-            ILogger<AlbumNfoSaver> logger)
-            : base(fileSystem, configurationManager, libraryManager, userManager, userDataManager, logger)
+            ILogger<AlbumNfoSaver> logger,
+            IMediaSourceManager mediaSourceManager)
+            : base(fileSystem, configurationManager, libraryManager, userManager, userDataManager, logger, mediaSourceManager)
         {
         }
 

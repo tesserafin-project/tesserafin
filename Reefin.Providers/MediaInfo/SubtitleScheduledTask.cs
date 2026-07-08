@@ -28,6 +28,7 @@ namespace Reefin.Providers.MediaInfo
         private readonly ILogger<SubtitleScheduledTask> _logger;
         private readonly ILocalizationManager _localization;
         private readonly ISubtitleProvider[] _subtitleProviders;
+        private readonly IMediaSourceManager _mediaSourceManager;
 
         public SubtitleScheduledTask(
             ILibraryManager libraryManager,
@@ -35,7 +36,8 @@ namespace Reefin.Providers.MediaInfo
             ISubtitleManager subtitleManager,
             ILogger<SubtitleScheduledTask> logger,
             ILocalizationManager localization,
-            IEnumerable<ISubtitleProvider> subtitleProviders)
+            IEnumerable<ISubtitleProvider> subtitleProviders,
+            IMediaSourceManager mediaSourceManager)
         {
             _libraryManager = libraryManager;
             _config = config;
@@ -45,6 +47,7 @@ namespace Reefin.Providers.MediaInfo
             _subtitleProviders = subtitleProviders
                 .OrderBy(i => i is IHasOrder hasOrder ? hasOrder.Order : 0)
                 .ToArray();
+            _mediaSourceManager = mediaSourceManager;
         }
 
         public string Name => _localization.GetLocalizedString("TaskDownloadMissingSubtitles");
@@ -163,7 +166,7 @@ namespace Reefin.Providers.MediaInfo
 
         private async Task<bool> DownloadSubtitles(Video video, CancellationToken cancellationToken)
         {
-            var mediaStreams = video.GetMediaStreams();
+            var mediaStreams = video.GetMediaStreams(_mediaSourceManager);
 
             var libraryOptions = _libraryManager.GetLibraryOptions(video);
 

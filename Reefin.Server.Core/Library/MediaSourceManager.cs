@@ -23,6 +23,7 @@ using Reefin.Controller.IO;
 using Reefin.Controller.Library;
 using Reefin.Controller.LiveTv;
 using Reefin.Controller.MediaEncoding;
+using Reefin.Controller.MediaSegments;
 using Reefin.Controller.Persistence;
 using Reefin.Controller.Providers;
 using Reefin.Data;
@@ -58,6 +59,7 @@ namespace Reefin.Server.Core.Library
         private readonly IDirectoryService _directoryService;
         private readonly IMediaStreamRepository _mediaStreamRepository;
         private readonly IMediaAttachmentRepository _mediaAttachmentRepository;
+        private readonly IMediaSegmentManager _mediaSegmentManager;
         private readonly ConcurrentDictionary<string, ILiveStream> _openStreams = new ConcurrentDictionary<string, ILiveStream>(StringComparer.OrdinalIgnoreCase);
         private readonly AsyncNonKeyedLocker _liveStreamLocker = new(1);
         private readonly JsonSerializerOptions _jsonOptions = JsonDefaults.Options;
@@ -77,7 +79,8 @@ namespace Reefin.Server.Core.Library
             IMediaEncoder mediaEncoder,
             IDirectoryService directoryService,
             IMediaStreamRepository mediaStreamRepository,
-            IMediaAttachmentRepository mediaAttachmentRepository)
+            IMediaAttachmentRepository mediaAttachmentRepository,
+            IMediaSegmentManager mediaSegmentManager)
         {
             _appHost = appHost;
             _itemRepo = itemRepo;
@@ -92,6 +95,7 @@ namespace Reefin.Server.Core.Library
             _directoryService = directoryService;
             _mediaStreamRepository = mediaStreamRepository;
             _mediaAttachmentRepository = mediaAttachmentRepository;
+            _mediaSegmentManager = mediaSegmentManager;
         }
 
         public void AddParts(IEnumerable<IMediaSourceProvider> providers)
@@ -386,7 +390,9 @@ namespace Reefin.Server.Core.Library
 
             var hasMediaSources = (IHasMediaSources)item;
 
-            var sources = hasMediaSources.GetMediaSources(enablePathSubstitution);
+            // channelManager not injectable here: IChannelManager -> IDtoService -> IMediaSourceManager
+            // is an existing DI edge, so IMediaSourceManager -> IChannelManager would be circular.
+            var sources = hasMediaSources.GetMediaSources(enablePathSubstitution, this, _mediaSegmentManager, BaseItem.ChannelManager);
 
             if (user is not null)
             {

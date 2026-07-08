@@ -7,9 +7,11 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller.Channels;
 using Reefin.Controller.Entities;
 using Reefin.Controller.IO;
 using Reefin.Controller.Library;
+using Reefin.Controller.MediaSegments;
 using Reefin.Controller.Playlists;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations;
@@ -22,17 +24,26 @@ public class CleanDatabaseScheduledTask : ILibraryPostScanTask
     private readonly ILogger<CleanDatabaseScheduledTask> _logger;
     private readonly IDbContextFactory<ReefinDbContext> _dbProvider;
     private readonly IPathManager _pathManager;
+    private readonly IMediaSourceManager _mediaSourceManager;
+    private readonly IMediaSegmentManager _mediaSegmentManager;
+    private readonly IChannelManager _channelManager;
 
     public CleanDatabaseScheduledTask(
         ILibraryManager libraryManager,
         ILogger<CleanDatabaseScheduledTask> logger,
         IDbContextFactory<ReefinDbContext> dbProvider,
-        IPathManager pathManager)
+        IPathManager pathManager,
+        IMediaSourceManager mediaSourceManager,
+        IMediaSegmentManager mediaSegmentManager,
+        IChannelManager channelManager)
     {
         _libraryManager = libraryManager;
         _logger = logger;
         _dbProvider = dbProvider;
         _pathManager = pathManager;
+        _mediaSourceManager = mediaSourceManager;
+        _mediaSegmentManager = mediaSegmentManager;
+        _channelManager = channelManager;
     }
 
     public async Task Run(IProgress<double> progress, CancellationToken cancellationToken)
@@ -67,7 +78,7 @@ public class CleanDatabaseScheduledTask : ILibraryPostScanTask
             {
                 _logger.LogInformation("Cleaning item {Item} type: {Type} path: {Path}", item.Name, item.GetType().Name, item.Path ?? string.Empty);
 
-                foreach (var mediaSource in item.GetMediaSources(false))
+                foreach (var mediaSource in item.GetMediaSources(false, _mediaSourceManager, _mediaSegmentManager, _channelManager))
                 {
                     // Delete extracted data
                     var mediaSourceItem = _libraryManager.GetItemById(mediaSource.Id);

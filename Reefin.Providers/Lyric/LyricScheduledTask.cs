@@ -33,6 +33,7 @@ public class LyricScheduledTask : IScheduledTask
     private readonly ILyricManager _lyricManager;
     private readonly ILogger<LyricScheduledTask> _logger;
     private readonly ILocalizationManager _localizationManager;
+    private readonly IMediaSourceManager _mediaSourceManager;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LyricScheduledTask"/> class.
@@ -41,16 +42,19 @@ public class LyricScheduledTask : IScheduledTask
     /// <param name="lyricManager">Instance of the <see cref="ILyricManager"/> interface.</param>
     /// <param name="logger">Instance of the <see cref="ILogger{DownloaderScheduledTask}"/> interface.</param>
     /// <param name="localizationManager">Instance of the <see cref="ILocalizationManager"/> interface.</param>
+    /// <param name="mediaSourceManager">Instance of the <see cref="IMediaSourceManager"/> interface.</param>
     public LyricScheduledTask(
         ILibraryManager libraryManager,
         ILyricManager lyricManager,
         ILogger<LyricScheduledTask> logger,
-        ILocalizationManager localizationManager)
+        ILocalizationManager localizationManager,
+        IMediaSourceManager mediaSourceManager)
     {
         _libraryManager = libraryManager;
         _lyricManager = lyricManager;
         _logger = logger;
         _localizationManager = localizationManager;
+        _mediaSourceManager = mediaSourceManager;
     }
 
     /// <inheritdoc />
@@ -108,7 +112,7 @@ public class LyricScheduledTask : IScheduledTask
 
                     try
                     {
-                        if (audioItem.GetMediaStreams().All(s => s.Type != MediaStreamType.Lyric))
+                        if (audioItem.GetMediaStreams(_mediaSourceManager).All(s => s.Type != MediaStreamType.Lyric))
                         {
                             _logger.LogDebug("Searching for lyrics for {Path}", audioItem.Path);
                             var lyricResults = await _lyricManager.SearchLyricsAsync(

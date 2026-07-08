@@ -106,7 +106,8 @@ namespace Reefin.XbmcMetadata.Savers
             ILibraryManager libraryManager,
             IUserManager userManager,
             IUserDataManager userDataManager,
-            ILogger<BaseNfoSaver> logger)
+            ILogger<BaseNfoSaver> logger,
+            IMediaSourceManager mediaSourceManager)
         {
             Logger = logger;
             UserDataManager = userDataManager;
@@ -114,6 +115,7 @@ namespace Reefin.XbmcMetadata.Savers
             LibraryManager = libraryManager;
             ConfigurationManager = configurationManager;
             FileSystem = fileSystem;
+            MediaSourceManager = mediaSourceManager;
         }
 
         protected IFileSystem FileSystem { get; }
@@ -127,6 +129,8 @@ namespace Reefin.XbmcMetadata.Savers
         protected IUserDataManager UserDataManager { get; }
 
         protected ILogger<BaseNfoSaver> Logger { get; }
+
+        protected IMediaSourceManager MediaSourceManager { get; }
 
         protected ItemUpdateType MinimumUpdateType
         {
@@ -279,7 +283,7 @@ namespace Reefin.XbmcMetadata.Savers
 
                 if (baseItem is IHasMediaSources hasMediaSources)
                 {
-                    AddMediaInfo(hasMediaSources, writer);
+                    AddMediaInfo(hasMediaSources, writer, MediaSourceManager);
                 }
 
                 var tagsUsed = GetTagsUsed(item).ToList();
@@ -307,13 +311,13 @@ namespace Reefin.XbmcMetadata.Savers
 
         protected abstract void WriteCustomElements(BaseItem item, XmlWriter writer);
 
-        public static void AddMediaInfo<T>(T item, XmlWriter writer)
+        public static void AddMediaInfo<T>(T item, XmlWriter writer, IMediaSourceManager mediaSourceManager)
             where T : IHasMediaSources
         {
             writer.WriteStartElement("fileinfo");
             writer.WriteStartElement("streamdetails");
 
-            var mediaStreams = item.GetMediaStreams();
+            var mediaStreams = item.GetMediaStreams(mediaSourceManager);
 
             foreach (var stream in mediaStreams)
             {

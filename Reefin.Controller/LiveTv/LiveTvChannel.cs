@@ -8,7 +8,10 @@ using System.Collections.Immutable;
 using System.Globalization;
 using System.Linq;
 using System.Text.Json.Serialization;
+using Reefin.Controller.Channels;
 using Reefin.Controller.Entities;
+using Reefin.Controller.Library;
+using Reefin.Controller.MediaSegments;
 using Reefin.Data.Enums;
 using Reefin.Extensions;
 using Reefin.Model.Dto;
@@ -122,7 +125,7 @@ namespace Reefin.Controller.LiveTv
 
         public IEnumerable<BaseItem> GetTaggedItems() => [];
 
-        public override IReadOnlyList<MediaSourceInfo> GetMediaSources(bool enablePathSubstitution)
+        public override IReadOnlyList<MediaSourceInfo> GetMediaSources(bool enablePathSubstitution, IMediaSourceManager mediaSourceManager, IMediaSegmentManager mediaSegmentManager, IChannelManager channelManager)
         {
             var info = new MediaSourceInfo
             {
@@ -139,7 +142,7 @@ namespace Reefin.Controller.LiveTv
             return [info];
         }
 
-        public override IReadOnlyList<MediaStream> GetMediaStreams()
+        public override IReadOnlyList<MediaStream> GetMediaStreams(IMediaSourceManager mediaSourceManager)
         {
             return [];
         }

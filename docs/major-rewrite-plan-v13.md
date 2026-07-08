@@ -259,11 +259,32 @@ Build 41 projets 0 erreur. Suite complète 0 échec hors les 2 échecs réseau p
 
 Cluster `GetItemsInternal` **terminé** : les 4 statics qu'il portait (`ChannelManager`, `CollectionManager`, `UserViewManager`, `TVSeriesManager`) sont sortis de la lecture directe dans la chaîne `GetItemsInternal`/`GetItems`/`GetItemList`/`PostFilterAndSort`. Restent des lectures directes hors de ce cluster pour certains d'entre eux (`ChannelManager.EnableMediaSourceDisplay`, `ChannelManager.CanDelete`, et les 6 sites de repli qui gardent tous les 4 comme fallback documenté — `GetChildren`, `MarkPlayed`, etc., hors scope, cascades trop larges).
 
-### Prochains candidats si reprise (mise à jour post-PR12)
+### PR13/N — `MediaSourceManager`+`MediaSegmentManager` retirés de `GetVersionInfo`/`GetMediaSources`/`GetMediaStreams` (2026-07-08)
 
-1. **`MediaSegmentManager`+`MediaSourceManager`** — chaîne `GetVersionInfo`/`GetMediaSources`/`GetMediaStreams` partagée (1 override, 8-10 appelants), hors propriété `PathProtocol` (changement de forme, à part). Vérifier si `GetMediaSources`/`GetMediaStreams` sont eux-mêmes appelés par d'autres méthodes publiques larges avant de supposer le compte d'appelants final (leçon PR11/PR12 : toujours vérifier, jamais supposer).
-2. **`ChannelManager.EnableMediaSourceDisplay`** — propriété à 4 lecteurs, petit.
-3. **Les 6 sites de repli** (`GetChildren`, `GetRecursiveChildren`, `GetChildCount`, `GetRecursiveChildCount`, `MarkPlayed`, `MarkUnplayed`) restent sur les 4 statics — chantier à part si on veut les traiter un jour (probablement pas rentable : ce sont des méthodes cœur de l'API item, cascade large garantie).
+Candidat n°1 de la liste ci-dessus. `GetVersionInfo` (private), `GetMediaSources(bool)` et `GetMediaStreams()` (tous deux `public virtual`, 1 override `LiveTvChannel`) gagnent `IMediaSourceManager mediaSourceManager, IMediaSegmentManager mediaSegmentManager` (+ `IChannelManager channelManager` pour `GetMediaSources` seul, qui lisait aussi ce static — **4e site `ChannelManager` non compté par la carte**, trouvé en lisant le corps de la méthode avant de coder).
+
+**Le plus gros rayon d'action rencontré jusqu'ici sur ce chantier**, découvert en 3 vagues successives à la compilation, pas anticipé par la carte :
+1. **Contrat d'interface** : `IHasMediaSources` (implémentée par `BaseItem`, `Video`, `Audio`, `LiveTvChannel`) déclare `GetMediaSources`/`GetMediaStreams` avec les anciennes signatures — a fallu changer l'interface elle-même, pas seulement les implémentations.
+2. **Générique contraint par l'interface** : `BaseNfoSaver.AddMediaInfo<T>(T item, ...) where T : IHasMediaSources` appelle `item.GetMediaStreams()` — a fallu ajouter `IMediaSourceManager` au constructeur de `BaseNfoSaver` (`protected`, base commune) **et** de ses 6 sous-classes (`Episode`/`Season`/`Movie`/`Series`/`Album`/`ArtistNfoSaver`), toutes avec un appel `base(...)` à mettre à jour — mécanique mais large.
+3. **Appelants internes non recensés** : `Episode.BeforeMetadataRefresh` (déjà connu comme cluster séparé, 15 overrides/17 appelants) lisait aussi `GetMediaSources` en interne — fallback statics, documenté, cohérent avec le reste de ce cluster déjà catalogué comme "reporté par volume".
+
+**3 nouveaux cycles DI anticipés avant d'écrire le code** (pas redécouverts à l'exécution, contrairement à PR11) :
+- `MediaSourceManager.cs` (la classe) → `IChannelManager` → `IDtoService` → `IMediaSourceManager` (soi-même) : circulaire. `channelManager` reste sur le static `BaseItem.ChannelManager` à ce site.
+- `TrickplayManager` → `IChannelManager` → `IDtoService` → `ITrickplayManager` (soi-même, `IDtoService` prend `ITrickplayManager` en dépendance) : circulaire. Même traitement.
+- `LibraryManager` → `IMediaSourceManager` → `ILibraryManager` (soi-même, `MediaSourceManager` dépend déjà de `ILibraryManager`) : circulaire, **et** décision délibérée de ne pas faire grossir son constructeur (déjà 23 paramètres, cible du point 5) même si un `Lazy<T>` aurait cassé le cycle. Les 3 statics (`MediaSourceManager`, `MediaSegmentManager`, `ChannelManager`) restent en fallback à cet unique site (`GetPhysicalFileSystemPaths`-ish, nettoyage de dossiers de sous-titres/attachments).
+
+Callers DI mis à jour proprement (ajout `IMediaSourceManager` seul, ou avec `IMediaSegmentManager`/`IChannelManager` selon le besoin) : `ItemsController`-like providers `CollectionFolderImageProvider`/`DynamicImageProvider` (déjà faits en PR12, pas retouchés ici), `LyricManager`/`FFProbeVideoInfo` (avaient déjà `IMediaSourceManager`, juste le call site à mettre à jour), `LyricScheduledTask`, `SubtitleScheduledTask`, `TVSeriesManager` (3 nouvelles dépendances), `CleanDatabaseScheduledTask` (3 nouvelles dépendances), `FixAudioData` (routine de migration, 1 nouvelle dépendance), `DtoService` (avait déjà `_mediaSourceManager`, juste le call site), `TrickplayManager` (2 sur 3, `channelManager` en fallback statique), `MediaSourceManager` (`this` pour `mediaSourceManager`, `IMediaSegmentManager` injecté, `channelManager` en fallback statique), `LibraryManager` (tout en fallback statique par choix).
+
+Build 41 projets 0 erreur. Suite complète 0 échec hors les 2 échecs réseau pré-existants — **aucune régression de cycle DI**, les 3 cycles ont été anticipés et évités avant l'exécution des tests, pas découverts après comme en PR11.
+
+Leçon confirmée une 4e fois (interfaces cette fois, pas seulement les classes concrètes) : **un contrat public (interface, générique contraint) peut porter la même signature qu'une implémentation — vérifier tous les points d'implémentation ET tous les points de consommation par interface avant de changer une signature partagée, pas seulement les classes concrètes trouvées au premier grep.**
+
+### Prochains candidats si reprise (mise à jour post-PR13)
+
+1. **`ChannelManager.EnableMediaSourceDisplay`** — propriété à 4 lecteurs, petit. Seul candidat "petit" clairement restant sur ce chantier.
+2. **Les statics laissés en fallback documenté** (nombreux maintenant : `ChannelManager`/`CollectionManager`/`UserViewManager`/`TVSeriesManager` sur 6+ sites, `MediaSourceManager`/`MediaSegmentManager` sur `LibraryManager` et `Episode.BeforeMetadataRefresh`) — tous rattachés à des méthodes cœur (`GetChildren`, `MarkPlayed`, `BeforeMetadataRefresh`, un site dans `LibraryManager`) ou à des cycles DI réels. Pas de chantier séparé recommandé : rendement décroissant confirmé à chaque vérification.
+3. **`ChannelManager.CanDelete`** — 16 overrides/4 appelants, large mécaniquement (comme `BeforeMetadataRefresh`), jamais traité, faible priorité.
+4. Le reste (`LibraryManager`, `FileSystem`, `Logger`, `ConfigurationManager`, `ProviderManager`, `UserDataManager` — 10-100+ sites chacun) reste dans la catégorie "reporté par volume", non creusé.
 
 ## Ordre recommandé (reprend celui du plan, réordonné sur le point 3 ci-dessus)
 1. Sessions de lecture + protocole capacités v2 (point 1-2) — priorité confirmée, zone la mieux comprise.

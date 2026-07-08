@@ -218,7 +218,7 @@ namespace Reefin.Providers.MediaInfo
             }
             else
             {
-                foreach (var mediaStream in video.GetMediaStreams())
+                foreach (var mediaStream in video.GetMediaStreams(_mediaSourceManager))
                 {
                     if (!mediaStream.IsExternal)
                     {

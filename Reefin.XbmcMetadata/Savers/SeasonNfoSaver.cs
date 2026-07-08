@@ -25,14 +25,16 @@ namespace Reefin.XbmcMetadata.Savers
         /// <param name="userManager">The user manager.</param>
         /// <param name="userDataManager">The user data manager.</param>
         /// <param name="logger">The logger.</param>
+        /// <param name="mediaSourceManager">The media source manager.</param>
         public SeasonNfoSaver(
             IFileSystem fileSystem,
             IServerConfigurationManager configurationManager,
             ILibraryManager libraryManager,
             IUserManager userManager,
             IUserDataManager userDataManager,
-            ILogger<SeasonNfoSaver> logger)
-            : base(fileSystem, configurationManager, libraryManager, userManager, userDataManager, logger)
+            ILogger<SeasonNfoSaver> logger,
+            IMediaSourceManager mediaSourceManager)
+            : base(fileSystem, configurationManager, libraryManager, userManager, userDataManager, logger, mediaSourceManager)
         {
         }
 

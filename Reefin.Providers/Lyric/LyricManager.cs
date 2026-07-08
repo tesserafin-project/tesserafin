@@ -271,7 +271,7 @@ public class LyricManager : ILyricManager
     {
         ArgumentNullException.ThrowIfNull(audio);
 
-        var lyricStreams = audio.GetMediaStreams().Where(s => s.Type == MediaStreamType.Lyric);
+        var lyricStreams = audio.GetMediaStreams(_mediaSourceManager).Where(s => s.Type == MediaStreamType.Lyric);
         foreach (var lyricStream in lyricStreams)
         {
             var lyricContents = await File.ReadAllTextAsync(lyricStream.Path, Encoding.UTF8, cancellationToken).ConfigureAwait(false);

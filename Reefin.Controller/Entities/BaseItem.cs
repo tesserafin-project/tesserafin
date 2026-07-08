@@ -1073,9 +1073,9 @@ namespace Reefin.Controller.Entities
             return PlayAccess.Full;
         }
 
-        public virtual IReadOnlyList<MediaStream> GetMediaStreams()
+        public virtual IReadOnlyList<MediaStream> GetMediaStreams(IMediaSourceManager mediaSourceManager)
         {
-            return MediaSourceManager.GetMediaStreams(new MediaStreamQuery
+            return mediaSourceManager.GetMediaStreams(new MediaStreamQuery
             {
                 ItemId = Id
             });
@@ -1086,11 +1086,11 @@ namespace Reefin.Controller.Entities
             return false;
         }
 
-        public virtual IReadOnlyList<MediaSourceInfo> GetMediaSources(bool enablePathSubstitution)
+        public virtual IReadOnlyList<MediaSourceInfo> GetMediaSources(bool enablePathSubstitution, IMediaSourceManager mediaSourceManager, IMediaSegmentManager mediaSegmentManager, IChannelManager channelManager)
         {
             if (SourceType == SourceType.Channel)
             {
-                var sources = ChannelManager.GetStaticMediaSources(this, CancellationToken.None)
+                var sources = channelManager.GetStaticMediaSources(this, CancellationToken.None)
                            .ToList();
 
                 if (sources.Count > 0)
@@ -1101,7 +1101,7 @@ namespace Reefin.Controller.Entities
 
             var list = GetAllItemsForMediaSources().ToList();
             var commonPrefix = GetCommonNamePrefix(list);
-            var result = list.Select(i => GetVersionInfo(enablePathSubstitution, i.Item, i.MediaSourceType, commonPrefix)).ToList();
+            var result = list.Select(i => GetVersionInfo(enablePathSubstitution, i.Item, i.MediaSourceType, mediaSourceManager, mediaSegmentManager, commonPrefix)).ToList();
 
             if (IsActiveRecording())
             {
@@ -1127,7 +1127,7 @@ namespace Reefin.Controller.Entities
             return Enumerable.Empty<(BaseItem, MediaSourceType)>();
         }
 
-        private MediaSourceInfo GetVersionInfo(bool enablePathSubstitution, BaseItem item, MediaSourceType type, string commonPrefix = null)
+        private MediaSourceInfo GetVersionInfo(bool enablePathSubstitution, BaseItem item, MediaSourceType type, IMediaSourceManager mediaSourceManager, IMediaSegmentManager mediaSegmentManager, string commonPrefix = null)
         {
             ArgumentNullException.ThrowIfNull(item);
 
@@ -1138,17 +1138,17 @@ namespace Reefin.Controller.Entities
             {
                 Id = item.Id.ToString("N", CultureInfo.InvariantCulture),
                 Protocol = protocol ?? MediaProtocol.File,
-                MediaStreams = MediaSourceManager.GetMediaStreams(item.Id),
-                MediaAttachments = MediaSourceManager.GetMediaAttachments(item.Id),
+                MediaStreams = mediaSourceManager.GetMediaStreams(item.Id),
+                MediaAttachments = mediaSourceManager.GetMediaAttachments(item.Id),
                 Name = GetMediaSourceName(item, commonPrefix),
                 Path = enablePathSubstitution ? GetMappedPath(item, itemPath, protocol) : itemPath,
                 RunTimeTicks = item.RunTimeTicks,
                 Container = item.Container,
                 Size = item.Size,
                 Type = type,
-                HasSegments = MediaSegmentManager.IsTypeSupported(item)
+                HasSegments = mediaSegmentManager.IsTypeSupported(item)
                     && (protocol is null or MediaProtocol.File)
-                    && MediaSegmentManager.HasSegments(item.Id)
+                    && mediaSegmentManager.HasSegments(item.Id)
             };
 
             if (string.IsNullOrEmpty(info.Path))
@@ -1171,7 +1171,7 @@ namespace Reefin.Controller.Entities
 
                 if (video.IsShortcut && !string.IsNullOrEmpty(video.ShortcutPath))
                 {
-                    var shortcutProtocol = MediaSourceManager.GetPathProtocol(video.ShortcutPath);
+                    var shortcutProtocol = mediaSourceManager.GetPathProtocol(video.ShortcutPath);
 
                     // Only allow remote shortcut paths — local file paths in .strm files
                     // could be used to read arbitrary files from the server.
@@ -1205,7 +1205,7 @@ namespace Reefin.Controller.Entities
 
             if (info.SupportsDirectStream && !string.IsNullOrEmpty(info.Path))
             {
-                info.SupportsDirectStream = MediaSourceManager.SupportsDirectStream(info.Path, info.Protocol);
+                info.SupportsDirectStream = mediaSourceManager.SupportsDirectStream(info.Path, info.Protocol);
             }
 
             if (video is not null && video.VideoType != VideoType.VideoFile)

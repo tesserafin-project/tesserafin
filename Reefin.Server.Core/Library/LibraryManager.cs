@@ -722,8 +722,12 @@ namespace Reefin.Server.Core.Library
                 // Chapter Images
                 list.Add(_pathManager.GetChapterImageFolderPath(video));
 
+                // mediaSourceManager not injectable here: it already depends on ILibraryManager, so
+                // ILibraryManager -> IMediaSourceManager would be circular. Also deliberately not
+                // growing LibraryManager's constructor (already 23 params, slated for point-5
+                // breakup) — falls back to the statics.
                 // Subtitles and attachments
-                foreach (var mediaSource in item.GetMediaSources(false))
+                foreach (var mediaSource in item.GetMediaSources(false, BaseItem.MediaSourceManager, BaseItem.MediaSegmentManager, BaseItem.ChannelManager))
                 {
                     var subtitleFolder = _pathManager.GetSubtitleFolderPath(mediaSource.Id);
                     if (subtitleFolder is not null)
