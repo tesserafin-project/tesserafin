@@ -11,15 +11,12 @@ using Reefin.Api.Extensions;
 using Reefin.Api.Helpers;
 using Reefin.Api.ModelBinders;
 using Reefin.Common.Extensions;
-using Reefin.Controller.Channels;
-using Reefin.Controller.Collections;
 using Reefin.Controller.Dto;
 using Reefin.Controller.Entities;
 using Reefin.Controller.Entities.Movies;
 using Reefin.Controller.Library;
 using Reefin.Controller.Playlists;
 using Reefin.Controller.Session;
-using Reefin.Controller.TV;
 using Reefin.Data;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Enums;
@@ -47,10 +44,7 @@ public class ItemsController : BaseReefinApiController
     private readonly ISessionManager _sessionManager;
     private readonly IUserDataManager _userDataRepository;
     private readonly ISearchManager _searchManager;
-    private readonly IChannelManager _channelManager;
-    private readonly ICollectionManager _collectionManager;
-    private readonly IUserViewManager _userViewManager;
-    private readonly ITVSeriesManager _tvSeriesManager;
+    private readonly IItemQueryService _itemQueryService;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ItemsController"/> class.
@@ -63,10 +57,7 @@ public class ItemsController : BaseReefinApiController
     /// <param name="sessionManager">Instance of the <see cref="ISessionManager"/> interface.</param>
     /// <param name="userDataRepository">Instance of the <see cref="IUserDataManager"/> interface.</param>
     /// <param name="searchManager">Instance of the <see cref="ISearchManager"/> interface.</param>
-    /// <param name="channelManager">Instance of the <see cref="IChannelManager"/> interface.</param>
-    /// <param name="collectionManager">Instance of the <see cref="ICollectionManager"/> interface.</param>
-    /// <param name="userViewManager">Instance of the <see cref="IUserViewManager"/> interface.</param>
-    /// <param name="tvSeriesManager">Instance of the <see cref="ITVSeriesManager"/> interface.</param>
+    /// <param name="itemQueryService">Instance of the <see cref="IItemQueryService"/> interface.</param>
     public ItemsController(
         IUserManager userManager,
         ILibraryManager libraryManager,
@@ -76,10 +67,7 @@ public class ItemsController : BaseReefinApiController
         ISessionManager sessionManager,
         IUserDataManager userDataRepository,
         ISearchManager searchManager,
-        IChannelManager channelManager,
-        ICollectionManager collectionManager,
-        IUserViewManager userViewManager,
-        ITVSeriesManager tvSeriesManager)
+        IItemQueryService itemQueryService)
     {
         _userManager = userManager;
         _libraryManager = libraryManager;
@@ -89,10 +77,7 @@ public class ItemsController : BaseReefinApiController
         _sessionManager = sessionManager;
         _userDataRepository = userDataRepository;
         _searchManager = searchManager;
-        _channelManager = channelManager;
-        _collectionManager = collectionManager;
-        _userViewManager = userViewManager;
-        _tvSeriesManager = tvSeriesManager;
+        _itemQueryService = itemQueryService;
     }
 
     /// <summary>
@@ -613,7 +598,7 @@ public class ItemsController : BaseReefinApiController
         if ((recursive.HasValue && recursive.Value) || ids.Length != 0 || item is not UserRootFolder || query.HasFilters)
         {
             // folder.GetItems applies user-access filtering via the InternalItemsQuery's User.
-            result = folder.GetItems(query, _channelManager, _collectionManager, _userViewManager, _tvSeriesManager);
+            result = _itemQueryService.GetItems(folder, query);
             if (searchResultScores is not null && searchResultScores.Count > 0)
             {
                 var orderedItems = result.Items
