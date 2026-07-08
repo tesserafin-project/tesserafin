@@ -347,9 +347,17 @@ Pas de nouveau cycle DI : rien ne consomme encore `IItemQueryService`, donc aucu
 
 Build 41 projets 0 erreur. Suite complète 0 échec hors les 2 échecs réseau pré-existants (et hors le flake `BaseItemTests`/`FolderTests` ci-dessus, résolu avant ce commit).
 
-### Prochain candidat si reprise (mise à jour post-PR16)
+### PR17/N — premier consommateur migré vers `ItemQueryService` : `CollectionFolderImageProvider` (2026-07-08)
 
-Migrer un premier consommateur réel de `Folder.GetItems`/`GetItemList` vers `IItemQueryService` (candidat le plus simple d'abord : `CollectionFolderImageProvider`/`DynamicImageProvider`, déjà DI-propres depuis PR11/PR12, pas de cycle connu) — prouverait la valeur du service, pas seulement sa compilation.
+Candidat proposé en fin de PR16 (déjà DI-propre, pas de cycle connu). `CollectionFolderImageProvider` n'injectait plus `IChannelManager`/`ICollectionManager`/`IUserViewManager`/`ITVSeriesManager` séparément — remplacés par le seul `IItemQueryService`, `view.GetItemList(query, channelManager, collectionManager, userViewManager, tvSeriesManager)` devient `_itemQueryService.GetItemList(view, query)`. Aucun changement de comportement, réduction pure du nombre de dépendances constructeur (4 → 1). Pas d'enregistrement DI explicite à toucher : ce provider est déjà résolu par scan d'assembly (aucune autre référence dans le repo hors ce fichier).
+
+**Bogue analyzer découvert en marge, sans rapport avec la migration** : `dotnet build Reefin.sln` a échoué (CA1711 + CA1052) sur `BaseItemStaticStateCollection` (fixture xUnit ajoutée en PR16) — un nom de type qui se termine par "Collection" sans être un vrai type de collection (CA1711), et une classe "porteuse de statics" (juste une `const string`) qui doit être `static`/`sealed` (CA1052). Passé inaperçu au moment de PR16 car la vérification de ce PR-là s'appuyait sur un build incrémental (cache), qui n'a pas ré-exécuté les analyzers sur ce fichier inchangé — seul un build complet frais (déclenché ici par les fichiers touchés dans `Reefin.Server.Core`) les a révélés. Corrigé en renommant le type en `BaseItemStaticStateFixture` (`static class`), sans changer le comportement (le littéral `Name` passé à `[CollectionDefinition]`/`[Collection]` est inchangé). **Leçon** : un `dotnet build Reefin.sln` "0 erreur" obtenu en incrémental après un `dotnet test` récent n'est pas une garantie suffisante pour un fichier qui n'a pas été retouché dans le même run — privilégier un build frais (ou au moins vérifier que le fichier concerné a bien été recompilé) avant de conclure "0 erreur" dans le suivi de ce doc.
+
+Build 41 projets 0 erreur (build frais, post-fix). Suite complète 0 échec hors les 2 échecs réseau pré-existants.
+
+### Prochain candidat si reprise (mise à jour post-PR17)
+
+Un autre consommateur du cluster `GetItemsInternal` déjà DI-propre : `DynamicImageProvider` (même famille que `CollectionFolderImageProvider`, cité comme candidat "faible risque" en fin de PR16) — même patron de migration attendu.
 
 ## Ordre recommandé (reprend celui du plan, réordonné sur le point 3 ci-dessus)
 1. Sessions de lecture + protocole capacités v2 (point 1-2) — priorité confirmée, zone la mieux comprise.

@@ -11,7 +11,7 @@ namespace Reefin.Controller.Tests.Entities;
 /// started mutating the same statics).
 /// </summary>
 [CollectionDefinition(Name, DisableParallelization = true)]
-public class BaseItemStaticStateCollection
+public static class BaseItemStaticStateFixture
 {
     public const string Name = "BaseItem static state";
 }
