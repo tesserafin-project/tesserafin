@@ -1,11 +1,16 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using Moq;
 using Reefin.Controller.Channels;
 using Reefin.Controller.Collections;
+using Reefin.Controller.Configuration;
 using Reefin.Controller.Entities;
 using Reefin.Controller.Entities.Movies;
 using Reefin.Controller.Library;
 using Reefin.Controller.TV;
+using Reefin.Database.Implementations.Entities;
+using Reefin.Model.Configuration;
 using Reefin.Model.Querying;
 using Reefin.Server.Core.Library;
 using Xunit;
@@ -73,5 +78,125 @@ public class ItemQueryServiceTests
         collectionManager.VerifyNoOtherCalls();
         userViewManager.VerifyNoOtherCalls();
         tvSeriesManager.VerifyNoOtherCalls();
+    }
+
+    // Parity tests (major rewrite plan, PR23/N): ItemQueryService.PostFilterAndSort is a relocation
+    // of Folder.PostFilterAndSort - not wired into GetItems/GetItemList yet (that's PR24, once a
+    // raw-children primitive exists on Folder). These compare the new standalone method against the
+    // still-untouched Folder.GetItems (which still runs its own copy of the same logic) given the
+    // same raw items, to prove behavior was reproduced exactly, not just relocated by inspection.
+
+    [Fact]
+    public void PostFilterAndSort_UserNull_MatchesFolderGetItems()
+    {
+        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager);
+
+        var folder = new Folder { Id = Guid.NewGuid() };
+        var child1 = new Movie { Id = Guid.NewGuid(), Name = "Alpha" };
+        var child2 = new Movie { Id = Guid.NewGuid(), Name = "Beta" };
+        folder.Children = new BaseItem[] { child1, child2 };
+        BaseItem.LibraryManager = new Mock<ILibraryManager>().Object;
+        BaseItem.UserDataManager = new Mock<IUserDataManager>().Object;
+
+        var expected = folder.GetItems(new InternalItemsQuery(), channelManager.Object, collectionManager.Object, userViewManager.Object, tvSeriesManager.Object);
+        var actual = service.PostFilterAndSort(folder, folder.Children, new InternalItemsQuery());
+
+        Assert.Equal(expected.Items, actual.Items);
+        Assert.Equal(expected.TotalRecordCount, actual.TotalRecordCount);
+    }
+
+    [Fact]
+    public void PostFilterAndSort_UserNonNull_CollapseFalse_MatchesFolderGetItems()
+    {
+        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager);
+
+        var folder = new Folder { Id = Guid.NewGuid() };
+        var child = new Movie { Id = Guid.NewGuid(), Name = "Alpha" };
+        folder.Children = new BaseItem[] { child };
+        var user = new User("test-user", "provider", "provider");
+        BaseItem.LibraryManager = new Mock<ILibraryManager>().Object;
+        BaseItem.UserDataManager = new Mock<IUserDataManager>().Object;
+
+        InternalItemsQuery MakeQuery() => new() { User = user, CollapseBoxSetItems = false };
+
+        var expected = folder.GetItems(MakeQuery(), channelManager.Object, collectionManager.Object, userViewManager.Object, tvSeriesManager.Object);
+        var actual = service.PostFilterAndSort(folder, folder.Children, MakeQuery());
+
+        Assert.Equal(expected.Items, actual.Items);
+        collectionManager.Verify(x => x.CollapseItemsWithinBoxSets(It.IsAny<IEnumerable<BaseItem>>(), It.IsAny<User>()), Times.Never);
+    }
+
+    [Fact]
+    public void PostFilterAndSort_UserNonNull_CollapseTrue_MatchesFolderGetItems()
+    {
+        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager);
+
+        var folder = new Folder { Id = Guid.NewGuid() };
+        var child = new Movie { Id = Guid.NewGuid(), Name = "Alpha" };
+        folder.Children = new BaseItem[] { child };
+        var user = new User("test-user", "provider", "provider");
+        BaseItem.LibraryManager = new Mock<ILibraryManager>().Object;
+        BaseItem.UserDataManager = new Mock<IUserDataManager>().Object;
+        BaseItem.ConfigurationManager = Mock.Of<IServerConfigurationManager>(x => x.Configuration == new ServerConfiguration
+        {
+            EnableGroupingMoviesIntoCollections = true,
+            EnableGroupingShowsIntoCollections = true,
+        });
+
+        collectionManager
+            .Setup(x => x.CollapseItemsWithinBoxSets(It.IsAny<IEnumerable<BaseItem>>(), user))
+            .Returns((IEnumerable<BaseItem> items, User _) => items);
+
+        InternalItemsQuery MakeQuery() => new() { User = user, CollapseBoxSetItems = true };
+
+        var expected = folder.GetItems(MakeQuery(), channelManager.Object, collectionManager.Object, userViewManager.Object, tvSeriesManager.Object);
+        var actual = service.PostFilterAndSort(folder, folder.Children, MakeQuery());
+
+        Assert.Equal(expected.Items, actual.Items);
+        // Both the untouched Folder path and the new relocated path call the same collectionManager
+        // instance once each with the exact same arguments - not just "similar output".
+        collectionManager.Verify(x => x.CollapseItemsWithinBoxSets(It.IsAny<IEnumerable<BaseItem>>(), user), Times.Exactly(2));
+    }
+
+    [Theory]
+    [InlineData("B", "", "", "Beta")]
+    [InlineData("", "B", "", "Beta")]
+    [InlineData("", "", "B", "Alpha")]
+    public void PostFilterAndSort_NameFiltersAfterCollapse_MatchesFolderGetItems(string nameStartsWith, string nameStartsWithOrGreater, string nameLessThan, string expectedName)
+    {
+        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager);
+
+        var folder = new Folder { Id = Guid.NewGuid() };
+        var alpha = new Movie { Id = Guid.NewGuid(), Name = "Alpha" };
+        var beta = new Movie { Id = Guid.NewGuid(), Name = "Beta" };
+        folder.Children = new BaseItem[] { alpha, beta };
+        var user = new User("test-user", "provider", "provider");
+        BaseItem.LibraryManager = new Mock<ILibraryManager>().Object;
+        BaseItem.UserDataManager = new Mock<IUserDataManager>().Object;
+        BaseItem.ConfigurationManager = Mock.Of<IServerConfigurationManager>(x => x.Configuration == new ServerConfiguration
+        {
+            EnableGroupingMoviesIntoCollections = true,
+            EnableGroupingShowsIntoCollections = true,
+        });
+
+        collectionManager
+            .Setup(x => x.CollapseItemsWithinBoxSets(It.IsAny<IEnumerable<BaseItem>>(), user))
+            .Returns((IEnumerable<BaseItem> items, User _) => items);
+
+        InternalItemsQuery MakeQuery() => new()
+        {
+            User = user,
+            CollapseBoxSetItems = true,
+            NameStartsWith = nameStartsWith,
+            NameStartsWithOrGreater = nameStartsWithOrGreater,
+            NameLessThan = nameLessThan,
+        };
+
+        var expected = folder.GetItems(MakeQuery(), channelManager.Object, collectionManager.Object, userViewManager.Object, tvSeriesManager.Object);
+        var actual = service.PostFilterAndSort(folder, folder.Children, MakeQuery());
+
+        Assert.Equal(expected.Items.Select(i => i.Name), actual.Items.Select(i => i.Name));
+        Assert.Single(actual.Items);
+        Assert.Equal(expectedName, actual.Items[0].Name);
     }
 }
