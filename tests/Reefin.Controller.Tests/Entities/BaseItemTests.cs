@@ -4,7 +4,9 @@ using System.Linq;
 using System.Reflection;
 using System.Threading;
 using Moq;
+using Reefin.Controller.Channels;
 using Reefin.Controller.Entities;
+using Reefin.Controller.Entities.Movies;
 using Reefin.Controller.Library;
 using Reefin.Controller.LiveTv;
 using Reefin.Controller.MediaSegments;
@@ -334,5 +336,74 @@ public class BaseItemTests
             Assert.Contains(alt1.Id, ids);
             Assert.Contains(alt2.Id, ids);
         }
+    }
+
+    [Fact]
+    public void GetEnableMediaSourceDisplay_NonChannelItem_ReturnsTrueWithoutCallingChannelManager()
+    {
+        var movie = new Movie { Id = Guid.NewGuid() };
+        var channelManager = new Mock<IChannelManager>(MockBehavior.Strict);
+
+        Assert.True(movie.GetEnableMediaSourceDisplay(channelManager.Object));
+        channelManager.Verify(x => x.EnableMediaSourceDisplay(It.IsAny<BaseItem>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void GetEnableMediaSourceDisplay_ChannelItem_DelegatesToChannelManager(bool channelManagerResult)
+    {
+        var channelItem = new Movie { Id = Guid.NewGuid(), ChannelId = Guid.NewGuid() };
+        var channelManager = new Mock<IChannelManager>();
+        channelManager.Setup(x => x.EnableMediaSourceDisplay(channelItem)).Returns(channelManagerResult);
+
+        Assert.Equal(channelManagerResult, channelItem.GetEnableMediaSourceDisplay(channelManager.Object));
+    }
+
+    [Fact]
+    public void GetMediaSources_ChannelItem_WithStaticSources_ReturnsThemWithoutFallingBackToVersions()
+    {
+        var channelItem = new Movie { Id = Guid.NewGuid(), ChannelId = Guid.NewGuid() };
+
+        var staticSource = new MediaSourceInfo { Id = Guid.NewGuid().ToString("N") };
+        var channelManager = new Mock<IChannelManager>();
+        channelManager.Setup(x => x.GetStaticMediaSources(channelItem, It.IsAny<CancellationToken>()))
+            .Returns([staticSource]);
+
+        var mediaSourceManager = new Mock<IMediaSourceManager>(MockBehavior.Strict);
+        var segmentManager = new Mock<IMediaSegmentManager>(MockBehavior.Strict);
+
+        var result = channelItem.GetMediaSources(false, mediaSourceManager.Object, segmentManager.Object, channelManager.Object);
+
+        Assert.Single(result);
+        Assert.Equal(staticSource.Id, result[0].Id);
+    }
+
+    [Fact]
+    public void GetMediaSources_ChannelItem_WithNoStaticSources_FallsBackToOwnVersion()
+    {
+        var channelItem = new Movie { Id = Guid.NewGuid(), ChannelId = Guid.NewGuid(), Path = "/Channels/Live/Live.mkv" };
+
+        var channelManager = new Mock<IChannelManager>();
+        channelManager.Setup(x => x.GetStaticMediaSources(channelItem, It.IsAny<CancellationToken>()))
+            .Returns(Array.Empty<MediaSourceInfo>());
+
+        var mediaSourceManager = new Mock<IMediaSourceManager>();
+        mediaSourceManager.Setup(x => x.GetPathProtocol(It.IsAny<string>())).Returns(MediaProtocol.File);
+        mediaSourceManager.Setup(x => x.GetMediaStreams(It.IsAny<Guid>())).Returns(new List<MediaStream>());
+        mediaSourceManager.Setup(x => x.GetMediaAttachments(It.IsAny<Guid>())).Returns(new List<MediaAttachment>());
+
+        var segmentManager = new Mock<IMediaSegmentManager>();
+        segmentManager.Setup(x => x.IsTypeSupported(It.IsAny<BaseItem>())).Returns(false);
+
+        var libraryManager = new Mock<ILibraryManager>();
+        libraryManager.Setup(x => x.GetLinkedAlternateVersions(It.IsAny<Video>())).Returns(Array.Empty<Video>());
+        libraryManager.Setup(x => x.GetLocalAlternateVersionIds(It.IsAny<Video>())).Returns(Array.Empty<Guid>());
+        BaseItem.LibraryManager = libraryManager.Object;
+
+        var result = channelItem.GetMediaSources(false, mediaSourceManager.Object, segmentManager.Object, channelManager.Object);
+
+        Assert.Single(result);
+        Assert.Equal(channelItem.Id.ToString("N"), result[0].Id);
     }
 }

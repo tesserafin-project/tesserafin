@@ -297,6 +297,18 @@ Build 41 projets 0 erreur. Suite complète 0 échec hors les 2 échecs réseau p
 2. **`ChannelManager.CanDelete`** — 16 overrides/4 appelants, large mécaniquement (comme `BeforeMetadataRefresh`), jamais traité, faible priorité. Dernier candidat non trivial sur `ChannelManager` lui-même.
 3. Le reste (`LibraryManager`, `FileSystem`, `Logger`, `ConfigurationManager`, `ProviderManager`, `UserDataManager` — 10-100+ sites chacun) reste dans la catégorie "reporté par volume", non creusé.
 
+### PR15/N — stabilisation (tests ciblés), point 1 de la correction de trajectoire post-PR14 (2026-07-08)
+
+Exécution du point 1 de la revue externe post-PR14 (§ "Revue externe post-PR14") : tests ciblés sur les chemins déjà modifiés, avant de continuer à traquer des statics.
+
+- `tests/Reefin.Controller.Tests/Entities/BaseItemTests.cs` : 4 tests ajoutés — `GetEnableMediaSourceDisplay` (item non-channel retourne `true` sans appeler `IChannelManager` ; item channel délègue et propage le résultat, vrai et faux) ; `GetMediaSources` sur item channel (sources statiques renvoyées telles quelles sans repli sur les versions ; aucune source statique → repli sur la version propre de l'item, chemin jusque-là non couvert).
+- `tests/Reefin.Controller.Tests/Entities/FolderTests.cs` (nouveau fichier — aucun test `Folder` n'existait avant) : 3 tests sur `GetItems`/`GetItemList` — dossier non-channel sans utilisateur (mocks stricts `IChannelManager`/`ICollectionManager`/`IUserViewManager`/`ITVSeriesManager`, `VerifyNoOtherCalls()` prouve qu'aucun des 4 n'est touché sur ce chemin, conforme au commentaire de code "most overrides never use most of them") ; dossier channel (délégation à `IChannelManager.GetChannelItemsInternal` uniquement) ; `GetItemList` non-channel (même garantie que `GetItems`).
+- Effet de bord découvert en marge (pas dans le scope PR15) : `Reefin.Api/Controllers/LibraryController.cs` portait une modification non committée antérieure à cette session (paramètre constructeur `IChannelManager channelManager` déjà ajouté, champ `_channelManager` assigné mais jamais lu ailleurs) qui cassait le build solution complète (`CS0246`, `using Reefin.Controller.Channels;` manquant). Corrigé a minima (ajout du using) pour débloquer la vérification build/tests de ce PR — le champ reste non exploité, pas dans le scope de cette session, à clarifier avec l'utilisateur avant d'aller plus loin dessus.
+
+Build 41 projets 0 erreur. Suite complète : 0 échec hors les 2 échecs réseau pré-existants confirmés indépendants (`Reefin.Server.Tests.ParseNetworkTests`).
+
+Reste du point 1 (stabiliser) non fait ici : pas de test dédié pour `GetVersionInfo`/`GetMediaStreams` seuls (couverts indirectement par `GetMediaSources_DefaultsToTheQueriedVersionsOwnSource` déjà existant), pas de test sur `Folder.GetItemsInternal` avec utilisateur non-null (chemin `CollapseBoxSetItemsIfNeeded`/`collectionManager` réellement invoqué) — candidat naturel pour la suite si repris.
+
 ## Revue externe post-PR14 (2026-07-08) — verdict et correction de trajectoire
 
 Deuxième avis demandé après PR14. Confirme le diagnostic (`SetStaticProperties`, `ApplicationHost.cs:669`, commentaire "Dirty hacks." — service-locator global sur `BaseItem`) et la direction (sortir les statics, dépendances explicites) comme bonnes. Mais qualifie la forme actuelle de **chirurgie préparatoire / phase de transition**, pas de design final pour `BaseItem`.

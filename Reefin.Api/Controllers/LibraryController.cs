@@ -17,6 +17,7 @@ using Reefin.Api.ModelBinders;
 using Reefin.Api.Models.LibraryDtos;
 using Reefin.Common.Api;
 using Reefin.Common.Extensions;
+using Reefin.Controller.Channels;
 using Reefin.Controller.Collections;
 using Reefin.Controller.Configuration;
 using Reefin.Controller.Dto;
@@ -58,6 +59,7 @@ public class LibraryController : BaseReefinApiController
     private readonly ILibraryMonitor _libraryMonitor;
     private readonly ILogger<LibraryController> _logger;
     private readonly IServerConfigurationManager _serverConfigurationManager;
+    private readonly IChannelManager _channelManager;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LibraryController"/> class.
@@ -73,6 +75,7 @@ public class LibraryController : BaseReefinApiController
     /// <param name="libraryMonitor">Instance of the <see cref="ILibraryMonitor"/> interface.</param>
     /// <param name="logger">Instance of the <see cref="ILogger{LibraryController}"/> interface.</param>
     /// <param name="serverConfigurationManager">Instance of the <see cref="IServerConfigurationManager"/> interface.</param>
+    /// <param name="channelManager">Instance of the <see cref="IChannelManager"/> interface.</param>
     public LibraryController(
         IProviderManager providerManager,
         ISimilarItemsManager similarItemsManager,
@@ -84,7 +87,8 @@ public class LibraryController : BaseReefinApiController
         ILocalizationManager localization,
         ILibraryMonitor libraryMonitor,
         ILogger<LibraryController> logger,
-        IServerConfigurationManager serverConfigurationManager)
+        IServerConfigurationManager serverConfigurationManager,
+        IChannelManager channelManager)
     {
         _providerManager = providerManager;
         _similarItemsManager = similarItemsManager;
@@ -97,6 +101,7 @@ public class LibraryController : BaseReefinApiController
         _libraryMonitor = libraryMonitor;
         _logger = logger;
         _serverConfigurationManager = serverConfigurationManager;
+        _channelManager = channelManager;
     }
 
     /// <summary>
