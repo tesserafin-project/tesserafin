@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.IO;
 using Reefin.Api.Extensions;
 using Reefin.Common.Configuration;
+using Reefin.Controller.Channels;
 using Reefin.Controller.Drawing;
 using Reefin.Controller.Dto;
 using Reefin.Controller.Entities;
@@ -20,8 +21,11 @@ namespace Reefin.Server.Core.Images
 {
     public class CollectionFolderImageProvider : BaseDynamicImageProvider<CollectionFolder>
     {
-        public CollectionFolderImageProvider(IFileSystem fileSystem, IProviderManager providerManager, IApplicationPaths applicationPaths, IImageProcessor imageProcessor) : base(fileSystem, providerManager, applicationPaths, imageProcessor)
+        private readonly IChannelManager _channelManager;
+
+        public CollectionFolderImageProvider(IFileSystem fileSystem, IProviderManager providerManager, IApplicationPaths applicationPaths, IImageProcessor imageProcessor, IChannelManager channelManager) : base(fileSystem, providerManager, applicationPaths, imageProcessor)
         {
+            _channelManager = channelManager;
         }
 
         protected override IReadOnlyList<BaseItem> GetItemsWithImages(BaseItem item)
@@ -31,16 +35,18 @@ namespace Reefin.Server.Core.Images
             var includeItemTypes = DtoExtensions.GetBaseItemKindsForCollectionType(viewType);
             var recursive = viewType != CollectionType.playlists;
 
-            return view.GetItemList(new InternalItemsQuery
-            {
-                CollapseBoxSetItems = false,
-                Recursive = recursive,
-                DtoOptions = new DtoOptions(false),
-                ImageTypes = [ImageType.Primary],
-                Limit = 8,
-                OrderBy = [(ItemSortBy.Random, SortOrder.Ascending)],
-                IncludeItemTypes = includeItemTypes
-            });
+            return view.GetItemList(
+                new InternalItemsQuery
+                {
+                    CollapseBoxSetItems = false,
+                    Recursive = recursive,
+                    DtoOptions = new DtoOptions(false),
+                    ImageTypes = [ImageType.Primary],
+                    Limit = 8,
+                    OrderBy = [(ItemSortBy.Random, SortOrder.Ascending)],
+                    IncludeItemTypes = includeItemTypes
+                },
+                _channelManager);
         }
 
         protected override bool Supports(BaseItem item)

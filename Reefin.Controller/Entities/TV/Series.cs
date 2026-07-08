@@ -9,6 +9,7 @@ using System.Linq;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using Reefin.Controller.Channels;
 using Reefin.Controller.Dto;
 using Reefin.Controller.Providers;
 using Reefin.Data;
@@ -220,7 +221,7 @@ namespace Reefin.Controller.Entities.TV
             }
         }
 
-        protected override QueryResult<BaseItem> GetItemsInternal(InternalItemsQuery query)
+        protected override QueryResult<BaseItem> GetItemsInternal(InternalItemsQuery query, IChannelManager channelManager)
         {
             var user = query.User;
 
@@ -230,7 +231,7 @@ namespace Reefin.Controller.Entities.TV
                 {
                     query.Parent = this;
                     query.ChannelIds = [ChannelId];
-                    return ChannelManager.GetChannelItemsInternal(query, new Progress<double>(), CancellationToken.None).GetAwaiter().GetResult();
+                    return channelManager.GetChannelItemsInternal(query, new Progress<double>(), CancellationToken.None).GetAwaiter().GetResult();
                 }
                 catch
                 {

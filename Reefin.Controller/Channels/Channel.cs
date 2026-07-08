@@ -45,7 +45,7 @@ namespace Reefin.Controller.Channels
             return base.IsVisible(user, skipAllowedTagsCheck);
         }
 
-        protected override QueryResult<BaseItem> GetItemsInternal(InternalItemsQuery query)
+        protected override QueryResult<BaseItem> GetItemsInternal(InternalItemsQuery query, IChannelManager channelManager)
         {
             try
             {
@@ -53,7 +53,7 @@ namespace Reefin.Controller.Channels
                 query.ChannelIds = new Guid[] { Id };
 
                 // Don't blow up here because it could cause parent screens with other content to fail
-                return ChannelManager.GetChannelItemsInternal(query, new Progress<double>(), CancellationToken.None).GetAwaiter().GetResult();
+                return channelManager.GetChannelItemsInternal(query, new Progress<double>(), CancellationToken.None).GetAwaiter().GetResult();
             }
             catch
             {

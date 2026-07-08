@@ -14,6 +14,7 @@ using Reefin.Common.Events;
 using Reefin.Common.Extensions;
 using Reefin.Controller;
 using Reefin.Controller.Authentication;
+using Reefin.Controller.Channels;
 using Reefin.Controller.Configuration;
 using Reefin.Controller.Devices;
 using Reefin.Controller.Drawing;
@@ -60,6 +61,7 @@ namespace Reefin.Server.Core.Session
         private readonly IMediaSourceManager _mediaSourceManager;
         private readonly IServerApplicationHost _appHost;
         private readonly IDeviceManager _deviceManager;
+        private readonly IChannelManager _channelManager;
         private readonly CancellationTokenRegistration _shutdownCallback;
         private readonly ConcurrentDictionary<string, SessionInfo> _activeConnections
             = new(StringComparer.OrdinalIgnoreCase);
@@ -89,6 +91,7 @@ namespace Reefin.Server.Core.Session
         /// <param name="deviceManager">Instance of <see cref="IDeviceManager"/> interface.</param>
         /// <param name="mediaSourceManager">Instance of <see cref="IMediaSourceManager"/> interface.</param>
         /// <param name="hostApplicationLifetime">Instance of <see cref="IHostApplicationLifetime"/> interface.</param>
+        /// <param name="channelManager">Instance of <see cref="IChannelManager"/> interface.</param>
         public SessionManager(
             ILogger<SessionManager> logger,
             IEventManager eventManager,
@@ -102,7 +105,8 @@ namespace Reefin.Server.Core.Session
             IServerApplicationHost appHost,
             IDeviceManager deviceManager,
             IMediaSourceManager mediaSourceManager,
-            IHostApplicationLifetime hostApplicationLifetime)
+            IHostApplicationLifetime hostApplicationLifetime,
+            IChannelManager channelManager)
         {
             _logger = logger;
             _eventManager = eventManager;
@@ -117,6 +121,7 @@ namespace Reefin.Server.Core.Session
             _deviceManager = deviceManager;
             _mediaSourceManager = mediaSourceManager;
             _shutdownCallback = hostApplicationLifetime.ApplicationStopping.Register(OnApplicationStopping);
+            _channelManager = channelManager;
 
             _deviceManager.DeviceOptionsUpdated += OnDeviceManagerDeviceOptionsUpdated;
         }
@@ -1468,21 +1473,23 @@ namespace Reefin.Server.Core.Session
             {
                 var folder = (Folder)item;
 
-                return folder.GetItemList(new InternalItemsQuery(user)
-                {
-                    Recursive = true,
-                    IsFolder = false,
-                    DtoOptions = new DtoOptions(false)
+                return folder.GetItemList(
+                    new InternalItemsQuery(user)
                     {
-                        EnableImages = false,
-                        Fields = new ItemFields[]
+                        Recursive = true,
+                        IsFolder = false,
+                        DtoOptions = new DtoOptions(false)
                         {
-                            ItemFields.SortName
-                        }
+                            EnableImages = false,
+                            Fields = new ItemFields[]
+                            {
+                                ItemFields.SortName
+                            }
+                        },
+                        IsVirtualItem = false,
+                        OrderBy = new[] { (ItemSortBy.SortName, SortOrder.Ascending) }
                     },
-                    IsVirtualItem = false,
-                    OrderBy = new[] { (ItemSortBy.SortName, SortOrder.Ascending) }
-                });
+                    _channelManager);
             }
 
             return new[] { item };

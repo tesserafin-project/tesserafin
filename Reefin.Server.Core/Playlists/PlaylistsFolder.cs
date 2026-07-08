@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json.Serialization;
 using Reefin.Common;
+using Reefin.Controller.Channels;
 using Reefin.Controller.Entities;
 using Reefin.Controller.Playlists;
 using Reefin.Data.Enums;
@@ -34,12 +35,12 @@ namespace Reefin.Server.Core.Playlists
             return base.GetEligibleChildrenForRecursiveChildren(user).OfType<Playlist>();
         }
 
-        protected override QueryResult<BaseItem> GetItemsInternal(InternalItemsQuery query)
+        protected override QueryResult<BaseItem> GetItemsInternal(InternalItemsQuery query, IChannelManager channelManager)
         {
             if (query.User is null)
             {
                 query.Recursive = false;
-                return base.GetItemsInternal(query);
+                return base.GetItemsInternal(query, channelManager);
             }
 
             query.Recursive = true;

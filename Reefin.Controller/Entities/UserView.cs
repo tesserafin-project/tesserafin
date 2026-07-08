@@ -8,6 +8,7 @@ using System.Linq;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using Reefin.Controller.Channels;
 using Reefin.Controller.Providers;
 using Reefin.Controller.TV;
 using Reefin.Data.Enums;
@@ -93,7 +94,7 @@ namespace Reefin.Controller.Entities
         }
 
         /// <inheritdoc />
-        protected override QueryResult<BaseItem> GetItemsInternal(InternalItemsQuery query)
+        protected override QueryResult<BaseItem> GetItemsInternal(InternalItemsQuery query, IChannelManager channelManager)
         {
             var parent = this as Folder;
 
@@ -106,7 +107,7 @@ namespace Reefin.Controller.Entities
                 parent = LibraryManager.GetItemById(ParentId) as Folder ?? parent;
             }
 
-            return new UserViewBuilder(UserViewManager, LibraryManager, Logger, UserDataManager, TVSeriesManager)
+            return new UserViewBuilder(UserViewManager, LibraryManager, Logger, UserDataManager, TVSeriesManager, channelManager)
                 .GetUserItems(parent, this, CollectionType, query);
         }
 
@@ -116,7 +117,11 @@ namespace Reefin.Controller.Entities
             query ??= new InternalItemsQuery(user);
 
             query.EnableTotalRecordCount = false;
-            var result = GetItemList(query);
+
+            // GetChildren isn't part of the GetItemsInternal/GetItems/GetItemList chain the
+            // channelManager parameter was threaded through (out of scope: GetChildren is a much
+            // wider virtual with many more overrides/callers) — falls back to the static here.
+            var result = GetItemList(query, ChannelManager);
 
             return result.ToList();
         }
@@ -140,7 +145,10 @@ namespace Reefin.Controller.Entities
             query.Recursive = true;
             query.EnableTotalRecordCount = false;
             query.ForceDirect = true;
-            var data = GetItemList(query);
+
+            // Same scope boundary as GetChildren above: GetRecursiveChildren isn't part of the
+            // threaded chain, falls back to the static.
+            var data = GetItemList(query, ChannelManager);
             totalCount = data.Count;
 
             return data;

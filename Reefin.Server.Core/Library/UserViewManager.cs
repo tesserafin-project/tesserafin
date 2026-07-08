@@ -62,10 +62,12 @@ namespace Reefin.Server.Core.Library
                 // Playlist and BoxSet libraries require special handling because the folder only references linked items
                 if (folderViewType == CollectionType.playlists || folderViewType == CollectionType.boxsets)
                 {
-                    var items = folder.GetItemList(new InternalItemsQuery(user)
-                    {
-                        ParentId = folder.ParentId
-                    });
+                    var items = folder.GetItemList(
+                        new InternalItemsQuery(user)
+                        {
+                            ParentId = folder.ParentId
+                        },
+                        _channelManager);
 
                     if (!items.Any(item => item.IsVisible(user)))
                     {

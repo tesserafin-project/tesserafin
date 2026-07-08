@@ -8,6 +8,7 @@ using System.Linq;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using Reefin.Controller.Channels;
 using Reefin.Controller.Providers;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Model.Library;
@@ -67,7 +68,7 @@ namespace Reefin.Controller.Entities
             }
         }
 
-        protected override QueryResult<BaseItem> GetItemsInternal(InternalItemsQuery query)
+        protected override QueryResult<BaseItem> GetItemsInternal(InternalItemsQuery query, IChannelManager channelManager)
         {
             // The user root holds no items of its own - a plain listing returns the user's
             // views. But a request carrying any filter is a search across the libraries, so

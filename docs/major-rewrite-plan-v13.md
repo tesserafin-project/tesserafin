@@ -221,11 +221,26 @@ Passe de contrôle demandée par l'utilisateur, 5 corrections :
 
 Leçon récurrente confirmée une 3e fois (après `ChapterManager`/31-appelants et `IsPlayedComparer`/DI-manuelle) : **un "0 appelant" au grep sur une méthode `protected`/`private` ne veut rien dire — il faut remonter aux membres publics qui l'atteignent, propriétés comprises.**
 
-### Décision à prendre par l'utilisateur
+### PR11/N — `ChannelManager` retiré du cluster `GetItemsInternal` (2026-07-08)
 
-Aucun code écrit cette session sur ce chantier au-delà de la carte. Candidats les plus immédiatement actionnables si reprise, dans l'ordre :
-1. **Cluster `GetItemsInternal`** — 4 statics d'un coup (`ChannelManager` partiel, `CollectionManager`, `UserViewManager`, `TVSeriesManager`), ~12 points d'entrée externes vérifiés, 6 overrides. Meilleur ratio statics/effort du chantier.
-2. **`MediaSegmentManager`+`MediaSourceManager`** — chaîne `GetVersionInfo`/`GetMediaSources`/`GetMediaStreams` partagée (1 override, 8-10 appelants), hors propriété `PathProtocol` (changement de forme, à part).
+Premier candidat de la liste attaqué. Périmètre : uniquement les 4 lectures `ChannelManager` dans la chaîne `GetItemsInternal`/`GetItems`/`GetItemList` (branche `SourceType.Channel` dans `Folder`/`Season`/`Series`/`Channel`). `Folder.CollectionManager` (`PostFilterAndSort`), `Folder.UserViewManager` et `UserView.TVSeriesManager` **laissés en l'état** — même cluster, statics différents, pas touchés cette fois.
+
+Mécanique : `GetItemsInternal(query)` → `GetItemsInternal(query, IChannelManager channelManager)`, répercuté sur `GetItems`/`GetItemList` (publics) et les 6 overrides (`PlaylistsFolder`, `UserView`, `UserRootFolder`, `Series`, `Season`, `Channel` — la plupart ne lisent pas `channelManager`, juste signature à faire correspondre).
+
+**Deux surprises non prévues par la carte, trouvées seulement à l'implémentation :**
+1. `Folder.GetItems`/`GetItemList` sont **publics**, utilisés par bien plus que les 12 points d'entrée comptés dans le cluster — au moins 6 autres méthodes publiques/virtuelles (`GetChildren`, `GetRecursiveChildren` sur `UserView` ; `GetChildCount`, `GetRecursiveChildCount`, `MarkPlayed`, `MarkUnplayed` sur `Folder`) appellent aussi `GetItems`/`GetItemList` en interne, chacune elle-même virtuelle avec son propre lot d'overrides/appelants bien plus large (ce sont des méthodes cœur de l'API item, pas des feuilles). Compilateur les a révélées une par une (`CS7036`, paramètre manquant) — pas trouvées par grep à l'avance. **Traitées en gardant `BaseItem.ChannelManager` (le static) comme valeur de fallback à ces 6 sites**, avec commentaire explicite "hors scope, cascade trop large" — le static reste donc nécessaire pour ces chemins, pas une régression, juste le périmètre réel qui dépasse ce que la carte voyait.
+2. **Dépendance circulaire DI** détectée seulement à l'exécution des tests d'intégration (103/106 échecs, pas visible à la compilation) : `IChannelManager → IDtoService → IRecordingsManager → IChannelManager`. Injecter `IChannelManager` dans `RecordingsManager` (pour son seul call site `GetItemList`, nettoyage d'anciens enregistrements) fermait une boucle déjà existante (`ChannelManager` dépendait déjà de `IDtoService`, qui dépend déjà de `IRecordingsManager`). Résolu en revenant sur ce site précis au static `BaseItem.ChannelManager` — sûr ici : `librarySeries` est toujours une vraie `Series` de bibliothèque, jamais `SourceType.Channel`, donc la branche que ce paramètre alimente est de toute façon inatteignable sur ce chemin. **Leçon : les cycles DI ne se voient qu'à l'exécution (résolution du container), jamais à la compilation — un test d'intégration qui construit le container complet est indispensable après tout ajout de dépendance sur une classe déjà profondément connectée (`RecordingsManager`, `DtoService`, `ChannelManager` le sont).**
+
+Callers externes DI mis à jour proprement (6, sans relais statique) : `ItemsController`, `TvShowsController`, `UserViewManager` (avait déjà `IChannelManager`), `CollectionFolderImageProvider`, `DynamicImageProvider`, `SessionManager`. Relais via paramètre déjà reçu (pas de static, chaîne propre) : `UserView.GetItemsInternal` → `UserViewBuilder` (nouvelle dépendance constructeur) → `queryParent.GetItems`. Relais via nouvelle dépendance DI sur un appelant à 1 site (`Playlist.GetPlaylistItems`, méthode statique) : `PlaylistManager`.
+
+`ChannelManager` reste un static sur `BaseItem` (7 lectures au total à l'origine ; 4 supprimées, 3 restantes : `EnableMediaSourceDisplay`, `CanDelete`, et les 6 sites de repli ci-dessus qui l'utilisent maintenant explicitement comme fallback documenté plutôt qu'implicitement).
+
+Build 41 projets 0 erreur. Suite complète : régression détectée puis corrigée (103/106 échecs `Reefin.Server.Integration.Tests` sur la dépendance circulaire, désormais 103/106 réussite) ; 0 échec hors les 2 échecs réseau pré-existants.
+
+### Prochains candidats si reprise (mise à jour post-PR11)
+
+1. **Reste du cluster `GetItemsInternal`** — `Folder.CollectionManager`, `Folder.UserViewManager`, `UserView.TVSeriesManager` (même méthode `GetItemsInternal`, déjà signature-compatible avec un paramètre `channelManager` ajouté ; ajouter les 3 autres suivra probablement le même patron mais **vérifier à nouveau les 6 sites de repli** trouvés en PR11 avant de supposer le même périmètre).
+2. **`MediaSegmentManager`+`MediaSourceManager`** — chaîne `GetVersionInfo`/`GetMediaSources`/`GetMediaStreams` partagée (1 override, 8-10 appelants), hors propriété `PathProtocol` (changement de forme, à part). **Vérifier aussi si `GetMediaSources`/`GetMediaStreams` sont eux-mêmes appelés par d'autres méthodes publiques larges avant de supposer le compte d'appelants final — PR11 montre que ce genre de surprise est systématique, pas un cas isolé.**
 3. **`ChannelManager.EnableMediaSourceDisplay`** — propriété à 4 lecteurs, petit.
 
 ## Ordre recommandé (reprend celui du plan, réordonné sur le point 3 ci-dessus)

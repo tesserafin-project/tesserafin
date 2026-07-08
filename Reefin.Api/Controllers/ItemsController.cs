@@ -11,6 +11,7 @@ using Reefin.Api.Extensions;
 using Reefin.Api.Helpers;
 using Reefin.Api.ModelBinders;
 using Reefin.Common.Extensions;
+using Reefin.Controller.Channels;
 using Reefin.Controller.Dto;
 using Reefin.Controller.Entities;
 using Reefin.Controller.Entities.Movies;
@@ -44,6 +45,7 @@ public class ItemsController : BaseReefinApiController
     private readonly ISessionManager _sessionManager;
     private readonly IUserDataManager _userDataRepository;
     private readonly ISearchManager _searchManager;
+    private readonly IChannelManager _channelManager;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ItemsController"/> class.
@@ -56,6 +58,7 @@ public class ItemsController : BaseReefinApiController
     /// <param name="sessionManager">Instance of the <see cref="ISessionManager"/> interface.</param>
     /// <param name="userDataRepository">Instance of the <see cref="IUserDataManager"/> interface.</param>
     /// <param name="searchManager">Instance of the <see cref="ISearchManager"/> interface.</param>
+    /// <param name="channelManager">Instance of the <see cref="IChannelManager"/> interface.</param>
     public ItemsController(
         IUserManager userManager,
         ILibraryManager libraryManager,
@@ -64,7 +67,8 @@ public class ItemsController : BaseReefinApiController
         ILogger<ItemsController> logger,
         ISessionManager sessionManager,
         IUserDataManager userDataRepository,
-        ISearchManager searchManager)
+        ISearchManager searchManager,
+        IChannelManager channelManager)
     {
         _userManager = userManager;
         _libraryManager = libraryManager;
@@ -74,6 +78,7 @@ public class ItemsController : BaseReefinApiController
         _sessionManager = sessionManager;
         _userDataRepository = userDataRepository;
         _searchManager = searchManager;
+        _channelManager = channelManager;
     }
 
     /// <summary>
@@ -594,7 +599,7 @@ public class ItemsController : BaseReefinApiController
         if ((recursive.HasValue && recursive.Value) || ids.Length != 0 || item is not UserRootFolder || query.HasFilters)
         {
             // folder.GetItems applies user-access filtering via the InternalItemsQuery's User.
-            result = folder.GetItems(query);
+            result = folder.GetItems(query, _channelManager);
             if (searchResultScores is not null && searchResultScores.Count > 0)
             {
                 var orderedItems = result.Items

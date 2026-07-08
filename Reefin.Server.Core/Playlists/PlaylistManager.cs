@@ -13,6 +13,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using PlaylistsNET.Content;
 using PlaylistsNET.Models;
+using Reefin.Controller.Channels;
 using Reefin.Controller.Dto;
 using Reefin.Controller.Entities;
 using Reefin.Controller.Entities.Audio;
@@ -40,6 +41,7 @@ namespace Reefin.Server.Core.Playlists
         private readonly IUserManager _userManager;
         private readonly IProviderManager _providerManager;
         private readonly IConfiguration _appConfig;
+        private readonly IChannelManager _channelManager;
 
         public PlaylistManager(
             ILibraryManager libraryManager,
@@ -48,7 +50,8 @@ namespace Reefin.Server.Core.Playlists
             ILogger<PlaylistManager> logger,
             IUserManager userManager,
             IProviderManager providerManager,
-            IConfiguration appConfig)
+            IConfiguration appConfig,
+            IChannelManager channelManager)
         {
             _libraryManager = libraryManager;
             _fileSystem = fileSystem;
@@ -57,6 +60,7 @@ namespace Reefin.Server.Core.Playlists
             _userManager = userManager;
             _providerManager = providerManager;
             _appConfig = appConfig;
+            _channelManager = channelManager;
         }
 
         public Playlist GetPlaylistForUser(Guid playlistId, Guid userId)
@@ -195,7 +199,7 @@ namespace Reefin.Server.Core.Playlists
         {
             var items = itemIds.Select(_libraryManager.GetItemById).Where(i => i is not null);
 
-            return Playlist.GetPlaylistItems(items, user, options);
+            return Playlist.GetPlaylistItems(items, user, options, _channelManager);
         }
 
         public Task AddItemToPlaylistAsync(Guid playlistId, IReadOnlyCollection<Guid> itemIds, int? position, Guid userId)

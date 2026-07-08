@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller.Channels;
 using Reefin.Controller.Library;
 using Reefin.Controller.TV;
 using Reefin.Data;
@@ -27,19 +28,22 @@ namespace Reefin.Controller.Entities
         private readonly ILogger<BaseItem> _logger;
         private readonly IUserDataManager _userDataManager;
         private readonly ITVSeriesManager _tvSeriesManager;
+        private readonly IChannelManager _channelManager;
 
         public UserViewBuilder(
             IUserViewManager userViewManager,
             ILibraryManager libraryManager,
             ILogger<BaseItem> logger,
             IUserDataManager userDataManager,
-            ITVSeriesManager tvSeriesManager)
+            ITVSeriesManager tvSeriesManager,
+            IChannelManager channelManager)
         {
             _userViewManager = userViewManager;
             _libraryManager = libraryManager;
             _logger = logger;
             _userDataManager = userDataManager;
             _tvSeriesManager = tvSeriesManager;
+            _channelManager = channelManager;
         }
 
         public QueryResult<BaseItem> GetUserItems(Folder queryParent, Folder displayParent, CollectionType? viewType, InternalItemsQuery query)
@@ -122,7 +126,7 @@ namespace Reefin.Controller.Entities
                             return GetResult(GetMediaFolders(user).OfType<Folder>().SelectMany(i => i.GetChildren(user, true)), query);
                         }
 
-                        return queryParent.GetItems(query);
+                        return queryParent.GetItems(query, _channelManager);
                     }
             }
         }

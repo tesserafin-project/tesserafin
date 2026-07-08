@@ -9,6 +9,7 @@ using System.Linq;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using Reefin.Controller.Channels;
 using Reefin.Controller.Dto;
 using Reefin.Controller.Entities;
 using Reefin.Controller.Entities.Audio;
@@ -170,7 +171,7 @@ namespace Reefin.Controller.Playlists
             return base.GetChildren(user, true, query);
         }
 
-        public static IReadOnlyList<BaseItem> GetPlaylistItems(IEnumerable<BaseItem> inputItems, User user, DtoOptions options)
+        public static IReadOnlyList<BaseItem> GetPlaylistItems(IEnumerable<BaseItem> inputItems, User user, DtoOptions options, IChannelManager channelManager)
         {
             if (user is not null)
             {
@@ -181,14 +182,14 @@ namespace Reefin.Controller.Playlists
 
             foreach (var item in inputItems)
             {
-                var playlistItems = GetPlaylistItems(item, user, options);
+                var playlistItems = GetPlaylistItems(item, user, options, channelManager);
                 list.AddRange(playlistItems);
             }
 
             return list;
         }
 
-        private static IEnumerable<BaseItem> GetPlaylistItems(BaseItem item, User user, DtoOptions options)
+        private static IEnumerable<BaseItem> GetPlaylistItems(BaseItem item, User user, DtoOptions options, IChannelManager channelManager)
         {
             if (item is MusicGenre musicGenre)
             {
@@ -225,7 +226,7 @@ namespace Reefin.Controller.Playlists
                     DtoOptions = options
                 };
 
-                return folder.GetItemList(query);
+                return folder.GetItemList(query, channelManager);
             }
 
             return [item];

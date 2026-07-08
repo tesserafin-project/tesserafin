@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using AsyncKeyedLock;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Configuration;
+using Reefin.Controller.Channels;
 using Reefin.Controller.Configuration;
 using Reefin.Controller.Dto;
 using Reefin.Controller.Entities;
@@ -695,6 +696,10 @@ public sealed class RecordingsManager : IRecordingsManager, IDisposable
                 return;
             }
 
+            // channelManager not injectable here: IChannelManager -> IDtoService -> IRecordingsManager
+            // is an existing DI edge, so IRecordingsManager -> IChannelManager would be circular.
+            // Fine to fall back to the static: librarySeries is a real library Series (SourceType
+            // never Channel), so the channel branch this feeds is unreachable in this call path.
             var episodesToDelete = librarySeries.GetItemList(
                     new InternalItemsQuery
                     {
@@ -703,7 +708,8 @@ public sealed class RecordingsManager : IRecordingsManager, IDisposable
                         IsFolder = false,
                         Recursive = true,
                         DtoOptions = new DtoOptions(true)
-                    })
+                    },
+                    BaseItem.ChannelManager)
                 .Where(i => i.IsFileProtocol && File.Exists(i.Path))
                 .Skip(seriesTimer.KeepUpTo - 1);
 

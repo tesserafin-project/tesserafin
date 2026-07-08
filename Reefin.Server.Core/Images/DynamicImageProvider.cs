@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Reefin.Common.Configuration;
+using Reefin.Controller.Channels;
 using Reefin.Controller.Drawing;
 using Reefin.Controller.Dto;
 using Reefin.Controller.Entities;
@@ -24,11 +25,13 @@ namespace Reefin.Server.Core.Images
     public class DynamicImageProvider : BaseDynamicImageProvider<UserView>
     {
         private readonly IUserManager _userManager;
+        private readonly IChannelManager _channelManager;
 
-        public DynamicImageProvider(IFileSystem fileSystem, IProviderManager providerManager, IApplicationPaths applicationPaths, IImageProcessor imageProcessor, IUserManager userManager)
+        public DynamicImageProvider(IFileSystem fileSystem, IProviderManager providerManager, IApplicationPaths applicationPaths, IImageProcessor imageProcessor, IUserManager userManager, IChannelManager channelManager)
             : base(fileSystem, providerManager, applicationPaths, imageProcessor)
         {
             _userManager = userManager;
+            _channelManager = channelManager;
         }
 
         protected override IReadOnlyList<BaseItem> GetItemsWithImages(BaseItem item)
@@ -38,14 +41,16 @@ namespace Reefin.Server.Core.Images
             var isUsingCollectionStrip = IsUsingCollectionStrip(view);
             var recursive = isUsingCollectionStrip && view?.ViewType is not null && view.ViewType != CollectionType.boxsets && view.ViewType != CollectionType.playlists;
 
-            var result = view.GetItemList(new InternalItemsQuery
-            {
-                User = view.UserId.HasValue ? _userManager.GetUserById(view.UserId.Value) : null,
-                CollapseBoxSetItems = false,
-                Recursive = recursive,
-                ExcludeItemTypes = new[] { BaseItemKind.UserView, BaseItemKind.CollectionFolder, BaseItemKind.Person },
-                DtoOptions = new DtoOptions(false)
-            });
+            var result = view.GetItemList(
+                new InternalItemsQuery
+                {
+                    User = view.UserId.HasValue ? _userManager.GetUserById(view.UserId.Value) : null,
+                    CollapseBoxSetItems = false,
+                    Recursive = recursive,
+                    ExcludeItemTypes = new[] { BaseItemKind.UserView, BaseItemKind.CollectionFolder, BaseItemKind.Person },
+                    DtoOptions = new DtoOptions(false)
+                },
+                _channelManager);
 
             var items = result.Select(i =>
             {

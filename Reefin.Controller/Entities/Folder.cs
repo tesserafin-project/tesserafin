@@ -871,34 +871,42 @@ namespace Reefin.Controller.Entities
                 }
             }
 
-            var result = GetItems(new InternalItemsQuery(user)
-            {
-                Recursive = false,
-                Limit = 0,
-                Parent = this,
-                DtoOptions = new DtoOptions(false)
+            // GetChildCount isn't part of the GetItemsInternal/GetItems/GetItemList chain the
+            // channelManager parameter was threaded through (out of scope: a much wider virtual
+            // with many more overrides/callers) — falls back to the static here.
+            var result = GetItems(
+                new InternalItemsQuery(user)
                 {
-                    EnableImages = false
-                }
-            });
+                    Recursive = false,
+                    Limit = 0,
+                    Parent = this,
+                    DtoOptions = new DtoOptions(false)
+                    {
+                        EnableImages = false
+                    }
+                },
+                ChannelManager);
 
             return result.TotalRecordCount;
         }
 
         public virtual int GetRecursiveChildCount(User user)
         {
-            return GetItems(new InternalItemsQuery(user)
-            {
-                Recursive = true,
-                IsFolder = false,
-                IsVirtualItem = false,
-                EnableTotalRecordCount = true,
-                Limit = 0,
-                DtoOptions = new DtoOptions(false)
+            // Same scope boundary as GetChildCount above: falls back to the static.
+            return GetItems(
+                new InternalItemsQuery(user)
                 {
-                    EnableImages = false
-                }
-            }).TotalRecordCount;
+                    Recursive = true,
+                    IsFolder = false,
+                    IsVirtualItem = false,
+                    EnableTotalRecordCount = true,
+                    Limit = 0,
+                    DtoOptions = new DtoOptions(false)
+                    {
+                        EnableImages = false
+                    }
+                },
+                ChannelManager).TotalRecordCount;
         }
 
         public QueryResult<BaseItem> QueryRecursive(InternalItemsQuery query)
@@ -978,7 +986,7 @@ namespace Reefin.Controller.Entities
             return items.OrderBy(i => Array.IndexOf(query.ItemIds, i.Id)).ToArray();
         }
 
-        public QueryResult<BaseItem> GetItems(InternalItemsQuery query)
+        public QueryResult<BaseItem> GetItems(InternalItemsQuery query, IChannelManager channelManager)
         {
             if (query.ItemIds.Length > 0)
             {
@@ -992,10 +1000,10 @@ namespace Reefin.Controller.Entities
                 return result;
             }
 
-            return GetItemsInternal(query);
+            return GetItemsInternal(query, channelManager);
         }
 
-        public IReadOnlyList<BaseItem> GetItemList(InternalItemsQuery query)
+        public IReadOnlyList<BaseItem> GetItemList(InternalItemsQuery query, IChannelManager channelManager)
         {
             query.EnableTotalRecordCount = false;
 
@@ -1011,10 +1019,13 @@ namespace Reefin.Controller.Entities
                 return result;
             }
 
-            return GetItemsInternal(query).Items;
+            return GetItemsInternal(query, channelManager).Items;
         }
 
-        protected virtual QueryResult<BaseItem> GetItemsInternal(InternalItemsQuery query)
+        // channelManager is needed only when this folder's SourceType is SourceType.Channel;
+        // threaded as a parameter (replacing the removed BaseItem.ChannelManager static) so the
+        // dependency is explicit — most overrides never use it.
+        protected virtual QueryResult<BaseItem> GetItemsInternal(InternalItemsQuery query, IChannelManager channelManager)
         {
             if (SourceType == SourceType.Channel)
             {
@@ -1024,7 +1035,7 @@ namespace Reefin.Controller.Entities
                     query.ChannelIds = new[] { ChannelId };
 
                     // Don't blow up here because it could cause parent screens with other content to fail
-                    return ChannelManager.GetChannelItemsInternal(query, new Progress<double>(), CancellationToken.None).GetAwaiter().GetResult();
+                    return channelManager.GetChannelItemsInternal(query, new Progress<double>(), CancellationToken.None).GetAwaiter().GetResult();
                 }
                 catch
                 {
@@ -1878,7 +1889,10 @@ namespace Reefin.Controller.Entities
                 query.IsVirtualItem = false;
             }
 
-            var itemsResult = GetItemList(query);
+            // MarkPlayed isn't part of the GetItemsInternal/GetItems/GetItemList chain the
+            // channelManager parameter was threaded through (out of scope: a much wider virtual
+            // with many more overrides/callers) — falls back to the static here.
+            var itemsResult = GetItemList(query, ChannelManager);
 
             // Sweep through recursively and update status
             foreach (var item in itemsResult)
@@ -1903,13 +1917,16 @@ namespace Reefin.Controller.Entities
         /// <param name="user">The user.</param>
         public override void MarkUnplayed(User user)
         {
-            var itemsResult = GetItemList(new InternalItemsQuery
-            {
-                User = user,
-                Recursive = true,
-                IsFolder = false,
-                EnableTotalRecordCount = false
-            });
+            // Same scope boundary as MarkPlayed above: falls back to the static.
+            var itemsResult = GetItemList(
+                new InternalItemsQuery
+                {
+                    User = user,
+                    Recursive = true,
+                    IsFolder = false,
+                    EnableTotalRecordCount = false
+                },
+                ChannelManager);
 
             // Sweep through recursively and update status
             foreach (var item in itemsResult)
