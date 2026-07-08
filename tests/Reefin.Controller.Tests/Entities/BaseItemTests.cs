@@ -18,6 +18,7 @@ using Xunit;
 
 namespace Reefin.Controller.Tests.Entities;
 
+[Collection(BaseItemStaticStateCollection.Name)]
 public class BaseItemTests
 {
     [Theory]

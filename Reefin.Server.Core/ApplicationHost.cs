@@ -594,6 +594,7 @@ namespace Reefin.Server.Core
             serviceCollection.AddSingleton<ISyncPlayManager, SyncPlayManager>();
 
             serviceCollection.AddSingleton<IUserViewManager, UserViewManager>();
+            serviceCollection.AddSingleton<IItemQueryService, ItemQueryService>();
 
             serviceCollection.AddSingleton<IChapterManager, ChapterManager>();
 

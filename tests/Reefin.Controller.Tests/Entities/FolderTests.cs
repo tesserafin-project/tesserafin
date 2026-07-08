@@ -11,6 +11,7 @@ using Xunit;
 
 namespace Reefin.Controller.Tests.Entities;
 
+[Collection(BaseItemStaticStateCollection.Name)]
 public class FolderTests
 {
     private static (Mock<IChannelManager> ChannelManager, Mock<ICollectionManager> CollectionManager, Mock<IUserViewManager> UserViewManager, Mock<ITVSeriesManager> TvSeriesManager) StrictManagers()
