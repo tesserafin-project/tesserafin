@@ -9,6 +9,7 @@ using Reefin.Api.Extensions;
 using Reefin.Api.Helpers;
 using Reefin.Api.ModelBinders;
 using Reefin.Controller.Channels;
+using Reefin.Controller.Collections;
 using Reefin.Controller.Dto;
 using Reefin.Controller.Entities;
 using Reefin.Controller.Entities.TV;
@@ -36,6 +37,8 @@ public class TvShowsController : BaseReefinApiController
     private readonly IDtoService _dtoService;
     private readonly ITVSeriesManager _tvSeriesManager;
     private readonly IChannelManager _channelManager;
+    private readonly ICollectionManager _collectionManager;
+    private readonly IUserViewManager _userViewManager;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TvShowsController"/> class.
@@ -45,18 +48,24 @@ public class TvShowsController : BaseReefinApiController
     /// <param name="dtoService">Instance of the <see cref="IDtoService"/> interface.</param>
     /// <param name="tvSeriesManager">Instance of the <see cref="ITVSeriesManager"/> interface.</param>
     /// <param name="channelManager">Instance of the <see cref="IChannelManager"/> interface.</param>
+    /// <param name="collectionManager">Instance of the <see cref="ICollectionManager"/> interface.</param>
+    /// <param name="userViewManager">Instance of the <see cref="IUserViewManager"/> interface.</param>
     public TvShowsController(
         IUserManager userManager,
         ILibraryManager libraryManager,
         IDtoService dtoService,
         ITVSeriesManager tvSeriesManager,
-        IChannelManager channelManager)
+        IChannelManager channelManager,
+        ICollectionManager collectionManager,
+        IUserViewManager userViewManager)
     {
         _userManager = userManager;
         _libraryManager = libraryManager;
         _dtoService = dtoService;
         _tvSeriesManager = tvSeriesManager;
         _channelManager = channelManager;
+        _collectionManager = collectionManager;
+        _userViewManager = userViewManager;
     }
 
     /// <summary>
@@ -366,7 +375,10 @@ public class TvShowsController : BaseReefinApiController
                 IsSpecialSeason = isSpecialSeason,
                 AdjacentTo = adjacentTo
             },
-            _channelManager);
+            _channelManager,
+            _collectionManager,
+            _userViewManager,
+            _tvSeriesManager);
 
         var dtoOptions = new DtoOptions { Fields = fields }
             .AddAdditionalDtoOptions(enableImages, enableUserData, imageTypeLimit, enableImageTypes);

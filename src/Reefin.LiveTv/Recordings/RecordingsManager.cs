@@ -696,10 +696,11 @@ public sealed class RecordingsManager : IRecordingsManager, IDisposable
                 return;
             }
 
-            // channelManager not injectable here: IChannelManager -> IDtoService -> IRecordingsManager
-            // is an existing DI edge, so IRecordingsManager -> IChannelManager would be circular.
-            // Fine to fall back to the static: librarySeries is a real library Series (SourceType
-            // never Channel), so the channel branch this feeds is unreachable in this call path.
+            // None of these are injectable here: IChannelManager -> IDtoService -> IRecordingsManager
+            // is an existing DI edge (and IUserViewManager itself depends on IChannelManager), so
+            // IRecordingsManager -> any of them would be circular. Fine to fall back to the statics:
+            // librarySeries is a real library Series (SourceType never Channel), so none of the
+            // branches these feed are reachable in this call path.
             var episodesToDelete = librarySeries.GetItemList(
                     new InternalItemsQuery
                     {
@@ -709,7 +710,10 @@ public sealed class RecordingsManager : IRecordingsManager, IDisposable
                         Recursive = true,
                         DtoOptions = new DtoOptions(true)
                     },
-                    BaseItem.ChannelManager)
+                    BaseItem.ChannelManager,
+                    Folder.CollectionManager,
+                    Folder.UserViewManager,
+                    UserView.TVSeriesManager)
                 .Where(i => i.IsFileProtocol && File.Exists(i.Path))
                 .Skip(seriesTimer.KeepUpTo - 1);
 

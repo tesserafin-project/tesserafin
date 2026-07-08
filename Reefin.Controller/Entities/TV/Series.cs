@@ -10,8 +10,11 @@ using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using Reefin.Controller.Channels;
+using Reefin.Controller.Collections;
 using Reefin.Controller.Dto;
+using Reefin.Controller.Library;
 using Reefin.Controller.Providers;
+using Reefin.Controller.TV;
 using Reefin.Data;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
@@ -221,7 +224,7 @@ namespace Reefin.Controller.Entities.TV
             }
         }
 
-        protected override QueryResult<BaseItem> GetItemsInternal(InternalItemsQuery query, IChannelManager channelManager)
+        protected override QueryResult<BaseItem> GetItemsInternal(InternalItemsQuery query, IChannelManager channelManager, ICollectionManager collectionManager, IUserViewManager userViewManager, ITVSeriesManager tvSeriesManager)
         {
             var user = query.User;
 

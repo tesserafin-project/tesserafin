@@ -8,6 +8,7 @@ using System.IO;
 using System.Linq;
 using Reefin.Common.Configuration;
 using Reefin.Controller.Channels;
+using Reefin.Controller.Collections;
 using Reefin.Controller.Drawing;
 using Reefin.Controller.Dto;
 using Reefin.Controller.Entities;
@@ -15,6 +16,7 @@ using Reefin.Controller.Entities.Audio;
 using Reefin.Controller.Entities.TV;
 using Reefin.Controller.Library;
 using Reefin.Controller.Providers;
+using Reefin.Controller.TV;
 using Reefin.Data.Enums;
 using Reefin.Extensions;
 using Reefin.Model.Entities;
@@ -26,12 +28,18 @@ namespace Reefin.Server.Core.Images
     {
         private readonly IUserManager _userManager;
         private readonly IChannelManager _channelManager;
+        private readonly ICollectionManager _collectionManager;
+        private readonly IUserViewManager _userViewManager;
+        private readonly ITVSeriesManager _tvSeriesManager;
 
-        public DynamicImageProvider(IFileSystem fileSystem, IProviderManager providerManager, IApplicationPaths applicationPaths, IImageProcessor imageProcessor, IUserManager userManager, IChannelManager channelManager)
+        public DynamicImageProvider(IFileSystem fileSystem, IProviderManager providerManager, IApplicationPaths applicationPaths, IImageProcessor imageProcessor, IUserManager userManager, IChannelManager channelManager, ICollectionManager collectionManager, IUserViewManager userViewManager, ITVSeriesManager tvSeriesManager)
             : base(fileSystem, providerManager, applicationPaths, imageProcessor)
         {
             _userManager = userManager;
             _channelManager = channelManager;
+            _collectionManager = collectionManager;
+            _userViewManager = userViewManager;
+            _tvSeriesManager = tvSeriesManager;
         }
 
         protected override IReadOnlyList<BaseItem> GetItemsWithImages(BaseItem item)
@@ -50,7 +58,10 @@ namespace Reefin.Server.Core.Images
                     ExcludeItemTypes = new[] { BaseItemKind.UserView, BaseItemKind.CollectionFolder, BaseItemKind.Person },
                     DtoOptions = new DtoOptions(false)
                 },
-                _channelManager);
+                _channelManager,
+                _collectionManager,
+                _userViewManager,
+                _tvSeriesManager);
 
             var items = result.Select(i =>
             {

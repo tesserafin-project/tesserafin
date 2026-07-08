@@ -243,6 +243,28 @@ Build 41 projets 0 erreur. Suite complète : régression détectée puis corrig�
 2. **`MediaSegmentManager`+`MediaSourceManager`** — chaîne `GetVersionInfo`/`GetMediaSources`/`GetMediaStreams` partagée (1 override, 8-10 appelants), hors propriété `PathProtocol` (changement de forme, à part). **Vérifier aussi si `GetMediaSources`/`GetMediaStreams` sont eux-mêmes appelés par d'autres méthodes publiques larges avant de supposer le compte d'appelants final — PR11 montre que ce genre de surprise est systématique, pas un cas isolé.**
 3. **`ChannelManager.EnableMediaSourceDisplay`** — propriété à 4 lecteurs, petit.
 
+### PR12/N — reste du cluster `GetItemsInternal` : `CollectionManager`, `UserViewManager`, `TVSeriesManager` (2026-07-08)
+
+Candidat n°1 de la liste ci-dessus, comme prévu. `GetItemsInternal`/`GetItems`/`GetItemList` passent de 1 paramètre (`channelManager`, PR11) à 4 (`channelManager, collectionManager, userViewManager, tvSeriesManager`) ; `PostFilterAndSort` gagne `collectionManager` (remplace la lecture directe dans `CollapseBoxSetItemsIfNeeded`, `ConfigurationManager` reste statique — hors scope). Mêmes 6 overrides déjà touchés en PR11 mis à jour à nouveau (signature à 4 paramètres) ; mêmes 6 sites de repli (`GetChildren`/`GetRecursiveChildren` sur `UserView`, `GetChildCount`/`GetRecursiveChildCount`/`MarkPlayed`/`MarkUnplayed` sur `Folder`) étendus aux 3 nouveaux statics en fallback.
+
+**Piège trouvé en vérifiant la carte avant de coder** : `TVSeriesManager` est déclaré sur `UserView`, pas sur `Folder` (contrairement à `CollectionManager`/`UserViewManager`, tous deux sur `Folder`). Les 6 sites de repli vivent dans `Folder.cs`/`UserView.cs` — dans `Folder.cs`, `TVSeriesManager` n'est **pas accessible non qualifié** (pas dans la hiérarchie de classe). Fallback qualifié explicite (`UserView.TVSeriesManager`) utilisé aux 3 sites concernés (`Folder.cs` ×2, `RecordingsManager.cs` ×1) — sémantiquement identique (static, donc un seul emplacement de stockage, la qualification ne change pas quelle valeur est lue).
+
+**Cycle DI anticipé cette fois** (pas redécouvert à l'exécution comme en PR11) : `IUserViewManager` dépend déjà de `IChannelManager` (donc transitivement de `IDtoService`/`IRecordingsManager`, le même cycle que PR11). Vérifié avant d'injecter : `ICollectionManager` et `ITVSeriesManager` n'ont aucune dépendance vers ce groupe (safe partout) ; `IUserViewManager` reste **non injectable dans `RecordingsManager`** — les 4 statics (`ChannelManager`, `CollectionManager`, `UserViewManager`, `TVSeriesManager`) y restent en fallback pour ce seul call site, cohérent avec PR11.
+
+**Auto-référence dans `UserViewManager.cs`** (la classe service, pas le static) : cette classe implémente `IUserViewManager` — impossible de s'injecter elle-même en dépendance constructeur. Pour son propre appel `folder.GetItemList(...)`, passe `this` comme argument `userViewManager` (fonctionne : `UserViewManager : IUserViewManager`).
+
+Callers DI mis à jour (ajout `ICollectionManager`+`IUserViewManager`+`ITVSeriesManager`, ou sous-ensemble déjà partiellement présent) : `ItemsController`, `TvShowsController` (avait déjà `ITVSeriesManager`), `UserViewManager` (classe, ajoute `ICollectionManager`+`ITVSeriesManager`, passe `this` pour `userViewManager`), `CollectionFolderImageProvider`, `DynamicImageProvider`, `SessionManager`, `PlaylistManager` (relais vers `Playlist.GetPlaylistItems`, méthode statique, même patron que PR11).
+
+Build 41 projets 0 erreur. Suite complète 0 échec hors les 2 échecs réseau pré-existants — **pas de régression de cycle DI cette fois** (contrairement à PR11), grâce à la vérification a priori des dépendances de `IUserViewManager`/`ICollectionManager`/`ITVSeriesManager` avant d'écrire le code, plutôt qu'après.
+
+Cluster `GetItemsInternal` **terminé** : les 4 statics qu'il portait (`ChannelManager`, `CollectionManager`, `UserViewManager`, `TVSeriesManager`) sont sortis de la lecture directe dans la chaîne `GetItemsInternal`/`GetItems`/`GetItemList`/`PostFilterAndSort`. Restent des lectures directes hors de ce cluster pour certains d'entre eux (`ChannelManager.EnableMediaSourceDisplay`, `ChannelManager.CanDelete`, et les 6 sites de repli qui gardent tous les 4 comme fallback documenté — `GetChildren`, `MarkPlayed`, etc., hors scope, cascades trop larges).
+
+### Prochains candidats si reprise (mise à jour post-PR12)
+
+1. **`MediaSegmentManager`+`MediaSourceManager`** — chaîne `GetVersionInfo`/`GetMediaSources`/`GetMediaStreams` partagée (1 override, 8-10 appelants), hors propriété `PathProtocol` (changement de forme, à part). Vérifier si `GetMediaSources`/`GetMediaStreams` sont eux-mêmes appelés par d'autres méthodes publiques larges avant de supposer le compte d'appelants final (leçon PR11/PR12 : toujours vérifier, jamais supposer).
+2. **`ChannelManager.EnableMediaSourceDisplay`** — propriété à 4 lecteurs, petit.
+3. **Les 6 sites de repli** (`GetChildren`, `GetRecursiveChildren`, `GetChildCount`, `GetRecursiveChildCount`, `MarkPlayed`, `MarkUnplayed`) restent sur les 4 statics — chantier à part si on veut les traiter un jour (probablement pas rentable : ce sont des méthodes cœur de l'API item, cascade large garantie).
+
 ## Ordre recommandé (reprend celui du plan, réordonné sur le point 3 ci-dessus)
 1. Sessions de lecture + protocole capacités v2 (point 1-2) — priorité confirmée, zone la mieux comprise.
 2. Suppression `SetStaticProperties` / statics `BaseItem` (point 4) **avant** découpage `LibraryManager`.

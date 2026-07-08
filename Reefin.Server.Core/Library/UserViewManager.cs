@@ -7,11 +7,13 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using Reefin.Controller.Channels;
+using Reefin.Controller.Collections;
 using Reefin.Controller.Configuration;
 using Reefin.Controller.Dto;
 using Reefin.Controller.Entities;
 using Reefin.Controller.Library;
 using Reefin.Controller.LiveTv;
+using Reefin.Controller.TV;
 using Reefin.Data;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
@@ -32,14 +34,18 @@ namespace Reefin.Server.Core.Library
         private readonly IChannelManager _channelManager;
         private readonly ILiveTvManager _liveTvManager;
         private readonly IServerConfigurationManager _config;
+        private readonly ICollectionManager _collectionManager;
+        private readonly ITVSeriesManager _tvSeriesManager;
 
-        public UserViewManager(ILibraryManager libraryManager, ILocalizationManager localizationManager, IChannelManager channelManager, ILiveTvManager liveTvManager, IServerConfigurationManager config)
+        public UserViewManager(ILibraryManager libraryManager, ILocalizationManager localizationManager, IChannelManager channelManager, ILiveTvManager liveTvManager, IServerConfigurationManager config, ICollectionManager collectionManager, ITVSeriesManager tvSeriesManager)
         {
             _libraryManager = libraryManager;
             _localizationManager = localizationManager;
             _channelManager = channelManager;
             _liveTvManager = liveTvManager;
             _config = config;
+            _collectionManager = collectionManager;
+            _tvSeriesManager = tvSeriesManager;
         }
 
         public Folder[] GetUserViews(UserViewQuery query)
@@ -67,7 +73,10 @@ namespace Reefin.Server.Core.Library
                         {
                             ParentId = folder.ParentId
                         },
-                        _channelManager);
+                        _channelManager,
+                        _collectionManager,
+                        this,
+                        _tvSeriesManager);
 
                     if (!items.Any(item => item.IsVisible(user)))
                     {

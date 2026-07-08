@@ -9,6 +9,8 @@ using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using Reefin.Controller.Channels;
+using Reefin.Controller.Collections;
+using Reefin.Controller.Library;
 using Reefin.Controller.Providers;
 using Reefin.Controller.TV;
 using Reefin.Data.Enums;
@@ -94,7 +96,7 @@ namespace Reefin.Controller.Entities
         }
 
         /// <inheritdoc />
-        protected override QueryResult<BaseItem> GetItemsInternal(InternalItemsQuery query, IChannelManager channelManager)
+        protected override QueryResult<BaseItem> GetItemsInternal(InternalItemsQuery query, IChannelManager channelManager, ICollectionManager collectionManager, IUserViewManager userViewManager, ITVSeriesManager tvSeriesManager)
         {
             var parent = this as Folder;
 
@@ -107,7 +109,7 @@ namespace Reefin.Controller.Entities
                 parent = LibraryManager.GetItemById(ParentId) as Folder ?? parent;
             }
 
-            return new UserViewBuilder(UserViewManager, LibraryManager, Logger, UserDataManager, TVSeriesManager, channelManager)
+            return new UserViewBuilder(userViewManager, LibraryManager, Logger, UserDataManager, tvSeriesManager, channelManager, collectionManager)
                 .GetUserItems(parent, this, CollectionType, query);
         }
 
@@ -120,8 +122,8 @@ namespace Reefin.Controller.Entities
 
             // GetChildren isn't part of the GetItemsInternal/GetItems/GetItemList chain the
             // channelManager parameter was threaded through (out of scope: GetChildren is a much
-            // wider virtual with many more overrides/callers) — falls back to the static here.
-            var result = GetItemList(query, ChannelManager);
+            // wider virtual with many more overrides/callers) — falls back to the statics here.
+            var result = GetItemList(query, ChannelManager, CollectionManager, UserViewManager, TVSeriesManager);
 
             return result.ToList();
         }
@@ -147,8 +149,8 @@ namespace Reefin.Controller.Entities
             query.ForceDirect = true;
 
             // Same scope boundary as GetChildren above: GetRecursiveChildren isn't part of the
-            // threaded chain, falls back to the static.
-            var data = GetItemList(query, ChannelManager);
+            // threaded chain, falls back to the statics.
+            var data = GetItemList(query, ChannelManager, CollectionManager, UserViewManager, TVSeriesManager);
             totalCount = data.Count;
 
             return data;

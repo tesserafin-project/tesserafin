@@ -14,6 +14,7 @@ using Microsoft.Extensions.Logging;
 using PlaylistsNET.Content;
 using PlaylistsNET.Models;
 using Reefin.Controller.Channels;
+using Reefin.Controller.Collections;
 using Reefin.Controller.Dto;
 using Reefin.Controller.Entities;
 using Reefin.Controller.Entities.Audio;
@@ -21,6 +22,7 @@ using Reefin.Controller.Extensions;
 using Reefin.Controller.Library;
 using Reefin.Controller.Playlists;
 using Reefin.Controller.Providers;
+using Reefin.Controller.TV;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Extensions;
@@ -42,6 +44,9 @@ namespace Reefin.Server.Core.Playlists
         private readonly IProviderManager _providerManager;
         private readonly IConfiguration _appConfig;
         private readonly IChannelManager _channelManager;
+        private readonly ICollectionManager _collectionManager;
+        private readonly IUserViewManager _userViewManager;
+        private readonly ITVSeriesManager _tvSeriesManager;
 
         public PlaylistManager(
             ILibraryManager libraryManager,
@@ -51,7 +56,10 @@ namespace Reefin.Server.Core.Playlists
             IUserManager userManager,
             IProviderManager providerManager,
             IConfiguration appConfig,
-            IChannelManager channelManager)
+            IChannelManager channelManager,
+            ICollectionManager collectionManager,
+            IUserViewManager userViewManager,
+            ITVSeriesManager tvSeriesManager)
         {
             _libraryManager = libraryManager;
             _fileSystem = fileSystem;
@@ -61,6 +69,9 @@ namespace Reefin.Server.Core.Playlists
             _providerManager = providerManager;
             _appConfig = appConfig;
             _channelManager = channelManager;
+            _collectionManager = collectionManager;
+            _userViewManager = userViewManager;
+            _tvSeriesManager = tvSeriesManager;
         }
 
         public Playlist GetPlaylistForUser(Guid playlistId, Guid userId)
@@ -199,7 +210,7 @@ namespace Reefin.Server.Core.Playlists
         {
             var items = itemIds.Select(_libraryManager.GetItemById).Where(i => i is not null);
 
-            return Playlist.GetPlaylistItems(items, user, options, _channelManager);
+            return Playlist.GetPlaylistItems(items, user, options, _channelManager, _collectionManager, _userViewManager, _tvSeriesManager);
         }
 
         public Task AddItemToPlaylistAsync(Guid playlistId, IReadOnlyCollection<Guid> itemIds, int? position, Guid userId)

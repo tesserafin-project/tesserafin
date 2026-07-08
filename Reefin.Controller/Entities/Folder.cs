@@ -23,6 +23,7 @@ using Reefin.Controller.Library;
 using Reefin.Controller.LibraryTaskScheduler;
 using Reefin.Controller.Persistence;
 using Reefin.Controller.Providers;
+using Reefin.Controller.TV;
 using Reefin.Data;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
@@ -885,7 +886,10 @@ namespace Reefin.Controller.Entities
                         EnableImages = false
                     }
                 },
-                ChannelManager);
+                ChannelManager,
+                CollectionManager,
+                UserViewManager,
+                UserView.TVSeriesManager);
 
             return result.TotalRecordCount;
         }
@@ -906,7 +910,10 @@ namespace Reefin.Controller.Entities
                         EnableImages = false
                     }
                 },
-                ChannelManager).TotalRecordCount;
+                ChannelManager,
+                CollectionManager,
+                UserViewManager,
+                UserView.TVSeriesManager).TotalRecordCount;
         }
 
         public QueryResult<BaseItem> QueryRecursive(InternalItemsQuery query)
@@ -986,7 +993,7 @@ namespace Reefin.Controller.Entities
             return items.OrderBy(i => Array.IndexOf(query.ItemIds, i.Id)).ToArray();
         }
 
-        public QueryResult<BaseItem> GetItems(InternalItemsQuery query, IChannelManager channelManager)
+        public QueryResult<BaseItem> GetItems(InternalItemsQuery query, IChannelManager channelManager, ICollectionManager collectionManager, IUserViewManager userViewManager, ITVSeriesManager tvSeriesManager)
         {
             if (query.ItemIds.Length > 0)
             {
@@ -1000,10 +1007,10 @@ namespace Reefin.Controller.Entities
                 return result;
             }
 
-            return GetItemsInternal(query, channelManager);
+            return GetItemsInternal(query, channelManager, collectionManager, userViewManager, tvSeriesManager);
         }
 
-        public IReadOnlyList<BaseItem> GetItemList(InternalItemsQuery query, IChannelManager channelManager)
+        public IReadOnlyList<BaseItem> GetItemList(InternalItemsQuery query, IChannelManager channelManager, ICollectionManager collectionManager, IUserViewManager userViewManager, ITVSeriesManager tvSeriesManager)
         {
             query.EnableTotalRecordCount = false;
 
@@ -1019,13 +1026,15 @@ namespace Reefin.Controller.Entities
                 return result;
             }
 
-            return GetItemsInternal(query, channelManager).Items;
+            return GetItemsInternal(query, channelManager, collectionManager, userViewManager, tvSeriesManager).Items;
         }
 
         // channelManager is needed only when this folder's SourceType is SourceType.Channel;
-        // threaded as a parameter (replacing the removed BaseItem.ChannelManager static) so the
-        // dependency is explicit — most overrides never use it.
-        protected virtual QueryResult<BaseItem> GetItemsInternal(InternalItemsQuery query, IChannelManager channelManager)
+        // collectionManager only for PostFilterAndSort's BoxSet collapsing; userViewManager and
+        // tvSeriesManager only by UserView's override. Threaded as parameters (replacing the
+        // removed BaseItem statics) so the dependencies are explicit — most overrides never use
+        // most of them.
+        protected virtual QueryResult<BaseItem> GetItemsInternal(InternalItemsQuery query, IChannelManager channelManager, ICollectionManager collectionManager, IUserViewManager userViewManager, ITVSeriesManager tvSeriesManager)
         {
             if (SourceType == SourceType.Channel)
             {
@@ -1079,17 +1088,17 @@ namespace Reefin.Controller.Entities
                     LibraryManager);
             }
 
-            return PostFilterAndSort(items, query);
+            return PostFilterAndSort(items, query, collectionManager);
         }
 
-        protected QueryResult<BaseItem> PostFilterAndSort(IEnumerable<BaseItem> items, InternalItemsQuery query)
+        protected QueryResult<BaseItem> PostFilterAndSort(IEnumerable<BaseItem> items, InternalItemsQuery query, ICollectionManager collectionManager)
         {
             var user = query.User;
 
             // Check recursive - don't substitute in plain folder views
             if (user is not null)
             {
-                items = CollapseBoxSetItemsIfNeeded(items, query, this, user, ConfigurationManager, CollectionManager);
+                items = CollapseBoxSetItemsIfNeeded(items, query, this, user, ConfigurationManager, collectionManager);
 
                 // After collapse, BoxSets may have replaced items whose names matched the filter
                 // but the BoxSet's own name may not match. Re-apply name filtering so BoxSets
@@ -1891,8 +1900,8 @@ namespace Reefin.Controller.Entities
 
             // MarkPlayed isn't part of the GetItemsInternal/GetItems/GetItemList chain the
             // channelManager parameter was threaded through (out of scope: a much wider virtual
-            // with many more overrides/callers) — falls back to the static here.
-            var itemsResult = GetItemList(query, ChannelManager);
+            // with many more overrides/callers) — falls back to the statics here.
+            var itemsResult = GetItemList(query, ChannelManager, CollectionManager, UserViewManager, UserView.TVSeriesManager);
 
             // Sweep through recursively and update status
             foreach (var item in itemsResult)
@@ -1917,7 +1926,7 @@ namespace Reefin.Controller.Entities
         /// <param name="user">The user.</param>
         public override void MarkUnplayed(User user)
         {
-            // Same scope boundary as MarkPlayed above: falls back to the static.
+            // Same scope boundary as MarkPlayed above: falls back to the statics.
             var itemsResult = GetItemList(
                 new InternalItemsQuery
                 {
@@ -1926,7 +1935,10 @@ namespace Reefin.Controller.Entities
                     IsFolder = false,
                     EnableTotalRecordCount = false
                 },
-                ChannelManager);
+                ChannelManager,
+                CollectionManager,
+                UserViewManager,
+                UserView.TVSeriesManager);
 
             // Sweep through recursively and update status
             foreach (var item in itemsResult)

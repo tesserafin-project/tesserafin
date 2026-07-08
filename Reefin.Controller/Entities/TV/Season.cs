@@ -10,8 +10,11 @@ using System.Text.Json.Serialization;
 using System.Threading;
 using Reefin.Common;
 using Reefin.Controller.Channels;
+using Reefin.Controller.Collections;
 using Reefin.Controller.Dto;
+using Reefin.Controller.Library;
 using Reefin.Controller.Providers;
+using Reefin.Controller.TV;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Extensions;
@@ -158,7 +161,7 @@ namespace Reefin.Controller.Entities.TV
             return IndexNumber is not null ? IndexNumber.Value.ToString("0000", CultureInfo.InvariantCulture) : Name;
         }
 
-        protected override QueryResult<BaseItem> GetItemsInternal(InternalItemsQuery query, IChannelManager channelManager)
+        protected override QueryResult<BaseItem> GetItemsInternal(InternalItemsQuery query, IChannelManager channelManager, ICollectionManager collectionManager, IUserViewManager userViewManager, ITVSeriesManager tvSeriesManager)
         {
             if (SourceType == SourceType.Channel)
             {
@@ -177,14 +180,14 @@ namespace Reefin.Controller.Entities.TV
 
             if (query.User is null)
             {
-                return base.GetItemsInternal(query, channelManager);
+                return base.GetItemsInternal(query, channelManager, collectionManager, userViewManager, tvSeriesManager);
             }
 
             var user = query.User;
 
             var items = UserViewBuilder.Filter(GetEpisodes(user, query.DtoOptions, true), user, query, UserDataManager, LibraryManager);
 
-            return PostFilterAndSort(items, query);
+            return PostFilterAndSort(items, query, collectionManager);
         }
 
         /// <summary>

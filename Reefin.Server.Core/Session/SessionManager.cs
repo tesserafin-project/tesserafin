@@ -15,6 +15,7 @@ using Reefin.Common.Extensions;
 using Reefin.Controller;
 using Reefin.Controller.Authentication;
 using Reefin.Controller.Channels;
+using Reefin.Controller.Collections;
 using Reefin.Controller.Configuration;
 using Reefin.Controller.Devices;
 using Reefin.Controller.Drawing;
@@ -26,6 +27,7 @@ using Reefin.Controller.Events.Session;
 using Reefin.Controller.Library;
 using Reefin.Controller.Net;
 using Reefin.Controller.Session;
+using Reefin.Controller.TV;
 using Reefin.Data;
 using Reefin.Data.Enums;
 using Reefin.Data.Events;
@@ -62,6 +64,9 @@ namespace Reefin.Server.Core.Session
         private readonly IServerApplicationHost _appHost;
         private readonly IDeviceManager _deviceManager;
         private readonly IChannelManager _channelManager;
+        private readonly ICollectionManager _collectionManager;
+        private readonly IUserViewManager _userViewManager;
+        private readonly ITVSeriesManager _tvSeriesManager;
         private readonly CancellationTokenRegistration _shutdownCallback;
         private readonly ConcurrentDictionary<string, SessionInfo> _activeConnections
             = new(StringComparer.OrdinalIgnoreCase);
@@ -92,6 +97,9 @@ namespace Reefin.Server.Core.Session
         /// <param name="mediaSourceManager">Instance of <see cref="IMediaSourceManager"/> interface.</param>
         /// <param name="hostApplicationLifetime">Instance of <see cref="IHostApplicationLifetime"/> interface.</param>
         /// <param name="channelManager">Instance of <see cref="IChannelManager"/> interface.</param>
+        /// <param name="collectionManager">Instance of <see cref="ICollectionManager"/> interface.</param>
+        /// <param name="userViewManager">Instance of <see cref="IUserViewManager"/> interface.</param>
+        /// <param name="tvSeriesManager">Instance of <see cref="ITVSeriesManager"/> interface.</param>
         public SessionManager(
             ILogger<SessionManager> logger,
             IEventManager eventManager,
@@ -106,7 +114,10 @@ namespace Reefin.Server.Core.Session
             IDeviceManager deviceManager,
             IMediaSourceManager mediaSourceManager,
             IHostApplicationLifetime hostApplicationLifetime,
-            IChannelManager channelManager)
+            IChannelManager channelManager,
+            ICollectionManager collectionManager,
+            IUserViewManager userViewManager,
+            ITVSeriesManager tvSeriesManager)
         {
             _logger = logger;
             _eventManager = eventManager;
@@ -122,6 +133,9 @@ namespace Reefin.Server.Core.Session
             _mediaSourceManager = mediaSourceManager;
             _shutdownCallback = hostApplicationLifetime.ApplicationStopping.Register(OnApplicationStopping);
             _channelManager = channelManager;
+            _collectionManager = collectionManager;
+            _userViewManager = userViewManager;
+            _tvSeriesManager = tvSeriesManager;
 
             _deviceManager.DeviceOptionsUpdated += OnDeviceManagerDeviceOptionsUpdated;
         }
@@ -1489,7 +1503,10 @@ namespace Reefin.Server.Core.Session
                         IsVirtualItem = false,
                         OrderBy = new[] { (ItemSortBy.SortName, SortOrder.Ascending) }
                     },
-                    _channelManager);
+                    _channelManager,
+                    _collectionManager,
+                    _userViewManager,
+                    _tvSeriesManager);
             }
 
             return new[] { item };

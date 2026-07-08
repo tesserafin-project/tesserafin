@@ -7,7 +7,10 @@ using System.Globalization;
 using System.Linq;
 using System.Text.Json.Serialization;
 using System.Threading;
+using Reefin.Controller.Collections;
 using Reefin.Controller.Entities;
+using Reefin.Controller.Library;
+using Reefin.Controller.TV;
 using Reefin.Data;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Database.Implementations.Enums;
@@ -45,7 +48,7 @@ namespace Reefin.Controller.Channels
             return base.IsVisible(user, skipAllowedTagsCheck);
         }
 
-        protected override QueryResult<BaseItem> GetItemsInternal(InternalItemsQuery query, IChannelManager channelManager)
+        protected override QueryResult<BaseItem> GetItemsInternal(InternalItemsQuery query, IChannelManager channelManager, ICollectionManager collectionManager, IUserViewManager userViewManager, ITVSeriesManager tvSeriesManager)
         {
             try
             {
