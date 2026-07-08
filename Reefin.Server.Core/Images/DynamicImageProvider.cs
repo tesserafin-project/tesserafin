@@ -7,8 +7,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Reefin.Common.Configuration;
-using Reefin.Controller.Channels;
-using Reefin.Controller.Collections;
 using Reefin.Controller.Drawing;
 using Reefin.Controller.Dto;
 using Reefin.Controller.Entities;
@@ -16,7 +14,6 @@ using Reefin.Controller.Entities.Audio;
 using Reefin.Controller.Entities.TV;
 using Reefin.Controller.Library;
 using Reefin.Controller.Providers;
-using Reefin.Controller.TV;
 using Reefin.Data.Enums;
 using Reefin.Extensions;
 using Reefin.Model.Entities;
@@ -27,19 +24,13 @@ namespace Reefin.Server.Core.Images
     public class DynamicImageProvider : BaseDynamicImageProvider<UserView>
     {
         private readonly IUserManager _userManager;
-        private readonly IChannelManager _channelManager;
-        private readonly ICollectionManager _collectionManager;
-        private readonly IUserViewManager _userViewManager;
-        private readonly ITVSeriesManager _tvSeriesManager;
+        private readonly IItemQueryService _itemQueryService;
 
-        public DynamicImageProvider(IFileSystem fileSystem, IProviderManager providerManager, IApplicationPaths applicationPaths, IImageProcessor imageProcessor, IUserManager userManager, IChannelManager channelManager, ICollectionManager collectionManager, IUserViewManager userViewManager, ITVSeriesManager tvSeriesManager)
+        public DynamicImageProvider(IFileSystem fileSystem, IProviderManager providerManager, IApplicationPaths applicationPaths, IImageProcessor imageProcessor, IUserManager userManager, IItemQueryService itemQueryService)
             : base(fileSystem, providerManager, applicationPaths, imageProcessor)
         {
             _userManager = userManager;
-            _channelManager = channelManager;
-            _collectionManager = collectionManager;
-            _userViewManager = userViewManager;
-            _tvSeriesManager = tvSeriesManager;
+            _itemQueryService = itemQueryService;
         }
 
         protected override IReadOnlyList<BaseItem> GetItemsWithImages(BaseItem item)
@@ -49,7 +40,8 @@ namespace Reefin.Server.Core.Images
             var isUsingCollectionStrip = IsUsingCollectionStrip(view);
             var recursive = isUsingCollectionStrip && view?.ViewType is not null && view.ViewType != CollectionType.boxsets && view.ViewType != CollectionType.playlists;
 
-            var result = view.GetItemList(
+            var result = _itemQueryService.GetItemList(
+                view,
                 new InternalItemsQuery
                 {
                     User = view.UserId.HasValue ? _userManager.GetUserById(view.UserId.Value) : null,
@@ -57,11 +49,7 @@ namespace Reefin.Server.Core.Images
                     Recursive = recursive,
                     ExcludeItemTypes = new[] { BaseItemKind.UserView, BaseItemKind.CollectionFolder, BaseItemKind.Person },
                     DtoOptions = new DtoOptions(false)
-                },
-                _channelManager,
-                _collectionManager,
-                _userViewManager,
-                _tvSeriesManager);
+                });
 
             var items = result.Select(i =>
             {

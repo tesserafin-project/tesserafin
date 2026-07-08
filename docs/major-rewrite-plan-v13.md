@@ -355,9 +355,19 @@ Candidat proposé en fin de PR16 (déjà DI-propre, pas de cycle connu). `Collec
 
 Build 41 projets 0 erreur (build frais, post-fix). Suite complète 0 échec hors les 2 échecs réseau pré-existants.
 
-### Prochain candidat si reprise (mise à jour post-PR17)
+### PR18/N — deuxième consommateur migré vers `ItemQueryService` : `DynamicImageProvider` (2026-07-08)
 
-Un autre consommateur du cluster `GetItemsInternal` déjà DI-propre : `DynamicImageProvider` (même famille que `CollectionFolderImageProvider`, cité comme candidat "faible risque" en fin de PR16) — même patron de migration attendu.
+Même patron que PR17. `DynamicImageProvider` (vues `UserView`, bandeau de collage d'images pour movies/tvshows/playlists) n'injectait plus `IChannelManager`/`ICollectionManager`/`IUserViewManager`/`ITVSeriesManager` séparément — remplacés par `IItemQueryService`. `IUserManager` conservé (hors cluster, sert à résoudre `view.UserId` en `User` pour la requête). `view.GetItemList(query, channelManager, collectionManager, userViewManager, tvSeriesManager)` devient `_itemQueryService.GetItemList(view, query)`. 5 dépendances constructeur → 2.
+
+Différence notée par rapport à PR17 : la requête ici porte un `User` réel (`view.UserId.HasValue`), pas `null` — passe donc par le chemin `PostFilterAndSort` avec `user is not null` (branche `CollapseBoxSetItemsIfNeeded`/`ApplyNameFilter`). Vérifié avant de commiter : `CollapseBoxSetItems = false` explicite dans la requête court-circuite `CollapseBoxSetItemsIfNeeded` avant tout appel à `collectionManager.CollapseItemsWithinBoxSets` — aucun risque de cycle DI supplémentaire exercé par ce call site.
+
+Pas d'enregistrement DI explicite à toucher (résolution par scan d'assembly, comme PR17). Aucune autre référence dans le repo ne construit `DynamicImageProvider` directement.
+
+Build 41 projets 0 erreur (`--no-incremental`, leçon PR17 appliquée). Suite complète 0 échec hors les 2 échecs réseau pré-existants.
+
+### Prochain candidat si reprise (mise à jour post-PR18)
+
+Les deux consommateurs "faible risque" identifiés en PR16 sont maintenant migrés. Candidats suivants du cluster `GetItemsInternal` (PR11/PR12) à auditer avant migration (risque de surprise à la compilation comme observé sur ce cluster en PR11/PR12, cf. call sites `GetChildren`/`MarkPlayed`/etc.) : `ItemsController`, `TvShowsController`, `SessionManager`, `PlaylistManager`, `UserViewManager` (celui-ci s'auto-référence via `this`, cf. PR12 — migration vers `IItemQueryService` impossible sans casser cette auto-référence, à traiter à part ou laisser tel quel).
 
 ## Ordre recommandé (reprend celui du plan, réordonné sur le point 3 ci-dessus)
 1. Sessions de lecture + protocole capacités v2 (point 1-2) — priorité confirmée, zone la mieux comprise.
