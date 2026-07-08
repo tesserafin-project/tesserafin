@@ -33,8 +33,10 @@ namespace Reefin.Controller.BaseItemManager
 
             if (baseItem.SourceType == SourceType.Channel)
             {
-                // Hack alert.
-                return !baseItem.EnableMediaSourceDisplay;
+                // Hack alert. channelManager not injectable here: IDtoService -> IProviderManager
+                // -> IBaseItemManager is an existing DI edge, and IChannelManager already depends
+                // on IDtoService, so IBaseItemManager -> IChannelManager would be circular.
+                return !baseItem.GetEnableMediaSourceDisplay(BaseItem.ChannelManager);
             }
 
             if (libraryTypeOptions is not null)
@@ -57,8 +59,10 @@ namespace Reefin.Controller.BaseItemManager
 
             if (baseItem.SourceType == SourceType.Channel)
             {
-                // Hack alert.
-                return !baseItem.EnableMediaSourceDisplay;
+                // Hack alert. channelManager not injectable here: IDtoService -> IProviderManager
+                // -> IBaseItemManager is an existing DI edge, and IChannelManager already depends
+                // on IDtoService, so IBaseItemManager -> IChannelManager would be circular.
+                return !baseItem.GetEnableMediaSourceDisplay(BaseItem.ChannelManager);
             }
 
             if (libraryTypeOptions is not null)

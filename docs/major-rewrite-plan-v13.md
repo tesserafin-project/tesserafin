@@ -279,12 +279,23 @@ Build 41 projets 0 erreur. Suite complète 0 échec hors les 2 échecs réseau p
 
 Leçon confirmée une 4e fois (interfaces cette fois, pas seulement les classes concrètes) : **un contrat public (interface, générique contraint) peut porter la même signature qu'une implémentation — vérifier tous les points d'implémentation ET tous les points de consommation par interface avant de changer une signature partagée, pas seulement les classes concrètes trouvées au premier grep.**
 
-### Prochains candidats si reprise (mise à jour post-PR13)
+### PR14/N — `ChannelManager.EnableMediaSourceDisplay` : propriété convertie en méthode (2026-07-08)
 
-1. **`ChannelManager.EnableMediaSourceDisplay`** — propriété à 4 lecteurs, petit. Seul candidat "petit" clairement restant sur ce chantier.
-2. **Les statics laissés en fallback documenté** (nombreux maintenant : `ChannelManager`/`CollectionManager`/`UserViewManager`/`TVSeriesManager` sur 6+ sites, `MediaSourceManager`/`MediaSegmentManager` sur `LibraryManager` et `Episode.BeforeMetadataRefresh`) — tous rattachés à des méthodes cœur (`GetChildren`, `MarkPlayed`, `BeforeMetadataRefresh`, un site dans `LibraryManager`) ou à des cycles DI réels. Pas de chantier séparé recommandé : rendement décroissant confirmé à chaque vérification.
-3. **`ChannelManager.CanDelete`** — 16 overrides/4 appelants, large mécaniquement (comme `BeforeMetadataRefresh`), jamais traité, faible priorité.
-4. Le reste (`LibraryManager`, `FileSystem`, `Logger`, `ConfigurationManager`, `ProviderManager`, `UserDataManager` — 10-100+ sites chacun) reste dans la catégorie "reporté par volume", non creusé.
+`BaseItem.EnableMediaSourceDisplay` (propriété, getter seul) devient `BaseItem.GetEnableMediaSourceDisplay(IChannelManager channelManager)` — même famille de changement de forme que `OriginalLanguage`/`PathProtocol` (getter de propriété = pas de paramètre possible, seule option = méthode explicite). Déplacée de sa position d'origine (entre deux blocs de propriétés) vers la zone des méthodes `GetMediaSources`/`GetMediaStreams` pour respecter SA1201 (une méthode ne doit pas précéder une propriété dans ce ruleset StyleCop).
+
+3 vrais lecteurs externes (pas 4 comme l'audit initial l'estimait — un des 4 comptés était en fait `IChannelManager.EnableMediaSourceDisplay`, une méthode sans rapport sur une autre interface, name collision) : `DtoService.cs` (1), `BaseItemManager.cs` (2, mêmes 2 branches `SourceType.Channel` dans `IsMetadataFetcherEnabled`/`IsImageFetcherEnabled`).
+
+**2e cycle DI raté à la vérification a priori, retrouvé seulement à l'exécution des tests d'intégration** (comme PR11, pas comme PR13) : `BaseItemManager` semblait sûr (seule dépendance `IServerConfigurationManager`, vérifié via grep sur seulement 2 répertoires — `src/Reefin.LiveTv` et `Reefin.Server.Core/Dto`). Le vrai cycle passait par un 3e chemin non vérifié : `IChannelManager → IDtoService → IProviderManager → IBaseItemManager → IChannelManager` (`ProviderManager`, dans `Reefin.Providers/`, dépend de `IBaseItemManager` — hors du périmètre de recherche initial). 103/106 tests d'intégration ont échoué avant correction (retour au fallback statique `BaseItem.ChannelManager` dans `BaseItemManager.cs`, `DtoService.cs` restait déjà sur le static depuis le début).
+
+**Leçon méthode, 2e occurrence après PR11** : une recherche de cycle DI par grep doit couvrir **tout le repo**, pas seulement les répertoires qui semblent pertinents a priori — `Reefin.Providers/` n'avait pas été inclus dans la vérification initiale de `IBaseItemManager`, exactement le genre d'angle mort qui rend `dotnet test` sur la suite d'intégration complète non négociable après tout ajout de dépendance touchant `IChannelManager`/`IDtoService`/leurs consommateurs.
+
+Build 41 projets 0 erreur. Suite complète 0 échec hors les 2 échecs réseau pré-existants (après correction du cycle).
+
+### Prochains candidats si reprise (mise à jour post-PR14)
+
+1. **Les statics laissés en fallback documenté** (nombreux maintenant : `ChannelManager`/`CollectionManager`/`UserViewManager`/`TVSeriesManager` sur 6+ sites, `MediaSourceManager`/`MediaSegmentManager` sur `LibraryManager` et `Episode.BeforeMetadataRefresh`, `ChannelManager` sur `DtoService`/`BaseItemManager`/`MediaSourceManager`/`TrickplayManager`) — tous rattachés à des méthodes cœur ou des cycles DI réels et déjà vérifiés. Pas de chantier séparé recommandé : rendement décroissant confirmé à chaque vérification.
+2. **`ChannelManager.CanDelete`** — 16 overrides/4 appelants, large mécaniquement (comme `BeforeMetadataRefresh`), jamais traité, faible priorité. Dernier candidat non trivial sur `ChannelManager` lui-même.
+3. Le reste (`LibraryManager`, `FileSystem`, `Logger`, `ConfigurationManager`, `ProviderManager`, `UserDataManager` — 10-100+ sites chacun) reste dans la catégorie "reporté par volume", non creusé.
 
 ## Ordre recommandé (reprend celui du plan, réordonné sur le point 3 ci-dessus)
 1. Sessions de lecture + protocole capacités v2 (point 1-2) — priorité confirmée, zone la mieux comprise.

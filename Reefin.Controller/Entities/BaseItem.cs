@@ -467,20 +467,6 @@ namespace Reefin.Controller.Entities
         }
 
         [JsonIgnore]
-        public bool EnableMediaSourceDisplay
-        {
-            get
-            {
-                if (SourceType == SourceType.Channel)
-                {
-                    return ChannelManager.EnableMediaSourceDisplay(this);
-                }
-
-                return true;
-            }
-        }
-
-        [JsonIgnore]
         public Guid ParentId { get; set; }
 
         /// <summary>
@@ -1079,6 +1065,27 @@ namespace Reefin.Controller.Entities
             {
                 ItemId = Id
             });
+        }
+
+        /// <summary>
+        /// Gets a value indicating whether media sources should be displayed for this item.
+        /// Was a property; converted to a method (a property getter can't take a parameter) so
+        /// <see cref="IChannelManager"/> is passed explicitly instead of read from the removed
+        /// <c>BaseItem.ChannelManager</c> static.
+        /// </summary>
+        /// <param name="channelManager">
+        /// Instance of the <see cref="IChannelManager"/> interface, needed only when this item's
+        /// <see cref="SourceType"/> is <see cref="SourceType.Channel"/>.
+        /// </param>
+        /// <returns><c>true</c> if media sources should be displayed; otherwise, <c>false</c>.</returns>
+        public bool GetEnableMediaSourceDisplay(IChannelManager channelManager)
+        {
+            if (SourceType == SourceType.Channel)
+            {
+                return channelManager.EnableMediaSourceDisplay(this);
+            }
+
+            return true;
         }
 
         protected virtual bool IsActiveRecording()

@@ -1101,7 +1101,9 @@ namespace Reefin.Server.Core.Dto
 
             if (options.ContainsField(ItemFields.EnableMediaSourceDisplay))
             {
-                dto.EnableMediaSourceDisplay = item.EnableMediaSourceDisplay;
+                // channelManager not injectable here: IChannelManager already depends on
+                // IDtoService, so IDtoService -> IChannelManager would be circular.
+                dto.EnableMediaSourceDisplay = item.GetEnableMediaSourceDisplay(BaseItem.ChannelManager);
             }
 
             dto.PremiereDate = item.PremiereDate;
