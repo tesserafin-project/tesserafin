@@ -297,9 +297,31 @@ Build 41 projets 0 erreur. Suite complète 0 échec hors les 2 échecs réseau p
 2. **`ChannelManager.CanDelete`** — 16 overrides/4 appelants, large mécaniquement (comme `BeforeMetadataRefresh`), jamais traité, faible priorité. Dernier candidat non trivial sur `ChannelManager` lui-même.
 3. Le reste (`LibraryManager`, `FileSystem`, `Logger`, `ConfigurationManager`, `ProviderManager`, `UserDataManager` — 10-100+ sites chacun) reste dans la catégorie "reporté par volume", non creusé.
 
+## Revue externe post-PR14 (2026-07-08) — verdict et correction de trajectoire
+
+Deuxième avis demandé après PR14. Confirme le diagnostic (`SetStaticProperties`, `ApplicationHost.cs:669`, commentaire "Dirty hacks." — service-locator global sur `BaseItem`) et la direction (sortir les statics, dépendances explicites) comme bonnes. Mais qualifie la forme actuelle de **chirurgie préparatoire / phase de transition**, pas de design final pour `BaseItem`.
+
+Gains confirmés par la revue :
+- Dépendances visibles/vérifiées par le compilateur (avant : appel manager global invisible depuis le caller ; après : signature explicite, ex. `IHasMediaSources.GetMediaSources`/`GetMediaStreams`).
+- Révèle les vrais cycles DI au lieu de les cacher derrière des statics (3 cycles PR13 : `MediaSourceManager→IChannelManager→IDtoService→IMediaSourceManager`, `TrickplayManager→IChannelManager→IDtoService→ITrickplayManager`, `LibraryManager→IMediaSourceManager→ILibraryManager` ; 2e cycle PR14 via `IProviderManager→IBaseItemManager`).
+- Prépare le découpage `LibraryManager` (point 5) — ordre déjà retenu dans ce doc (risque #4), la revue confirme que l'inverse serait plus confus.
+- Rend certaines API honnêtes : `EnableMediaSourceDisplay` → `GetEnableMediaSourceDisplay(IChannelManager)` signale le coût caché.
+
+Point faible signalé : PR14 déplace la dépendance hors de la propriété plutôt que de vraiment libérer `ChannelManager` — les call sites critiques (`DtoService`, `BaseItemManager`) repassent `BaseItem.ChannelManager` en fallback statique à cause des cycles DI. Utile (casse l'illusion "propriété pure") mais pas une élimination réelle à ces sites. Rendement décroissant déjà noté dans ce doc (§ "Prochains candidats si reprise (mise à jour post-PR14)").
+
+**Correction de trajectoire recommandée** (adoptée) :
+1. Stabiliser la phase actuelle : tests ciblés sur les chemins déjà modifiés (`GetItemsInternal`, `GetMediaSources`, `GetEnableMediaSourceDisplay`) avant de continuer à traquer chaque static restant un par un — rendement décroissant déjà confirmé.
+2. Ne pas continuer à traquer chaque static restant à tout prix — le pattern et les zones coûteuses sont déjà prouvés (PR8-PR14).
+3. Créer les vrais services de remplacement plutôt que de faire grossir indéfiniment les signatures : ex. un service de requête d'items propriétaire des dépendances aujourd'hui passées en grappe à `Folder.GetItems` (`IChannelManager`, `ICollectionManager`, `IUserViewManager`, `ITVSeriesManager`) — candidat nommé par la revue : `ItemQueryService` (+ pistes `MediaSourceResolver`, `VisibilityPolicy`, `UserDataProjectionService` pour la suite).
+4. Objectif final reformulé : **pas** "`BaseItem` avec toutes ses dépendances passées en paramètres" — mais moins de logique applicative dans `BaseItem` (entité + comportements locaux), logique métier déplacée vers des services spécialisés autour.
+5. Fallbacks statiques : liste fermée, compat temporaire uniquement — ne pas en ajouter de nouveaux au-delà de ceux déjà documentés (§ "Prochains candidats si reprise (mise à jour post-PR14)").
+6. Les paramètres explicites (`IChannelManager`, `ICollectionManager`, etc. sur `GetItemsInternal`/`GetMediaSources`) sont une étape de migration, pas le design final — ne pas figer le "parameter soup" comme architecture permanente.
+
+Impact sur l'ordre du chantier (§ "Ordre recommandé" ci-dessous) : point 4 passe de "creuser static par static" à "stabiliser + esquisser les services de remplacement" avant d'enchaîner sur le point 5 (`LibraryManager`).
+
 ## Ordre recommandé (reprend celui du plan, réordonné sur le point 3 ci-dessus)
 1. Sessions de lecture + protocole capacités v2 (point 1-2) — priorité confirmée, zone la mieux comprise.
-2. Suppression `SetStaticProperties` / statics `BaseItem` (point 4) **avant** découpage `LibraryManager`.
+2. Suppression `SetStaticProperties` / statics `BaseItem` (point 4) **avant** découpage `LibraryManager`. Post-revue PR14 (2026-07-08) : stabiliser (tests ciblés) + esquisser les services de remplacement (`ItemQueryService` et consorts) plutôt que continuer à traquer chaque static un par un — voir § "Revue externe post-PR14".
 3. Découpage `LibraryManager` (point 5).
 4. Persistance v2 (point 8) — déjà en route, continuer.
 5. Plugin SDK v2 isolé (point 7) — après API v2 stabilisée, pas avant.
