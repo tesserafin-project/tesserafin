@@ -1058,37 +1058,44 @@ namespace Reefin.Controller.Entities
                 return QueryRecursive(query);
             }
 
+            return PostFilterAndSort(GetRawQueryItems(query), query, collectionManager);
+        }
+
+        // Raw filtered children before collapse/sort/pagination (PostFilterAndSort) - the block
+        // GetItemsInternal used to inline directly. Stays on Folder (depends on this folder's own
+        // children/overrides/hierarchy, per major rewrite plan PR24) rather than moving into
+        // ItemQueryService. Public + virtual: overrides that build items differently (Season with a
+        // user set, UserView's wholesale delegation to UserViewBuilder.GetUserItems, etc.) don't
+        // route through this yet - they keep their own GetItemsInternal override untouched. Wiring
+        // ItemQueryService.GetItems to call this directly (skipping GetItemsInternal's dispatch) is
+        // deliberately deferred to a later PR: it first needs a way to know, per folder, whether
+        // this base implementation is actually correct for it - that predicate belongs on the Folder
+        // hierarchy, not as a type-check in the service.
+        public virtual IEnumerable<BaseItem> GetRawQueryItems(InternalItemsQuery query)
+        {
             var user = query.User;
 
-            IEnumerable<BaseItem> items;
-
-            int totalItemCount = 0;
-            if (query.User is null)
+            if (user is null)
             {
-                items = UserViewBuilder.Filter(Children, user, query, UserDataManager, LibraryManager);
-                totalItemCount = items.Count();
-            }
-            else
-            {
-                // need to pass this param to the children.
-                // Note: Don't pass Limit/StartIndex here as pagination should happen after sorting in PostFilterAndSort
-                var childQuery = new InternalItemsQuery
-                {
-                    DisplayAlbumFolders = query.DisplayAlbumFolders,
-                    NameStartsWith = query.NameStartsWith,
-                    NameStartsWithOrGreater = query.NameStartsWithOrGreater,
-                    NameLessThan = query.NameLessThan
-                };
-
-                items = UserViewBuilder.Filter(
-                    GetChildren(user, true, out totalItemCount, childQuery),
-                    user,
-                    query,
-                    UserDataManager,
-                    LibraryManager);
+                return UserViewBuilder.Filter(Children, user, query, UserDataManager, LibraryManager);
             }
 
-            return PostFilterAndSort(items, query, collectionManager);
+            // need to pass this param to the children.
+            // Note: Don't pass Limit/StartIndex here as pagination should happen after sorting in PostFilterAndSort
+            var childQuery = new InternalItemsQuery
+            {
+                DisplayAlbumFolders = query.DisplayAlbumFolders,
+                NameStartsWith = query.NameStartsWith,
+                NameStartsWithOrGreater = query.NameStartsWithOrGreater,
+                NameLessThan = query.NameLessThan
+            };
+
+            return UserViewBuilder.Filter(
+                GetChildren(user, true, out _, childQuery),
+                user,
+                query,
+                UserDataManager,
+                LibraryManager);
         }
 
         protected QueryResult<BaseItem> PostFilterAndSort(IEnumerable<BaseItem> items, InternalItemsQuery query, ICollectionManager collectionManager)
