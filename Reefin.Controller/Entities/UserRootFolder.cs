@@ -108,10 +108,10 @@ namespace Reefin.Controller.Entities
             return list;
         }
 
-        public override bool BeforeMetadataRefresh(bool replaceAllMetadata)
+        public override bool BeforeMetadataRefresh(bool replaceAllMetadata, IItemNamingService itemNamingService)
         {
             ClearCache();
-            var hasChanges = base.BeforeMetadataRefresh(replaceAllMetadata);
+            var hasChanges = base.BeforeMetadataRefresh(replaceAllMetadata, itemNamingService);
 
             if (string.Equals("default", Name, StringComparison.OrdinalIgnoreCase))
             {

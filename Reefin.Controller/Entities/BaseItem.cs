@@ -2594,8 +2594,9 @@ namespace Reefin.Controller.Entities
         /// This is called before any metadata refresh and returns true if changes were made.
         /// </summary>
         /// <param name="replaceAllMetadata">Whether to replace all metadata.</param>
+        /// <param name="itemNamingService">Instance of the <see cref="IItemNamingService"/> interface.</param>
         /// <returns>true if the item has change, else false.</returns>
-        public virtual bool BeforeMetadataRefresh(bool replaceAllMetadata)
+        public virtual bool BeforeMetadataRefresh(bool replaceAllMetadata, IItemNamingService itemNamingService)
         {
             _sortName = null;
 

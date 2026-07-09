@@ -27,7 +27,6 @@ namespace Reefin.Providers.TV;
 public class SeriesMetadataService : MetadataService<Series, SeriesInfo>
 {
     private readonly ILocalizationManager _localizationManager;
-    private readonly IItemNamingService _itemNamingService;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SeriesMetadataService"/> class.
@@ -51,9 +50,8 @@ public class SeriesMetadataService : MetadataService<Series, SeriesInfo>
         ILocalizationManager localizationManager,
         IExternalDataManager externalDataManager,
         IItemRepository itemRepository)
-        : base(serverConfigurationManager, logger, providerManager, fileSystem, libraryManager, externalDataManager, itemRepository)
+        : base(serverConfigurationManager, logger, providerManager, fileSystem, libraryManager, itemNamingService, externalDataManager, itemRepository)
     {
-        _itemNamingService = itemNamingService;
         _localizationManager = localizationManager;
     }
 
@@ -66,7 +64,7 @@ public class SeriesMetadataService : MetadataService<Series, SeriesInfo>
 
             foreach (var season in seasons)
             {
-                var hasUpdate = refreshOptions is not null && season.BeforeMetadataRefresh(refreshOptions.ReplaceAllMetadata);
+                var hasUpdate = refreshOptions is not null && season.BeforeMetadataRefresh(refreshOptions.ReplaceAllMetadata, ItemNamingService);
                 if (hasUpdate)
                 {
                     await season.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
@@ -315,7 +313,7 @@ public class SeriesMetadataService : MetadataService<Series, SeriesInfo>
 
             try
             {
-                _itemNamingService.FillMissingEpisodeNumbersFromPath(episode, false);
+                ItemNamingService.FillMissingEpisodeNumbersFromPath(episode, false);
             }
             catch (Exception ex)
             {

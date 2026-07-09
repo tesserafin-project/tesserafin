@@ -234,9 +234,9 @@ namespace Reefin.Controller.Entities
             return changed;
         }
 
-        public override bool BeforeMetadataRefresh(bool replaceAllMetadata)
+        public override bool BeforeMetadataRefresh(bool replaceAllMetadata, IItemNamingService itemNamingService)
         {
-            var changed = base.BeforeMetadataRefresh(replaceAllMetadata) || _requiresRefresh;
+            var changed = base.BeforeMetadataRefresh(replaceAllMetadata, itemNamingService) || _requiresRefresh;
             _requiresRefresh = false;
             return changed;
         }

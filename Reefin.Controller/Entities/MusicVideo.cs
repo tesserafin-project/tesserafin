@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 using Reefin.Controller.Entities.Audio;
+using Reefin.Controller.Library;
 using Reefin.Controller.Providers;
 using Reefin.Data.Enums;
 
@@ -36,13 +37,13 @@ namespace Reefin.Controller.Entities
             return info;
         }
 
-        public override bool BeforeMetadataRefresh(bool replaceAllMetadata)
+        public override bool BeforeMetadataRefresh(bool replaceAllMetadata, IItemNamingService itemNamingService)
         {
-            var hasChanges = base.BeforeMetadataRefresh(replaceAllMetadata);
+            var hasChanges = base.BeforeMetadataRefresh(replaceAllMetadata, itemNamingService);
 
             if (!ProductionYear.HasValue)
             {
-                var info = LibraryManager.ParseName(Name);
+                var info = itemNamingService.ParseName(Name);
 
                 var yearInName = info.Year;
 
@@ -56,7 +57,7 @@ namespace Reefin.Controller.Entities
                     // Try to get the year from the folder name
                     if (!IsInMixedFolder)
                     {
-                        info = LibraryManager.ParseName(System.IO.Path.GetFileName(ContainingFolderPath));
+                        info = itemNamingService.ParseName(System.IO.Path.GetFileName(ContainingFolderPath));
 
                         yearInName = info.Year;
 

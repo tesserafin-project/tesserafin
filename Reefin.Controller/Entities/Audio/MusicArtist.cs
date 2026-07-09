@@ -9,6 +9,7 @@ using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller.Library;
 using Reefin.Controller.Providers;
 using Reefin.Data;
 using Reefin.Data.Enums;
@@ -205,10 +206,11 @@ namespace Reefin.Controller.Entities.Audio
         /// This is called before any metadata refresh and returns true or false indicating if changes were made.
         /// </summary>
         /// <param name="replaceAllMetadata">Option to replace metadata.</param>
+        /// <param name="itemNamingService">Instance of the <see cref="IItemNamingService"/> interface.</param>
         /// <returns>True if metadata changed.</returns>
-        public override bool BeforeMetadataRefresh(bool replaceAllMetadata)
+        public override bool BeforeMetadataRefresh(bool replaceAllMetadata, IItemNamingService itemNamingService)
         {
-            var hasChanges = base.BeforeMetadataRefresh(replaceAllMetadata);
+            var hasChanges = base.BeforeMetadataRefresh(replaceAllMetadata, itemNamingService);
 
             if (IsAccessedByName)
             {

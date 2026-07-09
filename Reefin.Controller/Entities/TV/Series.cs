@@ -509,13 +509,13 @@ namespace Reefin.Controller.Entities.TV
             return info;
         }
 
-        public override bool BeforeMetadataRefresh(bool replaceAllMetadata)
+        public override bool BeforeMetadataRefresh(bool replaceAllMetadata, IItemNamingService itemNamingService)
         {
-            var hasChanges = base.BeforeMetadataRefresh(replaceAllMetadata);
+            var hasChanges = base.BeforeMetadataRefresh(replaceAllMetadata, itemNamingService);
 
             if (!ProductionYear.HasValue)
             {
-                var info = LibraryManager.ParseName(Name);
+                var info = itemNamingService.ParseName(Name);
 
                 var yearInName = info.Year;
 

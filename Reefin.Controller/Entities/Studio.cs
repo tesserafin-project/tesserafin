@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller.Library;
 using Reefin.Extensions;
 
 namespace Reefin.Controller.Entities
@@ -107,10 +108,11 @@ namespace Reefin.Controller.Entities
         /// This is called before any metadata refresh and returns true or false indicating if changes were made.
         /// </summary>
         /// <param name="replaceAllMetadata"><c>true</c> to replace all metadata, <c>false</c> to not.</param>
+        /// <param name="itemNamingService">Instance of the <see cref="IItemNamingService"/> interface.</param>
         /// <returns><c>true</c> if changes were made, <c>false</c> if not.</returns>
-        public override bool BeforeMetadataRefresh(bool replaceAllMetadata)
+        public override bool BeforeMetadataRefresh(bool replaceAllMetadata, IItemNamingService itemNamingService)
         {
-            var hasChanges = base.BeforeMetadataRefresh(replaceAllMetadata);
+            var hasChanges = base.BeforeMetadataRefresh(replaceAllMetadata, itemNamingService);
 
             var newPath = GetRebasedPath();
             if (!string.Equals(Path, newPath, StringComparison.Ordinal))

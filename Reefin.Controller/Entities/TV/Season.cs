@@ -284,14 +284,19 @@ namespace Reefin.Controller.Entities.TV
         /// This is called before any metadata refresh and returns true or false indicating if changes were made.
         /// </summary>
         /// <param name="replaceAllMetadata"><c>true</c> to replace metadata, <c>false</c> to not.</param>
+        /// <param name="itemNamingService">Instance of the <see cref="IItemNamingService"/> interface.</param>
         /// <returns><c>true</c> if XXXX, <c>false</c> otherwise.</returns>
-        public override bool BeforeMetadataRefresh(bool replaceAllMetadata)
+        public override bool BeforeMetadataRefresh(bool replaceAllMetadata, IItemNamingService itemNamingService)
         {
-            var hasChanges = base.BeforeMetadataRefresh(replaceAllMetadata);
+            var hasChanges = base.BeforeMetadataRefresh(replaceAllMetadata, itemNamingService);
 
             if (!IndexNumber.HasValue && !string.IsNullOrEmpty(Path))
             {
-                IndexNumber ??= LibraryManager.GetSeasonNumberFromPath(Path, ParentId);
+                // Legacy parentId -> parentPath lookup stays on the BaseItem.LibraryManager
+                // static (GetParent(), out of scope for this migration); only the naming
+                // computation itself moves to the injected service (PR34/PR35 boundary).
+                var parentPath = GetParent()?.ContainingFolderPath;
+                IndexNumber ??= itemNamingService.GetSeasonNumberFromPath(Path, parentPath);
 
                 // If a change was made record it
                 if (IndexNumber.HasValue)

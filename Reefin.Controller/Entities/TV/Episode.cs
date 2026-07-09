@@ -9,6 +9,7 @@ using System.Linq;
 using System.Text.Json.Serialization;
 using System.Threading;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller.Library;
 using Reefin.Controller.MediaEncoding;
 using Reefin.Controller.Providers;
 using Reefin.Data.Enums;
@@ -325,9 +326,9 @@ namespace Reefin.Controller.Entities.TV
             return id;
         }
 
-        public override bool BeforeMetadataRefresh(bool replaceAllMetadata)
+        public override bool BeforeMetadataRefresh(bool replaceAllMetadata, IItemNamingService itemNamingService)
         {
-            var hasChanges = base.BeforeMetadataRefresh(replaceAllMetadata);
+            var hasChanges = base.BeforeMetadataRefresh(replaceAllMetadata, itemNamingService);
 
             if (!IsLocked)
             {
@@ -372,7 +373,7 @@ namespace Reefin.Controller.Entities.TV
 
                     try
                     {
-                        if (LibraryManager.FillMissingEpisodeNumbersFromPath(this, replaceAllMetadata))
+                        if (itemNamingService.FillMissingEpisodeNumbersFromPath(this, replaceAllMetadata))
                         {
                             hasChanges = true;
                         }

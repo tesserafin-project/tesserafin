@@ -34,6 +34,7 @@ namespace Reefin.Providers.Manager
             IProviderManager providerManager,
             IFileSystem fileSystem,
             ILibraryManager libraryManager,
+            IItemNamingService itemNamingService,
             IExternalDataManager externalDataManager,
             IItemRepository itemRepository)
         {
@@ -42,6 +43,7 @@ namespace Reefin.Providers.Manager
             ProviderManager = providerManager;
             FileSystem = fileSystem;
             LibraryManager = libraryManager;
+            ItemNamingService = itemNamingService;
             ExternalDataManager = externalDataManager;
             ItemRepository = itemRepository;
             ImageProvider = new ItemImageProvider(Logger, ProviderManager, FileSystem);
@@ -58,6 +60,8 @@ namespace Reefin.Providers.Manager
         protected IFileSystem FileSystem { get; }
 
         protected ILibraryManager LibraryManager { get; }
+
+        protected IItemNamingService ItemNamingService { get; }
 
         protected IExternalDataManager ExternalDataManager { get; }
 
@@ -164,7 +168,7 @@ namespace Reefin.Providers.Manager
 
                 if (providers.Count > 0 || isFirstRefresh || requiresRefresh)
                 {
-                    if (item.BeforeMetadataRefresh(refreshOptions.ReplaceAllMetadata))
+                    if (item.BeforeMetadataRefresh(refreshOptions.ReplaceAllMetadata, ItemNamingService))
                     {
                         updateType |= ItemUpdateType.MetadataImport;
                     }
