@@ -27,6 +27,7 @@ using Reefin.Controller.Entities.TV;
 using Reefin.Controller.IO;
 using Reefin.Controller.Library;
 using Reefin.Controller.Providers;
+using Reefin.Controller.Sorting;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Database.Implementations.Enums;
@@ -58,6 +59,7 @@ public class LibraryController : BaseReefinApiController
     private readonly ILibraryMonitor _libraryMonitor;
     private readonly ILogger<LibraryController> _logger;
     private readonly IServerConfigurationManager _serverConfigurationManager;
+    private readonly IItemSortService _itemSortService;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LibraryController"/> class.
@@ -73,6 +75,7 @@ public class LibraryController : BaseReefinApiController
     /// <param name="libraryMonitor">Instance of the <see cref="ILibraryMonitor"/> interface.</param>
     /// <param name="logger">Instance of the <see cref="ILogger{LibraryController}"/> interface.</param>
     /// <param name="serverConfigurationManager">Instance of the <see cref="IServerConfigurationManager"/> interface.</param>
+    /// <param name="itemSortService">Instance of the <see cref="IItemSortService"/> interface.</param>
     public LibraryController(
         IProviderManager providerManager,
         ISimilarItemsManager similarItemsManager,
@@ -84,7 +87,8 @@ public class LibraryController : BaseReefinApiController
         ILocalizationManager localization,
         ILibraryMonitor libraryMonitor,
         ILogger<LibraryController> logger,
-        IServerConfigurationManager serverConfigurationManager)
+        IServerConfigurationManager serverConfigurationManager,
+        IItemSortService itemSortService)
     {
         _providerManager = providerManager;
         _similarItemsManager = similarItemsManager;
@@ -97,6 +101,7 @@ public class LibraryController : BaseReefinApiController
         _libraryMonitor = libraryMonitor;
         _logger = logger;
         _serverConfigurationManager = serverConfigurationManager;
+        _itemSortService = itemSortService;
     }
 
     /// <summary>
@@ -178,7 +183,10 @@ public class LibraryController : BaseReefinApiController
 
         while (true)
         {
-            themeItems = item.GetThemeSongs(user, orderBy);
+            themeItems = _itemSortService.Sort(
+                item.GetExtras(user).Where(e => e.ExtraType == Reefin.Model.Entities.ExtraType.ThemeSong),
+                user,
+                orderBy).ToArray();
 
             if (themeItems.Count > 0 || !inheritFromParent)
             {
@@ -251,7 +259,10 @@ public class LibraryController : BaseReefinApiController
 
         while (true)
         {
-            themeItems = item.GetThemeVideos(user, orderBy);
+            themeItems = _itemSortService.Sort(
+                item.GetExtras(user).Where(e => e.ExtraType == Reefin.Model.Entities.ExtraType.ThemeVideo),
+                user,
+                orderBy).ToArray();
 
             if (themeItems.Any() || !inheritFromParent)
             {
