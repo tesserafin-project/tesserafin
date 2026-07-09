@@ -539,6 +539,7 @@ namespace Reefin.Server.Core
             serviceCollection.AddSingleton<ILinkedChildrenService, LinkedChildrenService>();
             serviceCollection.AddSingleton<IItemSortService, ItemSortService>();
             serviceCollection.AddSingleton<IItemNamingService, ItemNamingService>();
+            serviceCollection.AddSingleton<IItemPeopleService, ItemPeopleService>();
             serviceCollection.AddSingleton<IPeopleRepository, PeopleRepository>();
             serviceCollection.AddSingleton<IChapterRepository, ChapterRepository>();
             serviceCollection.AddSingleton<IMediaAttachmentRepository, MediaAttachmentRepository>();

@@ -724,6 +724,14 @@ Call sites vérifiés : `GetPeople(BaseItem)` est appelé par `DtoService`, `FFP
 
 Verdict : extraction sûre si l'interface vit côté `Reefin.Controller` (ex. `IItemPeopleService`) et l'implémentation côté `Reefin.Server.Core`, avec unique dépendance `IPeopleRepository`. Aucun cycle possible : le service ne dépend ni de `ILibraryManager`, ni de `IProviderManager`, ni des `Lazy<T>`. `LibraryManager` garde les méthodes publiques `ILibraryManager` et délègue pour préserver l'API. Tests recommandés pour PR38 : `GetPeople(BaseItem)` retourne vide si `SupportsPeople == false`, délègue par `ItemId` si `SupportsPeople == true`, et `GetPeopleNamesByItems` relaie les paramètres.
 
+### PR38/N — `IItemPeopleService`, extraction read-only People (2026-07-09)
+
+Extraction appliquée conformément à l'audit PR37. `IItemPeopleService` (`Reefin.Controller/Library/IItemPeopleService.cs`) expose uniquement les lectures People sans mutation : `GetPeople(InternalPeopleQuery)`, `GetPeople(BaseItem)`, `GetPeopleNames(...)`, `GetPeopleNamesByItems(...)`. `ItemPeopleService` (`Reefin.Server.Core/Library/ItemPeopleService.cs`) reprend la politique read-only existante avec une seule dépendance constructeur, `IPeopleRepository`.
+
+`LibraryManager` conserve l'API publique `ILibraryManager` intacte et délègue ces quatre méthodes à `_itemPeopleService`. `_peopleRepository` reste volontairement dans `LibraryManager` pour les chemins non-leaf exclus de cette tranche : `GetPeopleItems` (résolution `Person` + visibilité) et `UpdatePeopleAsync`/`SavePeopleMetadataAsync` (création/update de personnes et metadata savers). Enregistrement DI ajouté (`IItemPeopleService -> ItemPeopleService`) à côté des autres services item extraits.
+
+Tests dédiés ajoutés dans `tests/Reefin.Server.Implementations.Tests/Library/ItemPeopleServiceTests.cs` : item ne supportant pas People sans appel repository, item supportant People avec requête par `ItemId`, et relais `GetPeopleNamesByItems` des paramètres. Vérifications : `ItemPeopleServiceTests` 3/3, build frais solution 0 erreur, intégration 103/106 (3 ignorés).
+
 ## Ordre recommandé (reprend celui du plan, réordonné sur le point 3 ci-dessus)
 1. Sessions de lecture + protocole capacités v2 (point 1-2) — priorité confirmée, zone la mieux comprise.
 2. Suppression `SetStaticProperties` / statics `BaseItem` (point 4) **avant** découpage `LibraryManager`. Post-revue PR14 (2026-07-08) : stabiliser (tests ciblés) + esquisser les services de remplacement (`ItemQueryService` et consorts) plutôt que continuer à traquer chaque static un par un — voir § "Revue externe post-PR14".

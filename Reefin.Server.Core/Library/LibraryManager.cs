@@ -80,6 +80,7 @@ namespace Reefin.Server.Core.Library
         private readonly ILinkedChildrenService _linkedChildrenService;
         private readonly IItemSortService _itemSortService;
         private readonly IItemNamingService _itemNamingService;
+        private readonly IItemPeopleService _itemPeopleService;
         private readonly IImageProcessor _imageProcessor;
         private readonly NamingOptions _namingOptions;
         private readonly IPeopleRepository _peopleRepository;
@@ -127,6 +128,7 @@ namespace Reefin.Server.Core.Library
         /// <param name="linkedChildrenService">The linked children service.</param>
         /// <param name="itemSortService">The item sort service.</param>
         /// <param name="itemNamingService">The item naming service.</param>
+        /// <param name="itemPeopleService">The item people service.</param>
         /// <param name="imageProcessor">The image processor.</param>
         /// <param name="namingOptions">The naming options.</param>
         /// <param name="directoryService">The directory service.</param>
@@ -154,6 +156,7 @@ namespace Reefin.Server.Core.Library
             ILinkedChildrenService linkedChildrenService,
             IItemSortService itemSortService,
             IItemNamingService itemNamingService,
+            IItemPeopleService itemPeopleService,
             IImageProcessor imageProcessor,
             NamingOptions namingOptions,
             IDirectoryService directoryService,
@@ -181,6 +184,7 @@ namespace Reefin.Server.Core.Library
             _linkedChildrenService = linkedChildrenService;
             _itemSortService = itemSortService;
             _itemNamingService = itemNamingService;
+            _itemPeopleService = itemPeopleService;
             _imageProcessor = imageProcessor;
 
             _cache = new FastConcurrentLru<Guid, BaseItem>(_configurationManager.Configuration.CacheSize);
@@ -3156,25 +3160,12 @@ namespace Reefin.Server.Core.Library
 
         public IReadOnlyList<PersonInfo> GetPeople(InternalPeopleQuery query)
         {
-            return _peopleRepository.GetPeople(query).Items;
+            return _itemPeopleService.GetPeople(query);
         }
 
         public IReadOnlyList<PersonInfo> GetPeople(BaseItem item)
         {
-            if (item.SupportsPeople)
-            {
-                var people = GetPeople(new InternalPeopleQuery
-                {
-                    ItemId = item.Id
-                });
-
-                if (people.Count > 0)
-                {
-                    return people;
-                }
-            }
-
-            return [];
+            return _itemPeopleService.GetPeople(item);
         }
 
         public QueryResult<BaseItem> GetPeopleItems(InternalPeopleQuery query)
@@ -3208,13 +3199,13 @@ namespace Reefin.Server.Core.Library
 
         public IReadOnlyList<string> GetPeopleNames(InternalPeopleQuery query)
         {
-            return _peopleRepository.GetPeopleNames(query);
+            return _itemPeopleService.GetPeopleNames(query);
         }
 
         /// <inheritdoc/>
         public IReadOnlyDictionary<Guid, IReadOnlyList<string>> GetPeopleNamesByItems(IReadOnlyList<Guid> itemIds, IReadOnlyList<string> personTypes)
         {
-            return _peopleRepository.GetPeopleNamesByItems(itemIds, personTypes);
+            return _itemPeopleService.GetPeopleNamesByItems(itemIds, personTypes);
         }
 
         public void UpdatePeople(BaseItem item, List<PersonInfo> people)
