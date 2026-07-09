@@ -798,6 +798,7 @@ namespace Reefin.Controller.Library
         /// </summary>
         /// <param name="mediaStreamType">The stream type.</param>
         /// <returns>List of language codes.</returns>
+        [Obsolete("Use IMediaStreamLanguageService.GetMediaStreamLanguages instead. See docs/major-rewrite-plan-v13.md § PR47/N.")]
         IReadOnlyList<string> GetMediaStreamLanguages(MediaStreamType mediaStreamType);
     }
 }
