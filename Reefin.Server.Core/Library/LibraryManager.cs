@@ -49,7 +49,6 @@ using Reefin.Server.Core.Library.Resolvers;
 using Reefin.Server.Core.Library.Validators;
 using Reefin.Server.Core.Playlists;
 using Reefin.Server.Core.ScheduledTasks.Tasks;
-using Reefin.Server.Core.Sorting;
 using Episode = Reefin.Controller.Entities.TV.Episode;
 using EpisodeInfo = Reefin.Naming.TV.EpisodeInfo;
 using Genre = Reefin.Controller.Entities.Genre;
@@ -81,6 +80,7 @@ namespace Reefin.Server.Core.Library
         private readonly INextUpService _nextUpService;
         private readonly IItemCountService _countService;
         private readonly ILinkedChildrenService _linkedChildrenService;
+        private readonly IItemSortService _itemSortService;
         private readonly IImageProcessor _imageProcessor;
         private readonly NamingOptions _namingOptions;
         private readonly IPeopleRepository _peopleRepository;
@@ -126,6 +126,7 @@ namespace Reefin.Server.Core.Library
         /// <param name="nextUpService">The next up service.</param>
         /// <param name="countService">The item count service.</param>
         /// <param name="linkedChildrenService">The linked children service.</param>
+        /// <param name="itemSortService">The item sort service.</param>
         /// <param name="imageProcessor">The image processor.</param>
         /// <param name="namingOptions">The naming options.</param>
         /// <param name="directoryService">The directory service.</param>
@@ -151,6 +152,7 @@ namespace Reefin.Server.Core.Library
             INextUpService nextUpService,
             IItemCountService countService,
             ILinkedChildrenService linkedChildrenService,
+            IItemSortService itemSortService,
             IImageProcessor imageProcessor,
             NamingOptions namingOptions,
             IDirectoryService directoryService,
@@ -176,6 +178,7 @@ namespace Reefin.Server.Core.Library
             _nextUpService = nextUpService;
             _countService = countService;
             _linkedChildrenService = linkedChildrenService;
+            _itemSortService = itemSortService;
             _imageProcessor = imageProcessor;
 
             _cache = new FastConcurrentLru<Guid, BaseItem>(_configurationManager.Configuration.CacheSize);
@@ -261,12 +264,6 @@ namespace Reefin.Server.Core.Library
 
         private IMultiItemResolver[] MultiItemResolvers { get; set; } = [];
 
-        /// <summary>
-        /// Gets or sets the comparers.
-        /// </summary>
-        /// <value>The comparers.</value>
-        private IBaseItemComparer[] Comparers { get; set; } = [];
-
         public bool IsScanRunning { get; private set; }
 
         /// <summary>
@@ -288,7 +285,7 @@ namespace Reefin.Server.Core.Library
             EntityResolvers = resolvers.OrderBy(i => i.Priority).ToArray();
             MultiItemResolvers = EntityResolvers.OfType<IMultiItemResolver>().ToArray();
             IntroProviders = introProviders.ToArray();
-            Comparers = itemComparers.ToArray();
+            _itemSortService.AddParts(itemComparers);
             PostScanTasks = postScanTasks.ToArray();
         }
 
@@ -2242,96 +2239,13 @@ namespace Reefin.Server.Core.Library
         /// <inheritdoc />
         public IEnumerable<BaseItem> Sort(IEnumerable<BaseItem> items, User? user, IEnumerable<ItemSortBy> sortBy, SortOrder sortOrder)
         {
-            IOrderedEnumerable<BaseItem>? orderedItems = null;
-
-            foreach (var orderBy in sortBy.Select(o => GetComparer(o, user)).Where(c => c is not null))
-            {
-                if (orderBy is RandomComparer)
-                {
-                    var randomItems = items.ToArray();
-                    Random.Shared.Shuffle(randomItems);
-                    items = randomItems;
-                    // Items are no longer ordered at this point, so set orderedItems back to null
-                    orderedItems = null;
-                }
-                else if (orderedItems is null)
-                {
-                    orderedItems = sortOrder == SortOrder.Descending
-                        ? items.OrderByDescending(i => i, orderBy)
-                        : items.OrderBy(i => i, orderBy);
-                }
-                else
-                {
-                    orderedItems = sortOrder == SortOrder.Descending
-                        ? orderedItems!.ThenByDescending(i => i, orderBy)
-                        : orderedItems!.ThenBy(i => i, orderBy); // orderedItems is set during the first iteration
-                }
-            }
-
-            return orderedItems ?? items;
+            return _itemSortService.Sort(items, user, sortBy, sortOrder);
         }
 
         /// <inheritdoc />
         public IEnumerable<BaseItem> Sort(IEnumerable<BaseItem> items, User? user, IEnumerable<(ItemSortBy OrderBy, SortOrder SortOrder)> orderBy)
         {
-            IOrderedEnumerable<BaseItem>? orderedItems = null;
-
-            foreach (var (name, sortOrder) in orderBy)
-            {
-                var comparer = GetComparer(name, user);
-                if (comparer is null)
-                {
-                    continue;
-                }
-
-                if (comparer is RandomComparer)
-                {
-                    var randomItems = items.ToArray();
-                    Random.Shared.Shuffle(randomItems);
-                    items = randomItems;
-                    // Items are no longer ordered at this point, so set orderedItems back to null
-                    orderedItems = null;
-                }
-                else if (orderedItems is null)
-                {
-                    orderedItems = sortOrder == SortOrder.Descending
-                        ? items.OrderByDescending(i => i, comparer)
-                        : items.OrderBy(i => i, comparer);
-                }
-                else
-                {
-                    orderedItems = sortOrder == SortOrder.Descending
-                        ? orderedItems!.ThenByDescending(i => i, comparer)
-                        : orderedItems!.ThenBy(i => i, comparer); // orderedItems is set during the first iteration
-                }
-            }
-
-            return orderedItems ?? items;
-        }
-
-        /// <summary>
-        /// Gets the comparer.
-        /// </summary>
-        /// <param name="name">The name.</param>
-        /// <param name="user">The user.</param>
-        /// <returns>IBaseItemComparer.</returns>
-        private IBaseItemComparer? GetComparer(ItemSortBy name, User? user)
-        {
-            var comparer = Comparers.FirstOrDefault(c => name == c.Type);
-
-            // If it requires a user, create a new one, and assign the user
-            if (comparer is IUserBaseItemComparer)
-            {
-                var userComparer = (IUserBaseItemComparer)Activator.CreateInstance(comparer.GetType())!; // only null for Nullable<T> instances
-
-                userComparer.User = user;
-                userComparer.UserManager = _userManager;
-                userComparer.UserDataManager = _userDataManager;
-
-                return userComparer;
-            }
-
-            return comparer;
+            return _itemSortService.Sort(items, user, orderBy);
         }
 
         /// <inheritdoc />

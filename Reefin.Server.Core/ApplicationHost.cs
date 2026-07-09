@@ -104,6 +104,7 @@ using Reefin.Server.Core.QuickConnect;
 using Reefin.Server.Core.ScheduledTasks;
 using Reefin.Server.Core.Serialization;
 using Reefin.Server.Core.Session;
+using Reefin.Server.Core.Sorting;
 using Reefin.Server.Core.SyncPlay;
 using Reefin.Server.Core.TV;
 using Reefin.Server.Core.Updates;
@@ -536,6 +537,7 @@ namespace Reefin.Server.Core
             serviceCollection.AddSingleton<INextUpService, NextUpService>();
             serviceCollection.AddSingleton<IItemCountService, ItemCountService>();
             serviceCollection.AddSingleton<ILinkedChildrenService, LinkedChildrenService>();
+            serviceCollection.AddSingleton<IItemSortService, ItemSortService>();
             serviceCollection.AddSingleton<IPeopleRepository, PeopleRepository>();
             serviceCollection.AddSingleton<IChapterRepository, ChapterRepository>();
             serviceCollection.AddSingleton<IMediaAttachmentRepository, MediaAttachmentRepository>();
