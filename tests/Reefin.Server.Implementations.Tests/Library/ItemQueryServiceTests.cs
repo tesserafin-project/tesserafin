@@ -24,14 +24,23 @@ public class ItemQueryServiceTests
         out Mock<IChannelManager> channelManager,
         out Mock<ICollectionManager> collectionManager,
         out Mock<IUserViewManager> userViewManager,
-        out Mock<ITVSeriesManager> tvSeriesManager)
+        out Mock<ITVSeriesManager> tvSeriesManager,
+        ILibraryManager? libraryManager = null,
+        IServerConfigurationManager? configurationManager = null)
     {
         channelManager = new Mock<IChannelManager>();
         collectionManager = new Mock<ICollectionManager>();
         userViewManager = new Mock<IUserViewManager>();
         tvSeriesManager = new Mock<ITVSeriesManager>();
 
-        return new ItemQueryService(channelManager.Object, collectionManager.Object, userViewManager.Object, tvSeriesManager.Object);
+        libraryManager ??= new Mock<ILibraryManager>().Object;
+        configurationManager ??= Mock.Of<IServerConfigurationManager>(x => x.Configuration == new ServerConfiguration());
+
+        BaseItem.LibraryManager = libraryManager;
+        BaseItem.ConfigurationManager = configurationManager;
+        BaseItem.UserDataManager = new Mock<IUserDataManager>().Object;
+
+        return new ItemQueryService(channelManager.Object, collectionManager.Object, userViewManager.Object, tvSeriesManager.Object, libraryManager, configurationManager);
     }
 
     [Fact]
@@ -42,8 +51,6 @@ public class ItemQueryServiceTests
         var folder = new Folder { Id = Guid.NewGuid() };
         var child = new Movie { Id = Guid.NewGuid() };
         folder.Children = new BaseItem[] { child };
-        BaseItem.LibraryManager = new Mock<ILibraryManager>().Object;
-        BaseItem.UserDataManager = new Mock<IUserDataManager>().Object;
 
         var result = service.GetItems(folder, new InternalItemsQuery());
 
@@ -68,8 +75,6 @@ public class ItemQueryServiceTests
         var folder = new Folder { Id = Guid.NewGuid() };
         var child = new Movie { Id = Guid.NewGuid() };
         folder.Children = new BaseItem[] { child };
-        BaseItem.LibraryManager = new Mock<ILibraryManager>().Object;
-        BaseItem.UserDataManager = new Mock<IUserDataManager>().Object;
 
         var result = service.GetItemList(folder, new InternalItemsQuery());
 
@@ -96,8 +101,6 @@ public class ItemQueryServiceTests
         var child1 = new Movie { Id = Guid.NewGuid(), Name = "Alpha" };
         var child2 = new Movie { Id = Guid.NewGuid(), Name = "Beta" };
         folder.Children = new BaseItem[] { child1, child2 };
-        BaseItem.LibraryManager = new Mock<ILibraryManager>().Object;
-        BaseItem.UserDataManager = new Mock<IUserDataManager>().Object;
 
         // Parity test deliberately compares against the obsolete 5-parameter overload — see
         // docs/major-rewrite-plan-v13.md § PR28/N.
@@ -119,8 +122,6 @@ public class ItemQueryServiceTests
         var child = new Movie { Id = Guid.NewGuid(), Name = "Alpha" };
         folder.Children = new BaseItem[] { child };
         var user = new User("test-user", "provider", "provider");
-        BaseItem.LibraryManager = new Mock<ILibraryManager>().Object;
-        BaseItem.UserDataManager = new Mock<IUserDataManager>().Object;
 
         InternalItemsQuery MakeQuery() => new() { User = user, CollapseBoxSetItems = false };
 
@@ -138,19 +139,17 @@ public class ItemQueryServiceTests
     [Fact]
     public void PostFilterAndSort_UserNonNull_CollapseTrue_MatchesFolderGetItems()
     {
-        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager);
+        var configurationManager = Mock.Of<IServerConfigurationManager>(x => x.Configuration == new ServerConfiguration
+        {
+            EnableGroupingMoviesIntoCollections = true,
+            EnableGroupingShowsIntoCollections = true,
+        });
+        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager, configurationManager: configurationManager);
 
         var folder = new Folder { Id = Guid.NewGuid() };
         var child = new Movie { Id = Guid.NewGuid(), Name = "Alpha" };
         folder.Children = new BaseItem[] { child };
         var user = new User("test-user", "provider", "provider");
-        BaseItem.LibraryManager = new Mock<ILibraryManager>().Object;
-        BaseItem.UserDataManager = new Mock<IUserDataManager>().Object;
-        BaseItem.ConfigurationManager = Mock.Of<IServerConfigurationManager>(x => x.Configuration == new ServerConfiguration
-        {
-            EnableGroupingMoviesIntoCollections = true,
-            EnableGroupingShowsIntoCollections = true,
-        });
 
         collectionManager
             .Setup(x => x.CollapseItemsWithinBoxSets(It.IsAny<IEnumerable<BaseItem>>(), user))
@@ -177,20 +176,18 @@ public class ItemQueryServiceTests
     [InlineData("", "", "B", "Alpha")]
     public void PostFilterAndSort_NameFiltersAfterCollapse_MatchesFolderGetItems(string nameStartsWith, string nameStartsWithOrGreater, string nameLessThan, string expectedName)
     {
-        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager);
+        var configurationManager = Mock.Of<IServerConfigurationManager>(x => x.Configuration == new ServerConfiguration
+        {
+            EnableGroupingMoviesIntoCollections = true,
+            EnableGroupingShowsIntoCollections = true,
+        });
+        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager, configurationManager: configurationManager);
 
         var folder = new Folder { Id = Guid.NewGuid() };
         var alpha = new Movie { Id = Guid.NewGuid(), Name = "Alpha" };
         var beta = new Movie { Id = Guid.NewGuid(), Name = "Beta" };
         folder.Children = new BaseItem[] { alpha, beta };
         var user = new User("test-user", "provider", "provider");
-        BaseItem.LibraryManager = new Mock<ILibraryManager>().Object;
-        BaseItem.UserDataManager = new Mock<IUserDataManager>().Object;
-        BaseItem.ConfigurationManager = Mock.Of<IServerConfigurationManager>(x => x.Configuration == new ServerConfiguration
-        {
-            EnableGroupingMoviesIntoCollections = true,
-            EnableGroupingShowsIntoCollections = true,
-        });
 
         collectionManager
             .Setup(x => x.CollapseItemsWithinBoxSets(It.IsAny<IEnumerable<BaseItem>>(), user))
@@ -228,20 +225,16 @@ public class ItemQueryServiceTests
     [Fact]
     public void GetItems_RecursiveQuery_FallsBackInsteadOfRawQueryItems()
     {
-        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager);
-
-        var folder = new Folder { Id = Guid.NewGuid() };
-        // Present in Children so a wrongly-taken fast path would return this instead of the sentinel below.
-        folder.Children = new BaseItem[] { new Movie { Id = Guid.NewGuid() } };
-
         var sentinel = new Movie { Id = Guid.NewGuid() };
         var libraryManager = new Mock<ILibraryManager>();
         libraryManager
             .Setup(x => x.GetItemsResult(It.IsAny<InternalItemsQuery>()))
             .Returns(new QueryResult<BaseItem>(0, 1, new BaseItem[] { sentinel }));
-        BaseItem.LibraryManager = libraryManager.Object;
-        BaseItem.UserDataManager = new Mock<IUserDataManager>().Object;
-        BaseItem.ConfigurationManager = Mock.Of<IServerConfigurationManager>(x => x.Configuration == new ServerConfiguration());
+        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager, libraryManager: libraryManager.Object);
+
+        var folder = new Folder { Id = Guid.NewGuid() };
+        // Present in Children so a wrongly-taken fast path would return this instead of the sentinel below.
+        folder.Children = new BaseItem[] { new Movie { Id = Guid.NewGuid() } };
 
         var result = service.GetItems(folder, new InternalItemsQuery { Recursive = true });
 
@@ -252,18 +245,15 @@ public class ItemQueryServiceTests
     [Fact]
     public void GetItems_ItemIdsQuery_FallsBackInsteadOfRawQueryItems()
     {
-        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager);
-
-        var folder = new Folder { Id = Guid.NewGuid() };
-        folder.Children = new BaseItem[] { new Movie { Id = Guid.NewGuid() } };
-
         var sentinel = new Movie { Id = Guid.NewGuid() };
         var libraryManager = new Mock<ILibraryManager>();
         libraryManager
             .Setup(x => x.GetItemsResult(It.IsAny<InternalItemsQuery>()))
             .Returns(new QueryResult<BaseItem>(0, 1, new BaseItem[] { sentinel }));
-        BaseItem.LibraryManager = libraryManager.Object;
-        BaseItem.UserDataManager = new Mock<IUserDataManager>().Object;
+        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager, libraryManager: libraryManager.Object);
+
+        var folder = new Folder { Id = Guid.NewGuid() };
+        folder.Children = new BaseItem[] { new Movie { Id = Guid.NewGuid() } };
 
         var result = service.GetItems(folder, new InternalItemsQuery { ItemIds = new[] { sentinel.Id } });
 
@@ -293,8 +283,6 @@ public class ItemQueryServiceTests
     [Fact]
     public void GetItems_UserView_FallsBackInsteadOfRawQueryItems()
     {
-        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager);
-
         // UserView.SupportsRawQueryItems is false - its own GetItemsInternal (resolving
         // DisplayParentId to a channel-sourced Folder, cf. FolderTests' equivalent test) must be
         // used, not the base GetRawQueryItems on the UserView itself (which has no Children set here
@@ -305,8 +293,7 @@ public class ItemQueryServiceTests
 
         var libraryManager = new Mock<ILibraryManager>();
         libraryManager.Setup(x => x.GetItemById(displayParent.Id)).Returns(displayParent);
-        BaseItem.LibraryManager = libraryManager.Object;
-        BaseItem.UserDataManager = new Mock<IUserDataManager>().Object;
+        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager, libraryManager: libraryManager.Object);
         BaseItem.Logger = NullLogger<BaseItem>.Instance;
 
         channelManager
@@ -327,8 +314,6 @@ public class ItemQueryServiceTests
         var folder = new Folder { Id = Guid.NewGuid() };
         var child = new Movie { Id = Guid.NewGuid() };
         folder.Children = new BaseItem[] { child };
-        BaseItem.LibraryManager = new Mock<ILibraryManager>().Object;
-        BaseItem.UserDataManager = new Mock<IUserDataManager>().Object;
 
         var query = new InternalItemsQuery { EnableTotalRecordCount = true };
 

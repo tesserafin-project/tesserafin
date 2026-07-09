@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Reefin.Controller.Channels;
 using Reefin.Controller.Collections;
+using Reefin.Controller.Configuration;
 using Reefin.Controller.Entities;
 using Reefin.Controller.Entities.Audio;
 using Reefin.Controller.Entities.Movies;
@@ -25,13 +26,17 @@ namespace Reefin.Server.Core.Library
         private readonly ICollectionManager _collectionManager;
         private readonly IUserViewManager _userViewManager;
         private readonly ITVSeriesManager _tvSeriesManager;
+        private readonly ILibraryManager _libraryManager;
+        private readonly IServerConfigurationManager _configurationManager;
 
-        public ItemQueryService(IChannelManager channelManager, ICollectionManager collectionManager, IUserViewManager userViewManager, ITVSeriesManager tvSeriesManager)
+        public ItemQueryService(IChannelManager channelManager, ICollectionManager collectionManager, IUserViewManager userViewManager, ITVSeriesManager tvSeriesManager, ILibraryManager libraryManager, IServerConfigurationManager configurationManager)
         {
             _channelManager = channelManager;
             _collectionManager = collectionManager;
             _userViewManager = userViewManager;
             _tvSeriesManager = tvSeriesManager;
+            _libraryManager = libraryManager;
+            _configurationManager = configurationManager;
         }
 
         public QueryResult<BaseItem> GetItems(Folder folder, InternalItemsQuery query)
@@ -78,12 +83,8 @@ namespace Reefin.Server.Core.Library
                 && !query.Recursive;
 
         // Relocation of Folder.PostFilterAndSort (and its private helpers) per the major rewrite
-        // plan's point 5 (PR23/N): not wired into GetItems/GetItemList yet (Folder keeps its own
-        // copy, GetItemsInternal untouched) - this is the parity-tested standalone version, wiring
-        // is deferred to PR24 once Folder exposes a raw-children primitive (avoids duplicating the
-        // child-fetch logic to reach that wiring point). BaseItem.ConfigurationManager/LibraryManager
-        // read here are the same statics Folder.PostFilterAndSort itself reads via instance property
-        // access - behavior, not just code, is reproduced.
+        // plan's point 5. Folder keeps its own copy for legacy callers, while ItemQueryService owns
+        // injected dependencies for the migrated path.
         internal QueryResult<BaseItem> PostFilterAndSort(BaseItem queryParent, IEnumerable<BaseItem> items, InternalItemsQuery query)
         {
             var user = query.User;
@@ -95,7 +96,7 @@ namespace Reefin.Server.Core.Library
             }
 
             var filteredItems = items as IReadOnlyList<BaseItem> ?? items.ToList();
-            var result = UserViewBuilder.SortAndPage(filteredItems, null, query, BaseItem.LibraryManager);
+            var result = UserViewBuilder.SortAndPage(filteredItems, null, query, _libraryManager);
 
             if (query.EnableTotalRecordCount)
             {
@@ -138,7 +139,7 @@ namespace Reefin.Server.Core.Library
                 return items;
             }
 
-            var config = BaseItem.ConfigurationManager.Configuration;
+            var config = _configurationManager.Configuration;
 
             bool collapseMovies = config.EnableGroupingMoviesIntoCollections;
             bool collapseSeries = config.EnableGroupingShowsIntoCollections;
@@ -178,7 +179,7 @@ namespace Reefin.Server.Core.Library
             return collapsedItems.Concat(remainingItems);
         }
 
-        private static bool CollapseBoxSetItems(
+        private bool CollapseBoxSetItems(
             InternalItemsQuery query,
             BaseItem queryParent,
             User user)
@@ -210,7 +211,7 @@ namespace Reefin.Server.Core.Library
                 return param.Value && AllowBoxSetCollapsing(query);
             }
 
-            var config = BaseItem.ConfigurationManager.Configuration;
+            var config = _configurationManager.Configuration;
 
             bool queryHasMovies = query.IncludeItemTypes.Length == 0 || query.IncludeItemTypes.Contains(BaseItemKind.Movie);
             bool queryHasSeries = query.IncludeItemTypes.Length == 0 || query.IncludeItemTypes.Contains(BaseItemKind.Series);
