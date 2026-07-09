@@ -709,6 +709,21 @@ Migration mécanique des consommateurs non-entités identifiés en PR34/PR35, sa
 
 Après migration, les appels legacy restants à `ParseName`/`FillMissingEpisodeNumbersFromPath`/`GetSeasonNumberFromPath` sont la façade `LibraryManager` elle-même et les entités `Movie`/`Trailer`/`MusicVideo`/`Series`/`Season`/`Episode` côté `Reefin.Controller`, ce qui correspond au périmètre reporté (statics `BaseItem.LibraryManager`). Vérifications : build frais solution 0 erreur, intégration 103/106 (3 ignorés).
 
+### PR37/N — audit prochain leaf `LibraryManager` : lecture People sans mutation (2026-07-09)
+
+Objectif : continuer le découpage `LibraryManager` par responsabilités leaf après le tri et le naming, sans mélanger les chemins People qui créent/modifient des items. Le bloc People complet n'est pas extractible tel quel : `GetPeopleItems` reconstruit des `Person` via `GetPerson` et applique visibilité utilisateur, tandis que `UpdatePeopleAsync` appelle `SavePeopleMetadataAsync`, qui peut créer des `Person`, appeler `CreateItems`, `RunMetadataSavers`, `GetItemByNameId` et toucher le filesystem. Ces deux méthodes restent donc hors scope.
+
+Candidat retenu pour PR38 : **lecture People read-only**, dépendance unique `IPeopleRepository` :
+
+- `GetPeople(InternalPeopleQuery)` : délégation pure vers `_peopleRepository.GetPeople(query).Items`.
+- `GetPeople(BaseItem)` : garde la politique légère `item.SupportsPeople` + requête `ItemId`, puis délègue au cas précédent.
+- `GetPeopleNames(InternalPeopleQuery)` : délégation pure vers `_peopleRepository.GetPeopleNames(query)`.
+- `GetPeopleNamesByItems(IReadOnlyList<Guid>, IReadOnlyList<string>)` : délégation pure vers `_peopleRepository.GetPeopleNamesByItems(...)`.
+
+Call sites vérifiés : `GetPeople(BaseItem)` est appelé par `DtoService`, `FFProbeVideoInfo`, `RecordingsMetadataManager`, `BaseXmlSaver`, `BaseNfoSaver`; `GetPeopleNames` par `PeopleValidator`; `GetPeopleNamesByItems` par `SimilarItemsManager`. La plupart de ces classes conservent `ILibraryManager` pour d'autres opérations (`GetPerson`, `GetItemList`, `GetLibraryOptions`, `UpdatePeople`, image paths, etc.), donc PR39 sera une migration ciblée des appels People plutôt qu'une suppression massive de `ILibraryManager`.
+
+Verdict : extraction sûre si l'interface vit côté `Reefin.Controller` (ex. `IItemPeopleService`) et l'implémentation côté `Reefin.Server.Core`, avec unique dépendance `IPeopleRepository`. Aucun cycle possible : le service ne dépend ni de `ILibraryManager`, ni de `IProviderManager`, ni des `Lazy<T>`. `LibraryManager` garde les méthodes publiques `ILibraryManager` et délègue pour préserver l'API. Tests recommandés pour PR38 : `GetPeople(BaseItem)` retourne vide si `SupportsPeople == false`, délègue par `ItemId` si `SupportsPeople == true`, et `GetPeopleNamesByItems` relaie les paramètres.
+
 ## Ordre recommandé (reprend celui du plan, réordonné sur le point 3 ci-dessus)
 1. Sessions de lecture + protocole capacités v2 (point 1-2) — priorité confirmée, zone la mieux comprise.
 2. Suppression `SetStaticProperties` / statics `BaseItem` (point 4) **avant** découpage `LibraryManager`. Post-revue PR14 (2026-07-08) : stabiliser (tests ciblés) + esquisser les services de remplacement (`ItemQueryService` et consorts) plutôt que continuer à traquer chaque static un par un — voir § "Revue externe post-PR14".
