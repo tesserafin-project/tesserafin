@@ -973,6 +973,35 @@ Mise en œuvre : `[Obsolete("Use IMediaStreamLanguageService.GetMediaStreamLangu
 
 **Critère de retrait futur.** Aucun changement tant que l'API reste publique pour les plugins tiers. Retrait de la méthode (et de son implémentation façade) envisageable seulement quand le fork assumera des breaking changes internes sur le SDK plugin (cf. point 8 « suppression compat historique », dernière étape du plan, conditionnée à l'adoption des nouveaux contrats par les clients officiels) — pas avant.
 
+### PR48/N — verrouiller la façade `ILibraryManager.Sort` (2026-07-09)
+
+Suite directe de l'évaluation PR46/N (§ ci-dessus). Contrairement à `GetMediaStreamLanguages` (PR47/N), `ILibraryManager.Sort` n'est pas candidate à une dépréciation « sans risque » : elle a encore 5 call sites externes actifs, tous liés au chantier `Folder.GetChildren`/`Series.GetEpisodes` (PR49-PR50), qui doivent rester en l'état pour l'instant.
+
+**1. Ré-audit exact des sites restants.** Grep précis sur tout le dépôt (hors `tests/`, `bin/`, `obj/`) distinguant les deux formes d'appel :
+- `\.Sort(` complet repo-entier : aucun autre appelant que les 5 déjà identifiés en PR46/N, plus l'implémentation elle-même (`LibraryManager.cs:2248`/`2254`, délégation vers `_itemSortService.Sort`) et les consommateurs déjà migrés vers `IItemSortService` directement (`UserViewManager.cs:161`, `TVSeriesManager.cs:228`, `YearsController.cs:137`, `LibraryController.cs:186/262`, `ItemSortServiceTests.cs`).
+- Les 5 sites confirmés, forme `LibraryManager.Sort(...)` (static `BaseItem.LibraryManager`, propriété typée `ILibraryManager`) ou `libraryManager.Sort(...)` (paramètre DI typé `ILibraryManager`) :
+  - `Reefin.Controller/Entities/BaseItem.cs:2851` (corps de `GetThemeSongs`).
+  - `Reefin.Controller/Entities/BaseItem.cs:2861` (corps de `GetThemeVideos`).
+  - `Reefin.Controller/Entities/Movies/BoxSet.cs:128` (méthode privée `Sort`, appelée par les 3 overloads de `GetChildren`/`GetRecursiveChildren`).
+  - `Reefin.Controller/Entities/TV/Series.cs:429` (`GetSeasonEpisodes`).
+  - `Reefin.Controller/Entities/UserViewBuilder.cs:502` (`SortAndPage`, paramètre `ILibraryManager libraryManager` — atteint en DI pur par `ItemQueryService.cs:99`, mais aussi via le static par `Folder.cs:1148` et `UserRootFolder.cs:95`, cf. PR46/N §3).
+
+Aucun 6ᵉ site trouvé ; l'audit PR46/N reste exact à l'identique.
+
+**2. Décision : `[Obsolete]` sur les 2 overloads + `#pragma warning disable CS0618` local aux 5 sites.** Posé sur `Reefin.Controller/Library/ILibraryManager.cs:289-293` (2 overloads, chacune précédée de son `[Obsolete]` en L289 et L292), message `"Use IItemSortService.Sort instead. See docs/major-rewrite-plan-v13.md § PR48/N."`, même style que `Folder.GetItems`/`GetItemList` (§ PR28/N) et `GetMediaStreamLanguages` (§ PR47/N).
+
+Vérification empirique préalable (probe temporaire, retiré avant commit) : contrairement à `GetMediaStreamLanguages`, marquer `ILibraryManager.Sort` `[Obsolete]` déclenche bien CS0618 aux 5 sites — la résolution de surcharge se fait sur le type statique de la référence (`ILibraryManager`, y compris pour la propriété statique `BaseItem.LibraryManager`), pas sur le type d'exécution. Comme `Directory.Build.props:9` fixe `TreatWarningsAsErrors=true` sur tout le dépôt, ces 5 CS0618 seraient de vraies erreurs de build sans suppression — d'où l'intérêt : `[Obsolete]` sans les 5 pragmas locaux casserait la compilation à chaque appelant restant, ce qui constitue justement un verrou de compilation contre tout **nouveau** site (un futur appel non pragmatisé casse le build). Une simple xmldoc `<remarks>` n'aurait été qu'indicative, sans ce verrou — écartée pour cette raison, et non parce que les pragmas seraient jugés trop bruyants : le pattern `#pragma warning disable CS0618` local avec commentaire d'une ligne est déjà établi à 60+ endroits du dépôt (`Folder.cs`, `BaseItem.cs`, `UserView.cs`, `UserViewBuilder.cs:136-138`, migrations `Reefin.Server/Migrations/**`, etc.), donc les 5 ajouts ne sont pas une entorse de style.
+
+Pragmas posés, chacun avec un commentaire d'une ligne renvoyant au chantier § PR49/N (`Folder.GetChildren`/`Series.GetEpisodes`) :
+- `BaseItem.cs:2851`/`:2861` : `#pragma warning disable CS0618 // static LibraryManager.Sort facade left in place pending Folder.GetChildren cascade, see docs/major-rewrite-plan-v13.md § PR49/N`.
+- `BoxSet.cs:128` : même commentaire.
+- `Series.cs:429` : commentaire adapté (« Folder.GetChildren/Series.GetEpisodes cascade »).
+- `UserViewBuilder.cs:502` : commentaire adapté rappelant que 2 des 3 appelants passent le static `BaseItem.LibraryManager` (`Folder.cs:1148`, `UserRootFolder.cs:95`).
+
+**3. Vérification build/tests.** `dotnet build Reefin.sln` (41 projets) : 0 erreur, 87 warnings, identique au build baseline sans ce changement (même commande, mêmes 87 warnings, vérifié par `git stash`/`git stash pop` avant/après) — donc 0 nouveau warning, et aucun CS0618 dans le journal de build complet (`grep -c CS0618` sur le log de warnings : 0). `dotnet test tests/Reefin.Server.Implementations.Tests --filter FullyQualifiedName~Sorting` (seul fichier de tests référençant `ItemSortService`/`Sort` sous `tests/`, `ItemSortServiceTests.cs`) : 58/58 réussis.
+
+**Critère de levée.** Les 5 sites migreront vers `IItemSortService` directement (retrait des 5 pragmas) au moment du chantier `Folder.GetChildren`/`Series.GetEpisodes` (PR49-PR50, cf. PR43/PR45 et PR46/N §3) : à cette occasion, `BaseItem.GetThemeSongs`/`GetThemeVideos`, `BoxSet.Sort` (privée), `Series.GetSeasonEpisodes` et `UserViewBuilder.SortAndPage` seront reconstruits pour recevoir `IItemSortService` en DI plutôt que de passer par la façade `ILibraryManager`/le static `BaseItem.LibraryManager`. Retrait de `ILibraryManager.Sort` (méthode + implémentation) seulement ensuite, sous la même réserve « compat historique SDK plugin » que PR47/N — pas avant que les 5 sites internes soient migrés.
+
 ## Ordre recommandé (reprend celui du plan, réordonné sur le point 3 ci-dessus)
 1. Sessions de lecture + protocole capacités v2 (point 1-2) — priorité confirmée, zone la mieux comprise.
 2. Suppression `SetStaticProperties` / statics `BaseItem` (point 4) **avant** découpage `LibraryManager`. Post-revue PR14 (2026-07-08) : stabiliser (tests ciblés) + esquisser les services de remplacement (`ItemQueryService` et consorts) plutôt que continuer à traquer chaque static un par un — voir § "Revue externe post-PR14".

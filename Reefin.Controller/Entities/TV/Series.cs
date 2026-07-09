@@ -426,7 +426,9 @@ namespace Reefin.Controller.Entities.TV
 
             var sortBy = (parentSeason.IndexNumber ?? -1) == 0 ? ItemSortBy.SortName : ItemSortBy.AiredEpisodeOrder;
 
+#pragma warning disable CS0618 // static LibraryManager.Sort facade left in place pending Folder.GetChildren/Series.GetEpisodes cascade, see docs/major-rewrite-plan-v13.md § PR49/N
             return LibraryManager.Sort(episodes, user, new[] { sortBy }, SortOrder.Ascending).ToList();
+#pragma warning restore CS0618
         }
 
         /// <summary>

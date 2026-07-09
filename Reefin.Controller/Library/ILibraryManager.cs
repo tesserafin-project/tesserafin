@@ -286,8 +286,10 @@ namespace Reefin.Controller.Library
         /// <param name="sortBy">The sort by.</param>
         /// <param name="sortOrder">The sort order.</param>
         /// <returns>IEnumerable{BaseItem}.</returns>
+        [Obsolete("Use IItemSortService.Sort instead. See docs/major-rewrite-plan-v13.md § PR48/N.")]
         IEnumerable<BaseItem> Sort(IEnumerable<BaseItem> items, User? user, IEnumerable<ItemSortBy> sortBy, SortOrder sortOrder);
 
+        [Obsolete("Use IItemSortService.Sort instead. See docs/major-rewrite-plan-v13.md § PR48/N.")]
         IEnumerable<BaseItem> Sort(IEnumerable<BaseItem> items, User? user, IEnumerable<(ItemSortBy OrderBy, SortOrder SortOrder)> orderBy);
 
         /// <summary>

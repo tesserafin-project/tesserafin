@@ -499,7 +499,10 @@ namespace Reefin.Controller.Entities
         {
             if (query.OrderBy.Count > 0)
             {
+                // ILibraryManager.Sort facade kept here pending Folder.GetChildren cascade (2 of 3 callers pass BaseItem.LibraryManager static), see docs/major-rewrite-plan-v13.md § PR49/N
+#pragma warning disable CS0618
                 items = libraryManager.Sort(items, query.User, query.OrderBy);
+#pragma warning restore CS0618
             }
 
             var itemsArray = totalRecordLimit.HasValue ? items.Take(totalRecordLimit.Value).ToArray() : items.ToArray();

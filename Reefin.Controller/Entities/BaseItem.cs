@@ -2848,7 +2848,9 @@ namespace Reefin.Controller.Entities
 
         public IReadOnlyList<BaseItem> GetThemeSongs(User user, IEnumerable<(ItemSortBy SortBy, SortOrder SortOrder)> orderBy)
         {
+#pragma warning disable CS0618 // static LibraryManager.Sort facade left in place pending Folder.GetChildren cascade, see docs/major-rewrite-plan-v13.md § PR49/N
             return LibraryManager.Sort(GetExtras(user).Where(e => e.ExtraType == Reefin.Model.Entities.ExtraType.ThemeSong), user, orderBy).ToArray();
+#pragma warning restore CS0618
         }
 
         public IReadOnlyList<BaseItem> GetThemeVideos(User user = null)
@@ -2858,7 +2860,9 @@ namespace Reefin.Controller.Entities
 
         public IReadOnlyList<BaseItem> GetThemeVideos(User user, IEnumerable<(ItemSortBy SortBy, SortOrder SortOrder)> orderBy)
         {
+#pragma warning disable CS0618 // static LibraryManager.Sort facade left in place pending Folder.GetChildren cascade, see docs/major-rewrite-plan-v13.md § PR49/N
             return LibraryManager.Sort(GetExtras(user).Where(e => e.ExtraType == Reefin.Model.Entities.ExtraType.ThemeVideo), user, orderBy).ToArray();
+#pragma warning restore CS0618
         }
 
         /// <summary>

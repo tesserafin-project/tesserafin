@@ -125,7 +125,9 @@ namespace Reefin.Controller.Entities.Movies
                 return items;
             }
 
+#pragma warning disable CS0618 // static LibraryManager.Sort facade left in place pending Folder.GetChildren cascade, see docs/major-rewrite-plan-v13.md § PR49/N
             return LibraryManager.Sort(items, user, new[] { sortBy }, SortOrder.Ascending);
+#pragma warning restore CS0618
         }
 
         public override IReadOnlyList<BaseItem> GetChildren(User user, bool includeLinkedChildren, InternalItemsQuery query)
