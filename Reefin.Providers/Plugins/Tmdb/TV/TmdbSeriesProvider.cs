@@ -26,21 +26,21 @@ namespace Reefin.Providers.Plugins.Tmdb.TV
     public class TmdbSeriesProvider : IRemoteMetadataProvider<Series, SeriesInfo>, IHasOrder
     {
         private readonly IHttpClientFactory _httpClientFactory;
-        private readonly ILibraryManager _libraryManager;
+        private readonly IItemNamingService _itemNamingService;
         private readonly TmdbClientManager _tmdbClientManager;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="TmdbSeriesProvider"/> class.
         /// </summary>
-        /// <param name="libraryManager">The <see cref="ILibraryManager"/>.</param>
+        /// <param name="itemNamingService">The <see cref="IItemNamingService"/>.</param>
         /// <param name="httpClientFactory">The <see cref="IHttpClientFactory"/>.</param>
         /// <param name="tmdbClientManager">The <see cref="TmdbClientManager"/>.</param>
         public TmdbSeriesProvider(
-            ILibraryManager libraryManager,
+            IItemNamingService itemNamingService,
             IHttpClientFactory httpClientFactory,
             TmdbClientManager tmdbClientManager)
         {
-            _libraryManager = libraryManager;
+            _itemNamingService = itemNamingService;
             _httpClientFactory = httpClientFactory;
             _tmdbClientManager = tmdbClientManager;
         }
@@ -200,7 +200,7 @@ namespace Reefin.Providers.Plugins.Tmdb.TV
                 result.QueriedById = false;
                 // ParseName is required here.
                 // Caller provides the filename with extension stripped and NOT the parsed filename
-                var parsedName = _libraryManager.ParseName(info.Name);
+                var parsedName = _itemNamingService.ParseName(info.Name);
                 var cleanedName = TmdbUtils.CleanName(parsedName.Name);
                 var searchResults = await _tmdbClientManager.SearchSeriesAsync(cleanedName, info.MetadataLanguage, info.MetadataCountryCode, info.Year ?? parsedName.Year ?? 0, cancellationToken).ConfigureAwait(false);
 

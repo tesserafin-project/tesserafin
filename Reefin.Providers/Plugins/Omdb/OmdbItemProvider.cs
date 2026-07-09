@@ -31,18 +31,18 @@ namespace Reefin.Providers.Plugins.Omdb
         IRemoteMetadataProvider<Movie, MovieInfo>, IRemoteMetadataProvider<Trailer, TrailerInfo>, IHasOrder
     {
         private readonly IHttpClientFactory _httpClientFactory;
-        private readonly ILibraryManager _libraryManager;
+        private readonly IItemNamingService _itemNamingService;
         private readonly JsonSerializerOptions _jsonOptions;
         private readonly OmdbProvider _omdbProvider;
 
         public OmdbItemProvider(
             IHttpClientFactory httpClientFactory,
-            ILibraryManager libraryManager,
+            IItemNamingService itemNamingService,
             IFileSystem fileSystem,
             IServerConfigurationManager configurationManager)
         {
             _httpClientFactory = httpClientFactory;
-            _libraryManager = libraryManager;
+            _itemNamingService = itemNamingService;
             _omdbProvider = new OmdbProvider(_httpClientFactory, fileSystem, configurationManager);
 
             _jsonOptions = new JsonSerializerOptions(JsonDefaults.Options);
@@ -111,7 +111,7 @@ namespace Reefin.Providers.Plugins.Omdb
                 var year = searchInfo.Year;
                 if (!string.IsNullOrWhiteSpace(name))
                 {
-                    var parsedName = _libraryManager.ParseName(name);
+                    var parsedName = _itemNamingService.ParseName(name);
                     var yearInName = parsedName.Year;
                     name = parsedName.Name;
                     year ??= yearInName;

@@ -21,19 +21,19 @@ namespace Reefin.Providers.Plugins.Tmdb.BoxSets
     {
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly TmdbClientManager _tmdbClientManager;
-        private readonly ILibraryManager _libraryManager;
+        private readonly IItemNamingService _itemNamingService;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="TmdbBoxSetProvider"/> class.
         /// </summary>
-        /// <param name="libraryManager">The <see cref="ILibraryManager"/>.</param>
+        /// <param name="itemNamingService">The <see cref="IItemNamingService"/>.</param>
         /// <param name="httpClientFactory">The <see cref="IHttpClientFactory"/>.</param>
         /// <param name="tmdbClientManager">The <see cref="TmdbClientManager"/>.</param>
-        public TmdbBoxSetProvider(IHttpClientFactory httpClientFactory, TmdbClientManager tmdbClientManager, ILibraryManager libraryManager)
+        public TmdbBoxSetProvider(IHttpClientFactory httpClientFactory, TmdbClientManager tmdbClientManager, IItemNamingService itemNamingService)
         {
             _httpClientFactory = httpClientFactory;
             _tmdbClientManager = tmdbClientManager;
-            _libraryManager = libraryManager;
+            _itemNamingService = itemNamingService;
         }
 
         /// <inheritdoc />
@@ -105,7 +105,7 @@ namespace Reefin.Providers.Plugins.Tmdb.BoxSets
             {
                 // ParseName is required here.
                 // Caller provides the filename with extension stripped and NOT the parsed filename
-                var parsedName = _libraryManager.ParseName(info.Name);
+                var parsedName = _itemNamingService.ParseName(info.Name);
                 var cleanedName = TmdbUtils.CleanName(parsedName.Name);
                 var searchResults = await _tmdbClientManager.SearchCollectionAsync(cleanedName, language, info.MetadataCountryCode, cancellationToken).ConfigureAwait(false);
 

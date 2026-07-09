@@ -26,21 +26,21 @@ namespace Reefin.Providers.Plugins.Tmdb.Movies
     public class TmdbMovieProvider : IRemoteMetadataProvider<Movie, MovieInfo>, IHasOrder
     {
         private readonly IHttpClientFactory _httpClientFactory;
-        private readonly ILibraryManager _libraryManager;
+        private readonly IItemNamingService _itemNamingService;
         private readonly TmdbClientManager _tmdbClientManager;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="TmdbMovieProvider"/> class.
         /// </summary>
-        /// <param name="libraryManager">The <see cref="ILibraryManager"/>.</param>
+        /// <param name="itemNamingService">The <see cref="IItemNamingService"/>.</param>
         /// <param name="httpClientFactory">The <see cref="IHttpClientFactory"/>.</param>
         /// <param name="tmdbClientManager">The <see cref="TmdbClientManager"/>.</param>
         public TmdbMovieProvider(
-            ILibraryManager libraryManager,
+            IItemNamingService itemNamingService,
             TmdbClientManager tmdbClientManager,
             IHttpClientFactory httpClientFactory)
         {
-            _libraryManager = libraryManager;
+            _itemNamingService = itemNamingService;
             _tmdbClientManager = tmdbClientManager;
             _httpClientFactory = httpClientFactory;
         }
@@ -159,7 +159,7 @@ namespace Reefin.Providers.Plugins.Tmdb.Movies
             {
                 // ParseName is required here.
                 // Caller provides the filename with extension stripped and NOT the parsed filename
-                var parsedName = _libraryManager.ParseName(info.Name);
+                var parsedName = _itemNamingService.ParseName(info.Name);
                 var cleanedName = TmdbUtils.CleanName(parsedName.Name);
 
                 var searchResults = await _tmdbClientManager.SearchMovieAsync(cleanedName, info.Year ?? parsedName.Year ?? 0, info.MetadataLanguage, info.MetadataCountryCode, cancellationToken).ConfigureAwait(false);

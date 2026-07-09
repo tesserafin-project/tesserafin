@@ -699,6 +699,16 @@ Extraction appliquée conformément à l'audit PR34. `IItemNamingService` (`Reef
 
 Tests dédiés ajoutés dans `tests/Reefin.Server.Implementations.Tests/Library/ItemNamingServiceTests.cs` : nettoyage nom+année (`ParseName`), parsing de saison avec parent path, et remplissage saison/épisode depuis un chemin `S01E02` (avec le static legacy `BaseItem.MediaSourceManager` mocké uniquement pour `Episode.IsFileProtocol`). Vérifications : `ItemNamingServiceTests` 3/3, build frais solution 0 erreur, intégration 103/106 (3 ignorés).
 
+### PR36/N — providers bas-risque migrés vers `IItemNamingService` (2026-07-09)
+
+Migration mécanique des consommateurs non-entités identifiés en PR34/PR35, sans toucher aux entités `Controller` qui restent provisoirement sur `BaseItem.LibraryManager` :
+
+- `TmdbMovieProvider`, `TmdbSeriesProvider`, `TmdbBoxSetProvider` : `ILibraryManager` retiré car il ne servait qu'à `ParseName`; remplacement par `IItemNamingService`.
+- `OmdbItemProvider` : même remplacement `ParseName`; `OmdbEpisodeProvider` mis à jour car il construit `OmdbItemProvider` manuellement.
+- `SeriesMetadataService` : conserve `ILibraryManager` pour `GetLibraryOptions`, `DeleteItem`, `GetNewItemId`, etc., mais son appel `LibraryManager.FillMissingEpisodeNumbersFromPath(...)` passe à `_itemNamingService.FillMissingEpisodeNumbersFromPath(...)`.
+
+Après migration, les appels legacy restants à `ParseName`/`FillMissingEpisodeNumbersFromPath`/`GetSeasonNumberFromPath` sont la façade `LibraryManager` elle-même et les entités `Movie`/`Trailer`/`MusicVideo`/`Series`/`Season`/`Episode` côté `Reefin.Controller`, ce qui correspond au périmètre reporté (statics `BaseItem.LibraryManager`). Vérifications : build frais solution 0 erreur, intégration 103/106 (3 ignorés).
+
 ## Ordre recommandé (reprend celui du plan, réordonné sur le point 3 ci-dessus)
 1. Sessions de lecture + protocole capacités v2 (point 1-2) — priorité confirmée, zone la mieux comprise.
 2. Suppression `SetStaticProperties` / statics `BaseItem` (point 4) **avant** découpage `LibraryManager`. Post-revue PR14 (2026-07-08) : stabiliser (tests ciblés) + esquisser les services de remplacement (`ItemQueryService` et consorts) plutôt que continuer à traquer chaque static un par un — voir § "Revue externe post-PR14".

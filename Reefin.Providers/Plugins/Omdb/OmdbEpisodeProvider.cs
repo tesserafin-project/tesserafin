@@ -21,11 +21,11 @@ namespace Reefin.Providers.Plugins.Omdb
 
         public OmdbEpisodeProvider(
             IHttpClientFactory httpClientFactory,
-            ILibraryManager libraryManager,
+            IItemNamingService itemNamingService,
             IFileSystem fileSystem,
             IServerConfigurationManager configurationManager)
         {
-            _itemProvider = new OmdbItemProvider(httpClientFactory, libraryManager, fileSystem, configurationManager);
+            _itemProvider = new OmdbItemProvider(httpClientFactory, itemNamingService, fileSystem, configurationManager);
             _omdbProvider = new OmdbProvider(httpClientFactory, fileSystem, configurationManager);
         }
 

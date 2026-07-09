@@ -27,6 +27,7 @@ namespace Reefin.Providers.TV;
 public class SeriesMetadataService : MetadataService<Series, SeriesInfo>
 {
     private readonly ILocalizationManager _localizationManager;
+    private readonly IItemNamingService _itemNamingService;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SeriesMetadataService"/> class.
@@ -36,6 +37,7 @@ public class SeriesMetadataService : MetadataService<Series, SeriesInfo>
     /// <param name="providerManager">Instance of the <see cref="IProviderManager"/> interface.</param>
     /// <param name="fileSystem">Instance of the <see cref="IFileSystem"/> interface.</param>
     /// <param name="libraryManager">Instance of the <see cref="ILibraryManager"/> interface.</param>
+    /// <param name="itemNamingService">Instance of the <see cref="IItemNamingService"/> interface.</param>
     /// <param name="localizationManager">Instance of the <see cref="ILocalizationManager"/> interface.</param>
     /// <param name="externalDataManager">Instance of the <see cref="IExternalDataManager"/> interface.</param>
     /// <param name="itemRepository">Instance of the <see cref="IItemRepository"/> interface.</param>
@@ -45,11 +47,13 @@ public class SeriesMetadataService : MetadataService<Series, SeriesInfo>
         IProviderManager providerManager,
         IFileSystem fileSystem,
         ILibraryManager libraryManager,
+        IItemNamingService itemNamingService,
         ILocalizationManager localizationManager,
         IExternalDataManager externalDataManager,
         IItemRepository itemRepository)
         : base(serverConfigurationManager, logger, providerManager, fileSystem, libraryManager, externalDataManager, itemRepository)
     {
+        _itemNamingService = itemNamingService;
         _localizationManager = localizationManager;
     }
 
@@ -311,7 +315,7 @@ public class SeriesMetadataService : MetadataService<Series, SeriesInfo>
 
             try
             {
-                LibraryManager.FillMissingEpisodeNumbersFromPath(episode, false);
+                _itemNamingService.FillMissingEpisodeNumbersFromPath(episode, false);
             }
             catch (Exception ex)
             {
