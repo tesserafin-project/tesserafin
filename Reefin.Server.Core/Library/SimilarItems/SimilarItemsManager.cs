@@ -33,6 +33,7 @@ public class SimilarItemsManager : ISimilarItemsManager
     private readonly ILogger<SimilarItemsManager> _logger;
     private readonly IServerApplicationPaths _appPaths;
     private readonly ILibraryManager _libraryManager;
+    private readonly IItemPeopleService _itemPeopleService;
     private readonly IFileSystem _fileSystem;
     private readonly IServerConfigurationManager _serverConfigurationManager;
     private ISimilarItemsProvider[] _similarItemsProviders = [];
@@ -43,18 +44,21 @@ public class SimilarItemsManager : ISimilarItemsManager
     /// <param name="logger">The logger.</param>
     /// <param name="appPaths">The server application paths.</param>
     /// <param name="libraryManager">The library manager.</param>
+    /// <param name="itemPeopleService">The item people service.</param>
     /// <param name="fileSystem">The file system.</param>
     /// <param name="serverConfigurationManager">The server configuration manager.</param>
     public SimilarItemsManager(
         ILogger<SimilarItemsManager> logger,
         IServerApplicationPaths appPaths,
         ILibraryManager libraryManager,
+        IItemPeopleService itemPeopleService,
         IFileSystem fileSystem,
         IServerConfigurationManager serverConfigurationManager)
     {
         _logger = logger;
         _appPaths = appPaths;
         _libraryManager = libraryManager;
+        _itemPeopleService = itemPeopleService;
         _fileSystem = fileSystem;
         _serverConfigurationManager = serverConfigurationManager;
     }
@@ -438,7 +442,7 @@ public class SimilarItemsManager : ISimilarItemsManager
     private IReadOnlyList<string> GetPeopleNames(IReadOnlyList<BaseItem> items, IReadOnlyList<string> personTypes)
     {
         var itemIds = items.Select(i => i.Id).ToArray();
-        return _libraryManager.GetPeopleNamesByItems(itemIds, personTypes)
+        return _itemPeopleService.GetPeopleNamesByItems(itemIds, personTypes)
             .Values
             .SelectMany(names => names)
             .Distinct()

@@ -28,12 +28,14 @@ namespace Reefin.LocalMetadata.Savers
         /// <param name="fileSystem">Instance of the <see cref="IFileSystem"/> interface.</param>
         /// <param name="configurationManager">Instance of the <see cref="IServerConfigurationManager"/> interface.</param>
         /// <param name="libraryManager">Instance of the <see cref="ILibraryManager"/> interface.</param>
+        /// <param name="itemPeopleService">Instance of the <see cref="IItemPeopleService"/> interface.</param>
         /// <param name="logger">Instance of the <see cref="ILogger{BaseXmlSaver}"/> interface.</param>
-        protected BaseXmlSaver(IFileSystem fileSystem, IServerConfigurationManager configurationManager, ILibraryManager libraryManager, ILogger<BaseXmlSaver> logger)
+        protected BaseXmlSaver(IFileSystem fileSystem, IServerConfigurationManager configurationManager, ILibraryManager libraryManager, IItemPeopleService itemPeopleService, ILogger<BaseXmlSaver> logger)
         {
             FileSystem = fileSystem;
             ConfigurationManager = configurationManager;
             LibraryManager = libraryManager;
+            ItemPeopleService = itemPeopleService;
             Logger = logger;
         }
 
@@ -51,6 +53,11 @@ namespace Reefin.LocalMetadata.Savers
         /// Gets the library manager.
         /// </summary>
         protected ILibraryManager LibraryManager { get; private set; }
+
+        /// <summary>
+        /// Gets the item people service.
+        /// </summary>
+        protected IItemPeopleService ItemPeopleService { get; private set; }
 
         /// <summary>
         /// Gets the logger.
@@ -365,7 +372,7 @@ namespace Reefin.LocalMetadata.Savers
                 await writer.WriteEndElementAsync().ConfigureAwait(false);
             }
 
-            var people = LibraryManager.GetPeople(item);
+            var people = ItemPeopleService.GetPeople(item);
 
             if (people.Count > 0)
             {

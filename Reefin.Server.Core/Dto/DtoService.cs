@@ -114,6 +114,7 @@ namespace Reefin.Server.Core.Dto
 
         private readonly ILogger<DtoService> _logger;
         private readonly ILibraryManager _libraryManager;
+        private readonly IItemPeopleService _itemPeopleService;
         private readonly IUserDataManager _userDataRepository;
 
         private readonly IImageProcessor _imageProcessor;
@@ -131,6 +132,7 @@ namespace Reefin.Server.Core.Dto
         public DtoService(
             ILogger<DtoService> logger,
             ILibraryManager libraryManager,
+            IItemPeopleService itemPeopleService,
             IUserDataManager userDataRepository,
             IImageProcessor imageProcessor,
             IProviderManager providerManager,
@@ -144,6 +146,7 @@ namespace Reefin.Server.Core.Dto
         {
             _logger = logger;
             _libraryManager = libraryManager;
+            _itemPeopleService = itemPeopleService;
             _userDataRepository = userDataRepository;
             _imageProcessor = imageProcessor;
             _providerManager = providerManager;
@@ -751,7 +754,7 @@ namespace Reefin.Server.Core.Dto
             // Ordering by person type to ensure actors and artists are at the front.
             // This is taking advantage of the fact that they both begin with A
             // This should be improved in the future
-            var people = _libraryManager.GetPeople(item).OrderBy(i => i.SortOrder ?? int.MaxValue)
+            var people = _itemPeopleService.GetPeople(item).OrderBy(i => i.SortOrder ?? int.MaxValue)
                 .ThenBy(i =>
                 {
                     if (i.IsType(PersonKind.Actor))

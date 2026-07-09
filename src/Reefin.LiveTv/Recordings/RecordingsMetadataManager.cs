@@ -30,6 +30,7 @@ public class RecordingsMetadataManager
     private readonly ILogger<RecordingsMetadataManager> _logger;
     private readonly IConfigurationManager _config;
     private readonly ILibraryManager _libraryManager;
+    private readonly IItemPeopleService _itemPeopleService;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="RecordingsMetadataManager"/> class.
@@ -37,14 +38,17 @@ public class RecordingsMetadataManager
     /// <param name="logger">The <see cref="ILogger"/>.</param>
     /// <param name="config">The <see cref="IConfigurationManager"/>.</param>
     /// <param name="libraryManager">The <see cref="ILibraryManager"/>.</param>
+    /// <param name="itemPeopleService">The <see cref="IItemPeopleService"/>.</param>
     public RecordingsMetadataManager(
         ILogger<RecordingsMetadataManager> logger,
         IConfigurationManager config,
-        ILibraryManager libraryManager)
+        ILibraryManager libraryManager,
+        IItemPeopleService itemPeopleService)
     {
         _logger = logger;
         _config = config;
         _libraryManager = libraryManager;
+        _itemPeopleService = itemPeopleService;
     }
 
     /// <summary>
@@ -316,7 +320,7 @@ public class RecordingsMetadataManager
                     await writer.WriteElementStringAsync(null, "genre", null, genre).ConfigureAwait(false);
                 }
 
-                var people = item.Id.IsEmpty() ? new List<PersonInfo>() : _libraryManager.GetPeople(item);
+                var people = item.Id.IsEmpty() ? new List<PersonInfo>() : _itemPeopleService.GetPeople(item);
 
                 var directors = people
                     .Where(i => i.IsType(PersonKind.Director))

@@ -27,9 +27,10 @@ namespace Reefin.LocalMetadata.Savers
         /// <param name="fileSystem">Instance of the <see cref="IFileSystem"/> interface.</param>
         /// <param name="configurationManager">Instance of the <see cref="IServerConfigurationManager"/> interface.</param>
         /// <param name="libraryManager">Instance of the <see cref="ILibraryManager"/> interface.</param>
+        /// <param name="itemPeopleService">Instance of the <see cref="IItemPeopleService"/> interface.</param>
         /// <param name="logger">Instance of the <see cref="ILogger{PlaylistXmlSaver}"/> interface.</param>
-        public PlaylistXmlSaver(IFileSystem fileSystem, IServerConfigurationManager configurationManager, ILibraryManager libraryManager, ILogger<PlaylistXmlSaver> logger)
-            : base(fileSystem, configurationManager, libraryManager, logger)
+        public PlaylistXmlSaver(IFileSystem fileSystem, IServerConfigurationManager configurationManager, ILibraryManager libraryManager, IItemPeopleService itemPeopleService, ILogger<PlaylistXmlSaver> logger)
+            : base(fileSystem, configurationManager, libraryManager, itemPeopleService, logger)
         {
         }
 

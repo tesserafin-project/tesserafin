@@ -103,6 +103,7 @@ public class DtoServiceImageInheritanceTests
     private static DtoService BuildDtoService(BaseItem displayParent)
     {
         var libraryManager = new Mock<ILibraryManager>();
+        var itemPeopleService = new Mock<IItemPeopleService>();
         var userDataManager = new Mock<IUserDataManager>();
         var imageProcessor = new Mock<IImageProcessor>();
         var providerManager = new Mock<IProviderManager>();
@@ -126,6 +127,7 @@ public class DtoServiceImageInheritanceTests
         return new DtoService(
             logger.Object,
             libraryManager.Object,
+            itemPeopleService.Object,
             userDataManager.Object,
             imageProcessor.Object,
             providerManager.Object,

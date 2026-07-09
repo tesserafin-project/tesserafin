@@ -1349,7 +1349,7 @@ namespace Reefin.Server.Core.Library
             // Ensure the location is available.
             Directory.CreateDirectory(_configurationManager.ApplicationPaths.PeoplePath);
 
-            return new PeopleValidator(this, _logger, _fileSystem).ValidatePeople(cancellationToken, progress);
+            return new PeopleValidator(this, _itemPeopleService, _logger, _fileSystem).ValidatePeople(cancellationToken, progress);
         }
 
         /// <summary>

@@ -104,6 +104,7 @@ namespace Reefin.XbmcMetadata.Savers
             IFileSystem fileSystem,
             IServerConfigurationManager configurationManager,
             ILibraryManager libraryManager,
+            IItemPeopleService itemPeopleService,
             IUserManager userManager,
             IUserDataManager userDataManager,
             ILogger<BaseNfoSaver> logger,
@@ -113,6 +114,7 @@ namespace Reefin.XbmcMetadata.Savers
             UserDataManager = userDataManager;
             UserManager = userManager;
             LibraryManager = libraryManager;
+            ItemPeopleService = itemPeopleService;
             ConfigurationManager = configurationManager;
             FileSystem = fileSystem;
             MediaSourceManager = mediaSourceManager;
@@ -123,6 +125,8 @@ namespace Reefin.XbmcMetadata.Savers
         protected IServerConfigurationManager ConfigurationManager { get; }
 
         protected ILibraryManager LibraryManager { get; }
+
+        protected IItemPeopleService ItemPeopleService { get; }
 
         protected IUserManager UserManager { get; }
 
@@ -276,7 +280,7 @@ namespace Reefin.XbmcMetadata.Savers
 
                 if (baseItem is not null)
                 {
-                    AddCommonNodes(baseItem, writer, LibraryManager, UserManager, UserDataManager, ConfigurationManager);
+                    AddCommonNodes(baseItem, writer, LibraryManager, ItemPeopleService, UserManager, UserDataManager, ConfigurationManager);
                 }
 
                 WriteCustomElements(item, writer);
@@ -451,6 +455,7 @@ namespace Reefin.XbmcMetadata.Savers
             BaseItem item,
             XmlWriter writer,
             ILibraryManager libraryManager,
+            IItemPeopleService itemPeopleService,
             IUserManager userManager,
             IUserDataManager userDataRepo,
             IServerConfigurationManager config)
@@ -507,7 +512,7 @@ namespace Reefin.XbmcMetadata.Savers
                 writer.WriteElementString("originallanguage", item.OriginalLanguage);
             }
 
-            var people = libraryManager.GetPeople(item);
+            var people = itemPeopleService.GetPeople(item);
 
             var directors = people
                 .Where(i => i.IsType(PersonKind.Director))

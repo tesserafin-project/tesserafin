@@ -21,11 +21,13 @@ namespace Reefin.Server.Implementations.Tests.Dto;
 public class DtoServiceTests
 {
     private readonly Mock<ILibraryManager> _libraryManagerMock;
+    private readonly Mock<IItemPeopleService> _itemPeopleServiceMock;
     private readonly DtoService _dtoService;
 
     public DtoServiceTests()
     {
         _libraryManagerMock = new Mock<ILibraryManager>();
+        _itemPeopleServiceMock = new Mock<IItemPeopleService>();
 
         var imageProcessor = new Mock<IImageProcessor>();
         // Deterministic tag derived from the image so each item gets a distinct, assertable tag.
@@ -42,6 +44,7 @@ public class DtoServiceTests
         _dtoService = new DtoService(
             NullLogger<DtoService>.Instance,
             _libraryManagerMock.Object,
+            _itemPeopleServiceMock.Object,
             new Mock<IUserDataManager>().Object,
             imageProcessor.Object,
             new Mock<IProviderManager>().Object,

@@ -40,10 +40,13 @@ public sealed class RecordingsMetadataManagerTests
             .Setup(l => l.GetItemList(It.IsAny<InternalItemsQuery>()))
             .Returns(Array.Empty<BaseItem>());
 
+        var itemPeopleService = new Mock<IItemPeopleService>();
+
         var manager = new RecordingsMetadataManager(
             NullLogger<RecordingsMetadataManager>.Instance,
             config.Object,
-            libraryManager.Object);
+            libraryManager.Object,
+            itemPeopleService.Object);
 
         var timer = new TimerInfo { Name = "Test Recording", ProgramId = null };
 

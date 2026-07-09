@@ -20,6 +20,7 @@ public class PeopleValidator
     /// The _library manager.
     /// </summary>
     private readonly ILibraryManager _libraryManager;
+    private readonly IItemPeopleService _itemPeopleService;
 
     /// <summary>
     /// The _logger.
@@ -32,11 +33,13 @@ public class PeopleValidator
     /// Initializes a new instance of the <see cref="PeopleValidator" /> class.
     /// </summary>
     /// <param name="libraryManager">The library manager.</param>
+    /// <param name="itemPeopleService">The item people service.</param>
     /// <param name="logger">The logger.</param>
     /// <param name="fileSystem">The file system.</param>
-    public PeopleValidator(ILibraryManager libraryManager, ILogger logger, IFileSystem fileSystem)
+    public PeopleValidator(ILibraryManager libraryManager, IItemPeopleService itemPeopleService, ILogger logger, IFileSystem fileSystem)
     {
         _libraryManager = libraryManager;
+        _itemPeopleService = itemPeopleService;
         _logger = logger;
         _fileSystem = fileSystem;
     }
@@ -49,7 +52,7 @@ public class PeopleValidator
     /// <returns>Task.</returns>
     public async Task ValidatePeople(CancellationToken cancellationToken, IProgress<double> progress)
     {
-        var people = _libraryManager.GetPeopleNames(new InternalPeopleQuery());
+        var people = _itemPeopleService.GetPeopleNames(new InternalPeopleQuery());
 
         var numComplete = 0;
 

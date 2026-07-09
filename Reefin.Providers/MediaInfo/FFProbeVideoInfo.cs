@@ -39,6 +39,7 @@ namespace Reefin.Providers.MediaInfo
         private readonly IServerConfigurationManager _config;
         private readonly ISubtitleManager _subtitleManager;
         private readonly ILibraryManager _libraryManager;
+        private readonly IItemPeopleService _itemPeopleService;
         private readonly AudioResolver _audioResolver;
         private readonly SubtitleResolver _subtitleResolver;
         private readonly IMediaAttachmentRepository _mediaAttachmentRepository;
@@ -54,6 +55,7 @@ namespace Reefin.Providers.MediaInfo
             IServerConfigurationManager config,
             ISubtitleManager subtitleManager,
             ILibraryManager libraryManager,
+            IItemPeopleService itemPeopleService,
             AudioResolver audioResolver,
             SubtitleResolver subtitleResolver,
             IMediaAttachmentRepository mediaAttachmentRepository,
@@ -68,6 +70,7 @@ namespace Reefin.Providers.MediaInfo
             _config = config;
             _subtitleManager = subtitleManager;
             _libraryManager = libraryManager;
+            _itemPeopleService = itemPeopleService;
             _audioResolver = audioResolver;
             _subtitleResolver = subtitleResolver;
             _mediaAttachmentRepository = mediaAttachmentRepository;
@@ -505,7 +508,7 @@ namespace Reefin.Providers.MediaInfo
                 return;
             }
 
-            if (options.ReplaceAllMetadata || _libraryManager.GetPeople(video).Count == 0)
+            if (options.ReplaceAllMetadata || _itemPeopleService.GetPeople(video).Count == 0)
             {
                 var people = new List<PersonInfo>();
 

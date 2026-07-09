@@ -24,6 +24,7 @@ namespace Reefin.XbmcMetadata.Savers
         /// <param name="fileSystem">The file system.</param>
         /// <param name="configurationManager">the server configuration manager.</param>
         /// <param name="libraryManager">The library manager.</param>
+        /// <param name="itemPeopleService">The item people service.</param>
         /// <param name="userManager">The user manager.</param>
         /// <param name="userDataManager">The user data manager.</param>
         /// <param name="logger">The logger.</param>
@@ -32,11 +33,12 @@ namespace Reefin.XbmcMetadata.Savers
             IFileSystem fileSystem,
             IServerConfigurationManager configurationManager,
             ILibraryManager libraryManager,
+            IItemPeopleService itemPeopleService,
             IUserManager userManager,
             IUserDataManager userDataManager,
             ILogger<ArtistNfoSaver> logger,
             IMediaSourceManager mediaSourceManager)
-            : base(fileSystem, configurationManager, libraryManager, userManager, userDataManager, logger, mediaSourceManager)
+            : base(fileSystem, configurationManager, libraryManager, itemPeopleService, userManager, userDataManager, logger, mediaSourceManager)
         {
         }
 

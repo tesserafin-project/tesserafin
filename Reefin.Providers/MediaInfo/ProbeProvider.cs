@@ -61,6 +61,7 @@ namespace Reefin.Providers.MediaInfo
         /// <param name="config">Instance of the <see cref="IServerConfigurationManager"/> interface.</param>
         /// <param name="subtitleManager">Instance of the <see cref="ISubtitleManager"/> interface.</param>
         /// <param name="libraryManager">Instance of the <see cref="ILibraryManager"/> interface.</param>
+        /// <param name="itemPeopleService">Instance of the <see cref="IItemPeopleService"/> interface.</param>
         /// <param name="loggerFactory">Instance of the <see cref="ILoggerFactory"/>.</param>
         /// <param name="fileSystem">Instance of the <see cref="IFileSystem"/> interface.</param>
         /// <param name="namingOptions">The <see cref="NamingOptions"/>.</param>
@@ -76,6 +77,7 @@ namespace Reefin.Providers.MediaInfo
             IServerConfigurationManager config,
             ISubtitleManager subtitleManager,
             ILibraryManager libraryManager,
+            IItemPeopleService itemPeopleService,
             IFileSystem fileSystem,
             ILoggerFactory loggerFactory,
             NamingOptions namingOptions,
@@ -98,6 +100,7 @@ namespace Reefin.Providers.MediaInfo
                 config,
                 subtitleManager,
                 libraryManager,
+                itemPeopleService,
                 _audioResolver,
                 _subtitleResolver,
                 mediaAttachmentRepository,
