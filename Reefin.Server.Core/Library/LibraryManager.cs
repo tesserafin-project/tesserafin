@@ -88,7 +88,7 @@ namespace Reefin.Server.Core.Library
         private readonly IPathManager _pathManager;
         private readonly FastConcurrentLru<Guid, BaseItem> _cache;
         private readonly DotIgnoreIgnoreRule _dotIgnoreIgnoreRule;
-        private readonly IMediaStreamRepository _mediaStreamRepository;
+        private readonly IMediaStreamLanguageService _mediaStreamLanguageService;
         private readonly Lazy<IExternalDataManager> _externalDataManagerFactory;
 
         /// <summary>
@@ -135,7 +135,7 @@ namespace Reefin.Server.Core.Library
         /// <param name="peopleRepository">The people repository.</param>
         /// <param name="pathManager">The path manager.</param>
         /// <param name="dotIgnoreIgnoreRule">The .ignore rule handler.</param>
-        /// <param name="mediaStreamRepository">The media stream repository.</param>
+        /// <param name="mediaStreamLanguageService">The media stream language service.</param>
         /// <param name="externalDataManagerFactory">The external data manager (lazy, to break the DI cycle through ChapterManager).</param>
         public LibraryManager(
             IServerApplicationHost appHost,
@@ -163,7 +163,7 @@ namespace Reefin.Server.Core.Library
             IPeopleRepository peopleRepository,
             IPathManager pathManager,
             DotIgnoreIgnoreRule dotIgnoreIgnoreRule,
-            IMediaStreamRepository mediaStreamRepository,
+            IMediaStreamLanguageService mediaStreamLanguageService,
             Lazy<IExternalDataManager> externalDataManagerFactory)
         {
             _appHost = appHost;
@@ -197,7 +197,7 @@ namespace Reefin.Server.Core.Library
 
             _configurationManager.ConfigurationUpdated += ConfigurationUpdated;
 
-            _mediaStreamRepository = mediaStreamRepository;
+            _mediaStreamLanguageService = mediaStreamLanguageService;
             _externalDataManagerFactory = externalDataManagerFactory;
 
             RecordConfigurationValues(_configurationManager.Configuration);
@@ -3668,7 +3668,7 @@ namespace Reefin.Server.Core.Library
         /// <inheritdoc />
         public IReadOnlyList<string> GetMediaStreamLanguages(MediaStreamType mediaStreamType)
         {
-            return _mediaStreamRepository.GetMediaStreamLanguages(mediaStreamType);
+            return _mediaStreamLanguageService.GetMediaStreamLanguages(mediaStreamType);
         }
     }
 }
