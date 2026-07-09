@@ -1002,6 +1002,133 @@ Pragmas posés, chacun avec un commentaire d'une ligne renvoyant au chantier § 
 
 **Critère de levée.** Les 5 sites migreront vers `IItemSortService` directement (retrait des 5 pragmas) au moment du chantier `Folder.GetChildren`/`Series.GetEpisodes` (PR49-PR50, cf. PR43/PR45 et PR46/N §3) : à cette occasion, `BaseItem.GetThemeSongs`/`GetThemeVideos`, `BoxSet.Sort` (privée), `Series.GetSeasonEpisodes` et `UserViewBuilder.SortAndPage` seront reconstruits pour recevoir `IItemSortService` en DI plutôt que de passer par la façade `ILibraryManager`/le static `BaseItem.LibraryManager`. Retrait de `ILibraryManager.Sort` (méthode + implémentation) seulement ensuite, sous la même réserve « compat historique SDK plugin » que PR47/N — pas avant que les 5 sites internes soient migrés.
 
+### PR49/N — audit Folder.GetChildren / GetEpisodes / GetParent (2026-07-09)
+
+Audit pur, aucune ligne de code applicatif modifiée. Suite directe de PR46/48 : les 5 sites `[Obsolete]`/pragma `ILibraryManager.Sort` verrouillés en PR48 (`BaseItem.cs:2851/2861`, `BoxSet.cs:128`, `Series.cs:429`, `UserViewBuilder.cs:502`) restent bloqués par la cascade `Folder.GetChildren`/`Series.GetEpisodes`/`GetParent` — jamais cartographiée exhaustivement jusqu'ici (PR43/PR46 ne l'avaient que dénombrée : « 21 sites », « 8 appelants », « lookup legacy `GetItemById` »). Objectif de cette tranche : produire cette cartographie et trancher la frontière avant toute extraction.
+
+**1. Structure `Children`/`RecursiveChildren`/`GetChildren` (`Reefin.Controller/Entities/Folder.cs`).** Trois chemins distincts, pas un seul :
+- `Children` (propriété, `Folder.cs:137-141`) : `get => _children ??= LoadChildren()`. `LoadChildren()` (`Folder.cs:282-287`, `protected virtual`) appelle `GetCachedChildren()` (`Folder.cs:869-877`) qui interroge directement le static `ItemRepository.GetItemList(...)` — **aucun passage par `GetChildren(User, ...)`**. 3 overrides de `LoadChildren`/`GetNonCachedChildren` changent la source (`AggregateFolder.cs:67/153`, `UserRootFolder.cs:61/125`, `BoxSet.cs:85/95`) mais aucun ne route vers `GetChildren(User,...)` non plus.
+- `RecursiveChildren` (propriété, `Folder.cs:148`) : `=> GetRecursiveChildren()` (overload sans argument). **Zéro usage dans tout le dépôt** (`grep '\.RecursiveChildren\b'` : aucune occurrence hors la définition elle-même) — propriété morte.
+- `GetChildren(User user, bool includeLinkedChildren, ...)` (`Folder.cs:1488-1510`, 2 overloads, `public virtual`) : chemin **utilisateur-scopé**, distinct de `Children`/`LoadChildren`. Passe par `AddChildren` (privée, `Folder.cs:1520-1549`) → `GetEligibleChildrenForRecursiveChildren(user)` (`protected virtual`, `Folder.cs:1512-1515`, retourne `Children` par défaut — seul point de jonction avec le chemin non-scopé) → `AddChildrenFromCollection` (`Folder.cs:1551-1587`, filtrage visibilité/query via `UserViewBuilder.Filter`).
+- `GetRecursiveChildren(User user, InternalItemsQuery query, out int totalCount)` (`Folder.cs:1589-1598`, `public virtual`) réutilise aussi `AddChildren` (donc `Children`/`GetEligibleChildrenForRecursiveChildren`), **pas** `GetChildren(User,...)`. Les 4 overloads sans `User` (`GetRecursiveChildren()`/`(bool)`/`(Func<>)`/`(Func<>,bool)`, `Folder.cs:1604-1626`) empruntent un troisième chemin interne, `AddChildrenToList` (privée, `Folder.cs:1631-1659`), qui itère directement sur `Children` (donc `LoadChildren`) + `GetLinkedChildren()` — indépendant d'`AddChildren`.
+
+Conclusion : « `Folder.GetChildren` » recouvre en réalité 3 familles de méthodes non unifiées (`Children`/`LoadChildren`, `GetChildren(User,...)`/`GetRecursiveChildren(User,...)` via `AddChildren`, `GetRecursiveChildren(...)` sans `User` via `AddChildrenToList`) qui ne se rejoignent qu'au niveau de la propriété `Children`. Toute extraction de service devra choisir laquelle de ces 3 familles elle couvre — les traiter comme un seul point d'entrée serait une erreur de cadrage.
+
+**2. Inventaire `Folder.GetChildren(User, ...)` — 21 sites d'appel bruts** (grep `\.GetChildren\(` repo-entier hors `obj/`/`bin/`, confirmé identique au chiffre PR43/PR46) :
+
+| Fichier:ligne | Appelant | Nature |
+|---|---|---|
+| `UserViewManager.cs:59` | `UserViewManager.GetUserViews` | DI-résolu (service) |
+| `UserViewManager.cs:299` | `UserViewManager` (méthode latest items) | DI-résolu (service) |
+| `LibraryManager.cs:2080` | `LibraryManager.GetTopParentIdsForQuery` (`this.GetUserRootFolder()`) | DI-résolu (service, méthode interne non-statique) |
+| `PlaylistManager.cs:184` | `PlaylistManager.GetUserPlaylists` | DI-résolu (service) |
+| `LibraryChangedNotifier.cs:312` | `LibraryChangedNotifier` (event handler) | DI-résolu (service) |
+| `TVSeriesManager.cs:89` | `TVSeriesManager` | DI-résolu (service) |
+| `CollectionManager.cs:152` | `CollectionManager.GetCollections` | DI-résolu (service) |
+| `UserViewsController.cs:141` | `UserViewsController` | DI-résolu (contrôleur) |
+| `YearsController.cs:127` | `YearsController` | DI-résolu (contrôleur) |
+| `LibraryController.cs:1003` | `LibraryController` | DI-résolu (contrôleur) |
+| `ItemsController.cs:628` | `ItemsController` | DI-résolu (contrôleur) |
+| `ItemsController.cs:962` | `ItemsController` | DI-résolu (contrôleur) |
+| `UserViewBuilder.cs:70` | `UserViewBuilder.GetUserItems` (switch `CollectionType.folders`) | Mixte — cf. §6 |
+| `UserViewBuilder.cs:130` | `UserViewBuilder.GetUserItems` (branche `default`) | Mixte — cf. §6 |
+| `UserViewBuilder.cs:858` | `UserViewBuilder` (grouping) | Mixte — cf. §6 |
+| `Folder.cs:1497` | `Folder.GetChildren` (`IsPhysicalRoot` → délègue à `LibraryManager.GetUserRootFolder().GetChildren(...)`) | Récursion interne d'entité (via static) |
+| `Folder.cs:1719` | `Folder.GetLinkedChildren(User)` | Récursion interne d'entité (via static) |
+| `BoxSet.cs:135` | `BoxSet.GetChildren` override (`base.GetChildren(...)`) | Récursion interne d'entité |
+| `BoxSet.cs:141` | `BoxSet.GetChildren` override (`base.GetChildren(..., out totalItemCount, ...)`) | Récursion interne d'entité |
+| `BoxSet.cs:239` | `BoxSet.GetLibraryFolderIds(User)` (via static `LibraryManager.GetUserRootFolder()`) | Récursion interne d'entité (via static) |
+| `Playlist.cs:171` | `Playlist.GetChildren` override (`base.GetChildren(...)`) | Récursion interne d'entité |
+
+Total : **12 DI-résolus, 6 récursion interne d'entité, 3 mixtes** (`UserViewBuilder`) = 21.
+
+**3. Inventaire `Folder.GetRecursiveChildren` — 14 sites d'appel bruts hors `Folder.cs` lui-même** (tous overloads confondus, `RecursiveChildren` exclue car sans usage) :
+
+`AlbumMetadataService.cs:61`, `ArtistMetadataService.cs:56`, `MetadataService.cs:404` (base abstraite, `RefreshMetadata`), `SeriesMetadataService.cs:63/114/301`, `MusicManager.cs:50`, `LibraryManager.cs:549`, `PlaylistManager.cs:114`, `ArtistNfoSaver.cs:70` — 9 sites DI-résolus (services `Reefin.Providers`/`Reefin.Server.Core`/`Reefin.XbmcMetadata`, tous construits par DI, tous appellent sur un `item`/`folder` reçu ou résolu via leur propre `libraryManager` injecté). `BoxSet.cs:147` (override `GetRecursiveChildren`, `base.GetRecursiveChildren(...)`) — récursion interne d'entité. `ItemUpdateController.cs:115`, `YearsController.cs:123`, `YearsController.cs:127` — 3 sites DI-résolus (contrôleurs).
+
+Total : 9 + 3 = 12 DI-résolus, 1 récursion interne (BoxSet), 1 site (`YearsController.cs:127`) qui appelle **à la fois** `GetRecursiveChildren` et `GetChildren` sur la même ligne (ternaire `recursive ? ... : ...`) — déjà compté dans les deux inventaires séparément, pas un doublon d'entité.
+
+**4. `Children` (propriété) — hors périmètre exhaustif de cet audit.** Confirmé au §1 : `Children` ne délègue pas à `GetChildren`, c'est une cascade structurellement différente (source `ItemRepository`/DB, pas de `User`/visibilité). Grep `\.Children\b` (hors `LinkedChildren`/`GetChildren`/`ChildrenIds`/`ChildCount`/`tests/`) : **41 occurrences** dans 24 fichiers (`LibraryManager.cs` seul en a 10, plus `ItemUpdateController.cs`, `CollectionFolder.cs`, `BaseItem.cs`, des `ScheduledTasks`, 2 fichiers EF Core de configuration de schéma). Famille distincte, non cartographiée site par site ici — mentionnée pour mémoire, cf. §7 (hors périmètre PR49/PR50, éventuel chantier séparé si besoin identifié).
+
+**5. Inventaire `Season.GetEpisodes` / `Series.GetSeasonEpisodes` / `Series.GetEpisodes`.** Aucune de ces méthodes n'est `virtual`/`override` (contrairement à `GetChildren`) — chaîne de délégation linéaire, pas de hiérarchie de surcharge :
+- `Season.GetEpisodes()` (`Season.cs:225-228`, no-arg) → `GetEpisodes(Series, User, DtoOptions, bool)` (`:210-213`) → `GetEpisodes(Series, User, IEnumerable<Episode>, DtoOptions, bool)` (`:215-223`) → `series.GetSeasonEpisodes(this, user, allSeriesEpisodes, options, shouldIncludeMissingEpisodes)`. `Season.GetEpisodes(User, DtoOptions, bool)` (`:205-208`) délègue à la même chaîne via `Series` (propriété).
+- `Season.GetChildren` override (`Season.cs:230-233`) appelle `GetEpisodes(user, new DtoOptions(true), true)` — **point de jonction entre la cascade `GetChildren` (virtuelle) et la cascade `GetEpisodes`/`GetSeasonEpisodes` (concrète)**, cf. §6.
+- `Series.GetSeasonEpisodes(Season, User, DtoOptions, bool)` (`Series.cs:372-416`) — construit la query, appelle `LibraryManager.GetItemList` ou `ChannelManager.GetChannelItemsInternal` (`SourceType.Channel`), puis délègue à l'overload avec `allSeriesEpisodes`.
+- `Series.GetSeasonEpisodes(Season, User, IEnumerable<BaseItem>, DtoOptions, bool)` (`:418-432`) — **contient l'appel `LibraryManager.Sort(...)` pragmatisé en PR48** (`:430`), seul site d'appel de cette méthode : `Season.cs:222`.
+- `Series.GetEpisodes(User, DtoOptions, bool)` (`Series.cs:273-304`) — boucle sur les `Season` obtenues par `LibraryManager.GetItemList`, appelle `i.GetEpisodes(this, user, allSeriesEpisodes, options, shouldIncludeMissingEpisodes)` pour chacune (`:296`, récursion interne vers `Season.GetEpisodes`).
+
+Appelants de `Season.GetEpisodes`/`Series.GetEpisodes` (grep `\.GetEpisodes\(` repo-entier, 8 sites externes + 1 interne, confirme le chiffre PR43 « 8 appelants ») :
+
+| Fichier:ligne | Méthode appelée | Appelant | Nature |
+|---|---|---|---|
+| `SeriesMetadataService.cs:196` | `Season.GetEpisodes()` (`virtualSeason`) | `SeriesMetadataService` | DI-résolu |
+| `SeriesMetadataService.cs:214` | `Series.GetEpisodes(User,DtoOptions,bool)` | `SeriesMetadataService` | DI-résolu |
+| `SeasonMetadataService.cs:92` | `Season.GetEpisodes()` | `SeasonMetadataService` | DI-résolu |
+| `SessionManager.cs:1395` | `Series.GetEpisodes(User,DtoOptions,bool)` | `SessionManager` | DI-résolu |
+| `TvShowsController.cs:245` | `Season.GetEpisodes(User,DtoOptions,bool)` | `TvShowsController` | DI-résolu |
+| `TvShowsController.cs:261` | `Season.GetEpisodes(User,DtoOptions,bool)` | `TvShowsController` | DI-résolu |
+| `TvShowsController.cs:270` | `Series.GetEpisodes(User,DtoOptions,bool)` | `TvShowsController` | DI-résolu |
+| `Series.cs:296` | `Season.GetEpisodes(Series,User,IEnumerable<Episode>,DtoOptions,bool)` | `Series.GetEpisodes` (elle-même) | Récursion interne d'entité (vers entité sœur) |
+
+Soit **7 DI-résolus, 1 récursion interne**. Auquel s'ajoute le seul appelant de `Series.GetSeasonEpisodes` : `Season.cs:222` (`Season.GetEpisodes` → `series.GetSeasonEpisodes(...)`), récursion interne vers entité sœur — et le point de jonction `Season.GetChildren` → `GetEpisodes` (`Season.cs:232`) noté au-dessus, lui aussi récursion interne (override virtuel appelant une méthode concrète du même type).
+
+**6. Inventaire `BaseItem.GetParent()`/`GetParents()`.** Implémentation confirmée (`BaseItem.cs:1000-1021`) : `GetParent()` lit `ParentId` puis retourne `LibraryManager.GetItemById(parentId)` (static `BaseItem.LibraryManager`) ; `GetParents()` boucle sur `GetParent()` jusqu'à `null`. Grep `\bGetParent(\|\bGetParents(` repo-entier (hors `obj/`/`bin/`), après exclusion de **5 faux positifs `System.IO.Directory.GetParent`** (`TrickplayManager.cs:138/427/621`, `ImageSaver.cs:196`, `ManagedFileSystem.cs:157`) et des 2 lignes de définition (`BaseItem.cs:1000/1011`) et d'un commentaire (`Season.cs:296`) : **47 sites d'appel réels**, répartis en deux familles :
+
+- **26 sites hors `Reefin.Controller/Entities/`** (services/contrôleurs/résolveurs, appelants « DI-résolus » au sens où la classe porteuse est construite par DI, l'item étant reçu en paramètre ou obtenu via un service injecté) : `ItemNamingService.cs:51` (1), `ResolverHelper.cs:39,82` (2 — classe `public static`, méthode utilitaire opérant sur un `item` passé en paramètre, ni service DI ni récursion d'entité), `LibraryManager.cs:357,2335,2378,2628,2707,2755` (6), `EpisodeResolver.cs:50,66` (2), `MovieResolver.cs:219` (1), `PlaylistImageProvider.cs:48` (1), `DtoService.cs:1558` (1), `PlaylistManager.cs:614` (1), `FileRefresher.cs:179` (1), `UserDataChangeNotifier.cs:98` (1), `CollectionImageProvider.cs:72` (1), `RecordingsManager.cs:644` (1), `ItemResolveArgs.cs:139` (1 — classe POCO de contexte de résolution, pas un service DI), `SearchController.cs:265` (1), `LibraryController.cs:196,272,517,532,1002` (5).
+- **21 sites dans `Reefin.Controller/Entities/`** (récursion interne d'entité) : `Book.cs:78`, `CollectionFolder.cs:308`, `Photo.cs:27`, `Video.cs:584,591,649` (3), `Folder.cs:360`, `MusicAlbum.cs:71`, `Season.cs:298` (le lookup `parentPath` legacy documenté PR34/PR35/PR44), `BaseItem.cs:742,1013,1019,1031,1459,1655,1690,1816,1855,2264,2760,2770` (12 — dont `:1013`/`:1019` internes à la définition de `GetParents()` elle-même).
+
+**Constat déterminant pour la frontière (§7) : `GetParent()`/`GetParents()` n'a pas de service cible existant.** Contrairement à `Sort` (→ `IItemSortService`, extrait PR30) ou au naming (→ `IItemNamingService`, PR35), `LibraryManager.GetItemById` fait partie de la famille « Résolution id/path » explicitement listée par PR46/N §2 comme **encore réellement propriétaire de logique**, non extraite (~42 appelants rien que pour `GetItemById`, cf. PR43/§4 « hors de portée d'une extraction leaf »). Qu'un appelant de `GetParent()` soit DI-résolu ou en récursion d'entité ne change donc rien : aucun des 47 sites n'est migrable indépendamment tant que `GetItemById` lui-même reste sur `LibraryManager`.
+
+**7. Dépendances internes de `Folder.GetChildren` et de la cascade `Children`.** Statics/services traversés par la chaîne `GetChildren(User,...)`/`GetRecursiveChildren(User,...)` → `AddChildren` → `AddChildrenFromCollection` :
+- `LibraryManager` (static `BaseItem.LibraryManager`) : `GetUserRootFolder()` (`Folder.cs:1497`, cas `IsPhysicalRoot`), utilisé aussi via `UserViewBuilder.Filter(..., LibraryManager)` (`Folder.cs:1561`, passé en paramètre à une méthode statique).
+- `UserDataManager` (static `BaseItem.UserDataManager`) : passé de la même façon à `UserViewBuilder.Filter(..., UserDataManager, LibraryManager)`.
+- `ItemRepository` (static `BaseItem.ItemRepository`) : uniquement via `Children`/`LoadChildren`/`GetCachedChildren` (§1), pas directement dans `GetChildren(User,...)`.
+- `UserViewBuilder.Filter` (`Reefin.Controller/Entities/UserViewBuilder.cs:458`, `public static`) : méthode statique **DI-propre dans sa signature** (reçoit `libraryManager`/`userDataManager` en paramètres) mais dont l'unique appelant ici (`Folder.AddChildrenFromCollection`) lui passe les statics `BaseItem.LibraryManager`/`BaseItem.UserDataManager` — même pont DI-vers-static que celui déjà documenté PR46/N §3 pour `UserViewBuilder.SortAndPage`.
+- `GetLinkedChildren(user)` (si `includeLinkedChildren`) : `ResolveLinkedChildren` → `LibraryManager.GetItemList` (static, batch lookup) + `GetLinkedChild` (repli par entrée).
+- Cas spécial `UserView.GetChildren` override (`UserView.cs:120-136`) : ne suit **pas** la chaîne `AddChildren` de `Folder` — appelle `GetItemList(query, ChannelManager, CollectionManager, UserViewManager, TVSeriesManager)`, l'overload à 5 paramètres `[Obsolete]` depuis PR28 (pragma local documenté dans le fichier, référence PR49/N déjà posée). C'est ce site qui explique la mention PR43 « mélangeant... `ChannelManager`, `UserViewManager`... » : ces 4 dépendances n'entrent en jeu que pour `UserView`, pas pour `Folder`/`BoxSet`/`Season`/`Series`/`Playlist`.
+- `BoxSet.Sort` (privée, `BoxSet.cs:116-131`) : seule dépendance propre ajoutée par l'override, `LibraryManager.Sort` (pragmatisé PR48).
+
+**8. Frontière — classement des appelants.**
+
+**(a) DI-résolus, migrables vers un futur service applicatif** (ex. étendre `IItemSortService`/nouveau `IFolderChildrenService`, une fois la famille de méthode ciblée choisie au §1) :
+- 12 des 21 sites `GetChildren(User,...)` : `UserViewManager` ×2, `LibraryManager.cs:2080`, `PlaylistManager.cs:184`, `LibraryChangedNotifier.cs:312`, `TVSeriesManager.cs:89`, `CollectionManager.cs:152`, `UserViewsController.cs:141`, `YearsController.cs:127`, `LibraryController.cs:1003`, `ItemsController.cs:628,962`.
+- 12 des 14 sites `GetRecursiveChildren` (tous sauf `BoxSet.cs:147`).
+- 7 des 8 sites `GetEpisodes`/`GetSeasonEpisodes` externes (`SeriesMetadataService` ×2, `SeasonMetadataService`, `SessionManager`, `TvShowsController` ×3).
+
+Ces sites n'ont toutefois **rien à migrer côté `Sort`** : ils appellent `GetChildren`/`GetEpisodes` eux-mêmes, pas `LibraryManager.Sort` directement — leur migration porterait sur le point d'entrée de la cascade (threading d'un futur service au niveau de l'appel), pas sur les 5 pragmas PR48 eux-mêmes, qui vivent tous **à l'intérieur** des méthodes d'entité (§6 rappel : `BoxSet.Sort` privée, `Series.GetSeasonEpisodes`).
+
+**(b) Récursion interne d'entité, nécessitant primitive d'entité ou threading explicite** (patron PR44/`BeforeMetadataRefresh`) :
+- 6 des 21 sites `GetChildren` (`Folder.cs:1497,1719`, `BoxSet.cs:135,141,239`, `Playlist.cs:171`) + `BoxSet.cs:147` (`GetRecursiveChildren`).
+- `Series.cs:296` (`Series.GetEpisodes` → `Season.GetEpisodes`), `Season.cs:222` (`Season.GetEpisodes` → `Series.GetSeasonEpisodes`), `Season.cs:232` (`Season.GetChildren` override → `GetEpisodes`) — ces 3 sites forment la chaîne interne complète qui porte l'appel `Sort` pragmatisé de `Series.cs:429`.
+- Les 2 overrides `GetChildren`/1 override `GetRecursiveChildren` de `BoxSet` qui portent l'appel `Sort` pragmatisé de `BoxSet.cs:128`.
+- 21 sites `GetParent`/`GetParents` internes à `Reefin.Controller/Entities/` (§6) — mais bloqués par un chantier différent (résolution id/path), pas par celui-ci.
+
+**(c) Cas mixtes/bloqués par cycle :**
+- 3 sites `UserViewBuilder.cs:70,130,858` : classe à signature DI-propre (`_libraryManager`/`_userDataManager` injectés au constructeur), mais **unique site d'instanciation** (`UserView.cs:115`, `new UserViewBuilder(userViewManager, LibraryManager, Logger, UserDataManager, tvSeriesManager, channelManager, collectionManager)`) thread les statics `BaseItem.LibraryManager`/`UserDataManager` en arguments — même pont DI-vers-static que `UserViewBuilder.SortAndPage` (PR46/N §3), pas un vrai appelant DI pur.
+- `Folder.cs:1561` (`UserViewBuilder.Filter(..., UserDataManager, LibraryManager)`) : même pont, méthode statique cette fois.
+- `UserView.GetChildren` (`UserView.cs:132`) : passe par l'overload `[Obsolete]` à 5 paramètres de `GetItemList`, lui-même dépendant de 4 statics (`ChannelManager`, `CollectionManager`, `UserViewManager`, `TVSeriesManager`) — cascade déjà pragmatisée PR28, hors périmètre Sort mais structurellement du même type de blocage.
+- 26 sites `GetParent`/`GetParents` hors `Entities/` (§6) : DI-résolus en apparence, mais bloqués par la même cause que les 21 sites internes — `GetItemById` non extrait. Traiter comme un seul bloc « en attente du chantier résolution id/path », indépendant de la présente cascade `Sort`.
+
+**9. Recommandation PR50 — périmètre unique.**
+
+Trois candidats évalués (mandat de la tâche) :
+
+- **Appel contrôleur/API isolé : écarté.** Aucun des 5 pragmas PR48 ne vit dans un contrôleur — ils sont tous dans des méthodes d'entité (`BaseItem.GetThemeSongs`/`GetThemeVideos`, `BoxSet.Sort`, `Series.GetSeasonEpisodes`, `UserViewBuilder.SortAndPage`). Une tranche « contrôleur seul » ne retirerait aucun pragma : rejetée, pas seulement reportée.
+- **`BoxSet.Sort` : écarté pour PR50, pas rejeté.** Son point d'entrée est `Folder.GetChildren` (`public virtual`), avec 3 overrides porteurs (`GetChildren` ×2 + `GetRecursiveChildren`) et 21+14 sites d'appel bruts mélangeant DI/récursion/pont static (§8). Threader un service en paramètre obligerait à toucher la signature virtuelle *ou* à dupliquer un chemin non-thread able pour les 6 sites de récursion interne (`Folder.cs:1497/1719`, `BoxSet.cs:135/141/239`, `Playlist.cs:171`) — même ampleur que le threading `channelManager` (PR11-13) mais sur une hiérarchie encore plus large (5 sous-classes overridant `GetChildren` : `UserView`, `BoxSet`, `Season`, `Series`, plus `Playlist` qui appelle `base.GetChildren`). Trop large pour une tranche bornée.
+- **`Series.GetSeasonEpisodes`/chaîne `GetEpisodes` : retenu.** Aucune des méthodes de la chaîne (`Series.GetSeasonEpisodes` ×2, `Series.GetEpisodes`, `Season.GetEpisodes` ×4) n'est `virtual`/`override` — délégation linéaire, pas de hiérarchie à toucher. 8 appelants externes, dont 7 DI-résolus sans fan-out de constructeur base (`SeriesMetadataService`/`SeasonMetadataService` n'ont pas besoin de passer `IItemSortService` à `MetadataService<T,U>` — le service ne serait consommé que par leur propre code, pas par la classe de base abstraite, donc pas de cascade sur les 26 sous-classes comme en PR44). **Point de vigilance identifié (§5/§8) : `Season.GetChildren` (override virtuel) rappelle `GetEpisodes` en interne** (`Season.cs:232`) — si la chaîne `GetEpisodes`/`GetSeasonEpisodes` reçoit `IItemSortService` en paramètre explicite, ce site n'a pas de service à fournir (signature `GetChildren` fixée par le contrat virtuel `Folder`). PR50 doit donc **explicitement laisser ce site sur le static/pragma** (même choix que PR43/PR48 pour `BoxSet.Sort`, symétrique) plutôt que de forcer l'ouverture de la cascade `GetChildren` — cohérent avec le fait que `Season.GetChildren` reste, par construction, hors du périmètre DI de cette tranche.
+
+**Couverture de tests : nulle pour les 3 candidats.** Grep `BoxSet`/`GetSeasonEpisodes`/`GetEpisodes`/`GetChildren`/`GetRecursiveChildren`/`GetParent` dans `tests/` : aucun test n'exerce directement `Folder.GetChildren`, `Season.GetEpisodes`, `Series.GetSeasonEpisodes`/`GetEpisodes`, ni `BaseItem.GetParent`/`GetParents` (les seuls tests `BoxSet` dans `tests/Reefin.Controller.Tests/Entities/FolderTests.cs` et `tests/Reefin.Server.Implementations.Tests/Library/ItemQueryServiceTests.cs` couvrent `CollapseBoxSetItems` dans `GetItemsInternal`, pas `BoxSet.Sort`/`GetChildren`). Le critère « couverture existante » ne départage donc pas les candidats — PR50 devra ajouter un test de caractérisation avant de toucher les signatures, quel que soit le périmètre retenu.
+
+**Périmètre exact recommandé pour PR50 :** threading `IItemSortService` en paramètre explicite (patron b1, PR44) à travers la chaîne concrète :
+- `Series.GetSeasonEpisodes(Season, User, DtoOptions, bool)` (`TV/Series.cs:372`) et `Series.GetSeasonEpisodes(Season, User, IEnumerable<BaseItem>, DtoOptions, bool)` (`:418`, site du `LibraryManager.Sort` pragmatisé `:429-431`).
+- `Series.GetEpisodes(User, DtoOptions, bool)` (`TV/Series.cs:273`).
+- `Season.GetEpisodes(User, DtoOptions, bool)` (`TV/Season.cs:205`), `GetEpisodes(Series, User, DtoOptions, bool)` (`:210`), `GetEpisodes(Series, User, IEnumerable<Episode>, DtoOptions, bool)` (`:215`).
+- Câblage DI ajouté aux 4 classes qui portent les 7 appelants DI-résolus : `SeriesMetadataService`, `SeasonMetadataService` (constructeur propre, pas de fan-out sur `MetadataService<T,U>` ni sur les 24 autres sous-classes), `SessionManager`, `TvShowsController` (nouveau paramètre constructeur `IItemSortService`, même patron que `LibraryController` en PR45).
+- `Season.GetEpisodes()` (no-arg, `:225`) et `Season.GetChildren` override (`:230-233`) restent sur le static `BaseItem.LibraryManager.Sort` via un overload sans le nouveau paramètre (repli explicite, documenté, symétrique au traitement `BoxSet.Sort`/`GetChildren` laissé en l'état) — même sort que `Series.cs:296` (récursion interne `Series.GetEpisodes` → `Season.GetEpisodes`), qui reste elle aussi sur l'overload sans service tant que `Series.GetEpisodes` n'est pas elle-même migrée côté appelant (question ouverte pour une éventuelle tranche PR51, hors périmètre ici).
+- Ajout d'un test de caractérisation (`Reefin.Controller.Tests` ou `Reefin.Providers.Tests`) sur `Series.GetSeasonEpisodes`/`Season.GetEpisodes` avant modification de signature, aucun test existant ne les couvrant.
+
+Fichiers touchés estimés : `TV/Series.cs`, `TV/Season.cs`, `Providers/TV/SeriesMetadataService.cs`, `Providers/TV/SeasonMetadataService.cs`, `Server.Core/Session/SessionManager.cs`, `Api/Controllers/TvShowsController.cs`, + 1 fichier de test nouveau/étendu — 7 fichiers, périmètre du même ordre que PR45 (relocalisation `GetThemeSongs`/`GetThemeVideos`), nettement plus borné que PR44 (44 fichiers) ou qu'un futur PR pour `BoxSet.Sort`/`Folder.GetChildren` (21+14 sites, 5 sous-classes `GetChildren`). `BoxSet.Sort`, la propriété `Children`/`RecursiveChildren`, `Season.GetParent()`/le lookup `parentPath`, et les 47 sites `GetParent`/`GetParents` restent hors périmètre, rattachés respectivement à un futur chantier `Folder.GetChildren` (cascade virtuelle complète) et au chantier « résolution id/path » (`GetItemById`, ~42+ appelants, non commencé).
+
 ## Ordre recommandé (reprend celui du plan, réordonné sur le point 3 ci-dessus)
 1. Sessions de lecture + protocole capacités v2 (point 1-2) — priorité confirmée, zone la mieux comprise.
 2. Suppression `SetStaticProperties` / statics `BaseItem` (point 4) **avant** découpage `LibraryManager`. Post-revue PR14 (2026-07-08) : stabiliser (tests ciblés) + esquisser les services de remplacement (`ItemQueryService` et consorts) plutôt que continuer à traquer chaque static un par un — voir § "Revue externe post-PR14".
