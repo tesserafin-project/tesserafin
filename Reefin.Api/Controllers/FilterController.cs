@@ -27,6 +27,7 @@ public class FilterController : BaseReefinApiController
     private readonly ILibraryManager _libraryManager;
     private readonly IUserManager _userManager;
     private readonly ILocalizationManager _localization;
+    private readonly IMediaStreamLanguageService _mediaStreamLanguageService;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="FilterController"/> class.
@@ -34,11 +35,17 @@ public class FilterController : BaseReefinApiController
     /// <param name="libraryManager">Instance of the <see cref="ILibraryManager"/> interface.</param>
     /// <param name="userManager">Instance of the <see cref="IUserManager"/> interface.</param>
     /// <param name="localization">Instance of the <see cref="ILocalizationManager"/> interface.</param>
-    public FilterController(ILibraryManager libraryManager, IUserManager userManager, ILocalizationManager localization)
+    /// <param name="mediaStreamLanguageService">Instance of the <see cref="IMediaStreamLanguageService"/> interface.</param>
+    public FilterController(
+        ILibraryManager libraryManager,
+        IUserManager userManager,
+        ILocalizationManager localization,
+        IMediaStreamLanguageService mediaStreamLanguageService)
     {
         _libraryManager = libraryManager;
         _userManager = userManager;
         _localization = localization;
+        _mediaStreamLanguageService = mediaStreamLanguageService;
     }
 
     /// <summary>
@@ -190,7 +197,7 @@ public class FilterController : BaseReefinApiController
 
         if (includeItemTypes.Contains(BaseItemKind.Movie) || includeItemTypes.Contains(BaseItemKind.Series))
         {
-            filters.AudioLanguages = _libraryManager
+            filters.AudioLanguages = _mediaStreamLanguageService
                 .GetMediaStreamLanguages(MediaStreamType.Audio)
                 .Select(language =>
                 {
@@ -203,7 +210,7 @@ public class FilterController : BaseReefinApiController
                 })
                 .OrderBy(l => l.Name)
                 .ToArray();
-            filters.SubtitleLanguages = _libraryManager
+            filters.SubtitleLanguages = _mediaStreamLanguageService
                 .GetMediaStreamLanguages(MediaStreamType.Subtitle)
                 .Select(language =>
                 {
