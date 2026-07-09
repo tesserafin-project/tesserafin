@@ -38,7 +38,12 @@ namespace Reefin.Server.Core.Library
         {
             if (!CanUseRawQueryItemsFastPath(folder, query))
             {
+                // Documented legitimate caller of the obsolete 5-parameter overload: this service
+                // is the migration target and owns the full-pipeline fallback path — see
+                // docs/major-rewrite-plan-v13.md § PR28/N.
+#pragma warning disable CS0618
                 return folder.GetItems(query, _channelManager, _collectionManager, _userViewManager, _tvSeriesManager);
+#pragma warning restore CS0618
             }
 
             return PostFilterAndSort(folder, folder.GetRawQueryItems(query), query);
@@ -48,7 +53,11 @@ namespace Reefin.Server.Core.Library
         {
             if (!CanUseRawQueryItemsFastPath(folder, query))
             {
+                // Documented legitimate caller of the obsolete 5-parameter overload, same
+                // rationale as GetItems above — see docs/major-rewrite-plan-v13.md § PR28/N.
+#pragma warning disable CS0618
                 return folder.GetItemList(query, _channelManager, _collectionManager, _userViewManager, _tvSeriesManager);
+#pragma warning restore CS0618
             }
 
             // Mirrors Folder.GetItemList's own unconditional mutation before it delegates further.

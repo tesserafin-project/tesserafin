@@ -701,6 +701,10 @@ public sealed class RecordingsManager : IRecordingsManager, IDisposable
             // IRecordingsManager -> any of them would be circular. Fine to fall back to the statics:
             // librarySeries is a real library Series (SourceType never Channel), so none of the
             // branches these feed are reachable in this call path.
+            // Documented legitimate caller of the obsolete 5-parameter overload (the same DI cycle
+            // blocks IItemQueryService too, via its IChannelManager/IUserViewManager dependencies)
+            // — see docs/major-rewrite-plan-v13.md § PR28/N.
+#pragma warning disable CS0618
             var episodesToDelete = librarySeries.GetItemList(
                     new InternalItemsQuery
                     {
@@ -714,6 +718,7 @@ public sealed class RecordingsManager : IRecordingsManager, IDisposable
                     Folder.CollectionManager,
                     Folder.UserViewManager,
                     UserView.TVSeriesManager)
+#pragma warning restore CS0618
                 .Where(i => i.IsFileProtocol && File.Exists(i.Path))
                 .Skip(seriesTimer.KeepUpTo - 1);
 

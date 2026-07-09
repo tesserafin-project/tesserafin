@@ -68,6 +68,11 @@ namespace Reefin.Server.Core.Library
                 // Playlist and BoxSet libraries require special handling because the folder only references linked items
                 if (folderViewType == CollectionType.playlists || folderViewType == CollectionType.boxsets)
                 {
+                    // Documented legitimate caller of the obsolete 5-parameter overload:
+                    // this class implements IUserViewManager and passes itself (`this`), so it
+                    // cannot inject IItemQueryService without a DI self-cycle — see
+                    // docs/major-rewrite-plan-v13.md § PR28/N (and § PR12/N for the self-reference).
+#pragma warning disable CS0618
                     var items = folder.GetItemList(
                         new InternalItemsQuery(user)
                         {
@@ -77,6 +82,7 @@ namespace Reefin.Server.Core.Library
                         _collectionManager,
                         this,
                         _tvSeriesManager);
+#pragma warning restore CS0618
 
                     if (!items.Any(item => item.IsVisible(user)))
                     {

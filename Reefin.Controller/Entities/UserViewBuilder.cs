@@ -130,7 +130,12 @@ namespace Reefin.Controller.Entities
                             return GetResult(GetMediaFolders(user).OfType<Folder>().SelectMany(i => i.GetChildren(user, true)), query);
                         }
 
+                        // Documented legitimate caller of the obsolete 5-parameter overload:
+                        // clean relay of the managers this builder received from UserView's
+                        // GetItemsInternal override — see docs/major-rewrite-plan-v13.md § PR28/N.
+#pragma warning disable CS0618
                         return queryParent.GetItems(query, _channelManager, _collectionManager, _userViewManager, _tvSeriesManager);
+#pragma warning restore CS0618
                     }
             }
         }

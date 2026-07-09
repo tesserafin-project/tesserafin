@@ -99,7 +99,11 @@ public class ItemQueryServiceTests
         BaseItem.LibraryManager = new Mock<ILibraryManager>().Object;
         BaseItem.UserDataManager = new Mock<IUserDataManager>().Object;
 
+        // Parity test deliberately compares against the obsolete 5-parameter overload — see
+        // docs/major-rewrite-plan-v13.md § PR28/N.
+#pragma warning disable CS0618
         var expected = folder.GetItems(new InternalItemsQuery(), channelManager.Object, collectionManager.Object, userViewManager.Object, tvSeriesManager.Object);
+#pragma warning restore CS0618
         var actual = service.PostFilterAndSort(folder, folder.Children, new InternalItemsQuery());
 
         Assert.Equal(expected.Items, actual.Items);
@@ -120,7 +124,11 @@ public class ItemQueryServiceTests
 
         InternalItemsQuery MakeQuery() => new() { User = user, CollapseBoxSetItems = false };
 
+        // Parity test deliberately compares against the obsolete 5-parameter overload — see
+        // docs/major-rewrite-plan-v13.md § PR28/N.
+#pragma warning disable CS0618
         var expected = folder.GetItems(MakeQuery(), channelManager.Object, collectionManager.Object, userViewManager.Object, tvSeriesManager.Object);
+#pragma warning restore CS0618
         var actual = service.PostFilterAndSort(folder, folder.Children, MakeQuery());
 
         Assert.Equal(expected.Items, actual.Items);
@@ -150,7 +158,11 @@ public class ItemQueryServiceTests
 
         InternalItemsQuery MakeQuery() => new() { User = user, CollapseBoxSetItems = true };
 
+        // Parity test deliberately compares against the obsolete 5-parameter overload — see
+        // docs/major-rewrite-plan-v13.md § PR28/N.
+#pragma warning disable CS0618
         var expected = folder.GetItems(MakeQuery(), channelManager.Object, collectionManager.Object, userViewManager.Object, tvSeriesManager.Object);
+#pragma warning restore CS0618
         var actual = service.PostFilterAndSort(folder, folder.Children, MakeQuery());
 
         Assert.Equal(expected.Items, actual.Items);
@@ -193,7 +205,11 @@ public class ItemQueryServiceTests
             NameLessThan = nameLessThan,
         };
 
+        // Parity test deliberately compares against the obsolete 5-parameter overload — see
+        // docs/major-rewrite-plan-v13.md § PR28/N.
+#pragma warning disable CS0618
         var expected = folder.GetItems(MakeQuery(), channelManager.Object, collectionManager.Object, userViewManager.Object, tvSeriesManager.Object);
+#pragma warning restore CS0618
         var actual = service.PostFilterAndSort(folder, folder.Children, MakeQuery());
 
         Assert.Equal(expected.Items.Select(i => i.Name), actual.Items.Select(i => i.Name));

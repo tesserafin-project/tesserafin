@@ -126,7 +126,11 @@ namespace Reefin.Controller.Entities
             // GetChildren isn't part of the GetItemsInternal/GetItems/GetItemList chain the
             // channelManager parameter was threaded through (out of scope: GetChildren is a much
             // wider virtual with many more overrides/callers) — falls back to the statics here.
+            // Documented legitimate caller of the obsolete 5-parameter overload — see
+            // docs/major-rewrite-plan-v13.md § PR28/N.
+#pragma warning disable CS0618
             var result = GetItemList(query, ChannelManager, CollectionManager, UserViewManager, TVSeriesManager);
+#pragma warning restore CS0618
 
             return result.ToList();
         }
@@ -153,7 +157,11 @@ namespace Reefin.Controller.Entities
 
             // Same scope boundary as GetChildren above: GetRecursiveChildren isn't part of the
             // threaded chain, falls back to the statics.
+            // Documented legitimate caller of the obsolete 5-parameter overload — see
+            // docs/major-rewrite-plan-v13.md § PR28/N.
+#pragma warning disable CS0618
             var data = GetItemList(query, ChannelManager, CollectionManager, UserViewManager, TVSeriesManager);
+#pragma warning restore CS0618
             totalCount = data.Count;
 
             return data;

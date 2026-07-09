@@ -17,6 +17,9 @@ using Xunit;
 
 namespace Reefin.Controller.Tests.Entities;
 
+// This class deliberately tests the obsolete 5-parameter Folder.GetItems/GetItemList overloads
+// (documented legitimate caller) — see docs/major-rewrite-plan-v13.md § PR28/N.
+#pragma warning disable CS0618
 [Collection(BaseItemStaticStateFixture.Name)]
 public class FolderTests
 {
@@ -193,3 +196,4 @@ public class FolderTests
         tvSeriesManager.VerifyNoOtherCalls();
     }
 }
+#pragma warning restore CS0618

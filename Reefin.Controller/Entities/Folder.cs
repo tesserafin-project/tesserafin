@@ -889,6 +889,9 @@ namespace Reefin.Controller.Entities
             // GetChildCount isn't part of the GetItemsInternal/GetItems/GetItemList chain the
             // channelManager parameter was threaded through (out of scope: a much wider virtual
             // with many more overrides/callers) — falls back to the static here.
+            // Documented legitimate caller of the obsolete 5-parameter overload — see
+            // docs/major-rewrite-plan-v13.md § PR28/N.
+#pragma warning disable CS0618
             var result = GetItems(
                 new InternalItemsQuery(user)
                 {
@@ -904,6 +907,7 @@ namespace Reefin.Controller.Entities
                 CollectionManager,
                 UserViewManager,
                 UserView.TVSeriesManager);
+#pragma warning restore CS0618
 
             return result.TotalRecordCount;
         }
@@ -911,6 +915,9 @@ namespace Reefin.Controller.Entities
         public virtual int GetRecursiveChildCount(User user)
         {
             // Same scope boundary as GetChildCount above: falls back to the static.
+            // Documented legitimate caller of the obsolete 5-parameter overload — see
+            // docs/major-rewrite-plan-v13.md § PR28/N.
+#pragma warning disable CS0618
             return GetItems(
                 new InternalItemsQuery(user)
                 {
@@ -928,6 +935,7 @@ namespace Reefin.Controller.Entities
                 CollectionManager,
                 UserViewManager,
                 UserView.TVSeriesManager).TotalRecordCount;
+#pragma warning restore CS0618
         }
 
         public QueryResult<BaseItem> QueryRecursive(InternalItemsQuery query)
@@ -1007,6 +1015,13 @@ namespace Reefin.Controller.Entities
             return items.OrderBy(i => Array.IndexOf(query.ItemIds, i.Id)).ToArray();
         }
 
+        // PR28/N (major-rewrite-plan-v13.md): the 5-parameter signature was an intermediate
+        // migration step (GetItemsInternal cluster, PR11/PR12), not a stable API. Marked obsolete
+        // (warning) so no new application consumer picks it up; the remaining documented callers
+        // (internal fallback sites here and in UserView, UserViewBuilder's relay, ItemQueryService's
+        // own fallback path, UserViewManager's self-reference, RecordingsManager's DI-cycle
+        // fallback) suppress CS0618 locally with a pointer back to that doc section.
+        [Obsolete("Application code should use IItemQueryService instead of calling Folder.GetItems/GetItemList directly. See docs/major-rewrite-plan-v13.md § PR28/N.")]
         public QueryResult<BaseItem> GetItems(InternalItemsQuery query, IChannelManager channelManager, ICollectionManager collectionManager, IUserViewManager userViewManager, ITVSeriesManager tvSeriesManager)
         {
             if (query.ItemIds.Length > 0)
@@ -1024,6 +1039,8 @@ namespace Reefin.Controller.Entities
             return GetItemsInternal(query, channelManager, collectionManager, userViewManager, tvSeriesManager);
         }
 
+        // PR28/N: same deprecation rationale as GetItems above.
+        [Obsolete("Application code should use IItemQueryService instead of calling Folder.GetItems/GetItemList directly. See docs/major-rewrite-plan-v13.md § PR28/N.")]
         public IReadOnlyList<BaseItem> GetItemList(InternalItemsQuery query, IChannelManager channelManager, ICollectionManager collectionManager, IUserViewManager userViewManager, ITVSeriesManager tvSeriesManager)
         {
             query.EnableTotalRecordCount = false;
@@ -1922,7 +1939,11 @@ namespace Reefin.Controller.Entities
             // MarkPlayed isn't part of the GetItemsInternal/GetItems/GetItemList chain the
             // channelManager parameter was threaded through (out of scope: a much wider virtual
             // with many more overrides/callers) — falls back to the statics here.
+            // Documented legitimate caller of the obsolete 5-parameter overload — see
+            // docs/major-rewrite-plan-v13.md § PR28/N.
+#pragma warning disable CS0618
             var itemsResult = GetItemList(query, ChannelManager, CollectionManager, UserViewManager, UserView.TVSeriesManager);
+#pragma warning restore CS0618
 
             // Sweep through recursively and update status
             foreach (var item in itemsResult)
@@ -1948,6 +1969,9 @@ namespace Reefin.Controller.Entities
         public override void MarkUnplayed(User user)
         {
             // Same scope boundary as MarkPlayed above: falls back to the statics.
+            // Documented legitimate caller of the obsolete 5-parameter overload — see
+            // docs/major-rewrite-plan-v13.md § PR28/N.
+#pragma warning disable CS0618
             var itemsResult = GetItemList(
                 new InternalItemsQuery
                 {
@@ -1960,6 +1984,7 @@ namespace Reefin.Controller.Entities
                 CollectionManager,
                 UserViewManager,
                 UserView.TVSeriesManager);
+#pragma warning restore CS0618
 
             // Sweep through recursively and update status
             foreach (var item in itemsResult)
