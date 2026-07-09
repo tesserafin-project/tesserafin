@@ -691,6 +691,14 @@ Call sites non-test vérifiés : `ParseName` a 7 consommateurs (`Trailer`, `Movi
 
 Verdict : extraction sûre si l'interface vit côté `Reefin.Controller` (ex. `IItemNamingService`, namespace à choisir près de `Library` ou `Resolvers`) et l'implémentation côté `Reefin.Server.Core`, avec unique dépendance `NamingOptions`. `LibraryManager` garde les trois méthodes publiques `ILibraryManager` et délègue ; aucun nouveau cycle possible car le service ne dépend ni de `ILibraryManager`, ni des repositories, ni des `Lazy<T>`. Tests recommandés pour PR35 : tests unitaires dédiés du service pour `ParseName`, un cas `FillMissingEpisodeNumbersFromPath`, et un cas `GetSeasonNumberFromPath(path, parentPath)` ; build frais + intégration pour confirmer la DI.
 
+### PR35/N — `IItemNamingService`, extraction leaf naming vidéo/TV (2026-07-09)
+
+Extraction appliquée conformément à l'audit PR34. `IItemNamingService` (`Reefin.Controller/Library/IItemNamingService.cs`) expose la frontière pure naming : `ParseName(string)`, `FillMissingEpisodeNumbersFromPath(Episode, bool)` et `GetSeasonNumberFromPath(string, string? parentPath)`. `ItemNamingService` (`Reefin.Server.Core/Library/ItemNamingService.cs`) reprend la logique extraite de `LibraryManager` avec une seule dépendance constructeur, `NamingOptions`.
+
+`LibraryManager` conserve l'API publique `ILibraryManager` intacte et délègue : `ParseName` et `FillMissingEpisodeNumbersFromPath` appellent directement `_itemNamingService`, tandis que `GetSeasonNumberFromPath(string, Guid?)` garde uniquement le lookup legacy `parentId -> parentPath` via `GetItemById`, puis délègue au service. Enregistrement DI ajouté (`IItemNamingService -> ItemNamingService`) à côté des autres services item déjà extraits. Aucun consommateur externe migré dans ce PR : les entités `Controller` restent sur `BaseItem.LibraryManager`, et les providers seront le prochain périmètre bas-risque.
+
+Tests dédiés ajoutés dans `tests/Reefin.Server.Implementations.Tests/Library/ItemNamingServiceTests.cs` : nettoyage nom+année (`ParseName`), parsing de saison avec parent path, et remplissage saison/épisode depuis un chemin `S01E02` (avec le static legacy `BaseItem.MediaSourceManager` mocké uniquement pour `Episode.IsFileProtocol`). Vérifications : `ItemNamingServiceTests` 3/3, build frais solution 0 erreur, intégration 103/106 (3 ignorés).
+
 ## Ordre recommandé (reprend celui du plan, réordonné sur le point 3 ci-dessus)
 1. Sessions de lecture + protocole capacités v2 (point 1-2) — priorité confirmée, zone la mieux comprise.
 2. Suppression `SetStaticProperties` / statics `BaseItem` (point 4) **avant** découpage `LibraryManager`. Post-revue PR14 (2026-07-08) : stabiliser (tests ciblés) + esquisser les services de remplacement (`ItemQueryService` et consorts) plutôt que continuer à traquer chaque static un par un — voir § "Revue externe post-PR14".
