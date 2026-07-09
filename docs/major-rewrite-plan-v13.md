@@ -671,6 +671,26 @@ Tests adaptés dans `ItemQueryServiceTests` : le helper central construit/inject
 
 Vérifications : `ItemQueryServiceTests` ciblés 13/13, build frais solution 0 erreur, intégration 103/106 (3 ignorés). Le conteneur DI réel confirme l'absence de cycle introduit par l'injection.
 
+### PR34/N — audit prochain leaf `LibraryManager` après le tri : naming vidéo/TV (2026-07-09)
+
+Objectif : choisir la prochaine extraction bornée après `IItemSortService`, sans retomber dans les familles rejetées en PR29 (résolution d'items, virtual folders, scan/refresh, alternate versions). Audit limité aux méthodes restantes qui ont peu de dépendances et peu d'appelants externes.
+
+Mauvais candidats immédiats :
+
+- `GetPeople`/`GetPeopleItems`/`UpdatePeople` : volume raisonnable, mais pas leaf. `GetPeopleItems` rappelle `GetPerson`, et `UpdatePeopleAsync` appelle `SavePeopleMetadataAsync`, qui peut créer des `Person`, appeler `CreateItems`, `RunMetadataSavers`, `GetItemByNameId` et toucher le filesystem. Extraction possible plus tard, mais pas comme deuxième preuve de découpage.
+- `GetQueryFiltersLegacy` : un seul appelant API, mais dépend de `AddUserToQuery`/`SetTopParentOrAncestorIds`, donc de `UserViewManager`, `GetItemById`, `GetTopParentIdsForQuery` et des règles d'accès utilisateur. Ce n'est pas un leaf ; il appartient plutôt à une future extraction query/access-policy plus large.
+- `GetMediaStreamLanguages` : vrai leaf (`IMediaStreamRepository` seulement) et seulement deux appels depuis `FilterController`, mais extraction seule trop cosmétique pour justifier une tranche. À garder comme opportunité si un service filtres/metadata existe déjà plus tard.
+
+Candidat retenu pour PR35 : **naming vidéo/TV** autour de trois méthodes aujourd'hui exposées par `ILibraryManager` :
+
+- `ParseName(string)` (L3177-3187) : pur wrapper de `VideoResolver.CleanDateTime`/`TryCleanString`, dépend seulement de `NamingOptions`.
+- `FillMissingEpisodeNumbersFromPath(Episode, bool)` (L3052-3175) : logique locale de parsing via `EpisodeResolver(_namingOptions)`, mutation de l'`Episode` fourni, aucune lecture repository/cache/scan/provider.
+- `GetSeasonNumberFromPath(string, Guid?)` (L3045-3049) : seule partie non-leaf actuelle = résolution du `parentId` en `parentPath` via `GetItemById`. La frontière saine est donc : `LibraryManager.GetSeasonNumberFromPath(path, parentId)` conserve ce lookup legacy, puis délègue à un service `GetSeasonNumberFromPath(path, parentPath)` purement naming.
+
+Call sites non-test vérifiés : `ParseName` a 7 consommateurs (`Trailer`, `Movie`, `MusicVideo`, `Series`, 4 providers externes Tmdb/Omdb/BoxSet) ; `FillMissingEpisodeNumbersFromPath` a 2 consommateurs (`Episode`, `SeriesMetadataService`) ; `GetSeasonNumberFromPath` a 1 consommateur (`Season`). Les entités `Controller` continueront provisoirement à passer par `BaseItem.LibraryManager`/`ILibraryManager` comme pour le tri côté `BaseItem`/`Series`/`BoxSet` après PR30. Les providers sont des candidats bas-risque à migrer ensuite vers le nouveau service, car ils sont déjà DI-résolus et ne sont pas des dépendances de `LibraryManager`.
+
+Verdict : extraction sûre si l'interface vit côté `Reefin.Controller` (ex. `IItemNamingService`, namespace à choisir près de `Library` ou `Resolvers`) et l'implémentation côté `Reefin.Server.Core`, avec unique dépendance `NamingOptions`. `LibraryManager` garde les trois méthodes publiques `ILibraryManager` et délègue ; aucun nouveau cycle possible car le service ne dépend ni de `ILibraryManager`, ni des repositories, ni des `Lazy<T>`. Tests recommandés pour PR35 : tests unitaires dédiés du service pour `ParseName`, un cas `FillMissingEpisodeNumbersFromPath`, et un cas `GetSeasonNumberFromPath(path, parentPath)` ; build frais + intégration pour confirmer la DI.
+
 ## Ordre recommandé (reprend celui du plan, réordonné sur le point 3 ci-dessus)
 1. Sessions de lecture + protocole capacités v2 (point 1-2) — priorité confirmée, zone la mieux comprise.
 2. Suppression `SetStaticProperties` / statics `BaseItem` (point 4) **avant** découpage `LibraryManager`. Post-revue PR14 (2026-07-08) : stabiliser (tests ciblés) + esquisser les services de remplacement (`ItemQueryService` et consorts) plutôt que continuer à traquer chaque static un par un — voir § "Revue externe post-PR14".
