@@ -10,6 +10,7 @@ using Reefin.Controller.Dto;
 using Reefin.Controller.Entities;
 using Reefin.Controller.Library;
 using Reefin.Controller.MediaSegments;
+using Reefin.Controller.Sorting;
 using Reefin.Controller.TV;
 using Reefin.Data;
 using Reefin.Data.Enums;
@@ -30,6 +31,7 @@ namespace Reefin.Server.Core.TV
         private readonly IMediaSourceManager _mediaSourceManager;
         private readonly IMediaSegmentManager _mediaSegmentManager;
         private readonly IChannelManager _channelManager;
+        private readonly IItemSortService _itemSortService;
 
         public TVSeriesManager(
             IUserDataManager userDataManager,
@@ -37,7 +39,8 @@ namespace Reefin.Server.Core.TV
             IServerConfigurationManager configurationManager,
             IMediaSourceManager mediaSourceManager,
             IMediaSegmentManager mediaSegmentManager,
-            IChannelManager channelManager)
+            IChannelManager channelManager,
+            IItemSortService itemSortService)
         {
             _userDataManager = userDataManager;
             _libraryManager = libraryManager;
@@ -45,6 +48,7 @@ namespace Reefin.Server.Core.TV
             _mediaSourceManager = mediaSourceManager;
             _mediaSegmentManager = mediaSegmentManager;
             _channelManager = channelManager;
+            _itemSortService = itemSortService;
         }
 
         public QueryResult<BaseItem> GetNextUp(NextUpQuery query, DtoOptions options)
@@ -221,7 +225,7 @@ namespace Reefin.Server.Core.TV
 
                 if (consideredEpisodes.Count > 0)
                 {
-                    var sortedEpisodes = _libraryManager.Sort(consideredEpisodes, user, [(ItemSortBy.AiredEpisodeOrder, SortOrder.Ascending)])
+                    var sortedEpisodes = _itemSortService.Sort(consideredEpisodes, user, [(ItemSortBy.AiredEpisodeOrder, SortOrder.Ascending)])
                         .Cast<Episode>();
 
                     if (lastWatchedEpisode is not null)

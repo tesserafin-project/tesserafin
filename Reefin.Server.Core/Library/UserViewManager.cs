@@ -13,6 +13,7 @@ using Reefin.Controller.Dto;
 using Reefin.Controller.Entities;
 using Reefin.Controller.Library;
 using Reefin.Controller.LiveTv;
+using Reefin.Controller.Sorting;
 using Reefin.Controller.TV;
 using Reefin.Data;
 using Reefin.Data.Enums;
@@ -36,8 +37,9 @@ namespace Reefin.Server.Core.Library
         private readonly IServerConfigurationManager _config;
         private readonly ICollectionManager _collectionManager;
         private readonly ITVSeriesManager _tvSeriesManager;
+        private readonly IItemSortService _itemSortService;
 
-        public UserViewManager(ILibraryManager libraryManager, ILocalizationManager localizationManager, IChannelManager channelManager, ILiveTvManager liveTvManager, IServerConfigurationManager config, ICollectionManager collectionManager, ITVSeriesManager tvSeriesManager)
+        public UserViewManager(ILibraryManager libraryManager, ILocalizationManager localizationManager, IChannelManager channelManager, ILiveTvManager liveTvManager, IServerConfigurationManager config, ICollectionManager collectionManager, ITVSeriesManager tvSeriesManager, IItemSortService itemSortService)
         {
             _libraryManager = libraryManager;
             _localizationManager = localizationManager;
@@ -46,6 +48,7 @@ namespace Reefin.Server.Core.Library
             _config = config;
             _collectionManager = collectionManager;
             _tvSeriesManager = tvSeriesManager;
+            _itemSortService = itemSortService;
         }
 
         public Folder[] GetUserViews(UserViewQuery query)
@@ -155,7 +158,7 @@ namespace Reefin.Server.Core.Library
                 list = list.Where(i => !user.GetPreferenceValues<Guid>(PreferenceKind.MyMediaExcludes).Contains(i.Id)).ToList();
             }
 
-            var sorted = _libraryManager.Sort(list, user, [ItemSortBy.SortName], SortOrder.Ascending).ToList();
+            var sorted = _itemSortService.Sort(list, user, [ItemSortBy.SortName], SortOrder.Ascending).ToList();
             var orders = user.GetPreferenceValues<Guid>(PreferenceKind.OrderedViews);
 
             return list
