@@ -12,6 +12,7 @@ using Reefin.Api.ModelBinders;
 using Reefin.Controller.Dto;
 using Reefin.Controller.Entities;
 using Reefin.Controller.Library;
+using Reefin.Controller.Sorting;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Database.Implementations.Enums;
@@ -32,6 +33,7 @@ public class YearsController : BaseReefinApiController
     private readonly ILibraryManager _libraryManager;
     private readonly IUserManager _userManager;
     private readonly IDtoService _dtoService;
+    private readonly IItemSortService _itemSortService;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="YearsController"/> class.
@@ -39,14 +41,17 @@ public class YearsController : BaseReefinApiController
     /// <param name="libraryManager">Instance of the <see cref="ILibraryManager"/> interface.</param>
     /// <param name="userManager">Instance of the <see cref="IUserManager"/> interface.</param>
     /// <param name="dtoService">Instance of the <see cref="IDtoService"/> interface.</param>
+    /// <param name="itemSortService">Instance of the <see cref="IItemSortService"/> interface.</param>
     public YearsController(
         ILibraryManager libraryManager,
         IUserManager userManager,
-        IDtoService dtoService)
+        IDtoService dtoService,
+        IItemSortService itemSortService)
     {
         _libraryManager = libraryManager;
         _userManager = userManager;
         _dtoService = dtoService;
+        _itemSortService = itemSortService;
     }
 
     /// <summary>
@@ -129,7 +134,7 @@ public class YearsController : BaseReefinApiController
 
         var extractedItems = GetAllItems(items);
 
-        var filteredItems = _libraryManager.Sort(extractedItems, user, RequestHelpers.GetOrderBy(sortBy, sortOrder));
+        var filteredItems = _itemSortService.Sort(extractedItems, user, RequestHelpers.GetOrderBy(sortBy, sortOrder));
 
         var ibnItemsArray = filteredItems.ToList();
 
