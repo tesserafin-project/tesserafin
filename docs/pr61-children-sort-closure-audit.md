@@ -1,5 +1,15 @@
 # PR61 children/sort closure audit
 
+Status: reopened by PR62. This document is now an intermediate audit, not the final closure record.
+
+## Erratum
+
+- The PR61 claim that normal DI paths no longer need children/sort statics was too broad.
+- `UserView` did not override the service-aware `GetChildren`/`GetRecursiveChildren` methods, so the base service-aware fallback redispatched to the old `UserView` overrides and lost `IItemSortService`.
+- `ItemQueryService` could still reach the legacy `BoxSet.GetChildren` sort through the `GetRawQueryItems` fast path.
+- Some non-virtual `GetRecursiveChildren(..., IItemSortService)` overloads were no-ops that created misleading migration call sites.
+- PR63-PR67 supersede this audit and provide the real closure criteria.
+
 Scope: closure audit for the PR55-PR60 additive migration of the public `GetEpisodes`, `SortAndPage`, `Folder.GetItems`, `GetChildren`, and `GetRecursiveChildren` surfaces.
 
 ## Result

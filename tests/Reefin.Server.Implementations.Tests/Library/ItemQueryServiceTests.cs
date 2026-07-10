@@ -29,7 +29,8 @@ public class ItemQueryServiceTests
         out Mock<IUserViewManager> userViewManager,
         out Mock<ITVSeriesManager> tvSeriesManager,
         ILibraryManager? libraryManager = null,
-        IServerConfigurationManager? configurationManager = null)
+        IServerConfigurationManager? configurationManager = null,
+        IItemSortService? itemSortService = null)
     {
         channelManager = new Mock<IChannelManager>();
         collectionManager = new Mock<ICollectionManager>();
@@ -43,7 +44,7 @@ public class ItemQueryServiceTests
         BaseItem.ConfigurationManager = configurationManager;
         BaseItem.UserDataManager = new Mock<IUserDataManager>().Object;
 
-        return new ItemQueryService(channelManager.Object, collectionManager.Object, userViewManager.Object, tvSeriesManager.Object, libraryManager, configurationManager, new PassthroughItemSortService());
+        return new ItemQueryService(channelManager.Object, collectionManager.Object, userViewManager.Object, tvSeriesManager.Object, libraryManager, configurationManager, itemSortService ?? new PassthroughItemSortService());
     }
 
     [Fact]
@@ -327,6 +328,54 @@ public class ItemQueryServiceTests
         Assert.False(query.EnableTotalRecordCount);
     }
 
+    [Fact]
+    public void GetItems_BoxSetNonRecursive_UsesItemSortServiceInsteadOfStaticSort()
+    {
+        var user = new User("test-user", "provider", "provider");
+        var alpha = new Movie { Id = Guid.NewGuid(), Name = "Alpha" };
+        var zulu = new Movie { Id = Guid.NewGuid(), Name = "Zulu" };
+        var boxSet = new BoxSet { Id = Guid.NewGuid(), DisplayOrder = nameof(ItemSortBy.SortName), Children = new BaseItem[] { zulu, alpha } };
+        var libraryManager = new Mock<ILibraryManager>(MockBehavior.Strict);
+        var sortService = new RecordingItemSortService();
+        var service = CreateService(
+            out _,
+            out _,
+            out _,
+            out _,
+            libraryManager: libraryManager.Object,
+            itemSortService: sortService);
+
+        var result = service.GetItems(boxSet, new InternalItemsQuery(user));
+
+        Assert.Equal(new BaseItem[] { alpha, zulu }, result.Items);
+        Assert.Single(sortService.Calls);
+        libraryManager.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public void GetItemList_BoxSetNonRecursive_UsesItemSortServiceInsteadOfStaticSort()
+    {
+        var user = new User("test-user", "provider", "provider");
+        var alpha = new Movie { Id = Guid.NewGuid(), Name = "Alpha" };
+        var zulu = new Movie { Id = Guid.NewGuid(), Name = "Zulu" };
+        var boxSet = new BoxSet { Id = Guid.NewGuid(), DisplayOrder = nameof(ItemSortBy.SortName), Children = new BaseItem[] { zulu, alpha } };
+        var libraryManager = new Mock<ILibraryManager>(MockBehavior.Strict);
+        var sortService = new RecordingItemSortService();
+        var service = CreateService(
+            out _,
+            out _,
+            out _,
+            out _,
+            libraryManager: libraryManager.Object,
+            itemSortService: sortService);
+
+        var result = service.GetItemList(boxSet, new InternalItemsQuery(user));
+
+        Assert.Equal(new BaseItem[] { alpha, zulu }, result);
+        Assert.Single(sortService.Calls);
+        libraryManager.VerifyNoOtherCalls();
+    }
+
     private sealed class PassthroughItemSortService : IItemSortService
     {
         public void AddParts(IEnumerable<IBaseItemComparer> itemComparers)
@@ -338,5 +387,28 @@ public class ItemQueryServiceTests
 
         public IEnumerable<BaseItem> Sort(IEnumerable<BaseItem> items, User? user, IEnumerable<(ItemSortBy OrderBy, SortOrder SortOrder)> orderBy)
             => items;
+    }
+
+    private sealed class RecordingItemSortService : IItemSortService
+    {
+        public List<(IReadOnlyList<BaseItem> Items, User? User, IReadOnlyList<ItemSortBy> SortBy, SortOrder SortOrder)> Calls { get; } = [];
+
+        public void AddParts(IEnumerable<IBaseItemComparer> itemComparers)
+        {
+        }
+
+        public IEnumerable<BaseItem> Sort(IEnumerable<BaseItem> items, User? user, IEnumerable<ItemSortBy> sortBy, SortOrder sortOrder)
+        {
+            var itemList = items.ToList();
+            var sortByList = sortBy.ToList();
+            Calls.Add((itemList, user, sortByList, sortOrder));
+
+            return sortOrder == SortOrder.Descending
+                ? itemList.OrderByDescending(i => i.SortName, StringComparer.OrdinalIgnoreCase)
+                : itemList.OrderBy(i => i.SortName, StringComparer.OrdinalIgnoreCase);
+        }
+
+        public IEnumerable<BaseItem> Sort(IEnumerable<BaseItem> items, User? user, IEnumerable<(ItemSortBy OrderBy, SortOrder SortOrder)> orderBy)
+            => throw new NotSupportedException("BoxSet raw-query tests use the 4-argument Sort overload.");
     }
 }

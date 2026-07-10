@@ -274,6 +274,69 @@ public class FolderGetChildrenCharacterizationTests
             Times.Never);
     }
 
+    [Fact]
+    public void UserViewGetChildren_ServiceAwarePathDoesNotUseStaticSort()
+    {
+        var user = CreateUser();
+        var child = CreateMovie("Child");
+        var parent = new Folder { Id = Guid.NewGuid(), Children = new BaseItem[] { child } };
+        var userView = new UserView { Id = Guid.NewGuid(), DisplayParentId = parent.Id };
+
+        var libraryManager = new Mock<ILibraryManager>(MockBehavior.Strict);
+        libraryManager.Setup(x => x.GetItemById(parent.Id)).Returns(parent);
+        SetStatics(libraryManager.Object);
+
+        var (channelManager, collectionManager, userViewManager, tvSeriesManager) = StrictManagers();
+        BaseItem.ChannelManager = channelManager.Object;
+        Folder.CollectionManager = collectionManager.Object;
+        Folder.UserViewManager = userViewManager.Object;
+        UserView.TVSeriesManager = tvSeriesManager.Object;
+        var sortService = new RecordingItemSortService();
+
+        var result = userView.GetChildren(
+            user,
+            true,
+            new InternalItemsQuery(user) { OrderBy = [(ItemSortBy.SortName, SortOrder.Ascending)] },
+            sortService);
+
+        Assert.Equal(new BaseItem[] { child }, result);
+        Assert.Single(sortService.Calls);
+        libraryManager.Verify(x => x.GetItemById(parent.Id), Times.Once);
+        libraryManager.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public void UserViewGetRecursiveChildren_ServiceAwarePathDoesNotUseStaticSort()
+    {
+        var user = CreateUser();
+        var child = CreateMovie("Child");
+        var root = new Folder { Id = Guid.NewGuid(), Children = new BaseItem[] { child } };
+        var userView = new UserView { Id = Guid.NewGuid(), ViewType = CollectionType.folders };
+
+        var libraryManager = new Mock<ILibraryManager>(MockBehavior.Strict);
+        libraryManager.Setup(x => x.GetUserRootFolder()).Returns(root);
+        SetStatics(libraryManager.Object);
+
+        var (channelManager, collectionManager, userViewManager, tvSeriesManager) = StrictManagers();
+        BaseItem.ChannelManager = channelManager.Object;
+        Folder.CollectionManager = collectionManager.Object;
+        Folder.UserViewManager = userViewManager.Object;
+        UserView.TVSeriesManager = tvSeriesManager.Object;
+        var sortService = new RecordingItemSortService();
+
+        var result = userView.GetRecursiveChildren(
+            user,
+            new InternalItemsQuery(user) { OrderBy = [(ItemSortBy.SortName, SortOrder.Ascending)] },
+            out var totalCount,
+            sortService);
+
+        Assert.Equal(1, totalCount);
+        Assert.Equal(new BaseItem[] { child }, result);
+        Assert.Single(sortService.Calls);
+        libraryManager.Verify(x => x.GetUserRootFolder(), Times.Once);
+        libraryManager.VerifyNoOtherCalls();
+    }
+
     private static Mock<ILibraryManager> CreateSortingLibraryManager()
     {
         var libraryManager = new Mock<ILibraryManager>();
