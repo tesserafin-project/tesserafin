@@ -1714,29 +1714,14 @@ namespace Reefin.Controller.Entities
             return GetRecursiveChildren(true);
         }
 
-        public IReadOnlyList<BaseItem> GetRecursiveChildren(IItemSortService itemSortService)
-        {
-            return GetRecursiveChildren();
-        }
-
         public IReadOnlyList<BaseItem> GetRecursiveChildren(bool includeLinkedChildren)
         {
             return GetRecursiveChildren(i => true, includeLinkedChildren);
         }
 
-        public IReadOnlyList<BaseItem> GetRecursiveChildren(bool includeLinkedChildren, IItemSortService itemSortService)
-        {
-            return GetRecursiveChildren(includeLinkedChildren);
-        }
-
         public IReadOnlyList<BaseItem> GetRecursiveChildren(Func<BaseItem, bool> filter)
         {
             return GetRecursiveChildren(filter, true);
-        }
-
-        public IReadOnlyList<BaseItem> GetRecursiveChildren(Func<BaseItem, bool> filter, IItemSortService itemSortService)
-        {
-            return GetRecursiveChildren(filter);
         }
 
         public IReadOnlyList<BaseItem> GetRecursiveChildren(Func<BaseItem, bool> filter, bool includeLinkedChildren)
@@ -1746,11 +1731,6 @@ namespace Reefin.Controller.Entities
             AddChildrenToList(result, includeLinkedChildren, true, filter);
 
             return result.Values.ToArray();
-        }
-
-        public IReadOnlyList<BaseItem> GetRecursiveChildren(Func<BaseItem, bool> filter, bool includeLinkedChildren, IItemSortService itemSortService)
-        {
-            return GetRecursiveChildren(filter, includeLinkedChildren);
         }
 
         /// <summary>

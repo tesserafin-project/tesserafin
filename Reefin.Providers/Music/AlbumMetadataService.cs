@@ -11,7 +11,6 @@ using Reefin.Controller.IO;
 using Reefin.Controller.Library;
 using Reefin.Controller.Persistence;
 using Reefin.Controller.Providers;
-using Reefin.Controller.Sorting;
 using Reefin.Data.Enums;
 using Reefin.Model.Entities;
 using Reefin.Model.IO;
@@ -24,8 +23,6 @@ namespace Reefin.Providers.Music;
 /// </summary>
 public class AlbumMetadataService : MetadataService<MusicAlbum, AlbumInfo>
 {
-    private readonly IItemSortService _itemSortService;
-
     /// <summary>
     /// Initializes a new instance of the <see cref="AlbumMetadataService"/> class.
     /// </summary>
@@ -37,7 +34,6 @@ public class AlbumMetadataService : MetadataService<MusicAlbum, AlbumInfo>
     /// <param name="itemNamingService">Instance of the <see cref="IItemNamingService"/> interface.</param>
     /// <param name="externalDataManager">Instance of the <see cref="IExternalDataManager"/> interface.</param>
     /// <param name="itemRepository">Instance of the <see cref="IItemRepository"/> interface.</param>
-    /// <param name="itemSortService">Instance of the <see cref="IItemSortService"/> interface.</param>
     public AlbumMetadataService(
         IServerConfigurationManager serverConfigurationManager,
         ILogger<AlbumMetadataService> logger,
@@ -46,11 +42,9 @@ public class AlbumMetadataService : MetadataService<MusicAlbum, AlbumInfo>
         ILibraryManager libraryManager,
         IItemNamingService itemNamingService,
         IExternalDataManager externalDataManager,
-        IItemRepository itemRepository,
-        IItemSortService itemSortService)
+        IItemRepository itemRepository)
         : base(serverConfigurationManager, logger, providerManager, fileSystem, libraryManager, itemNamingService, externalDataManager, itemRepository)
     {
-        _itemSortService = itemSortService;
     }
 
     /// <inheritdoc />
@@ -64,7 +58,7 @@ public class AlbumMetadataService : MetadataService<MusicAlbum, AlbumInfo>
 
     /// <inheritdoc />
     protected override IReadOnlyList<BaseItem> GetChildrenForMetadataUpdates(MusicAlbum item)
-        => item.GetRecursiveChildren(i => i is Audio, _itemSortService);
+        => item.GetRecursiveChildren(i => i is Audio);
 
     /// <inheritdoc />
     protected override Task AfterMetadataRefresh(MusicAlbum item, MetadataRefreshOptions refreshOptions, CancellationToken cancellationToken)

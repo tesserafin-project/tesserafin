@@ -115,7 +115,7 @@ namespace Reefin.Server.Core.Playlists
                     {
                         if (item is Folder folder)
                         {
-                            request.MediaType = folder.GetRecursiveChildren(i => !i.IsFolder && i.SupportsAddingToPlaylist, _itemSortService)
+                            request.MediaType = folder.GetRecursiveChildren(i => !i.IsFolder && i.SupportsAddingToPlaylist)
                                 .Select(i => i.MediaType)
                                 .FirstOrDefault(i => i != MediaType.Unknown);
                         }
