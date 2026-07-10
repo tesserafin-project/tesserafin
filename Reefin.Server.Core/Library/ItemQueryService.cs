@@ -13,6 +13,7 @@ using Reefin.Controller.Entities.Audio;
 using Reefin.Controller.Entities.Movies;
 using Reefin.Controller.Entities.TV;
 using Reefin.Controller.Library;
+using Reefin.Controller.Sorting;
 using Reefin.Controller.TV;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
@@ -28,8 +29,9 @@ namespace Reefin.Server.Core.Library
         private readonly ITVSeriesManager _tvSeriesManager;
         private readonly ILibraryManager _libraryManager;
         private readonly IServerConfigurationManager _configurationManager;
+        private readonly IItemSortService _itemSortService;
 
-        public ItemQueryService(IChannelManager channelManager, ICollectionManager collectionManager, IUserViewManager userViewManager, ITVSeriesManager tvSeriesManager, ILibraryManager libraryManager, IServerConfigurationManager configurationManager)
+        public ItemQueryService(IChannelManager channelManager, ICollectionManager collectionManager, IUserViewManager userViewManager, ITVSeriesManager tvSeriesManager, ILibraryManager libraryManager, IServerConfigurationManager configurationManager, IItemSortService itemSortService)
         {
             _channelManager = channelManager;
             _collectionManager = collectionManager;
@@ -37,18 +39,14 @@ namespace Reefin.Server.Core.Library
             _tvSeriesManager = tvSeriesManager;
             _libraryManager = libraryManager;
             _configurationManager = configurationManager;
+            _itemSortService = itemSortService;
         }
 
         public QueryResult<BaseItem> GetItems(Folder folder, InternalItemsQuery query)
         {
             if (!CanUseRawQueryItemsFastPath(folder, query))
             {
-                // Documented legitimate caller of the obsolete 5-parameter overload: this service
-                // is the migration target and owns the full-pipeline fallback path — see
-                // docs/major-rewrite-plan-v13.md § PR28/N.
-#pragma warning disable CS0618
-                return folder.GetItems(query, _channelManager, _collectionManager, _userViewManager, _tvSeriesManager);
-#pragma warning restore CS0618
+                return folder.GetItems(query, _channelManager, _collectionManager, _userViewManager, _tvSeriesManager, _itemSortService);
             }
 
             return PostFilterAndSort(folder, folder.GetRawQueryItems(query), query);
@@ -58,11 +56,7 @@ namespace Reefin.Server.Core.Library
         {
             if (!CanUseRawQueryItemsFastPath(folder, query))
             {
-                // Documented legitimate caller of the obsolete 5-parameter overload, same
-                // rationale as GetItems above — see docs/major-rewrite-plan-v13.md § PR28/N.
-#pragma warning disable CS0618
-                return folder.GetItemList(query, _channelManager, _collectionManager, _userViewManager, _tvSeriesManager);
-#pragma warning restore CS0618
+                return folder.GetItemList(query, _channelManager, _collectionManager, _userViewManager, _tvSeriesManager, _itemSortService);
             }
 
             // Mirrors Folder.GetItemList's own unconditional mutation before it delegates further.
@@ -96,7 +90,7 @@ namespace Reefin.Server.Core.Library
             }
 
             var filteredItems = items as IReadOnlyList<BaseItem> ?? items.ToList();
-            var result = UserViewBuilder.SortAndPage(filteredItems, null, query, _libraryManager);
+            var result = UserViewBuilder.SortAndPage(filteredItems, null, query, _itemSortService);
 
             if (query.EnableTotalRecordCount)
             {

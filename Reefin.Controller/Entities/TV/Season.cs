@@ -196,6 +196,35 @@ namespace Reefin.Controller.Entities.TV
             return PostFilterAndSort(items, query, collectionManager);
         }
 
+        protected override QueryResult<BaseItem> GetItemsInternal(InternalItemsQuery query, IChannelManager channelManager, ICollectionManager collectionManager, IUserViewManager userViewManager, ITVSeriesManager tvSeriesManager, IItemSortService itemSortService)
+        {
+            if (SourceType == SourceType.Channel)
+            {
+                try
+                {
+                    query.Parent = this;
+                    query.ChannelIds = new[] { ChannelId };
+                    return channelManager.GetChannelItemsInternal(query, new Progress<double>(), CancellationToken.None).GetAwaiter().GetResult();
+                }
+                catch
+                {
+                    // Already logged at lower levels
+                    return new QueryResult<BaseItem>();
+                }
+            }
+
+            if (query.User is null)
+            {
+                return base.GetItemsInternal(query, channelManager, collectionManager, userViewManager, tvSeriesManager, itemSortService);
+            }
+
+            var user = query.User;
+
+            var items = UserViewBuilder.Filter(GetEpisodes(user, query.DtoOptions, true, itemSortService), user, query, UserDataManager, LibraryManager);
+
+            return PostFilterAndSort(items, query, collectionManager, itemSortService);
+        }
+
         /// <summary>
         /// Gets the episodes.
         /// </summary>

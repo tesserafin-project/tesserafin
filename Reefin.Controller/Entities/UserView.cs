@@ -12,6 +12,7 @@ using Reefin.Controller.Channels;
 using Reefin.Controller.Collections;
 using Reefin.Controller.Library;
 using Reefin.Controller.Providers;
+using Reefin.Controller.Sorting;
 using Reefin.Controller.TV;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
@@ -112,7 +113,25 @@ namespace Reefin.Controller.Entities
                 parent = LibraryManager.GetItemById(ParentId) as Folder ?? parent;
             }
 
-            return new UserViewBuilder(userViewManager, LibraryManager, Logger, UserDataManager, tvSeriesManager, channelManager, collectionManager)
+            return new UserViewBuilder(userViewManager, LibraryManager, Logger, UserDataManager, tvSeriesManager, channelManager, collectionManager, null)
+                .GetUserItems(parent, this, CollectionType, query);
+        }
+
+        /// <inheritdoc />
+        protected override QueryResult<BaseItem> GetItemsInternal(InternalItemsQuery query, IChannelManager channelManager, ICollectionManager collectionManager, IUserViewManager userViewManager, ITVSeriesManager tvSeriesManager, IItemSortService itemSortService)
+        {
+            var parent = this as Folder;
+
+            if (!DisplayParentId.IsEmpty())
+            {
+                parent = LibraryManager.GetItemById(DisplayParentId) as Folder ?? parent;
+            }
+            else if (!ParentId.IsEmpty())
+            {
+                parent = LibraryManager.GetItemById(ParentId) as Folder ?? parent;
+            }
+
+            return new UserViewBuilder(userViewManager, LibraryManager, Logger, UserDataManager, tvSeriesManager, channelManager, collectionManager, itemSortService)
                 .GetUserItems(parent, this, CollectionType, query);
         }
 

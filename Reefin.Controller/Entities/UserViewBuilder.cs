@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging;
 using Reefin.Controller.Channels;
 using Reefin.Controller.Collections;
 using Reefin.Controller.Library;
+using Reefin.Controller.Sorting;
 using Reefin.Controller.TV;
 using Reefin.Data;
 using Reefin.Data.Enums;
@@ -31,6 +32,7 @@ namespace Reefin.Controller.Entities
         private readonly ITVSeriesManager _tvSeriesManager;
         private readonly IChannelManager _channelManager;
         private readonly ICollectionManager _collectionManager;
+        private readonly IItemSortService _itemSortService;
 
         public UserViewBuilder(
             IUserViewManager userViewManager,
@@ -39,7 +41,8 @@ namespace Reefin.Controller.Entities
             IUserDataManager userDataManager,
             ITVSeriesManager tvSeriesManager,
             IChannelManager channelManager,
-            ICollectionManager collectionManager)
+            ICollectionManager collectionManager,
+            IItemSortService itemSortService)
         {
             _userViewManager = userViewManager;
             _libraryManager = libraryManager;
@@ -48,6 +51,7 @@ namespace Reefin.Controller.Entities
             _tvSeriesManager = tvSeriesManager;
             _channelManager = channelManager;
             _collectionManager = collectionManager;
+            _itemSortService = itemSortService;
         }
 
         public QueryResult<BaseItem> GetUserItems(Folder queryParent, Folder displayParent, CollectionType? viewType, InternalItemsQuery query)
@@ -130,9 +134,11 @@ namespace Reefin.Controller.Entities
                             return GetResult(GetMediaFolders(user).OfType<Folder>().SelectMany(i => i.GetChildren(user, true)), query);
                         }
 
-                        // Documented legitimate caller of the obsolete 5-parameter overload:
-                        // clean relay of the managers this builder received from UserView's
-                        // GetItemsInternal override — see docs/major-rewrite-plan-v13.md § PR28/N.
+                        if (_itemSortService is not null)
+                        {
+                            return queryParent.GetItems(query, _channelManager, _collectionManager, _userViewManager, _tvSeriesManager, _itemSortService);
+                        }
+
 #pragma warning disable CS0618
                         return queryParent.GetItems(query, _channelManager, _collectionManager, _userViewManager, _tvSeriesManager);
 #pragma warning restore CS0618
@@ -443,7 +449,14 @@ namespace Reefin.Controller.Entities
         {
             var filtered = Filter(items, query.User, query, _userDataManager, _libraryManager);
 
+            if (_itemSortService is not null)
+            {
+                return SortAndPage(filtered, null, query, _itemSortService);
+            }
+
+#pragma warning disable CS0618
             return SortAndPage(filtered, null, query, _libraryManager);
+#pragma warning restore CS0618
         }
 
         /// <summary>
@@ -495,6 +508,21 @@ namespace Reefin.Controller.Entities
             IEnumerable<BaseItem> items,
             int? totalRecordLimit,
             InternalItemsQuery query,
+            IItemSortService itemSortService)
+        {
+            if (query.OrderBy.Count > 0)
+            {
+                items = itemSortService.Sort(items, query.User, query.OrderBy);
+            }
+
+            return Page(items, totalRecordLimit, query);
+        }
+
+        [Obsolete("Use SortAndPage with IItemSortService instead. See docs/major-rewrite-plan-v13.md § PR56/N.")]
+        public static QueryResult<BaseItem> SortAndPage(
+            IEnumerable<BaseItem> items,
+            int? totalRecordLimit,
+            InternalItemsQuery query,
             ILibraryManager libraryManager)
         {
             if (query.OrderBy.Count > 0)
@@ -505,6 +533,14 @@ namespace Reefin.Controller.Entities
 #pragma warning restore CS0618
             }
 
+            return Page(items, totalRecordLimit, query);
+        }
+
+        private static QueryResult<BaseItem> Page(
+            IEnumerable<BaseItem> items,
+            int? totalRecordLimit,
+            InternalItemsQuery query)
+        {
             var itemsArray = totalRecordLimit.HasValue ? items.Take(totalRecordLimit.Value).ToArray() : items.ToArray();
             var totalCount = itemsArray.Length;
 

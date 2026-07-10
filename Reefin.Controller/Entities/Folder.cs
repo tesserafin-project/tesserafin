@@ -23,6 +23,7 @@ using Reefin.Controller.Library;
 using Reefin.Controller.LibraryTaskScheduler;
 using Reefin.Controller.Persistence;
 using Reefin.Controller.Providers;
+using Reefin.Controller.Sorting;
 using Reefin.Controller.TV;
 using Reefin.Data;
 using Reefin.Data.Enums;
@@ -1039,6 +1040,23 @@ namespace Reefin.Controller.Entities
             return GetItemsInternal(query, channelManager, collectionManager, userViewManager, tvSeriesManager);
         }
 
+        public QueryResult<BaseItem> GetItems(InternalItemsQuery query, IChannelManager channelManager, ICollectionManager collectionManager, IUserViewManager userViewManager, ITVSeriesManager tvSeriesManager, IItemSortService itemSortService)
+        {
+            if (query.ItemIds.Length > 0)
+            {
+                var result = LibraryManager.GetItemsResult(query);
+
+                if (query.OrderBy.Count == 0 && query.ItemIds.Length > 1)
+                {
+                    result.Items = SortItemsByRequest(query, result.Items);
+                }
+
+                return result;
+            }
+
+            return GetItemsInternal(query, channelManager, collectionManager, userViewManager, tvSeriesManager, itemSortService);
+        }
+
         // PR28/N: same deprecation rationale as GetItems above.
         [Obsolete("Application code should use IItemQueryService instead of calling Folder.GetItems/GetItemList directly. See docs/major-rewrite-plan-v13.md § PR28/N.")]
         public IReadOnlyList<BaseItem> GetItemList(InternalItemsQuery query, IChannelManager channelManager, ICollectionManager collectionManager, IUserViewManager userViewManager, ITVSeriesManager tvSeriesManager)
@@ -1058,6 +1076,25 @@ namespace Reefin.Controller.Entities
             }
 
             return GetItemsInternal(query, channelManager, collectionManager, userViewManager, tvSeriesManager).Items;
+        }
+
+        public IReadOnlyList<BaseItem> GetItemList(InternalItemsQuery query, IChannelManager channelManager, ICollectionManager collectionManager, IUserViewManager userViewManager, ITVSeriesManager tvSeriesManager, IItemSortService itemSortService)
+        {
+            query.EnableTotalRecordCount = false;
+
+            if (query.ItemIds.Length > 0)
+            {
+                var result = LibraryManager.GetItemList(query);
+
+                if (query.OrderBy.Count == 0 && query.ItemIds.Length > 1)
+                {
+                    return SortItemsByRequest(query, result);
+                }
+
+                return result;
+            }
+
+            return GetItemsInternal(query, channelManager, collectionManager, userViewManager, tvSeriesManager, itemSortService).Items;
         }
 
         // channelManager is needed only when this folder's SourceType is SourceType.Channel;
@@ -1090,6 +1127,32 @@ namespace Reefin.Controller.Entities
             }
 
             return PostFilterAndSort(GetRawQueryItems(query), query, collectionManager);
+        }
+
+        protected virtual QueryResult<BaseItem> GetItemsInternal(InternalItemsQuery query, IChannelManager channelManager, ICollectionManager collectionManager, IUserViewManager userViewManager, ITVSeriesManager tvSeriesManager, IItemSortService itemSortService)
+        {
+            if (SourceType == SourceType.Channel)
+            {
+                try
+                {
+                    query.Parent = this;
+                    query.ChannelIds = new[] { ChannelId };
+
+                    return channelManager.GetChannelItemsInternal(query, new Progress<double>(), CancellationToken.None).GetAwaiter().GetResult();
+                }
+                catch
+                {
+                    // Already logged at lower levels
+                    return new QueryResult<BaseItem>();
+                }
+            }
+
+            if (query.Recursive)
+            {
+                return QueryRecursive(query);
+            }
+
+            return PostFilterAndSort(GetRawQueryItems(query), query, collectionManager, itemSortService);
         }
 
         // Raw filtered children before collapse/sort/pagination (PostFilterAndSort) - the block
@@ -1145,7 +1208,30 @@ namespace Reefin.Controller.Entities
             }
 
             var filteredItems = items as IReadOnlyList<BaseItem> ?? items.ToList();
+#pragma warning disable CS0618
             var result = UserViewBuilder.SortAndPage(filteredItems, null, query, LibraryManager);
+#pragma warning restore CS0618
+
+            if (query.EnableTotalRecordCount)
+            {
+                result.TotalRecordCount = filteredItems.Count;
+            }
+
+            return result;
+        }
+
+        protected QueryResult<BaseItem> PostFilterAndSort(IEnumerable<BaseItem> items, InternalItemsQuery query, ICollectionManager collectionManager, IItemSortService itemSortService)
+        {
+            var user = query.User;
+
+            if (user is not null)
+            {
+                items = CollapseBoxSetItemsIfNeeded(items, query, this, user, ConfigurationManager, collectionManager);
+                items = ApplyNameFilter(items, query);
+            }
+
+            var filteredItems = items as IReadOnlyList<BaseItem> ?? items.ToList();
+            var result = UserViewBuilder.SortAndPage(filteredItems, null, query, itemSortService);
 
             if (query.EnableTotalRecordCount)
             {

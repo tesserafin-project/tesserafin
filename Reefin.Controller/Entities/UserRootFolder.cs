@@ -12,6 +12,7 @@ using Reefin.Controller.Channels;
 using Reefin.Controller.Collections;
 using Reefin.Controller.Library;
 using Reefin.Controller.Providers;
+using Reefin.Controller.Sorting;
 using Reefin.Controller.TV;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Model.Library;
@@ -92,7 +93,26 @@ namespace Reefin.Controller.Entities
                 PresetViews = query.PresetViews
             });
 
+#pragma warning disable CS0618
             return UserViewBuilder.SortAndPage(result, null, query, LibraryManager);
+#pragma warning restore CS0618
+        }
+
+        protected override QueryResult<BaseItem> GetItemsInternal(InternalItemsQuery query, IChannelManager channelManager, ICollectionManager collectionManager, IUserViewManager userViewManager, ITVSeriesManager tvSeriesManager, IItemSortService itemSortService)
+        {
+            if (query.Recursive || query.HasFilters)
+            {
+                query.Recursive = true;
+                return QueryRecursive(query);
+            }
+
+            var result = UserViewManager.GetUserViews(new UserViewQuery
+            {
+                User = query.User,
+                PresetViews = query.PresetViews
+            });
+
+            return UserViewBuilder.SortAndPage(result, null, query, itemSortService);
         }
 
         public override int GetChildCount(User user)

@@ -9,8 +9,11 @@ using Reefin.Controller.Configuration;
 using Reefin.Controller.Entities;
 using Reefin.Controller.Entities.Movies;
 using Reefin.Controller.Library;
+using Reefin.Controller.Sorting;
 using Reefin.Controller.TV;
+using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
+using Reefin.Database.Implementations.Enums;
 using Reefin.Model.Configuration;
 using Reefin.Model.Querying;
 using Reefin.Server.Core.Library;
@@ -40,7 +43,7 @@ public class ItemQueryServiceTests
         BaseItem.ConfigurationManager = configurationManager;
         BaseItem.UserDataManager = new Mock<IUserDataManager>().Object;
 
-        return new ItemQueryService(channelManager.Object, collectionManager.Object, userViewManager.Object, tvSeriesManager.Object, libraryManager, configurationManager);
+        return new ItemQueryService(channelManager.Object, collectionManager.Object, userViewManager.Object, tvSeriesManager.Object, libraryManager, configurationManager, new PassthroughItemSortService());
     }
 
     [Fact]
@@ -322,5 +325,18 @@ public class ItemQueryServiceTests
         Assert.Single(result);
         Assert.Equal(child, result[0]);
         Assert.False(query.EnableTotalRecordCount);
+    }
+
+    private sealed class PassthroughItemSortService : IItemSortService
+    {
+        public void AddParts(IEnumerable<IBaseItemComparer> itemComparers)
+        {
+        }
+
+        public IEnumerable<BaseItem> Sort(IEnumerable<BaseItem> items, User? user, IEnumerable<ItemSortBy> sortBy, SortOrder sortOrder)
+            => items;
+
+        public IEnumerable<BaseItem> Sort(IEnumerable<BaseItem> items, User? user, IEnumerable<(ItemSortBy OrderBy, SortOrder SortOrder)> orderBy)
+            => items;
     }
 }

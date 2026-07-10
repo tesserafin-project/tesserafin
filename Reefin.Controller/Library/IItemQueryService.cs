@@ -9,8 +9,8 @@ namespace Reefin.Controller.Library
     /// <summary>
     /// Owns the dependencies (<see cref="Reefin.Controller.Channels.IChannelManager"/>,
     /// <see cref="Reefin.Controller.Collections.ICollectionManager"/>, <see cref="IUserViewManager"/>,
-    /// <see cref="Reefin.Controller.TV.ITVSeriesManager"/>) that <see cref="Folder.GetItems"/> and
-    /// <see cref="Folder.GetItemList"/> currently require every caller to thread through by hand.
+    /// <see cref="Reefin.Controller.TV.ITVSeriesManager"/>) that <c>Folder.GetItems</c> and
+    /// <c>Folder.GetItemList</c> currently require every caller to thread through by hand.
     /// First step of moving item-querying logic out of <see cref="BaseItem"/>/<see cref="Folder"/>
     /// and into a dedicated application service, per the point 4 trajectory correction (major rewrite
     /// plan, "Revue externe post-PR14").
