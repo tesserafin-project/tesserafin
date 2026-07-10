@@ -351,4 +351,50 @@ public class LibraryManagerItemLookupTests
         _itemRepositoryMock.Verify(r => r.RetrieveItem(channel.Id), Times.Once);
         _persistenceServiceMock.Verify(p => p.DeleteItem(It.Is<IReadOnlyList<Guid>>(ids => ids.Contains(channel.Id))), Times.Once);
     }
+
+    // ---------------------------------------------------------------
+    // 12. IItemLookupService (PR71)
+    // ---------------------------------------------------------------
+
+    [Fact]
+    public void LibraryManager_IsAssignableToIItemLookupService()
+    {
+        Assert.IsAssignableFrom<IItemLookupService>(_libraryManager);
+    }
+
+    [Fact]
+    public void GetItemById_ViaIItemLookupServiceReference_SameCacheBehaviorAndInstanceAsILibraryManager()
+    {
+        var folder = new Folder { Id = Guid.NewGuid(), Name = "Folder" };
+        _libraryManager.RegisterItem(folder);
+
+        IItemLookupService lookupService = _libraryManager;
+
+        var viaInterface = lookupService.GetItemById(folder.Id);
+        var viaConcrete = _libraryManager.GetItemById(folder.Id);
+
+        Assert.Same(folder, viaInterface);
+        Assert.Same(viaConcrete, viaInterface);
+        _itemRepositoryMock.Verify(r => r.RetrieveItem(It.IsAny<Guid>()), Times.Never);
+    }
+
+    [Fact]
+    public void GetItemByIdGeneric_ViaIItemLookupServiceReference_InvisibleViaBlockedTag_ReturnsNull()
+    {
+        // Same visibility setup as GetItemByIdGeneric_InvisibleViaBlockedTag_ReturnsNull, but
+        // exercised through the IItemLookupService reference to confirm the user-aware overload
+        // applies the same visibility rules across the interface boundary.
+        SetLibraryManagerStatic(Mock.Of<ILibraryManager>(m => m.GetCollectionFolders(It.IsAny<BaseItem>()) == new List<Folder>()));
+
+        var audio = new Audio { Id = Guid.NewGuid(), Name = "Track", Tags = new[] { "blocked" } };
+        _itemRepositoryMock.Setup(r => r.RetrieveItem(audio.Id)).Returns(audio);
+
+        var user = new User("test-user", "provider", "provider");
+        user.SetPreference(PreferenceKind.BlockedTags, new[] { "blocked" });
+
+        IItemLookupService lookupService = _libraryManager;
+        var result = lookupService.GetItemById<Audio>(audio.Id, user);
+
+        Assert.Null(result);
+    }
 }

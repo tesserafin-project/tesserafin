@@ -58,7 +58,7 @@ namespace Reefin.Server.Core.Library
     /// <summary>
     /// Class LibraryManager.
     /// </summary>
-    public class LibraryManager : ILibraryManager
+    public class LibraryManager : ILibraryManager, IItemLookupService
     {
         private const string ShortcutFileExtension = ".mblink";
 
