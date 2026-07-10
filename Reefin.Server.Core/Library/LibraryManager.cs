@@ -390,7 +390,7 @@ namespace Reefin.Server.Core.Library
         {
             ArgumentNullException.ThrowIfNull(item);
 
-            var parent = item.GetOwner() ?? item.GetParent();
+            var parent = item.GetOwner(this) ?? item.GetParent(this);
 
             DeleteItem(item, options, parent, notifyParentItem);
         }
@@ -2366,7 +2366,7 @@ namespace Reefin.Server.Core.Library
                             new ItemChangeEventArgs
                             {
                                 Item = item,
-                                Parent = parent ?? item.GetParent()
+                                Parent = parent ?? item.GetParent(this)
                             });
                     }
                     catch (Exception ex)
@@ -2409,7 +2409,7 @@ namespace Reefin.Server.Core.Library
                 ? item.ImageInfos.Where(i => i.Path is not null).ToArray()
                 : item.ImageInfos.Where(ImageNeedsRefresh).ToArray();
 
-            var parentItem = item.GetParent();
+            var parentItem = item.GetParent(this);
             var isLiveTvShow = item.SourceType != SourceType.Library &&
                                parentItem is not null &&
                                parentItem.SourceType != SourceType.Library; // not a channel
@@ -2659,7 +2659,7 @@ namespace Reefin.Server.Core.Library
         {
             while (item is not null)
             {
-                var parent = item.GetParent();
+                var parent = item.GetParent(this);
 
                 if (parent is AggregateFolder)
                 {
@@ -2668,7 +2668,7 @@ namespace Reefin.Server.Core.Library
 
                 if (parent is null)
                 {
-                    var owner = item.GetOwner();
+                    var owner = item.GetOwner(this);
 
                     if (owner is null)
                     {
@@ -2738,7 +2738,7 @@ namespace Reefin.Server.Core.Library
                 return type;
             }
 
-            return item.GetParents()
+            return item.GetParents(this)
                 .Select(GetConfiguredContentType)
                 .LastOrDefault(i => i is not null);
         }
@@ -2786,7 +2786,7 @@ namespace Reefin.Server.Core.Library
 
             while (!item.ParentId.IsEmpty())
             {
-                var parent = item.GetParent();
+                var parent = item.GetParent(this);
                 if (parent is null || parent is AggregateFolder)
                 {
                     break;

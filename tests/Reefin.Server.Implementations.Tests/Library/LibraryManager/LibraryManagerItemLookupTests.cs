@@ -397,4 +397,38 @@ public class LibraryManagerItemLookupTests
 
         Assert.Null(result);
     }
+
+    // ---------------------------------------------------------------
+    // 13. DeleteItem parent resolution uses the injected lookup (PR73)
+    // ---------------------------------------------------------------
+
+    [Fact]
+    public void DeleteItem_ParentResolution_UsesInstanceLookupNotStaticLibraryManager()
+    {
+        SetConfigurationManagerStatic(_configurationManagerMock.Object);
+
+        // Strict mock with zero setups: DeleteItem's parent resolution (item.GetOwner(this)
+        // ?? item.GetParent(this), PR73) must resolve entirely through the LibraryManager
+        // instance passed as "this". If it fell back to the static BaseItem.LibraryManager
+        // (pre-PR73 behavior), any call on this mock throws and the test fails.
+        SetLibraryManagerStatic(new Mock<ILibraryManager>(MockBehavior.Strict).Object);
+
+        var parentFolder = new Folder { Id = Guid.NewGuid(), Name = "Parent" };
+        _libraryManager.RegisterItem(parentFolder);
+
+        // LiveTvChannel keeps DeleteItem's side paths inert (see DeleteItem_CacheableItem_
+        // InvalidatesCache above): SourceType is LiveTV, IsFolder is false, and Path is null,
+        // so only the cache-invalidation / event-notification tail runs.
+        var channel = new LiveTvChannel { Id = Guid.NewGuid(), Name = "Channel", ParentId = parentFolder.Id };
+        _libraryManager.RegisterItem(channel);
+
+        ItemChangeEventArgs? raisedArgs = null;
+        _libraryManager.ItemRemoved += (_, args) => raisedArgs = args;
+
+        _libraryManager.DeleteItem(channel, new DeleteOptions { DeleteFileLocation = false }, notifyParentItem: true);
+
+        Assert.NotNull(raisedArgs);
+        Assert.Same(channel, raisedArgs.Item);
+        Assert.Same(parentFolder, raisedArgs.Parent);
+    }
 }
