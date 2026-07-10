@@ -9,6 +9,7 @@ using Reefin.Controller.Entities;
 using Reefin.Controller.Entities.Audio;
 using Reefin.Controller.Library;
 using Reefin.Controller.Playlists;
+using Reefin.Controller.Sorting;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Database.Implementations.Enums;
@@ -20,10 +21,12 @@ namespace Reefin.Server.Core.Library
     public class MusicManager : IMusicManager
     {
         private readonly ILibraryManager _libraryManager;
+        private readonly IItemSortService _itemSortService;
 
-        public MusicManager(ILibraryManager libraryManager)
+        public MusicManager(ILibraryManager libraryManager, IItemSortService itemSortService)
         {
             _libraryManager = libraryManager;
+            _itemSortService = itemSortService;
         }
 
         public IReadOnlyList<BaseItem> GetInstantMixFromSong(Audio item, User? user, DtoOptions dtoOptions)
@@ -47,18 +50,19 @@ namespace Reefin.Server.Core.Library
         public IReadOnlyList<BaseItem> GetInstantMixFromFolder(Folder item, User? user, DtoOptions dtoOptions)
         {
             var genres = item
-               .GetRecursiveChildren(
-                user,
-                new InternalItemsQuery(user)
-                {
-                    IncludeItemTypes = [BaseItemKind.Audio],
-                    DtoOptions = dtoOptions
-                },
-                out _)
-               .Cast<Audio>()
-               .SelectMany(i => i.Genres)
-               .Concat(item.Genres)
-               .DistinctNames();
+                .GetRecursiveChildren(
+                    user,
+                    new InternalItemsQuery(user)
+                    {
+                        IncludeItemTypes = [BaseItemKind.Audio],
+                        DtoOptions = dtoOptions
+                    },
+                    out _,
+                    _itemSortService)
+                .Cast<Audio>()
+                .SelectMany(i => i.Genres)
+                .Concat(item.Genres)
+                .DistinctNames();
 
             return GetInstantMixFromGenres(genres, user, dtoOptions);
         }

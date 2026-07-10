@@ -18,6 +18,7 @@ using Reefin.Controller.Entities.TV;
 using Reefin.Controller.Library;
 using Reefin.Controller.LiveTv;
 using Reefin.Controller.Providers;
+using Reefin.Controller.Sorting;
 using Reefin.Data.Enums;
 using Reefin.Model.Dto;
 using Reefin.Model.Entities;
@@ -38,6 +39,7 @@ public class ItemUpdateController : BaseReefinApiController
     private readonly ILocalizationManager _localizationManager;
     private readonly IFileSystem _fileSystem;
     private readonly IServerConfigurationManager _serverConfigurationManager;
+    private readonly IItemSortService _itemSortService;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ItemUpdateController"/> class.
@@ -47,18 +49,21 @@ public class ItemUpdateController : BaseReefinApiController
     /// <param name="providerManager">Instance of the <see cref="IProviderManager"/> interface.</param>
     /// <param name="localizationManager">Instance of the <see cref="ILocalizationManager"/> interface.</param>
     /// <param name="serverConfigurationManager">Instance of the <see cref="IServerConfigurationManager"/> interface.</param>
+    /// <param name="itemSortService">Instance of the <see cref="IItemSortService"/> interface.</param>
     public ItemUpdateController(
         IFileSystem fileSystem,
         ILibraryManager libraryManager,
         IProviderManager providerManager,
         ILocalizationManager localizationManager,
-        IServerConfigurationManager serverConfigurationManager)
+        IServerConfigurationManager serverConfigurationManager,
+        IItemSortService itemSortService)
     {
         _libraryManager = libraryManager;
         _providerManager = providerManager;
         _localizationManager = localizationManager;
         _fileSystem = fileSystem;
         _serverConfigurationManager = serverConfigurationManager;
+        _itemSortService = itemSortService;
     }
 
     /// <summary>
@@ -112,7 +117,7 @@ public class ItemUpdateController : BaseReefinApiController
         {
             var folder = (Folder)item;
 
-            foreach (var child in folder.GetRecursiveChildren())
+            foreach (var child in folder.GetRecursiveChildren(_itemSortService))
             {
                 child.IsLocked = newLockData;
                 await child.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, CancellationToken.None).ConfigureAwait(false);

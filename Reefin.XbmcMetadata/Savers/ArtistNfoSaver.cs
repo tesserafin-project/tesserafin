@@ -8,6 +8,7 @@ using Reefin.Controller.Configuration;
 using Reefin.Controller.Entities;
 using Reefin.Controller.Entities.Audio;
 using Reefin.Controller.Library;
+using Reefin.Controller.Sorting;
 using Reefin.Model.IO;
 using Reefin.XbmcMetadata.Configuration;
 
@@ -18,6 +19,8 @@ namespace Reefin.XbmcMetadata.Savers
     /// </summary>
     public class ArtistNfoSaver : BaseNfoSaver
     {
+        private readonly IItemSortService _itemSortService;
+
         /// <summary>
         /// Initializes a new instance of the <see cref="ArtistNfoSaver"/> class.
         /// </summary>
@@ -29,6 +32,7 @@ namespace Reefin.XbmcMetadata.Savers
         /// <param name="userDataManager">The user data manager.</param>
         /// <param name="logger">The logger.</param>
         /// <param name="mediaSourceManager">The media source manager.</param>
+        /// <param name="itemSortService">The item sort service.</param>
         public ArtistNfoSaver(
             IFileSystem fileSystem,
             IServerConfigurationManager configurationManager,
@@ -37,9 +41,11 @@ namespace Reefin.XbmcMetadata.Savers
             IUserManager userManager,
             IUserDataManager userDataManager,
             ILogger<ArtistNfoSaver> logger,
-            IMediaSourceManager mediaSourceManager)
+            IMediaSourceManager mediaSourceManager,
+            IItemSortService itemSortService)
             : base(fileSystem, configurationManager, libraryManager, itemPeopleService, userManager, userDataManager, logger, mediaSourceManager)
         {
+            _itemSortService = itemSortService;
         }
 
         /// <inheritdoc />
@@ -67,7 +73,7 @@ namespace Reefin.XbmcMetadata.Savers
             }
 
             var albums = artist
-                .GetRecursiveChildren(i => i is MusicAlbum);
+                .GetRecursiveChildren(i => i is MusicAlbum, _itemSortService);
 
             AddAlbums(albums, writer);
         }
