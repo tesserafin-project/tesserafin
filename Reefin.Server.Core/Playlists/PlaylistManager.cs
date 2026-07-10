@@ -20,6 +20,7 @@ using Reefin.Controller.Extensions;
 using Reefin.Controller.Library;
 using Reefin.Controller.Playlists;
 using Reefin.Controller.Providers;
+using Reefin.Controller.Sorting;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Extensions;
@@ -41,6 +42,7 @@ namespace Reefin.Server.Core.Playlists
         private readonly IProviderManager _providerManager;
         private readonly IConfiguration _appConfig;
         private readonly IItemQueryService _itemQueryService;
+        private readonly IItemSortService _itemSortService;
 
         public PlaylistManager(
             ILibraryManager libraryManager,
@@ -50,7 +52,8 @@ namespace Reefin.Server.Core.Playlists
             IUserManager userManager,
             IProviderManager providerManager,
             IConfiguration appConfig,
-            IItemQueryService itemQueryService)
+            IItemQueryService itemQueryService,
+            IItemSortService itemSortService)
         {
             _libraryManager = libraryManager;
             _fileSystem = fileSystem;
@@ -60,6 +63,7 @@ namespace Reefin.Server.Core.Playlists
             _providerManager = providerManager;
             _appConfig = appConfig;
             _itemQueryService = itemQueryService;
+            _itemSortService = itemSortService;
         }
 
         public Playlist GetPlaylistForUser(Guid playlistId, Guid userId)
@@ -181,7 +185,7 @@ namespace Reefin.Server.Core.Playlists
                 return [];
             }
 
-            return playlistsFolder.GetChildren(user, true).OfType<Playlist>().ToList();
+            return playlistsFolder.GetChildren(user, true, null, _itemSortService).OfType<Playlist>().ToList();
         }
 
         private static string GetTargetPath(string path)

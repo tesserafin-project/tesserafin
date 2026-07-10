@@ -71,7 +71,7 @@ namespace Reefin.Controller.Entities
             switch (viewType)
             {
                 case CollectionType.folders:
-                    return GetResult(_libraryManager.GetUserRootFolder().GetChildren(user, true), query);
+                    return GetResult(GetChildren(_libraryManager.GetUserRootFolder(), user), query);
 
                 case CollectionType.books:
                     return GetBooks(queryParent, user, query);
@@ -131,7 +131,7 @@ namespace Reefin.Controller.Entities
                     {
                         if (queryParent is UserView)
                         {
-                            return GetResult(GetMediaFolders(user).OfType<Folder>().SelectMany(i => i.GetChildren(user, true)), query);
+                            return GetResult(GetMediaFolders(user).OfType<Folder>().SelectMany(i => GetChildren(i, user)), query);
                         }
 
                         if (_itemSortService is not null)
@@ -149,6 +149,13 @@ namespace Reefin.Controller.Entities
         private int GetSpecialItemsLimit()
         {
             return 50;
+        }
+
+        private IReadOnlyList<BaseItem> GetChildren(Folder folder, User user)
+        {
+            return _itemSortService is null
+                ? folder.GetChildren(user, true)
+                : folder.GetChildren(user, true, null, _itemSortService);
         }
 
         private QueryResult<BaseItem> GetMovieFolders(Folder parent, User user, InternalItemsQuery query)
@@ -890,8 +897,7 @@ namespace Reefin.Controller.Entities
                     .Where(UserView.IsEligibleForGrouping);
             }
 
-            return _libraryManager.GetUserRootFolder()
-                .GetChildren(user, true)
+            return GetChildren(_libraryManager.GetUserRootFolder(), user)
                 .OfType<Folder>()
                 .Where(i => user.IsFolderGrouped(i.Id) && UserView.IsEligibleForGrouping(i));
         }

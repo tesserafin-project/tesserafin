@@ -14,6 +14,7 @@ using Reefin.Controller.Entities.Audio;
 using Reefin.Controller.Library;
 using Reefin.Controller.Providers;
 using Reefin.Controller.Session;
+using Reefin.Controller.Sorting;
 using Reefin.Data.Events;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Extensions;
@@ -33,6 +34,7 @@ public sealed class LibraryChangedNotifier : IHostedService, IDisposable
     private readonly ISessionManager _sessionManager;
     private readonly IUserManager _userManager;
     private readonly ILogger<LibraryChangedNotifier> _logger;
+    private readonly IItemSortService _itemSortService;
 
     private readonly Lock _libraryChangedSyncLock = new();
     private readonly List<Folder> _foldersAddedTo = new();
@@ -53,13 +55,15 @@ public sealed class LibraryChangedNotifier : IHostedService, IDisposable
     /// <param name="userManager">The <see cref="IUserManager"/>.</param>
     /// <param name="logger">The <see cref="ILogger"/>.</param>
     /// <param name="providerManager">The <see cref="IProviderManager"/>.</param>
+    /// <param name="itemSortService">The <see cref="IItemSortService"/>.</param>
     public LibraryChangedNotifier(
         ILibraryManager libraryManager,
         IServerConfigurationManager configurationManager,
         ISessionManager sessionManager,
         IUserManager userManager,
         ILogger<LibraryChangedNotifier> logger,
-        IProviderManager providerManager)
+        IProviderManager providerManager,
+        IItemSortService itemSortService)
     {
         _libraryManager = libraryManager;
         _configurationManager = configurationManager;
@@ -67,6 +71,7 @@ public sealed class LibraryChangedNotifier : IHostedService, IDisposable
         _userManager = userManager;
         _logger = logger;
         _providerManager = providerManager;
+        _itemSortService = itemSortService;
     }
 
     /// <inheritdoc />
@@ -309,7 +314,7 @@ public sealed class LibraryChangedNotifier : IHostedService, IDisposable
         newAndRemoved.AddRange(foldersRemovedFrom);
 
         var allUserRootChildren = _libraryManager.GetUserRootFolder()
-            .GetChildren(user, true)
+            .GetChildren(user, true, null, _itemSortService)
             .OfType<Folder>()
             .ToList();
 

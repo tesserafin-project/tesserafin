@@ -17,6 +17,7 @@ using Reefin.Controller.Entities.Movies;
 using Reefin.Controller.Library;
 using Reefin.Controller.Playlists;
 using Reefin.Controller.Session;
+using Reefin.Controller.Sorting;
 using Reefin.Data;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Enums;
@@ -45,6 +46,7 @@ public class ItemsController : BaseReefinApiController
     private readonly IUserDataManager _userDataRepository;
     private readonly ISearchManager _searchManager;
     private readonly IItemQueryService _itemQueryService;
+    private readonly IItemSortService _itemSortService;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ItemsController"/> class.
@@ -58,6 +60,7 @@ public class ItemsController : BaseReefinApiController
     /// <param name="userDataRepository">Instance of the <see cref="IUserDataManager"/> interface.</param>
     /// <param name="searchManager">Instance of the <see cref="ISearchManager"/> interface.</param>
     /// <param name="itemQueryService">Instance of the <see cref="IItemQueryService"/> interface.</param>
+    /// <param name="itemSortService">Instance of the <see cref="IItemSortService"/> interface.</param>
     public ItemsController(
         IUserManager userManager,
         ILibraryManager libraryManager,
@@ -67,7 +70,8 @@ public class ItemsController : BaseReefinApiController
         ISessionManager sessionManager,
         IUserDataManager userDataRepository,
         ISearchManager searchManager,
-        IItemQueryService itemQueryService)
+        IItemQueryService itemQueryService,
+        IItemSortService itemSortService)
     {
         _userManager = userManager;
         _libraryManager = libraryManager;
@@ -78,6 +82,7 @@ public class ItemsController : BaseReefinApiController
         _userDataRepository = userDataRepository;
         _searchManager = searchManager;
         _itemQueryService = itemQueryService;
+        _itemSortService = itemSortService;
     }
 
     /// <summary>
@@ -625,7 +630,7 @@ public class ItemsController : BaseReefinApiController
         }
         else
         {
-            var itemsArray = folder.GetChildren(user, true);
+            var itemsArray = folder.GetChildren(user, true, null, _itemSortService);
             result = new QueryResult<BaseItem>(itemsArray);
         }
 
@@ -959,7 +964,7 @@ public class ItemsController : BaseReefinApiController
         var excludeFolderIds = user.GetPreferenceValues<Guid>(PreferenceKind.LatestItemExcludes);
         if (parentIdGuid.IsEmpty() && excludeFolderIds.Length > 0)
         {
-            ancestorIds = _libraryManager.GetUserRootFolder().GetChildren(user, true)
+            ancestorIds = _libraryManager.GetUserRootFolder().GetChildren(user, true, null, _itemSortService)
                 .Where(i => i is Folder)
                 .Where(i => !excludeFolderIds.Contains(i.Id))
                 .Select(i => i.Id)

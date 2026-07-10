@@ -2077,7 +2077,7 @@ namespace Reefin.Server.Core.Library
                     && user.GetPreference(PreferenceKind.GroupedFolders).Length > 0)
                 {
                     return GetUserRootFolder()
-                        .GetChildren(user, true)
+                        .GetChildren(user, true, null, _itemSortService)
                         .OfType<CollectionFolder>()
                         .Where(i => i.CollectionType is null || i.CollectionType == view.ViewType)
                         .Where(i => user.IsFolderGrouped(i.Id))

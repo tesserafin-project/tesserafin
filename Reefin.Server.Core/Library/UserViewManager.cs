@@ -56,7 +56,7 @@ namespace Reefin.Server.Core.Library
             var user = query.User;
 
             var folders = _libraryManager.GetUserRootFolder()
-                .GetChildren(user, true)
+                .GetChildren(user, true, null, _itemSortService)
                 .OfType<Folder>()
                 .ToList();
 
@@ -291,7 +291,7 @@ namespace Reefin.Server.Core.Library
 
             if (parents.Count == 0)
             {
-                parents = _libraryManager.GetUserRootFolder().GetChildren(user, true)
+                parents = _libraryManager.GetUserRootFolder().GetChildren(user, true, null, _itemSortService)
                     .Where(i => i is Folder)
                     .Where(i => !user.GetPreferenceValues<Guid>(PreferenceKind.LatestItemExcludes)
                         .Contains(i.Id))

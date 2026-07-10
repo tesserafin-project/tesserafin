@@ -1000,7 +1000,7 @@ public class LibraryController : BaseReefinApiController
     private BaseItem? TranslateParentItem(BaseItem item, User user)
     {
         return item.GetParent() is AggregateFolder
-            ? _libraryManager.GetUserRootFolder().GetChildren(user, true)
+            ? _libraryManager.GetUserRootFolder().GetChildren(user, true, null, _itemSortService)
                 .FirstOrDefault(i => i.PhysicalLocations.Contains(item.Path))
             : item;
     }

@@ -124,7 +124,7 @@ public class YearsController : BaseReefinApiController
             }
             else
             {
-                items = recursive ? folder.GetRecursiveChildren(user, query, out totalCount) : folder.GetChildren(user, true).Where(Filter).ToArray();
+                items = recursive ? folder.GetRecursiveChildren(user, query, out totalCount, _itemSortService) : folder.GetChildren(user, true, null, _itemSortService).Where(Filter).ToArray();
             }
         }
         else

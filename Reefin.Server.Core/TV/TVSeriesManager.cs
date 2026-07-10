@@ -86,7 +86,7 @@ namespace Reefin.Server.Core.TV
             }
             else
             {
-                parents = _libraryManager.GetUserRootFolder().GetChildren(user, true)
+                parents = _libraryManager.GetUserRootFolder().GetChildren(user, true, null, _itemSortService)
                    .Where(i => i is Folder)
                    .Where(i => !user.GetPreferenceValues<Guid>(PreferenceKind.LatestItemExcludes).Contains(i.Id))
                    .ToArray();

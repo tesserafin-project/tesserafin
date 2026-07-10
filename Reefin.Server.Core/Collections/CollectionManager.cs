@@ -12,6 +12,7 @@ using Reefin.Controller.Entities.Movies;
 using Reefin.Controller.Library;
 using Reefin.Controller.Persistence;
 using Reefin.Controller.Providers;
+using Reefin.Controller.Sorting;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Extensions;
@@ -35,6 +36,7 @@ namespace Reefin.Server.Core.Collections
         private readonly ILinkedChildrenService _linkedChildrenService;
         private readonly ILocalizationManager _localizationManager;
         private readonly IApplicationPaths _appPaths;
+        private readonly IItemSortService _itemSortService;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="CollectionManager"/> class.
@@ -47,6 +49,7 @@ namespace Reefin.Server.Core.Collections
         /// <param name="loggerFactory">The logger factory.</param>
         /// <param name="providerManager">The provider manager.</param>
         /// <param name="linkedChildrenService">The linked children service.</param>
+        /// <param name="itemSortService">The item sort service.</param>
         public CollectionManager(
             ILibraryManager libraryManager,
             IApplicationPaths appPaths,
@@ -55,7 +58,8 @@ namespace Reefin.Server.Core.Collections
             ILibraryMonitor iLibraryMonitor,
             ILoggerFactory loggerFactory,
             IProviderManager providerManager,
-            ILinkedChildrenService linkedChildrenService)
+            ILinkedChildrenService linkedChildrenService,
+            IItemSortService itemSortService)
         {
             _libraryManager = libraryManager;
             _fileSystem = fileSystem;
@@ -65,6 +69,7 @@ namespace Reefin.Server.Core.Collections
             _linkedChildrenService = linkedChildrenService;
             _localizationManager = localizationManager;
             _appPaths = appPaths;
+            _itemSortService = itemSortService;
         }
 
         /// <inheritdoc />
@@ -149,7 +154,7 @@ namespace Reefin.Server.Core.Collections
 
             return folder is null
                 ? Enumerable.Empty<BoxSet>()
-                : folder.GetChildren(user, true).OfType<BoxSet>();
+                : folder.GetChildren(user, true, null, _itemSortService).OfType<BoxSet>();
         }
 
         /// <inheritdoc />

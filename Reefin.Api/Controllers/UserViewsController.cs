@@ -14,6 +14,7 @@ using Reefin.Common.Extensions;
 using Reefin.Controller.Dto;
 using Reefin.Controller.Entities;
 using Reefin.Controller.Library;
+using Reefin.Controller.Sorting;
 using Reefin.Data.Enums;
 using Reefin.Model.Dto;
 using Reefin.Model.Library;
@@ -33,6 +34,7 @@ public class UserViewsController : BaseReefinApiController
     private readonly IUserViewManager _userViewManager;
     private readonly IDtoService _dtoService;
     private readonly ILibraryManager _libraryManager;
+    private readonly IItemSortService _itemSortService;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="UserViewsController"/> class.
@@ -41,16 +43,19 @@ public class UserViewsController : BaseReefinApiController
     /// <param name="userViewManager">Instance of the <see cref="IUserViewManager"/> interface.</param>
     /// <param name="dtoService">Instance of the <see cref="IDtoService"/> interface.</param>
     /// <param name="libraryManager">Instance of the <see cref="ILibraryManager"/> interface.</param>
+    /// <param name="itemSortService">Instance of the <see cref="IItemSortService"/> interface.</param>
     public UserViewsController(
         IUserManager userManager,
         IUserViewManager userViewManager,
         IDtoService dtoService,
-        ILibraryManager libraryManager)
+        ILibraryManager libraryManager,
+        IItemSortService itemSortService)
     {
         _userManager = userManager;
         _userViewManager = userViewManager;
         _dtoService = dtoService;
         _libraryManager = libraryManager;
+        _itemSortService = itemSortService;
     }
 
     /// <summary>
@@ -138,7 +143,7 @@ public class UserViewsController : BaseReefinApiController
         }
 
         return Ok(_libraryManager.GetUserRootFolder()
-            .GetChildren(user, true)
+            .GetChildren(user, true, null, _itemSortService)
             .OfType<Folder>()
             .Where(UserView.IsEligibleForGrouping)
             .Select(i => new SpecialViewOptionDto
