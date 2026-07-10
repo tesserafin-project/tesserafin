@@ -1590,9 +1590,19 @@ namespace Reefin.Controller.Entities
             return result.Values.ToArray();
         }
 
+        public virtual IReadOnlyList<BaseItem> GetChildren(User user, bool includeLinkedChildren, out int totalItemCount, InternalItemsQuery query, IItemSortService itemSortService)
+        {
+            return GetChildren(user, includeLinkedChildren, out totalItemCount, query);
+        }
+
         public virtual IReadOnlyList<BaseItem> GetChildren(User user, bool includeLinkedChildren, InternalItemsQuery query = null)
         {
             return GetChildren(user, includeLinkedChildren, out _, query);
+        }
+
+        public virtual IReadOnlyList<BaseItem> GetChildren(User user, bool includeLinkedChildren, InternalItemsQuery query, IItemSortService itemSortService)
+        {
+            return GetChildren(user, includeLinkedChildren, query);
         }
 
         protected virtual IEnumerable<BaseItem> GetEligibleChildrenForRecursiveChildren(User user)
@@ -1683,6 +1693,11 @@ namespace Reefin.Controller.Entities
             return result.Values.ToArray();
         }
 
+        public virtual IReadOnlyList<BaseItem> GetRecursiveChildren(User user, InternalItemsQuery query, out int totalCount, IItemSortService itemSortService)
+        {
+            return GetRecursiveChildren(user, query, out totalCount);
+        }
+
         /// <summary>
         /// Gets the recursive children.
         /// </summary>
@@ -1692,14 +1707,29 @@ namespace Reefin.Controller.Entities
             return GetRecursiveChildren(true);
         }
 
+        public IReadOnlyList<BaseItem> GetRecursiveChildren(IItemSortService itemSortService)
+        {
+            return GetRecursiveChildren();
+        }
+
         public IReadOnlyList<BaseItem> GetRecursiveChildren(bool includeLinkedChildren)
         {
             return GetRecursiveChildren(i => true, includeLinkedChildren);
         }
 
+        public IReadOnlyList<BaseItem> GetRecursiveChildren(bool includeLinkedChildren, IItemSortService itemSortService)
+        {
+            return GetRecursiveChildren(includeLinkedChildren);
+        }
+
         public IReadOnlyList<BaseItem> GetRecursiveChildren(Func<BaseItem, bool> filter)
         {
             return GetRecursiveChildren(filter, true);
+        }
+
+        public IReadOnlyList<BaseItem> GetRecursiveChildren(Func<BaseItem, bool> filter, IItemSortService itemSortService)
+        {
+            return GetRecursiveChildren(filter);
         }
 
         public IReadOnlyList<BaseItem> GetRecursiveChildren(Func<BaseItem, bool> filter, bool includeLinkedChildren)
@@ -1709,6 +1739,11 @@ namespace Reefin.Controller.Entities
             AddChildrenToList(result, includeLinkedChildren, true, filter);
 
             return result.Values.ToArray();
+        }
+
+        public IReadOnlyList<BaseItem> GetRecursiveChildren(Func<BaseItem, bool> filter, bool includeLinkedChildren, IItemSortService itemSortService)
+        {
+            return GetRecursiveChildren(filter, includeLinkedChildren);
         }
 
         /// <summary>

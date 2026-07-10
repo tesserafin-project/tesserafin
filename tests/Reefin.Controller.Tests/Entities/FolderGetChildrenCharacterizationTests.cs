@@ -11,6 +11,7 @@ using Reefin.Controller.Entities.Movies;
 using Reefin.Controller.Entities.TV;
 using Reefin.Controller.Library;
 using Reefin.Controller.Playlists;
+using Reefin.Controller.Sorting;
 using Reefin.Controller.TV;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
@@ -231,6 +232,48 @@ public class FolderGetChildrenCharacterizationTests
             Times.Once);
     }
 
+    [Fact]
+    public void BoxSetGetChildren_ServiceAwarePathSortsOnceWithoutStaticSort()
+    {
+        var user = CreateUser();
+        var alpha = CreateMovie("Alpha");
+        var zulu = CreateMovie("Zulu");
+        var boxSet = new BoxSet { Id = Guid.NewGuid(), DisplayOrder = nameof(ItemSortBy.SortName), Children = new BaseItem[] { zulu, alpha } };
+        var libraryManager = new Mock<ILibraryManager>(MockBehavior.Strict);
+        SetStatics(libraryManager.Object);
+        var sortService = new RecordingItemSortService();
+
+        var result = boxSet.GetChildren(user, true, null, sortService);
+
+        Assert.Equal(new BaseItem[] { alpha, zulu }, result);
+        Assert.Single(sortService.Calls);
+        libraryManager.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public void SeasonGetChildren_ServiceAwarePathPassesSortServiceToGetEpisodes()
+    {
+        var user = CreateUser();
+        var series = new Series { Id = Guid.NewGuid(), Name = "Series", PresentationUniqueKey = "series-key" };
+        var season = new Season { Id = Guid.NewGuid(), Name = "Season 1", IndexNumber = 1, SeriesId = series.Id };
+        var episode = new Episode { Id = Guid.NewGuid(), Name = "Episode", ParentIndexNumber = 1, IndexNumber = 1 };
+
+        var libraryManager = new Mock<ILibraryManager>();
+        libraryManager.Setup(x => x.GetItemById(series.Id)).Returns(series);
+        libraryManager.Setup(x => x.GetItemList(It.IsAny<InternalItemsQuery>())).Returns(new List<BaseItem> { episode });
+        SetStatics(libraryManager.Object);
+        BaseItem.ConfigurationManager = Mock.Of<IServerConfigurationManager>(x => x.Configuration == new ServerConfiguration { DisplaySpecialsWithinSeasons = true });
+        var sortService = new RecordingItemSortService();
+
+        var result = season.GetChildren(user, true, null, sortService);
+
+        Assert.Equal(new BaseItem[] { episode }, result);
+        Assert.Single(sortService.Calls);
+        libraryManager.Verify(
+            x => x.Sort(It.IsAny<IEnumerable<BaseItem>>(), It.IsAny<User>(), It.IsAny<IEnumerable<ItemSortBy>>(), It.IsAny<SortOrder>()),
+            Times.Never);
+    }
+
     private static Mock<ILibraryManager> CreateSortingLibraryManager()
     {
         var libraryManager = new Mock<ILibraryManager>();
@@ -242,6 +285,29 @@ public class FolderGetChildrenCharacterizationTests
                     : items.OrderBy(i => i.SortName, StringComparer.OrdinalIgnoreCase));
 
         return libraryManager;
+    }
+
+    private sealed class RecordingItemSortService : IItemSortService
+    {
+        public List<(IReadOnlyList<BaseItem> Items, User User, IReadOnlyList<ItemSortBy> SortBy, SortOrder SortOrder)> Calls { get; } = [];
+
+        public void AddParts(IEnumerable<IBaseItemComparer> itemComparers)
+        {
+        }
+
+        public IEnumerable<BaseItem> Sort(IEnumerable<BaseItem> items, User? user, IEnumerable<ItemSortBy> sortBy, SortOrder sortOrder)
+        {
+            var itemList = items.ToList();
+            var sortByList = sortBy.ToList();
+            Calls.Add((itemList, user!, sortByList, sortOrder));
+
+            return sortOrder == SortOrder.Descending
+                ? itemList.OrderByDescending(i => i.SortName, StringComparer.OrdinalIgnoreCase)
+                : itemList.OrderBy(i => i.SortName, StringComparer.OrdinalIgnoreCase);
+        }
+
+        public IEnumerable<BaseItem> Sort(IEnumerable<BaseItem> items, User? user, IEnumerable<(ItemSortBy OrderBy, SortOrder SortOrder)> orderBy)
+            => throw new NotSupportedException("GetChildren service-aware tests use the 4-argument Sort overload.");
     }
 }
 #pragma warning restore CS0618

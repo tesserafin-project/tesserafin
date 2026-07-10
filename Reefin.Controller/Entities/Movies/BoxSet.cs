@@ -8,6 +8,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text.Json.Serialization;
 using Reefin.Controller.Providers;
+using Reefin.Controller.Sorting;
 using Reefin.Data;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
@@ -130,10 +131,31 @@ namespace Reefin.Controller.Entities.Movies
 #pragma warning restore CS0618
         }
 
+        private IEnumerable<BaseItem> Sort(IEnumerable<BaseItem> items, User user, IItemSortService itemSortService)
+        {
+            if (!Enum.TryParse<ItemSortBy>(DisplayOrder, out var sortBy))
+            {
+                sortBy = ItemSortBy.PremiereDate;
+            }
+
+            if (sortBy == ItemSortBy.Default)
+            {
+                return items;
+            }
+
+            return itemSortService.Sort(items, user, new[] { sortBy }, SortOrder.Ascending);
+        }
+
         public override IReadOnlyList<BaseItem> GetChildren(User user, bool includeLinkedChildren, InternalItemsQuery query)
         {
             var children = base.GetChildren(user, includeLinkedChildren, query);
             return Sort(children, user).ToArray();
+        }
+
+        public override IReadOnlyList<BaseItem> GetChildren(User user, bool includeLinkedChildren, InternalItemsQuery query, IItemSortService itemSortService)
+        {
+            var children = base.GetChildren(user, includeLinkedChildren, out _, query);
+            return Sort(children, user, itemSortService).ToArray();
         }
 
         public override IReadOnlyList<BaseItem> GetChildren(User user, bool includeLinkedChildren, out int totalItemCount, InternalItemsQuery query = null)
@@ -142,10 +164,22 @@ namespace Reefin.Controller.Entities.Movies
             return Sort(children, user).ToArray();
         }
 
+        public override IReadOnlyList<BaseItem> GetChildren(User user, bool includeLinkedChildren, out int totalItemCount, InternalItemsQuery query, IItemSortService itemSortService)
+        {
+            var children = base.GetChildren(user, includeLinkedChildren, out totalItemCount, query);
+            return Sort(children, user, itemSortService).ToArray();
+        }
+
         public override IReadOnlyList<BaseItem> GetRecursiveChildren(User user, InternalItemsQuery query, out int totalCount)
         {
             var children = base.GetRecursiveChildren(user, query, out totalCount);
             return Sort(children, user).ToArray();
+        }
+
+        public override IReadOnlyList<BaseItem> GetRecursiveChildren(User user, InternalItemsQuery query, out int totalCount, IItemSortService itemSortService)
+        {
+            var children = base.GetRecursiveChildren(user, query, out totalCount);
+            return Sort(children, user, itemSortService).ToArray();
         }
 
         public BoxSetInfo GetLookupInfo()

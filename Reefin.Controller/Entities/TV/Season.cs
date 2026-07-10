@@ -288,6 +288,11 @@ namespace Reefin.Controller.Entities.TV
             return GetEpisodes(user, new DtoOptions(true), true);
         }
 
+        public override IReadOnlyList<BaseItem> GetChildren(User user, bool includeLinkedChildren, InternalItemsQuery query, IItemSortService itemSortService)
+        {
+            return GetEpisodes(user, new DtoOptions(true), true, itemSortService);
+        }
+
         protected override bool GetBlockUnratedValue(User user)
         {
             // Don't block. Let either the entire series rating or episode rating determine it
