@@ -24,8 +24,11 @@ namespace Reefin.Server.Core.Library
     /// Extracted from <c>LibraryManager</c> in PR75. Depends only on <see cref="IItemRepository"/>
     /// and <see cref="IServerConfigurationManager"/> - it must never take a dependency on
     /// <c>ILibraryManager</c>, to avoid a circular dependency with the class that consumes it.
+    /// Hardened to <c>internal sealed</c> in PR76: outside this assembly the service is only ever
+    /// reachable through <see cref="IItemLookupService"/> (reads) or <see cref="IItemCacheStore"/>
+    /// (lifecycle), never as the concrete type. A reflection guard test keeps it that way.
     /// </remarks>
-    public class ItemLookupService : IItemLookupService, IItemCacheStore
+    internal sealed class ItemLookupService : IItemLookupService, IItemCacheStore
     {
         private readonly IItemRepository _itemRepository;
         private readonly FastConcurrentLru<Guid, BaseItem> _cache;

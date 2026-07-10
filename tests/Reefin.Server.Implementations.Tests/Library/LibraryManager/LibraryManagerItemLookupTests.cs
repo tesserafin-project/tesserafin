@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using AutoFixture;
 using AutoFixture.AutoMoq;
+using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Reefin.Controller.Configuration;
 using Reefin.Controller.Entities;
@@ -69,6 +71,7 @@ public class LibraryManagerItemLookupTests
         _itemLookupService = new Reefin.Server.Core.Library.ItemLookupService(_itemRepositoryMock.Object, _configurationManagerMock.Object);
         fixture.Register(() => _itemLookupService);
         fixture.Register<IItemLookupService>(() => _itemLookupService);
+        fixture.Register<Reefin.Server.Core.Library.IItemCacheStore>(() => _itemLookupService);
 
         _libraryManager = fixture.Build<Reefin.Server.Core.Library.LibraryManager>().Do(s => s.AddParts(
                 fixture.Create<IEnumerable<IResolverIgnoreRule>>(),
@@ -479,5 +482,166 @@ public class LibraryManagerItemLookupTests
         Assert.Same(movie, viaLibraryManager);
         Assert.Same(viaLibraryManager, viaItemLookupService);
         _itemRepositoryMock.Verify(r => r.RetrieveItem(movie.Id), Times.Once);
+    }
+
+    // ---------------------------------------------------------------
+    // 15. PR76: BaseItem.GetParent()/GetOwner() (static LibraryManager) and their
+    // GetParent(lookup)/GetOwner(lookup) counterparts (PR72) resolve through the same cache.
+    // ---------------------------------------------------------------
+
+    [Fact]
+    public void GetParent_StaticAndLookupOverload_ResolveSameInstanceFromSameCache()
+    {
+        // Closing-audit check (PR76 point 5): the historical BaseItem.GetParent() (static
+        // BaseItem.LibraryManager, itself delegating to _itemLookupService per LibraryManager.cs:1599)
+        // and the PR72 BaseItem.GetParent(IItemLookupService) overload must resolve the exact same
+        // cached instance, not two independently-caching lookups.
+        SetLibraryManagerStatic(_libraryManager);
+
+        var parent = new Folder { Id = Guid.NewGuid(), Name = "Parent" };
+        _libraryManager.RegisterItem(parent);
+        var child = new Movie { Id = Guid.NewGuid(), Name = "Child", ParentId = parent.Id };
+
+        var viaStatic = child.GetParent();
+        var viaLookup = child.GetParent(_itemLookupService);
+
+        Assert.Same(parent, viaStatic);
+        Assert.Same(viaStatic, viaLookup);
+        _itemRepositoryMock.Verify(r => r.RetrieveItem(It.IsAny<Guid>()), Times.Never);
+    }
+
+    [Fact]
+    public void GetOwner_StaticAndLookupOverload_ResolveSameInstanceFromSameCache()
+    {
+        // Closing-audit check (PR76 point 6): same as above, for GetOwner()/GetOwner(lookup).
+        SetLibraryManagerStatic(_libraryManager);
+
+        var owner = new Movie { Id = Guid.NewGuid(), Name = "Owner" };
+        _libraryManager.RegisterItem(owner);
+        var item = new Movie { Id = Guid.NewGuid(), Name = "Item", OwnerId = owner.Id };
+
+        var viaStatic = item.GetOwner();
+        var viaLookup = item.GetOwner(_itemLookupService);
+
+        Assert.Same(owner, viaStatic);
+        Assert.Same(viaStatic, viaLookup);
+        _itemRepositoryMock.Verify(r => r.RetrieveItem(It.IsAny<Guid>()), Times.Never);
+    }
+
+    // ---------------------------------------------------------------
+    // 16. PR76: hardening guards - DI wiring and concrete-type visibility.
+    // ---------------------------------------------------------------
+
+    [Fact]
+    public void DiWiring_ApplicationHostStyleRegistration_BothPortsResolveSameSingleton()
+    {
+        // Reproduces the exact ApplicationHost wiring (ApplicationHost.cs, PR75/PR76): one
+        // concrete ItemLookupService singleton exposed under both the public read port
+        // (IItemLookupService) and the internal lifecycle port (IItemCacheStore). If someone
+        // ever splits these mappings into two instances, reads and invalidation would silently
+        // operate on two different caches.
+        var services = new ServiceCollection();
+        services.AddSingleton(_itemRepositoryMock.Object);
+        services.AddSingleton(_configurationManagerMock.Object);
+        services.AddSingleton<Reefin.Server.Core.Library.ItemLookupService>();
+        services.AddSingleton<IItemLookupService>(sp => sp.GetRequiredService<Reefin.Server.Core.Library.ItemLookupService>());
+        services.AddSingleton<Reefin.Server.Core.Library.IItemCacheStore>(sp => sp.GetRequiredService<Reefin.Server.Core.Library.ItemLookupService>());
+
+        using var provider = services.BuildServiceProvider();
+
+        var lookup = provider.GetRequiredService<IItemLookupService>();
+        var cacheStore = provider.GetRequiredService<Reefin.Server.Core.Library.IItemCacheStore>();
+
+        Assert.Same(lookup, cacheStore);
+    }
+
+    [Fact]
+    public void ItemLookupService_ConcreteType_StaysInternalSealed()
+    {
+        // PR76 hardening guard: the concrete cache owner must never become public again -
+        // consumers outside Reefin.Server.Core may only see IItemLookupService (reads) or,
+        // within the assembly, IItemCacheStore (lifecycle).
+        var concreteType = typeof(Reefin.Server.Core.Library.ItemLookupService);
+
+        Assert.False(concreteType.IsVisible);
+        Assert.False(concreteType.IsPublic);
+        Assert.True(concreteType.IsSealed);
+    }
+
+    // ---------------------------------------------------------------
+    // 17. PR76: ValidateTopLibraryFolders - a CollectionFolder whose directory disappeared is
+    // deleted from the database AND invalidated from the lookup cache (fix discovered in PR75).
+    // ---------------------------------------------------------------
+
+    [Fact]
+    public async Task ValidateTopLibraryFolders_MissingCollectionFolderDirectory_InvalidatesCacheEntry()
+    {
+        // The heavy machinery (root construction, metadata refresh, children validation) is
+        // neutralized: stub root folders are injected into LibraryManager's private lazy fields,
+        // their ValidateChildrenInternal/Children members are overridden to no-ops, and the
+        // BaseItem statics used by the non-virtual RefreshMetadata path are pointed at mocks.
+        // What remains under test is exactly the PR75 fix: the missing-directory cleanup loop in
+        // ValidateTopLibraryFolders must invalidate the cache entry after deleting from the DB.
+        SetLibraryManagerStatic(_libraryManager);
+        SetConfigurationManagerStatic(_configurationManagerMock.Object);
+        BaseItem.Logger = new Microsoft.Extensions.Logging.Abstractions.NullLogger<BaseItem>();
+        BaseItem.FileSystem = Mock.Of<Reefin.Model.IO.IFileSystem>();
+        BaseItem.ProviderManager = new Mock<IProviderManager>().Object;
+
+        var missing = new CollectionFolder
+        {
+            Id = Guid.NewGuid(),
+            Name = "Vanished library",
+            Path = "/reefin-test-nonexistent/" + Guid.NewGuid()
+        };
+
+        _libraryManager.RegisterItem(missing);
+        Assert.Same(missing, _libraryManager.GetItemById(missing.Id));
+        _itemRepositoryMock.Verify(r => r.RetrieveItem(missing.Id), Times.Never);
+
+        var libraryManagerType = typeof(Reefin.Server.Core.Library.LibraryManager);
+        libraryManagerType
+            .GetField("_rootFolder", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .SetValue(_libraryManager, new StubAggregateFolder());
+        libraryManagerType
+            .GetField("_userRootFolder", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .SetValue(_libraryManager, new StubUserRootFolder { StubChildren = [missing] });
+
+        await _libraryManager.ValidateTopLibraryFolders(CancellationToken.None);
+
+        // Deleted from the database...
+        _persistenceServiceMock.Verify(
+            p => p.DeleteItem(It.Is<IReadOnlyList<Guid>>(ids => ids.Count == 1 && ids[0].Equals(missing.Id))),
+            Times.Once);
+
+        // ...and invalidated from the cache: the next lookup is a read-through miss.
+        Assert.Null(_libraryManager.GetItemById(missing.Id));
+        _itemRepositoryMock.Verify(r => r.RetrieveItem(missing.Id), Times.Once);
+    }
+
+    private sealed class StubAggregateFolder : AggregateFolder
+    {
+        public override IEnumerable<BaseItem> Children
+        {
+            get => [];
+            set { }
+        }
+
+        protected override System.Threading.Tasks.Task ValidateChildrenInternal(IProgress<double> progress, bool recursive, bool refreshChildMetadata, bool allowRemoveRoot, MetadataRefreshOptions refreshOptions, IDirectoryService directoryService, CancellationToken cancellationToken)
+            => System.Threading.Tasks.Task.CompletedTask;
+    }
+
+    private sealed class StubUserRootFolder : UserRootFolder
+    {
+        public IReadOnlyList<BaseItem> StubChildren { get; set; } = [];
+
+        public override IEnumerable<BaseItem> Children
+        {
+            get => StubChildren;
+            set { }
+        }
+
+        protected override System.Threading.Tasks.Task ValidateChildrenInternal(IProgress<double> progress, bool recursive, bool refreshChildMetadata, bool allowRemoveRoot, MetadataRefreshOptions refreshOptions, IDirectoryService directoryService, CancellationToken cancellationToken)
+            => System.Threading.Tasks.Task.CompletedTask;
     }
 }

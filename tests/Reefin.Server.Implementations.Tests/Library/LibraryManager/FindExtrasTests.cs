@@ -34,10 +34,18 @@ public class FindExtrasTests
         fixture.Register(() => new NamingOptions());
         var configMock = fixture.Freeze<Mock<IServerConfigurationManager>>();
         configMock.Setup(c => c.ApplicationPaths.ProgramDataPath).Returns("/data");
+        configMock.Setup(c => c.Configuration).Returns(new Reefin.Model.Configuration.ServerConfiguration());
         var itemRepository = fixture.Freeze<Mock<IItemRepository>>();
         itemRepository.Setup(i => i.RetrieveItem(It.IsAny<Guid>())).Returns<BaseItem>(null);
         _fileSystemMock = fixture.Freeze<Mock<IFileSystem>>();
         _fileSystemMock.Setup(f => f.GetFileInfo(It.IsAny<string>())).Returns<string>(path => new FileSystemMetadata { FullName = path });
+
+        // PR76: LibraryManager depends on IItemLookupService + IItemCacheStore (both satisfied by
+        // the single internal ItemLookupService in production). Mirror that wiring with one real
+        // instance - IItemCacheStore is internal, so AutoMoq could not proxy it anyway.
+        var itemLookupService = new Reefin.Server.Core.Library.ItemLookupService(itemRepository.Object, configMock.Object);
+        fixture.Register<IItemLookupService>(() => itemLookupService);
+        fixture.Register<Reefin.Server.Core.Library.IItemCacheStore>(() => itemLookupService);
         _libraryManager = fixture.Build<Reefin.Server.Core.Library.LibraryManager>().Do(s => s.AddParts(
                 fixture.Create<IEnumerable<IResolverIgnoreRule>>(),
                 new List<IItemResolver> { new AudioResolver(fixture.Create<NamingOptions>()) },

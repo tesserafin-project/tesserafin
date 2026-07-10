@@ -57,7 +57,13 @@ namespace Reefin.Server.Core.Library
     /// <summary>
     /// Class LibraryManager.
     /// </summary>
-    public class LibraryManager : ILibraryManager, IItemLookupService
+    /// <remarks>
+    /// Internal since PR76: the constructor depends on the internal <see cref="IItemCacheStore"/>
+    /// lifecycle port, and no other assembly ever referenced the concrete type - consumers go
+    /// through <see cref="ILibraryManager"/> (or <see cref="IItemLookupService"/>), wired up in
+    /// <c>ApplicationHost</c> (same assembly). Tests reach it via <c>InternalsVisibleTo</c>.
+    /// </remarks>
+    internal class LibraryManager : ILibraryManager, IItemLookupService
     {
         private const string ShortcutFileExtension = ".mblink";
 
@@ -85,7 +91,8 @@ namespace Reefin.Server.Core.Library
         private readonly IPeopleRepository _peopleRepository;
         private readonly ExtraResolver _extraResolver;
         private readonly IPathManager _pathManager;
-        private readonly ItemLookupService _itemLookupService;
+        private readonly IItemLookupService _itemLookupService;
+        private readonly IItemCacheStore _itemCacheStore;
         private readonly DotIgnoreIgnoreRule _dotIgnoreIgnoreRule;
         private readonly IMediaStreamLanguageService _mediaStreamLanguageService;
         private readonly Lazy<IExternalDataManager> _externalDataManagerFactory;
@@ -136,7 +143,8 @@ namespace Reefin.Server.Core.Library
         /// <param name="dotIgnoreIgnoreRule">The .ignore rule handler.</param>
         /// <param name="mediaStreamLanguageService">The media stream language service.</param>
         /// <param name="externalDataManagerFactory">The external data manager (lazy, to break the DI cycle through ChapterManager).</param>
-        /// <param name="itemLookupService">The item lookup service (owns the item lookup cache; see PR75).</param>
+        /// <param name="itemLookupService">The item lookup service (read side of the item lookup cache; see PR75/PR76).</param>
+        /// <param name="itemCacheStore">The item cache lifecycle port (register/invalidate side of the same cache; see PR76).</param>
         public LibraryManager(
             IServerApplicationHost appHost,
             ILoggerFactory loggerFactory,
@@ -165,7 +173,8 @@ namespace Reefin.Server.Core.Library
             DotIgnoreIgnoreRule dotIgnoreIgnoreRule,
             IMediaStreamLanguageService mediaStreamLanguageService,
             Lazy<IExternalDataManager> externalDataManagerFactory,
-            ItemLookupService itemLookupService)
+            IItemLookupService itemLookupService,
+            IItemCacheStore itemCacheStore)
         {
             _appHost = appHost;
             _logger = loggerFactory.CreateLogger<LibraryManager>();
@@ -189,6 +198,7 @@ namespace Reefin.Server.Core.Library
             _imageProcessor = imageProcessor;
 
             _itemLookupService = itemLookupService;
+            _itemCacheStore = itemCacheStore;
 
             _namingOptions = namingOptions;
             _peopleRepository = peopleRepository;
@@ -328,7 +338,7 @@ namespace Reefin.Server.Core.Library
         {
             ArgumentNullException.ThrowIfNull(item);
 
-            _itemLookupService.Register(item);
+            _itemCacheStore.Register(item);
         }
 
         public void DeleteItem(BaseItem item, DeleteOptions options)
@@ -396,7 +406,7 @@ namespace Reefin.Server.Core.Library
             }
 
             _persistenceService.DeleteItem([.. pathMaps.Select(f => f.Item.Id)]);
-            _itemLookupService.RemoveRange(pathMaps.Select(f => f.Item.Id));
+            _itemCacheStore.RemoveRange(pathMaps.Select(f => f.Item.Id));
         }
 
         public void DeleteItem(BaseItem item, DeleteOptions options, BaseItem parent, bool notifyParentItem)
@@ -584,8 +594,8 @@ namespace Reefin.Server.Core.Library
             }
 
             _persistenceService.DeleteItem([item.Id, .. children.Select(f => f.Id)]);
-            _itemLookupService.Remove(item.Id);
-            _itemLookupService.RemoveRange(children.Select(child => child.Id));
+            _itemCacheStore.Remove(item.Id);
+            _itemCacheStore.RemoveRange(children.Select(child => child.Id));
 
             if (parent is Folder folder)
             {
@@ -1418,7 +1428,7 @@ namespace Reefin.Server.Core.Library
             if (toDelete.Count > 0)
             {
                 _persistenceService.DeleteItem(toDelete.ToArray());
-                _itemLookupService.RemoveRange(toDelete);
+                _itemCacheStore.RemoveRange(toDelete);
             }
 
             ClearIgnoreRuleCache();

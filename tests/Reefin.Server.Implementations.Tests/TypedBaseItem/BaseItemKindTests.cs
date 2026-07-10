@@ -55,6 +55,14 @@ namespace Reefin.Server.Implementations.Tests.TypedBaseItem
                 return false;
             }
 
+            // Test assemblies may declare private BaseItem stubs (e.g. the ValidateTopLibraryFolders
+            // stubs in LibraryManagerItemLookupTests); the BaseItemKind mapping contract only covers
+            // production types, so exclude them from the reflection scan.
+            if (name.Contains(".Tests", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
             return name.StartsWith("Reefin", StringComparison.OrdinalIgnoreCase)
                    || name.StartsWith("Emby", StringComparison.OrdinalIgnoreCase)
                    || name.StartsWith("MediaBrowser", StringComparison.OrdinalIgnoreCase);
