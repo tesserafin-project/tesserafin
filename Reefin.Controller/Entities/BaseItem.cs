@@ -2841,11 +2841,15 @@ namespace Reefin.Controller.Entities
                 StringComparison.OrdinalIgnoreCase);
         }
 
+        [Obsolete("Use GetExtras plus IItemSortService.Sort instead. Kept for plugin compatibility until Plugin SDK v2.")]
         public IReadOnlyList<BaseItem> GetThemeSongs(User user = null)
         {
+#pragma warning disable CS0618
             return GetThemeSongs(user, Array.Empty<(ItemSortBy, SortOrder)>());
+#pragma warning restore CS0618
         }
 
+        [Obsolete("Use GetExtras plus IItemSortService.Sort instead. Kept for plugin compatibility until Plugin SDK v2.")]
         public IReadOnlyList<BaseItem> GetThemeSongs(User user, IEnumerable<(ItemSortBy SortBy, SortOrder SortOrder)> orderBy)
         {
 #pragma warning disable CS0618 // static LibraryManager.Sort facade left in place pending Folder.GetChildren cascade, see docs/major-rewrite-plan-v13.md § PR49/N
@@ -2853,11 +2857,15 @@ namespace Reefin.Controller.Entities
 #pragma warning restore CS0618
         }
 
+        [Obsolete("Use GetExtras plus IItemSortService.Sort instead. Kept for plugin compatibility until Plugin SDK v2.")]
         public IReadOnlyList<BaseItem> GetThemeVideos(User user = null)
         {
+#pragma warning disable CS0618
             return GetThemeVideos(user, Array.Empty<(ItemSortBy, SortOrder)>());
+#pragma warning restore CS0618
         }
 
+        [Obsolete("Use GetExtras plus IItemSortService.Sort instead. Kept for plugin compatibility until Plugin SDK v2.")]
         public IReadOnlyList<BaseItem> GetThemeVideos(User user, IEnumerable<(ItemSortBy SortBy, SortOrder SortOrder)> orderBy)
         {
 #pragma warning disable CS0618 // static LibraryManager.Sort facade left in place pending Folder.GetChildren cascade, see docs/major-rewrite-plan-v13.md § PR49/N
