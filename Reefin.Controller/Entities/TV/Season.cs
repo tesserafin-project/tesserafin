@@ -14,6 +14,7 @@ using Reefin.Controller.Collections;
 using Reefin.Controller.Dto;
 using Reefin.Controller.Library;
 using Reefin.Controller.Providers;
+using Reefin.Controller.Sorting;
 using Reefin.Controller.TV;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
@@ -201,29 +202,33 @@ namespace Reefin.Controller.Entities.TV
         /// <param name="user">The user.</param>
         /// <param name="options">The options to use.</param>
         /// <param name="shouldIncludeMissingEpisodes">If missing episodes should be included.</param>
+        /// <param name="itemSortService">Optional sort service; falls back to the obsolete static <c>LibraryManager.Sort</c> facade when <c>null</c> (see docs/major-rewrite-plan-v13.md § PR50/N).</param>
         /// <returns>Set of episodes.</returns>
-        public List<BaseItem> GetEpisodes(User user, DtoOptions options, bool shouldIncludeMissingEpisodes)
+        public List<BaseItem> GetEpisodes(User user, DtoOptions options, bool shouldIncludeMissingEpisodes, IItemSortService itemSortService = null)
         {
-            return GetEpisodes(Series, user, options, shouldIncludeMissingEpisodes);
+            return GetEpisodes(Series, user, options, shouldIncludeMissingEpisodes, itemSortService);
         }
 
-        public List<BaseItem> GetEpisodes(Series series, User user, DtoOptions options, bool shouldIncludeMissingEpisodes)
+        public List<BaseItem> GetEpisodes(Series series, User user, DtoOptions options, bool shouldIncludeMissingEpisodes, IItemSortService itemSortService = null)
         {
-            return GetEpisodes(series, user, null, options, shouldIncludeMissingEpisodes);
+            return GetEpisodes(series, user, null, options, shouldIncludeMissingEpisodes, itemSortService);
         }
 
-        public List<BaseItem> GetEpisodes(Series series, User user, IEnumerable<Episode> allSeriesEpisodes, DtoOptions options, bool shouldIncludeMissingEpisodes)
+        public List<BaseItem> GetEpisodes(Series series, User user, IEnumerable<Episode> allSeriesEpisodes, DtoOptions options, bool shouldIncludeMissingEpisodes, IItemSortService itemSortService = null)
         {
             if (series is null)
             {
                 return [];
             }
 
-            return series.GetSeasonEpisodes(this, user, allSeriesEpisodes, options, shouldIncludeMissingEpisodes);
+            return series.GetSeasonEpisodes(this, user, allSeriesEpisodes, options, shouldIncludeMissingEpisodes, itemSortService);
         }
 
         public List<BaseItem> GetEpisodes()
         {
+            // No IItemSortService to give here (no DI-resolved caller reaches this no-arg
+            // overload): falls back to the obsolete static LibraryManager.Sort facade via
+            // Series.GetSeasonEpisodes, same as Season.GetChildren below. See PR50/N.
             return GetEpisodes(Series, null, null, new DtoOptions(true), true);
         }
 

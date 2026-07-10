@@ -14,6 +14,7 @@ using Reefin.Controller.Collections;
 using Reefin.Controller.Dto;
 using Reefin.Controller.Library;
 using Reefin.Controller.Providers;
+using Reefin.Controller.Sorting;
 using Reefin.Controller.TV;
 using Reefin.Data;
 using Reefin.Data.Enums;
@@ -270,7 +271,7 @@ namespace Reefin.Controller.Entities.TV
             return LibraryManager.GetItemsResult(query);
         }
 
-        public IEnumerable<BaseItem> GetEpisodes(User user, DtoOptions options, bool shouldIncludeMissingEpisodes)
+        public IEnumerable<BaseItem> GetEpisodes(User user, DtoOptions options, bool shouldIncludeMissingEpisodes, IItemSortService itemSortService = null)
         {
             var seriesKey = GetUniqueSeriesKey(this);
 
@@ -293,7 +294,7 @@ namespace Reefin.Controller.Entities.TV
             var allSeriesEpisodes = allItems.OfType<Episode>().ToList();
 
             var allEpisodes = allItems.OfType<Season>()
-                .SelectMany(i => i.GetEpisodes(this, user, allSeriesEpisodes, options, shouldIncludeMissingEpisodes))
+                .SelectMany(i => i.GetEpisodes(this, user, allSeriesEpisodes, options, shouldIncludeMissingEpisodes, itemSortService))
                 .Reverse();
 
             // Specials could appear twice based on above - once in season 0, once in the aired season
@@ -369,7 +370,7 @@ namespace Reefin.Controller.Entities.TV
             await ProviderManager.RefreshSingleItem(this, refreshOptions, cancellationToken).ConfigureAwait(false);
         }
 
-        public List<BaseItem> GetSeasonEpisodes(Season parentSeason, User user, DtoOptions options, bool shouldIncludeMissingEpisodes)
+        public List<BaseItem> GetSeasonEpisodes(Season parentSeason, User user, DtoOptions options, bool shouldIncludeMissingEpisodes, IItemSortService itemSortService = null)
         {
             var queryFromSeries = ConfigurationManager.Configuration.DisplaySpecialsWithinSeasons;
 
@@ -412,19 +413,29 @@ namespace Reefin.Controller.Entities.TV
                 allItems = LibraryManager.GetItemList(query);
             }
 
-            return GetSeasonEpisodes(parentSeason, user, allItems, options, shouldIncludeMissingEpisodes);
+            return GetSeasonEpisodes(parentSeason, user, allItems, options, shouldIncludeMissingEpisodes, itemSortService);
         }
 
-        public List<BaseItem> GetSeasonEpisodes(Season parentSeason, User user, IEnumerable<BaseItem> allSeriesEpisodes, DtoOptions options, bool shouldIncludeMissingEpisodes)
+        public List<BaseItem> GetSeasonEpisodes(Season parentSeason, User user, IEnumerable<BaseItem> allSeriesEpisodes, DtoOptions options, bool shouldIncludeMissingEpisodes, IItemSortService itemSortService = null)
         {
             if (allSeriesEpisodes is null)
             {
-                return GetSeasonEpisodes(parentSeason, user, options, shouldIncludeMissingEpisodes);
+                return GetSeasonEpisodes(parentSeason, user, options, shouldIncludeMissingEpisodes, itemSortService);
             }
 
             var episodes = FilterEpisodesBySeason(allSeriesEpisodes, parentSeason, ConfigurationManager.Configuration.DisplaySpecialsWithinSeasons);
 
             var sortBy = (parentSeason.IndexNumber ?? -1) == 0 ? ItemSortBy.SortName : ItemSortBy.AiredEpisodeOrder;
+
+            // Partial threading (PR50/N): callers that can supply an IItemSortService use it
+            // directly; callers that cannot (e.g. Season.GetChildren, the virtual GetChildren
+            // contract has no service to give) keep falling back to the obsolete static facade.
+            // The pragma below therefore survives this tranche on purpose -- see
+            // docs/major-rewrite-plan-v13.md § PR49/N and § PR50/N.
+            if (itemSortService is not null)
+            {
+                return itemSortService.Sort(episodes, user, new[] { sortBy }, SortOrder.Ascending).ToList();
+            }
 
 #pragma warning disable CS0618 // static LibraryManager.Sort facade left in place pending Folder.GetChildren/Series.GetEpisodes cascade, see docs/major-rewrite-plan-v13.md § PR49/N
             return LibraryManager.Sort(episodes, user, new[] { sortBy }, SortOrder.Ascending).ToList();
