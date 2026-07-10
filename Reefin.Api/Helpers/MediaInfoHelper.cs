@@ -37,7 +37,7 @@ namespace Reefin.Api.Helpers;
 public class MediaInfoHelper
 {
     private readonly IUserManager _userManager;
-    private readonly ILibraryManager _libraryManager;
+    private readonly IItemLookupService _itemLookupService;
     private readonly IMediaSourceManager _mediaSourceManager;
     private readonly IMediaEncoder _mediaEncoder;
     private readonly IServerConfigurationManager _serverConfigurationManager;
@@ -50,7 +50,7 @@ public class MediaInfoHelper
     /// Initializes a new instance of the <see cref="MediaInfoHelper"/> class.
     /// </summary>
     /// <param name="userManager">Instance of the <see cref="IUserManager"/> interface.</param>
-    /// <param name="libraryManager">Instance of the <see cref="ILibraryManager"/> interface.</param>
+    /// <param name="itemLookupService">Instance of the <see cref="IItemLookupService"/> interface.</param>
     /// <param name="mediaSourceManager">Instance of the <see cref="IMediaSourceManager"/> interface.</param>
     /// <param name="mediaEncoder">Instance of the <see cref="IMediaEncoder"/> interface.</param>
     /// <param name="serverConfigurationManager">Instance of the <see cref="IServerConfigurationManager"/> interface.</param>
@@ -60,7 +60,7 @@ public class MediaInfoHelper
     /// <param name="playbackSessionManager">Instance of the <see cref="IPlaybackSessionManager"/> interface.</param>
     public MediaInfoHelper(
         IUserManager userManager,
-        ILibraryManager libraryManager,
+        IItemLookupService itemLookupService,
         IMediaSourceManager mediaSourceManager,
         IMediaEncoder mediaEncoder,
         IServerConfigurationManager serverConfigurationManager,
@@ -70,7 +70,7 @@ public class MediaInfoHelper
         IPlaybackSessionManager playbackSessionManager)
     {
         _userManager = userManager;
-        _libraryManager = libraryManager;
+        _itemLookupService = itemLookupService;
         _mediaSourceManager = mediaSourceManager;
         _mediaEncoder = mediaEncoder;
         _serverConfigurationManager = serverConfigurationManager;
@@ -429,7 +429,7 @@ public class MediaInfoHelper
 
         if (profile is not null)
         {
-            var item = _libraryManager.GetItemById<BaseItem>(request.ItemId)
+            var item = _itemLookupService.GetItemById<BaseItem>(request.ItemId)
                 ?? throw new ResourceNotFoundException();
 
             SetDeviceSpecificData(

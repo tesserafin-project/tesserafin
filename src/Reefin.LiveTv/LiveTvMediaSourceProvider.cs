@@ -31,7 +31,7 @@ namespace Reefin.LiveTv
         private readonly IServerApplicationHost _appHost;
         private readonly IRecordingsManager _recordingsManager;
         private readonly IMediaSourceManager _mediaSourceManager;
-        private readonly ILibraryManager _libraryManager;
+        private readonly IItemLookupService _itemLookupService;
         private readonly ILiveTvService[] _services;
 
         public LiveTvMediaSourceProvider(
@@ -39,14 +39,14 @@ namespace Reefin.LiveTv
             IServerApplicationHost appHost,
             IRecordingsManager recordingsManager,
             IMediaSourceManager mediaSourceManager,
-            ILibraryManager libraryManager,
+            IItemLookupService itemLookupService,
             IEnumerable<ILiveTvService> services)
         {
             _logger = logger;
             _appHost = appHost;
             _recordingsManager = recordingsManager;
             _mediaSourceManager = mediaSourceManager;
-            _libraryManager = libraryManager;
+            _itemLookupService = itemLookupService;
             _services = services.ToArray();
         }
 
@@ -267,7 +267,7 @@ namespace Reefin.LiveTv
                 mediaSourceId = null;
             }
 
-            var channel = (LiveTvChannel)_libraryManager.GetItemById(id);
+            var channel = (LiveTvChannel)_itemLookupService.GetItemById(new Guid(id));
 
             bool isVideo = channel.ChannelType == ChannelType.TV;
             var service = GetService(channel.ServiceName);

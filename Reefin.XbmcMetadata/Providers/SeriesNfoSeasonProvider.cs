@@ -21,7 +21,7 @@ namespace Reefin.XbmcMetadata.Providers
         private readonly IUserManager _userManager;
         private readonly IUserDataManager _userDataManager;
         private readonly IDirectoryService _directoryService;
-        private readonly ILibraryManager _libraryManager;
+        private readonly IItemLookupService _itemLookupService;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="SeriesNfoSeasonProvider"/> class.
@@ -33,7 +33,7 @@ namespace Reefin.XbmcMetadata.Providers
         /// <param name="userManager">Instance of the <see cref="IUserManager"/> interface.</param>
         /// <param name="userDataManager">Instance of the <see cref="IUserDataManager"/> interface.</param>
         /// <param name="directoryService">Instance of the <see cref="IDirectoryService"/> interface.</param>
-        /// <param name="libraryManager">Instance of the <see cref="ILibraryManager"/> interface.</param>
+        /// <param name="itemLookupService">Instance of the <see cref="IItemLookupService"/> interface.</param>
         public SeriesNfoSeasonProvider(
             ILogger<SeriesNfoSeasonProvider> logger,
             IFileSystem fileSystem,
@@ -42,7 +42,7 @@ namespace Reefin.XbmcMetadata.Providers
             IUserManager userManager,
             IUserDataManager userDataManager,
             IDirectoryService directoryService,
-            ILibraryManager libraryManager)
+            IItemLookupService itemLookupService)
             : base(fileSystem)
         {
             _logger = logger;
@@ -51,7 +51,7 @@ namespace Reefin.XbmcMetadata.Providers
             _userManager = userManager;
             _userDataManager = userDataManager;
             _directoryService = directoryService;
-            _libraryManager = libraryManager;
+            _itemLookupService = itemLookupService;
         }
 
         /// <inheritdoc />
@@ -73,7 +73,7 @@ namespace Reefin.XbmcMetadata.Providers
                 }
             }
 
-            var seriesPath = _libraryManager.GetItemById(info.ParentId)?.Path;
+            var seriesPath = _itemLookupService.GetItemById(info.ParentId)?.Path;
             if (seriesPath is not null)
             {
                 var path = Path.Combine(seriesPath, "tvshow.nfo");

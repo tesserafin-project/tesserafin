@@ -20,7 +20,7 @@ namespace Reefin.Api.Tests.Helpers
         {
             return new MediaInfoHelper(
                 Mock.Of<IUserManager>(),
-                Mock.Of<ILibraryManager>(),
+                Mock.Of<IItemLookupService>(),
                 Mock.Of<IMediaSourceManager>(),
                 Mock.Of<IMediaEncoder>(),
                 Mock.Of<IServerConfigurationManager>(),
