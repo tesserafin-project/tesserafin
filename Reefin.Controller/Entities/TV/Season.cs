@@ -202,19 +202,41 @@ namespace Reefin.Controller.Entities.TV
         /// <param name="user">The user.</param>
         /// <param name="options">The options to use.</param>
         /// <param name="shouldIncludeMissingEpisodes">If missing episodes should be included.</param>
-        /// <param name="itemSortService">Optional sort service; falls back to the obsolete static <c>LibraryManager.Sort</c> facade when <c>null</c> (see docs/major-rewrite-plan-v13.md § PR50/N).</param>
         /// <returns>Set of episodes.</returns>
-        public List<BaseItem> GetEpisodes(User user, DtoOptions options, bool shouldIncludeMissingEpisodes, IItemSortService itemSortService = null)
+        public List<BaseItem> GetEpisodes(User user, DtoOptions options, bool shouldIncludeMissingEpisodes)
+        {
+            return GetEpisodes(user, options, shouldIncludeMissingEpisodes, null);
+        }
+
+        /// <summary>
+        /// Gets the episodes.
+        /// </summary>
+        /// <param name="user">The user.</param>
+        /// <param name="options">The options to use.</param>
+        /// <param name="shouldIncludeMissingEpisodes">If missing episodes should be included.</param>
+        /// <param name="itemSortService">Sort service; falls back to the obsolete static <c>LibraryManager.Sort</c> facade when <c>null</c> (see docs/major-rewrite-plan-v13.md § PR50/N).</param>
+        /// <returns>Set of episodes.</returns>
+        public List<BaseItem> GetEpisodes(User user, DtoOptions options, bool shouldIncludeMissingEpisodes, IItemSortService itemSortService)
         {
             return GetEpisodes(Series, user, options, shouldIncludeMissingEpisodes, itemSortService);
         }
 
-        public List<BaseItem> GetEpisodes(Series series, User user, DtoOptions options, bool shouldIncludeMissingEpisodes, IItemSortService itemSortService = null)
+        public List<BaseItem> GetEpisodes(Series series, User user, DtoOptions options, bool shouldIncludeMissingEpisodes)
+        {
+            return GetEpisodes(series, user, options, shouldIncludeMissingEpisodes, null);
+        }
+
+        public List<BaseItem> GetEpisodes(Series series, User user, DtoOptions options, bool shouldIncludeMissingEpisodes, IItemSortService itemSortService)
         {
             return GetEpisodes(series, user, null, options, shouldIncludeMissingEpisodes, itemSortService);
         }
 
-        public List<BaseItem> GetEpisodes(Series series, User user, IEnumerable<Episode> allSeriesEpisodes, DtoOptions options, bool shouldIncludeMissingEpisodes, IItemSortService itemSortService = null)
+        public List<BaseItem> GetEpisodes(Series series, User user, IEnumerable<Episode> allSeriesEpisodes, DtoOptions options, bool shouldIncludeMissingEpisodes)
+        {
+            return GetEpisodes(series, user, allSeriesEpisodes, options, shouldIncludeMissingEpisodes, null);
+        }
+
+        public List<BaseItem> GetEpisodes(Series series, User user, IEnumerable<Episode> allSeriesEpisodes, DtoOptions options, bool shouldIncludeMissingEpisodes, IItemSortService itemSortService)
         {
             if (series is null)
             {

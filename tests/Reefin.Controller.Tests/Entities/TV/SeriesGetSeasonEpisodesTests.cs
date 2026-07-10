@@ -395,6 +395,58 @@ public class SeriesGetSeasonEpisodesTests
     }
 
     [Fact]
+    public void SeriesGetSeasonEpisodes_LegacyOverloadMatchesExplicitNullFallback()
+    {
+        SetDisplaySpecialsWithinSeasons(true);
+
+        var series = CreateSeries();
+        var season1 = CreateSeason(1);
+        var e1 = CreateEpisode("S01E01", 1, 1);
+        var e2 = CreateEpisode("S01E02", 1, 2);
+
+        var libraryManager = new Mock<ILibraryManager>();
+        libraryManager
+            .Setup(x => x.Sort(It.IsAny<IEnumerable<BaseItem>>(), It.IsAny<User>(), It.IsAny<IEnumerable<ItemSortBy>>(), It.IsAny<SortOrder>()))
+            .Returns((IEnumerable<BaseItem> items, User u, IEnumerable<ItemSortBy> sortBy, SortOrder order) => items);
+        BaseItem.LibraryManager = libraryManager.Object;
+
+        var legacyResult = series.GetSeasonEpisodes(season1, null, new BaseItem[] { e1, e2 }, new DtoOptions(true), true);
+        var explicitNullResult = series.GetSeasonEpisodes(season1, null, new BaseItem[] { e1, e2 }, new DtoOptions(true), true, null);
+
+        Assert.Equal(legacyResult, explicitNullResult);
+        libraryManager.Verify(
+            x => x.Sort(It.IsAny<IEnumerable<BaseItem>>(), It.IsAny<User>(), It.IsAny<IEnumerable<ItemSortBy>>(), It.IsAny<SortOrder>()),
+            Times.Exactly(2));
+    }
+
+    [Fact]
+    public void SeasonGetEpisodes_LegacyOverloadMatchesExplicitNullFallback()
+    {
+        SetDisplaySpecialsWithinSeasons(true);
+
+        var series = CreateSeries();
+        var season1 = CreateSeason(1);
+        var e1 = CreateEpisode("S01E01", 1, 1);
+
+        var libraryManager = new Mock<ILibraryManager>();
+        libraryManager
+            .Setup(x => x.GetItemList(It.IsAny<InternalItemsQuery>()))
+            .Returns(new List<BaseItem> { e1 });
+        libraryManager
+            .Setup(x => x.Sort(It.IsAny<IEnumerable<BaseItem>>(), It.IsAny<User>(), It.IsAny<IEnumerable<ItemSortBy>>(), It.IsAny<SortOrder>()))
+            .Returns((IEnumerable<BaseItem> items, User u, IEnumerable<ItemSortBy> sortBy, SortOrder order) => items);
+        BaseItem.LibraryManager = libraryManager.Object;
+
+        var legacyResult = season1.GetEpisodes(series, null, new DtoOptions(true), true);
+        var explicitNullResult = season1.GetEpisodes(series, null, new DtoOptions(true), true, null);
+
+        Assert.Equal(legacyResult, explicitNullResult);
+        libraryManager.Verify(
+            x => x.Sort(It.IsAny<IEnumerable<BaseItem>>(), It.IsAny<User>(), It.IsAny<IEnumerable<ItemSortBy>>(), It.IsAny<SortOrder>()),
+            Times.Exactly(2));
+    }
+
+    [Fact]
     public void SeasonGetEpisodes_NoArgOverload_OrphanSeason_ReturnsEmptyWithoutAnyLibraryManagerCall()
     {
         // Season.GetEpisodes() / Season.GetChildren have no IItemSortService to give (fixed
