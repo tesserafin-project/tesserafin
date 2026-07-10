@@ -138,9 +138,7 @@ namespace Reefin.Controller.Entities
         /// <inheritdoc />
         public override List<BaseItem> GetChildren(User user, bool includeLinkedChildren, InternalItemsQuery query)
         {
-            query ??= new InternalItemsQuery(user);
-
-            query.EnableTotalRecordCount = false;
+            query = PrepareChildrenQuery(user, query);
 
             // GetChildren isn't part of the GetItemsInternal/GetItems/GetItemList chain the
             // channelManager parameter was threaded through (out of scope: GetChildren is a much
@@ -150,6 +148,16 @@ namespace Reefin.Controller.Entities
 #pragma warning disable CS0618
             var result = GetItemList(query, ChannelManager, CollectionManager, UserViewManager, TVSeriesManager);
 #pragma warning restore CS0618
+
+            return result.ToList();
+        }
+
+        /// <inheritdoc />
+        public override IReadOnlyList<BaseItem> GetChildren(User user, bool includeLinkedChildren, InternalItemsQuery query, IItemSortService itemSortService)
+        {
+            query = PrepareChildrenQuery(user, query);
+
+            var result = GetItemList(query, ChannelManager, CollectionManager, UserViewManager, TVSeriesManager, itemSortService);
 
             return result.ToList();
         }
@@ -169,10 +177,7 @@ namespace Reefin.Controller.Entities
         /// <inheritdoc />
         public override IReadOnlyList<BaseItem> GetRecursiveChildren(User user, InternalItemsQuery query, out int totalCount)
         {
-            query.SetUser(user);
-            query.Recursive = true;
-            query.EnableTotalRecordCount = false;
-            query.ForceDirect = true;
+            query = PrepareRecursiveChildrenQuery(user, query);
 
             // Same scope boundary as GetChildren above: GetRecursiveChildren isn't part of the
             // threaded chain, falls back to the statics.
@@ -184,6 +189,34 @@ namespace Reefin.Controller.Entities
             totalCount = data.Count;
 
             return data;
+        }
+
+        /// <inheritdoc />
+        public override IReadOnlyList<BaseItem> GetRecursiveChildren(User user, InternalItemsQuery query, out int totalCount, IItemSortService itemSortService)
+        {
+            query = PrepareRecursiveChildrenQuery(user, query);
+
+            var data = GetItemList(query, ChannelManager, CollectionManager, UserViewManager, TVSeriesManager, itemSortService);
+            totalCount = data.Count;
+
+            return data;
+        }
+
+        private static InternalItemsQuery PrepareChildrenQuery(User user, InternalItemsQuery query)
+        {
+            query ??= new InternalItemsQuery(user);
+            query.EnableTotalRecordCount = false;
+            return query;
+        }
+
+        private static InternalItemsQuery PrepareRecursiveChildrenQuery(User user, InternalItemsQuery query)
+        {
+            query ??= new InternalItemsQuery(user);
+            query.SetUser(user);
+            query.Recursive = true;
+            query.EnableTotalRecordCount = false;
+            query.ForceDirect = true;
+            return query;
         }
 
         /// <inheritdoc />

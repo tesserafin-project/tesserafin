@@ -370,7 +370,17 @@ public class FolderGetChildrenCharacterizationTests
         }
 
         public IEnumerable<BaseItem> Sort(IEnumerable<BaseItem> items, User? user, IEnumerable<(ItemSortBy OrderBy, SortOrder SortOrder)> orderBy)
-            => throw new NotSupportedException("GetChildren service-aware tests use the 4-argument Sort overload.");
+        {
+            var orderByList = orderBy.ToList();
+            var firstOrder = orderByList.Count == 0 ? SortOrder.Ascending : orderByList[0].SortOrder;
+            var sortByList = orderByList.Select(i => i.OrderBy).ToList();
+            var itemList = items.ToList();
+            Calls.Add((itemList, user!, sortByList, firstOrder));
+
+            return firstOrder == SortOrder.Descending
+                ? itemList.OrderByDescending(i => i.SortName, StringComparer.OrdinalIgnoreCase)
+                : itemList.OrderBy(i => i.SortName, StringComparer.OrdinalIgnoreCase);
+        }
     }
 }
 #pragma warning restore CS0618
