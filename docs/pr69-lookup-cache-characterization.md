@@ -80,7 +80,7 @@ Confirmed by exercising `RegisterItem`/`GetItemById` directly (matches the code 
   `DeleteItem`/`DeleteItemsUnsafeFast` tests set that static, joined via
   `LibraryManagerStaticStateFixture`.
 
-### `DeleteItemsUnsafeFast` does **NOT** invalidate the cache - known bug
+### `DeleteItemsUnsafeFast` does **NOT** invalidate the cache - known bug (fixed by PR70, see `docs/pr70-cache-coherence.md`)
 
 This is the headline finding, characterized exactly as described in the task brief:
 

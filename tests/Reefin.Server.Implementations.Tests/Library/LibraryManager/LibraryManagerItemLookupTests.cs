@@ -28,8 +28,9 @@ namespace Reefin.Server.Implementations.Tests.Library.LibraryManager;
 /// <summary>
 /// Characterization tests for <see cref="Reefin.Server.Core.Library.LibraryManager"/> item lookup
 /// (<c>GetItemById</c> family) and its cache (<c>_cache</c>, a <c>FastConcurrentLru</c>). These tests
-/// lock down the CURRENT behavior as groundwork for PR70 (which will fix the stale-cache bug in
-/// <c>DeleteItemsUnsafeFast</c> documented below) - they are not a statement of the desired behavior.
+/// lock down the current behavior, including the cache coherence invariant introduced by PR70:
+/// every cache write goes through the <c>ShouldCacheItem</c>/<c>RegisterItemInCache</c>/
+/// <c>RemoveItemFromCache</c>/<c>RemoveItemsFromCache</c> primitives.
 /// </summary>
 [Collection(LibraryManagerStaticStateFixture.Name)]
 public class LibraryManagerItemLookupTests
@@ -329,11 +330,11 @@ public class LibraryManagerItemLookupTests
     }
 
     // ---------------------------------------------------------------
-    // 11. DeleteItemsUnsafeFast does NOT invalidate the cache (known bug, PR70 will fix)
+    // 11. DeleteItemsUnsafeFast invalidates the cache
     // ---------------------------------------------------------------
 
     [Fact]
-    public void DeleteItemsUnsafeFast_CacheableItem_DoesNotInvalidateCache()
+    public void DeleteItemsUnsafeFast_CacheableItem_InvalidatesCache()
     {
         SetConfigurationManagerStatic(_configurationManagerMock.Object);
 
@@ -343,11 +344,11 @@ public class LibraryManagerItemLookupTests
 
         _libraryManager.DeleteItemsUnsafeFast(new List<BaseItem> { channel }, deleteSourceFiles: false);
 
-        // Comportement actuel (bug connu): PR70 ajoutera l'invalidation et inversera cette assertion.
+        _itemRepositoryMock.Setup(r => r.RetrieveItem(channel.Id)).Returns((BaseItem)null!);
         var result = _libraryManager.GetItemById(channel.Id);
 
-        Assert.Same(channel, result);
-        _itemRepositoryMock.Verify(r => r.RetrieveItem(It.IsAny<Guid>()), Times.Never);
+        Assert.Null(result);
+        _itemRepositoryMock.Verify(r => r.RetrieveItem(channel.Id), Times.Once);
         _persistenceServiceMock.Verify(p => p.DeleteItem(It.Is<IReadOnlyList<Guid>>(ids => ids.Contains(channel.Id))), Times.Once);
     }
 }

@@ -327,22 +327,58 @@ namespace Reefin.Server.Core.Library
         {
             ArgumentNullException.ThrowIfNull(item);
 
+            RegisterItemInCache(item);
+        }
+
+        /// <summary>
+        /// Determines whether an item is eligible for the item lookup cache. IItemByName
+        /// implementors are excluded except <see cref="MusicArtist"/>; non-folder items are
+        /// excluded except <see cref="Video"/> and <see cref="LiveTvChannel"/>.
+        /// </summary>
+        private static bool ShouldCacheItem(BaseItem item)
+        {
             if (item is IItemByName)
             {
-                if (item is not MusicArtist)
-                {
-                    return;
-                }
-            }
-            else if (!item.IsFolder)
-            {
-                if (item is not Video && item is not LiveTvChannel)
-                {
-                    return;
-                }
+                return item is MusicArtist;
             }
 
-            _cache.AddOrUpdate(item.Id, item);
+            if (!item.IsFolder)
+            {
+                return item is Video or LiveTvChannel;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Adds or replaces <paramref name="item"/> in the item lookup cache if it is cacheable
+        /// (see <see cref="ShouldCacheItem"/>); otherwise a no-op.
+        /// </summary>
+        private void RegisterItemInCache(BaseItem item)
+        {
+            if (ShouldCacheItem(item))
+            {
+                _cache.AddOrUpdate(item.Id, item);
+            }
+        }
+
+        /// <summary>
+        /// Removes a single item from the item lookup cache, if present.
+        /// </summary>
+        private void RemoveItemFromCache(Guid id)
+        {
+            _cache.TryRemove(id, out _);
+        }
+
+        /// <summary>
+        /// Removes multiple items from the item lookup cache, if present.
+        /// </summary>
+        private void RemoveItemsFromCache(IEnumerable<Guid> ids)
+        {
+            foreach (var id in ids)
+            {
+                _cache.TryRemove(id, out _);
+            }
         }
 
         public void DeleteItem(BaseItem item, DeleteOptions options)
@@ -410,6 +446,7 @@ namespace Reefin.Server.Core.Library
             }
 
             _persistenceService.DeleteItem([.. pathMaps.Select(f => f.Item.Id)]);
+            RemoveItemsFromCache(pathMaps.Select(f => f.Item.Id));
         }
 
         public void DeleteItem(BaseItem item, DeleteOptions options, BaseItem parent, bool notifyParentItem)
@@ -597,11 +634,8 @@ namespace Reefin.Server.Core.Library
             }
 
             _persistenceService.DeleteItem([item.Id, .. children.Select(f => f.Id)]);
-            _cache.TryRemove(item.Id, out _);
-            foreach (var child in children)
-            {
-                _cache.TryRemove(child.Id, out _);
-            }
+            RemoveItemFromCache(item.Id);
+            RemoveItemsFromCache(children.Select(child => child.Id));
 
             if (parent is Folder folder)
             {
