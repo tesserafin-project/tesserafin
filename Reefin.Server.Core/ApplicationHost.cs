@@ -558,8 +558,10 @@ namespace Reefin.Server.Core
             serviceCollection.AddTransient(provider => new Lazy<IProviderManager>(provider.GetRequiredService<IProviderManager>));
             serviceCollection.AddTransient(provider => new Lazy<IUserViewManager>(provider.GetRequiredService<IUserViewManager>));
             serviceCollection.AddTransient(provider => new Lazy<IExternalDataManager>(provider.GetRequiredService<IExternalDataManager>));
+            serviceCollection.AddSingleton<ItemLookupService>();
+            serviceCollection.AddSingleton<IItemLookupService>(sp => sp.GetRequiredService<ItemLookupService>());
+            serviceCollection.AddSingleton<IItemCacheStore>(sp => sp.GetRequiredService<ItemLookupService>());
             serviceCollection.AddSingleton<ILibraryManager, LibraryManager>();
-            serviceCollection.AddSingleton<IItemLookupService>(sp => (IItemLookupService)sp.GetRequiredService<ILibraryManager>());
             serviceCollection.AddSingleton<NamingOptions>();
             serviceCollection.AddSingleton<VideoListResolver>();
 

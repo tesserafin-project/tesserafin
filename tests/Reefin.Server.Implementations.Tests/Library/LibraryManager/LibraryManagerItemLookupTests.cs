@@ -36,6 +36,7 @@ namespace Reefin.Server.Implementations.Tests.Library.LibraryManager;
 public class LibraryManagerItemLookupTests
 {
     private readonly Reefin.Server.Core.Library.LibraryManager _libraryManager;
+    private readonly Reefin.Server.Core.Library.ItemLookupService _itemLookupService;
     private readonly Mock<IItemRepository> _itemRepositoryMock;
     private readonly Mock<IItemPersistenceService> _persistenceServiceMock;
     private readonly Mock<IServerConfigurationManager> _configurationManagerMock;
@@ -58,6 +59,16 @@ public class LibraryManagerItemLookupTests
 
         _externalDataManagerMock = fixture.Freeze<Mock<IExternalDataManager>>();
         fixture.Register(() => new Lazy<IExternalDataManager>(() => _externalDataManagerMock.Object));
+
+        // PR75: LibraryManager no longer owns the item lookup cache directly - it delegates to a
+        // single ItemLookupService instance. Build a *real* ItemLookupService (not a mock) from the
+        // frozen repository/configuration mocks above, and register that one instance for every type
+        // that can request it (the concrete class, the public IItemLookupService, and the internal
+        // IItemCacheStore port) so LibraryManager and the tests below share the same live cache -
+        // exactly like the single-instance double-singleton wiring in ApplicationHost.
+        _itemLookupService = new Reefin.Server.Core.Library.ItemLookupService(_itemRepositoryMock.Object, _configurationManagerMock.Object);
+        fixture.Register(() => _itemLookupService);
+        fixture.Register<IItemLookupService>(() => _itemLookupService);
 
         _libraryManager = fixture.Build<Reefin.Server.Core.Library.LibraryManager>().Do(s => s.AddParts(
                 fixture.Create<IEnumerable<IResolverIgnoreRule>>(),
@@ -430,5 +441,43 @@ public class LibraryManagerItemLookupTests
         Assert.NotNull(raisedArgs);
         Assert.Same(channel, raisedArgs.Item);
         Assert.Same(parentFolder, raisedArgs.Parent);
+    }
+
+    // ---------------------------------------------------------------
+    // 14. ItemLookupService extraction (PR75)
+    // ---------------------------------------------------------------
+
+    [Fact]
+    public void ItemLookupService_Standalone_CacheMissThenHit_ReadsThroughOnceThenServesFromCache()
+    {
+        // Exercised directly against ItemLookupService, with no LibraryManager involved, to prove
+        // the extracted service is independently read-through/cache-capable rather than relying on
+        // LibraryManager to drive it.
+        var folder = new Folder { Id = Guid.NewGuid(), Name = "Folder" };
+        _itemRepositoryMock.Setup(r => r.RetrieveItem(folder.Id)).Returns(folder);
+
+        var first = _itemLookupService.GetItemById(folder.Id);
+        var second = _itemLookupService.GetItemById(folder.Id);
+
+        Assert.Same(folder, first);
+        Assert.Same(folder, second);
+        _itemRepositoryMock.Verify(r => r.RetrieveItem(folder.Id), Times.Once);
+    }
+
+    [Fact]
+    public void GetItemById_LibraryManagerAndItemLookupService_ReturnSameInstanceFromSameCache()
+    {
+        // LibraryManager.GetItemById must delegate to the exact same ItemLookupService instance
+        // used elsewhere (DI wires a single ItemLookupService as both the concrete service and the
+        // IItemLookupService/IItemCacheStore ports) - not a second, independently-caching instance.
+        var movie = new Movie { Id = Guid.NewGuid(), Name = "Movie" };
+        _itemRepositoryMock.Setup(r => r.RetrieveItem(movie.Id)).Returns(movie);
+
+        var viaLibraryManager = _libraryManager.GetItemById(movie.Id);
+        var viaItemLookupService = _itemLookupService.GetItemById(movie.Id);
+
+        Assert.Same(movie, viaLibraryManager);
+        Assert.Same(viaLibraryManager, viaItemLookupService);
+        _itemRepositoryMock.Verify(r => r.RetrieveItem(movie.Id), Times.Once);
     }
 }

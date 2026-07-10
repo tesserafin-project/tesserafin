@@ -10,7 +10,6 @@ using System.Net;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
-using BitFaster.Caching.Lru;
 using Microsoft.Extensions.Logging;
 using Reefin.Common.Extensions;
 using Reefin.Controller;
@@ -86,7 +85,7 @@ namespace Reefin.Server.Core.Library
         private readonly IPeopleRepository _peopleRepository;
         private readonly ExtraResolver _extraResolver;
         private readonly IPathManager _pathManager;
-        private readonly FastConcurrentLru<Guid, BaseItem> _cache;
+        private readonly ItemLookupService _itemLookupService;
         private readonly DotIgnoreIgnoreRule _dotIgnoreIgnoreRule;
         private readonly IMediaStreamLanguageService _mediaStreamLanguageService;
         private readonly Lazy<IExternalDataManager> _externalDataManagerFactory;
@@ -137,6 +136,7 @@ namespace Reefin.Server.Core.Library
         /// <param name="dotIgnoreIgnoreRule">The .ignore rule handler.</param>
         /// <param name="mediaStreamLanguageService">The media stream language service.</param>
         /// <param name="externalDataManagerFactory">The external data manager (lazy, to break the DI cycle through ChapterManager).</param>
+        /// <param name="itemLookupService">The item lookup service (owns the item lookup cache; see PR75).</param>
         public LibraryManager(
             IServerApplicationHost appHost,
             ILoggerFactory loggerFactory,
@@ -164,7 +164,8 @@ namespace Reefin.Server.Core.Library
             IPathManager pathManager,
             DotIgnoreIgnoreRule dotIgnoreIgnoreRule,
             IMediaStreamLanguageService mediaStreamLanguageService,
-            Lazy<IExternalDataManager> externalDataManagerFactory)
+            Lazy<IExternalDataManager> externalDataManagerFactory,
+            ItemLookupService itemLookupService)
         {
             _appHost = appHost;
             _logger = loggerFactory.CreateLogger<LibraryManager>();
@@ -187,7 +188,7 @@ namespace Reefin.Server.Core.Library
             _itemPeopleService = itemPeopleService;
             _imageProcessor = imageProcessor;
 
-            _cache = new FastConcurrentLru<Guid, BaseItem>(_configurationManager.Configuration.CacheSize);
+            _itemLookupService = itemLookupService;
 
             _namingOptions = namingOptions;
             _peopleRepository = peopleRepository;
@@ -327,58 +328,7 @@ namespace Reefin.Server.Core.Library
         {
             ArgumentNullException.ThrowIfNull(item);
 
-            RegisterItemInCache(item);
-        }
-
-        /// <summary>
-        /// Determines whether an item is eligible for the item lookup cache. IItemByName
-        /// implementors are excluded except <see cref="MusicArtist"/>; non-folder items are
-        /// excluded except <see cref="Video"/> and <see cref="LiveTvChannel"/>.
-        /// </summary>
-        private static bool ShouldCacheItem(BaseItem item)
-        {
-            if (item is IItemByName)
-            {
-                return item is MusicArtist;
-            }
-
-            if (!item.IsFolder)
-            {
-                return item is Video or LiveTvChannel;
-            }
-
-            return true;
-        }
-
-        /// <summary>
-        /// Adds or replaces <paramref name="item"/> in the item lookup cache if it is cacheable
-        /// (see <see cref="ShouldCacheItem"/>); otherwise a no-op.
-        /// </summary>
-        private void RegisterItemInCache(BaseItem item)
-        {
-            if (ShouldCacheItem(item))
-            {
-                _cache.AddOrUpdate(item.Id, item);
-            }
-        }
-
-        /// <summary>
-        /// Removes a single item from the item lookup cache, if present.
-        /// </summary>
-        private void RemoveItemFromCache(Guid id)
-        {
-            _cache.TryRemove(id, out _);
-        }
-
-        /// <summary>
-        /// Removes multiple items from the item lookup cache, if present.
-        /// </summary>
-        private void RemoveItemsFromCache(IEnumerable<Guid> ids)
-        {
-            foreach (var id in ids)
-            {
-                _cache.TryRemove(id, out _);
-            }
+            _itemLookupService.Register(item);
         }
 
         public void DeleteItem(BaseItem item, DeleteOptions options)
@@ -446,7 +396,7 @@ namespace Reefin.Server.Core.Library
             }
 
             _persistenceService.DeleteItem([.. pathMaps.Select(f => f.Item.Id)]);
-            RemoveItemsFromCache(pathMaps.Select(f => f.Item.Id));
+            _itemLookupService.RemoveRange(pathMaps.Select(f => f.Item.Id));
         }
 
         public void DeleteItem(BaseItem item, DeleteOptions options, BaseItem parent, bool notifyParentItem)
@@ -634,8 +584,8 @@ namespace Reefin.Server.Core.Library
             }
 
             _persistenceService.DeleteItem([item.Id, .. children.Select(f => f.Id)]);
-            RemoveItemFromCache(item.Id);
-            RemoveItemsFromCache(children.Select(child => child.Id));
+            _itemLookupService.Remove(item.Id);
+            _itemLookupService.RemoveRange(children.Select(child => child.Id));
 
             if (parent is Folder folder)
             {
@@ -1468,6 +1418,7 @@ namespace Reefin.Server.Core.Library
             if (toDelete.Count > 0)
             {
                 _persistenceService.DeleteItem(toDelete.ToArray());
+                _itemLookupService.RemoveRange(toDelete);
             }
 
             ClearIgnoreRuleCache();
@@ -1645,37 +1596,14 @@ namespace Reefin.Server.Core.Library
         /// <inheritdoc />
         public BaseItem? GetItemById(Guid id)
         {
-            if (id.IsEmpty())
-            {
-                throw new ArgumentException("Guid can't be empty", nameof(id));
-            }
-
-            if (_cache.TryGet(id, out var item))
-            {
-                return item;
-            }
-
-            item = RetrieveItem(id);
-
-            if (item is not null)
-            {
-                RegisterItem(item);
-            }
-
-            return item;
+            return _itemLookupService.GetItemById(id);
         }
 
         /// <inheritdoc />
         public T? GetItemById<T>(Guid id)
             where T : BaseItem
         {
-            var item = GetItemById(id);
-            if (item is T typedItem)
-            {
-                return typedItem;
-            }
-
-            return null;
+            return _itemLookupService.GetItemById<T>(id);
         }
 
         /// <inheritdoc />
@@ -1690,8 +1618,7 @@ namespace Reefin.Server.Core.Library
         public T? GetItemById<T>(Guid id, User? user)
             where T : BaseItem
         {
-            var item = GetItemById<T>(id);
-            return ItemIsVisible(item, user) ? item : null;
+            return _itemLookupService.GetItemById<T>(id, user);
         }
 
         public IReadOnlyList<BaseItem> GetItemList(InternalItemsQuery query, bool allowExternalContent)
@@ -3628,21 +3555,6 @@ namespace Reefin.Server.Core.Library
                 .ToArray();
 
             CollectionFolder.SaveLibraryOptions(virtualFolderPath, libraryOptions);
-        }
-
-        private static bool ItemIsVisible(BaseItem? item, User? user)
-        {
-            if (item is null)
-            {
-                return false;
-            }
-
-            if (user is null)
-            {
-                return true;
-            }
-
-            return item is UserRootFolder || item.IsVisibleStandalone(user);
         }
 
         public void CreateShortcut(string virtualFolderPath, MediaPathInfo pathInfo)

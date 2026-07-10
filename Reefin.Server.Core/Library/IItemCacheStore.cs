@@ -1,0 +1,40 @@
+using System;
+using System.Collections.Generic;
+using Reefin.Controller.Entities;
+
+namespace Reefin.Server.Core.Library
+{
+    /// <summary>
+    /// Internal lifecycle port for the item lookup cache owned by <see cref="ItemLookupService"/>.
+    /// Deliberately excluded from the public, read-only <see cref="Reefin.Controller.Library.IItemLookupService"/>
+    /// contract - only <see cref="LibraryManager"/> (the sole writer of items into the library) is
+    /// expected to register or invalidate cache entries.
+    /// </summary>
+    /// <remarks>
+    /// Kept <c>internal</c> rather than public: <see cref="LibraryManager"/> lives in the same
+    /// assembly (Reefin.Server.Core) as <see cref="ItemLookupService"/>, and
+    /// Reefin.Server.Core.Properties.AssemblyInfo already grants
+    /// <c>InternalsVisibleTo("Reefin.Server.Implementations.Tests")</c>, so the characterization
+    /// test suite can see this type too.
+    /// </remarks>
+    internal interface IItemCacheStore
+    {
+        /// <summary>
+        /// Adds or replaces <paramref name="item"/> in the cache if it is cacheable; otherwise a no-op.
+        /// </summary>
+        /// <param name="item">The item to register.</param>
+        void Register(BaseItem item);
+
+        /// <summary>
+        /// Removes a single item from the cache, if present.
+        /// </summary>
+        /// <param name="id">The item id.</param>
+        void Remove(Guid id);
+
+        /// <summary>
+        /// Removes multiple items from the cache, if present.
+        /// </summary>
+        /// <param name="ids">The item ids.</param>
+        void RemoveRange(IEnumerable<Guid> ids);
+    }
+}
