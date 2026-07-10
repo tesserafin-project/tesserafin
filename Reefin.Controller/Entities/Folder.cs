@@ -1025,60 +1025,44 @@ namespace Reefin.Controller.Entities
         [Obsolete("Application code should use IItemQueryService instead of calling Folder.GetItems/GetItemList directly. See docs/major-rewrite-plan-v13.md § PR28/N.")]
         public QueryResult<BaseItem> GetItems(InternalItemsQuery query, IChannelManager channelManager, ICollectionManager collectionManager, IUserViewManager userViewManager, ITVSeriesManager tvSeriesManager)
         {
-            if (query.ItemIds.Length > 0)
-            {
-                var result = LibraryManager.GetItemsResult(query);
-
-                if (query.OrderBy.Count == 0 && query.ItemIds.Length > 1)
-                {
-                    result.Items = SortItemsByRequest(query, result.Items);
-                }
-
-                return result;
-            }
-
-            return GetItemsInternal(query, channelManager, collectionManager, userViewManager, tvSeriesManager);
+            return GetItemsCore(query, q => GetItemsInternal(q, channelManager, collectionManager, userViewManager, tvSeriesManager));
         }
 
         public QueryResult<BaseItem> GetItems(InternalItemsQuery query, IChannelManager channelManager, ICollectionManager collectionManager, IUserViewManager userViewManager, ITVSeriesManager tvSeriesManager, IItemSortService itemSortService)
         {
-            if (query.ItemIds.Length > 0)
-            {
-                var result = LibraryManager.GetItemsResult(query);
-
-                if (query.OrderBy.Count == 0 && query.ItemIds.Length > 1)
-                {
-                    result.Items = SortItemsByRequest(query, result.Items);
-                }
-
-                return result;
-            }
-
-            return GetItemsInternal(query, channelManager, collectionManager, userViewManager, tvSeriesManager, itemSortService);
+            return GetItemsCore(query, q => GetItemsInternal(q, channelManager, collectionManager, userViewManager, tvSeriesManager, itemSortService));
         }
 
         // PR28/N: same deprecation rationale as GetItems above.
         [Obsolete("Application code should use IItemQueryService instead of calling Folder.GetItems/GetItemList directly. See docs/major-rewrite-plan-v13.md § PR28/N.")]
         public IReadOnlyList<BaseItem> GetItemList(InternalItemsQuery query, IChannelManager channelManager, ICollectionManager collectionManager, IUserViewManager userViewManager, ITVSeriesManager tvSeriesManager)
         {
-            query.EnableTotalRecordCount = false;
+            return GetItemListCore(query, q => GetItemsInternal(q, channelManager, collectionManager, userViewManager, tvSeriesManager));
+        }
 
+        public IReadOnlyList<BaseItem> GetItemList(InternalItemsQuery query, IChannelManager channelManager, ICollectionManager collectionManager, IUserViewManager userViewManager, ITVSeriesManager tvSeriesManager, IItemSortService itemSortService)
+        {
+            return GetItemListCore(query, q => GetItemsInternal(q, channelManager, collectionManager, userViewManager, tvSeriesManager, itemSortService));
+        }
+
+        private QueryResult<BaseItem> GetItemsCore(InternalItemsQuery query, Func<InternalItemsQuery, QueryResult<BaseItem>> getItemsInternal)
+        {
             if (query.ItemIds.Length > 0)
             {
-                var result = LibraryManager.GetItemList(query);
+                var result = LibraryManager.GetItemsResult(query);
 
                 if (query.OrderBy.Count == 0 && query.ItemIds.Length > 1)
                 {
-                    return SortItemsByRequest(query, result);
+                    result.Items = SortItemsByRequest(query, result.Items);
                 }
 
                 return result;
             }
 
-            return GetItemsInternal(query, channelManager, collectionManager, userViewManager, tvSeriesManager).Items;
+            return getItemsInternal(query);
         }
 
-        public IReadOnlyList<BaseItem> GetItemList(InternalItemsQuery query, IChannelManager channelManager, ICollectionManager collectionManager, IUserViewManager userViewManager, ITVSeriesManager tvSeriesManager, IItemSortService itemSortService)
+        private IReadOnlyList<BaseItem> GetItemListCore(InternalItemsQuery query, Func<InternalItemsQuery, QueryResult<BaseItem>> getItemsInternal)
         {
             query.EnableTotalRecordCount = false;
 
@@ -1094,7 +1078,7 @@ namespace Reefin.Controller.Entities
                 return result;
             }
 
-            return GetItemsInternal(query, channelManager, collectionManager, userViewManager, tvSeriesManager, itemSortService).Items;
+            return getItemsInternal(query).Items;
         }
 
         // channelManager is needed only when this folder's SourceType is SourceType.Channel;
@@ -1104,32 +1088,30 @@ namespace Reefin.Controller.Entities
         // most of them.
         protected virtual QueryResult<BaseItem> GetItemsInternal(InternalItemsQuery query, IChannelManager channelManager, ICollectionManager collectionManager, IUserViewManager userViewManager, ITVSeriesManager tvSeriesManager)
         {
-            if (SourceType == SourceType.Channel)
-            {
-                try
-                {
-                    query.Parent = this;
-                    query.ChannelIds = new[] { ChannelId };
-
-                    // Don't blow up here because it could cause parent screens with other content to fail
-                    return channelManager.GetChannelItemsInternal(query, new Progress<double>(), CancellationToken.None).GetAwaiter().GetResult();
-                }
-                catch
-                {
-                    // Already logged at lower levels
-                    return new QueryResult<BaseItem>();
-                }
-            }
-
-            if (query.Recursive)
-            {
-                return QueryRecursive(query);
-            }
-
-            return PostFilterAndSort(GetRawQueryItems(query), query, collectionManager);
+            return GetItemsInternalCore(
+                query,
+                channelManager,
+                collectionManager,
+                () => GetRawQueryItems(query),
+                PostFilterAndSort);
         }
 
         protected virtual QueryResult<BaseItem> GetItemsInternal(InternalItemsQuery query, IChannelManager channelManager, ICollectionManager collectionManager, IUserViewManager userViewManager, ITVSeriesManager tvSeriesManager, IItemSortService itemSortService)
+        {
+            return GetItemsInternalCore(
+                query,
+                channelManager,
+                collectionManager,
+                () => GetRawQueryItems(query),
+                (items, q, cm) => PostFilterAndSort(items, q, cm, itemSortService));
+        }
+
+        private QueryResult<BaseItem> GetItemsInternalCore(
+            InternalItemsQuery query,
+            IChannelManager channelManager,
+            ICollectionManager collectionManager,
+            Func<IEnumerable<BaseItem>> getRawQueryItems,
+            Func<IEnumerable<BaseItem>, InternalItemsQuery, ICollectionManager, QueryResult<BaseItem>> postFilterAndSort)
         {
             if (SourceType == SourceType.Channel)
             {
@@ -1152,7 +1134,7 @@ namespace Reefin.Controller.Entities
                 return QueryRecursive(query);
             }
 
-            return PostFilterAndSort(GetRawQueryItems(query), query, collectionManager, itemSortService);
+            return postFilterAndSort(getRawQueryItems(), query, collectionManager);
         }
 
         // Raw filtered children before collapse/sort/pagination (PostFilterAndSort) - the block
@@ -1201,9 +1183,31 @@ namespace Reefin.Controller.Entities
 
         protected QueryResult<BaseItem> PostFilterAndSort(IEnumerable<BaseItem> items, InternalItemsQuery query, ICollectionManager collectionManager)
         {
+            return PostFilterAndSortCore(items, query, collectionManager, filteredItems =>
+            {
+#pragma warning disable CS0618
+                return UserViewBuilder.SortAndPage(filteredItems, null, query, LibraryManager);
+#pragma warning restore CS0618
+            });
+        }
+
+        protected QueryResult<BaseItem> PostFilterAndSort(IEnumerable<BaseItem> items, InternalItemsQuery query, ICollectionManager collectionManager, IItemSortService itemSortService)
+        {
+            return PostFilterAndSortCore(
+                items,
+                query,
+                collectionManager,
+                filteredItems => UserViewBuilder.SortAndPage(filteredItems, null, query, itemSortService));
+        }
+
+        private QueryResult<BaseItem> PostFilterAndSortCore(
+            IEnumerable<BaseItem> items,
+            InternalItemsQuery query,
+            ICollectionManager collectionManager,
+            Func<IReadOnlyList<BaseItem>, QueryResult<BaseItem>> sortAndPage)
+        {
             var user = query.User;
 
-            // Check recursive - don't substitute in plain folder views
             if (user is not null)
             {
                 items = CollapseBoxSetItemsIfNeeded(items, query, this, user, ConfigurationManager, collectionManager);
@@ -1215,30 +1219,7 @@ namespace Reefin.Controller.Entities
             }
 
             var filteredItems = items as IReadOnlyList<BaseItem> ?? items.ToList();
-#pragma warning disable CS0618
-            var result = UserViewBuilder.SortAndPage(filteredItems, null, query, LibraryManager);
-#pragma warning restore CS0618
-
-            if (query.EnableTotalRecordCount)
-            {
-                result.TotalRecordCount = filteredItems.Count;
-            }
-
-            return result;
-        }
-
-        protected QueryResult<BaseItem> PostFilterAndSort(IEnumerable<BaseItem> items, InternalItemsQuery query, ICollectionManager collectionManager, IItemSortService itemSortService)
-        {
-            var user = query.User;
-
-            if (user is not null)
-            {
-                items = CollapseBoxSetItemsIfNeeded(items, query, this, user, ConfigurationManager, collectionManager);
-                items = ApplyNameFilter(items, query);
-            }
-
-            var filteredItems = items as IReadOnlyList<BaseItem> ?? items.ToList();
-            var result = UserViewBuilder.SortAndPage(filteredItems, null, query, itemSortService);
+            var result = sortAndPage(filteredItems);
 
             if (query.EnableTotalRecordCount)
             {
