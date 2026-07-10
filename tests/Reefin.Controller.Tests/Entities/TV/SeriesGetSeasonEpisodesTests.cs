@@ -33,15 +33,15 @@ public class SeriesGetSeasonEpisodesTests
     private static Series CreateSeries(string presentationUniqueKey = "series-key")
         => new Series { Id = Guid.NewGuid(), Name = "Test Series", PresentationUniqueKey = presentationUniqueKey };
 
-    private static Season CreateSeason(int? indexNumber, string presentationUniqueKey = "season-key", bool leavePathUnset = true)
+    private static Season CreateSeason(int? indexNumber, string presentationUniqueKey = "season-key")
         => new Season
         {
             Id = Guid.NewGuid(),
             Name = indexNumber is null ? "Unassigned Season" : $"Season {indexNumber}",
             IndexNumber = indexNumber,
             PresentationUniqueKey = presentationUniqueKey,
-            // Path deliberately left null (leavePathUnset): LocationType then resolves to Virtual
-            // without touching the BaseItem.FileSystem static (see PR50/N test notes below).
+            // Path deliberately left null: LocationType then resolves to Virtual without
+            // touching the BaseItem.FileSystem static (see PR50/N test notes below).
         };
 
     // ParentId/SeasonId are deliberately left unset (Guid.Empty) on every Episode created by this
@@ -157,10 +157,13 @@ public class SeriesGetSeasonEpisodesTests
         var libraryManager = new Mock<ILibraryManager>();
         libraryManager
             .Setup(x => x.Sort(It.IsAny<IEnumerable<BaseItem>>(), It.IsAny<User>(), It.IsAny<IEnumerable<ItemSortBy>>(), It.IsAny<SortOrder>()))
-            .Returns((IEnumerable<BaseItem> items, User u, IEnumerable<ItemSortBy> sortBy, SortOrder order) => items);
+            .Returns((IEnumerable<BaseItem> items, User u, IEnumerable<ItemSortBy> sortBy, SortOrder order) =>
+                order == SortOrder.Descending
+                    ? items.OrderByDescending(i => i.SortName, StringComparer.OrdinalIgnoreCase)
+                    : items.OrderBy(i => i.SortName, StringComparer.OrdinalIgnoreCase));
         BaseItem.LibraryManager = libraryManager.Object;
 
-        _ = series.GetSeasonEpisodes(season0, null, new BaseItem[] { special1, special2 }, new DtoOptions(true), true);
+        var result = series.GetSeasonEpisodes(season0, null, new BaseItem[] { special1, special2 }, new DtoOptions(true), true);
 
         libraryManager.Verify(
             x => x.Sort(
@@ -169,6 +172,10 @@ public class SeriesGetSeasonEpisodesTests
                 It.Is<IEnumerable<ItemSortBy>>(s => s.SequenceEqual(new[] { ItemSortBy.SortName })),
                 SortOrder.Ascending),
             Times.Once);
+
+        // "ordre des specials (saison 0)": confirms the resulting order, not just the sortBy
+        // selection -- special2 ("Special A") sorts before special1 ("Special B") by SortName.
+        Assert.Equal(new BaseItem[] { special2, special1 }, result);
     }
 
     [Fact]
