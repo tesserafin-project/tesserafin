@@ -25,6 +25,7 @@ using Reefin.Controller.Events.Session;
 using Reefin.Controller.Library;
 using Reefin.Controller.Net;
 using Reefin.Controller.Session;
+using Reefin.Controller.Sorting;
 using Reefin.Data;
 using Reefin.Data.Enums;
 using Reefin.Data.Events;
@@ -61,6 +62,7 @@ namespace Reefin.Server.Core.Session
         private readonly IServerApplicationHost _appHost;
         private readonly IDeviceManager _deviceManager;
         private readonly IItemQueryService _itemQueryService;
+        private readonly IItemSortService _itemSortService;
         private readonly CancellationTokenRegistration _shutdownCallback;
         private readonly ConcurrentDictionary<string, SessionInfo> _activeConnections
             = new(StringComparer.OrdinalIgnoreCase);
@@ -91,6 +93,7 @@ namespace Reefin.Server.Core.Session
         /// <param name="mediaSourceManager">Instance of <see cref="IMediaSourceManager"/> interface.</param>
         /// <param name="hostApplicationLifetime">Instance of <see cref="IHostApplicationLifetime"/> interface.</param>
         /// <param name="itemQueryService">Instance of <see cref="IItemQueryService"/> interface.</param>
+        /// <param name="itemSortService">Instance of <see cref="IItemSortService"/> interface.</param>
         public SessionManager(
             ILogger<SessionManager> logger,
             IEventManager eventManager,
@@ -105,7 +108,8 @@ namespace Reefin.Server.Core.Session
             IDeviceManager deviceManager,
             IMediaSourceManager mediaSourceManager,
             IHostApplicationLifetime hostApplicationLifetime,
-            IItemQueryService itemQueryService)
+            IItemQueryService itemQueryService,
+            IItemSortService itemSortService)
         {
             _logger = logger;
             _eventManager = eventManager;
@@ -121,6 +125,7 @@ namespace Reefin.Server.Core.Session
             _mediaSourceManager = mediaSourceManager;
             _shutdownCallback = hostApplicationLifetime.ApplicationStopping.Register(OnApplicationStopping);
             _itemQueryService = itemQueryService;
+            _itemSortService = itemSortService;
 
             _deviceManager.DeviceOptionsUpdated += OnDeviceManagerDeviceOptionsUpdated;
         }
@@ -1398,7 +1403,8 @@ namespace Reefin.Server.Core.Session
                             {
                                 EnableImages = false
                             },
-                            user.DisplayMissingEpisodes)
+                            user.DisplayMissingEpisodes,
+                            _itemSortService)
                         .Where(i => !i.IsVirtualItem)
                         .SkipWhile(i => !i.Id.Equals(episode.Id))
                         .ToList();

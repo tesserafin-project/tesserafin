@@ -3,12 +3,14 @@ using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Extensions.Logging;
 using Reefin.Controller.Configuration;
+using Reefin.Controller.Dto;
 using Reefin.Controller.Entities;
 using Reefin.Controller.Entities.TV;
 using Reefin.Controller.IO;
 using Reefin.Controller.Library;
 using Reefin.Controller.Persistence;
 using Reefin.Controller.Providers;
+using Reefin.Controller.Sorting;
 using Reefin.Model.Entities;
 using Reefin.Model.IO;
 using Reefin.Providers.Manager;
@@ -20,6 +22,8 @@ namespace Reefin.Providers.TV;
 /// </summary>
 public class SeasonMetadataService : MetadataService<Season, SeasonInfo>
 {
+    private readonly IItemSortService _itemSortService;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="SeasonMetadataService"/> class.
     /// </summary>
@@ -31,6 +35,7 @@ public class SeasonMetadataService : MetadataService<Season, SeasonInfo>
     /// <param name="itemNamingService">Instance of the <see cref="IItemNamingService"/> interface.</param>
     /// <param name="externalDataManager">Instance of the <see cref="IExternalDataManager"/> interface.</param>
     /// <param name="itemRepository">Instance of the <see cref="IItemRepository"/> interface.</param>
+    /// <param name="itemSortService">Instance of the <see cref="IItemSortService"/> interface.</param>
     public SeasonMetadataService(
         IServerConfigurationManager serverConfigurationManager,
         ILogger<SeasonMetadataService> logger,
@@ -39,9 +44,11 @@ public class SeasonMetadataService : MetadataService<Season, SeasonInfo>
         ILibraryManager libraryManager,
         IItemNamingService itemNamingService,
         IExternalDataManager externalDataManager,
-        IItemRepository itemRepository)
+        IItemRepository itemRepository,
+        IItemSortService itemSortService)
         : base(serverConfigurationManager, logger, providerManager, fileSystem, libraryManager, itemNamingService, externalDataManager, itemRepository)
     {
+        _itemSortService = itemSortService;
     }
 
     /// <inheritdoc />
@@ -89,7 +96,7 @@ public class SeasonMetadataService : MetadataService<Season, SeasonInfo>
 
     /// <inheritdoc />
     protected override IReadOnlyList<BaseItem> GetChildrenForMetadataUpdates(Season item)
-        => item.GetEpisodes();
+        => item.GetEpisodes(null, new DtoOptions(true), true, _itemSortService);
 
     /// <inheritdoc />
     protected override ItemUpdateType UpdateMetadataFromChildren(Season item, IReadOnlyList<BaseItem> children, bool isFullRefresh, ItemUpdateType currentUpdateType)

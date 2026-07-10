@@ -12,6 +12,7 @@ using Reefin.Controller.Dto;
 using Reefin.Controller.Entities;
 using Reefin.Controller.Entities.TV;
 using Reefin.Controller.Library;
+using Reefin.Controller.Sorting;
 using Reefin.Controller.TV;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Enums;
@@ -35,6 +36,7 @@ public class TvShowsController : BaseReefinApiController
     private readonly IDtoService _dtoService;
     private readonly ITVSeriesManager _tvSeriesManager;
     private readonly IItemQueryService _itemQueryService;
+    private readonly IItemSortService _itemSortService;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TvShowsController"/> class.
@@ -44,18 +46,21 @@ public class TvShowsController : BaseReefinApiController
     /// <param name="dtoService">Instance of the <see cref="IDtoService"/> interface.</param>
     /// <param name="tvSeriesManager">Instance of the <see cref="ITVSeriesManager"/> interface.</param>
     /// <param name="itemQueryService">Instance of the <see cref="IItemQueryService"/> interface.</param>
+    /// <param name="itemSortService">Instance of the <see cref="IItemSortService"/> interface.</param>
     public TvShowsController(
         IUserManager userManager,
         ILibraryManager libraryManager,
         IDtoService dtoService,
         ITVSeriesManager tvSeriesManager,
-        IItemQueryService itemQueryService)
+        IItemQueryService itemQueryService,
+        IItemSortService itemSortService)
     {
         _userManager = userManager;
         _libraryManager = libraryManager;
         _dtoService = dtoService;
         _tvSeriesManager = tvSeriesManager;
         _itemQueryService = itemQueryService;
+        _itemSortService = itemSortService;
     }
 
     /// <summary>
@@ -242,7 +247,7 @@ public class TvShowsController : BaseReefinApiController
                 return NotFound("No season exists with Id " + seasonId);
             }
 
-            episodes = seasonItem.GetEpisodes(user, dtoOptions, shouldIncludeMissingEpisodes);
+            episodes = seasonItem.GetEpisodes(user, dtoOptions, shouldIncludeMissingEpisodes, _itemSortService);
         }
         else if (season.HasValue) // Season number was supplied. Get episodes by season number
         {
@@ -258,7 +263,7 @@ public class TvShowsController : BaseReefinApiController
 
             episodes = seasonItem is null ?
                 new List<BaseItem>()
-                : ((Season)seasonItem).GetEpisodes(user, dtoOptions, shouldIncludeMissingEpisodes);
+                : ((Season)seasonItem).GetEpisodes(user, dtoOptions, shouldIncludeMissingEpisodes, _itemSortService);
         }
         else // No season number or season id was supplied. Returning all episodes.
         {
@@ -267,7 +272,7 @@ public class TvShowsController : BaseReefinApiController
                 return NotFound("Series not found");
             }
 
-            episodes = series.GetEpisodes(user, dtoOptions, shouldIncludeMissingEpisodes).ToList();
+            episodes = series.GetEpisodes(user, dtoOptions, shouldIncludeMissingEpisodes, _itemSortService).ToList();
         }
 
         // Filter after the fact in case the ui doesn't want them

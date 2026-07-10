@@ -13,6 +13,7 @@ using Reefin.Controller.IO;
 using Reefin.Controller.Library;
 using Reefin.Controller.Persistence;
 using Reefin.Controller.Providers;
+using Reefin.Controller.Sorting;
 using Reefin.Extensions;
 using Reefin.Model.Entities;
 using Reefin.Model.Globalization;
@@ -27,6 +28,7 @@ namespace Reefin.Providers.TV;
 public class SeriesMetadataService : MetadataService<Series, SeriesInfo>
 {
     private readonly ILocalizationManager _localizationManager;
+    private readonly IItemSortService _itemSortService;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SeriesMetadataService"/> class.
@@ -40,6 +42,7 @@ public class SeriesMetadataService : MetadataService<Series, SeriesInfo>
     /// <param name="localizationManager">Instance of the <see cref="ILocalizationManager"/> interface.</param>
     /// <param name="externalDataManager">Instance of the <see cref="IExternalDataManager"/> interface.</param>
     /// <param name="itemRepository">Instance of the <see cref="IItemRepository"/> interface.</param>
+    /// <param name="itemSortService">Instance of the <see cref="IItemSortService"/> interface.</param>
     public SeriesMetadataService(
         IServerConfigurationManager serverConfigurationManager,
         ILogger<SeriesMetadataService> logger,
@@ -49,10 +52,12 @@ public class SeriesMetadataService : MetadataService<Series, SeriesInfo>
         IItemNamingService itemNamingService,
         ILocalizationManager localizationManager,
         IExternalDataManager externalDataManager,
-        IItemRepository itemRepository)
+        IItemRepository itemRepository,
+        IItemSortService itemSortService)
         : base(serverConfigurationManager, logger, providerManager, fileSystem, libraryManager, itemNamingService, externalDataManager, itemRepository)
     {
         _localizationManager = localizationManager;
+        _itemSortService = itemSortService;
     }
 
     /// <inheritdoc />
@@ -193,7 +198,7 @@ public class SeriesMetadataService : MetadataService<Series, SeriesInfo>
             var seasonNumber = virtualSeason.IndexNumber;
             // If there's a physical season with the same number or no episodes in the season, delete it
             if ((seasonNumber.HasValue && physicalSeasonNumbers.Contains(seasonNumber.Value))
-                || virtualSeason.GetEpisodes().Count == 0)
+                || virtualSeason.GetEpisodes(null, new DtoOptions(true), true, _itemSortService).Count == 0)
             {
                 Logger.LogInformation("Removing virtual season {SeasonNumber} in series {SeriesName}", virtualSeason.IndexNumber, series.Name);
 
@@ -211,7 +216,7 @@ public class SeriesMetadataService : MetadataService<Series, SeriesInfo>
 
     private void RemoveObsoleteEpisodes(Series series)
     {
-        var episodesBySeason = series.GetEpisodes(null, new DtoOptions(), true)
+        var episodesBySeason = series.GetEpisodes(null, new DtoOptions(), true, _itemSortService)
                         .OfType<Episode>()
                         .GroupBy(e => e.ParentIndexNumber)
                         .ToList();

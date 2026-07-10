@@ -1166,6 +1166,33 @@ Aucun appelant externe modifié (confirmé par `git diff --stat` : seuls `TV/Ser
 
 **Critère de levée du pragma (rappel, inchangé depuis PR48/PR49) :** retrait complet des 5 pragmas `[Obsolete]`/`CS0618` posés en PR48/N seulement une fois la cascade virtuelle `Folder.GetChildren`/`Season.GetChildren` ouverte (chantier futur, § PR49/N point 9) — PR50/N ne fait qu'ajouter un chemin alternatif optionnel, il ne referme aucun des 5 sites.
 
+### PR51 — câblage des 4 appelants DI sur `IItemSortService` (2026-07-10)
+
+Suite directe de PR50/N : le paramètre optionnel `itemSortService = null` existait déjà dans la chaîne `Series.GetEpisodes`/`GetSeasonEpisodes`/`Season.GetEpisodes` ; PR51 fait fournir la valeur réelle par les 4 appelants DI-résolus identifiés en PR49/N §9, au lieu de laisser passer `null` implicitement.
+
+**Fait.**
+- Injection constructeur de `IItemSortService` (déjà enregistré en singleton, `ApplicationHost.cs:540`, `AddSingleton<IItemSortService, ItemSortService>()` — aucun nouvel enregistrement DI requis) dans les 4 classes, style calqué sur `TVSeriesManager` (paramètre en dernière position) :
+  - `Reefin.Api/Controllers/TvShowsController.cs` — 3 sites d'appel dans `GetEpisodes` : `:246` (`seasonItem.GetEpisodes(...)`), `:262` (`((Season)seasonItem).GetEpisodes(...)`), `:271` (`series.GetEpisodes(...).ToList()`).
+  - `Reefin.Server.Core/Session/SessionManager.cs` — 1 site, `:1395-1402` (`series.GetEpisodes(...)` dans `SendPlayCommand`, branche `EnableNextEpisodeAutoPlay`).
+  - `Reefin.Providers/TV/SeriesMetadataService.cs` — 2 sites : `:196` (`virtualSeason.GetEpisodes().Count == 0` → réécrit en `virtualSeason.GetEpisodes(null, new DtoOptions(true), true, _itemSortService)`, dans `RemoveObsoleteSeasons`) et `:214` (`series.GetEpisodes(null, new DtoOptions(), true, _itemSortService)`, dans `RemoveObsoleteEpisodes`).
+  - `Reefin.Providers/TV/SeasonMetadataService.cs` — 1 site : `:92` (`GetChildrenForMetadataUpdates`), `item.GetEpisodes()` → `item.GetEpisodes(null, new DtoOptions(true), true, _itemSortService)`.
+- **Point non mécanique** : les 2 sites `SeriesMetadataService.cs:196` et `SeasonMetadataService.cs:92` appelaient l'overload sans arguments `Season.GetEpisodes()` (`TV/Season.cs:227`), dont le commentaire affirme *« no DI-resolved caller reaches this no-arg overload »*. Cette affirmation était devenue fausse dès lors que ces deux services sont DI-résolus : les rediriger vers l'overload paramétré restaure l'invariant du commentaire au lieu de le contredire. La substitution `GetEpisodes(null, new DtoOptions(true), true, _itemSortService)` reproduit exactement les valeurs internes de l'ancien no-arg (`GetEpisodes(Series, null, null, new DtoOptions(true), true)`, `TV/Season.cs:232`) — comportement inchangé hors service de tri.
+- `tests/Reefin.Server.Implementations.Tests/SessionManager/SessionManagerTests.cs` : ajout de `Mock.Of<IItemSortService>()` en dernier argument des 2 constructions manuelles de `SessionManager` (seul test du repo qui construit une des 4 classes à la main — aucun test ne construit `TvShowsController`/`SeriesMetadataService`/`SeasonMetadataService` directement).
+- `TV/Series.cs` et `TV/Season.cs` **non touchés** (signatures posées en PR50/N inchangées) ; pragma `#pragma warning disable CS0618` de `Series.cs` conservé, tel que voulu.
+
+**Reste en fallback (repli statique `LibraryManager.Sort`), et pourquoi.**
+- `Season.GetEpisodes()` (no-arg, `TV/Season.cs:227`) et `Season.GetChildren` (override virtuel `Folder.GetChildren`, `TV/Season.cs:235-238`) : aucun appelant DI ne les atteint plus après ce PR (les 2 seuls qui le faisaient ont été migrés) — le commentaire du no-arg redevient donc exact. Signature figée par le contrat virtuel de `Folder`, hors périmètre (cf. PR49/N §9).
+- Récursion interne `Series.GetEpisodes` → `Season.GetEpisodes` (`TV/Series.cs:296`) : chemin interne à la chaîne, pas un appelant externe — continue de propager `itemSortService` reçu par le premier appelant, donc déjà couvert transitivement dès que l'appelant externe (les 4 classes ci-dessus) fournit le service.
+- Aucun autre site en fallback : grep exhaustif `\.GetEpisodes(\|\.GetSeasonEpisodes(` hors `TV/Series.cs`/`TV/Season.cs`/`tests/` confirme que les 7 sites listés ci-dessus (3+1+2+1) sont la totalité des appelants externes — cohérent avec le décompte « 8 appelants externes, dont 7 DI-résolus » de PR49/N §9 (le 8ᵉ est `Season.GetChildren`, virtuel, hors service).
+
+**Autres candidats DI découverts, non câblés (listés, pas touchés per consigne).** Aucun. La recherche exhaustive (grep + graphify) sur les sites d'appel de `GetEpisodes`/`GetSeasonEpisodes` ne révèle aucun appelant DI-résolu en dehors des 4 classes du périmètre.
+
+**Pièges.**
+- Ordre alphabétique des `using` (StyleCop `SA1210`) : `Reefin.Controller.Sorting` doit être inséré à sa place alphabétique dans chacun des 4 fichiers + le fichier de test — un seul oubli (`Reefin.Controller.Dto` mal placé dans `SeasonMetadataService.cs`) a fait échouer le premier build, corrigé avant de committer.
+- Les 2 substitutions no-arg → paramétré (`SeriesMetadataService.cs:196`, `SeasonMetadataService.cs:92`) doivent répliquer exactement les 3 valeurs par défaut internes de l'ancien no-arg (`user: null`, `new DtoOptions(true)`, `shouldIncludeMissingEpisodes: true`) — un DtoOptions différent (ex. `new DtoOptions()` au lieu de `new DtoOptions(true)`) aurait changé le comportement au-delà du seul câblage du service de tri.
+
+**Vérifications.** `dotnet build Reefin.sln` : 41 projets, 0 erreur. `dotnet test tests/Reefin.Controller.Tests` : 215/215 (inchangé, `TV/Series.cs`/`TV/Season.cs` non touchés). `dotnet test tests/Reefin.Providers.Tests` : 298/298 (couvre `SeriesMetadataService`/`SeasonMetadataService` modifiés). `dotnet test tests/Reefin.Server.Implementations.Tests` : 600/604 (4 ignorés Windows-only, inchangé) — couvre `SessionManagerTests`. `dotnet test tests/Reefin.Api.Tests` : 89/89 (couvre le contrôleur `TvShowsController`, pas de test dédié mais suite du projet passe).
+
 ## Ordre recommandé (reprend celui du plan, réordonné sur le point 3 ci-dessus)
 1. Sessions de lecture + protocole capacités v2 (point 1-2) — priorité confirmée, zone la mieux comprise.
 2. Suppression `SetStaticProperties` / statics `BaseItem` (point 4) **avant** découpage `LibraryManager`. Post-revue PR14 (2026-07-08) : stabiliser (tests ciblés) + esquisser les services de remplacement (`ItemQueryService` et consorts) plutôt que continuer à traquer chaque static un par un — voir § "Revue externe post-PR14".

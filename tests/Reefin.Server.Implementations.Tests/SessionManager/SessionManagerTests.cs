@@ -11,6 +11,7 @@ using Reefin.Controller.Dto;
 using Reefin.Controller.Events;
 using Reefin.Controller.Library;
 using Reefin.Controller.Session;
+using Reefin.Controller.Sorting;
 using Reefin.Database.Implementations.Entities;
 using Xunit;
 
@@ -37,7 +38,8 @@ public class SessionManagerTests
             Mock.Of<IDeviceManager>(),
             Mock.Of<IMediaSourceManager>(),
             Mock.Of<IHostApplicationLifetime>(),
-            Mock.Of<IItemQueryService>());
+            Mock.Of<IItemQueryService>(),
+            Mock.Of<IItemSortService>());
 
         await Assert.ThrowsAsync(exceptionType, () => sessionManager.GetAuthorizationToken(
             new User("test", "default", "default"),
@@ -65,7 +67,8 @@ public class SessionManagerTests
             Mock.Of<IDeviceManager>(),
             Mock.Of<IMediaSourceManager>(),
             Mock.Of<IHostApplicationLifetime>(),
-            Mock.Of<IItemQueryService>());
+            Mock.Of<IItemQueryService>(),
+            Mock.Of<IItemSortService>());
 
         await Assert.ThrowsAsync(exceptionType, () => sessionManager.AuthenticateNewSessionInternal(authenticationRequest, false));
     }
