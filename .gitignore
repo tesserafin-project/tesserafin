@@ -282,3 +282,9 @@ mono_crash.*.json
 # Devcontainer temp files
 .devcontainer/devcontainer-lock.json
 dotnet/
+
+# Personal tooling (not part of Reefin)
+graphify-out/
+.agents/
+.forge/
+skills-lock.json
