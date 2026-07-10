@@ -7,8 +7,12 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text.Json.Serialization;
+using Reefin.Controller.Channels;
+using Reefin.Controller.Collections;
+using Reefin.Controller.Library;
 using Reefin.Controller.Providers;
 using Reefin.Controller.Sorting;
+using Reefin.Controller.TV;
 using Reefin.Data;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
@@ -67,6 +71,8 @@ namespace Reefin.Controller.Entities.Movies
 
         [JsonIgnore]
         public override bool IsPreSorted => true;
+
+        public override bool SupportsRawQueryItems => false;
 
         public Guid[] LibraryFolderIds { get; set; }
 
@@ -180,6 +186,20 @@ namespace Reefin.Controller.Entities.Movies
         {
             var children = base.GetRecursiveChildren(user, query, out totalCount);
             return Sort(children, user, itemSortService).ToArray();
+        }
+
+        protected override QueryResult<BaseItem> GetItemsInternal(InternalItemsQuery query, IChannelManager channelManager, ICollectionManager collectionManager, IUserViewManager userViewManager, ITVSeriesManager tvSeriesManager, IItemSortService itemSortService)
+        {
+            if (SourceType == SourceType.Channel || query.Recursive)
+            {
+                return base.GetItemsInternal(query, channelManager, collectionManager, userViewManager, tvSeriesManager, itemSortService);
+            }
+
+            var rawItems = GetRawQueryItems(
+                query,
+                (user, includeLinkedChildren, childQuery) => GetChildren(user, includeLinkedChildren, childQuery, itemSortService));
+
+            return PostFilterAndSort(rawItems, query, collectionManager, itemSortService);
         }
 
         public BoxSetInfo GetLookupInfo()

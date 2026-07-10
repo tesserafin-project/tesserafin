@@ -1167,6 +1167,13 @@ namespace Reefin.Controller.Entities
         // hierarchy, not as a type-check in the service.
         public virtual IEnumerable<BaseItem> GetRawQueryItems(InternalItemsQuery query)
         {
+            return GetRawQueryItems(query, (user, includeLinkedChildren, childQuery) => GetChildren(user, includeLinkedChildren, out _, childQuery));
+        }
+
+        protected IEnumerable<BaseItem> GetRawQueryItems(
+            InternalItemsQuery query,
+            Func<User, bool, InternalItemsQuery, IReadOnlyList<BaseItem>> getChildren)
+        {
             var user = query.User;
 
             if (user is null)
@@ -1185,7 +1192,7 @@ namespace Reefin.Controller.Entities
             };
 
             return UserViewBuilder.Filter(
-                GetChildren(user, true, out _, childQuery),
+                getChildren(user, true, childQuery),
                 user,
                 query,
                 UserDataManager,
