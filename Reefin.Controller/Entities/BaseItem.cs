@@ -852,6 +852,20 @@ namespace Reefin.Controller.Entities
             return ownerId.IsEmpty() ? null : LibraryManager.GetItemById(ownerId);
         }
 
+        /// <summary>
+        /// Gets the owner via the given lookup service, without touching the static
+        /// <see cref="LibraryManager"/>.
+        /// </summary>
+        /// <param name="lookup">The lookup service.</param>
+        /// <returns>BaseItem.</returns>
+        public BaseItem GetOwner(IItemLookupService lookup)
+        {
+            ArgumentNullException.ThrowIfNull(lookup);
+
+            var ownerId = OwnerId;
+            return ownerId.IsEmpty() ? null : lookup.GetItemById(ownerId);
+        }
+
         public bool CanDelete(User user, List<Folder> allCollectionFolders)
         {
             return CanDelete() && IsAuthorizedToDelete(user, allCollectionFolders);
@@ -1008,6 +1022,25 @@ namespace Reefin.Controller.Entities
             return LibraryManager.GetItemById(parentId);
         }
 
+        /// <summary>
+        /// Gets the parent via the given lookup service, without touching the static
+        /// <see cref="LibraryManager"/>.
+        /// </summary>
+        /// <param name="lookup">The lookup service.</param>
+        /// <returns>BaseItem.</returns>
+        public BaseItem GetParent(IItemLookupService lookup)
+        {
+            ArgumentNullException.ThrowIfNull(lookup);
+
+            var parentId = ParentId;
+            if (parentId.IsEmpty())
+            {
+                return null;
+            }
+
+            return lookup.GetItemById(parentId);
+        }
+
         public IEnumerable<BaseItem> GetParents()
         {
             var parent = GetParent();
@@ -1021,6 +1054,25 @@ namespace Reefin.Controller.Entities
         }
 
         /// <summary>
+        /// Gets the parents via the given lookup service, without touching the static
+        /// <see cref="LibraryManager"/>. Each hop up the chain is resolved through
+        /// <paramref name="lookup"/>.
+        /// </summary>
+        /// <param name="lookup">The lookup service.</param>
+        /// <returns>IEnumerable{BaseItem}.</returns>
+        public IEnumerable<BaseItem> GetParents(IItemLookupService lookup)
+        {
+            var parent = GetParent(lookup);
+
+            while (parent is not null)
+            {
+                yield return parent;
+
+                parent = parent.GetParent(lookup);
+            }
+        }
+
+        /// <summary>
         /// Finds a parent of a given type.
         /// </summary>
         /// <typeparam name="T">Type of parent.</typeparam>
@@ -1029,6 +1081,29 @@ namespace Reefin.Controller.Entities
             where T : Folder
         {
             foreach (var parent in GetParents())
+            {
+                if (parent is T item)
+                {
+                    return item;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Finds a parent of a given type via the given lookup service, without touching the
+        /// static <see cref="LibraryManager"/>.
+        /// </summary>
+        /// <param name="lookup">The lookup service.</param>
+        /// <typeparam name="T">Type of parent.</typeparam>
+        /// <returns>``0.</returns>
+        public T FindParent<T>(IItemLookupService lookup)
+            where T : Folder
+        {
+            ArgumentNullException.ThrowIfNull(lookup);
+
+            foreach (var parent in GetParents(lookup))
             {
                 if (parent is T item)
                 {
