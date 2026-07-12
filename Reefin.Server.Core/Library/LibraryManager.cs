@@ -93,6 +93,7 @@ namespace Reefin.Server.Core.Library
         private readonly IPathManager _pathManager;
         private readonly IItemLookupService _itemLookupService;
         private readonly IItemCacheStore _itemCacheStore;
+        private readonly IItemAccessService _itemAccessService;
         private readonly DotIgnoreIgnoreRule _dotIgnoreIgnoreRule;
         private readonly IMediaStreamLanguageService _mediaStreamLanguageService;
         private readonly Lazy<IExternalDataManager> _externalDataManagerFactory;
@@ -145,6 +146,7 @@ namespace Reefin.Server.Core.Library
         /// <param name="externalDataManagerFactory">The external data manager (lazy, to break the DI cycle through ChapterManager).</param>
         /// <param name="itemLookupService">The item lookup service (read side of the item lookup cache; see PR75/PR76).</param>
         /// <param name="itemCacheStore">The item cache lifecycle port (register/invalidate side of the same cache; see PR76).</param>
+        /// <param name="itemAccessService">The item access service (user visibility on top of the item lookup service; see PR77).</param>
         public LibraryManager(
             IServerApplicationHost appHost,
             ILoggerFactory loggerFactory,
@@ -174,7 +176,8 @@ namespace Reefin.Server.Core.Library
             IMediaStreamLanguageService mediaStreamLanguageService,
             Lazy<IExternalDataManager> externalDataManagerFactory,
             IItemLookupService itemLookupService,
-            IItemCacheStore itemCacheStore)
+            IItemCacheStore itemCacheStore,
+            IItemAccessService itemAccessService)
         {
             _appHost = appHost;
             _logger = loggerFactory.CreateLogger<LibraryManager>();
@@ -199,6 +202,7 @@ namespace Reefin.Server.Core.Library
 
             _itemLookupService = itemLookupService;
             _itemCacheStore = itemCacheStore;
+            _itemAccessService = itemAccessService;
 
             _namingOptions = namingOptions;
             _peopleRepository = peopleRepository;
@@ -1625,10 +1629,19 @@ namespace Reefin.Server.Core.Library
         }
 
         /// <inheritdoc />
+        /// <remarks>
+        /// PR77: <see cref="IItemLookupService"/> no longer exposes a user-aware overload - a null
+        /// user historically meant "no visibility filtering", not "no user", so a null user routes
+        /// to the plain <see cref="IItemLookupService.GetItemById{T}(Guid)"/> lookup, and a non-null
+        /// user routes to <see cref="IItemAccessService.GetVisibleItemById{T}(Guid, User)"/>. This
+        /// preserves the exact pre-PR77 behavior of this overload.
+        /// </remarks>
         public T? GetItemById<T>(Guid id, User? user)
             where T : BaseItem
         {
-            return _itemLookupService.GetItemById<T>(id, user);
+            return user is null
+                ? _itemLookupService.GetItemById<T>(id)
+                : _itemAccessService.GetVisibleItemById<T>(id, user);
         }
 
         public IReadOnlyList<BaseItem> GetItemList(InternalItemsQuery query, bool allowExternalContent)

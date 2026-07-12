@@ -9,7 +9,6 @@ using Reefin.Controller.Entities.Audio;
 using Reefin.Controller.Library;
 using Reefin.Controller.LiveTv;
 using Reefin.Controller.Persistence;
-using Reefin.Database.Implementations.Entities;
 using Reefin.Extensions;
 
 namespace Reefin.Server.Core.Library
@@ -27,6 +26,10 @@ namespace Reefin.Server.Core.Library
     /// Hardened to <c>internal sealed</c> in PR76: outside this assembly the service is only ever
     /// reachable through <see cref="IItemLookupService"/> (reads) or <see cref="IItemCacheStore"/>
     /// (lifecycle), never as the concrete type. A reflection guard test keeps it that way.
+    /// PR77 removed the user-aware <c>GetItemById&lt;T&gt;(Guid, User)</c> overload (and the
+    /// <c>ItemIsVisible</c> visibility check it delegated to) from this class: this service now
+    /// only ever finds items, it never decides whether a user may see them. See
+    /// <see cref="ItemAccessService"/> for that concern.
     /// </remarks>
     internal sealed class ItemLookupService : IItemLookupService, IItemCacheStore
     {
@@ -81,14 +84,6 @@ namespace Reefin.Server.Core.Library
         }
 
         /// <inheritdoc />
-        public T? GetItemById<T>(Guid id, User? user)
-            where T : BaseItem
-        {
-            var item = GetItemById<T>(id);
-            return ItemIsVisible(item, user) ? item : null;
-        }
-
-        /// <inheritdoc />
         public void Register(BaseItem item)
         {
             ArgumentNullException.ThrowIfNull(item);
@@ -132,26 +127,6 @@ namespace Reefin.Server.Core.Library
             }
 
             return true;
-        }
-
-        /// <summary>
-        /// Determines whether <paramref name="item"/> is visible to <paramref name="user"/>.
-        /// <see cref="UserRootFolder"/> is always visible regardless of a user's tag/parental
-        /// restrictions.
-        /// </summary>
-        private static bool ItemIsVisible(BaseItem? item, User? user)
-        {
-            if (item is null)
-            {
-                return false;
-            }
-
-            if (user is null)
-            {
-                return true;
-            }
-
-            return item is UserRootFolder || item.IsVisibleStandalone(user);
         }
     }
 }

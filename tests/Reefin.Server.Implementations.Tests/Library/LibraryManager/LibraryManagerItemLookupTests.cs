@@ -39,6 +39,7 @@ public class LibraryManagerItemLookupTests
 {
     private readonly Reefin.Server.Core.Library.LibraryManager _libraryManager;
     private readonly Reefin.Server.Core.Library.ItemLookupService _itemLookupService;
+    private readonly Reefin.Server.Core.Library.ItemAccessService _itemAccessService;
     private readonly Mock<IItemRepository> _itemRepositoryMock;
     private readonly Mock<IItemPersistenceService> _persistenceServiceMock;
     private readonly Mock<IServerConfigurationManager> _configurationManagerMock;
@@ -72,6 +73,14 @@ public class LibraryManagerItemLookupTests
         fixture.Register(() => _itemLookupService);
         fixture.Register<IItemLookupService>(() => _itemLookupService);
         fixture.Register<Reefin.Server.Core.Library.IItemCacheStore>(() => _itemLookupService);
+
+        // PR77: LibraryManager.GetItemById<T>(id, user) (non-null user) now delegates to
+        // IItemAccessService instead of the (removed) user-aware overload on IItemLookupService.
+        // Register a *real* ItemAccessService wrapping the same ItemLookupService instance above -
+        // an auto-mocked IItemAccessService would silently return null for every visibility check
+        // instead of exercising the real ItemIsVisible/IsVisibleStandalone logic.
+        _itemAccessService = new Reefin.Server.Core.Library.ItemAccessService(_itemLookupService);
+        fixture.Register<IItemAccessService>(() => _itemAccessService);
 
         _libraryManager = fixture.Build<Reefin.Server.Core.Library.LibraryManager>().Do(s => s.AddParts(
                 fixture.Create<IEnumerable<IResolverIgnoreRule>>(),
@@ -198,7 +207,12 @@ public class LibraryManagerItemLookupTests
     }
 
     // ---------------------------------------------------------------
-    // 7. User-aware variant
+    // 7. User-aware variant - null-user routing only. PR77 moved the actual visibility checks
+    // (item-not-found, tag restrictions, UserRootFolder exception) to ItemAccessServiceTests,
+    // since they now exercise IItemAccessService rather than LibraryManager/IItemLookupService.
+    // This test stays here because it locks down LibraryManager's own routing decision: a null
+    // user bypasses IItemAccessService entirely and falls back to a plain, unfiltered lookup
+    // (see LibraryManager.GetItemById<T>(Guid, User?) remarks).
     // ---------------------------------------------------------------
 
     [Fact]
@@ -210,73 +224,6 @@ public class LibraryManagerItemLookupTests
         var result = _libraryManager.GetItemById<Movie>(movie.Id, (User)null!);
 
         Assert.Same(movie, result);
-    }
-
-    [Fact]
-    public void GetItemByIdGeneric_ItemNotFound_ReturnsNull()
-    {
-        var id = Guid.NewGuid();
-        _itemRepositoryMock.Setup(r => r.RetrieveItem(id)).Returns((BaseItem)null!);
-
-        var user = new User("test-user", "provider", "provider");
-        var result = _libraryManager.GetItemById<Movie>(id, user);
-
-        Assert.Null(result);
-    }
-
-    [Fact]
-    public void GetItemByIdGeneric_VisibleItemNoTagRestrictions_ReturnsItem()
-    {
-        // Audio (not Video) to avoid Video.SourceType touching the unset Video.RecordingsManager
-        // static via IsActiveRecording(). No Path set -> IsVisibleStandaloneInternal short-circuits
-        // to visible before touching collection folders / LibraryManager statics (topParent.Path is
-        // empty -> return true).
-        var audio = new Audio { Id = Guid.NewGuid(), Name = "Track" };
-        _itemRepositoryMock.Setup(r => r.RetrieveItem(audio.Id)).Returns(audio);
-
-        var user = new User("test-user", "provider", "provider");
-
-        var result = _libraryManager.GetItemById<Audio>(audio.Id, user);
-
-        Assert.Same(audio, result);
-    }
-
-    [Fact]
-    public void GetItemByIdGeneric_InvisibleViaBlockedTag_ReturnsNull()
-    {
-        // Blocked-tag path calls BaseItem.GetInheritedTags(), which unconditionally consults
-        // LibraryManager.GetCollectionFolders(this) - requires the static to be set.
-        SetLibraryManagerStatic(Mock.Of<ILibraryManager>(m => m.GetCollectionFolders(It.IsAny<BaseItem>()) == new List<Folder>()));
-
-        var audio = new Audio { Id = Guid.NewGuid(), Name = "Track", Tags = new[] { "blocked" } };
-        _itemRepositoryMock.Setup(r => r.RetrieveItem(audio.Id)).Returns(audio);
-
-        var user = new User("test-user", "provider", "provider");
-        user.SetPreference(PreferenceKind.BlockedTags, new[] { "blocked" });
-
-        var result = _libraryManager.GetItemById<Audio>(audio.Id, user);
-
-        Assert.Null(result);
-    }
-
-    // ---------------------------------------------------------------
-    // 8. UserRootFolder visibility exception
-    // ---------------------------------------------------------------
-
-    [Fact]
-    public void GetItemByIdGeneric_UserRootFolderWithUser_AlwaysReturnsItem()
-    {
-        // ItemIsVisible short-circuits on "item is UserRootFolder" (OR), so IsVisibleStandalone is
-        // never evaluated - the blocked tag below would normally hide the item but never gets checked.
-        var rootFolder = new UserRootFolder { Id = Guid.NewGuid(), Name = "root", Tags = new[] { "blocked" } };
-        _itemRepositoryMock.Setup(r => r.RetrieveItem(rootFolder.Id)).Returns(rootFolder);
-
-        var user = new User("test-user", "provider", "provider");
-        user.SetPreference(PreferenceKind.BlockedTags, new[] { "blocked" });
-
-        var result = _libraryManager.GetItemById<UserRootFolder>(rootFolder.Id, user);
-
-        Assert.Same(rootFolder, result);
     }
 
     // ---------------------------------------------------------------
@@ -392,25 +339,11 @@ public class LibraryManagerItemLookupTests
         _itemRepositoryMock.Verify(r => r.RetrieveItem(It.IsAny<Guid>()), Times.Never);
     }
 
-    [Fact]
-    public void GetItemByIdGeneric_ViaIItemLookupServiceReference_InvisibleViaBlockedTag_ReturnsNull()
-    {
-        // Same visibility setup as GetItemByIdGeneric_InvisibleViaBlockedTag_ReturnsNull, but
-        // exercised through the IItemLookupService reference to confirm the user-aware overload
-        // applies the same visibility rules across the interface boundary.
-        SetLibraryManagerStatic(Mock.Of<ILibraryManager>(m => m.GetCollectionFolders(It.IsAny<BaseItem>()) == new List<Folder>()));
-
-        var audio = new Audio { Id = Guid.NewGuid(), Name = "Track", Tags = new[] { "blocked" } };
-        _itemRepositoryMock.Setup(r => r.RetrieveItem(audio.Id)).Returns(audio);
-
-        var user = new User("test-user", "provider", "provider");
-        user.SetPreference(PreferenceKind.BlockedTags, new[] { "blocked" });
-
-        IItemLookupService lookupService = _libraryManager;
-        var result = lookupService.GetItemById<Audio>(audio.Id, user);
-
-        Assert.Null(result);
-    }
+    // Note (PR77): GetItemByIdGeneric_ViaIItemLookupServiceReference_InvisibleViaBlockedTag_ReturnsNull
+    // used to live here, exercising the user-aware IItemLookupService.GetItemById<T>(Guid, User)
+    // overload across the interface boundary. That overload was removed from IItemLookupService in
+    // PR77 (moved to IItemAccessService) - the equivalent coverage now lives in
+    // ItemAccessServiceTests.GetVisibleItemById_InvisibleViaBlockedTag_ReturnsNull.
 
     // ---------------------------------------------------------------
     // 13. DeleteItem parent resolution uses the injected lookup (PR73)
