@@ -272,6 +272,42 @@ namespace Reefin.Controller.Entities.TV
             return series is null ? Guid.Empty : series.Id;
         }
 
+        /// <summary>
+        /// Gets the Episode's <see cref="Series"/> via the given lookup service, without touching the
+        /// static <see cref="BaseItem.LibraryManager"/>. The parameterless <see cref="Series"/>
+        /// property remains as a compatibility wrapper over the static path; new callers that hold an
+        /// <see cref="IItemLookupService"/> should prefer this overload. Both the direct id resolution
+        /// and the empty-id parent fallback (<see cref="FindSeriesId(IItemLookupService)"/>) go through
+        /// <paramref name="lookup"/>, so this path is fully static-free.
+        /// </summary>
+        /// <param name="lookup">The lookup service.</param>
+        /// <returns>The series, or <c>null</c> if none can be resolved.</returns>
+        public Series GetSeries(IItemLookupService lookup)
+        {
+            ArgumentNullException.ThrowIfNull(lookup);
+
+            var seriesId = SeriesId;
+            if (seriesId.IsEmpty())
+            {
+                seriesId = FindSeriesId(lookup);
+            }
+
+            return seriesId.IsEmpty() ? null : (lookup.GetItemById(seriesId) as Series);
+        }
+
+        /// <summary>
+        /// Finds the owning series id by walking the parent chain via the given lookup service,
+        /// without touching the static <see cref="BaseItem.LibraryManager"/>. Used by
+        /// <see cref="GetSeries(IItemLookupService)"/> as its empty-id fallback.
+        /// </summary>
+        /// <param name="lookup">The lookup service.</param>
+        /// <returns>The series id, or <see cref="Guid.Empty"/> if no series ancestor exists.</returns>
+        public Guid FindSeriesId(IItemLookupService lookup)
+        {
+            var series = FindParent<Series>(lookup);
+            return series is null ? Guid.Empty : series.Id;
+        }
+
         public override IEnumerable<Guid> GetAncestorIds()
         {
             var list = base.GetAncestorIds().ToList();

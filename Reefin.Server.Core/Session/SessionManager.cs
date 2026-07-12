@@ -1394,7 +1394,7 @@ namespace Reefin.Server.Core.Session
                 && user.EnableNextEpisodeAutoPlay
                 && _itemLookupService.GetItemById(command.ItemIds[0]) is Episode episode)
             {
-                var series = episode.Series;
+                var series = episode.GetSeries(_itemLookupService);
                 if (series is not null)
                 {
                     var episodes = series.GetEpisodes(
