@@ -30,7 +30,8 @@ public class InstantMixController : BaseReefinApiController
 {
     private readonly IUserManager _userManager;
     private readonly IDtoService _dtoService;
-    private readonly ILibraryManager _libraryManager;
+    private readonly IItemLookupService _itemLookupService;
+    private readonly IItemAccessService _itemAccessService;
     private readonly IMusicManager _musicManager;
 
     /// <summary>
@@ -39,17 +40,20 @@ public class InstantMixController : BaseReefinApiController
     /// <param name="userManager">Instance of the <see cref="IUserManager"/> interface.</param>
     /// <param name="dtoService">Instance of the <see cref="IDtoService"/> interface.</param>
     /// <param name="musicManager">Instance of the <see cref="IMusicManager"/> interface.</param>
-    /// <param name="libraryManager">Instance of the <see cref="ILibraryManager"/> interface.</param>
+    /// <param name="itemLookupService">Instance of the <see cref="IItemLookupService"/> interface.</param>
+    /// <param name="itemAccessService">Instance of the <see cref="IItemAccessService"/> interface.</param>
     public InstantMixController(
         IUserManager userManager,
         IDtoService dtoService,
         IMusicManager musicManager,
-        ILibraryManager libraryManager)
+        IItemLookupService itemLookupService,
+        IItemAccessService itemAccessService)
     {
         _userManager = userManager;
         _dtoService = dtoService;
         _musicManager = musicManager;
-        _libraryManager = libraryManager;
+        _itemLookupService = itemLookupService;
+        _itemAccessService = itemAccessService;
     }
 
     /// <summary>
@@ -83,7 +87,9 @@ public class InstantMixController : BaseReefinApiController
         var user = userId.IsNullOrEmpty()
             ? null
             : _userManager.GetUserById(userId.Value);
-        var item = _libraryManager.GetItemById<BaseItem>(itemId, user);
+        var item = user is null
+            ? _itemLookupService.GetItemById<BaseItem>(itemId)
+            : _itemAccessService.GetVisibleItemById<BaseItem>(itemId, user);
         if (item is null)
         {
             return NotFound();
@@ -126,7 +132,9 @@ public class InstantMixController : BaseReefinApiController
         var user = userId.IsNullOrEmpty()
             ? null
             : _userManager.GetUserById(userId.Value);
-        var item = _libraryManager.GetItemById<BaseItem>(itemId, user);
+        var item = user is null
+            ? _itemLookupService.GetItemById<BaseItem>(itemId)
+            : _itemAccessService.GetVisibleItemById<BaseItem>(itemId, user);
         if (item is null)
         {
             return NotFound();
@@ -169,7 +177,9 @@ public class InstantMixController : BaseReefinApiController
         var user = userId.IsNullOrEmpty()
             ? null
             : _userManager.GetUserById(userId.Value);
-        var item = _libraryManager.GetItemById<Playlist>(itemId, user);
+        var item = user is null
+            ? _itemLookupService.GetItemById<Playlist>(itemId)
+            : _itemAccessService.GetVisibleItemById<Playlist>(itemId, user);
         if (item is null)
         {
             return NotFound();
@@ -248,7 +258,9 @@ public class InstantMixController : BaseReefinApiController
         var user = userId.IsNullOrEmpty()
             ? null
             : _userManager.GetUserById(userId.Value);
-        var item = _libraryManager.GetItemById<BaseItem>(itemId, user);
+        var item = user is null
+            ? _itemLookupService.GetItemById<BaseItem>(itemId)
+            : _itemAccessService.GetVisibleItemById<BaseItem>(itemId, user);
         if (item is null)
         {
             return NotFound();
@@ -291,7 +303,9 @@ public class InstantMixController : BaseReefinApiController
         var user = userId.IsNullOrEmpty()
             ? null
             : _userManager.GetUserById(userId.Value);
-        var item = _libraryManager.GetItemById<BaseItem>(itemId, user);
+        var item = user is null
+            ? _itemLookupService.GetItemById<BaseItem>(itemId)
+            : _itemAccessService.GetVisibleItemById<BaseItem>(itemId, user);
         if (item is null)
         {
             return NotFound();
@@ -375,7 +389,9 @@ public class InstantMixController : BaseReefinApiController
         var user = userId.IsNullOrEmpty()
             ? null
             : _userManager.GetUserById(userId.Value);
-        var item = _libraryManager.GetItemById<BaseItem>(id, user);
+        var item = user is null
+            ? _itemLookupService.GetItemById<BaseItem>(id)
+            : _itemAccessService.GetVisibleItemById<BaseItem>(id, user);
         if (item is null)
         {
             return NotFound();

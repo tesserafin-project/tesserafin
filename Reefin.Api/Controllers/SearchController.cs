@@ -31,7 +31,7 @@ namespace Reefin.Api.Controllers;
 public class SearchController : BaseReefinApiController
 {
     private readonly ISearchManager _searchManager;
-    private readonly ILibraryManager _libraryManager;
+    private readonly IItemLookupService _itemLookupService;
     private readonly IDtoService _dtoService;
     private readonly IImageProcessor _imageProcessor;
 
@@ -39,17 +39,17 @@ public class SearchController : BaseReefinApiController
     /// Initializes a new instance of the <see cref="SearchController"/> class.
     /// </summary>
     /// <param name="searchManager">Instance of <see cref="ISearchManager"/> interface.</param>
-    /// <param name="libraryManager">Instance of <see cref="ILibraryManager"/> interface.</param>
+    /// <param name="itemLookupService">Instance of <see cref="IItemLookupService"/> interface.</param>
     /// <param name="dtoService">Instance of <see cref="IDtoService"/> interface.</param>
     /// <param name="imageProcessor">Instance of <see cref="IImageProcessor"/> interface.</param>
     public SearchController(
         ISearchManager searchManager,
-        ILibraryManager libraryManager,
+        IItemLookupService itemLookupService,
         IDtoService dtoService,
         IImageProcessor imageProcessor)
     {
         _searchManager = searchManager;
-        _libraryManager = libraryManager;
+        _itemLookupService = itemLookupService;
         _dtoService = dtoService;
         _imageProcessor = imageProcessor;
     }
@@ -212,7 +212,7 @@ public class SearchController : BaseReefinApiController
 
         if (!item.ChannelId.IsEmpty())
         {
-            var channel = _libraryManager.GetItemById<BaseItem>(item.ChannelId);
+            var channel = _itemLookupService.GetItemById<BaseItem>(item.ChannelId);
             result.ChannelName = channel?.Name;
         }
 

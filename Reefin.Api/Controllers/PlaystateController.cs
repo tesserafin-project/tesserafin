@@ -29,7 +29,7 @@ public class PlaystateController : BaseReefinApiController
 {
     private readonly IUserManager _userManager;
     private readonly IUserDataManager _userDataRepository;
-    private readonly ILibraryManager _libraryManager;
+    private readonly IItemAccessService _itemAccessService;
     private readonly ISessionManager _sessionManager;
     private readonly ILogger<PlaystateController> _logger;
     private readonly ITranscodeManager _transcodeManager;
@@ -39,21 +39,21 @@ public class PlaystateController : BaseReefinApiController
     /// </summary>
     /// <param name="userManager">Instance of the <see cref="IUserManager"/> interface.</param>
     /// <param name="userDataRepository">Instance of the <see cref="IUserDataManager"/> interface.</param>
-    /// <param name="libraryManager">Instance of the <see cref="ILibraryManager"/> interface.</param>
+    /// <param name="itemAccessService">Instance of the <see cref="IItemAccessService"/> interface.</param>
     /// <param name="sessionManager">Instance of the <see cref="ISessionManager"/> interface.</param>
     /// <param name="loggerFactory">Instance of the <see cref="ILoggerFactory"/> interface.</param>
     /// <param name="transcodeManager">Instance of the <see cref="ITranscodeManager"/> interface.</param>
     public PlaystateController(
         IUserManager userManager,
         IUserDataManager userDataRepository,
-        ILibraryManager libraryManager,
+        IItemAccessService itemAccessService,
         ISessionManager sessionManager,
         ILoggerFactory loggerFactory,
         ITranscodeManager transcodeManager)
     {
         _userManager = userManager;
         _userDataRepository = userDataRepository;
-        _libraryManager = libraryManager;
+        _itemAccessService = itemAccessService;
         _sessionManager = sessionManager;
         _logger = loggerFactory.CreateLogger<PlaystateController>();
 
@@ -85,7 +85,7 @@ public class PlaystateController : BaseReefinApiController
             return NotFound();
         }
 
-        var item = _libraryManager.GetItemById<BaseItem>(itemId, user);
+        var item = _itemAccessService.GetVisibleItemById<BaseItem>(itemId, user);
         if (item is null)
         {
             return NotFound();
@@ -151,7 +151,7 @@ public class PlaystateController : BaseReefinApiController
             return NotFound();
         }
 
-        var item = _libraryManager.GetItemById<BaseItem>(itemId, user);
+        var item = _itemAccessService.GetVisibleItemById<BaseItem>(itemId, user);
         if (item is null)
         {
             return NotFound();

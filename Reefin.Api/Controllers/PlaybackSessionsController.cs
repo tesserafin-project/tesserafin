@@ -30,7 +30,7 @@ namespace Reefin.Api.Controllers;
 public class PlaybackSessionsController : BaseReefinApiController
 {
     private readonly IPlaybackSessionManager _playbackSessionManager;
-    private readonly ILibraryManager _libraryManager;
+    private readonly IItemLookupService _itemLookupService;
     private readonly IUserManager _userManager;
     private readonly IMediaSourceManager _mediaSourceManager;
 
@@ -38,17 +38,17 @@ public class PlaybackSessionsController : BaseReefinApiController
     /// Initializes a new instance of the <see cref="PlaybackSessionsController"/> class.
     /// </summary>
     /// <param name="playbackSessionManager">Instance of the <see cref="IPlaybackSessionManager"/> interface.</param>
-    /// <param name="libraryManager">Instance of the <see cref="ILibraryManager"/> interface.</param>
+    /// <param name="itemLookupService">Instance of the <see cref="IItemLookupService"/> interface.</param>
     /// <param name="userManager">Instance of the <see cref="IUserManager"/> interface.</param>
     /// <param name="mediaSourceManager">Instance of the <see cref="IMediaSourceManager"/> interface.</param>
     public PlaybackSessionsController(
         IPlaybackSessionManager playbackSessionManager,
-        ILibraryManager libraryManager,
+        IItemLookupService itemLookupService,
         IUserManager userManager,
         IMediaSourceManager mediaSourceManager)
     {
         _playbackSessionManager = playbackSessionManager;
-        _libraryManager = libraryManager;
+        _itemLookupService = itemLookupService;
         _userManager = userManager;
         _mediaSourceManager = mediaSourceManager;
     }
@@ -133,7 +133,7 @@ public class PlaybackSessionsController : BaseReefinApiController
     {
         var userId = RequestHelpers.GetUserId(User, request.UserId);
         var user = _userManager.GetUserById(userId) ?? throw new ResourceNotFoundException();
-        var item = _libraryManager.GetItemById<BaseItem>(request.ItemId) ?? throw new ResourceNotFoundException();
+        var item = _itemLookupService.GetItemById<BaseItem>(request.ItemId) ?? throw new ResourceNotFoundException();
 
         var mediaSources = await _mediaSourceManager.GetPlaybackMediaSources(item, user, true, true, cancellationToken)
             .ConfigureAwait(false);

@@ -32,7 +32,8 @@ namespace Reefin.Api.Controllers;
 [Tags("Audio")]
 public class UniversalAudioController : BaseReefinApiController
 {
-    private readonly ILibraryManager _libraryManager;
+    private readonly IItemLookupService _itemLookupService;
+    private readonly IItemAccessService _itemAccessService;
     private readonly ILogger<UniversalAudioController> _logger;
     private readonly MediaInfoHelper _mediaInfoHelper;
     private readonly AudioHelper _audioHelper;
@@ -42,21 +43,24 @@ public class UniversalAudioController : BaseReefinApiController
     /// <summary>
     /// Initializes a new instance of the <see cref="UniversalAudioController"/> class.
     /// </summary>
-    /// <param name="libraryManager">Instance of the <see cref="ILibraryManager"/> interface.</param>
+    /// <param name="itemLookupService">Instance of the <see cref="IItemLookupService"/> interface.</param>
+    /// <param name="itemAccessService">Instance of the <see cref="IItemAccessService"/> interface.</param>
     /// <param name="logger">Instance of the <see cref="ILogger{UniversalAudioController}"/> interface.</param>
     /// <param name="mediaInfoHelper">Instance of <see cref="MediaInfoHelper"/>.</param>
     /// <param name="audioHelper">Instance of <see cref="AudioHelper"/>.</param>
     /// <param name="dynamicHlsHelper">Instance of <see cref="DynamicHlsHelper"/>.</param>
     /// <param name="userManager">Instance of the <see cref="IUserManager"/> interface.</param>
     public UniversalAudioController(
-        ILibraryManager libraryManager,
+        IItemLookupService itemLookupService,
+        IItemAccessService itemAccessService,
         ILogger<UniversalAudioController> logger,
         MediaInfoHelper mediaInfoHelper,
         AudioHelper audioHelper,
         DynamicHlsHelper dynamicHlsHelper,
         IUserManager userManager)
     {
-        _libraryManager = libraryManager;
+        _itemLookupService = itemLookupService;
+        _itemAccessService = itemAccessService;
         _logger = logger;
         _mediaInfoHelper = mediaInfoHelper;
         _audioHelper = audioHelper;
@@ -120,7 +124,9 @@ public class UniversalAudioController : BaseReefinApiController
         var user = userId.IsNullOrEmpty()
             ? null
             : _userManager.GetUserById(userId.Value);
-        var item = _libraryManager.GetItemById<BaseItem>(itemId, user);
+        var item = user is null
+            ? _itemLookupService.GetItemById<BaseItem>(itemId)
+            : _itemAccessService.GetVisibleItemById<BaseItem>(itemId, user);
         if (item is null)
         {
             return NotFound();

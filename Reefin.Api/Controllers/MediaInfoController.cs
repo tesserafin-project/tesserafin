@@ -31,7 +31,8 @@ public class MediaInfoController : BaseReefinApiController
 {
     private readonly IMediaSourceManager _mediaSourceManager;
     private readonly IDeviceManager _deviceManager;
-    private readonly ILibraryManager _libraryManager;
+    private readonly IItemLookupService _itemLookupService;
+    private readonly IItemAccessService _itemAccessService;
     private readonly ILogger<MediaInfoController> _logger;
     private readonly MediaInfoHelper _mediaInfoHelper;
     private readonly IUserManager _userManager;
@@ -41,21 +42,24 @@ public class MediaInfoController : BaseReefinApiController
     /// </summary>
     /// <param name="mediaSourceManager">Instance of the <see cref="IMediaSourceManager"/> interface.</param>
     /// <param name="deviceManager">Instance of the <see cref="IDeviceManager"/> interface.</param>
-    /// <param name="libraryManager">Instance of the <see cref="ILibraryManager"/> interface.</param>
+    /// <param name="itemLookupService">Instance of the <see cref="IItemLookupService"/> interface.</param>
+    /// <param name="itemAccessService">Instance of the <see cref="IItemAccessService"/> interface.</param>
     /// <param name="logger">Instance of the <see cref="ILogger{MediaInfoController}"/> interface.</param>
     /// <param name="mediaInfoHelper">Instance of the <see cref="MediaInfoHelper"/>.</param>
     /// <param name="userManager">Instance of the <see cref="IUserManager"/> interface..</param>
     public MediaInfoController(
         IMediaSourceManager mediaSourceManager,
         IDeviceManager deviceManager,
-        ILibraryManager libraryManager,
+        IItemLookupService itemLookupService,
+        IItemAccessService itemAccessService,
         ILogger<MediaInfoController> logger,
         MediaInfoHelper mediaInfoHelper,
         IUserManager userManager)
     {
         _mediaSourceManager = mediaSourceManager;
         _deviceManager = deviceManager;
-        _libraryManager = libraryManager;
+        _itemLookupService = itemLookupService;
+        _itemAccessService = itemAccessService;
         _logger = logger;
         _mediaInfoHelper = mediaInfoHelper;
         _userManager = userManager;
@@ -78,7 +82,9 @@ public class MediaInfoController : BaseReefinApiController
         var user = userId.IsNullOrEmpty()
             ? null
             : _userManager.GetUserById(userId.Value);
-        var item = _libraryManager.GetItemById<BaseItem>(itemId, user);
+        var item = user is null
+            ? _itemLookupService.GetItemById<BaseItem>(itemId)
+            : _itemAccessService.GetVisibleItemById<BaseItem>(itemId, user);
         if (item is null)
         {
             return NotFound();
@@ -168,7 +174,9 @@ public class MediaInfoController : BaseReefinApiController
         var user = userId.IsNullOrEmpty()
             ? null
             : _userManager.GetUserById(userId.Value);
-        var item = _libraryManager.GetItemById<BaseItem>(itemId, user);
+        var item = user is null
+            ? _itemLookupService.GetItemById<BaseItem>(itemId)
+            : _itemAccessService.GetVisibleItemById<BaseItem>(itemId, user);
         if (item is null)
         {
             return NotFound();
