@@ -53,7 +53,7 @@ namespace Reefin.Server.Core.Session
         private readonly IServerConfigurationManager _config;
         private readonly ILogger<SessionManager> _logger;
         private readonly IEventManager _eventManager;
-        private readonly ILibraryManager _libraryManager;
+        private readonly IItemLookupService _itemLookupService;
         private readonly IUserManager _userManager;
         private readonly IMusicManager _musicManager;
         private readonly IDtoService _dtoService;
@@ -83,7 +83,7 @@ namespace Reefin.Server.Core.Session
         /// <param name="eventManager">Instance of <see cref="IEventManager"/> interface.</param>
         /// <param name="userDataManager">Instance of <see cref="IUserDataManager"/> interface.</param>
         /// <param name="serverConfigurationManager">Instance of <see cref="IServerConfigurationManager"/> interface.</param>
-        /// <param name="libraryManager">Instance of <see cref="ILibraryManager"/> interface.</param>
+        /// <param name="itemLookupService">Instance of <see cref="IItemLookupService"/> interface.</param>
         /// <param name="userManager">Instance of <see cref="IUserManager"/> interface.</param>
         /// <param name="musicManager">Instance of <see cref="IMusicManager"/> interface.</param>
         /// <param name="dtoService">Instance of <see cref="IDtoService"/> interface.</param>
@@ -99,7 +99,7 @@ namespace Reefin.Server.Core.Session
             IEventManager eventManager,
             IUserDataManager userDataManager,
             IServerConfigurationManager serverConfigurationManager,
-            ILibraryManager libraryManager,
+            IItemLookupService itemLookupService,
             IUserManager userManager,
             IMusicManager musicManager,
             IDtoService dtoService,
@@ -115,7 +115,7 @@ namespace Reefin.Server.Core.Session
             _eventManager = eventManager;
             _userDataManager = userDataManager;
             _config = serverConfigurationManager;
-            _libraryManager = libraryManager;
+            _itemLookupService = itemLookupService;
             _userManager = userManager;
             _musicManager = musicManager;
             _dtoService = dtoService;
@@ -731,7 +731,7 @@ namespace Reefin.Server.Core.Session
                 return item;
             }
 
-            item = _libraryManager.GetItemById(itemId);
+            item = _itemLookupService.GetItemById(itemId);
 
             session.FullNowPlayingItem = item;
 
@@ -1392,7 +1392,7 @@ namespace Reefin.Server.Core.Session
             if (user is not null
                 && command.ItemIds.Length == 1
                 && user.EnableNextEpisodeAutoPlay
-                && _libraryManager.GetItemById(command.ItemIds[0]) is Episode episode)
+                && _itemLookupService.GetItemById(command.ItemIds[0]) is Episode episode)
             {
                 var series = episode.Series;
                 if (series is not null)
@@ -1447,7 +1447,7 @@ namespace Reefin.Server.Core.Session
 
         private IEnumerable<BaseItem> TranslateItemForPlayback(Guid id, User user)
         {
-            var item = _libraryManager.GetItemById(id);
+            var item = _itemLookupService.GetItemById(id);
 
             if (item is null)
             {
@@ -1502,7 +1502,7 @@ namespace Reefin.Server.Core.Session
 
         private List<BaseItem> TranslateItemForInstantMix(Guid id, User user)
         {
-            var item = _libraryManager.GetItemById(id);
+            var item = _itemLookupService.GetItemById(id);
 
             if (item is null)
             {
@@ -1922,7 +1922,7 @@ namespace Reefin.Server.Core.Session
         {
             ArgumentException.ThrowIfNullOrEmpty(itemId);
 
-            var item = _libraryManager.GetItemById(new Guid(itemId));
+            var item = _itemLookupService.GetItemById(new Guid(itemId));
             var session = GetSession(sessionId);
 
             session.NowViewingItem = GetItemInfo(item, null);

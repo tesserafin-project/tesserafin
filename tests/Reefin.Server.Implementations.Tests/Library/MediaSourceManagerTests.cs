@@ -26,6 +26,7 @@ namespace Reefin.Server.Implementations.Tests.Library
         private readonly MediaSourceManager _mediaSourceManager;
         private readonly Mock<IUserDataManager> _mockUserDataManager;
         private readonly Mock<ILocalizationManager> _mockLocalizationManager;
+        private readonly Mock<IItemAccessService> _mockItemAccessService;
         private Video _item;
         private User _user;
 
@@ -40,6 +41,8 @@ namespace Reefin.Server.Implementations.Tests.Library
             _mockLocalizationManager = fixture.Create<Mock<ILocalizationManager>>();
             _mockLocalizationManager.Setup(m => m.FindLanguageInfo(It.IsAny<string>())).Returns((string s) => string.IsNullOrEmpty(s) ? null : new CultureDto(s, s, s, new EditableList<string> { s }));
             fixture.Inject(_mockLocalizationManager.Object);
+
+            _mockItemAccessService = fixture.Freeze<Mock<IItemAccessService>>();
 
             _mediaSourceManager = fixture.Create<MediaSourceManager>();
 
@@ -209,6 +212,34 @@ namespace Reefin.Server.Implementations.Tests.Library
 
             Assert.Equal(primary.Id.ToString("N"), sources[0].Id);
             _mockUserDataManager.Verify(x => x.GetUserDataBatch(It.IsAny<IReadOnlyList<BaseItem>>(), It.IsAny<User>()), Times.Never);
+        }
+
+        [Fact]
+        public void GetStaticMediaSources_WithUser_FiltersSourcesNotVisibleToUser()
+        {
+            // PR79 characterization: the per-source visibility filter in GetStaticMediaSources now
+            // routes through IItemAccessService.GetVisibleItemById (migrated off the former
+            // ILibraryManager.GetItemById<BaseItem>(id, user) call). Primary source is kept because
+            // its parsed id equals item.Id (never consults the access service); alt versions are kept
+            // only when the access service resolves them as visible.
+            var (primary, alt1, alt2) = SetupVersionGroup();
+            // Stub the user-data batch so AutoFixture does not auto-generate an invalid UserItemData
+            // (rating out of the 0-10 range) for the with-user code path; empty data is enough here
+            // since this test only asserts which sources survive the visibility filter.
+            SetupUserDataBatch(new Dictionary<Guid, UserItemData>());
+            _mockItemAccessService
+                .Setup(x => x.GetVisibleItemById<BaseItem>(alt1.Id, It.IsAny<User>()))
+                .Returns(alt1);
+            _mockItemAccessService
+                .Setup(x => x.GetVisibleItemById<BaseItem>(alt2.Id, It.IsAny<User>()))
+                .Returns((BaseItem)null!);
+
+            var sources = _mediaSourceManager.GetStaticMediaSources(primary, false, _user);
+
+            var ids = sources.Select(s => s.Id).ToHashSet();
+            Assert.Contains(primary.Id.ToString("N"), ids);
+            Assert.Contains(alt1.Id.ToString("N"), ids);
+            Assert.DoesNotContain(alt2.Id.ToString("N"), ids);
         }
 
         private void SetupUserDataBatch(Dictionary<Guid, UserItemData> userData)

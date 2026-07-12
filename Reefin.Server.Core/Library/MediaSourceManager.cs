@@ -49,7 +49,8 @@ namespace Reefin.Server.Core.Library
         private readonly IServerApplicationHost _appHost;
         private readonly IItemRepository _itemRepo;
         private readonly IUserManager _userManager;
-        private readonly ILibraryManager _libraryManager;
+        private readonly IItemLookupService _itemLookupService;
+        private readonly IItemAccessService _itemAccessService;
         private readonly IFileSystem _fileSystem;
         private readonly ILogger<MediaSourceManager> _logger;
         private readonly IUserDataManager _userDataManager;
@@ -72,7 +73,8 @@ namespace Reefin.Server.Core.Library
             IApplicationPaths applicationPaths,
             ILocalizationManager localizationManager,
             IUserManager userManager,
-            ILibraryManager libraryManager,
+            IItemLookupService itemLookupService,
+            IItemAccessService itemAccessService,
             ILogger<MediaSourceManager> logger,
             IFileSystem fileSystem,
             IUserDataManager userDataManager,
@@ -85,7 +87,8 @@ namespace Reefin.Server.Core.Library
             _appHost = appHost;
             _itemRepo = itemRepo;
             _userManager = userManager;
-            _libraryManager = libraryManager;
+            _itemLookupService = itemLookupService;
+            _itemAccessService = itemAccessService;
             _logger = logger;
             _fileSystem = fileSystem;
             _userDataManager = userDataManager;
@@ -399,7 +402,7 @@ namespace Reefin.Server.Core.Library
                 sources = sources
                     .Where(source => !Guid.TryParse(source.Id, out var sourceId)
                         || sourceId.Equals(item.Id)
-                        || _libraryManager.GetItemById<BaseItem>(sourceId, user) is not null)
+                        || _itemAccessService.GetVisibleItemById<BaseItem>(sourceId, user) is not null)
                     .ToArray();
 
                 foreach (var source in sources)
@@ -705,7 +708,7 @@ namespace Reefin.Server.Core.Library
                 var user = _userManager.GetUserById(request.UserId);
                 var item = request.ItemId.IsEmpty()
                     ? null
-                    : _libraryManager.GetItemById(request.ItemId);
+                    : _itemLookupService.GetItemById(request.ItemId);
                 SetDefaultAudioAndSubtitleStreamIndices(item, clone, user);
             }
 

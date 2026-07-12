@@ -27,17 +27,15 @@ namespace Reefin.Server.Core.Library
         private readonly ICollectionManager _collectionManager;
         private readonly IUserViewManager _userViewManager;
         private readonly ITVSeriesManager _tvSeriesManager;
-        private readonly ILibraryManager _libraryManager;
         private readonly IServerConfigurationManager _configurationManager;
         private readonly IItemSortService _itemSortService;
 
-        public ItemQueryService(IChannelManager channelManager, ICollectionManager collectionManager, IUserViewManager userViewManager, ITVSeriesManager tvSeriesManager, ILibraryManager libraryManager, IServerConfigurationManager configurationManager, IItemSortService itemSortService)
+        public ItemQueryService(IChannelManager channelManager, ICollectionManager collectionManager, IUserViewManager userViewManager, ITVSeriesManager tvSeriesManager, IServerConfigurationManager configurationManager, IItemSortService itemSortService)
         {
             _channelManager = channelManager;
             _collectionManager = collectionManager;
             _userViewManager = userViewManager;
             _tvSeriesManager = tvSeriesManager;
-            _libraryManager = libraryManager;
             _configurationManager = configurationManager;
             _itemSortService = itemSortService;
         }

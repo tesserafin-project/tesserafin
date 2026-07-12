@@ -21,7 +21,7 @@ public class GroupTests
 
         MockUserManager = new Mock<IUserManager>();
         MockSessionManager = new Mock<ISessionManager>();
-        MockLibraryManager = new Mock<ILibraryManager>();
+        MockItemLookupService = new Mock<IItemLookupService>();
         MockItem = new Mock<BaseItem>();
         MockItem.Setup(i => i.IsVisibleStandalone(It.IsAny<User>())).Returns(true);
     }
@@ -32,16 +32,16 @@ public class GroupTests
 
     private Mock<ISessionManager> MockSessionManager { get; }
 
-    private Mock<ILibraryManager> MockLibraryManager { get; }
+    private Mock<IItemLookupService> MockItemLookupService { get; }
 
     private Mock<BaseItem> MockItem { get; }
 
     [Fact]
     public void HasAccessToPlayQueue_ReturnsTrue_WhenItemsAreVisible()
     {
-        MockLibraryManager.Setup(m => m.GetItemById(It.IsAny<Guid>())).Returns(MockItem.Object);
+        MockItemLookupService.Setup(m => m.GetItemById(It.IsAny<Guid>())).Returns(MockItem.Object);
 
-        var group = new Reefin.Server.Core.SyncPlay.Group(MockLoggerFactory.Object, MockUserManager.Object, MockSessionManager.Object, MockLibraryManager.Object);
+        var group = new Reefin.Server.Core.SyncPlay.Group(MockLoggerFactory.Object, MockUserManager.Object, MockSessionManager.Object, MockItemLookupService.Object);
         var itemId = Guid.NewGuid();
         var playlist = new List<Guid> { itemId };
         group.PlayQueue.Reset();
@@ -59,11 +59,11 @@ public class GroupTests
     [Fact]
     public void HasAccessToPlayQueue_ReturnsFalse_WhenLibraryReturnsNullForItem()
     {
-        MockLibraryManager.Setup(m => m.GetItemById(It.IsAny<Guid>())).Returns((BaseItem?)null);
+        MockItemLookupService.Setup(m => m.GetItemById(It.IsAny<Guid>())).Returns((BaseItem?)null);
 
-        Assert.Null(MockLibraryManager.Object.GetItemById(Guid.NewGuid()));
+        Assert.Null(MockItemLookupService.Object.GetItemById(Guid.NewGuid()));
 
-        var group = new Reefin.Server.Core.SyncPlay.Group(MockLoggerFactory.Object, MockUserManager.Object, MockSessionManager.Object, MockLibraryManager.Object);
+        var group = new Reefin.Server.Core.SyncPlay.Group(MockLoggerFactory.Object, MockUserManager.Object, MockSessionManager.Object, MockItemLookupService.Object);
         var itemId = Guid.NewGuid();
         var playlist = new List<Guid> { itemId };
         group.PlayQueue.Reset();

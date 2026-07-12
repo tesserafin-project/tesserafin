@@ -35,7 +35,6 @@ public class PlaylistsController : BaseReefinApiController
     private readonly IPlaylistManager _playlistManager;
     private readonly IDtoService _dtoService;
     private readonly IUserManager _userManager;
-    private readonly ILibraryManager _libraryManager;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PlaylistsController"/> class.
@@ -43,17 +42,14 @@ public class PlaylistsController : BaseReefinApiController
     /// <param name="dtoService">Instance of the <see cref="IDtoService"/> interface.</param>
     /// <param name="playlistManager">Instance of the <see cref="IPlaylistManager"/> interface.</param>
     /// <param name="userManager">Instance of the <see cref="IUserManager"/> interface.</param>
-    /// <param name="libraryManager">Instance of the <see cref="ILibraryManager"/> interface.</param>
     public PlaylistsController(
         IDtoService dtoService,
         IPlaylistManager playlistManager,
-        IUserManager userManager,
-        ILibraryManager libraryManager)
+        IUserManager userManager)
     {
         _dtoService = dtoService;
         _playlistManager = playlistManager;
         _userManager = userManager;
-        _libraryManager = libraryManager;
     }
 
     /// <summary>
