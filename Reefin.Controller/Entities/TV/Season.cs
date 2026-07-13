@@ -323,6 +323,42 @@ namespace Reefin.Controller.Entities.TV
         }
 
         /// <summary>
+        /// Gets this season's owning series, resolving every hop through the given lookup service
+        /// instead of the static <see cref="BaseItem.LibraryManager"/>. The <see cref="Series"/>
+        /// property remains as a compatibility wrapper over the static path; new callers that hold
+        /// an <see cref="IItemLookupService"/> should prefer this overload. Both the direct id
+        /// resolution and the empty-id parent fallback (<see cref="FindSeriesId(IItemLookupService)"/>)
+        /// go through <paramref name="lookup"/>, so this path is fully static-free.
+        /// </summary>
+        /// <param name="lookup">The lookup service.</param>
+        /// <returns>The series, or <c>null</c> if none can be resolved.</returns>
+        public Series GetSeries(IItemLookupService lookup)
+        {
+            ArgumentNullException.ThrowIfNull(lookup);
+
+            var seriesId = SeriesId;
+            if (seriesId.IsEmpty())
+            {
+                seriesId = FindSeriesId(lookup);
+            }
+
+            return seriesId.IsEmpty() ? null : (lookup.GetItemById(seriesId) as Series);
+        }
+
+        /// <summary>
+        /// Finds the owning series id by walking the parent chain via the given lookup service,
+        /// without touching the static <see cref="BaseItem.LibraryManager"/>. Used by
+        /// <see cref="GetSeries(IItemLookupService)"/> as its empty-id fallback.
+        /// </summary>
+        /// <param name="lookup">The lookup service.</param>
+        /// <returns>The series id, or <see cref="Guid.Empty"/> if no series ancestor exists.</returns>
+        public Guid FindSeriesId(IItemLookupService lookup)
+        {
+            var series = FindParent<Series>(lookup);
+            return series?.Id ?? Guid.Empty;
+        }
+
+        /// <summary>
         /// Gets the lookup information.
         /// </summary>
         /// <returns>SeasonInfo.</returns>

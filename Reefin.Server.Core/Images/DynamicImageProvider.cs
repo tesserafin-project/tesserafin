@@ -25,12 +25,14 @@ namespace Reefin.Server.Core.Images
     {
         private readonly IUserManager _userManager;
         private readonly IItemQueryService _itemQueryService;
+        private readonly IItemLookupService _itemLookupService;
 
-        public DynamicImageProvider(IFileSystem fileSystem, IProviderManager providerManager, IApplicationPaths applicationPaths, IImageProcessor imageProcessor, IUserManager userManager, IItemQueryService itemQueryService)
+        public DynamicImageProvider(IFileSystem fileSystem, IProviderManager providerManager, IApplicationPaths applicationPaths, IImageProcessor imageProcessor, IUserManager userManager, IItemQueryService itemQueryService, IItemLookupService itemLookupService)
             : base(fileSystem, providerManager, applicationPaths, imageProcessor)
         {
             _userManager = userManager;
             _itemQueryService = itemQueryService;
+            _itemLookupService = itemLookupService;
         }
 
         protected override IReadOnlyList<BaseItem> GetItemsWithImages(BaseItem item)
@@ -55,7 +57,7 @@ namespace Reefin.Server.Core.Images
             {
                 if (i is Episode episode)
                 {
-                    var series = episode.Series;
+                    var series = episode.GetSeries(_itemLookupService);
                     if (series is not null)
                     {
                         return series;
@@ -66,7 +68,7 @@ namespace Reefin.Server.Core.Images
 
                 if (i is Season season)
                 {
-                    var series = season.Series;
+                    var series = season.GetSeries(_itemLookupService);
                     if (series is not null)
                     {
                         return series;
