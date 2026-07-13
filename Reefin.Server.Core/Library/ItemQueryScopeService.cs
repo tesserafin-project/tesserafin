@@ -28,10 +28,11 @@ namespace Reefin.Server.Core.Library
     /// helpers, copied verbatim (not moved) - <see cref="LibraryManager"/> keeps its own copies
     /// during the transition to avoid re-forming a DI cycle
     /// (<c>LibraryManager -&gt; IItemQueryService -&gt; IUserViewManager -&gt; ILibraryManager</c>);
-    /// see <c>docs/pr85b-item-query-scope-service.md</c>. This service depends only on cycle-free
-    /// leaf ports - notably <see cref="IUserRootFolderProvider"/> rather than
-    /// <see cref="ILibraryManager"/> itself - so it can safely be consumed by
-    /// <c>IItemQueryService</c> in PR86.
+    /// see <c>docs/pr85b-item-query-scope-service.md</c>. This service is independent of
+    /// <see cref="ILibraryManager"/> in its own implementation, but still depends on a cyclic DI
+    /// sub-graph via <see cref="IUserViewManager"/> (one of the central nodes of the query/user-views/
+    /// channel cycle); it is not a fully cycle-free leaf. It can still be consumed by
+    /// <c>IItemQueryService</c> because it holds no direct <see cref="ILibraryManager"/> reference.
     /// </remarks>
     internal sealed class ItemQueryScopeService : IItemQueryScopeService
     {
@@ -193,13 +194,28 @@ namespace Reefin.Server.Core.Library
                 return collectionFolder.PhysicalFolderIds;
             }
 
-            var topParent = item.GetTopParent();
+            var topParent = GetTopParentViaLookup(item);
             if (topParent is not null)
             {
                 return [topParent.Id];
             }
 
             return [];
+        }
+
+        // Walks to the top-level parent using IItemLookupService instead of BaseItem.GetTopParent(),
+        // which would reach the static BaseItem.LibraryManager. Single consumer, so it stays a private
+        // helper here rather than a shared hierarchy service (see docs/pr90-*, and the removed
+        // IItemHierarchyService in PR83).
+        private BaseItem? GetTopParentViaLookup(BaseItem item)
+        {
+            if (item.IsTopParentVia(_itemLookupService))
+            {
+                return item;
+            }
+
+            return item.GetParents(_itemLookupService)
+                .FirstOrDefault(parent => parent.IsTopParentVia(_itemLookupService));
         }
     }
 }

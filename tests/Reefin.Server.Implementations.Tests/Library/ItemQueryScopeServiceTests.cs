@@ -19,10 +19,12 @@ namespace Reefin.Server.Implementations.Tests.Library;
 /// tests in <c>LibraryManagerGlobalQueryTests</c> (PR85) that pinned down the equivalent
 /// <c>LibraryManager</c> private helpers this service copies from
 /// (<c>SetTopParentIdsOrAncestors</c>/<c>AddUserToQuery</c>/<c>GetTopParentIdsForQuery</c>). These
-/// exercise the extracted, cycle-free service directly, with <see cref="IItemLookupService"/>,
+/// exercise the extracted service directly, with <see cref="IItemLookupService"/>,
 /// <see cref="IUserViewManager"/>, <see cref="IItemSortService"/> and
-/// <see cref="IUserRootFolderProvider"/> mocked - no <c>ILibraryManager</c> dependency exists on this
-/// service (see <c>docs/pr85b-item-query-scope-service.md</c>).
+/// <see cref="IUserRootFolderProvider"/> mocked - this service holds no direct
+/// <c>ILibraryManager</c> reference, but still depends on <see cref="IUserViewManager"/>, a node of
+/// the query/user-views DI cycle, so it is not fully cycle-free (see
+/// <c>docs/pr85b-item-query-scope-service.md</c>).
 /// </summary>
 public class ItemQueryScopeServiceTests
 {
@@ -206,5 +208,45 @@ public class ItemQueryScopeServiceTests
         _scopeService.AddUserToQuery(query, user);
 
         Assert.Equal(user, query.User);
+    }
+
+    // ---------------------------------------------------------------
+    // 8. AddUserToQuery resolves a plain (non-view, non-collection) user view into its top parent
+    // WITHOUT touching the static BaseItem.LibraryManager. The item's parent chain is resolved purely
+    // through IItemLookupService; a strict BaseItem.LibraryManager mock proves no static hop occurs.
+    // This pins PR90's static-free query-scoping fallback.
+    // ---------------------------------------------------------------
+
+    [Fact]
+    public void AddUserToQuery_PlainViewResolvesTopParent_StaysOffStaticLibraryManager()
+    {
+        // Strict: any call to the static BaseItem.LibraryManager throws, failing the test.
+        var previous = BaseItem.LibraryManager;
+        BaseItem.LibraryManager = new Mock<ILibraryManager>(MockBehavior.Strict).Object;
+        try
+        {
+            var user = new User("test-user", "provider", "provider");
+
+            // Aggregate root: makes its direct child a top parent (IsTopParentVia -> GetParent(lookup) is AggregateFolder).
+            var aggregate = new AggregateFolder { Id = Guid.NewGuid(), Name = "Root" };
+            var topFolder = new Folder { Id = Guid.NewGuid(), Name = "Top", ParentId = aggregate.Id };
+            // Leaf returned by GetUserViews: plain Folder, not top, parent is topFolder.
+            var leaf = new Folder { Id = Guid.NewGuid(), Name = "Leaf", ParentId = topFolder.Id };
+
+            _itemLookupServiceMock.Setup(m => m.GetItemById(topFolder.Id)).Returns(topFolder);
+            _itemLookupServiceMock.Setup(m => m.GetItemById(aggregate.Id)).Returns(aggregate);
+            _userViewManagerMock.Setup(m => m.GetUserViews(It.IsAny<UserViewQuery>())).Returns(new[] { leaf });
+
+            var query = new InternalItemsQuery(user);
+
+            _scopeService.AddUserToQuery(query, user);
+
+            // Resolved purely through the lookup mock: leaf -> topFolder (top parent).
+            Assert.Equal(new[] { topFolder.Id }, query.TopParentIds);
+        }
+        finally
+        {
+            BaseItem.LibraryManager = previous;
+        }
     }
 }

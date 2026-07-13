@@ -748,8 +748,39 @@ namespace Reefin.Controller.Entities
             }
         }
 
+#pragma warning disable SA1201 // kept adjacent to IsTopParent for readability; it mirrors that property's logic
+        /// <summary>
+        /// Gets a value indicating whether this item is a top-level parent, resolving its parent
+        /// via the given lookup service instead of the static <see cref="LibraryManager"/>. Mirrors
+        /// the <see cref="IsTopParent"/> property but keeps the check off the static path.
+        /// </summary>
+        /// <param name="lookup">The lookup service used to resolve the parent.</param>
+        /// <returns><c>true</c> if this item is a top parent; otherwise, <c>false</c>.</returns>
+        public bool IsTopParentVia(IItemLookupService lookup)
+        {
+            ArgumentNullException.ThrowIfNull(lookup);
+
+            if (this is BasePluginFolder || this is Channel)
+            {
+                return true;
+            }
+
+            if (this is IHasCollectionType view && view.CollectionType == CollectionType.livetv)
+            {
+                return true;
+            }
+
+            if (GetParent(lookup) is AggregateFolder)
+            {
+                return true;
+            }
+
+            return false;
+        }
+
         [JsonIgnore]
         public virtual bool SupportsAncestors => true;
+#pragma warning restore SA1201
 
         [JsonIgnore]
         protected virtual bool SupportsOwnedItems => !ParentId.IsEmpty() && IsFileProtocol;

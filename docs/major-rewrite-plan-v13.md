@@ -34,14 +34,14 @@ Direction technique saine : monolithe modulaire conservé, pas de microservices,
 | 13 | Rename MediaBrowser/Emby → Reefin | **Terminé** (2026-07-07, voir suivi) | Oui |
 | 14 | Labo compatibilité média | Faisable, gros ROI qualité | Non vérifié en détail |
 
-## Tableau de statut par pilier (2026-07-13, après PR83)
+## Tableau de statut par pilier (2026-07-13, après PR90)
 
 | Pilier | Statut | Prochain jalon |
 | ------ | ------ | -------------- |
 | Playback sessions | API/lifecycle v1 terminé | moteur de décision non-DLNA |
 | Rename Reefin.* | terminé | aucun |
-| BaseItem statics | partiellement traités | query / access / hierarchy |
-| LibraryManager god-object | frontières de lecture amorcées | extraire query/listing |
+| BaseItem statics | query/access extraits ; lookup/parent/top-parent static-free | démêlage DI (cycle query/user-views) |
+| LibraryManager god-object | surface query globale extraite (IItemQueryService) mais constructeur encore à 29 paramètres | démêler le cycle DI avant nouvelles migrations query |
 | Plugin SDK v2 | non commencé | après API v2 |
 | Persistance (PostgreSQL) | non commencé | après stabilisation domaine |
 | Observabilité / config / jobs | non audités | ultérieur |
@@ -90,6 +90,14 @@ La notation interne "PRxx/N" utilisée ailleurs dans ce document est un schéma 
 - b41d54a5de — Migrer la relation Episode->Series consommée hors du static (PR81)
 - 8b7bcf44f6 — Corriger la frontière d'accès SyncPlay via IItemAccessService (PR82)
 - 11da9af244 — Supprimer IItemHierarchyService, abstraction sans consommateur (PR83)
+- d4ec8cf534 — Remettre à jour la roadmap: statut par pilier + journal PR (PR84)
+- 096dc706c5 — Auditer le query/listing et caractériser l'orchestration globale (PR85)
+- 2b15880090 — Extraire le scoping de query dans un service feuille cycle-free (PR85b)
+- 86530adbab — Étendre IItemQueryService aux requêtes globales (PR86)
+- 589dbc071d — Migrer les consommateurs sink query-only vers IItemQueryService (PR87)
+- 6d6c592ce9 — Absorber Season.Series consommé hors du static (PR88)
+- e1a9090736 — Clôturer query/listing v1 : mesures et blocage DI (PR89)
+- bfdebc398a — Fermer le dernier fallback statique de query (ItemQueryScopeService.GetTopParent -> parcours via IItemLookupService) et corriger la doc « cycle-free » (PR90)
 
 ## Détail des points vérifiés dans le code
 
