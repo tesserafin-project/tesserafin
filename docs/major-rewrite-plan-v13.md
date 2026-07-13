@@ -97,8 +97,9 @@ La notation interne "PRxx/N" utilisée ailleurs dans ce document est un schéma 
 - 589dbc071d — Migrer les consommateurs sink query-only vers IItemQueryService (PR87)
 - 6d6c592ce9 — Absorber Season.Series consommé hors du static (PR88)
 - e1a9090736 — Clôturer query/listing v1 : mesures et blocage DI (PR89)
-- bfdebc398a — Fermer le dernier fallback statique de query (ItemQueryScopeService.GetTopParent -> parcours via IItemLookupService) et corriger la doc « cycle-free » (PR90)
-- 9f57e82c3a — RFC « Playback Decision v2 » : cinq objets de domaine non-DLNA, raisons arborescentes, snapshot capacités inline (docs/pr91-rfc-playback-decision-v2.md, aucun code) (PR91)
+- ddce98daa6 — Fermer le dernier fallback statique de query (ItemQueryScopeService.GetTopParent -> parcours via IItemLookupService) et corriger la doc « cycle-free » (PR90)
+- 406d28f149 — RFC « Playback Decision v2 » : cinq objets de domaine non-DLNA, raisons arborescentes, snapshot capacités inline (docs/pr91-rfc-playback-decision-v2.md, aucun code) (PR91)
+- (pending) — Design API Playback v2 + UX diagnostic : surfaces client/admin séparées, PUT vs PATCH, DTO stables sans DLNA, wireframes (docs/pr92-design-playback-api-and-diagnostics.md, aucun code) (PR92)
 
 ## Détail des points vérifiés dans le code
 
