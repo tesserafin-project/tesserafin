@@ -28,6 +28,30 @@
     <None Include="..\PlaybackCompat\fixtures\video-mkv-remux-mp4.json" Link="fixtures\video-mkv-remux-mp4.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Include="..\PlaybackCompat\fixtures\video-mkv-dts-to-aac.json" Link="fixtures\video-mkv-dts-to-aac.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\PlaybackCompat\fixtures\audio-downmix-51-to-stereo.json" Link="fixtures\audio-downmix-51-to-stereo.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\PlaybackCompat\fixtures\video-no-viable-plan.json" Link="fixtures\video-no-viable-plan.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\PlaybackCompat\fixtures\video-codec-incompatible.json" Link="fixtures\video-codec-incompatible.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\PlaybackCompat\fixtures\video-resolution-limit.json" Link="fixtures\video-resolution-limit.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\PlaybackCompat\fixtures\video-hdr-tonemap.json" Link="fixtures\video-hdr-tonemap.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\PlaybackCompat\fixtures\subtitle-pgs-burn-in.json" Link="fixtures\subtitle-pgs-burn-in.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\PlaybackCompat\fixtures\subtitle-srt-external.json" Link="fixtures\subtitle-srt-external.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

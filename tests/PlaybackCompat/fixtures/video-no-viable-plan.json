@@ -35,7 +35,7 @@
     "selectedStreams": { "video": null, "audio": null, "subtitle": null },
     "output": { "container": null, "videoCodec": null, "audioCodec": null },
     "transforms": [],
-    "reasonCodes": ["VideoCodecNotSupported", "NoViablePlan"],
+    "reasonCodes": ["VideoCodecNotSupported", "AudioCodecNotSupported", "NoViablePlan"],
     "isViable": false
   }
 }

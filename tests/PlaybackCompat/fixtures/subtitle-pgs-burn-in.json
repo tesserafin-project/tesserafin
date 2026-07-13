@@ -1,0 +1,42 @@
+{
+  "fixtureVersion": 1,
+  "id": "subtitle-pgs-burn-in",
+  "category": "subtitle-burn-in",
+  "engineVersion": 2,
+  "description": "Video and audio are directly playable, but the requested PGS subtitle (image-based) has no supported delivery — only external SRT is. Burning it in forces a video re-encode; audio copied; container unchanged.",
+  "input": {
+    "context": { "mediaKind": "Video" },
+    "capabilities": {
+      "containers": ["mp4"],
+      "videoCodecs": [{ "codec": "h264", "profiles": [], "maxLevel": 62, "maxBitDepth": 10, "videoRangeTypes": ["SDR"] }],
+      "audioCodecs": [{ "codec": "aac", "maxChannels": 8 }],
+      "subtitleDelivery": [{ "format": "srt", "method": "External" }],
+      "maxVideoBitrate": 100000000
+    },
+    "source": {
+      "mediaSourceId": "src-1",
+      "container": "mp4",
+      "protocol": "file",
+      "bitrate": 12000000,
+      "videoStreams": [{ "index": 0, "codec": "h264", "profile": "high", "level": 40, "width": 1920, "height": 1080, "bitDepth": 8, "videoRange": "SDR", "bitrate": 8000000 }],
+      "audioStreams": [{ "index": 1, "codec": "aac", "channels": 2, "isDefault": true }],
+      "subtitleStreams": [{ "index": 2, "format": "pgssub", "isExternal": false, "isForced": false, "isDefault": false, "language": "eng" }],
+      "supportsDirectPlay": true,
+      "supportsDirectStream": true,
+      "supportsTranscoding": true
+    },
+    "constraints": {
+      "allowDirectPlay": true, "allowDirectStream": true, "allowTranscoding": true,
+      "allowVideoStreamCopy": true, "allowAudioStreamCopy": true,
+      "preferredSubtitleStreamIndex": 2
+    }
+  },
+  "expected": {
+    "method": "Transcode",
+    "selectedStreams": { "video": 0, "audio": 1, "subtitle": 2 },
+    "output": { "container": "mp4", "videoCodec": "h264", "audioCodec": "aac" },
+    "transforms": ["TranscodeVideo", "BurnInSubtitle", "CopyAudio"],
+    "reasonCodes": ["SubtitleCodecNotSupported", "SubtitleBurnInRequired", "MethodChosen"],
+    "isViable": true
+  }
+}

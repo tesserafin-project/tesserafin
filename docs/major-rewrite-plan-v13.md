@@ -34,11 +34,11 @@ Direction technique saine : monolithe modulaire conservé, pas de microservices,
 | 13 | Rename MediaBrowser/Emby → Reefin | **Terminé** (2026-07-07, voir suivi) | Oui |
 | 14 | Labo compatibilité média | Faisable, gros ROI qualité | Non vérifié en détail |
 
-## Tableau de statut par pilier (2026-07-13, après PR96)
+## Tableau de statut par pilier (2026-07-13, après PR97)
 
 | Pilier | Statut | Prochain jalon |
 | ------ | ------ | -------------- |
-| Playback sessions | domaine v2 + adaptateur DLNA + moteur phase 1 | moteur phase 2 (PR97) + shadow mode (PR98) |
+| Playback sessions | domaine v2 + adaptateur DLNA + moteur complet (phase 1+2) | shadow mode dual-run (PR98) |
 | Rename Reefin.* | terminé | aucun |
 | BaseItem statics | query/access extraits ; lookup/parent/top-parent static-free | démêlage DI (cycle query/user-views) |
 | LibraryManager god-object | surface query globale extraite (IItemQueryService) mais constructeur encore à 29 paramètres | démêler le cycle DI avant nouvelles migrations query |
@@ -103,7 +103,8 @@ La notation interne "PRxx/N" utilisée ailleurs dans ce document est un schéma 
 - 5cd091aae5 — Labo de compatibilité playback : format de fixture versionné + schema + fixtures seed + manifeste, comparaison par catégories (docs/pr93-compatibility-lab.md, tests/PlaybackCompat/, aucun code de prod) (PR93)
 - 09545eb9eb — Modèle de domaine playback v2 (src/Reefin.Playback.Decision) : types immuables, zéro référence donc zéro DLNA, ReasonCode string stable, invariants de décision par construction, tests sérialisation+invariants (PR94)
 - c2e2d510e9 — Adaptateur legacy DLNA->v2 à sens unique (src/Reefin.Playback.Dlna) : DeviceProfile/MediaOptions/MediaSourceInfo -> ClientCapabilities/PlaybackConstraints/MediaSourceSnapshot ; le domaine ne référence jamais DLNA (23 tests) (PR95)
-- (pending) — Moteur v2 phase 1 (src/Reefin.Playback.Engine, réf. domaine seul) : direct play, remux/direct stream, sélection source+streams ; NotViable hors périmètre phase 1 ; parité fixtures seed direct-play+remux (8 tests) (PR96)
+- 30fc33cad6 — Moteur v2 phase 1 (src/Reefin.Playback.Engine, réf. domaine seul) : direct play, remux/direct stream, sélection source+streams ; NotViable hors périmètre phase 1 ; parité fixtures seed direct-play+remux (8 tests) (PR96)
+- (pending) — Moteur v2 phase 2 : transcode audio/vidéo, sous-titres (embed/external/burn-in), bitrate/résolution, profils/levels, HDR/tonemap, downmix ; 10 fixtures labo au vert + bornes (27 tests) (PR97)
 
 ## Détail des points vérifiés dans le code
 

@@ -1,0 +1,42 @@
+{
+  "fixtureVersion": 1,
+  "id": "video-resolution-limit",
+  "category": "bitrate-resolution-limit",
+  "engineVersion": 2,
+  "description": "4K H.264 exceeding the client's 1080p max, with every OTHER dimension deliberately within limits (level, bit depth, range, bitrate all generous) so ONLY resolution trips. Video downscales; audio copied.",
+  "input": {
+    "context": { "mediaKind": "Video" },
+    "capabilities": {
+      "containers": ["mp4"],
+      "videoCodecs": [{ "codec": "h264", "profiles": [], "maxLevel": 62, "maxBitDepth": 10, "videoRangeTypes": ["SDR"] }],
+      "audioCodecs": [{ "codec": "aac", "maxChannels": 8 }],
+      "subtitleDelivery": [],
+      "maxResolution": { "width": 1920, "height": 1080 },
+      "maxVideoBitrate": 100000000
+    },
+    "source": {
+      "mediaSourceId": "src-1",
+      "container": "mp4",
+      "protocol": "file",
+      "bitrate": 25000000,
+      "videoStreams": [{ "index": 0, "codec": "h264", "profile": "high", "level": 51, "width": 3840, "height": 2160, "bitDepth": 8, "videoRange": "SDR", "bitrate": 20000000 }],
+      "audioStreams": [{ "index": 1, "codec": "aac", "channels": 2, "isDefault": true }],
+      "subtitleStreams": [],
+      "supportsDirectPlay": true,
+      "supportsDirectStream": true,
+      "supportsTranscoding": true
+    },
+    "constraints": {
+      "allowDirectPlay": true, "allowDirectStream": true, "allowTranscoding": true,
+      "allowVideoStreamCopy": true, "allowAudioStreamCopy": true
+    }
+  },
+  "expected": {
+    "method": "Transcode",
+    "selectedStreams": { "video": 0, "audio": 1, "subtitle": null },
+    "output": { "container": "mp4", "videoCodec": "h264", "audioCodec": "aac", "resolution": { "width": 1920, "height": 1080 } },
+    "transforms": ["TranscodeVideo", "CopyAudio"],
+    "reasonCodes": ["VideoResolutionNotSupported", "MethodChosen"],
+    "isViable": true
+  }
+}

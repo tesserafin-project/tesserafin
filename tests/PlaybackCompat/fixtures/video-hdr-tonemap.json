@@ -1,0 +1,42 @@
+{
+  "fixtureVersion": 1,
+  "id": "video-hdr-tonemap",
+  "category": "hdr-tonemap",
+  "engineVersion": 2,
+  "description": "HEVC HDR10 whose codec, level, bit depth and resolution are all accepted, but the client supports only SDR. Only the video range trips: video re-encodes with tonemapping to SDR; audio copied; container unchanged.",
+  "input": {
+    "context": { "mediaKind": "Video" },
+    "capabilities": {
+      "containers": ["mp4"],
+      "videoCodecs": [{ "codec": "hevc", "profiles": [], "maxLevel": 153, "maxBitDepth": 10, "videoRangeTypes": ["SDR"] }],
+      "audioCodecs": [{ "codec": "aac", "maxChannels": 8 }],
+      "subtitleDelivery": [],
+      "maxResolution": { "width": 3840, "height": 2160 },
+      "maxVideoBitrate": 100000000
+    },
+    "source": {
+      "mediaSourceId": "src-1",
+      "container": "mp4",
+      "protocol": "file",
+      "bitrate": 30000000,
+      "videoStreams": [{ "index": 0, "codec": "hevc", "profile": "main10", "level": 150, "width": 3840, "height": 2160, "bitDepth": 10, "videoRange": "HDR10", "bitrate": 25000000 }],
+      "audioStreams": [{ "index": 1, "codec": "aac", "channels": 6, "isDefault": true }],
+      "subtitleStreams": [],
+      "supportsDirectPlay": true,
+      "supportsDirectStream": true,
+      "supportsTranscoding": true
+    },
+    "constraints": {
+      "allowDirectPlay": true, "allowDirectStream": true, "allowTranscoding": true,
+      "allowVideoStreamCopy": true, "allowAudioStreamCopy": true
+    }
+  },
+  "expected": {
+    "method": "Transcode",
+    "selectedStreams": { "video": 0, "audio": 1, "subtitle": null },
+    "output": { "container": "mp4", "videoCodec": "hevc", "audioCodec": "aac", "videoRange": "SDR" },
+    "transforms": ["TranscodeVideo", "Tonemap", "CopyAudio"],
+    "reasonCodes": ["VideoRangeTypeNotSupported", "TonemapRequired", "MethodChosen"],
+    "isViable": true
+  }
+}

@@ -119,9 +119,10 @@ public static class PlaybackEngineTests
     [Fact]
     public static void Decide_DefaultAudioUnsupported_DoesNotRescueFromAlternateStream()
     {
-        // The default stream (index 1) is DTS, which the client cannot decode. An alternate
-        // stream (index 2) is AAC, which the client could decode - but phase 1 does not search
-        // alternate audio streams to rescue playability, so the engine must not switch to it.
+        // The default stream (index 1) is DTS, which the client cannot decode outright. An
+        // alternate stream (index 2) is AAC, which the client could direct play - but the engine
+        // does not search alternate audio streams to rescue playability: it acts on the default
+        // stream, transcoding it to AAC (phase 2), rather than switching to the alternate.
         var source = EngineTestFixtures.Source(
             "source-1",
             "mp4",
@@ -138,8 +139,9 @@ public static class PlaybackEngineTests
             [source],
             EngineTestFixtures.Constraints());
 
-        Assert.False(decision.IsViable);
-        Assert.Equal(string.Empty, decision.SelectedSource);
+        Assert.True(decision.IsViable);
+        Assert.Equal(PlaybackMethod.Transcode, decision.Method);
+        Assert.Equal(1, decision.SelectedStreams.Audio);
     }
 
     [Fact]

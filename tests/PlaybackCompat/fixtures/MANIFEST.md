@@ -1,7 +1,7 @@
 # Playback compatibility fixtures — mandatory categories
 
 One fixture file per case, validated against `../schema/fixture.schema.json`.
-Status: `seed` = provided in PR93 (exemplar), `à compléter` = to be added with the runner (PR96+).
+Status: `seed` = provided. `à compléter` = to be added with the legacy-vs-v2 runner (PR98).
 
 | Category | Fixture | Status |
 | --- | --- | --- |
@@ -10,16 +10,16 @@ Status: `seed` = provided in PR93 (exemplar), `à compléter` = to be added with
 | audio-transcode | `video-mkv-dts-to-aac.json` | seed |
 | downmix | `audio-downmix-51-to-stereo.json` | seed |
 | no-viable-plan | `video-no-viable-plan.json` | seed |
-| video-codec-incompatible | — | à compléter |
-| bitrate-resolution-limit | — | à compléter |
-| hdr-tonemap | — | à compléter |
-| subtitle-burn-in | — | à compléter |
-| subtitle-external | — | à compléter |
+| video-codec-incompatible | `video-codec-incompatible.json` | seed |
+| bitrate-resolution-limit | `video-resolution-limit.json` | seed |
+| hdr-tonemap | `video-hdr-tonemap.json` | seed |
+| subtitle-burn-in | `subtitle-pgs-burn-in.json` | seed |
+| subtitle-external | `subtitle-srt-external.json` | seed |
 | live-tv | — | à compléter |
 | alternate-versions | — | à compléter |
 
-The seed set covers the distinct mechanics (direct play, container remux, audio
-transcode, channel downmix, unviable) so the format and category-comparison
-method (see `../../../docs/pr93-compatibility-lab.md` §4) are exercised before the
-engine exists. The remaining categories are added alongside the legacy-vs-v2
-runner in PR98.
+Each fixture deliberately isolates a single "exceed" dimension (other capability
+limits set generous) so its `expected.reasonCodes` set equals exactly what the
+engine emits — see `docs/pr93-compatibility-lab.md` §4 and the PR97 engine.
+`live-tv` and `alternate-versions` need runner/orchestration context and are added
+with the legacy-vs-v2 runner in PR98.

@@ -23,19 +23,23 @@ internal static class EngineTestFixtures
     public static PlaybackConstraints Constraints(
         bool allowDirectPlay = true,
         bool allowDirectStream = true,
+        bool allowTranscoding = true,
         bool allowVideoStreamCopy = true,
         bool allowAudioStreamCopy = true,
-        int? preferredAudioStreamIndex = null) => new(
+        int? maxAudioChannels = null,
+        int? preferredAudioStreamIndex = null,
+        int? preferredSubtitleStreamIndex = null,
+        bool alwaysBurnInSubtitleWhenTranscoding = false) => new(
         AllowDirectPlay: allowDirectPlay,
         AllowDirectStream: allowDirectStream,
-        AllowTranscoding: true,
+        AllowTranscoding: allowTranscoding,
         AllowVideoStreamCopy: allowVideoStreamCopy,
         AllowAudioStreamCopy: allowAudioStreamCopy,
         MaxBitrate: null,
-        MaxAudioChannels: null,
+        MaxAudioChannels: maxAudioChannels,
         PreferredAudioStreamIndex: preferredAudioStreamIndex,
-        PreferredSubtitleStreamIndex: null,
-        AlwaysBurnInSubtitleWhenTranscoding: false,
+        PreferredSubtitleStreamIndex: preferredSubtitleStreamIndex,
+        AlwaysBurnInSubtitleWhenTranscoding: alwaysBurnInSubtitleWhenTranscoding,
         StartTimeTicks: 0);
 
     public static ClientCapabilities Capabilities(IReadOnlyList<string> containers, IReadOnlyList<string> videoCodecs, IReadOnlyList<string> audioCodecs) => new(
@@ -49,37 +53,66 @@ internal static class EngineTestFixtures
         SupportsHls: false,
         SupportsDash: false);
 
-    public static VideoStreamSnapshot VideoStream(int index, string codec) => new(
+    public static VideoStreamSnapshot VideoStream(
+        int index,
+        string codec,
+        string? profile = null,
+        double? level = null,
+        int? width = null,
+        int? height = null,
+        int? bitDepth = null,
+        string? videoRange = null,
+        int? bitrate = null) => new(
         Index: index,
         Codec: codec,
-        Profile: null,
-        Level: null,
-        Width: null,
-        Height: null,
-        BitDepth: null,
-        VideoRange: null,
+        Profile: profile,
+        Level: level,
+        Width: width,
+        Height: height,
+        BitDepth: bitDepth,
+        VideoRange: videoRange,
         Framerate: null,
-        Bitrate: null,
+        Bitrate: bitrate,
         IsAnamorphic: false,
         IsInterlaced: false);
 
-    public static AudioStreamSnapshot AudioStream(int index, string codec, bool isDefault = false) => new(
+    public static AudioStreamSnapshot AudioStream(
+        int index,
+        string codec,
+        bool isDefault = false,
+        int? channels = null,
+        int? sampleRate = null) => new(
         Index: index,
         Codec: codec,
-        Channels: null,
-        SampleRate: null,
+        Channels: channels,
+        SampleRate: sampleRate,
         BitDepth: null,
         Bitrate: null,
         Language: null,
         IsDefault: isDefault);
+
+    public static SubtitleStreamSnapshot SubtitleStream(
+        int index,
+        string format,
+        bool isExternal = false,
+        bool isForced = false,
+        bool isDefault = false) => new(
+        Index: index,
+        Format: format,
+        IsExternal: isExternal,
+        IsForced: isForced,
+        IsDefault: isDefault,
+        Language: null);
 
     public static MediaSourceSnapshot Source(
         string mediaSourceId,
         string container,
         IReadOnlyList<VideoStreamSnapshot>? videoStreams = null,
         IReadOnlyList<AudioStreamSnapshot>? audioStreams = null,
+        IReadOnlyList<SubtitleStreamSnapshot>? subtitleStreams = null,
         bool supportsDirectPlay = true,
-        bool supportsDirectStream = true) => new(
+        bool supportsDirectStream = true,
+        bool supportsTranscoding = true) => new(
         MediaSourceId: mediaSourceId,
         Container: container,
         Protocol: "http",
@@ -87,8 +120,8 @@ internal static class EngineTestFixtures
         RunTimeTicks: null,
         VideoStreams: videoStreams ?? [],
         AudioStreams: audioStreams ?? [],
-        SubtitleStreams: [],
+        SubtitleStreams: subtitleStreams ?? [],
         SupportsDirectPlay: supportsDirectPlay,
         SupportsDirectStream: supportsDirectStream,
-        SupportsTranscoding: true);
+        SupportsTranscoding: supportsTranscoding);
 }

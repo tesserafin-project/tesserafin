@@ -10,10 +10,11 @@ using Xunit;
 namespace Reefin.Playback.Engine.Tests;
 
 /// <summary>
-/// Compares the engine's decisions against the two phase-1-compatible seed fixtures from the
-/// compatibility lab (PR93): direct play and remux. The dts-to-aac, downmix, and no-viable-plan
-/// fixtures are intentionally not run here - they require transcoding (PR97) or assert reason codes
-/// the phase-1 engine does not emit.
+/// Compares the engine's decisions against all ten fixtures from the compatibility lab (PR93):
+/// direct play, remux, audio-transcode, downmix, no-viable-plan, video-codec-incompatible,
+/// bitrate/resolution limit, HDR tonemap, subtitle burn-in, and subtitle external delivery. Phase 2
+/// (PR97) implements transcoding, subtitle handling, resolution/bitrate limits, codec profile/
+/// level/bit-depth checks, HDR tonemapping, and channel downmix, so all ten now run here.
 /// </summary>
 public static class FixtureParityTests
 {
@@ -29,6 +30,14 @@ public static class FixtureParityTests
     [Theory]
     [InlineData("video-h264-aac-mp4-directplay.json")]
     [InlineData("video-mkv-remux-mp4.json")]
+    [InlineData("video-mkv-dts-to-aac.json")]
+    [InlineData("audio-downmix-51-to-stereo.json")]
+    [InlineData("video-no-viable-plan.json")]
+    [InlineData("video-codec-incompatible.json")]
+    [InlineData("video-resolution-limit.json")]
+    [InlineData("video-hdr-tonemap.json")]
+    [InlineData("subtitle-pgs-burn-in.json")]
+    [InlineData("subtitle-srt-external.json")]
     public static void Fixture_EngineDecisionMatchesExpected(string fixtureName)
     {
         var path = Path.Combine(AppContext.BaseDirectory, "fixtures", fixtureName);
@@ -49,9 +58,15 @@ public static class FixtureParityTests
         Assert.Equal(expected.SelectedStreams.Audio, decision.SelectedStreams.Audio);
         Assert.Equal(expected.SelectedStreams.Subtitle, decision.SelectedStreams.Subtitle?.Index);
 
+        // The fixture's `expected.output` only declares the fields relevant to the case it's
+        // isolating; an absent field deserializes to null on FixtureOutput, which is exactly what
+        // the engine is expected to produce when that field is not applicable/unchanged.
         Assert.Equal(expected.Output.Container, decision.Output.Container);
         Assert.Equal(expected.Output.VideoCodec, decision.Output.VideoCodec);
         Assert.Equal(expected.Output.AudioCodec, decision.Output.AudioCodec);
+        Assert.Equal(expected.Output.Resolution, decision.Output.Resolution);
+        Assert.Equal(expected.Output.VideoRange, decision.Output.VideoRange);
+        Assert.Equal(expected.Output.AudioChannels, decision.Output.AudioChannels);
 
         var expectedTransforms = expected.Transforms.Select(Enum.Parse<TransformKind>).ToHashSet();
         var actualTransforms = decision.Transforms.ToHashSet();
@@ -93,5 +108,11 @@ public static class FixtureParityTests
 
     private sealed record FixtureSelectedStreams(int? Video, int? Audio, int? Subtitle);
 
-    private sealed record FixtureOutput(string? Container, string? VideoCodec, string? AudioCodec);
+    private sealed record FixtureOutput(
+        string? Container,
+        string? VideoCodec,
+        string? AudioCodec,
+        Resolution? Resolution,
+        string? VideoRange,
+        int? AudioChannels);
 }

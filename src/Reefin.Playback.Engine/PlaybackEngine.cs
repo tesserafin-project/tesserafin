@@ -6,25 +6,21 @@ using Reefin.Playback.Decision;
 namespace Reefin.Playback.Engine;
 
 /// <summary>
-/// The v2 playback decision engine, phase 1: simple audio, video direct play, remux (container
-/// change with stream copy), and source/stream selection, all with name-only, case-insensitive
-/// codec matching.
+/// The v2 playback decision engine, phase 2: everything phase 1 had (simple audio, video direct
+/// play, remux, source/stream selection), plus audio/video transcoding, subtitle handling
+/// (embed/external/burn-in), bitrate/resolution limits, codec profile/level/bit-depth checks, HDR
+/// tonemapping (<see cref="VideoStreamSnapshot.VideoRange"/>), and audio channel downmix. All name-only,
+/// case-insensitive codec/format matching, same as phase 1.
 /// </summary>
-/// <remarks>
-/// Phase 1 does not implement video/audio transcoding, subtitle handling or burn-in, bitrate or
-/// resolution limits, codec profile/level/bit-depth checks, HDR tonemapping, or channel downmix
-/// (all PR97). A source that would need any of those to play returns
-/// <see cref="PlaybackDecision.NotViable(PlaybackMethod, ReasonNode, int)"/> instead of a half-built
-/// transcode plan. That is correct only because nothing consumes this engine's output yet: no
-/// application code switches on <see cref="PlaybackDecision"/> before PR97/PR98 wire it in, so a
-/// phase-1 engine that cannot transcode cannot regress anyone's current playback.
-/// </remarks>
 public sealed class PlaybackEngine : IPlaybackEngine
 {
     /// <summary>
     /// The version of the decision engine implemented by this type.
     /// </summary>
     public const int EngineVersion = 2;
+
+    private static readonly IReadOnlyCollection<string> TextBasedSubtitleFormats =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "srt", "subrip", "ass", "ssa", "vtt", "webvtt", "ttml", "sami", "smi" };
 
     /// <inheritdoc />
     public PlaybackDecision Decide(
@@ -60,6 +56,14 @@ public sealed class PlaybackEngine : IPlaybackEngine
             }
         }
 
+        foreach (var candidate in candidates)
+        {
+            if (candidate.Method == PlaybackMethod.Transcode && candidate.Decision is not null)
+            {
+                return candidate.Decision;
+            }
+        }
+
         IReadOnlyList<ReasonNode> firstBlockingReasons = candidates.Count > 0 ? candidates[0].BlockingReasons : [];
         var reasoning = new ReasonNode(ReasonCode.NoViablePlan, ReasonOutcome.Rejected, ReasonSubject.Method(), null, firstBlockingReasons);
         return PlaybackDecision.NotViable(PlaybackMethod.Transcode, reasoning, EngineVersion);
@@ -73,98 +77,311 @@ public sealed class PlaybackEngine : IPlaybackEngine
     {
         var selectedVideo = context.MediaKind == MediaKind.Video ? source.VideoStreams.FirstOrDefault() : null;
         var selectedAudio = SelectAudio(source, constraints);
+        var selectedSubtitle = SelectSubtitle(source, constraints);
 
-        var videoOk = context.MediaKind == MediaKind.Audio
-            || (selectedVideo is not null && ContainsCodec(capabilities.VideoCodecs.Select(c => c.Codec), selectedVideo.Codec));
-        var audioOk = selectedAudio is not null && ContainsCodec(capabilities.AudioCodecs.Select(c => c.Codec), selectedAudio.Codec);
-        var containerOk = capabilities.Containers.Contains(source.Container, StringComparer.OrdinalIgnoreCase);
-
-        if (constraints.AllowDirectPlay && source.SupportsDirectPlay && containerOk && videoOk && audioOk)
+        // A source with nothing to select at all (no video, no audio - regardless of MediaKind)
+        // has no stream for any method to play, copy, or transcode; matches phase 1, which also
+        // could never satisfy the videoOk/audioOk gates in this case and fell through to
+        // NotViable with no tripped reasons to report.
+        if (selectedVideo is null && selectedAudio is null)
         {
-            return SourceCandidate.ForDirectPlay(BuildDirectPlay(source, selectedVideo, selectedAudio));
+            return SourceCandidate.ForNotViable([]);
         }
 
-        if (!containerOk
-            && videoOk
-            && audioOk
-            && constraints.AllowDirectStream
-            && source.SupportsDirectStream
-            && (context.MediaKind == MediaKind.Audio || constraints.AllowVideoStreamCopy)
-            && constraints.AllowAudioStreamCopy
-            && capabilities.Containers.Count > 0)
-        {
-            return SourceCandidate.ForRemux(BuildRemux(capabilities, source, selectedVideo, selectedAudio));
-        }
+        // --- VIDEO ---
+        var needVideoTranscode = false;
+        var needTonemap = false;
+        var needDownscale = false;
+        var videoReasons = new List<ReasonNode>();
 
-        var blockingReasons = new List<ReasonNode>();
-        if (!videoOk && selectedVideo is not null)
-        {
-            blockingReasons.Add(ReasonNode.Leaf(ReasonCode.VideoCodecNotSupported, ReasonOutcome.Rejected, ReasonSubject.VideoStream(selectedVideo.Index)));
-        }
-
-        if (!audioOk && selectedAudio is not null)
-        {
-            blockingReasons.Add(ReasonNode.Leaf(ReasonCode.AudioCodecNotSupported, ReasonOutcome.Rejected, ReasonSubject.AudioStream(selectedAudio.Index)));
-        }
-
-        return SourceCandidate.ForNotViable(blockingReasons);
-    }
-
-    private static PlaybackDecision BuildDirectPlay(MediaSourceSnapshot source, VideoStreamSnapshot? selectedVideo, AudioStreamSnapshot? selectedAudio)
-    {
-        var output = new OutputSpec(source.Container, selectedVideo?.Codec, selectedAudio?.Codec, null, null, null, null);
-        var reasoning = ReasonNode.Leaf(ReasonCode.MethodChosen, ReasonOutcome.Chosen, ReasonSubject.Method());
-        var streams = new SelectedStreams(selectedVideo?.Index, selectedAudio?.Index, null);
-
-        return PlaybackDecision.DirectPlay(source.MediaSourceId, streams, output, reasoning, EngineVersion);
-    }
-
-    private static PlaybackDecision BuildRemux(
-        ClientCapabilities capabilities,
-        MediaSourceSnapshot source,
-        VideoStreamSnapshot? selectedVideo,
-        AudioStreamSnapshot? selectedAudio)
-    {
-        var targetContainer = SelectRemuxContainer(capabilities.Containers);
-
-        var transforms = new List<TransformKind> { TransformKind.RemuxContainer };
         if (selectedVideo is not null)
         {
-            transforms.Add(TransformKind.CopyVideo);
-        }
-
-        transforms.Add(TransformKind.CopyAudio);
-
-        var output = new OutputSpec(targetContainer, selectedVideo?.Codec, selectedAudio?.Codec, null, null, null, null);
-
-        ReasonSubject streamCopyableSubject;
-        if (selectedVideo is not null)
-        {
-            streamCopyableSubject = ReasonSubject.VideoStream(selectedVideo.Index);
-        }
-        else if (selectedAudio is not null)
-        {
-            streamCopyableSubject = ReasonSubject.AudioStream(selectedAudio.Index);
-        }
-        else
-        {
-            throw new InvalidOperationException("A remux candidate requires a selected audio stream when no video stream was selected.");
-        }
-
-        var reasoning = new ReasonNode(
-            ReasonCode.MethodChosen,
-            ReasonOutcome.Chosen,
-            ReasonSubject.Method(),
-            null,
-            new List<ReasonNode>
+            var videoCap = capabilities.VideoCodecs.FirstOrDefault(c => EqualsIgnoreCase(c.Codec, selectedVideo.Codec));
+            if (videoCap is null)
             {
-                ReasonNode.Leaf(ReasonCode.ContainerNotSupported, ReasonOutcome.Rejected, ReasonSubject.Container()),
-                ReasonNode.Leaf(ReasonCode.StreamCopyable, ReasonOutcome.Accepted, streamCopyableSubject),
-            });
+                needVideoTranscode = true;
+                videoReasons.Add(ReasonNode.Leaf(ReasonCode.VideoCodecNotSupported, ReasonOutcome.Rejected, ReasonSubject.VideoStream(selectedVideo.Index)));
+            }
+            else
+            {
+                if (videoCap.Profiles.Count > 0 && (selectedVideo.Profile is null || !videoCap.Profiles.Contains(selectedVideo.Profile, StringComparer.OrdinalIgnoreCase)))
+                {
+                    needVideoTranscode = true;
+                    videoReasons.Add(ReasonNode.Leaf(ReasonCode.VideoProfileNotSupported, ReasonOutcome.Rejected, ReasonSubject.VideoStream(selectedVideo.Index)));
+                }
 
-        var streams = new SelectedStreams(selectedVideo?.Index, selectedAudio?.Index, null);
+                if (videoCap.MaxLevel is not null && selectedVideo.Level is not null && selectedVideo.Level > videoCap.MaxLevel)
+                {
+                    needVideoTranscode = true;
+                    videoReasons.Add(ReasonNode.Leaf(ReasonCode.VideoLevelNotSupported, ReasonOutcome.Rejected, ReasonSubject.VideoStream(selectedVideo.Index)));
+                }
 
-        return PlaybackDecision.Remux(source.MediaSourceId, streams, output, transforms, reasoning, EngineVersion);
+                if (videoCap.MaxBitDepth is not null && selectedVideo.BitDepth is not null && selectedVideo.BitDepth > videoCap.MaxBitDepth)
+                {
+                    needVideoTranscode = true;
+                    videoReasons.Add(ReasonNode.Leaf(ReasonCode.VideoBitDepthNotSupported, ReasonOutcome.Rejected, ReasonSubject.VideoStream(selectedVideo.Index)));
+                }
+
+                if (videoCap.VideoRangeTypes.Count > 0 && selectedVideo.VideoRange is not null && !videoCap.VideoRangeTypes.Contains(selectedVideo.VideoRange, StringComparer.OrdinalIgnoreCase))
+                {
+                    needVideoTranscode = true;
+                    needTonemap = true;
+                    videoReasons.Add(ReasonNode.Leaf(ReasonCode.VideoRangeTypeNotSupported, ReasonOutcome.Rejected, ReasonSubject.VideoStream(selectedVideo.Index)));
+                }
+            }
+
+            if (capabilities.MaxResolution is not null && selectedVideo.Width is not null && selectedVideo.Height is not null
+                && (selectedVideo.Width > capabilities.MaxResolution.Width || selectedVideo.Height > capabilities.MaxResolution.Height))
+            {
+                needVideoTranscode = true;
+                needDownscale = true;
+                videoReasons.Add(ReasonNode.Leaf(ReasonCode.VideoResolutionNotSupported, ReasonOutcome.Rejected, ReasonSubject.VideoStream(selectedVideo.Index)));
+            }
+
+            if (capabilities.MaxVideoBitrate is not null && selectedVideo.Bitrate is not null && selectedVideo.Bitrate > capabilities.MaxVideoBitrate)
+            {
+                needVideoTranscode = true;
+                videoReasons.Add(ReasonNode.Leaf(ReasonCode.VideoBitrateNotSupported, ReasonOutcome.Rejected, ReasonSubject.VideoStream(selectedVideo.Index)));
+            }
+        }
+
+        // --- AUDIO ---
+        var needAudioTranscode = false;
+        var needDownmix = false;
+        int? effMaxChannels = null;
+        var audioReasons = new List<ReasonNode>();
+
+        if (selectedAudio is not null)
+        {
+            var audioCap = capabilities.AudioCodecs.FirstOrDefault(c => EqualsIgnoreCase(c.Codec, selectedAudio.Codec));
+            if (audioCap is null)
+            {
+                needAudioTranscode = true;
+                audioReasons.Add(ReasonNode.Leaf(ReasonCode.AudioCodecNotSupported, ReasonOutcome.Rejected, ReasonSubject.AudioStream(selectedAudio.Index)));
+            }
+            else
+            {
+                effMaxChannels = MinIgnoringNulls(audioCap.MaxChannels, constraints.MaxAudioChannels);
+                if (effMaxChannels is not null && selectedAudio.Channels is not null && selectedAudio.Channels > effMaxChannels)
+                {
+                    needDownmix = true;
+                    needAudioTranscode = true;
+                    audioReasons.Add(ReasonNode.Leaf(ReasonCode.AudioChannelsNotSupported, ReasonOutcome.Rejected, ReasonSubject.AudioStream(selectedAudio.Index)));
+                }
+
+                if (audioCap.MaxSampleRate is not null && selectedAudio.SampleRate is not null && selectedAudio.SampleRate > audioCap.MaxSampleRate)
+                {
+                    needAudioTranscode = true;
+                    audioReasons.Add(ReasonNode.Leaf(ReasonCode.AudioSampleRateNotSupported, ReasonOutcome.Rejected, ReasonSubject.AudioStream(selectedAudio.Index)));
+                }
+            }
+        }
+
+        // --- SUBTITLE ---
+        var needBurnIn = false;
+        SubtitleDeliveryMethod? subtitleDelivery = null;
+        ReasonNode? subtitleCodecNotSupportedReason = null;
+
+        if (selectedSubtitle is not null)
+        {
+            var subtitleCap = capabilities.SubtitleDelivery.FirstOrDefault(c => EqualsIgnoreCase(c.Format, selectedSubtitle.Format));
+            if (subtitleCap is not null)
+            {
+                subtitleDelivery = subtitleCap.Method;
+                if (subtitleDelivery == SubtitleDeliveryMethod.Burn)
+                {
+                    needBurnIn = true;
+                }
+            }
+            else
+            {
+                subtitleDelivery = SubtitleDeliveryMethod.Burn;
+                needBurnIn = true;
+                subtitleCodecNotSupportedReason = ReasonNode.Leaf(ReasonCode.SubtitleCodecNotSupported, ReasonOutcome.Rejected, ReasonSubject.Subtitle(selectedSubtitle.Index));
+            }
+
+            if (!needBurnIn && needVideoTranscode && constraints.AlwaysBurnInSubtitleWhenTranscoding && IsTextBasedSubtitle(selectedSubtitle.Format))
+            {
+                needBurnIn = true;
+                subtitleDelivery = SubtitleDeliveryMethod.Burn;
+            }
+
+            // Burning in requires a video stream to burn into; without one (audio-only playback),
+            // burn-in is meaningless, so don't let it force a nonsensical video transcode need.
+            if (needBurnIn && selectedVideo is null)
+            {
+                needBurnIn = false;
+            }
+        }
+
+        if (needBurnIn)
+        {
+            needVideoTranscode = true;
+        }
+
+        // --- METHOD ---
+        var wantsTranscode = needVideoTranscode || needAudioTranscode || needBurnIn;
+        var containerOk = capabilities.Containers.Contains(source.Container, StringComparer.OrdinalIgnoreCase);
+        var neededMethod = wantsTranscode
+            ? PlaybackMethod.Transcode
+            : !containerOk
+                ? PlaybackMethod.Remux
+                : PlaybackMethod.DirectPlay;
+
+        var allowed = neededMethod switch
+        {
+            PlaybackMethod.Transcode => constraints.AllowTranscoding && source.SupportsTranscoding,
+            PlaybackMethod.Remux => constraints.AllowDirectStream
+                && source.SupportsDirectStream
+                && (selectedVideo is null || constraints.AllowVideoStreamCopy)
+                && constraints.AllowAudioStreamCopy
+                && capabilities.Containers.Count > 0,
+            PlaybackMethod.DirectPlay => constraints.AllowDirectPlay && source.SupportsDirectPlay,
+            _ => false,
+        };
+
+        if (!allowed)
+        {
+            var blockingReasons = new List<ReasonNode>();
+            blockingReasons.AddRange(videoReasons);
+            blockingReasons.AddRange(audioReasons);
+            if (subtitleCodecNotSupportedReason is not null)
+            {
+                blockingReasons.Add(subtitleCodecNotSupportedReason);
+            }
+
+            return SourceCandidate.ForNotViable(blockingReasons);
+        }
+
+        // --- CONTAINER ---
+        var targetContainer = neededMethod == PlaybackMethod.DirectPlay
+            ? source.Container
+            : SelectTargetContainer(capabilities.Containers, source.Container);
+        var containerChanged = !string.Equals(targetContainer, source.Container, StringComparison.OrdinalIgnoreCase);
+
+        // --- TARGET CODECS ---
+        string? targetVideoCodec = null;
+        if (needVideoTranscode && selectedVideo is not null)
+        {
+            targetVideoCodec = SelectTargetCodec(capabilities.VideoCodecs.Select(c => c.Codec).ToList(), "h264", selectedVideo.Codec);
+        }
+
+        string? targetAudioCodec = null;
+        if (needAudioTranscode && selectedAudio is not null)
+        {
+            targetAudioCodec = SelectTargetCodec(capabilities.AudioCodecs.Select(c => c.Codec).ToList(), "aac", selectedAudio.Codec);
+        }
+
+        // --- TRANSFORMS ---
+        var transforms = new List<TransformKind>();
+        if (neededMethod != PlaybackMethod.DirectPlay)
+        {
+            if (selectedVideo is not null)
+            {
+                transforms.Add(needVideoTranscode ? TransformKind.TranscodeVideo : TransformKind.CopyVideo);
+                if (needTonemap)
+                {
+                    transforms.Add(TransformKind.Tonemap);
+                }
+            }
+
+            if (selectedAudio is not null)
+            {
+                transforms.Add(needAudioTranscode ? TransformKind.TranscodeAudio : TransformKind.CopyAudio);
+                if (needDownmix)
+                {
+                    transforms.Add(TransformKind.Downmix);
+                }
+            }
+
+            if (needBurnIn)
+            {
+                transforms.Add(TransformKind.BurnInSubtitle);
+            }
+
+            if (selectedSubtitle is not null && subtitleDelivery == SubtitleDeliveryMethod.External && !selectedSubtitle.IsExternal)
+            {
+                transforms.Add(TransformKind.ExtractSubtitle);
+            }
+
+            var hasCopy = transforms.Contains(TransformKind.CopyVideo) || transforms.Contains(TransformKind.CopyAudio);
+            if (containerChanged && hasCopy)
+            {
+                transforms.Insert(0, TransformKind.RemuxContainer);
+            }
+        }
+
+        // --- OUTPUT ---
+        var output = new OutputSpec(
+            Container: targetContainer,
+            VideoCodec: selectedVideo is not null ? (needVideoTranscode ? targetVideoCodec : selectedVideo.Codec) : null,
+            AudioCodec: selectedAudio is not null ? (needAudioTranscode ? targetAudioCodec : selectedAudio.Codec) : null,
+            Resolution: needVideoTranscode && needDownscale ? capabilities.MaxResolution : null,
+            VideoRange: needVideoTranscode && needTonemap ? "SDR" : null,
+            AudioChannels: needAudioTranscode ? (needDownmix ? effMaxChannels : selectedAudio?.Channels) : null,
+            Bitrate: null);
+
+        // --- REASONING ---
+        var children = new List<ReasonNode>();
+        if (transforms.Contains(TransformKind.RemuxContainer))
+        {
+            children.Add(ReasonNode.Leaf(ReasonCode.ContainerNotSupported, ReasonOutcome.Rejected, ReasonSubject.Container()));
+        }
+
+        if (neededMethod == PlaybackMethod.Remux)
+        {
+            var streamCopyableSubject = selectedVideo is not null
+                ? ReasonSubject.VideoStream(selectedVideo.Index)
+                : ReasonSubject.AudioStream(selectedAudio!.Index);
+            children.Add(ReasonNode.Leaf(ReasonCode.StreamCopyable, ReasonOutcome.Accepted, streamCopyableSubject));
+        }
+
+        children.AddRange(videoReasons);
+        if (transforms.Contains(TransformKind.Tonemap))
+        {
+            children.Add(ReasonNode.Leaf(ReasonCode.TonemapRequired, ReasonOutcome.Chosen, ReasonSubject.VideoStream(selectedVideo!.Index)));
+        }
+
+        children.AddRange(audioReasons);
+        if (transforms.Contains(TransformKind.Downmix))
+        {
+            children.Add(ReasonNode.Leaf(ReasonCode.DownmixRequired, ReasonOutcome.Chosen, ReasonSubject.AudioStream(selectedAudio!.Index)));
+        }
+
+        if (subtitleCodecNotSupportedReason is not null)
+        {
+            children.Add(subtitleCodecNotSupportedReason);
+        }
+
+        if (transforms.Contains(TransformKind.BurnInSubtitle))
+        {
+            children.Add(ReasonNode.Leaf(ReasonCode.SubtitleBurnInRequired, ReasonOutcome.Chosen, ReasonSubject.Subtitle(selectedSubtitle!.Index)));
+        }
+
+        var reasoning = new ReasonNode(ReasonCode.MethodChosen, ReasonOutcome.Chosen, ReasonSubject.Method(), null, children);
+
+        // --- SELECTED STREAMS ---
+        var streams = new SelectedStreams(
+            selectedVideo?.Index,
+            selectedAudio?.Index,
+            selectedSubtitle is not null ? new SelectedSubtitle(selectedSubtitle.Index, subtitleDelivery!.Value) : null);
+
+        // --- DECISION ---
+        var decision = neededMethod switch
+        {
+            PlaybackMethod.DirectPlay => PlaybackDecision.DirectPlay(source.MediaSourceId, streams, output, reasoning, EngineVersion),
+            PlaybackMethod.Remux => PlaybackDecision.Remux(source.MediaSourceId, streams, output, transforms, reasoning, EngineVersion),
+            PlaybackMethod.Transcode => PlaybackDecision.Transcode(source.MediaSourceId, streams, output, transforms, reasoning, EngineVersion),
+            _ => throw new InvalidOperationException($"Unhandled playback method '{neededMethod}'."),
+        };
+
+        return neededMethod switch
+        {
+            PlaybackMethod.DirectPlay => SourceCandidate.ForDirectPlay(decision),
+            PlaybackMethod.Remux => SourceCandidate.ForRemux(decision),
+            PlaybackMethod.Transcode => SourceCandidate.ForTranscode(decision),
+            _ => throw new InvalidOperationException($"Unhandled playback method '{neededMethod}'."),
+        };
     }
 
     private static AudioStreamSnapshot? SelectAudio(MediaSourceSnapshot source, PlaybackConstraints constraints)
@@ -181,18 +398,62 @@ public sealed class PlaybackEngine : IPlaybackEngine
         return selected;
     }
 
-    private static bool ContainsCodec(IEnumerable<string> codecs, string? codec) =>
-        codec is not null && codecs.Any(c => string.Equals(c, codec, StringComparison.OrdinalIgnoreCase));
+    private static SubtitleStreamSnapshot? SelectSubtitle(MediaSourceSnapshot source, PlaybackConstraints constraints) =>
+        constraints.PreferredSubtitleStreamIndex is int preferredIndex
+            ? source.SubtitleStreams.FirstOrDefault(s => s.Index == preferredIndex)
+            : null;
 
-    private static string SelectRemuxContainer(IReadOnlyList<string> containers)
+    private static bool ContainsCodec(IEnumerable<string> codecs, string? codec) =>
+        codec is not null && codecs.Any(c => EqualsIgnoreCase(c, codec));
+
+    private static bool EqualsIgnoreCase(string? a, string? b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsTextBasedSubtitle(string format) => TextBasedSubtitleFormats.Contains(format);
+
+    private static int? MinIgnoringNulls(int? a, int? b)
     {
-        var mp4 = containers.FirstOrDefault(c => string.Equals(c, "mp4", StringComparison.OrdinalIgnoreCase));
+        if (a is null)
+        {
+            return b;
+        }
+
+        if (b is null)
+        {
+            return a;
+        }
+
+        return Math.Min(a.Value, b.Value);
+    }
+
+    private static string SelectTargetCodec(IReadOnlyList<string> available, string preferred, string sourceCodec)
+    {
+        if (ContainsCodec(available, preferred))
+        {
+            return preferred;
+        }
+
+        if (ContainsCodec(available, sourceCodec))
+        {
+            return sourceCodec;
+        }
+
+        return available.Count > 0 ? available[0] : sourceCodec;
+    }
+
+    private static string SelectTargetContainer(IReadOnlyList<string> containers, string sourceContainer)
+    {
+        if (containers.Count == 0)
+        {
+            return sourceContainer;
+        }
+
+        var mp4 = containers.FirstOrDefault(c => EqualsIgnoreCase(c, "mp4"));
         if (mp4 is not null)
         {
             return mp4;
         }
 
-        var ts = containers.FirstOrDefault(c => string.Equals(c, "ts", StringComparison.OrdinalIgnoreCase));
+        var ts = containers.FirstOrDefault(c => EqualsIgnoreCase(c, "ts"));
         if (ts is not null)
         {
             return ts;
@@ -211,6 +472,8 @@ public sealed class PlaybackEngine : IPlaybackEngine
         public static SourceCandidate ForDirectPlay(PlaybackDecision decision) => new(PlaybackMethod.DirectPlay, decision, []);
 
         public static SourceCandidate ForRemux(PlaybackDecision decision) => new(PlaybackMethod.Remux, decision, []);
+
+        public static SourceCandidate ForTranscode(PlaybackDecision decision) => new(PlaybackMethod.Transcode, decision, []);
 
         public static SourceCandidate ForNotViable(IReadOnlyList<ReasonNode> blockingReasons) => new(null, null, blockingReasons);
     }
