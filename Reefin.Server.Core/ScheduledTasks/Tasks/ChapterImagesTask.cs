@@ -25,7 +25,7 @@ namespace Reefin.Server.Core.ScheduledTasks.Tasks;
 public class ChapterImagesTask : IScheduledTask
 {
     private readonly ILogger<ChapterImagesTask> _logger;
-    private readonly ILibraryManager _libraryManager;
+    private readonly IItemQueryService _itemQueryService;
     private readonly IApplicationPaths _appPaths;
     private readonly IChapterManager _chapterManager;
     private readonly IFileSystem _fileSystem;
@@ -35,21 +35,21 @@ public class ChapterImagesTask : IScheduledTask
     /// Initializes a new instance of the <see cref="ChapterImagesTask" /> class.
     /// </summary>
     /// <param name="logger">Instance of the <see cref="ILogger"/> interface.</param>
-    /// <param name="libraryManager">Instance of the <see cref="ILibraryManager"/> interface.</param>
+    /// <param name="itemQueryService">Instance of the <see cref="IItemQueryService"/> interface.</param>
     /// <param name="appPaths">Instance of the <see cref="IApplicationPaths"/> interface.</param>
     /// <param name="chapterManager">Instance of the <see cref="IChapterManager"/> interface.</param>
     /// <param name="fileSystem">Instance of the <see cref="IFileSystem"/> interface.</param>
     /// <param name="localization">Instance of the <see cref="ILocalizationManager"/> interface.</param>
     public ChapterImagesTask(
         ILogger<ChapterImagesTask> logger,
-        ILibraryManager libraryManager,
+        IItemQueryService itemQueryService,
         IApplicationPaths appPaths,
         IChapterManager chapterManager,
         IFileSystem fileSystem,
         ILocalizationManager localization)
     {
         _logger = logger;
-        _libraryManager = libraryManager;
+        _itemQueryService = itemQueryService;
         _appPaths = appPaths;
         _chapterManager = chapterManager;
         _fileSystem = fileSystem;
@@ -82,7 +82,7 @@ public class ChapterImagesTask : IScheduledTask
     /// <inheritdoc />
     public async Task ExecuteAsync(IProgress<double> progress, CancellationToken cancellationToken)
     {
-        var videos = _libraryManager.GetItemList(new InternalItemsQuery
+        var videos = _itemQueryService.GetItemList(new InternalItemsQuery
         {
             MediaTypes = [MediaType.Video],
             IsFolder = false,

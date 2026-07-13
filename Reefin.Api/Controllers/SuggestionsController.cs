@@ -28,22 +28,22 @@ public class SuggestionsController : BaseReefinApiController
 {
     private readonly IDtoService _dtoService;
     private readonly IUserManager _userManager;
-    private readonly ILibraryManager _libraryManager;
+    private readonly IItemQueryService _itemQueryService;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SuggestionsController"/> class.
     /// </summary>
     /// <param name="dtoService">Instance of the <see cref="IDtoService"/> interface.</param>
     /// <param name="userManager">Instance of the <see cref="IUserManager"/> interface.</param>
-    /// <param name="libraryManager">Instance of the <see cref="ILibraryManager"/> interface.</param>
+    /// <param name="itemQueryService">Instance of the <see cref="IItemQueryService"/> interface.</param>
     public SuggestionsController(
         IDtoService dtoService,
         IUserManager userManager,
-        ILibraryManager libraryManager)
+        IItemQueryService itemQueryService)
     {
         _dtoService = dtoService;
         _userManager = userManager;
-        _libraryManager = libraryManager;
+        _itemQueryService = itemQueryService;
     }
 
     /// <summary>
@@ -79,7 +79,7 @@ public class SuggestionsController : BaseReefinApiController
         }
 
         var dtoOptions = new DtoOptions();
-        var result = _libraryManager.GetItemsResult(new InternalItemsQuery(user)
+        var result = _itemQueryService.GetItems(new InternalItemsQuery(user)
         {
             OrderBy = new[] { (ItemSortBy.Random, SortOrder.Descending) },
             MediaTypes = mediaType,
