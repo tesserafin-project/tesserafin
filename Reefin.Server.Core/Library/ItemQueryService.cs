@@ -13,10 +13,12 @@ using Reefin.Controller.Entities.Audio;
 using Reefin.Controller.Entities.Movies;
 using Reefin.Controller.Entities.TV;
 using Reefin.Controller.Library;
+using Reefin.Controller.Persistence;
 using Reefin.Controller.Sorting;
 using Reefin.Controller.TV;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
+using Reefin.Extensions;
 using Reefin.Model.Querying;
 
 namespace Reefin.Server.Core.Library
@@ -29,8 +31,11 @@ namespace Reefin.Server.Core.Library
         private readonly ITVSeriesManager _tvSeriesManager;
         private readonly IServerConfigurationManager _configurationManager;
         private readonly IItemSortService _itemSortService;
+        private readonly IItemLookupService _itemLookupService;
+        private readonly IItemRepository _itemRepository;
+        private readonly IItemQueryScopeService _scopeService;
 
-        public ItemQueryService(IChannelManager channelManager, ICollectionManager collectionManager, IUserViewManager userViewManager, ITVSeriesManager tvSeriesManager, IServerConfigurationManager configurationManager, IItemSortService itemSortService)
+        public ItemQueryService(IChannelManager channelManager, ICollectionManager collectionManager, IUserViewManager userViewManager, ITVSeriesManager tvSeriesManager, IServerConfigurationManager configurationManager, IItemSortService itemSortService, IItemLookupService itemLookupService, IItemRepository itemRepository, IItemQueryScopeService scopeService)
         {
             _channelManager = channelManager;
             _collectionManager = collectionManager;
@@ -38,6 +43,9 @@ namespace Reefin.Server.Core.Library
             _tvSeriesManager = tvSeriesManager;
             _configurationManager = configurationManager;
             _itemSortService = itemSortService;
+            _itemLookupService = itemLookupService;
+            _itemRepository = itemRepository;
+            _scopeService = scopeService;
         }
 
         public QueryResult<BaseItem> GetItems(Folder folder, InternalItemsQuery query)
@@ -60,6 +68,49 @@ namespace Reefin.Server.Core.Library
             // Mirrors Folder.GetItemList's own unconditional mutation before it delegates further.
             query.EnableTotalRecordCount = false;
             return PostFilterAndSort(folder, folder.GetRawQueryItems(query), query).Items;
+        }
+
+        public IReadOnlyList<BaseItem> GetItemList(InternalItemsQuery query)
+        {
+            if (query.Recursive && !query.ParentId.IsEmpty())
+            {
+                var parent = _itemLookupService.GetItemById(query.ParentId);
+                if (parent is not null)
+                {
+                    _scopeService.SetTopParentIdsOrAncestors(query, [parent]);
+                }
+            }
+
+            if (query.User is not null)
+            {
+                _scopeService.AddUserToQuery(query, query.User);
+            }
+
+            return _itemRepository.GetItemList(query);
+        }
+
+        public QueryResult<BaseItem> GetItems(InternalItemsQuery query)
+        {
+            if (query.Recursive && !query.ParentId.IsEmpty())
+            {
+                var parent = _itemLookupService.GetItemById(query.ParentId);
+                if (parent is not null)
+                {
+                    _scopeService.SetTopParentIdsOrAncestors(query, [parent]);
+                }
+            }
+
+            if (query.User is not null)
+            {
+                _scopeService.AddUserToQuery(query, query.User);
+            }
+
+            if (query.EnableTotalRecordCount)
+            {
+                return _itemRepository.GetItems(query);
+            }
+
+            return new QueryResult<BaseItem>(query.StartIndex, null, _itemRepository.GetItemList(query));
         }
 
         // GetRawQueryItems + PostFilterAndSort is only equivalent to the full GetItems/GetItemList

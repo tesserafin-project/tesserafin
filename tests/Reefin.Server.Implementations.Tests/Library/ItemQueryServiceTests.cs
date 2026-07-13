@@ -9,6 +9,7 @@ using Reefin.Controller.Configuration;
 using Reefin.Controller.Entities;
 using Reefin.Controller.Entities.Movies;
 using Reefin.Controller.Library;
+using Reefin.Controller.Persistence;
 using Reefin.Controller.Sorting;
 using Reefin.Controller.TV;
 using Reefin.Data.Enums;
@@ -28,6 +29,9 @@ public class ItemQueryServiceTests
         out Mock<ICollectionManager> collectionManager,
         out Mock<IUserViewManager> userViewManager,
         out Mock<ITVSeriesManager> tvSeriesManager,
+        out Mock<IItemLookupService> itemLookupService,
+        out Mock<IItemRepository> itemRepository,
+        out Mock<IItemQueryScopeService> scopeService,
         ILibraryManager? libraryManager = null,
         IServerConfigurationManager? configurationManager = null,
         IItemSortService? itemSortService = null)
@@ -36,6 +40,9 @@ public class ItemQueryServiceTests
         collectionManager = new Mock<ICollectionManager>();
         userViewManager = new Mock<IUserViewManager>();
         tvSeriesManager = new Mock<ITVSeriesManager>();
+        itemLookupService = new Mock<IItemLookupService>();
+        itemRepository = new Mock<IItemRepository>();
+        scopeService = new Mock<IItemQueryScopeService>();
 
         libraryManager ??= new Mock<ILibraryManager>().Object;
         configurationManager ??= Mock.Of<IServerConfigurationManager>(x => x.Configuration == new ServerConfiguration());
@@ -44,13 +51,13 @@ public class ItemQueryServiceTests
         BaseItem.ConfigurationManager = configurationManager;
         BaseItem.UserDataManager = new Mock<IUserDataManager>().Object;
 
-        return new ItemQueryService(channelManager.Object, collectionManager.Object, userViewManager.Object, tvSeriesManager.Object, configurationManager, itemSortService ?? new PassthroughItemSortService());
+        return new ItemQueryService(channelManager.Object, collectionManager.Object, userViewManager.Object, tvSeriesManager.Object, configurationManager, itemSortService ?? new PassthroughItemSortService(), itemLookupService.Object, itemRepository.Object, scopeService.Object);
     }
 
     [Fact]
     public void GetItems_DelegatesToFolderWithTheServiceOwnedManagers()
     {
-        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager);
+        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager, out _, out _, out _);
 
         var folder = new Folder { Id = Guid.NewGuid() };
         var child = new Movie { Id = Guid.NewGuid() };
@@ -74,7 +81,7 @@ public class ItemQueryServiceTests
     [Fact]
     public void GetItemList_DelegatesToFolderWithTheServiceOwnedManagers()
     {
-        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager);
+        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager, out _, out _, out _);
 
         var folder = new Folder { Id = Guid.NewGuid() };
         var child = new Movie { Id = Guid.NewGuid() };
@@ -99,7 +106,7 @@ public class ItemQueryServiceTests
     [Fact]
     public void PostFilterAndSort_UserNull_MatchesFolderGetItems()
     {
-        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager);
+        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager, out _, out _, out _);
 
         var folder = new Folder { Id = Guid.NewGuid() };
         var child1 = new Movie { Id = Guid.NewGuid(), Name = "Alpha" };
@@ -120,7 +127,7 @@ public class ItemQueryServiceTests
     [Fact]
     public void PostFilterAndSort_UserNonNull_CollapseFalse_MatchesFolderGetItems()
     {
-        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager);
+        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager, out _, out _, out _);
 
         var folder = new Folder { Id = Guid.NewGuid() };
         var child = new Movie { Id = Guid.NewGuid(), Name = "Alpha" };
@@ -148,7 +155,7 @@ public class ItemQueryServiceTests
             EnableGroupingMoviesIntoCollections = true,
             EnableGroupingShowsIntoCollections = true,
         });
-        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager, configurationManager: configurationManager);
+        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager, out _, out _, out _, configurationManager: configurationManager);
 
         var folder = new Folder { Id = Guid.NewGuid() };
         var child = new Movie { Id = Guid.NewGuid(), Name = "Alpha" };
@@ -185,7 +192,7 @@ public class ItemQueryServiceTests
             EnableGroupingMoviesIntoCollections = true,
             EnableGroupingShowsIntoCollections = true,
         });
-        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager, configurationManager: configurationManager);
+        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager, out _, out _, out _, configurationManager: configurationManager);
 
         var folder = new Folder { Id = Guid.NewGuid() };
         var alpha = new Movie { Id = Guid.NewGuid(), Name = "Alpha" };
@@ -234,7 +241,7 @@ public class ItemQueryServiceTests
         libraryManager
             .Setup(x => x.GetItemsResult(It.IsAny<InternalItemsQuery>()))
             .Returns(new QueryResult<BaseItem>(0, 1, new BaseItem[] { sentinel }));
-        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager, libraryManager: libraryManager.Object);
+        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager, out _, out _, out _, libraryManager: libraryManager.Object);
 
         var folder = new Folder { Id = Guid.NewGuid() };
         // Present in Children so a wrongly-taken fast path would return this instead of the sentinel below.
@@ -254,7 +261,7 @@ public class ItemQueryServiceTests
         libraryManager
             .Setup(x => x.GetItemsResult(It.IsAny<InternalItemsQuery>()))
             .Returns(new QueryResult<BaseItem>(0, 1, new BaseItem[] { sentinel }));
-        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager, libraryManager: libraryManager.Object);
+        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager, out _, out _, out _, libraryManager: libraryManager.Object);
 
         var folder = new Folder { Id = Guid.NewGuid() };
         folder.Children = new BaseItem[] { new Movie { Id = Guid.NewGuid() } };
@@ -268,7 +275,7 @@ public class ItemQueryServiceTests
     [Fact]
     public void GetItems_ChannelFolder_FallsBackInsteadOfRawQueryItems()
     {
-        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager);
+        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager, out _, out _, out _);
 
         var folder = new Folder { Id = Guid.NewGuid(), ChannelId = Guid.NewGuid() };
         folder.Children = new BaseItem[] { new Movie { Id = Guid.NewGuid() } };
@@ -297,7 +304,7 @@ public class ItemQueryServiceTests
 
         var libraryManager = new Mock<ILibraryManager>();
         libraryManager.Setup(x => x.GetItemById(displayParent.Id)).Returns(displayParent);
-        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager, libraryManager: libraryManager.Object);
+        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager, out _, out _, out _, libraryManager: libraryManager.Object);
         BaseItem.Logger = NullLogger<BaseItem>.Instance;
 
         channelManager
@@ -313,7 +320,7 @@ public class ItemQueryServiceTests
     [Fact]
     public void GetItemList_FastPath_ForcesEnableTotalRecordCountFalse()
     {
-        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager);
+        var service = CreateService(out var channelManager, out var collectionManager, out var userViewManager, out var tvSeriesManager, out _, out _, out _);
 
         var folder = new Folder { Id = Guid.NewGuid() };
         var child = new Movie { Id = Guid.NewGuid() };
@@ -342,6 +349,9 @@ public class ItemQueryServiceTests
             out _,
             out _,
             out _,
+            out _,
+            out _,
+            out _,
             libraryManager: libraryManager.Object,
             itemSortService: sortService);
 
@@ -366,6 +376,9 @@ public class ItemQueryServiceTests
             out _,
             out _,
             out _,
+            out _,
+            out _,
+            out _,
             libraryManager: libraryManager.Object,
             itemSortService: sortService);
 
@@ -374,6 +387,136 @@ public class ItemQueryServiceTests
         Assert.Equal(new BaseItem[] { alpha, zulu }, result);
         Assert.Single(sortService.Calls);
         libraryManager.VerifyNoOtherCalls();
+    }
+
+    // Global-query surface tests (PR86): GetItemList(InternalItemsQuery)/GetItems(InternalItemsQuery)
+    // reproduce LibraryManager.GetItemList(query, allowExternalContent)/GetItemsResult(query)
+    // (Reefin.Server.Core/Library/LibraryManager.cs L1648/L1912), but via the cycle-free
+    // IItemLookupService/IItemQueryScopeService/IItemRepository leaves instead of ILibraryManager.
+
+    [Fact]
+    public void GetItemList_RecursiveWithParentId_ResolvesParentAndScopesTopParents()
+    {
+        var service = CreateService(out _, out _, out _, out _, out var itemLookupService, out var itemRepository, out var scopeService);
+
+        var parent = new Folder { Id = Guid.NewGuid() };
+        var query = new InternalItemsQuery { Recursive = true, ParentId = parent.Id };
+        var expected = new BaseItem[] { new Movie { Id = Guid.NewGuid() } };
+
+        itemLookupService.Setup(x => x.GetItemById(parent.Id)).Returns(parent);
+        itemRepository.Setup(x => x.GetItemList(query)).Returns(expected);
+
+        var result = service.GetItemList(query);
+
+        scopeService.Verify(x => x.SetTopParentIdsOrAncestors(query, It.Is<IReadOnlyCollection<BaseItem>>(p => p.Count == 1 && p.Single() == parent)), Times.Once);
+        Assert.Equal(expected, result);
+    }
+
+    [Fact]
+    public void GetItemList_RecursiveWithParentIdNotFound_DoesNotScopeTopParents()
+    {
+        var service = CreateService(out _, out _, out _, out _, out var itemLookupService, out var itemRepository, out var scopeService);
+
+        var missingParentId = Guid.NewGuid();
+        var query = new InternalItemsQuery { Recursive = true, ParentId = missingParentId };
+        var expected = new BaseItem[] { new Movie { Id = Guid.NewGuid() } };
+
+        itemLookupService.Setup(x => x.GetItemById(missingParentId)).Returns((BaseItem?)null);
+        itemRepository.Setup(x => x.GetItemList(query)).Returns(expected);
+
+        var result = service.GetItemList(query);
+
+        scopeService.Verify(x => x.SetTopParentIdsOrAncestors(It.IsAny<InternalItemsQuery>(), It.IsAny<IReadOnlyCollection<BaseItem>>()), Times.Never);
+        Assert.Equal(expected, result);
+    }
+
+    [Fact]
+    public void GetItemList_UserNonNull_ScopesToUserAndReturnsRepositoryGetItemList()
+    {
+        var service = CreateService(out _, out _, out _, out _, out var itemLookupService, out var itemRepository, out var scopeService);
+
+        var user = new User("test-user", "provider", "provider");
+        var query = new InternalItemsQuery { User = user };
+        var expected = new BaseItem[] { new Movie { Id = Guid.NewGuid() } };
+
+        itemRepository.Setup(x => x.GetItemList(query)).Returns(expected);
+
+        var result = service.GetItemList(query);
+
+        scopeService.Verify(x => x.AddUserToQuery(query, user, true), Times.Once);
+        itemLookupService.Verify(x => x.GetItemById(It.IsAny<Guid>()), Times.Never);
+        Assert.Equal(expected, result);
+    }
+
+    [Fact]
+    public void GetItems_EnableTotalRecordCountTrue_ReturnsRepositoryGetItems()
+    {
+        var service = CreateService(out _, out _, out _, out _, out _, out var itemRepository, out _);
+
+        var query = new InternalItemsQuery { EnableTotalRecordCount = true };
+        var expected = new QueryResult<BaseItem>(0, 1, new BaseItem[] { new Movie { Id = Guid.NewGuid() } });
+
+        itemRepository.Setup(x => x.GetItems(query)).Returns(expected);
+
+        var result = service.GetItems(query);
+
+        Assert.Same(expected, result);
+        itemRepository.Verify(x => x.GetItemList(It.IsAny<InternalItemsQuery>()), Times.Never);
+    }
+
+    [Fact]
+    public void GetItems_EnableTotalRecordCountFalse_ReturnsQueryResultWrappingRepositoryGetItemList()
+    {
+        var service = CreateService(out _, out _, out _, out _, out _, out var itemRepository, out _);
+
+        var query = new InternalItemsQuery { EnableTotalRecordCount = false, StartIndex = 5 };
+        var items = new BaseItem[] { new Movie { Id = Guid.NewGuid() } };
+
+        itemRepository.Setup(x => x.GetItemList(query)).Returns(items);
+
+        var result = service.GetItems(query);
+
+        Assert.Equal(5, result.StartIndex);
+        // Mirrors LibraryManager.GetItemsResult: new QueryResult<BaseItem>(query.StartIndex, null, items)
+        // passes a null totalRecordCount, which QueryResult's constructor falls back to items.Count for.
+        Assert.Equal(items.Length, result.TotalRecordCount);
+        Assert.Equal(items, result.Items);
+        itemRepository.Verify(x => x.GetItems(It.IsAny<InternalItemsQuery>()), Times.Never);
+    }
+
+    [Fact]
+    public void GetItems_RecursiveWithParentId_ResolvesParentAndScopesTopParents()
+    {
+        var service = CreateService(out _, out _, out _, out _, out var itemLookupService, out var itemRepository, out var scopeService);
+
+        var parent = new Folder { Id = Guid.NewGuid() };
+        var query = new InternalItemsQuery { Recursive = true, ParentId = parent.Id, EnableTotalRecordCount = false };
+        var items = new BaseItem[] { new Movie { Id = Guid.NewGuid() } };
+
+        itemLookupService.Setup(x => x.GetItemById(parent.Id)).Returns(parent);
+        itemRepository.Setup(x => x.GetItemList(query)).Returns(items);
+
+        var result = service.GetItems(query);
+
+        scopeService.Verify(x => x.SetTopParentIdsOrAncestors(query, It.Is<IReadOnlyCollection<BaseItem>>(p => p.Count == 1 && p.Single() == parent)), Times.Once);
+        Assert.Equal(items, result.Items);
+    }
+
+    [Fact]
+    public void GetItems_UserNonNull_ScopesToUser()
+    {
+        var service = CreateService(out _, out _, out _, out _, out _, out var itemRepository, out var scopeService);
+
+        var user = new User("test-user", "provider", "provider");
+        var query = new InternalItemsQuery { User = user, EnableTotalRecordCount = true };
+        var expected = new QueryResult<BaseItem>(0, 0, Array.Empty<BaseItem>());
+
+        itemRepository.Setup(x => x.GetItems(query)).Returns(expected);
+
+        var result = service.GetItems(query);
+
+        scopeService.Verify(x => x.AddUserToQuery(query, user, true), Times.Once);
+        Assert.Same(expected, result);
     }
 
     private sealed class PassthroughItemSortService : IItemSortService
