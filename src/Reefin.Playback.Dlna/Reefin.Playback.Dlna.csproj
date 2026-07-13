@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Reefin.Playback.Decision/Reefin.Playback.Decision.csproj" />
+    <ProjectReference Include="../../Reefin.Model/Reefin.Model.csproj" />
+  </ItemGroup>
+
+</Project>

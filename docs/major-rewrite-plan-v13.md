@@ -101,7 +101,8 @@ La notation interne "PRxx/N" utilisée ailleurs dans ce document est un schéma 
 - 406d28f149 — RFC « Playback Decision v2 » : cinq objets de domaine non-DLNA, raisons arborescentes, snapshot capacités inline (docs/pr91-rfc-playback-decision-v2.md, aucun code) (PR91)
 - eee0734685 — Design API Playback v2 + UX diagnostic : surfaces client/admin séparées, PUT vs PATCH, DTO stables sans DLNA, wireframes (docs/pr92-design-playback-api-and-diagnostics.md, aucun code) (PR92)
 - 5cd091aae5 — Labo de compatibilité playback : format de fixture versionné + schema + fixtures seed + manifeste, comparaison par catégories (docs/pr93-compatibility-lab.md, tests/PlaybackCompat/, aucun code de prod) (PR93)
-- (pending) — Modèle de domaine playback v2 (src/Reefin.Playback.Decision) : types immuables, zéro référence donc zéro DLNA, ReasonCode string stable, invariants de décision par construction, tests sérialisation+invariants (PR94)
+- 09545eb9eb — Modèle de domaine playback v2 (src/Reefin.Playback.Decision) : types immuables, zéro référence donc zéro DLNA, ReasonCode string stable, invariants de décision par construction, tests sérialisation+invariants (PR94)
+- (pending) — Adaptateur legacy DLNA->v2 à sens unique (src/Reefin.Playback.Dlna) : DeviceProfile/MediaOptions/MediaSourceInfo -> ClientCapabilities/PlaybackConstraints/MediaSourceSnapshot ; le domaine ne référence jamais DLNA (23 tests) (PR95)
 
 ## Détail des points vérifiés dans le code
 
