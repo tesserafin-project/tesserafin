@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Reefin.Controller.Entities;
 using Reefin.Controller.Library;
 using Reefin.Controller.Session;
 using Reefin.Controller.SyncPlay;
@@ -52,6 +53,11 @@ namespace Reefin.Server.Core.SyncPlay
         private readonly IItemLookupService _itemLookupService;
 
         /// <summary>
+        /// The item access service.
+        /// </summary>
+        private readonly IItemAccessService _itemAccessService;
+
+        /// <summary>
         /// The participants, or members of the group.
         /// </summary>
         private readonly Dictionary<string, GroupMember> _participants =
@@ -69,16 +75,19 @@ namespace Reefin.Server.Core.SyncPlay
         /// <param name="userManager">The user manager.</param>
         /// <param name="sessionManager">The session manager.</param>
         /// <param name="itemLookupService">The item lookup service.</param>
+        /// <param name="itemAccessService">The item access service.</param>
         public Group(
             ILoggerFactory loggerFactory,
             IUserManager userManager,
             ISessionManager sessionManager,
-            IItemLookupService itemLookupService)
+            IItemLookupService itemLookupService,
+            IItemAccessService itemAccessService)
         {
             _loggerFactory = loggerFactory;
             _userManager = userManager;
             _sessionManager = sessionManager;
             _itemLookupService = itemLookupService;
+            _itemAccessService = itemAccessService;
             _logger = loggerFactory.CreateLogger<Group>();
 
             _state = new IdleGroupState(loggerFactory);
@@ -205,9 +214,9 @@ namespace Reefin.Server.Core.SyncPlay
 
             foreach (var itemId in queue)
             {
-                var item = _itemLookupService.GetItemById(itemId);
+                var item = _itemAccessService.GetVisibleItemById<BaseItem>(itemId, user);
 
-                if (item is null || !item.IsVisibleStandalone(user))
+                if (item is null)
                 {
                     return false;
                 }

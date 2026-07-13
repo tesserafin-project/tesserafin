@@ -44,6 +44,11 @@ namespace Reefin.Server.Core.SyncPlay
         private readonly IItemLookupService _itemLookupService;
 
         /// <summary>
+        /// The item access service.
+        /// </summary>
+        private readonly IItemAccessService _itemAccessService;
+
+        /// <summary>
         /// The map between users and counter of active sessions.
         /// </summary>
         private readonly ConcurrentDictionary<Guid, int> _activeUsers =
@@ -78,16 +83,19 @@ namespace Reefin.Server.Core.SyncPlay
         /// <param name="userManager">The user manager.</param>
         /// <param name="sessionManager">The session manager.</param>
         /// <param name="itemLookupService">The item lookup service.</param>
+        /// <param name="itemAccessService">The item access service.</param>
         public SyncPlayManager(
             ILoggerFactory loggerFactory,
             IUserManager userManager,
             ISessionManager sessionManager,
-            IItemLookupService itemLookupService)
+            IItemLookupService itemLookupService,
+            IItemAccessService itemAccessService)
         {
             _loggerFactory = loggerFactory;
             _userManager = userManager;
             _sessionManager = sessionManager;
             _itemLookupService = itemLookupService;
+            _itemAccessService = itemAccessService;
             _logger = loggerFactory.CreateLogger<SyncPlayManager>();
             _sessionManager.SessionEnded += OnSessionEnded;
         }
@@ -122,7 +130,7 @@ namespace Reefin.Server.Core.SyncPlay
                     LeaveGroup(session, leaveGroupRequest, cancellationToken);
                 }
 
-                var group = new Group(_loggerFactory, _userManager, _sessionManager, _itemLookupService);
+                var group = new Group(_loggerFactory, _userManager, _sessionManager, _itemLookupService, _itemAccessService);
                 _groups[group.GroupId] = group;
 
                 if (!_sessionToGroupMap.TryAdd(session.Id, group))
