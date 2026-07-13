@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 
 namespace Reefin.Playback.Shadow;
@@ -23,9 +24,9 @@ public static class ShadowComparer
         ArgumentNullException.ThrowIfNull(v2);
 
         var methodDiffers = legacy.Method != v2.Method;
-        var streamsDiffer = IndexDiffers(legacy.VideoStreamIndex, v2.VideoStreamIndex)
-            || IndexDiffers(legacy.AudioStreamIndex, v2.AudioStreamIndex)
-            || IndexDiffers(legacy.SubtitleStreamIndex, v2.SubtitleStreamIndex);
+        var streamsDiffer = StreamSelection.Differ(legacy.VideoStreamIndex, v2.VideoStreamIndex)
+            || StreamSelection.Differ(legacy.AudioStreamIndex, v2.AudioStreamIndex)
+            || StreamSelection.Differ(legacy.SubtitleStreamIndex, v2.SubtitleStreamIndex);
 
         var onlyLegacyTransforms = Except(legacy.TransformClasses, v2.TransformClasses);
         var onlyV2Transforms = Except(v2.TransformClasses, legacy.TransformClasses);
@@ -34,14 +35,39 @@ public static class ShadowComparer
 
         var transformsEqual = onlyLegacyTransforms.Count == 0 && onlyV2Transforms.Count == 0;
         var reasonsEqual = onlyLegacyReasons.Count == 0 && onlyV2Reasons.Count == 0;
+
+        // "Serious" axes: known-on-both-sides-and-different here is never just noise. A subtitle
+        // silently dropped, a different source picked, a resolution or HDR/SDR range that changed
+        // unexpectedly - these must not be laundered into ExpectedImprovement (fewer transforms can
+        // look like "v2 does less work") or KnownV2Limitation (a benign, unlogged bucket). Computed
+        // before classification so they can gate it, per docs/pr93-compatibility-lab.md §4.2.
+        var subtitleNoneVsSelected = StreamSelection.IsNoneVsSelected(legacy.SubtitleStreamIndex, v2.SubtitleStreamIndex);
+        var sourceDiffers = KnownAndDiffer(legacy.SelectedSource, v2.SelectedSource, StringComparer.Ordinal);
+        var videoRangeDiffers = KnownAndDiffer(legacy.OutputVideoRange, v2.OutputVideoRange, StringComparer.OrdinalIgnoreCase);
+        var resolutionDiffers = KnownAndDiffer(legacy.OutputWidth, v2.OutputWidth) || KnownAndDiffer(legacy.OutputHeight, v2.OutputHeight);
+        var seriousFieldDiffers = subtitleNoneVsSelected || sourceDiffers || videoRangeDiffers || resolutionDiffers;
+
+        // Other output axes: real when known-and-different, but not serious enough to override the
+        // improvement/regression heuristics below - they still block Equivalent and, absent a more
+        // specific classification, fall into KnownV2Limitation alongside container/codec mismatches.
+        var bitrateDiffers = KnownAndDiffer(legacy.OutputBitrate, v2.OutputBitrate);
+        var audioChannelsDiffer = KnownAndDiffer(legacy.OutputAudioChannels, v2.OutputAudioChannels);
+        var subtitleDeliveryDiffers = KnownAndDiffer(legacy.SubtitleDeliveryMode, v2.SubtitleDeliveryMode);
+
         var outputEqual = CodecEquals(legacy.OutputContainer, v2.OutputContainer)
             && CodecEquals(legacy.OutputVideoCodec, v2.OutputVideoCodec)
-            && CodecEquals(legacy.OutputAudioCodec, v2.OutputAudioCodec);
+            && CodecEquals(legacy.OutputAudioCodec, v2.OutputAudioCodec)
+            && !sourceDiffers && !videoRangeDiffers && !resolutionDiffers
+            && !bitrateDiffers && !audioChannelsDiffer && !subtitleDeliveryDiffers;
 
         DivergenceClass divergenceClass;
         if (legacy.IsViable == v2.IsViable && !methodDiffers && !streamsDiffer && transformsEqual && reasonsEqual && outputEqual)
         {
             divergenceClass = DivergenceClass.Equivalent;
+        }
+        else if (seriousFieldDiffers)
+        {
+            divergenceClass = DivergenceClass.PotentialRegression;
         }
         else if (IsImprovement(legacy, v2, methodDiffers, onlyV2Transforms, onlyLegacyTransforms))
         {
@@ -66,18 +92,38 @@ public static class ShadowComparer
             divergenceClass = DivergenceClass.Unexplained;
         }
 
-        var summary = BuildSummary(divergenceClass, legacy, v2, streamsDiffer, onlyLegacyTransforms, onlyV2Transforms, onlyLegacyReasons, onlyV2Reasons);
+        var summary = BuildSummary(
+            divergenceClass,
+            legacy,
+            v2,
+            streamsDiffer,
+            onlyLegacyTransforms,
+            onlyV2Transforms,
+            onlyLegacyReasons,
+            onlyV2Reasons,
+            sourceDiffers,
+            videoRangeDiffers,
+            resolutionDiffers,
+            bitrateDiffers,
+            audioChannelsDiffer,
+            subtitleDeliveryDiffers);
 
         return new ShadowDivergence(divergenceClass, methodDiffers, streamsDiffer, onlyLegacyTransforms, onlyV2Transforms, onlyLegacyReasons, onlyV2Reasons, summary);
     }
 
-    /// <summary>
-    /// A <see langword="null"/> index on either side means "not asserted", not "different": it never
-    /// counts as a divergence. Only two differing non-null indices do.
-    /// </summary>
-    private static bool IndexDiffers(int? a, int? b) => a is not null && b is not null && a != b;
-
     private static bool CodecEquals(string? a, string? b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// True only when both sides carry a known value and it differs. A <see langword="null"/> on
+    /// either side means "unknown/not applicable" and never counts as a divergence - the whole point
+    /// of the tri-state handling introduced in PR101 (see <see cref="DecisionVector"/> remarks).
+    /// </summary>
+    private static bool KnownAndDiffer<T>(T? a, T? b)
+        where T : struct =>
+        a.HasValue && b.HasValue && !EqualityComparer<T>.Default.Equals(a.Value, b.Value);
+
+    private static bool KnownAndDiffer(string? a, string? b, StringComparer comparer) =>
+        a is not null && b is not null && !comparer.Equals(a, b);
 
     private static HashSet<T> Except<T>(IReadOnlySet<T> from, IReadOnlySet<T> subtract)
     {
@@ -150,7 +196,13 @@ public static class ShadowComparer
         IReadOnlySet<TransformClass> onlyLegacyTransforms,
         IReadOnlySet<TransformClass> onlyV2Transforms,
         IReadOnlySet<ReasonCategory> onlyLegacyReasons,
-        IReadOnlySet<ReasonCategory> onlyV2Reasons)
+        IReadOnlySet<ReasonCategory> onlyV2Reasons,
+        bool sourceDiffers,
+        bool videoRangeDiffers,
+        bool resolutionDiffers,
+        bool bitrateDiffers,
+        bool audioChannelsDiffer,
+        bool subtitleDeliveryDiffers)
     {
         if (divergenceClass == DivergenceClass.Equivalent)
         {
@@ -200,6 +252,36 @@ public static class ShadowComparer
         if (!CodecEquals(legacy.OutputAudioCodec, v2.OutputAudioCodec))
         {
             parts.Add($"audioCodec legacy={legacy.OutputAudioCodec ?? "n/a"} v2={v2.OutputAudioCodec ?? "n/a"}");
+        }
+
+        if (sourceDiffers)
+        {
+            parts.Add($"source legacy={legacy.SelectedSource} v2={v2.SelectedSource}");
+        }
+
+        if (videoRangeDiffers)
+        {
+            parts.Add($"videoRange legacy={legacy.OutputVideoRange} v2={v2.OutputVideoRange}");
+        }
+
+        if (resolutionDiffers)
+        {
+            parts.Add($"resolution legacy={legacy.OutputWidth?.ToString(CultureInfo.InvariantCulture) ?? "n/a"}x{legacy.OutputHeight?.ToString(CultureInfo.InvariantCulture) ?? "n/a"} v2={v2.OutputWidth?.ToString(CultureInfo.InvariantCulture) ?? "n/a"}x{v2.OutputHeight?.ToString(CultureInfo.InvariantCulture) ?? "n/a"}");
+        }
+
+        if (bitrateDiffers)
+        {
+            parts.Add($"bitrate legacy={legacy.OutputBitrate} v2={v2.OutputBitrate}");
+        }
+
+        if (audioChannelsDiffer)
+        {
+            parts.Add($"audioChannels legacy={legacy.OutputAudioChannels} v2={v2.OutputAudioChannels}");
+        }
+
+        if (subtitleDeliveryDiffers)
+        {
+            parts.Add($"subtitleDelivery legacy={legacy.SubtitleDeliveryMode} v2={v2.SubtitleDeliveryMode}");
         }
 
         return $"{divergenceClass}: {string.Join("; ", parts)}";

@@ -22,14 +22,21 @@ public sealed class LegacyDecisionProjectorTests
 
         Assert.False(vector.IsViable);
         Assert.Null(vector.Method);
-        Assert.Null(vector.VideoStreamIndex);
-        Assert.Null(vector.AudioStreamIndex);
-        Assert.Null(vector.SubtitleStreamIndex);
+        Assert.True(vector.VideoStreamIndex.IsUnknown);
+        Assert.True(vector.AudioStreamIndex.IsUnknown);
+        Assert.True(vector.SubtitleStreamIndex.IsUnknown);
         Assert.Empty(vector.TransformClasses);
         Assert.Empty(vector.ReasonCategories);
         Assert.Null(vector.OutputContainer);
         Assert.Null(vector.OutputVideoCodec);
         Assert.Null(vector.OutputAudioCodec);
+        Assert.Null(vector.SelectedSource);
+        Assert.Null(vector.OutputWidth);
+        Assert.Null(vector.OutputHeight);
+        Assert.Null(vector.OutputBitrate);
+        Assert.Null(vector.OutputVideoRange);
+        Assert.Null(vector.OutputAudioChannels);
+        Assert.Null(vector.SubtitleDeliveryMode);
     }
 
     [Fact]
@@ -47,9 +54,14 @@ public sealed class LegacyDecisionProjectorTests
         Assert.Equal("h264", vector.OutputVideoCodec);
         Assert.Equal("aac", vector.OutputAudioCodec);
 
-        // Legacy StreamInfo does not expose a video stream index cleanly (per PR98 spec); always null.
-        Assert.Null(vector.VideoStreamIndex);
-        Assert.Equal(1, vector.AudioStreamIndex);
+        // Legacy StreamInfo does not expose a video stream index cleanly (per PR98 spec); always Unknown.
+        Assert.True(vector.VideoStreamIndex.IsUnknown);
+        Assert.True(vector.AudioStreamIndex.IsSelected);
+        Assert.Equal(1, vector.AudioStreamIndex.Index);
+
+        // No subtitle index was passed to BuildStreamInfo: legacy positively selected none.
+        Assert.True(vector.SubtitleStreamIndex.IsNone);
+        Assert.Equal("source-1", vector.SelectedSource);
     }
 
     [Fact]
@@ -151,14 +163,58 @@ public sealed class LegacyDecisionProjectorTests
         var vector = LegacyDecisionProjector.Project(plan);
 
         Assert.True(vector.IsViable);
-        Assert.Null(vector.AudioStreamIndex);
-        Assert.Null(vector.SubtitleStreamIndex);
+        Assert.True(vector.AudioStreamIndex.IsUnknown);
+
+        // With no StreamInfo at all, the projector has no basis to say "no subtitle": Unknown, not None.
+        Assert.True(vector.SubtitleStreamIndex.IsUnknown);
         Assert.Null(vector.OutputContainer);
         Assert.Null(vector.OutputVideoCodec);
         Assert.Null(vector.OutputAudioCodec);
+        Assert.Null(vector.SelectedSource);
+        Assert.Null(vector.OutputVideoRange);
+        Assert.Null(vector.SubtitleDeliveryMode);
     }
 
-    private static StreamInfo BuildStreamInfo(PlayMethod playMethod, TranscodeReason reasons, string container, int? audioIndex = null, int? subtitleIndex = null)
+    [Fact]
+    public void Project_HdrSourceDirectPlayed_MapsVideoRangeToHdr10()
+    {
+        var streamInfo = BuildStreamInfo(PlayMethod.DirectPlay, 0, "mp4", colorTransfer: "smpte2084");
+
+        var vector = LegacyDecisionProjector.Project(new PlaybackPlan(PlayMethod.DirectPlay, 0, streamInfo));
+
+        Assert.Equal("HDR10", vector.OutputVideoRange);
+    }
+
+    [Fact]
+    public void Project_SdrSourceDirectPlayed_MapsVideoRangeToSdr()
+    {
+        var streamInfo = BuildStreamInfo(PlayMethod.DirectPlay, 0, "mp4");
+
+        var vector = LegacyDecisionProjector.Project(new PlaybackPlan(PlayMethod.DirectPlay, 0, streamInfo));
+
+        Assert.Equal("SDR", vector.OutputVideoRange);
+    }
+
+    [Fact]
+    public void Project_SubtitleSelectedWithEncodeDeliveryMethod_MapsToBurnAndSelectedIndex()
+    {
+        var streamInfo = BuildStreamInfo(PlayMethod.Transcode, TranscodeReason.SubtitleCodecNotSupported, "mp4", subtitleIndex: 2, subtitleDeliveryMethod: SubtitleDeliveryMethod.Encode);
+
+        var vector = LegacyDecisionProjector.Project(new PlaybackPlan(PlayMethod.Transcode, TranscodeReason.SubtitleCodecNotSupported, streamInfo));
+
+        Assert.True(vector.SubtitleStreamIndex.IsSelected);
+        Assert.Equal(2, vector.SubtitleStreamIndex.Index);
+        Assert.Equal(SubtitleDeliveryMode.Burn, vector.SubtitleDeliveryMode);
+    }
+
+    private static StreamInfo BuildStreamInfo(
+        PlayMethod playMethod,
+        TranscodeReason reasons,
+        string container,
+        int? audioIndex = null,
+        int? subtitleIndex = null,
+        SubtitleDeliveryMethod subtitleDeliveryMethod = SubtitleDeliveryMethod.Embed,
+        string? colorTransfer = null)
     {
         var mediaSource = new MediaSourceInfo
         {
@@ -166,7 +222,7 @@ public sealed class LegacyDecisionProjectorTests
             Container = container,
             MediaStreams =
             [
-                new MediaStream { Type = MediaStreamType.Video, Index = 0, Codec = "h264" },
+                new MediaStream { Type = MediaStreamType.Video, Index = 0, Codec = "h264", ColorTransfer = colorTransfer },
                 new MediaStream { Type = MediaStreamType.Audio, Index = 1, Codec = "aac", IsDefault = true },
             ],
         };
@@ -179,6 +235,7 @@ public sealed class LegacyDecisionProjectorTests
             Container = container,
             AudioStreamIndex = audioIndex,
             SubtitleStreamIndex = subtitleIndex,
+            SubtitleDeliveryMethod = subtitleDeliveryMethod,
             MediaSource = mediaSource,
         };
     }

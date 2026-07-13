@@ -16,23 +16,75 @@ public static class V2DecisionProjector
     /// <returns>The equivalent, comparable decision vector.</returns>
     public static DecisionVector Project(PlaybackDecision decision)
     {
-        var method = decision.IsViable ? MapMethod(decision.Method) : (NormalizedMethod?)null;
         var transformClasses = MapTransformClasses(decision.Transforms);
         var reasonCategories = new HashSet<ReasonCategory>();
         FoldReasonCategories(decision.Reasoning, reasonCategories);
 
+        if (!decision.IsViable)
+        {
+            // PlaybackDecision.NotViable carries SelectedStreams.None and OutputSpec.Empty as
+            // placeholder defaults (see PlaybackDecision.cs) - those are not real facts about the
+            // world, just the shape an unbuilt decision takes. Projecting them as Unknown avoids
+            // manufacturing a false "no stream selected"/"no output" divergence against whatever the
+            // legacy side reports for the same failed attempt.
+            return new DecisionVector(
+                IsViable: false,
+                Method: null,
+                VideoStreamIndex: StreamSelection.Unknown,
+                AudioStreamIndex: StreamSelection.Unknown,
+                SubtitleStreamIndex: StreamSelection.Unknown,
+                TransformClasses: transformClasses,
+                ReasonCategories: reasonCategories,
+                OutputContainer: null,
+                OutputVideoCodec: null,
+                OutputAudioCodec: null,
+                SelectedSource: null,
+                OutputWidth: null,
+                OutputHeight: null,
+                OutputBitrate: null,
+                OutputVideoRange: null,
+                OutputAudioChannels: null,
+                SubtitleDeliveryMode: null);
+        }
+
+        var method = MapMethod(decision.Method);
+        var subtitle = decision.SelectedStreams.Subtitle;
+
+        // Unlike legacy, v2 always knows definitively whether a stream was selected: a null
+        // Video/Audio index on a viable decision is a real "no stream" fact (e.g. audio-only
+        // playback), not missing data. So these are None, not Unknown, when absent.
+        var videoSelection = decision.SelectedStreams.Video is int videoIdx ? StreamSelection.Selected(videoIdx) : StreamSelection.None;
+        var audioSelection = decision.SelectedStreams.Audio is int audioIdx ? StreamSelection.Selected(audioIdx) : StreamSelection.None;
+        var subtitleSelection = subtitle is not null ? StreamSelection.Selected(subtitle.Index) : StreamSelection.None;
+
         return new DecisionVector(
-            IsViable: decision.IsViable,
+            IsViable: true,
             Method: method,
-            VideoStreamIndex: decision.SelectedStreams.Video,
-            AudioStreamIndex: decision.SelectedStreams.Audio,
-            SubtitleStreamIndex: decision.SelectedStreams.Subtitle?.Index,
+            VideoStreamIndex: videoSelection,
+            AudioStreamIndex: audioSelection,
+            SubtitleStreamIndex: subtitleSelection,
             TransformClasses: transformClasses,
             ReasonCategories: reasonCategories,
             OutputContainer: decision.Output.Container,
             OutputVideoCodec: decision.Output.VideoCodec,
-            OutputAudioCodec: decision.Output.AudioCodec);
+            OutputAudioCodec: decision.Output.AudioCodec,
+            SelectedSource: decision.SelectedSource,
+            OutputWidth: decision.Output.Resolution?.Width,
+            OutputHeight: decision.Output.Resolution?.Height,
+            OutputBitrate: decision.Output.Bitrate,
+            OutputVideoRange: decision.Output.VideoRange,
+            OutputAudioChannels: decision.Output.AudioChannels,
+            SubtitleDeliveryMode: subtitle is not null ? MapDeliveryMode(subtitle.Delivery) : SubtitleDeliveryMode.None);
     }
+
+    private static SubtitleDeliveryMode MapDeliveryMode(SubtitleDeliveryMethod method) => method switch
+    {
+        SubtitleDeliveryMethod.Embed => SubtitleDeliveryMode.Embed,
+        SubtitleDeliveryMethod.External => SubtitleDeliveryMode.External,
+        SubtitleDeliveryMethod.Burn => SubtitleDeliveryMode.Burn,
+        SubtitleDeliveryMethod.Hls => SubtitleDeliveryMode.Hls,
+        _ => SubtitleDeliveryMode.None,
+    };
 
     private static NormalizedMethod MapMethod(PlaybackMethod method) => method switch
     {

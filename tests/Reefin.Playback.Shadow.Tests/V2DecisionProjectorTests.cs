@@ -31,6 +31,15 @@ public sealed class V2DecisionProjectorTests
         // VideoCodecNotSupported is a real reason category, unrelated to the NoViablePlan marker
         // itself (which carries no category): it should still be folded in.
         Assert.Contains(ReasonCategory.VideoCodec, vector.ReasonCategories);
+
+        // PlaybackDecision.NotViable's SelectedStreams.None/OutputSpec.Empty are placeholder
+        // defaults, not real facts: the projector must not turn them into "no stream selected".
+        Assert.True(vector.VideoStreamIndex.IsUnknown);
+        Assert.True(vector.AudioStreamIndex.IsUnknown);
+        Assert.True(vector.SubtitleStreamIndex.IsUnknown);
+        Assert.Null(vector.SelectedSource);
+        Assert.Null(vector.OutputVideoRange);
+        Assert.Null(vector.SubtitleDeliveryMode);
     }
 
     [Fact]
@@ -45,13 +54,19 @@ public sealed class V2DecisionProjectorTests
 
         Assert.True(vector.IsViable);
         Assert.Equal(NormalizedMethod.DirectPlay, vector.Method);
-        Assert.Equal(0, vector.VideoStreamIndex);
-        Assert.Equal(1, vector.AudioStreamIndex);
-        Assert.Null(vector.SubtitleStreamIndex);
+        Assert.True(vector.VideoStreamIndex.IsSelected);
+        Assert.Equal(0, vector.VideoStreamIndex.Index);
+        Assert.True(vector.AudioStreamIndex.IsSelected);
+        Assert.Equal(1, vector.AudioStreamIndex.Index);
+
+        // No SelectedSubtitle on the decision: v2 knows definitively that none was selected.
+        Assert.True(vector.SubtitleStreamIndex.IsNone);
+        Assert.Equal(SubtitleDeliveryMode.None, vector.SubtitleDeliveryMode);
         Assert.Empty(vector.TransformClasses);
         Assert.Equal("mp4", vector.OutputContainer);
         Assert.Equal("h264", vector.OutputVideoCodec);
         Assert.Equal("aac", vector.OutputAudioCodec);
+        Assert.Equal("source-1", vector.SelectedSource);
 
         // MethodChosen is a positive marker code, not in the reason-category map.
         Assert.Empty(vector.ReasonCategories);
@@ -123,5 +138,11 @@ public sealed class V2DecisionProjectorTests
         // TonemapRequired/DownmixRequired/SubtitleBurnInRequired/MethodChosen are positive/marker
         // codes and are excluded; only the real constraint codes fold into categories.
         Assert.Equal(new HashSet<ReasonCategory> { ReasonCategory.VideoRange, ReasonCategory.AudioChannels }, vector.ReasonCategories);
+
+        Assert.True(vector.SubtitleStreamIndex.IsSelected);
+        Assert.Equal(2, vector.SubtitleStreamIndex.Index);
+        Assert.Equal(SubtitleDeliveryMode.Burn, vector.SubtitleDeliveryMode);
+        Assert.Equal("SDR", vector.OutputVideoRange);
+        Assert.Equal(2, vector.OutputAudioChannels);
     }
 }
