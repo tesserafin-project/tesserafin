@@ -1,16 +1,19 @@
 {
-  "fixtureVersion": 1,
+  "fixtureVersion": 2,
   "id": "video-no-viable-plan",
   "category": "no-viable-plan",
-  "engineVersion": 2,
+  "engineVersion": 3,
   "description": "Video codec the client cannot decode, and transcoding is disallowed by the source and the constraints. No method can produce a playable stream. Expect isViable=false with NoViablePlan.",
   "input": {
     "context": { "mediaKind": "Video" },
     "capabilities": {
-      "containers": ["mp4"],
-      "videoCodecs": [{ "codec": "h264", "profiles": ["high"], "maxLevel": 41 }],
-      "audioCodecs": [{ "codec": "aac", "maxChannels": 6 }],
-      "subtitleDelivery": []
+      "decode": {
+        "containers": ["mp4"],
+        "videoCodecs": [{ "codec": "h264", "profiles": ["high"], "maxLevel": 41 }],
+        "audioCodecs": [{ "codec": "aac", "maxChannels": 6 }],
+        "subtitleDelivery": []
+      },
+      "outputProfiles": []
     },
     "source": {
       "mediaSourceId": "src-1",

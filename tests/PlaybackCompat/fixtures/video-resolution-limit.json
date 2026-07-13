@@ -1,18 +1,23 @@
 {
-  "fixtureVersion": 1,
+  "fixtureVersion": 2,
   "id": "video-resolution-limit",
   "category": "bitrate-resolution-limit",
-  "engineVersion": 2,
-  "description": "4K H.264 exceeding the client's 1080p max, with every OTHER dimension deliberately within limits (level, bit depth, range, bitrate all generous) so ONLY resolution trips. Video downscales; audio copied.",
+  "engineVersion": 3,
+  "description": "4K H.264 exceeding the client's 1080p max, with every OTHER dimension deliberately within limits (level, bit depth, range, bitrate all generous) so ONLY resolution trips. Video downscales (targeting the client's declared H.264 output profile); audio copied.",
   "input": {
     "context": { "mediaKind": "Video" },
     "capabilities": {
-      "containers": ["mp4"],
-      "videoCodecs": [{ "codec": "h264", "profiles": [], "maxLevel": 62, "maxBitDepth": 10, "videoRangeTypes": ["SDR"] }],
-      "audioCodecs": [{ "codec": "aac", "maxChannels": 8 }],
-      "subtitleDelivery": [],
-      "maxResolution": { "width": 1920, "height": 1080 },
-      "maxVideoBitrate": 100000000
+      "decode": {
+        "containers": ["mp4"],
+        "videoCodecs": [{ "codec": "h264", "profiles": [], "maxLevel": 62, "maxBitDepth": 10, "videoRangeTypes": ["SDR"] }],
+        "audioCodecs": [{ "codec": "aac", "maxChannels": 8 }],
+        "subtitleDelivery": [],
+        "maxResolution": { "width": 1920, "height": 1080 },
+        "maxVideoBitrate": 100000000
+      },
+      "outputProfiles": [
+        { "type": "Video", "protocol": "Http", "container": "mp4", "videoCodecs": ["h264"], "audioCodecs": ["aac"] }
+      ]
     },
     "source": {
       "mediaSourceId": "src-1",

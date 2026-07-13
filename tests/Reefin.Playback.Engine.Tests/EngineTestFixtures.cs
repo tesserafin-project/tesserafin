@@ -42,16 +42,22 @@ internal static class EngineTestFixtures
         AlwaysBurnInSubtitleWhenTranscoding: alwaysBurnInSubtitleWhenTranscoding,
         StartTimeTicks: 0);
 
-    public static ClientCapabilities Capabilities(IReadOnlyList<string> containers, IReadOnlyList<string> videoCodecs, IReadOnlyList<string> audioCodecs) => new(
-        Containers: containers,
-        VideoCodecs: videoCodecs.Select(codec => new VideoCodecCapability(codec, [], null, null, [])).ToList(),
-        AudioCodecs: audioCodecs.Select(codec => new AudioCodecCapability(codec, null, null, null)).ToList(),
-        SubtitleDelivery: [],
-        MaxResolution: null,
-        MaxVideoBitrate: null,
-        MaxAudioBitrate: null,
-        SupportsHls: false,
-        SupportsDash: false);
+    public static ClientCapabilities Capabilities(
+        IReadOnlyList<string> containers,
+        IReadOnlyList<string> videoCodecs,
+        IReadOnlyList<string> audioCodecs,
+        IReadOnlyList<PlaybackOutputProfile>? outputProfiles = null) => new(
+        Decode: new DecodeCapabilities(
+            Containers: containers,
+            VideoCodecs: videoCodecs.Select(codec => new VideoCodecCapability(codec, [], null, null, [])).ToList(),
+            AudioCodecs: audioCodecs.Select(codec => new AudioCodecCapability(codec, null, null, null)).ToList(),
+            SubtitleDelivery: [],
+            MaxResolution: null,
+            MaxVideoBitrate: null,
+            MaxAudioBitrate: null,
+            SupportsHls: false,
+            SupportsDash: false),
+        OutputProfiles: outputProfiles ?? []);
 
     public static VideoStreamSnapshot VideoStream(
         int index,

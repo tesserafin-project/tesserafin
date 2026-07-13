@@ -12,12 +12,35 @@ namespace Reefin.Playback.Engine;
 /// tonemapping (<see cref="VideoStreamSnapshot.VideoRange"/>), and audio channel downmix. All name-only,
 /// case-insensitive codec/format matching, same as phase 1.
 /// </summary>
+/// <remarks>
+/// PR102: when transcoding, the target container/codecs now come from the first
+/// <see cref="PlaybackOutputProfile"/> in <see cref="ClientCapabilities.OutputProfiles"/> matching
+/// the request's <see cref="MediaKind"/> (client preference order, not a hardcoded server
+/// preference) - see <see cref="LegacyFallbackVideoCodec"/> for the named fallback used when the
+/// client declares none.
+/// </remarks>
 public sealed class PlaybackEngine : IPlaybackEngine
 {
     /// <summary>
     /// The version of the decision engine implemented by this type.
     /// </summary>
-    public const int EngineVersion = 2;
+    public const int EngineVersion = 3;
+
+    /// <summary>
+    /// The transcoding target video codec used when the client declares no
+    /// <see cref="PlaybackOutputProfile"/> matching the requested media kind. Mirrors the
+    /// pre-PR102 engine's hardcoded default, kept as a named fallback (not a magic literal) rather
+    /// than removed, so a client that predates output-profile declarations keeps behaving exactly
+    /// as it did in engine v2.0/v2.1.
+    /// </summary>
+    private const string LegacyFallbackVideoCodec = "h264";
+
+    /// <summary>
+    /// The transcoding target audio codec used when the client declares no
+    /// <see cref="PlaybackOutputProfile"/> matching the requested media kind. See
+    /// <see cref="LegacyFallbackVideoCodec"/>.
+    /// </summary>
+    private const string LegacyFallbackAudioCodec = "aac";
 
     private static readonly IReadOnlyCollection<string> TextBasedSubtitleFormats =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "srt", "subrip", "ass", "ssa", "vtt", "webvtt", "ttml", "sami", "smi" };
@@ -96,7 +119,7 @@ public sealed class PlaybackEngine : IPlaybackEngine
 
         if (selectedVideo is not null)
         {
-            var videoCap = capabilities.VideoCodecs.FirstOrDefault(c => EqualsIgnoreCase(c.Codec, selectedVideo.Codec));
+            var videoCap = capabilities.Decode.VideoCodecs.FirstOrDefault(c => EqualsIgnoreCase(c.Codec, selectedVideo.Codec));
             if (videoCap is null)
             {
                 needVideoTranscode = true;
@@ -130,15 +153,15 @@ public sealed class PlaybackEngine : IPlaybackEngine
                 }
             }
 
-            if (capabilities.MaxResolution is not null && selectedVideo.Width is not null && selectedVideo.Height is not null
-                && (selectedVideo.Width > capabilities.MaxResolution.Width || selectedVideo.Height > capabilities.MaxResolution.Height))
+            if (capabilities.Decode.MaxResolution is not null && selectedVideo.Width is not null && selectedVideo.Height is not null
+                && (selectedVideo.Width > capabilities.Decode.MaxResolution.Width || selectedVideo.Height > capabilities.Decode.MaxResolution.Height))
             {
                 needVideoTranscode = true;
                 needDownscale = true;
                 videoReasons.Add(ReasonNode.Leaf(ReasonCode.VideoResolutionNotSupported, ReasonOutcome.Rejected, ReasonSubject.VideoStream(selectedVideo.Index)));
             }
 
-            if (capabilities.MaxVideoBitrate is not null && selectedVideo.Bitrate is not null && selectedVideo.Bitrate > capabilities.MaxVideoBitrate)
+            if (capabilities.Decode.MaxVideoBitrate is not null && selectedVideo.Bitrate is not null && selectedVideo.Bitrate > capabilities.Decode.MaxVideoBitrate)
             {
                 needVideoTranscode = true;
                 videoReasons.Add(ReasonNode.Leaf(ReasonCode.VideoBitrateNotSupported, ReasonOutcome.Rejected, ReasonSubject.VideoStream(selectedVideo.Index)));
@@ -153,7 +176,7 @@ public sealed class PlaybackEngine : IPlaybackEngine
 
         if (selectedAudio is not null)
         {
-            var audioCap = capabilities.AudioCodecs.FirstOrDefault(c => EqualsIgnoreCase(c.Codec, selectedAudio.Codec));
+            var audioCap = capabilities.Decode.AudioCodecs.FirstOrDefault(c => EqualsIgnoreCase(c.Codec, selectedAudio.Codec));
             if (audioCap is null)
             {
                 needAudioTranscode = true;
@@ -184,7 +207,7 @@ public sealed class PlaybackEngine : IPlaybackEngine
 
         if (selectedSubtitle is not null)
         {
-            var subtitleCap = capabilities.SubtitleDelivery.FirstOrDefault(c => EqualsIgnoreCase(c.Format, selectedSubtitle.Format));
+            var subtitleCap = capabilities.Decode.SubtitleDelivery.FirstOrDefault(c => EqualsIgnoreCase(c.Format, selectedSubtitle.Format));
             if (subtitleCap is not null)
             {
                 subtitleDelivery = subtitleCap.Method;
@@ -221,7 +244,7 @@ public sealed class PlaybackEngine : IPlaybackEngine
 
         // --- METHOD ---
         var wantsTranscode = needVideoTranscode || needAudioTranscode || needBurnIn;
-        var containerOk = capabilities.Containers.Contains(source.Container, StringComparer.OrdinalIgnoreCase);
+        var containerOk = capabilities.Decode.Containers.Contains(source.Container, StringComparer.OrdinalIgnoreCase);
         var neededMethod = wantsTranscode
             ? PlaybackMethod.Transcode
             : !containerOk
@@ -235,7 +258,7 @@ public sealed class PlaybackEngine : IPlaybackEngine
                 && source.SupportsDirectStream
                 && (selectedVideo is null || constraints.AllowVideoStreamCopy)
                 && constraints.AllowAudioStreamCopy
-                && capabilities.Containers.Count > 0,
+                && capabilities.Decode.Containers.Count > 0,
             PlaybackMethod.DirectPlay => constraints.AllowDirectPlay && source.SupportsDirectPlay,
             _ => false,
         };
@@ -253,23 +276,65 @@ public sealed class PlaybackEngine : IPlaybackEngine
             return SourceCandidate.ForNotViable(blockingReasons);
         }
 
+        // --- OUTPUT PROFILE (PR102) ---
+        // When transcoding, the target format is the first client-declared PlaybackOutputProfile
+        // matching this request's MediaKind - the client's own preference order, not a hardcoded
+        // server preference. A client declaring no matching profile falls back to the named legacy
+        // default (LegacyFallbackVideoCodec/LegacyFallbackAudioCodec, container chosen from decode
+        // containers exactly as the pre-PR102 engine did).
+        var matchingOutputProfile = neededMethod == PlaybackMethod.Transcode
+            ? capabilities.OutputProfiles.FirstOrDefault(p => p.Type == context.MediaKind)
+            : null;
+        var usedOutputProfileFallback = false;
+
         // --- CONTAINER ---
-        var targetContainer = neededMethod == PlaybackMethod.DirectPlay
-            ? source.Container
-            : SelectTargetContainer(capabilities.Containers, source.Container);
+        string targetContainer;
+        if (neededMethod == PlaybackMethod.DirectPlay)
+        {
+            targetContainer = source.Container;
+        }
+        else if (matchingOutputProfile is not null)
+        {
+            targetContainer = matchingOutputProfile.Container;
+        }
+        else
+        {
+            // Remux never had an OutputProfile concept to begin with (it copies streams into a
+            // container the client already decodes); Transcode with no matching profile shares the
+            // same fallback container selection as a matter of the named legacy default.
+            targetContainer = SelectTargetContainer(capabilities.Decode.Containers, source.Container);
+            usedOutputProfileFallback |= neededMethod == PlaybackMethod.Transcode;
+        }
+
         var containerChanged = !string.Equals(targetContainer, source.Container, StringComparison.OrdinalIgnoreCase);
 
         // --- TARGET CODECS ---
         string? targetVideoCodec = null;
         if (needVideoTranscode && selectedVideo is not null)
         {
-            targetVideoCodec = SelectTargetCodec(capabilities.VideoCodecs.Select(c => c.Codec).ToList(), "h264", selectedVideo.Codec);
+            if (matchingOutputProfile is not null && matchingOutputProfile.VideoCodecs.Count > 0)
+            {
+                targetVideoCodec = matchingOutputProfile.VideoCodecs[0];
+            }
+            else
+            {
+                targetVideoCodec = LegacyFallbackVideoCodec;
+                usedOutputProfileFallback = true;
+            }
         }
 
         string? targetAudioCodec = null;
         if (needAudioTranscode && selectedAudio is not null)
         {
-            targetAudioCodec = SelectTargetCodec(capabilities.AudioCodecs.Select(c => c.Codec).ToList(), "aac", selectedAudio.Codec);
+            if (matchingOutputProfile is not null && matchingOutputProfile.AudioCodecs.Count > 0)
+            {
+                targetAudioCodec = matchingOutputProfile.AudioCodecs[0];
+            }
+            else
+            {
+                targetAudioCodec = LegacyFallbackAudioCodec;
+                usedOutputProfileFallback = true;
+            }
         }
 
         // --- TRANSFORMS ---
@@ -316,7 +381,7 @@ public sealed class PlaybackEngine : IPlaybackEngine
             Container: targetContainer,
             VideoCodec: selectedVideo is not null ? (needVideoTranscode ? targetVideoCodec : selectedVideo.Codec) : null,
             AudioCodec: selectedAudio is not null ? (needAudioTranscode ? targetAudioCodec : selectedAudio.Codec) : null,
-            Resolution: needVideoTranscode && needDownscale ? capabilities.MaxResolution : null,
+            Resolution: needVideoTranscode && needDownscale ? capabilities.Decode.MaxResolution : null,
             VideoRange: needVideoTranscode && needTonemap ? "SDR" : null,
             AudioChannels: needAudioTranscode ? (needDownmix ? effMaxChannels : selectedAudio?.Channels) : null,
             Bitrate: null);
@@ -356,6 +421,11 @@ public sealed class PlaybackEngine : IPlaybackEngine
         if (transforms.Contains(TransformKind.BurnInSubtitle))
         {
             children.Add(ReasonNode.Leaf(ReasonCode.SubtitleBurnInRequired, ReasonOutcome.Chosen, ReasonSubject.Subtitle(selectedSubtitle!.Index)));
+        }
+
+        if (usedOutputProfileFallback)
+        {
+            children.Add(ReasonNode.Leaf(ReasonCode.OutputProfileFallbackUsed, ReasonOutcome.Chosen, ReasonSubject.Method()));
         }
 
         var reasoning = new ReasonNode(ReasonCode.MethodChosen, ReasonOutcome.Chosen, ReasonSubject.Method(), null, children);
@@ -403,9 +473,6 @@ public sealed class PlaybackEngine : IPlaybackEngine
             ? source.SubtitleStreams.FirstOrDefault(s => s.Index == preferredIndex)
             : null;
 
-    private static bool ContainsCodec(IEnumerable<string> codecs, string? codec) =>
-        codec is not null && codecs.Any(c => EqualsIgnoreCase(c, codec));
-
     private static bool EqualsIgnoreCase(string? a, string? b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
 
     private static bool IsTextBasedSubtitle(string format) => TextBasedSubtitleFormats.Contains(format);
@@ -425,21 +492,13 @@ public sealed class PlaybackEngine : IPlaybackEngine
         return Math.Min(a.Value, b.Value);
     }
 
-    private static string SelectTargetCodec(IReadOnlyList<string> available, string preferred, string sourceCodec)
-    {
-        if (ContainsCodec(available, preferred))
-        {
-            return preferred;
-        }
-
-        if (ContainsCodec(available, sourceCodec))
-        {
-            return sourceCodec;
-        }
-
-        return available.Count > 0 ? available[0] : sourceCodec;
-    }
-
+    /// <summary>
+    /// Picks a container from the client's <em>decode</em> container list: used for
+    /// <see cref="PlaybackMethod.Remux"/> (which only ever repackages into a container the client
+    /// already decodes, never an encode target) and as the transcode container fallback when the
+    /// client declares no matching <see cref="PlaybackOutputProfile"/>. Prefers mp4, then ts, then
+    /// whatever is first, matching the pre-PR102 engine's container preference exactly.
+    /// </summary>
     private static string SelectTargetContainer(IReadOnlyList<string> containers, string sourceContainer)
     {
         if (containers.Count == 0)

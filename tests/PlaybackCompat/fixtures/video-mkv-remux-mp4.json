@@ -1,19 +1,22 @@
 {
-  "fixtureVersion": 1,
+  "fixtureVersion": 2,
   "id": "video-mkv-remux-mp4",
   "category": "remux",
-  "engineVersion": 2,
+  "engineVersion": 3,
   "description": "H.264/AAC streams the client can copy, but in an MKV container it does not accept. Expect a container remux to MP4 with both streams copied (no re-encode).",
   "input": {
     "context": { "mediaKind": "Video" },
     "capabilities": {
-      "containers": ["mp4", "ts"],
-      "videoCodecs": [{ "codec": "h264", "profiles": ["high"], "maxLevel": 41, "maxBitDepth": 8, "videoRangeTypes": ["SDR"] }],
-      "audioCodecs": [{ "codec": "aac", "maxChannels": 6 }],
-      "subtitleDelivery": [],
-      "maxResolution": { "width": 1920, "height": 1080 },
-      "maxVideoBitrate": 20000000,
-      "supportsHls": true
+      "decode": {
+        "containers": ["mp4", "ts"],
+        "videoCodecs": [{ "codec": "h264", "profiles": ["high"], "maxLevel": 41, "maxBitDepth": 8, "videoRangeTypes": ["SDR"] }],
+        "audioCodecs": [{ "codec": "aac", "maxChannels": 6 }],
+        "subtitleDelivery": [],
+        "maxResolution": { "width": 1920, "height": 1080 },
+        "maxVideoBitrate": 20000000,
+        "supportsHls": true
+      },
+      "outputProfiles": []
     },
     "source": {
       "mediaSourceId": "src-1",

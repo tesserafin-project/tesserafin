@@ -183,4 +183,10 @@ public enum ReasonCode
     /// No viable playback plan could be produced for the request.
     /// </summary>
     NoViablePlan,
+
+    /// <summary>
+    /// The client declared no <c>PlaybackOutputProfile</c> matching the requested media kind, so
+    /// the engine fell back to its named legacy default transcoding target (PR102).
+    /// </summary>
+    OutputProfileFallbackUsed,
 }

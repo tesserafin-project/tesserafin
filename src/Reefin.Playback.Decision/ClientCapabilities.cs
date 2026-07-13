@@ -3,26 +3,26 @@ using System.Collections.Generic;
 namespace Reefin.Playback.Decision;
 
 /// <summary>
-/// What a client can read, expressed without DLNA vocabulary. An inline, immutable snapshot: the
-/// full capability set travels with the request instead of being referenced by a stored profile
-/// id, so a decision is reproducible from the request alone (RFC PR91 §4, option A).
+/// Everything the v2 engine needs to know about a requesting client: what it can decode as-is
+/// (<see cref="Decode"/>), and separately, what the server should produce when it must transcode
+/// (<see cref="OutputProfiles"/>).
 /// </summary>
-/// <param name="Containers">The containers (muxes) the client accepts.</param>
-/// <param name="VideoCodecs">The video codecs the client can decode, and their limits.</param>
-/// <param name="AudioCodecs">The audio codecs the client can decode, and their limits.</param>
-/// <param name="SubtitleDelivery">The subtitle formats the client can render, and how it wants them delivered.</param>
-/// <param name="MaxResolution">The maximum resolution the client supports, or <see langword="null"/> if unbounded/unknown.</param>
-/// <param name="MaxVideoBitrate">The maximum video bitrate the client supports, or <see langword="null"/> if unbounded/unknown.</param>
-/// <param name="MaxAudioBitrate">The maximum audio bitrate the client supports, or <see langword="null"/> if unbounded/unknown.</param>
-/// <param name="SupportsHls">Whether the client can play HLS renditions.</param>
-/// <param name="SupportsDash">Whether the client can play DASH renditions.</param>
+/// <remarks>
+/// PR102: v2.0/v2.1 modeled only <see cref="Decode"/>, and the DLNA adapter collapsed each
+/// device's ordered <c>TranscodingProfile</c> list into that same flat decode surface. The engine
+/// then had no client-declared transcoding target to select from, so it fell back to hardcoded
+/// preferences (h264/aac/mp4/ts) - which is why a client declaring AV1 as its preferred transcode
+/// target (for example Firefox's HLS/MP4 <c>TranscodingProfile</c>, which lists
+/// <c>"av1,h264,vp9"</c>) was still handed H.264, and why direct-play-vs-remux was sometimes
+/// misclassified. Splitting the two facets restores the client's real declared preference order
+/// end to end: adapter -> domain -> engine.
+/// </remarks>
+/// <param name="Decode">What the client can read without any server-side transformation.</param>
+/// <param name="OutputProfiles">
+/// What the server should produce when it must transcode, in the client's preference order (index
+/// 0 = most preferred). Empty when the client declares no transcoding targets at all, in which case
+/// the engine falls back to a named legacy default (see <c>PlaybackEngine</c>).
+/// </param>
 public sealed record ClientCapabilities(
-    IReadOnlyList<string> Containers,
-    IReadOnlyList<VideoCodecCapability> VideoCodecs,
-    IReadOnlyList<AudioCodecCapability> AudioCodecs,
-    IReadOnlyList<SubtitleCapability> SubtitleDelivery,
-    Resolution? MaxResolution,
-    int? MaxVideoBitrate,
-    int? MaxAudioBitrate,
-    bool SupportsHls,
-    bool SupportsDash);
+    DecodeCapabilities Decode,
+    IReadOnlyList<PlaybackOutputProfile> OutputProfiles);

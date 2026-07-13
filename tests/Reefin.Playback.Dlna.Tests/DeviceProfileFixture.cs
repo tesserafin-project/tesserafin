@@ -39,6 +39,20 @@ internal static class DeviceProfileFixture
             ],
             TranscodingProfiles =
             [
+                // Deliberately declares AV1 ahead of H.264/VP9 (mirrors a real browser profile,
+                // e.g. Firefox's HLS/MP4 TranscodingProfile) so mapper tests can assert that
+                // PlaybackOutputProfile.VideoCodecs preserves this exact order rather than
+                // collapsing it into an unordered capability set (RFC PR102).
+                new TranscodingProfile
+                {
+                    Container = "mp4",
+                    Protocol = MediaStreamProtocol.hls,
+                    Type = DlnaProfileType.Video,
+                    VideoCodec = "av1,h264,vp9",
+                    AudioCodec = "aac,ac3",
+                    Context = EncodingContext.Streaming,
+                    MaxAudioChannels = "6",
+                },
                 new TranscodingProfile
                 {
                     Container = "ts",
@@ -46,6 +60,18 @@ internal static class DeviceProfileFixture
                     Type = DlnaProfileType.Video,
                     VideoCodec = "h264",
                     AudioCodec = "aac",
+                    Context = EncodingContext.Streaming,
+                },
+
+                // A Static-context profile: excluded from PlaybackOutputProfile projection (PR102),
+                // since the v2 domain models streaming playback only.
+                new TranscodingProfile
+                {
+                    Container = "mp4",
+                    Protocol = MediaStreamProtocol.http,
+                    Type = DlnaProfileType.Audio,
+                    AudioCodec = "aac",
+                    Context = EncodingContext.Static,
                 },
             ],
             CodecProfiles =

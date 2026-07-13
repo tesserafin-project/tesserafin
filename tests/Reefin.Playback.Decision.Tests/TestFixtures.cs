@@ -11,24 +11,37 @@ namespace Reefin.Playback.Decision.Tests;
 internal static class TestFixtures
 {
     public static ClientCapabilities SampleClientCapabilities() => new(
-        Containers: ["mp4", "mkv"],
-        VideoCodecs:
+        Decode: new DecodeCapabilities(
+            Containers: ["mp4", "mkv"],
+            VideoCodecs:
+            [
+                new VideoCodecCapability("h264", ["high", "main"], MaxLevel: 51, MaxBitDepth: 8, VideoRangeTypes: ["SDR"]),
+            ],
+            AudioCodecs:
+            [
+                new AudioCodecCapability("aac", MaxChannels: 6, MaxSampleRate: 48000, MaxBitDepth: 16),
+            ],
+            SubtitleDelivery:
+            [
+                new SubtitleCapability("srt", SubtitleDeliveryMethod.External),
+            ],
+            MaxResolution: new Resolution(1920, 1080),
+            MaxVideoBitrate: 20_000_000,
+            MaxAudioBitrate: 384_000,
+            SupportsHls: true,
+            SupportsDash: false),
+        OutputProfiles:
         [
-            new VideoCodecCapability("h264", ["high", "main"], MaxLevel: 51, MaxBitDepth: 8, VideoRangeTypes: ["SDR"]),
-        ],
-        AudioCodecs:
-        [
-            new AudioCodecCapability("aac", MaxChannels: 6, MaxSampleRate: 48000, MaxBitDepth: 16),
-        ],
-        SubtitleDelivery:
-        [
-            new SubtitleCapability("srt", SubtitleDeliveryMethod.External),
-        ],
-        MaxResolution: new Resolution(1920, 1080),
-        MaxVideoBitrate: 20_000_000,
-        MaxAudioBitrate: 384_000,
-        SupportsHls: true,
-        SupportsDash: false);
+            new PlaybackOutputProfile(
+                Type: MediaKind.Video,
+                Protocol: StreamingProtocol.Hls,
+                Container: "ts",
+                VideoCodecs: ["h264"],
+                AudioCodecs: ["aac"],
+                MaxVideoBitrate: 20_000_000,
+                MaxAudioBitrate: 384_000,
+                MaxAudioChannels: 2),
+        ]);
 
     public static MediaSourceSnapshot SampleMediaSourceSnapshot() => new(
         MediaSourceId: "source-1",

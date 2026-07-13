@@ -1,17 +1,22 @@
 {
-  "fixtureVersion": 1,
+  "fixtureVersion": 2,
   "id": "subtitle-pgs-burn-in",
   "category": "subtitle-burn-in",
-  "engineVersion": 2,
-  "description": "Video and audio are directly playable, but the requested PGS subtitle (image-based) has no supported delivery — only external SRT is. Burning it in forces a video re-encode; audio copied; container unchanged.",
+  "engineVersion": 3,
+  "description": "Video and audio are directly playable, but the requested PGS subtitle (image-based) has no supported delivery — only external SRT is. Burning it in forces a video re-encode (targeting the client's declared H.264 output profile); audio copied; container unchanged.",
   "input": {
     "context": { "mediaKind": "Video" },
     "capabilities": {
-      "containers": ["mp4"],
-      "videoCodecs": [{ "codec": "h264", "profiles": [], "maxLevel": 62, "maxBitDepth": 10, "videoRangeTypes": ["SDR"] }],
-      "audioCodecs": [{ "codec": "aac", "maxChannels": 8 }],
-      "subtitleDelivery": [{ "format": "srt", "method": "External" }],
-      "maxVideoBitrate": 100000000
+      "decode": {
+        "containers": ["mp4"],
+        "videoCodecs": [{ "codec": "h264", "profiles": [], "maxLevel": 62, "maxBitDepth": 10, "videoRangeTypes": ["SDR"] }],
+        "audioCodecs": [{ "codec": "aac", "maxChannels": 8 }],
+        "subtitleDelivery": [{ "format": "srt", "method": "External" }],
+        "maxVideoBitrate": 100000000
+      },
+      "outputProfiles": [
+        { "type": "Video", "protocol": "Http", "container": "mp4", "videoCodecs": ["h264"], "audioCodecs": ["aac"] }
+      ]
     },
     "source": {
       "mediaSourceId": "src-1",

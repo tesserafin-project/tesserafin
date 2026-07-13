@@ -1,19 +1,24 @@
 {
-  "fixtureVersion": 1,
+  "fixtureVersion": 2,
   "id": "video-mkv-dts-to-aac",
   "category": "audio-transcode",
-  "engineVersion": 2,
-  "description": "The plan's canonical case: MKV container refused, H.264 video is copyable, DTS audio is not decodable by the client. Expect remux + audio transcode to AAC, video copied.",
+  "engineVersion": 3,
+  "description": "The plan's canonical case: MKV container refused, H.264 video is copyable, DTS audio is not decodable by the client. Expect remux + audio transcode to AAC, video copied. The client's declared output profile targets mp4/h264/aac.",
   "input": {
     "context": { "mediaKind": "Video" },
     "capabilities": {
-      "containers": ["mp4", "ts"],
-      "videoCodecs": [{ "codec": "h264", "profiles": ["high"], "maxLevel": 41, "maxBitDepth": 8, "videoRangeTypes": ["SDR"] }],
-      "audioCodecs": [{ "codec": "aac", "maxChannels": 6 }, { "codec": "ac3", "maxChannels": 6 }],
-      "subtitleDelivery": [],
-      "maxResolution": { "width": 1920, "height": 1080 },
-      "maxVideoBitrate": 20000000,
-      "supportsHls": true
+      "decode": {
+        "containers": ["mp4", "ts"],
+        "videoCodecs": [{ "codec": "h264", "profiles": ["high"], "maxLevel": 41, "maxBitDepth": 8, "videoRangeTypes": ["SDR"] }],
+        "audioCodecs": [{ "codec": "aac", "maxChannels": 6 }, { "codec": "ac3", "maxChannels": 6 }],
+        "subtitleDelivery": [],
+        "maxResolution": { "width": 1920, "height": 1080 },
+        "maxVideoBitrate": 20000000,
+        "supportsHls": true
+      },
+      "outputProfiles": [
+        { "type": "Video", "protocol": "Http", "container": "mp4", "videoCodecs": ["h264"], "audioCodecs": ["aac"] }
+      ]
     },
     "source": {
       "mediaSourceId": "src-1",

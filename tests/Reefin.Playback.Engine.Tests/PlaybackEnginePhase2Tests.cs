@@ -36,15 +36,17 @@ public static class PlaybackEnginePhase2Tests
     private static PlaybackDecision DecideWithVideoLevel(double level)
     {
         var capabilities = new ClientCapabilities(
-            Containers: ["mp4"],
-            VideoCodecs: [new VideoCodecCapability("h264", [], MaxLevel: 41, null, [])],
-            AudioCodecs: [new AudioCodecCapability("aac", null, null, null)],
-            SubtitleDelivery: [],
-            MaxResolution: null,
-            MaxVideoBitrate: null,
-            MaxAudioBitrate: null,
-            SupportsHls: false,
-            SupportsDash: false);
+            Decode: new DecodeCapabilities(
+                Containers: ["mp4"],
+                VideoCodecs: [new VideoCodecCapability("h264", [], MaxLevel: 41, null, [])],
+                AudioCodecs: [new AudioCodecCapability("aac", null, null, null)],
+                SubtitleDelivery: [],
+                MaxResolution: null,
+                MaxVideoBitrate: null,
+                MaxAudioBitrate: null,
+                SupportsHls: false,
+                SupportsDash: false),
+            OutputProfiles: []);
 
         var source = EngineTestFixtures.Source(
             "source-1",
@@ -83,15 +85,17 @@ public static class PlaybackEnginePhase2Tests
     {
         // effMaxChannels = min(cap.MaxChannels=6, constraints.MaxAudioChannels=2) = 2.
         var capabilities = new ClientCapabilities(
-            Containers: ["mp4"],
-            VideoCodecs: [],
-            AudioCodecs: [new AudioCodecCapability("aac", MaxChannels: 6, null, null)],
-            SubtitleDelivery: [],
-            MaxResolution: null,
-            MaxVideoBitrate: null,
-            MaxAudioBitrate: null,
-            SupportsHls: false,
-            SupportsDash: false);
+            Decode: new DecodeCapabilities(
+                Containers: ["mp4"],
+                VideoCodecs: [],
+                AudioCodecs: [new AudioCodecCapability("aac", MaxChannels: 6, null, null)],
+                SubtitleDelivery: [],
+                MaxResolution: null,
+                MaxVideoBitrate: null,
+                MaxAudioBitrate: null,
+                SupportsHls: false,
+                SupportsDash: false),
+            OutputProfiles: []);
 
         var source = EngineTestFixtures.Source(
             "source-1",
@@ -131,15 +135,17 @@ public static class PlaybackEnginePhase2Tests
     private static PlaybackDecision DecideWithResolution(int width, int height)
     {
         var capabilities = new ClientCapabilities(
-            Containers: ["mp4"],
-            VideoCodecs: [new VideoCodecCapability("h264", [], null, null, [])],
-            AudioCodecs: [new AudioCodecCapability("aac", null, null, null)],
-            SubtitleDelivery: [],
-            MaxResolution: new Resolution(1920, 1080),
-            MaxVideoBitrate: null,
-            MaxAudioBitrate: null,
-            SupportsHls: false,
-            SupportsDash: false);
+            Decode: new DecodeCapabilities(
+                Containers: ["mp4"],
+                VideoCodecs: [new VideoCodecCapability("h264", [], null, null, [])],
+                AudioCodecs: [new AudioCodecCapability("aac", null, null, null)],
+                SubtitleDelivery: [],
+                MaxResolution: new Resolution(1920, 1080),
+                MaxVideoBitrate: null,
+                MaxAudioBitrate: null,
+                SupportsHls: false,
+                SupportsDash: false),
+            OutputProfiles: []);
 
         var source = EngineTestFixtures.Source(
             "source-1",
@@ -155,15 +161,17 @@ public static class PlaybackEnginePhase2Tests
     public static void Decide_SubtitleAlreadyExternal_DeliversExternalWithNoExtractAndStaysDirectPlay()
     {
         var capabilities = new ClientCapabilities(
-            Containers: ["mp4"],
-            VideoCodecs: [new VideoCodecCapability("h264", [], null, null, [])],
-            AudioCodecs: [new AudioCodecCapability("aac", null, null, null)],
-            SubtitleDelivery: [new SubtitleCapability("srt", SubtitleDeliveryMethod.External)],
-            MaxResolution: null,
-            MaxVideoBitrate: null,
-            MaxAudioBitrate: null,
-            SupportsHls: false,
-            SupportsDash: false);
+            Decode: new DecodeCapabilities(
+                Containers: ["mp4"],
+                VideoCodecs: [new VideoCodecCapability("h264", [], null, null, [])],
+                AudioCodecs: [new AudioCodecCapability("aac", null, null, null)],
+                SubtitleDelivery: [new SubtitleCapability("srt", SubtitleDeliveryMethod.External)],
+                MaxResolution: null,
+                MaxVideoBitrate: null,
+                MaxAudioBitrate: null,
+                SupportsHls: false,
+                SupportsDash: false),
+            OutputProfiles: []);
 
         var source = EngineTestFixtures.Source(
             "source-1",
@@ -190,15 +198,17 @@ public static class PlaybackEnginePhase2Tests
     public static void Decide_SubtitleUnsupportedFormat_BurnsInAndTranscodes()
     {
         var capabilities = new ClientCapabilities(
-            Containers: ["mp4"],
-            VideoCodecs: [new VideoCodecCapability("h264", [], null, null, [])],
-            AudioCodecs: [new AudioCodecCapability("aac", null, null, null)],
-            SubtitleDelivery: [new SubtitleCapability("srt", SubtitleDeliveryMethod.External)],
-            MaxResolution: null,
-            MaxVideoBitrate: null,
-            MaxAudioBitrate: null,
-            SupportsHls: false,
-            SupportsDash: false);
+            Decode: new DecodeCapabilities(
+                Containers: ["mp4"],
+                VideoCodecs: [new VideoCodecCapability("h264", [], null, null, [])],
+                AudioCodecs: [new AudioCodecCapability("aac", null, null, null)],
+                SubtitleDelivery: [new SubtitleCapability("srt", SubtitleDeliveryMethod.External)],
+                MaxResolution: null,
+                MaxVideoBitrate: null,
+                MaxAudioBitrate: null,
+                SupportsHls: false,
+                SupportsDash: false),
+            OutputProfiles: []);
 
         var source = EngineTestFixtures.Source(
             "source-1",
@@ -230,15 +240,17 @@ public static class PlaybackEnginePhase2Tests
         // AlwaysBurnInSubtitleWhenTranscoding overrides that once a video transcode is already
         // happening.
         var capabilities = new ClientCapabilities(
-            Containers: ["mp4"],
-            VideoCodecs: [new VideoCodecCapability("h264", [], null, null, [])],
-            AudioCodecs: [new AudioCodecCapability("aac", null, null, null)],
-            SubtitleDelivery: [new SubtitleCapability("srt", SubtitleDeliveryMethod.External)],
-            MaxResolution: null,
-            MaxVideoBitrate: null,
-            MaxAudioBitrate: null,
-            SupportsHls: false,
-            SupportsDash: false);
+            Decode: new DecodeCapabilities(
+                Containers: ["mp4"],
+                VideoCodecs: [new VideoCodecCapability("h264", [], null, null, [])],
+                AudioCodecs: [new AudioCodecCapability("aac", null, null, null)],
+                SubtitleDelivery: [new SubtitleCapability("srt", SubtitleDeliveryMethod.External)],
+                MaxResolution: null,
+                MaxVideoBitrate: null,
+                MaxAudioBitrate: null,
+                SupportsHls: false,
+                SupportsDash: false),
+            OutputProfiles: []);
 
         var source = EngineTestFixtures.Source(
             "source-1",
@@ -264,15 +276,17 @@ public static class PlaybackEnginePhase2Tests
     public static void Decide_TranscodeDisallowedButNeeded_IsNotViable()
     {
         var capabilities = new ClientCapabilities(
-            Containers: ["mp4"],
-            VideoCodecs: [new VideoCodecCapability("h264", [], null, null, [])],
-            AudioCodecs: [new AudioCodecCapability("aac", null, null, null)],
-            SubtitleDelivery: [],
-            MaxResolution: null,
-            MaxVideoBitrate: null,
-            MaxAudioBitrate: null,
-            SupportsHls: false,
-            SupportsDash: false);
+            Decode: new DecodeCapabilities(
+                Containers: ["mp4"],
+                VideoCodecs: [new VideoCodecCapability("h264", [], null, null, [])],
+                AudioCodecs: [new AudioCodecCapability("aac", null, null, null)],
+                SubtitleDelivery: [],
+                MaxResolution: null,
+                MaxVideoBitrate: null,
+                MaxAudioBitrate: null,
+                SupportsHls: false,
+                SupportsDash: false),
+            OutputProfiles: []);
 
         // av1 is not decodable by the client at all, so a viable plan needs a video transcode -
         // but this request disallows transcoding outright.
@@ -303,15 +317,17 @@ public static class PlaybackEnginePhase2Tests
         // videoOk/audioOk gates could never be satisfied); phase 2 must too, rather than crash
         // trying to build a StreamCopyable reason with no selected stream to reference.
         var capabilities = new ClientCapabilities(
-            Containers: ["mp4"],
-            VideoCodecs: [new VideoCodecCapability("h264", [], null, null, [])],
-            AudioCodecs: [new AudioCodecCapability("aac", null, null, null)],
-            SubtitleDelivery: [],
-            MaxResolution: null,
-            MaxVideoBitrate: null,
-            MaxAudioBitrate: null,
-            SupportsHls: false,
-            SupportsDash: false);
+            Decode: new DecodeCapabilities(
+                Containers: ["mp4"],
+                VideoCodecs: [new VideoCodecCapability("h264", [], null, null, [])],
+                AudioCodecs: [new AudioCodecCapability("aac", null, null, null)],
+                SubtitleDelivery: [],
+                MaxResolution: null,
+                MaxVideoBitrate: null,
+                MaxAudioBitrate: null,
+                SupportsHls: false,
+                SupportsDash: false),
+            OutputProfiles: []);
 
         var source = EngineTestFixtures.Source("source-1", "mkv");
 
@@ -320,6 +336,89 @@ public static class PlaybackEnginePhase2Tests
 
         Assert.False(decision.IsViable);
         Assert.Equal(string.Empty, decision.SelectedSource);
+    }
+
+    [Fact]
+    public static void Decide_ClientDeclaresAv1BeforeH264InOutputProfile_TranscodesToAv1()
+    {
+        // The PR98 oracle finding (RFC PR102): a client (Firefox) that lists AV1 ahead of H.264 in
+        // its declared transcoding target order must be handed AV1 when the engine has to
+        // transcode, not a hardcoded H.264 default. The source codec (vp9) is undecodable so a
+        // video transcode is forced; the client's OutputProfile lists av1 before h264.
+        var capabilities = new ClientCapabilities(
+            Decode: new DecodeCapabilities(
+                Containers: ["mp4"],
+                VideoCodecs: [new VideoCodecCapability("h264", [], null, null, [])],
+                AudioCodecs: [new AudioCodecCapability("aac", null, null, null)],
+                SubtitleDelivery: [],
+                MaxResolution: null,
+                MaxVideoBitrate: null,
+                MaxAudioBitrate: null,
+                SupportsHls: true,
+                SupportsDash: false),
+            OutputProfiles:
+            [
+                new PlaybackOutputProfile(
+                    Type: MediaKind.Video,
+                    Protocol: StreamingProtocol.Hls,
+                    Container: "mp4",
+                    VideoCodecs: ["av1", "h264"],
+                    AudioCodecs: ["aac"],
+                    MaxVideoBitrate: null,
+                    MaxAudioBitrate: null,
+                    MaxAudioChannels: null),
+            ]);
+
+        var source = EngineTestFixtures.Source(
+            "source-1",
+            "mp4",
+            videoStreams: [EngineTestFixtures.VideoStream(0, "vp9")],
+            audioStreams: [EngineTestFixtures.AudioStream(1, "aac", isDefault: true)]);
+
+        var engine = new PlaybackEngine();
+        var decision = engine.Decide(EngineTestFixtures.Context(MediaKind.Video), capabilities, [source], EngineTestFixtures.Constraints());
+
+        Assert.True(decision.IsViable);
+        Assert.Equal(PlaybackMethod.Transcode, decision.Method);
+        Assert.Equal("av1", decision.Output.VideoCodec);
+        Assert.Equal("mp4", decision.Output.Container);
+        Assert.DoesNotContain(ReasonCode.OutputProfileFallbackUsed, FlattenReasonCodes(decision.Reasoning));
+    }
+
+    [Fact]
+    public static void Decide_NoOutputProfileDeclared_FallsBackToNamedLegacyDefault()
+    {
+        // A client declaring no PlaybackOutputProfile at all for the requested media kind must not
+        // crash or silently transcode to nothing: the engine falls back to its named legacy
+        // default (h264/aac) and records that fact with a dedicated ReasonCode, rather than an
+        // inline magic-value substitution.
+        var capabilities = new ClientCapabilities(
+            Decode: new DecodeCapabilities(
+                Containers: ["mp4"],
+                VideoCodecs: [],
+                AudioCodecs: [],
+                SubtitleDelivery: [],
+                MaxResolution: null,
+                MaxVideoBitrate: null,
+                MaxAudioBitrate: null,
+                SupportsHls: false,
+                SupportsDash: false),
+            OutputProfiles: []);
+
+        var source = EngineTestFixtures.Source(
+            "source-1",
+            "mp4",
+            videoStreams: [EngineTestFixtures.VideoStream(0, "vp9")],
+            audioStreams: [EngineTestFixtures.AudioStream(1, "flac", isDefault: true)]);
+
+        var engine = new PlaybackEngine();
+        var decision = engine.Decide(EngineTestFixtures.Context(MediaKind.Video), capabilities, [source], EngineTestFixtures.Constraints());
+
+        Assert.True(decision.IsViable);
+        Assert.Equal(PlaybackMethod.Transcode, decision.Method);
+        Assert.Equal("h264", decision.Output.VideoCodec);
+        Assert.Equal("aac", decision.Output.AudioCodec);
+        Assert.Contains(ReasonCode.OutputProfileFallbackUsed, FlattenReasonCodes(decision.Reasoning));
     }
 
     private static IEnumerable<ReasonCode> FlattenReasonCodes(ReasonNode node)

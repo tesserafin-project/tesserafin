@@ -1,13 +1,13 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://reefin/tests/PlaybackCompat/fixture.schema.json",
-  "title": "Playback compatibility fixture (v1)",
-  "description": "Versioned fixture for the playback-decision compatibility lab (PR93). Input mirrors the PR91 domain objects; 'expected' describes the v2 PlaybackDecision. Legacy projection is computed at run time and compared by category (PR98), never by raw StreamInfo equality.",
+  "title": "Playback compatibility fixture (v2)",
+  "description": "Versioned fixture for the playback-decision compatibility lab (PR93). Input mirrors the PR91 domain objects; 'expected' describes the v2 PlaybackDecision. Legacy projection is computed at run time and compared by category (PR98), never by raw StreamInfo equality. v2 (PR102): 'capabilities' splits into 'decode' (DecodeCapabilities) and 'outputProfiles' (ordered PlaybackOutputProfile list), replacing the v1 flat capability shape.",
   "type": "object",
   "required": ["fixtureVersion", "id", "category", "engineVersion", "input", "expected"],
   "additionalProperties": false,
   "properties": {
-    "fixtureVersion": { "const": 1 },
+    "fixtureVersion": { "const": 2 },
     "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
     "category": {
       "type": "string",
@@ -36,55 +36,79 @@
         },
         "capabilities": {
           "type": "object",
-          "description": "ClientCapabilities (PR91 §3.2). No DLNA DeviceProfile.",
+          "description": "ClientCapabilities (PR91 §3.2, split into decode/outputProfiles by PR102). No DLNA DeviceProfile.",
           "properties": {
-            "containers": { "type": "array", "items": { "type": "string" } },
-            "videoCodecs": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "codec": { "type": "string" },
-                  "profiles": { "type": "array", "items": { "type": "string" } },
-                  "maxLevel": { "type": ["number", "null"] },
-                  "maxBitDepth": { "type": ["integer", "null"] },
-                  "videoRangeTypes": { "type": "array", "items": { "type": "string" } }
+            "decode": {
+              "type": "object",
+              "description": "DecodeCapabilities: what the client can read as-is, no server-side transformation.",
+              "properties": {
+                "containers": { "type": "array", "items": { "type": "string" } },
+                "videoCodecs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "codec": { "type": "string" },
+                      "profiles": { "type": "array", "items": { "type": "string" } },
+                      "maxLevel": { "type": ["number", "null"] },
+                      "maxBitDepth": { "type": ["integer", "null"] },
+                      "videoRangeTypes": { "type": "array", "items": { "type": "string" } }
+                    },
+                    "required": ["codec"]
+                  }
                 },
-                "required": ["codec"]
+                "audioCodecs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "codec": { "type": "string" },
+                      "maxChannels": { "type": ["integer", "null"] },
+                      "maxSampleRate": { "type": ["integer", "null"] },
+                      "maxBitDepth": { "type": ["integer", "null"] }
+                    },
+                    "required": ["codec"]
+                  }
+                },
+                "subtitleDelivery": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "format": { "type": "string" },
+                      "method": { "enum": ["Embed", "External", "Burn", "Hls"] }
+                    },
+                    "required": ["format", "method"]
+                  }
+                },
+                "maxResolution": {
+                  "type": ["object", "null"],
+                  "properties": { "width": { "type": "integer" }, "height": { "type": "integer" } }
+                },
+                "maxVideoBitrate": { "type": ["integer", "null"] },
+                "maxAudioBitrate": { "type": ["integer", "null"] },
+                "supportsHls": { "type": "boolean" },
+                "supportsDash": { "type": "boolean" }
               }
             },
-            "audioCodecs": {
+            "outputProfiles": {
               "type": "array",
+              "description": "Ordered PlaybackOutputProfile list (PR102): what the server should produce when it must transcode, index 0 = most preferred. Empty means the client declares no transcoding target; the engine falls back to a named legacy default.",
               "items": {
                 "type": "object",
+                "required": ["type", "container"],
                 "properties": {
-                  "codec": { "type": "string" },
-                  "maxChannels": { "type": ["integer", "null"] },
-                  "maxSampleRate": { "type": ["integer", "null"] },
-                  "maxBitDepth": { "type": ["integer", "null"] }
-                },
-                "required": ["codec"]
+                  "type": { "enum": ["Audio", "Video"] },
+                  "protocol": { "enum": ["Http", "Hls"] },
+                  "container": { "type": "string" },
+                  "videoCodecs": { "type": "array", "items": { "type": "string" } },
+                  "audioCodecs": { "type": "array", "items": { "type": "string" } },
+                  "maxVideoBitrate": { "type": ["integer", "null"] },
+                  "maxAudioBitrate": { "type": ["integer", "null"] },
+                  "maxAudioChannels": { "type": ["integer", "null"] }
+                }
               }
-            },
-            "subtitleDelivery": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "format": { "type": "string" },
-                  "method": { "enum": ["Embed", "External", "Burn", "Hls"] }
-                },
-                "required": ["format", "method"]
-              }
-            },
-            "maxResolution": {
-              "type": ["object", "null"],
-              "properties": { "width": { "type": "integer" }, "height": { "type": "integer" } }
-            },
-            "maxVideoBitrate": { "type": ["integer", "null"] },
-            "maxAudioBitrate": { "type": ["integer", "null"] },
-            "supportsHls": { "type": "boolean" },
-            "supportsDash": { "type": "boolean" }
+            }
           }
         },
         "source": {

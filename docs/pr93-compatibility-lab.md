@@ -21,21 +21,27 @@ Comparer, pour une même entrée, la décision du **moteur legacy** (projeté en
 
 ---
 
-## 2. Format de fixture (v1)
+## 2. Format de fixture (v2, PR102)
 
-Champ `fixtureVersion: 1`. Structure alignée sur les objets PR91.
+Champ `fixtureVersion: 2`. Structure alignée sur les objets PR91, mise à jour par PR102 pour
+séparer capacités de décodage et cibles d'encodage sur `capabilities` (bump depuis le v1 de PR93 :
+`capabilities` était un objet plat `ClientCapabilities`, remplacé par `decode` +
+`outputProfiles`).
 
 ```jsonc
 {
-  "fixtureVersion": 1,
+  "fixtureVersion": 2,
   "id": "video-h264-aac-mp4-directplay",   // stable, = nom de fichier
   "category": "direct-play",                // voir MANIFEST
-  "engineVersion": 2,                        // version de moteur v2 attendue
+  "engineVersion": 3,                        // version de moteur v2 attendue
   "description": "H.264/AAC en MP4, client compatible → direct play",
 
   "input": {
     "context":      { /* PlaybackRequestContext (sans PII) */ },
-    "capabilities": { /* ClientCapabilities  (PR91 §3.2) */ },
+    "capabilities": {
+      "decode":         { /* DecodeCapabilities: ce que le client sait lire (PR102) */ },
+      "outputProfiles": [ /* PlaybackOutputProfile[], ordre = préférence client (PR102) */ ]
+    },
     "source":       { /* MediaSourceSnapshot (PR91 §3.3) */ },
     "constraints":  { /* PlaybackConstraints (PR91 §3.4) */ }
   },
@@ -52,6 +58,10 @@ Champ `fixtureVersion: 1`. Structure alignée sur les objets PR91.
 ```
 
 Le champ `expected` décrit la **décision v2**. La projection legacy est calculée à l'exécution (PR98) et comparée par catégories (§4).
+
+`outputProfiles` vide signifie que le client ne déclare aucune cible de transcodage ; le moteur
+retombe alors sur un défaut legacy nommé (h264/aac, conteneur choisi parmi `decode.containers`),
+tracé par le `ReasonCode.OutputProfileFallbackUsed` dédié.
 
 ---
 

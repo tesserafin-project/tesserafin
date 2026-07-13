@@ -1,18 +1,23 @@
 {
-  "fixtureVersion": 1,
+  "fixtureVersion": 2,
   "id": "video-hdr-tonemap",
   "category": "hdr-tonemap",
-  "engineVersion": 2,
-  "description": "HEVC HDR10 whose codec, level, bit depth and resolution are all accepted, but the client supports only SDR. Only the video range trips: video re-encodes with tonemapping to SDR; audio copied; container unchanged.",
+  "engineVersion": 3,
+  "description": "HEVC HDR10 whose codec, level, bit depth and resolution are all accepted, but the client supports only SDR. Only the video range trips: video re-encodes with tonemapping to SDR (targeting the client's declared HEVC output profile); audio copied; container unchanged.",
   "input": {
     "context": { "mediaKind": "Video" },
     "capabilities": {
-      "containers": ["mp4"],
-      "videoCodecs": [{ "codec": "hevc", "profiles": [], "maxLevel": 153, "maxBitDepth": 10, "videoRangeTypes": ["SDR"] }],
-      "audioCodecs": [{ "codec": "aac", "maxChannels": 8 }],
-      "subtitleDelivery": [],
-      "maxResolution": { "width": 3840, "height": 2160 },
-      "maxVideoBitrate": 100000000
+      "decode": {
+        "containers": ["mp4"],
+        "videoCodecs": [{ "codec": "hevc", "profiles": [], "maxLevel": 153, "maxBitDepth": 10, "videoRangeTypes": ["SDR"] }],
+        "audioCodecs": [{ "codec": "aac", "maxChannels": 8 }],
+        "subtitleDelivery": [],
+        "maxResolution": { "width": 3840, "height": 2160 },
+        "maxVideoBitrate": 100000000
+      },
+      "outputProfiles": [
+        { "type": "Video", "protocol": "Http", "container": "mp4", "videoCodecs": ["hevc"], "audioCodecs": ["aac"] }
+      ]
     },
     "source": {
       "mediaSourceId": "src-1",

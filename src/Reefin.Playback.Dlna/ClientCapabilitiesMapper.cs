@@ -16,9 +16,12 @@ namespace Reefin.Playback.Dlna;
 /// This is a faithful projection of the capabilities a <see cref="DeviceProfile"/>
 /// <em>declares</em>, not a re-implementation of the DLNA <c>StreamBuilder</c> evaluation logic
 /// (which combines declared capabilities with a specific source to pick a play method). The
-/// resulting <see cref="ClientCapabilities"/> only describes what the client can decode; it is the
-/// v2 engine's job (PR96-PR97) to combine it with a <see cref="MediaSourceSnapshot"/> and
-/// <see cref="PlaybackConstraints"/> to produce a decision.
+/// resulting <see cref="ClientCapabilities"/> describes both what the client can decode
+/// (<see cref="DecodeCapabilities"/>, from <c>DirectPlayProfiles</c>/<c>CodecProfiles</c>) and,
+/// separately, what the server should produce when it must transcode
+/// (<see cref="PlaybackOutputProfile"/>, from <c>TranscodingProfiles</c>, order preserved - PR102).
+/// It is the v2 engine's job (PR96-PR97, PR102) to combine this with a
+/// <see cref="MediaSourceSnapshot"/> and <see cref="PlaybackConstraints"/> to produce a decision.
 /// </remarks>
 public static class ClientCapabilitiesMapper
 {
@@ -33,6 +36,13 @@ public static class ClientCapabilitiesMapper
     {
         ArgumentNullException.ThrowIfNull(profile);
 
+        return new ClientCapabilities(
+            Decode: BuildDecodeCapabilities(profile),
+            OutputProfiles: BuildOutputProfiles(profile));
+    }
+
+    private static DecodeCapabilities BuildDecodeCapabilities(DeviceProfile profile)
+    {
         var containers = profile.DirectPlayProfiles
             .Where(static p => p.Type == DlnaProfileType.Video || p.Type == DlnaProfileType.Audio)
             .SelectMany(static p => SplitCsv(p.Container))
@@ -71,7 +81,7 @@ public static class ClientCapabilitiesMapper
         // DLNA-declared DeviceProfile can never express DASH support. Always false.
         const bool supportsDash = false;
 
-        return new ClientCapabilities(
+        return new DecodeCapabilities(
             Containers: containers,
             VideoCodecs: videoCodecs,
             AudioCodecs: audioCodecs,
@@ -82,6 +92,75 @@ public static class ClientCapabilitiesMapper
             SupportsHls: supportsHls,
             SupportsDash: supportsDash);
     }
+
+    /// <summary>
+    /// Projects the device's <c>TranscodingProfiles</c> into ordered <see cref="PlaybackOutputProfile"/>
+    /// entries (PR102): unlike <see cref="BuildDecodeCapabilities"/>, list order is preserved
+    /// exactly as declared, because that order <em>is</em> the client's transcoding preference (for
+    /// example a browser listing <c>"av1,h264,vp9"</c> on its HLS/MP4 profile prefers AV1 output).
+    /// Only <see cref="EncodingContext.Streaming"/> profiles are projected: the v2 domain has no
+    /// concept of a <see cref="EncodingContext.Static"/> (whole-file conversion) request, so a
+    /// device's static-context transcoding profiles - duplicates of its streaming ones, aimed at a
+    /// different use case entirely - would only add noise to the preference order the engine reads.
+    /// </summary>
+    private static IReadOnlyList<PlaybackOutputProfile> BuildOutputProfiles(DeviceProfile profile)
+    {
+        var result = new List<PlaybackOutputProfile>(profile.TranscodingProfiles.Length);
+        foreach (var transcodingProfile in profile.TranscodingProfiles)
+        {
+            if (transcodingProfile.Context != EncodingContext.Streaming)
+            {
+                continue;
+            }
+
+            MediaKind type;
+            if (transcodingProfile.Type == DlnaProfileType.Video)
+            {
+                type = MediaKind.Video;
+            }
+            else if (transcodingProfile.Type == DlnaProfileType.Audio)
+            {
+                type = MediaKind.Audio;
+            }
+            else
+            {
+                // Photo/Subtitle/Lyric transcoding profiles have no v2 MediaKind equivalent and
+                // never occur in practice; skip rather than misclassify.
+                continue;
+            }
+
+            var protocol = transcodingProfile.Protocol == Reefin.Data.Enums.MediaStreamProtocol.hls
+                ? StreamingProtocol.Hls
+                : StreamingProtocol.Http;
+
+            var container = SplitCsv(transcodingProfile.Container).Select(static c => c.ToLowerInvariant()).FirstOrDefault() ?? string.Empty;
+
+            var videoCodecs = type == MediaKind.Video
+                ? SplitCsv(transcodingProfile.VideoCodec).Select(static c => c.ToLowerInvariant()).ToList()
+                : [];
+            var audioCodecs = SplitCsv(transcodingProfile.AudioCodec).Select(static c => c.ToLowerInvariant()).ToList();
+
+            var conditions = transcodingProfile.Conditions ?? [];
+            var maxVideoBitrate = MinInt(conditions, ProfileConditionValue.VideoBitrate, ProfileConditionType.LessThanEqual);
+            var maxAudioBitrate = MinInt(conditions, ProfileConditionValue.AudioBitrate, ProfileConditionType.LessThanEqual);
+            var maxAudioChannels = ParseNullableInt(transcodingProfile.MaxAudioChannels);
+
+            result.Add(new PlaybackOutputProfile(
+                Type: type,
+                Protocol: protocol,
+                Container: container,
+                VideoCodecs: videoCodecs,
+                AudioCodecs: audioCodecs,
+                MaxVideoBitrate: maxVideoBitrate,
+                MaxAudioBitrate: maxAudioBitrate,
+                MaxAudioChannels: maxAudioChannels));
+        }
+
+        return result;
+    }
+
+    private static int? ParseNullableInt(string? value) =>
+        int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) ? parsed : null;
 
     private static IReadOnlyList<VideoCodecCapability> BuildVideoCodecCapabilities(DeviceProfile profile)
     {

@@ -1,17 +1,20 @@
 {
-  "fixtureVersion": 1,
+  "fixtureVersion": 2,
   "id": "subtitle-srt-external",
   "category": "subtitle-external",
-  "engineVersion": 2,
+  "engineVersion": 3,
   "description": "Directly playable video and audio plus a requested external SRT subtitle the client accepts as an external sidecar. Nothing forces a transcode: direct play, subtitle delivered externally.",
   "input": {
     "context": { "mediaKind": "Video" },
     "capabilities": {
-      "containers": ["mp4"],
-      "videoCodecs": [{ "codec": "h264", "profiles": [], "maxLevel": 62, "maxBitDepth": 10, "videoRangeTypes": ["SDR"] }],
-      "audioCodecs": [{ "codec": "aac", "maxChannels": 8 }],
-      "subtitleDelivery": [{ "format": "srt", "method": "External" }],
-      "maxVideoBitrate": 100000000
+      "decode": {
+        "containers": ["mp4"],
+        "videoCodecs": [{ "codec": "h264", "profiles": [], "maxLevel": 62, "maxBitDepth": 10, "videoRangeTypes": ["SDR"] }],
+        "audioCodecs": [{ "codec": "aac", "maxChannels": 8 }],
+        "subtitleDelivery": [{ "format": "srt", "method": "External" }],
+        "maxVideoBitrate": 100000000
+      },
+      "outputProfiles": []
     },
     "source": {
       "mediaSourceId": "src-1",
