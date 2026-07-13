@@ -1,0 +1,46 @@
+{
+  "fixtureVersion": 1,
+  "id": "video-mkv-remux-mp4",
+  "category": "remux",
+  "engineVersion": 2,
+  "description": "H.264/AAC streams the client can copy, but in an MKV container it does not accept. Expect a container remux to MP4 with both streams copied (no re-encode).",
+  "input": {
+    "context": { "mediaKind": "Video" },
+    "capabilities": {
+      "containers": ["mp4", "ts"],
+      "videoCodecs": [{ "codec": "h264", "profiles": ["high"], "maxLevel": 41, "maxBitDepth": 8, "videoRangeTypes": ["SDR"] }],
+      "audioCodecs": [{ "codec": "aac", "maxChannels": 6 }],
+      "subtitleDelivery": [],
+      "maxResolution": { "width": 1920, "height": 1080 },
+      "maxVideoBitrate": 20000000,
+      "supportsHls": true
+    },
+    "source": {
+      "mediaSourceId": "src-1",
+      "container": "mkv",
+      "protocol": "File",
+      "bitrate": 9000000,
+      "videoStreams": [{ "index": 0, "codec": "h264", "profile": "high", "level": 40, "width": 1920, "height": 1080, "bitDepth": 8, "videoRange": "SDR" }],
+      "audioStreams": [{ "index": 1, "codec": "aac", "channels": 2, "sampleRate": 48000, "isDefault": true }],
+      "subtitleStreams": [],
+      "supportsDirectPlay": true,
+      "supportsDirectStream": true,
+      "supportsTranscoding": true
+    },
+    "constraints": {
+      "allowDirectPlay": true,
+      "allowDirectStream": true,
+      "allowTranscoding": true,
+      "allowVideoStreamCopy": true,
+      "allowAudioStreamCopy": true
+    }
+  },
+  "expected": {
+    "method": "Remux",
+    "selectedStreams": { "video": 0, "audio": 1, "subtitle": null },
+    "output": { "container": "mp4", "videoCodec": "h264", "audioCodec": "aac" },
+    "transforms": ["RemuxContainer", "CopyVideo", "CopyAudio"],
+    "reasonCodes": ["ContainerNotSupported", "StreamCopyable", "MethodChosen"],
+    "isViable": true
+  }
+}

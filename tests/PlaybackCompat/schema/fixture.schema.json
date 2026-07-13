@@ -1,0 +1,210 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://reefin/tests/PlaybackCompat/fixture.schema.json",
+  "title": "Playback compatibility fixture (v1)",
+  "description": "Versioned fixture for the playback-decision compatibility lab (PR93). Input mirrors the PR91 domain objects; 'expected' describes the v2 PlaybackDecision. Legacy projection is computed at run time and compared by category (PR98), never by raw StreamInfo equality.",
+  "type": "object",
+  "required": ["fixtureVersion", "id", "category", "engineVersion", "input", "expected"],
+  "additionalProperties": false,
+  "properties": {
+    "fixtureVersion": { "const": 1 },
+    "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+    "category": {
+      "type": "string",
+      "enum": [
+        "direct-play", "remux", "audio-transcode", "video-codec-incompatible",
+        "bitrate-resolution-limit", "hdr-tonemap", "subtitle-burn-in",
+        "subtitle-external", "downmix", "live-tv", "alternate-versions", "no-viable-plan"
+      ]
+    },
+    "engineVersion": { "type": "integer", "minimum": 1 },
+    "description": { "type": "string" },
+    "input": {
+      "type": "object",
+      "required": ["context", "capabilities", "source", "constraints"],
+      "additionalProperties": false,
+      "properties": {
+        "context": {
+          "type": "object",
+          "required": ["mediaKind"],
+          "properties": {
+            "mediaKind": { "enum": ["Audio", "Video"] },
+            "itemId": { "type": "string" },
+            "mediaSourceId": { "type": ["string", "null"] },
+            "userId": { "type": ["string", "null"] }
+          }
+        },
+        "capabilities": {
+          "type": "object",
+          "description": "ClientCapabilities (PR91 §3.2). No DLNA DeviceProfile.",
+          "properties": {
+            "containers": { "type": "array", "items": { "type": "string" } },
+            "videoCodecs": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "codec": { "type": "string" },
+                  "profiles": { "type": "array", "items": { "type": "string" } },
+                  "maxLevel": { "type": ["number", "null"] },
+                  "maxBitDepth": { "type": ["integer", "null"] },
+                  "videoRangeTypes": { "type": "array", "items": { "type": "string" } }
+                },
+                "required": ["codec"]
+              }
+            },
+            "audioCodecs": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "codec": { "type": "string" },
+                  "maxChannels": { "type": ["integer", "null"] },
+                  "maxSampleRate": { "type": ["integer", "null"] },
+                  "maxBitDepth": { "type": ["integer", "null"] }
+                },
+                "required": ["codec"]
+              }
+            },
+            "subtitleDelivery": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "format": { "type": "string" },
+                  "method": { "enum": ["Embed", "External", "Burn", "Hls"] }
+                },
+                "required": ["format", "method"]
+              }
+            },
+            "maxResolution": {
+              "type": ["object", "null"],
+              "properties": { "width": { "type": "integer" }, "height": { "type": "integer" } }
+            },
+            "maxVideoBitrate": { "type": ["integer", "null"] },
+            "maxAudioBitrate": { "type": ["integer", "null"] },
+            "supportsHls": { "type": "boolean" },
+            "supportsDash": { "type": "boolean" }
+          }
+        },
+        "source": {
+          "type": "object",
+          "description": "MediaSourceSnapshot (PR91 §3.3). No file paths.",
+          "required": ["container"],
+          "properties": {
+            "mediaSourceId": { "type": ["string", "null"] },
+            "container": { "type": "string" },
+            "protocol": { "type": "string" },
+            "bitrate": { "type": ["integer", "null"] },
+            "runTimeTicks": { "type": ["integer", "null"] },
+            "videoStreams": { "type": "array", "items": { "$ref": "#/$defs/videoStream" } },
+            "audioStreams": { "type": "array", "items": { "$ref": "#/$defs/audioStream" } },
+            "subtitleStreams": { "type": "array", "items": { "$ref": "#/$defs/subtitleStream" } },
+            "supportsDirectPlay": { "type": "boolean" },
+            "supportsDirectStream": { "type": "boolean" },
+            "supportsTranscoding": { "type": "boolean" }
+          }
+        },
+        "constraints": {
+          "type": "object",
+          "description": "PlaybackConstraints (PR91 §3.4).",
+          "properties": {
+            "allowDirectPlay": { "type": "boolean" },
+            "allowDirectStream": { "type": "boolean" },
+            "allowTranscoding": { "type": "boolean" },
+            "allowVideoStreamCopy": { "type": "boolean" },
+            "allowAudioStreamCopy": { "type": "boolean" },
+            "maxBitrate": { "type": ["integer", "null"] },
+            "maxAudioChannels": { "type": ["integer", "null"] },
+            "preferredAudioStreamIndex": { "type": ["integer", "null"] },
+            "preferredSubtitleStreamIndex": { "type": ["integer", "null"] },
+            "alwaysBurnInSubtitleWhenTranscoding": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "expected": {
+      "type": "object",
+      "required": ["method", "isViable"],
+      "additionalProperties": false,
+      "properties": {
+        "method": { "enum": ["DirectPlay", "Remux", "Transcode"] },
+        "selectedStreams": {
+          "type": "object",
+          "properties": {
+            "video": { "type": ["integer", "null"] },
+            "audio": { "type": ["integer", "null"] },
+            "subtitle": { "type": ["integer", "null"] }
+          }
+        },
+        "output": {
+          "type": "object",
+          "properties": {
+            "container": { "type": ["string", "null"] },
+            "videoCodec": { "type": ["string", "null"] },
+            "audioCodec": { "type": ["string", "null"] },
+            "resolution": { "type": ["object", "null"] },
+            "videoRange": { "type": ["string", "null"] },
+            "audioChannels": { "type": ["integer", "null"] },
+            "bitrate": { "type": ["integer", "null"] }
+          }
+        },
+        "transforms": {
+          "type": "array",
+          "items": {
+            "enum": ["RemuxContainer", "TranscodeVideo", "TranscodeAudio", "CopyVideo",
+                     "CopyAudio", "Downmix", "Tonemap", "BurnInSubtitle", "ExtractSubtitle"]
+          }
+        },
+        "reasonCodes": { "type": "array", "items": { "type": "string" } },
+        "isViable": { "type": "boolean" }
+      }
+    }
+  },
+  "$defs": {
+    "videoStream": {
+      "type": "object",
+      "required": ["index", "codec"],
+      "properties": {
+        "index": { "type": "integer" },
+        "codec": { "type": "string" },
+        "profile": { "type": ["string", "null"] },
+        "level": { "type": ["number", "null"] },
+        "width": { "type": ["integer", "null"] },
+        "height": { "type": ["integer", "null"] },
+        "bitDepth": { "type": ["integer", "null"] },
+        "videoRange": { "type": ["string", "null"] },
+        "framerate": { "type": ["number", "null"] },
+        "bitrate": { "type": ["integer", "null"] },
+        "isAnamorphic": { "type": ["boolean", "null"] },
+        "isInterlaced": { "type": ["boolean", "null"] }
+      }
+    },
+    "audioStream": {
+      "type": "object",
+      "required": ["index", "codec"],
+      "properties": {
+        "index": { "type": "integer" },
+        "codec": { "type": "string" },
+        "channels": { "type": ["integer", "null"] },
+        "sampleRate": { "type": ["integer", "null"] },
+        "bitDepth": { "type": ["integer", "null"] },
+        "bitrate": { "type": ["integer", "null"] },
+        "language": { "type": ["string", "null"] },
+        "isDefault": { "type": ["boolean", "null"] }
+      }
+    },
+    "subtitleStream": {
+      "type": "object",
+      "required": ["index", "format"],
+      "properties": {
+        "index": { "type": "integer" },
+        "format": { "type": "string" },
+        "isExternal": { "type": ["boolean", "null"] },
+        "isForced": { "type": ["boolean", "null"] },
+        "isDefault": { "type": ["boolean", "null"] },
+        "language": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

@@ -34,7 +34,7 @@ Direction technique saine : monolithe modulaire conservé, pas de microservices,
 | 13 | Rename MediaBrowser/Emby → Reefin | **Terminé** (2026-07-07, voir suivi) | Oui |
 | 14 | Labo compatibilité média | Faisable, gros ROI qualité | Non vérifié en détail |
 
-## Tableau de statut par pilier (2026-07-13, après PR90)
+## Tableau de statut par pilier (2026-07-13, après PR93)
 
 | Pilier | Statut | Prochain jalon |
 | ------ | ------ | -------------- |
@@ -99,7 +99,8 @@ La notation interne "PRxx/N" utilisée ailleurs dans ce document est un schéma 
 - e1a9090736 — Clôturer query/listing v1 : mesures et blocage DI (PR89)
 - ddce98daa6 — Fermer le dernier fallback statique de query (ItemQueryScopeService.GetTopParent -> parcours via IItemLookupService) et corriger la doc « cycle-free » (PR90)
 - 406d28f149 — RFC « Playback Decision v2 » : cinq objets de domaine non-DLNA, raisons arborescentes, snapshot capacités inline (docs/pr91-rfc-playback-decision-v2.md, aucun code) (PR91)
-- (pending) — Design API Playback v2 + UX diagnostic : surfaces client/admin séparées, PUT vs PATCH, DTO stables sans DLNA, wireframes (docs/pr92-design-playback-api-and-diagnostics.md, aucun code) (PR92)
+- eee0734685 — Design API Playback v2 + UX diagnostic : surfaces client/admin séparées, PUT vs PATCH, DTO stables sans DLNA, wireframes (docs/pr92-design-playback-api-and-diagnostics.md, aucun code) (PR92)
+- (pending) — Labo de compatibilité playback : format de fixture versionné + schema + fixtures seed + manifeste, comparaison par catégories (docs/pr93-compatibility-lab.md, tests/PlaybackCompat/, aucun code de prod) (PR93)
 
 ## Détail des points vérifiés dans le code
 

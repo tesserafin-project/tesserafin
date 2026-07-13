@@ -1,0 +1,41 @@
+{
+  "fixtureVersion": 1,
+  "id": "video-no-viable-plan",
+  "category": "no-viable-plan",
+  "engineVersion": 2,
+  "description": "Video codec the client cannot decode, and transcoding is disallowed by the source and the constraints. No method can produce a playable stream. Expect isViable=false with NoViablePlan.",
+  "input": {
+    "context": { "mediaKind": "Video" },
+    "capabilities": {
+      "containers": ["mp4"],
+      "videoCodecs": [{ "codec": "h264", "profiles": ["high"], "maxLevel": 41 }],
+      "audioCodecs": [{ "codec": "aac", "maxChannels": 6 }],
+      "subtitleDelivery": []
+    },
+    "source": {
+      "mediaSourceId": "src-1",
+      "container": "mkv",
+      "protocol": "File",
+      "bitrate": 30000000,
+      "videoStreams": [{ "index": 0, "codec": "av1", "width": 3840, "height": 2160, "bitDepth": 10, "videoRange": "HDR10" }],
+      "audioStreams": [{ "index": 1, "codec": "truehd", "channels": 8, "isDefault": true }],
+      "subtitleStreams": [],
+      "supportsDirectPlay": true,
+      "supportsDirectStream": true,
+      "supportsTranscoding": false
+    },
+    "constraints": {
+      "allowDirectPlay": true,
+      "allowDirectStream": true,
+      "allowTranscoding": false
+    }
+  },
+  "expected": {
+    "method": "Transcode",
+    "selectedStreams": { "video": null, "audio": null, "subtitle": null },
+    "output": { "container": null, "videoCodec": null, "audioCodec": null },
+    "transforms": [],
+    "reasonCodes": ["VideoCodecNotSupported", "NoViablePlan"],
+    "isViable": false
+  }
+}

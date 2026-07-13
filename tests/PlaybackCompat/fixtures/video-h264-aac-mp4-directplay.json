@@ -1,0 +1,47 @@
+{
+  "fixtureVersion": 1,
+  "id": "video-h264-aac-mp4-directplay",
+  "category": "direct-play",
+  "engineVersion": 2,
+  "description": "H.264/AAC in MP4; client accepts the container, codecs, resolution and bitrate. Expect direct play with no transforms.",
+  "input": {
+    "context": { "mediaKind": "Video" },
+    "capabilities": {
+      "containers": ["mp4"],
+      "videoCodecs": [{ "codec": "h264", "profiles": ["high", "main"], "maxLevel": 41, "maxBitDepth": 8, "videoRangeTypes": ["SDR"] }],
+      "audioCodecs": [{ "codec": "aac", "maxChannels": 6 }],
+      "subtitleDelivery": [],
+      "maxResolution": { "width": 1920, "height": 1080 },
+      "maxVideoBitrate": 20000000,
+      "supportsHls": true,
+      "supportsDash": false
+    },
+    "source": {
+      "mediaSourceId": "src-1",
+      "container": "mp4",
+      "protocol": "File",
+      "bitrate": 8000000,
+      "videoStreams": [{ "index": 0, "codec": "h264", "profile": "high", "level": 40, "width": 1920, "height": 1080, "bitDepth": 8, "videoRange": "SDR", "bitrate": 7000000 }],
+      "audioStreams": [{ "index": 1, "codec": "aac", "channels": 2, "sampleRate": 48000, "isDefault": true }],
+      "subtitleStreams": [],
+      "supportsDirectPlay": true,
+      "supportsDirectStream": true,
+      "supportsTranscoding": true
+    },
+    "constraints": {
+      "allowDirectPlay": true,
+      "allowDirectStream": true,
+      "allowTranscoding": true,
+      "allowVideoStreamCopy": true,
+      "allowAudioStreamCopy": true
+    }
+  },
+  "expected": {
+    "method": "DirectPlay",
+    "selectedStreams": { "video": 0, "audio": 1, "subtitle": null },
+    "output": { "container": "mp4", "videoCodec": "h264", "audioCodec": "aac" },
+    "transforms": [],
+    "reasonCodes": ["MethodChosen"],
+    "isViable": true
+  }
+}
