@@ -34,14 +34,14 @@ Direction technique saine : monolithe modulaire conservé, pas de microservices,
 | 13 | Rename MediaBrowser/Emby → Reefin | **Terminé** (2026-07-07, voir suivi) | Oui |
 | 14 | Labo compatibilité média | Faisable, gros ROI qualité | Non vérifié en détail |
 
-## Tableau de statut par pilier (2026-07-13, après PR98)
+## Tableau de statut par pilier (2026-07-13, après PR99)
 
 | Pilier | Statut | Prochain jalon |
 | ------ | ------ | -------------- |
 | Playback sessions | v2 en shadow mode (oracle legacy-vs-v2 actif) | trier divergences + démêlage DI (PR99+) |
 | Rename Reefin.* | terminé | aucun |
 | BaseItem statics | query/access extraits ; lookup/parent/top-parent static-free | démêlage DI (cycle query/user-views) |
-| LibraryManager god-object | surface query globale extraite (IItemQueryService) mais constructeur encore à 29 paramètres | démêler le cycle DI avant nouvelles migrations query |
+| LibraryManager god-object | cycle DI modélisé (RFC PR99), découpe leaf IUserViewCatalog retenue | appliquer la découpe PR100-104 (supprimer Lazy<IUserViewManager>) |
 | Plugin SDK v2 | non commencé | après API v2 |
 | Persistance (PostgreSQL) | non commencé | après stabilisation domaine |
 | Observabilité / config / jobs | non audités | ultérieur |
@@ -105,7 +105,8 @@ La notation interne "PRxx/N" utilisée ailleurs dans ce document est un schéma 
 - c2e2d510e9 — Adaptateur legacy DLNA->v2 à sens unique (src/Reefin.Playback.Dlna) : DeviceProfile/MediaOptions/MediaSourceInfo -> ClientCapabilities/PlaybackConstraints/MediaSourceSnapshot ; le domaine ne référence jamais DLNA (23 tests) (PR95)
 - 30fc33cad6 — Moteur v2 phase 1 (src/Reefin.Playback.Engine, réf. domaine seul) : direct play, remux/direct stream, sélection source+streams ; NotViable hors périmètre phase 1 ; parité fixtures seed direct-play+remux (8 tests) (PR96)
 - a0275179a0 — Moteur v2 phase 2 : transcode audio/vidéo, sous-titres (embed/external/burn-in), bitrate/résolution, profils/levels, HDR/tonemap, downmix ; 10 fixtures labo au vert + bornes (27 tests) (PR97)
-- (pending) — Shadow mode : lib Reefin.Playback.Shadow (DecisionVector, projecteurs legacy/v2, ShadowComparer) + décorateur ShadowPlaybackSessionPlanner (legacy=vérité, v2 en ombre, log-only, try/catch) + oracle réel StreamBuilder-vs-v2 ; full-sln build vert, 43+4 tests (PR98)
+- 92129984ee — Shadow mode : lib Reefin.Playback.Shadow (DecisionVector, projecteurs legacy/v2, ShadowComparer) + décorateur ShadowPlaybackSessionPlanner (legacy=vérité, v2 en ombre, log-only, try/catch) + oracle réel StreamBuilder-vs-v2 ; full-sln build vert, 43+4 tests (PR98)
+- (pending) — RFC démêlage du cycle DI query/user-views/channel : SCC modélisée (LibraryManager<->UserViewManager via Lazy), découpe retenue = leaf IUserViewCatalog (GetUserViews cycle-free) supprimant Lazy + arête ItemQueryScopeService, critères mesurables, séquence PR100-104 (docs/pr99-rfc-di-cycle-untangle.md) (PR99)
 
 ## Détail des points vérifiés dans le code
 
