@@ -63,7 +63,7 @@ namespace Reefin.Server.Core.Library
     /// through <see cref="ILibraryManager"/> (or <see cref="IItemLookupService"/>), wired up in
     /// <c>ApplicationHost</c> (same assembly). Tests reach it via <c>InternalsVisibleTo</c>.
     /// </remarks>
-    internal class LibraryManager : ILibraryManager, IItemLookupService
+    internal class LibraryManager : ILibraryManager, IItemLookupService, IUserRootFolderProvider
     {
         private const string ShortcutFileExtension = ".mblink";
 
@@ -1129,6 +1129,7 @@ namespace Reefin.Server.Core.Library
             return rootFolder;
         }
 
+        /// <inheritdoc />
         public Folder GetUserRootFolder()
         {
             if (_userRootFolder is null)
