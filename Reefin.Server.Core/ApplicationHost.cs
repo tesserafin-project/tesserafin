@@ -74,6 +74,7 @@ using Reefin.Naming.Video;
 using Reefin.Networking.Manager;
 using Reefin.Networking.Udp;
 using Reefin.Photos;
+using Reefin.Playback.Engine;
 using Reefin.Providers.Books;
 using Reefin.Providers.Books.ComicBookInfo;
 using Reefin.Providers.Books.ComicInfo;
@@ -619,7 +620,18 @@ namespace Reefin.Server.Core
             serviceCollection.AddSingleton<IAttachmentExtractor, Reefin.MediaEncoding.Attachments.AttachmentExtractor>();
 
             serviceCollection.AddSingleton<ITranscodeManager, TranscodeManager>();
-            serviceCollection.AddSingleton<IPlaybackSessionPlanner, PlaybackSessionPlanner>();
+
+            // PR98 shadow mode: the concrete legacy planner and the v2 engine are both registered so
+            // ShadowPlaybackSessionPlanner (the IPlaybackSessionPlanner actually resolved) can wrap
+            // the legacy planner - which stays the source of truth - and run the v2 engine
+            // alongside it, logging a classified diff without affecting the returned plan.
+            serviceCollection.AddSingleton<PlaybackSessionPlanner>();
+            serviceCollection.AddSingleton<IPlaybackEngine, PlaybackEngine>();
+            serviceCollection.AddSingleton<IPlaybackSessionPlanner>(provider => new ShadowPlaybackSessionPlanner(
+                provider.GetRequiredService<PlaybackSessionPlanner>(),
+                provider.GetRequiredService<IPlaybackEngine>(),
+                provider.GetRequiredService<ILogger<ShadowPlaybackSessionPlanner>>()));
+
             serviceCollection.AddSingleton<IPlaybackSessionManager, PlaybackSessionManager>();
             serviceCollection.AddScoped<MediaInfoHelper>();
             serviceCollection.AddScoped<AudioHelper>();

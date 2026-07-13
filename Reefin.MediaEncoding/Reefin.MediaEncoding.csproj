@@ -20,6 +20,12 @@
     <ProjectReference Include="..\Reefin.Common\Reefin.Common.csproj" />
     <ProjectReference Include="..\Reefin.Controller\Reefin.Controller.csproj" />
     <ProjectReference Include="..\Reefin.Model\Reefin.Model.csproj" />
+    <!-- PR98 shadow mode: ShadowPlaybackSessionPlanner runs the v2 engine alongside the legacy
+         planner. None of these sink back into Reefin.MediaEncoding or Reefin.Controller, so no
+         reference cycle is introduced. -->
+    <ProjectReference Include="..\src\Reefin.Playback.Shadow\Reefin.Playback.Shadow.csproj" />
+    <ProjectReference Include="..\src\Reefin.Playback.Engine\Reefin.Playback.Engine.csproj" />
+    <ProjectReference Include="..\src\Reefin.Playback.Dlna\Reefin.Playback.Dlna.csproj" />
   </ItemGroup>
 
   <ItemGroup>

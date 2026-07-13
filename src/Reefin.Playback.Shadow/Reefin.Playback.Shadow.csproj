@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Reefin.Playback.Decision/Reefin.Playback.Decision.csproj" />
+    <ProjectReference Include="../../Reefin.Model/Reefin.Model.csproj" />
+    <!-- PlaybackPlan (the legacy-side projection input) lives in Reefin.Controller, alongside
+         IPlaybackSessionPlanner. No cycle: Reefin.Controller does not reference Reefin.MediaEncoding
+         or any Reefin.Playback.* project. -->
+    <ProjectReference Include="../../Reefin.Controller/Reefin.Controller.csproj" />
+  </ItemGroup>
+
+</Project>

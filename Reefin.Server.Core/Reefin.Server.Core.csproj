@@ -19,6 +19,8 @@
     <ProjectReference Include="..\src\Reefin.Drawing\Reefin.Drawing.csproj" />
     <ProjectReference Include="..\Reefin.MediaEncoding\Reefin.MediaEncoding.csproj" />
     <ProjectReference Include="..\src\Reefin.Database\Reefin.Database.Implementations\Reefin.Database.Implementations.csproj" />
+    <!-- PR98 shadow mode DI: registers the v2 IPlaybackEngine used by ShadowPlaybackSessionPlanner. -->
+    <ProjectReference Include="..\src\Reefin.Playback.Engine\Reefin.Playback.Engine.csproj" />
   </ItemGroup>
 
   <ItemGroup>

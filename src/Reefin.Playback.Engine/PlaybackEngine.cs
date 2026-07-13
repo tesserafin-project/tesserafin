@@ -75,7 +75,7 @@ public sealed class PlaybackEngine : IPlaybackEngine
         MediaSourceSnapshot source,
         PlaybackConstraints constraints)
     {
-        var selectedVideo = context.MediaKind == MediaKind.Video ? source.VideoStreams.FirstOrDefault() : null;
+        var selectedVideo = context.MediaKind == MediaKind.Video && source.VideoStreams.Count > 0 ? source.VideoStreams[0] : null;
         var selectedAudio = SelectAudio(source, constraints);
         var selectedSubtitle = SelectSubtitle(source, constraints);
 
@@ -393,7 +393,7 @@ public sealed class PlaybackEngine : IPlaybackEngine
         }
 
         selected ??= source.AudioStreams.FirstOrDefault(a => a.IsDefault);
-        selected ??= source.AudioStreams.FirstOrDefault();
+        selected ??= source.AudioStreams.Count > 0 ? source.AudioStreams[0] : null;
 
         return selected;
     }
