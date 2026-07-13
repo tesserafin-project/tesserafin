@@ -34,11 +34,11 @@ Direction technique saine : monolithe modulaire conservé, pas de microservices,
 | 13 | Rename MediaBrowser/Emby → Reefin | **Terminé** (2026-07-07, voir suivi) | Oui |
 | 14 | Labo compatibilité média | Faisable, gros ROI qualité | Non vérifié en détail |
 
-## Tableau de statut par pilier (2026-07-13, après PR93)
+## Tableau de statut par pilier (2026-07-13, après PR94)
 
 | Pilier | Statut | Prochain jalon |
 | ------ | ------ | -------------- |
-| Playback sessions | API/lifecycle v1 terminé | moteur de décision non-DLNA |
+| Playback sessions | API/lifecycle v1 ; domaine décision v2 (Reefin.Playback.Decision) | adaptateur legacy (PR95) + moteur v2 shadow (PR96-98) |
 | Rename Reefin.* | terminé | aucun |
 | BaseItem statics | query/access extraits ; lookup/parent/top-parent static-free | démêlage DI (cycle query/user-views) |
 | LibraryManager god-object | surface query globale extraite (IItemQueryService) mais constructeur encore à 29 paramètres | démêler le cycle DI avant nouvelles migrations query |
@@ -100,7 +100,8 @@ La notation interne "PRxx/N" utilisée ailleurs dans ce document est un schéma 
 - ddce98daa6 — Fermer le dernier fallback statique de query (ItemQueryScopeService.GetTopParent -> parcours via IItemLookupService) et corriger la doc « cycle-free » (PR90)
 - 406d28f149 — RFC « Playback Decision v2 » : cinq objets de domaine non-DLNA, raisons arborescentes, snapshot capacités inline (docs/pr91-rfc-playback-decision-v2.md, aucun code) (PR91)
 - eee0734685 — Design API Playback v2 + UX diagnostic : surfaces client/admin séparées, PUT vs PATCH, DTO stables sans DLNA, wireframes (docs/pr92-design-playback-api-and-diagnostics.md, aucun code) (PR92)
-- (pending) — Labo de compatibilité playback : format de fixture versionné + schema + fixtures seed + manifeste, comparaison par catégories (docs/pr93-compatibility-lab.md, tests/PlaybackCompat/, aucun code de prod) (PR93)
+- 5cd091aae5 — Labo de compatibilité playback : format de fixture versionné + schema + fixtures seed + manifeste, comparaison par catégories (docs/pr93-compatibility-lab.md, tests/PlaybackCompat/, aucun code de prod) (PR93)
+- (pending) — Modèle de domaine playback v2 (src/Reefin.Playback.Decision) : types immuables, zéro référence donc zéro DLNA, ReasonCode string stable, invariants de décision par construction, tests sérialisation+invariants (PR94)
 
 ## Détail des points vérifiés dans le code
 
