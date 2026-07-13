@@ -630,7 +630,8 @@ namespace Reefin.Server.Core
             serviceCollection.AddSingleton<IPlaybackSessionPlanner>(provider => new ShadowPlaybackSessionPlanner(
                 provider.GetRequiredService<PlaybackSessionPlanner>(),
                 provider.GetRequiredService<IPlaybackEngine>(),
-                provider.GetRequiredService<ILogger<ShadowPlaybackSessionPlanner>>()));
+                provider.GetRequiredService<ILogger<ShadowPlaybackSessionPlanner>>(),
+                () => provider.GetRequiredService<IServerConfigurationManager>().Configuration.PlaybackShadow));
 
             serviceCollection.AddSingleton<IPlaybackSessionManager, PlaybackSessionManager>();
             serviceCollection.AddScoped<MediaInfoHelper>();
