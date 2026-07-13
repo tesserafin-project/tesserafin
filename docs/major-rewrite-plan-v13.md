@@ -34,6 +34,63 @@ Direction technique saine : monolithe modulaire conservé, pas de microservices,
 | 13 | Rename MediaBrowser/Emby → Reefin | **Terminé** (2026-07-07, voir suivi) | Oui |
 | 14 | Labo compatibilité média | Faisable, gros ROI qualité | Non vérifié en détail |
 
+## Tableau de statut par pilier (2026-07-13, après PR83)
+
+| Pilier | Statut | Prochain jalon |
+| ------ | ------ | -------------- |
+| Playback sessions | API/lifecycle v1 terminé | moteur de décision non-DLNA |
+| Rename Reefin.* | terminé | aucun |
+| BaseItem statics | partiellement traités | query / access / hierarchy |
+| LibraryManager god-object | frontières de lecture amorcées | extraire query/listing |
+| Plugin SDK v2 | non commencé | après API v2 |
+| Persistance (PostgreSQL) | non commencé | après stabilisation domaine |
+| Observabilité / config / jobs | non audités | ultérieur |
+
+## Journal synthétique des PR (source : titres de commit)
+
+La notation interne "PRxx/N" utilisée ailleurs dans ce document est un schéma de planification, pas une numérotation de commits ; ce journal reflète l'historique de commits réel de la série lookup/cache/hierarchy/query.
+
+- 39851f4c20 — Auditer la consolidation post-extractions PR30-PR45
+- 6f91e612e0 — Déprécier la façade ILibraryManager.GetMediaStreamLanguages
+- 0502af0e52 — Verrouiller la façade ILibraryManager.Sort
+- 487a5be7b3 — Auditer la cascade Folder.GetChildren / GetEpisodes / GetParent
+- 547827143e — Documenter l'audit PR49 et ignorer l'outillage personnel
+- bfd110563e — Caractériser Series.GetSeasonEpisodes et threader IItemSortService
+- f62e9440bf — Renforcer la caractérisation saison 0 et nettoyer un paramètre mort
+- fb50095dc6 — Câbler les appelants DI de GetEpisodes sur IItemSortService
+- 09d491a468 — Auditer BoxSet.Sort et sa cascade GetChildren
+- 6d4567ff84 — Auditer UserViewBuilder.SortAndPage
+- 34fe377414 — Planifier le découpage du chantier Folder.GetChildren
+- 0fc64674bd — Restaurer les signatures legacy GetEpisodes
+- 4ed66c76b3 — Ajouter les chemins service-aware GetItems
+- d99feaad12 — Caractériser la cascade GetChildren
+- 5582bdbce8 — Ajouter les overloads service-aware GetChildren
+- 37a562112e — Migrer les appelants DI de GetChildren
+- 7be39530c7 — Migrer les appelants GetRecursiveChildren
+- a5a8ebb782 — Clore l'audit enfants et tri
+- d692594a0d — Rouvrir l'audit enfants et tri
+- f0b55989eb — Propager le tri service-aware dans UserView
+- 50e1a79261 — Réparer le chemin BoxSet via ItemQueryService
+- 479ea77f41 — Supprimer les overloads récursifs no-op
+- d892f2b8d8 — Consolider les chemins Folder GetItems
+- e9a595ac1f — Clore l'audit enfants et tri v2
+- 6c37ff6da1 — Auditer les statics LibraryManager
+- b5619ca5cd — Caractériser le lookup et le cache LibraryManager
+- 9195c202fa — Centraliser la cohérence du cache d'items
+- d082b1d569 — Introduire IItemLookupService
+- 0a1e60d4f7 — Ajouter les chemins parent/owner service-aware
+- 6ce55905f5 — Migrer les appels parent/owner internes de LibraryManager
+- adecaf4179 — Migrer des consommateurs lecture vers IItemLookupService
+- a2586bf2a2 — Extraire le cache d'items vers ItemLookupService
+- 73afe7f426 — Durcir ItemLookupService et clore lookup/cache v1 (PR76)
+- 38ef62484f — Séparer lookup et visibilité utilisateur (PR77)
+- b70473cd61 — Migrer les contrôleurs à faible risque hors d'ILibraryManager (PR78)
+- a89c98f3d7 — Migrer les consommateurs centraux hors d'ILibraryManager (PR79)
+- 75f488391b — Extraire la résolution hiérarchique dans IItemHierarchyService (PR80)
+- b41d54a5de — Migrer la relation Episode->Series consommée hors du static (PR81)
+- 8b7bcf44f6 — Corriger la frontière d'accès SyncPlay via IItemAccessService (PR82)
+- 11da9af244 — Supprimer IItemHierarchyService, abstraction sans consommateur (PR83)
+
 ## Détail des points vérifiés dans le code
 
 ### Point 1-2 — Protocole DLNA comme cœur de décision (confirmé)
