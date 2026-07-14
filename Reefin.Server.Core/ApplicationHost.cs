@@ -567,6 +567,15 @@ namespace Reefin.Server.Core
             // injection would recreate the construction cycle. Same rationale as Lazy<IProviderManager>
             // above (see LiveTvPresenceProvider's type-level remarks: RFC I1 finding, PR108).
             serviceCollection.AddTransient(provider => new Lazy<IReadOnlyList<ILiveTvService>>(() => provider.GetServices<ILiveTvService>().ToList()));
+
+            // UserViewCatalog (PR109) needs IItemQueryService for the playlist/boxset probe, but the
+            // in-tree ItemQueryService implementation takes IUserViewManager and IChannelManager
+            // directly in its own constructor (its Folder.GetItems/GetItemList compatibility
+            // fallback) - a direct (non-Lazy) IItemQueryService injection would recreate the
+            // construction cycle once PR110 wires LibraryManager to inject IUserViewCatalog directly.
+            // Same rationale as Lazy<IProviderManager>/Lazy<IReadOnlyList<ILiveTvService>> above (see
+            // UserViewCatalog's type-level remarks: RFC I1 finding, PR109).
+            serviceCollection.AddTransient(provider => new Lazy<IItemQueryService>(provider.GetRequiredService<IItemQueryService>));
             serviceCollection.AddSingleton<ItemLookupService>();
             serviceCollection.AddSingleton<IItemLookupService>(sp => sp.GetRequiredService<ItemLookupService>());
             serviceCollection.AddSingleton<IItemCacheStore>(sp => sp.GetRequiredService<ItemLookupService>());
@@ -576,6 +585,7 @@ namespace Reefin.Server.Core
             serviceCollection.AddSingleton<IUserRootFolderProvider, UserRootFolderProvider>();
             serviceCollection.AddSingleton<IChannelCatalog, ChannelCatalog>();
             serviceCollection.AddSingleton<ILiveTvPresenceProvider, LiveTvPresenceProvider>();
+            serviceCollection.AddSingleton<IUserViewCatalog, UserViewCatalog>();
             serviceCollection.AddSingleton<ILibraryManager, LibraryManager>();
             serviceCollection.AddSingleton<IItemQueryScopeService, ItemQueryScopeService>();
             serviceCollection.AddSingleton<NamingOptions>();

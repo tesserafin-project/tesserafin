@@ -50,8 +50,9 @@ public sealed class ChannelCatalogParityTests
     /// </summary>
     private static Guid ComputeId(string key, Type type)
     {
-        using var md5 = MD5.Create();
-        var hash = md5.ComputeHash(Encoding.UTF8.GetBytes(key + "|" + type.FullName));
+#pragma warning disable CA5351 // matches Reefin.Common.Extensions.BaseExtensions.GetMD5's suppression - test-only stand-in, see remarks above
+        var hash = MD5.HashData(Encoding.UTF8.GetBytes(key + "|" + type.FullName));
+#pragma warning restore CA5351
         return new Guid(hash);
     }
 
