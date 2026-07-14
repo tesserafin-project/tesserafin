@@ -30,16 +30,17 @@ namespace Reefin.Server.Implementations.Tests.Library.LibraryManager;
 /// <c>GetItemsResult(InternalItemsQuery)</c>, plus the private helpers they share
 /// (<c>SetTopParentIdsOrAncestors</c>, <c>AddUserToQuery</c>). These tests pin down the CURRENT
 /// behavior, prior to a later PR that extracts this orchestration into a dedicated service
-/// (PR85). They mock <see cref="IItemRepository"/> and <see cref="IUserViewManager"/> and assert
-/// on the <see cref="InternalItemsQuery"/> mutated in place before it reaches the repository, plus
-/// which repository method is invoked and how its result is wrapped.
+/// (PR85). They mock <see cref="IItemRepository"/> and <see cref="IUserViewCatalog"/> (PR110:
+/// replaces <c>IUserViewManager</c>) and assert on the <see cref="InternalItemsQuery"/> mutated
+/// in place before it reaches the repository, plus which repository method is invoked and how
+/// its result is wrapped.
 /// </summary>
 [Collection(LibraryManagerStaticStateFixture.Name)]
 public class LibraryManagerGlobalQueryTests
 {
     private readonly Reefin.Server.Core.Library.LibraryManager _libraryManager;
     private readonly Mock<IItemRepository> _itemRepositoryMock;
-    private readonly Mock<IUserViewManager> _userViewManagerMock;
+    private readonly Mock<IUserViewCatalog> _userViewCatalogMock;
 
     public LibraryManagerGlobalQueryTests()
     {
@@ -59,11 +60,11 @@ public class LibraryManagerGlobalQueryTests
         var externalDataManagerMock = fixture.Freeze<Mock<IExternalDataManager>>();
         fixture.Register(() => new Lazy<IExternalDataManager>(() => externalDataManagerMock.Object));
 
-        // GetItemsResult/GetItemList resolve unscoped user queries via IUserViewManager
-        // (LibraryManager.cs AddUserToQuery, ~L2001). Freeze the mock so tests can both control
-        // the returned views and assert on the UserViewQuery LibraryManager builds for it.
-        _userViewManagerMock = fixture.Freeze<Mock<IUserViewManager>>();
-        fixture.Register(() => new Lazy<IUserViewManager>(() => _userViewManagerMock.Object));
+        // GetItemsResult/GetItemList resolve unscoped user queries via IUserViewCatalog (PR110:
+        // replaces IUserViewManager - LibraryManager.cs AddUserToQuery, ~L2001). Freeze the mock
+        // so tests can both control the returned views and assert on the UserViewQuery
+        // LibraryManager builds for it.
+        _userViewCatalogMock = fixture.Freeze<Mock<IUserViewCatalog>>();
 
         // Same wiring as LibraryManagerItemLookupTests: build a *real* ItemLookupService from the
         // frozen repository/configuration mocks so LibraryManager's GetItemById(ParentId) parent
@@ -110,7 +111,7 @@ public class LibraryManagerGlobalQueryTests
 
     // ---------------------------------------------------------------
     // 2. GetItemsResult with a non-null User and an otherwise-unscoped query resolves the user's
-    // views into query.TopParentIds via IUserViewManager before hitting the repository
+    // views into query.TopParentIds via IUserViewCatalog before hitting the repository
     // (AddUserToQuery, LibraryManager.cs L1985-2016).
     // ---------------------------------------------------------------
 
@@ -121,7 +122,7 @@ public class LibraryManagerGlobalQueryTests
         var physicalFolderId = Guid.NewGuid();
         var userView = new CollectionFolder { Id = Guid.NewGuid(), Name = "Movies", PhysicalFolderIds = [physicalFolderId] };
 
-        _userViewManagerMock.Setup(m => m.GetUserViews(It.IsAny<UserViewQuery>())).Returns([userView]);
+        _userViewCatalogMock.Setup(m => m.GetUserViews(It.IsAny<UserViewQuery>())).Returns([userView]);
         _itemRepositoryMock.Setup(r => r.GetItems(It.IsAny<InternalItemsQuery>()))
             .Returns(new QueryResult<BaseItem>(0, 0, Array.Empty<BaseItem>()));
 
@@ -130,7 +131,7 @@ public class LibraryManagerGlobalQueryTests
         _libraryManager.GetItemsResult(query);
 
         Assert.Equal(new[] { physicalFolderId }, query.TopParentIds);
-        _userViewManagerMock.Verify(
+        _userViewCatalogMock.Verify(
             m => m.GetUserViews(It.Is<UserViewQuery>(q => q.User == user && q.IncludeHidden)),
             Times.Once);
     }
@@ -247,7 +248,7 @@ public class LibraryManagerGlobalQueryTests
     {
         var user = new User("test-user", "provider", "provider");
         UserViewQuery? capturedQuery = null;
-        _userViewManagerMock.Setup(m => m.GetUserViews(It.IsAny<UserViewQuery>()))
+        _userViewCatalogMock.Setup(m => m.GetUserViews(It.IsAny<UserViewQuery>()))
             .Callback<UserViewQuery>(q => capturedQuery = q)
             .Returns([]);
         _itemRepositoryMock.Setup(r => r.GetItemList(It.IsAny<InternalItemsQuery>())).Returns(Array.Empty<BaseItem>());

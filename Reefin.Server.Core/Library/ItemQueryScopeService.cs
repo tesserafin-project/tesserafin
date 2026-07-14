@@ -28,16 +28,18 @@ namespace Reefin.Server.Core.Library
     /// helpers, copied verbatim (not moved) - <see cref="LibraryManager"/> keeps its own copies
     /// during the transition to avoid re-forming a DI cycle
     /// (<c>LibraryManager -&gt; IItemQueryService -&gt; IUserViewManager -&gt; ILibraryManager</c>);
-    /// see <c>docs/pr85b-item-query-scope-service.md</c>. This service is independent of
-    /// <see cref="ILibraryManager"/> in its own implementation, but still depends on a cyclic DI
-    /// sub-graph via <see cref="IUserViewManager"/> (one of the central nodes of the query/user-views/
-    /// channel cycle); it is not a fully cycle-free leaf. It can still be consumed by
-    /// <c>IItemQueryService</c> because it holds no direct <see cref="ILibraryManager"/> reference.
+    /// see <c>docs/pr85b-item-query-scope-service.md</c>. <b>Updated PR110</b>: this service now
+    /// depends on <see cref="IUserViewCatalog"/> instead of <c>IUserViewManager</c> - the narrower
+    /// leaf whose implementation (<c>UserViewCatalog</c>) never references <see cref="ILibraryManager"/>,
+    /// <c>IUserViewManager</c>, <c>IChannelManager</c> or <c>ILiveTvManager</c> in its own eager
+    /// construction graph (RFC <c>docs/rfc-di-query-user-views-v2.md</c> §9/§10.7). This service is
+    /// therefore a fully cycle-free leaf: it holds no direct or transitive edge back into the
+    /// query/user-views/channel/live-tv SCC.
     /// </remarks>
     internal sealed class ItemQueryScopeService : IItemQueryScopeService
     {
         private readonly IItemLookupService _itemLookupService;
-        private readonly IUserViewManager _userViewManager;
+        private readonly IUserViewCatalog _userViewCatalog;
         private readonly IItemSortService _itemSortService;
         private readonly IUserRootFolderProvider _rootFolderProvider;
 
@@ -45,17 +47,17 @@ namespace Reefin.Server.Core.Library
         /// Initializes a new instance of the <see cref="ItemQueryScopeService"/> class.
         /// </summary>
         /// <param name="itemLookupService">Used to resolve view display/parent ids in <c>GetTopParentIdsForQuery</c>.</param>
-        /// <param name="userViewManager">Used to resolve a user's visible views in <see cref="AddUserToQuery"/>.</param>
+        /// <param name="userViewCatalog">Used to resolve a user's visible views in <see cref="AddUserToQuery"/> (PR110: replaces <c>IUserViewManager</c>).</param>
         /// <param name="itemSortService">Used to sort the root folder's children in the grouped-folders branch.</param>
         /// <param name="rootFolderProvider">Used to obtain the user root folder in the grouped-folders branch.</param>
         public ItemQueryScopeService(
             IItemLookupService itemLookupService,
-            IUserViewManager userViewManager,
+            IUserViewCatalog userViewCatalog,
             IItemSortService itemSortService,
             IUserRootFolderProvider rootFolderProvider)
         {
             _itemLookupService = itemLookupService;
-            _userViewManager = userViewManager;
+            _userViewCatalog = userViewCatalog;
             _itemSortService = itemSortService;
             _rootFolderProvider = rootFolderProvider;
         }
@@ -125,7 +127,7 @@ namespace Reefin.Server.Core.Library
                 query.ItemIds.Length == 0 &&
                 query.OwnerIds.Length == 0)
             {
-                var userViews = _userViewManager.GetUserViews(new UserViewQuery
+                var userViews = _userViewCatalog.GetUserViews(new UserViewQuery
                 {
                     User = user,
                     IncludeHidden = true,

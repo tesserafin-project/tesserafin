@@ -74,7 +74,7 @@ namespace Reefin.Server.Core.Library
         private readonly IServerConfigurationManager _configurationManager;
         private readonly Lazy<ILibraryMonitor> _libraryMonitorFactory;
         private readonly Lazy<IProviderManager> _providerManagerFactory;
-        private readonly Lazy<IUserViewManager> _userViewManagerFactory;
+        private readonly IUserViewCatalog _userViewCatalog;
         private readonly IServerApplicationHost _appHost;
         private readonly IMediaEncoder _mediaEncoder;
         private readonly IFileSystem _fileSystem;
@@ -125,7 +125,15 @@ namespace Reefin.Server.Core.Library
         /// <param name="libraryMonitorFactory">The library monitor.</param>
         /// <param name="fileSystem">The file system.</param>
         /// <param name="providerManagerFactory">The provider manager.</param>
-        /// <param name="userViewManagerFactory">The user view manager.</param>
+        /// <param name="userViewCatalog">
+        /// The user-views catalog leaf (sole real implementation of <c>GetUserViews</c>; see PR106-109).
+        /// Replaces the former <c>Lazy&lt;IUserViewManager&gt;</c> - injected directly (not
+        /// <see cref="Lazy{T}"/>), since <see cref="IUserViewCatalog"/>'s implementation
+        /// (<c>UserViewCatalog</c>) never references <see cref="ILibraryManager"/>,
+        /// <see cref="IUserViewManager"/>, <c>IChannelManager</c> or <c>ILiveTvManager</c> in its own
+        /// eager construction graph (RFC <c>docs/rfc-di-query-user-views-v2.md</c> §9/§10.7, PR110) -
+        /// this is the edge whose removal breaks the SCC.
+        /// </param>
         /// <param name="mediaEncoder">The media encoder.</param>
         /// <param name="itemRepository">The item repository.</param>
         /// <param name="persistenceService">The item persistence service.</param>
@@ -159,7 +167,7 @@ namespace Reefin.Server.Core.Library
             Lazy<ILibraryMonitor> libraryMonitorFactory,
             IFileSystem fileSystem,
             Lazy<IProviderManager> providerManagerFactory,
-            Lazy<IUserViewManager> userViewManagerFactory,
+            IUserViewCatalog userViewCatalog,
             IMediaEncoder mediaEncoder,
             IItemRepository itemRepository,
             IItemPersistenceService persistenceService,
@@ -193,7 +201,7 @@ namespace Reefin.Server.Core.Library
             _libraryMonitorFactory = libraryMonitorFactory;
             _fileSystem = fileSystem;
             _providerManagerFactory = providerManagerFactory;
-            _userViewManagerFactory = userViewManagerFactory;
+            _userViewCatalog = userViewCatalog;
             _mediaEncoder = mediaEncoder;
             _itemRepository = itemRepository;
             _persistenceService = persistenceService;
@@ -266,8 +274,6 @@ namespace Reefin.Server.Core.Library
         private ILibraryMonitor LibraryMonitor => _libraryMonitorFactory.Value;
 
         private IProviderManager ProviderManager => _providerManagerFactory.Value;
-
-        private IUserViewManager UserViewManager => _userViewManagerFactory.Value;
 
         /// <summary>
         /// Gets or sets the postscan tasks.
@@ -2004,7 +2010,7 @@ namespace Reefin.Server.Core.Library
                 query.ItemIds.Length == 0 &&
                 query.OwnerIds.Length == 0)
             {
-                var userViews = UserViewManager.GetUserViews(new UserViewQuery
+                var userViews = _userViewCatalog.GetUserViews(new UserViewQuery
                 {
                     User = user,
                     IncludeHidden = true,

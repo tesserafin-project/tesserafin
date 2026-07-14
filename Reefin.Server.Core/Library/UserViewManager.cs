@@ -7,14 +7,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using Reefin.Controller.Channels;
-using Reefin.Controller.Collections;
-using Reefin.Controller.Configuration;
 using Reefin.Controller.Dto;
 using Reefin.Controller.Entities;
 using Reefin.Controller.Library;
-using Reefin.Controller.LiveTv;
 using Reefin.Controller.Sorting;
-using Reefin.Controller.TV;
 using Reefin.Data;
 using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
@@ -27,158 +23,67 @@ using Reefin.Model.Querying;
 
 namespace Reefin.Server.Core.Library
 {
+    /// <summary>
+    /// Class UserViewManager.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>PR110</b>: <see cref="GetUserViews"/> now delegates entirely to <see cref="IUserViewCatalog"/>
+    /// (RFC <c>docs/rfc-di-query-user-views-v2.md</c> §9/§10.7) - <c>UserViewCatalog</c> is the sole
+    /// real implementation of the listing logic; this class no longer duplicates it. The former
+    /// per-folder named/shadow-view creation helpers that only <see cref="GetUserViews"/> called
+    /// (<c>GetUserView(Folder, ...)</c>, the private list-grouping overload) were removed along with
+    /// it - zero other callers, in or out of this class (verified by repo-wide grep before removal).
+    /// </para>
+    /// <para>
+    /// <see cref="GetUserSubView"/>/<see cref="GetLatestItems"/> remain implemented here (out of
+    /// <see cref="IUserViewCatalog"/>'s narrower scope, PR109) and still route named-view creation
+    /// through <see cref="IUserViewFactory"/> instead of <c>ILibraryManager.GetNamedView</c>.
+    /// <see cref="ILibraryManager"/> itself stays as a dependency: <see cref="GetLatestItems"/>'s
+    /// <c>GetItemsForLatestItems</c> helper needs <c>GetItemById</c>, <c>GetLatestItemList</c> and
+    /// <c>GetItemList(InternalItemsQuery, List&lt;BaseItem&gt;)</c>, none of which are exposed on any
+    /// narrower leaf port - out of this RFC's scope. This is a one-way edge only
+    /// (<c>UserViewManager -&gt; ILibraryManager</c>): <c>LibraryManager</c> no longer references
+    /// <see cref="IUserViewManager"/> (direct or <see cref="Lazy{T}"/>) at all, so the SCC is broken
+    /// even though this residual edge remains.
+    /// </para>
+    /// </remarks>
     public class UserViewManager : IUserViewManager
     {
         private readonly ILibraryManager _libraryManager;
         private readonly ILocalizationManager _localizationManager;
-
         private readonly IChannelManager _channelManager;
-        private readonly ILiveTvManager _liveTvManager;
-        private readonly IServerConfigurationManager _config;
-        private readonly ICollectionManager _collectionManager;
-        private readonly ITVSeriesManager _tvSeriesManager;
         private readonly IItemSortService _itemSortService;
+        private readonly IUserViewCatalog _userViewCatalog;
+        private readonly IUserViewFactory _userViewFactory;
 
-        public UserViewManager(ILibraryManager libraryManager, ILocalizationManager localizationManager, IChannelManager channelManager, ILiveTvManager liveTvManager, IServerConfigurationManager config, ICollectionManager collectionManager, ITVSeriesManager tvSeriesManager, IItemSortService itemSortService)
+        public UserViewManager(
+            ILibraryManager libraryManager,
+            ILocalizationManager localizationManager,
+            IChannelManager channelManager,
+            IItemSortService itemSortService,
+            IUserViewCatalog userViewCatalog,
+            IUserViewFactory userViewFactory)
         {
             _libraryManager = libraryManager;
             _localizationManager = localizationManager;
             _channelManager = channelManager;
-            _liveTvManager = liveTvManager;
-            _config = config;
-            _collectionManager = collectionManager;
-            _tvSeriesManager = tvSeriesManager;
             _itemSortService = itemSortService;
+            _userViewCatalog = userViewCatalog;
+            _userViewFactory = userViewFactory;
         }
 
+        /// <inheritdoc/>
         public Folder[] GetUserViews(UserViewQuery query)
         {
-            var user = query.User;
-
-            var folders = _libraryManager.GetUserRootFolder()
-                .GetChildren(user, true, null, _itemSortService)
-                .OfType<Folder>()
-                .ToList();
-
-            var groupedFolders = new List<ICollectionFolder>();
-            var list = new List<Folder>();
-
-            foreach (var folder in folders)
-            {
-                var collectionFolder = folder as ICollectionFolder;
-                var folderViewType = collectionFolder?.CollectionType;
-
-                // Playlist and BoxSet libraries require special handling because the folder only references linked items
-                if (folderViewType == CollectionType.playlists || folderViewType == CollectionType.boxsets)
-                {
-                    var items = folder.GetItemList(
-                        new InternalItemsQuery(user)
-                        {
-                            ParentId = folder.ParentId
-                        },
-                        _channelManager,
-                        _collectionManager,
-                        this,
-                        _tvSeriesManager,
-                        _itemSortService);
-
-                    if (!items.Any(item => item.IsVisible(user)))
-                    {
-                        continue;
-                    }
-                }
-
-                if (UserView.IsUserSpecific(folder))
-                {
-                    list.Add(_libraryManager.GetNamedView(user, folder.Name, folder.Id, folderViewType, null));
-                    continue;
-                }
-
-                if (collectionFolder is not null && UserView.IsEligibleForGrouping(folder) && user.IsFolderGrouped(folder.Id))
-                {
-                    groupedFolders.Add(collectionFolder);
-                    continue;
-                }
-
-                if (query.PresetViews.Contains(folderViewType))
-                {
-                    list.Add(GetUserView(folder, folderViewType, string.Empty));
-                }
-                else
-                {
-                    list.Add(folder);
-                }
-            }
-
-            foreach (var viewType in new[] { CollectionType.movies, CollectionType.tvshows })
-            {
-                var parents = groupedFolders.Where(i => i.CollectionType == viewType || i.CollectionType is null)
-                    .ToList();
-
-                if (parents.Count > 0)
-                {
-                    var localizationKey = viewType == CollectionType.tvshows
-                        ? "TvShows"
-                        : "Movies";
-
-                    list.Add(GetUserView(parents, viewType, localizationKey, string.Empty, user, query.PresetViews));
-                }
-            }
-
-            if (_config.Configuration.EnableFolderView)
-            {
-                var name = _localizationManager.GetLocalizedString("Folders");
-                list.Add(_libraryManager.GetNamedView(name, CollectionType.folders, string.Empty));
-            }
-
-            if (query.IncludeExternalContent)
-            {
-                var channelResult = _channelManager.GetChannelsInternalAsync(new ChannelQuery
-                {
-                    UserId = user.Id
-                }).GetAwaiter().GetResult();
-
-                var channels = channelResult.Items;
-
-                list.AddRange(channels);
-
-                if (_liveTvManager.GetEnabledUsers().Select(i => i.Id).Contains(user.Id))
-                {
-                    list.Add(_liveTvManager.GetInternalLiveTvFolder(CancellationToken.None));
-                }
-            }
-
-            if (!query.IncludeHidden)
-            {
-                list = list.Where(i => !user.GetPreferenceValues<Guid>(PreferenceKind.MyMediaExcludes).Contains(i.Id)).ToList();
-            }
-
-            var sorted = _itemSortService.Sort(list, user, [ItemSortBy.SortName], SortOrder.Ascending).ToList();
-            var orders = user.GetPreferenceValues<Guid>(PreferenceKind.OrderedViews);
-
-            return list
-                .OrderBy(i =>
-                {
-                    var index = Array.IndexOf(orders, i.Id);
-                    if (index == -1
-                        && i is UserView view
-                        && !view.DisplayParentId.IsEmpty())
-                    {
-                        index = Array.IndexOf(orders, view.DisplayParentId);
-                    }
-
-                    return index == -1 ? int.MaxValue : index;
-                })
-                .ThenBy(sorted.IndexOf)
-                .ThenBy(i => i.SortName)
-                .ToArray();
+            return _userViewCatalog.GetUserViews(query);
         }
 
         public UserView GetUserSubViewWithName(string name, Guid parentId, CollectionType? type, string sortName)
         {
             var uniqueId = parentId + "subview" + type;
 
-            return _libraryManager.GetNamedView(name, parentId, type, sortName, uniqueId);
+            return _userViewFactory.GetNamedView(name, parentId, type, sortName, uniqueId);
         }
 
         public UserView GetUserSubView(Guid parentId, CollectionType? type, string localizationKey, string sortName)
@@ -186,33 +91,6 @@ namespace Reefin.Server.Core.Library
             var name = _localizationManager.GetLocalizedString(localizationKey);
 
             return GetUserSubViewWithName(name, parentId, type, sortName);
-        }
-
-        private Folder GetUserView(
-            List<ICollectionFolder> parents,
-            CollectionType? viewType,
-            string localizationKey,
-            string sortName,
-            User user,
-            CollectionType?[] presetViews)
-        {
-            if (parents.Count == 1 && parents.All(i => i.CollectionType == viewType))
-            {
-                if (!presetViews.Contains(viewType))
-                {
-                    return (Folder)parents[0];
-                }
-
-                return GetUserView((Folder)parents[0], viewType, string.Empty);
-            }
-
-            var name = _localizationManager.GetLocalizedString(localizationKey);
-            return _libraryManager.GetNamedView(user, name, viewType, sortName);
-        }
-
-        public UserView GetUserView(Folder parent, CollectionType? viewType, string sortName)
-        {
-            return _libraryManager.GetShadowView(parent, viewType, sortName);
         }
 
         public List<Tuple<BaseItem, List<BaseItem>>> GetLatestItems(LatestItemsQuery request, DtoOptions options)
