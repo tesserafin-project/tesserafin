@@ -20,16 +20,17 @@ namespace Reefin.Server.Implementations.Tests.Library;
 /// <c>LibraryManager</c> private helpers this service copies from
 /// (<c>SetTopParentIdsOrAncestors</c>/<c>AddUserToQuery</c>/<c>GetTopParentIdsForQuery</c>). These
 /// exercise the extracted service directly, with <see cref="IItemLookupService"/>,
-/// <see cref="IUserViewManager"/>, <see cref="IItemSortService"/> and
-/// <see cref="IUserRootFolderProvider"/> mocked - this service holds no direct
-/// <c>ILibraryManager</c> reference, but still depends on <see cref="IUserViewManager"/>, a node of
-/// the query/user-views DI cycle, so it is not fully cycle-free (see
+/// <see cref="IUserViewCatalog"/>, <see cref="IItemSortService"/> and
+/// <see cref="IUserRootFolderProvider"/> mocked. <b>PR110</b>: this service now depends on
+/// <see cref="IUserViewCatalog"/> instead of <c>IUserViewManager</c> - it holds no direct or
+/// transitive reference to <c>ILibraryManager</c>, <c>IUserViewManager</c>, <c>IChannelManager</c> or
+/// <c>ILiveTvManager</c>, so it is a fully cycle-free leaf (see
 /// <c>docs/pr85b-item-query-scope-service.md</c>).
 /// </summary>
 public class ItemQueryScopeServiceTests
 {
     private readonly Mock<IItemLookupService> _itemLookupServiceMock = new();
-    private readonly Mock<IUserViewManager> _userViewManagerMock = new();
+    private readonly Mock<IUserViewCatalog> _userViewCatalogMock = new();
     private readonly Mock<IItemSortService> _itemSortServiceMock = new();
     private readonly Mock<IUserRootFolderProvider> _rootFolderProviderMock = new();
     private readonly ItemQueryScopeService _scopeService;
@@ -38,7 +39,7 @@ public class ItemQueryScopeServiceTests
     {
         _scopeService = new ItemQueryScopeService(
             _itemLookupServiceMock.Object,
-            _userViewManagerMock.Object,
+            _userViewCatalogMock.Object,
             _itemSortServiceMock.Object,
             _rootFolderProviderMock.Object);
     }
@@ -61,7 +62,7 @@ public class ItemQueryScopeServiceTests
     }
 
     // ---------------------------------------------------------------
-    // 2. AddUserToQuery resolves the user's views into TopParentIds via IUserViewManager when the
+    // 2. AddUserToQuery resolves the user's views into TopParentIds via IUserViewCatalog when the
     // query does not already carry any scoping (LibraryManager.cs L1985-2016).
     // ---------------------------------------------------------------
 
@@ -72,14 +73,14 @@ public class ItemQueryScopeServiceTests
         var physicalFolderId = Guid.NewGuid();
         var userView = new CollectionFolder { Id = Guid.NewGuid(), Name = "Movies", PhysicalFolderIds = [physicalFolderId] };
 
-        _userViewManagerMock.Setup(m => m.GetUserViews(It.IsAny<UserViewQuery>())).Returns([userView]);
+        _userViewCatalogMock.Setup(m => m.GetUserViews(It.IsAny<UserViewQuery>())).Returns([userView]);
 
         var query = new InternalItemsQuery(user);
 
         _scopeService.AddUserToQuery(query, user);
 
         Assert.Equal(new[] { physicalFolderId }, query.TopParentIds);
-        _userViewManagerMock.Verify(
+        _userViewCatalogMock.Verify(
             m => m.GetUserViews(It.Is<UserViewQuery>(q => q.User == user && q.IncludeHidden)),
             Times.Once);
     }
@@ -163,7 +164,7 @@ public class ItemQueryScopeServiceTests
     {
         var user = new User("test-user", "provider", "provider");
         UserViewQuery? capturedQuery = null;
-        _userViewManagerMock.Setup(m => m.GetUserViews(It.IsAny<UserViewQuery>()))
+        _userViewCatalogMock.Setup(m => m.GetUserViews(It.IsAny<UserViewQuery>()))
             .Callback<UserViewQuery>(q => capturedQuery = q)
             .Returns([]);
 
@@ -177,7 +178,7 @@ public class ItemQueryScopeServiceTests
 
     // ---------------------------------------------------------------
     // 6. AddUserToQuery is a no-op when the query is already scoped (e.g. non-empty AncestorIds) -
-    // IUserViewManager is never consulted (LibraryManager.cs L1992-1999 guard condition).
+    // IUserViewCatalog is never consulted (LibraryManager.cs L1992-1999 guard condition).
     // ---------------------------------------------------------------
 
     [Fact]
@@ -188,7 +189,7 @@ public class ItemQueryScopeServiceTests
 
         _scopeService.AddUserToQuery(query, user);
 
-        _userViewManagerMock.Verify(m => m.GetUserViews(It.IsAny<UserViewQuery>()), Times.Never);
+        _userViewCatalogMock.Verify(m => m.GetUserViews(It.IsAny<UserViewQuery>()), Times.Never);
         Assert.Empty(query.TopParentIds);
     }
 
@@ -201,7 +202,7 @@ public class ItemQueryScopeServiceTests
     public void AddUserToQuery_QueryWithoutUser_SetsUserOnQuery()
     {
         var user = new User("test-user", "provider", "provider");
-        _userViewManagerMock.Setup(m => m.GetUserViews(It.IsAny<UserViewQuery>())).Returns([]);
+        _userViewCatalogMock.Setup(m => m.GetUserViews(It.IsAny<UserViewQuery>())).Returns([]);
 
         var query = new InternalItemsQuery();
 
@@ -235,7 +236,7 @@ public class ItemQueryScopeServiceTests
 
             _itemLookupServiceMock.Setup(m => m.GetItemById(topFolder.Id)).Returns(topFolder);
             _itemLookupServiceMock.Setup(m => m.GetItemById(aggregate.Id)).Returns(aggregate);
-            _userViewManagerMock.Setup(m => m.GetUserViews(It.IsAny<UserViewQuery>())).Returns(new[] { leaf });
+            _userViewCatalogMock.Setup(m => m.GetUserViews(It.IsAny<UserViewQuery>())).Returns(new[] { leaf });
 
             var query = new InternalItemsQuery(user);
 

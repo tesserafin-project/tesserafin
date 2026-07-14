@@ -47,6 +47,7 @@ namespace Reefin.LiveTv
         private readonly IRecordingsManager _recordingsManager;
         private readonly LiveTvDtoService _tvDtoService;
         private readonly ILiveTvService[] _services;
+        private readonly IUserViewFactory _userViewFactory;
 
         public LiveTvManager(
             IServerConfigurationManager config,
@@ -59,7 +60,8 @@ namespace Reefin.LiveTv
             IChannelManager channelManager,
             IRecordingsManager recordingsManager,
             LiveTvDtoService liveTvDtoService,
-            IEnumerable<ILiveTvService> services)
+            IEnumerable<ILiveTvService> services,
+            IUserViewFactory userViewFactory)
         {
             _config = config;
             _logger = logger;
@@ -72,6 +74,7 @@ namespace Reefin.LiveTv
             _tvDtoService = liveTvDtoService;
             _recordingsManager = recordingsManager;
             _services = services.ToArray();
+            _userViewFactory = userViewFactory;
 
             var defaultService = _services.OfType<DefaultLiveTvService>().First();
             defaultService.TimerCreated += OnEmbyTvTimerCreated;
@@ -1263,7 +1266,7 @@ namespace Reefin.LiveTv
         public Folder GetInternalLiveTvFolder(CancellationToken cancellationToken)
         {
             var name = _localization.GetLocalizedString("HeaderLiveTV");
-            return _libraryManager.GetNamedView(name, CollectionType.livetv, name);
+            return _userViewFactory.GetNamedView(name, CollectionType.livetv, name);
         }
 
         /// <inheritdoc />

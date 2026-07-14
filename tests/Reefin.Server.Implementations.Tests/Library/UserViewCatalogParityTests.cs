@@ -425,43 +425,35 @@ public sealed class UserViewCatalogParityTests
             return new ProbeFolder(item) { Id = Guid.NewGuid(), Name = name, CollectionType = collectionType };
         }
 
+        /// <summary>
+        /// <b>PR110</b>: <c>UserViewManager.GetUserViews</c> now delegates entirely to
+        /// <see cref="IUserViewCatalog"/> - the manager side is built on the exact same catalog
+        /// construction as <see cref="BuildCatalog"/> (shared <see cref="UserViewFactory"/>, same
+        /// channel/Live TV provider functions, same real <see cref="ItemQueryService"/> probe wiring),
+        /// so these parity tests are now trivially green by construction (the point: they still prove
+        /// the façade delegates without duplicating the listing logic, RFC §9/PR110 exit criterion
+        /// "one real GetUserViews implementation"). <see cref="ILibraryManager"/> is kept as an inert
+        /// mock purely to satisfy <see cref="UserViewManager"/>'s ctor (used only by
+        /// <c>GetLatestItems</c>, out of scope for <c>GetUserViews</c> parity).
+        /// </summary>
         public UserViewManager BuildManager(Folder root)
         {
+            var catalog = BuildCatalog(root);
+
             var libraryManagerMock = new Mock<ILibraryManager>();
-            libraryManagerMock.Setup(l => l.GetUserRootFolder()).Returns(root);
-            libraryManagerMock
-                .Setup(l => l.GetNamedView(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<CollectionType?>(), It.IsAny<string>()))
-                .Returns((User u, string name, Guid parentId, CollectionType? type, string sortName) => UserViewFactory.GetNamedView(u, name, parentId, type, sortName));
-            libraryManagerMock
-                .Setup(l => l.GetNamedView(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<CollectionType?>(), It.IsAny<string>()))
-                .Returns((User u, string name, CollectionType? type, string sortName) => UserViewFactory.GetNamedView(u, name, type, sortName));
-            libraryManagerMock
-                .Setup(l => l.GetNamedView(It.IsAny<string>(), It.IsAny<CollectionType>(), It.IsAny<string>()))
-                .Returns((string name, CollectionType type, string sortName) => UserViewFactory.GetNamedView(name, type, sortName));
-            libraryManagerMock
-                .Setup(l => l.GetShadowView(It.IsAny<BaseItem>(), It.IsAny<CollectionType?>(), It.IsAny<string>()))
-                .Returns((BaseItem parent, CollectionType? type, string sortName) => UserViewFactory.GetShadowView(parent, type, sortName));
 
             var channelManagerMock = new Mock<IChannelManager>();
             channelManagerMock
                 .Setup(c => c.GetChannelsInternalAsync(It.IsAny<ChannelQuery>()))
                 .Returns((ChannelQuery q) => ChannelsProvider(q));
 
-            var liveTvManagerMock = new Mock<ILiveTvManager>();
-            liveTvManagerMock.Setup(l => l.GetEnabledUsers()).Returns(() => EnabledUsersProvider());
-            liveTvManagerMock
-                .Setup(l => l.GetInternalLiveTvFolder(It.IsAny<CancellationToken>()))
-                .Returns((CancellationToken ct) => LiveTvFolderProvider(ct));
-
             return new UserViewManager(
                 libraryManagerMock.Object,
                 Localization,
                 channelManagerMock.Object,
-                liveTvManagerMock.Object,
-                Config,
-                CollectionManager,
-                TvSeriesManager,
-                ItemSortService);
+                ItemSortService,
+                catalog,
+                UserViewFactory);
         }
 
         public UserViewCatalog BuildCatalog(Folder root)

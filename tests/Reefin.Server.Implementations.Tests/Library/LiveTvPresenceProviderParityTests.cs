@@ -32,9 +32,10 @@ namespace Reefin.Server.Implementations.Tests.Library;
 /// <c>docs/rfc-di-query-user-views-v2.md</c> §5, PR108), sharing the exact same
 /// <see cref="IUserManager"/>, <see cref="IServerConfigurationManager"/>,
 /// <see cref="IEnumerable{ILiveTvService}"/> and <see cref="ILocalizationManager"/> fakes between
-/// both sides - only the members each side needs to reach the folder (<c>ILibraryManager.GetNamedView</c>
-/// vs. <c>IUserViewFactory.GetNamedView</c>) differ, and those are configured to return the same
-/// sentinel <see cref="UserView"/> instance for the same arguments.
+/// both sides. <b>PR110</b>: <c>LiveTvManager.GetInternalLiveTvFolder</c> now also calls
+/// <c>IUserViewFactory.GetNamedView</c> (no more <c>ILibraryManager.GetNamedView</c>) - both sides
+/// share the exact same <see cref="IUserViewFactory"/> mock, configured to return the same sentinel
+/// <see cref="UserView"/> instance for the same arguments.
 /// </summary>
 public sealed class LiveTvPresenceProviderParityTests
 {
@@ -116,7 +117,8 @@ public sealed class LiveTvPresenceProviderParityTests
             Mock.Of<Reefin.Controller.Channels.IChannelManager>(),
             Mock.Of<IRecordingsManager>(),
             liveTvDtoService,
-            services);
+            services,
+            Mock.Of<IUserViewFactory>());
 
         var providerResult = provider.GetEnabledUsers().Select(u => u.Id).ToArray();
         var managerResult = manager.GetEnabledUsers().Select(u => u.Id).ToArray();
@@ -137,7 +139,6 @@ public sealed class LiveTvPresenceProviderParityTests
         userViewFactoryMock.Setup(f => f.GetNamedView("Live TV", CollectionType.livetv, "Live TV")).Returns(sharedFolder);
 
         var libraryManagerMock = new Mock<ILibraryManager>();
-        libraryManagerMock.Setup(l => l.GetNamedView("Live TV", CollectionType.livetv, "Live TV")).Returns(sharedFolder);
 
         var configMock = MakeConfigMock();
         var liveTvDtoService = new LiveTvDtoService(Mock.Of<IDtoService>(), Mock.Of<IImageProcessor>(), NullLogger<LiveTvDtoService>.Instance, Mock.Of<IApplicationHost>(), libraryManagerMock.Object);
@@ -161,7 +162,8 @@ public sealed class LiveTvPresenceProviderParityTests
             Mock.Of<Reefin.Controller.Channels.IChannelManager>(),
             Mock.Of<IRecordingsManager>(),
             liveTvDtoService,
-            services);
+            services,
+            userViewFactoryMock.Object);
 
         var providerResult = provider.GetLiveTvFolder(CancellationToken.None);
         var managerResult = manager.GetInternalLiveTvFolder(CancellationToken.None);
