@@ -95,6 +95,7 @@ namespace Reefin.Server.Core.Library
         private readonly IItemCacheStore _itemCacheStore;
         private readonly IItemAccessService _itemAccessService;
         private readonly IItemStore _itemStore;
+        private readonly IUserViewFactory _userViewFactory;
         private readonly DotIgnoreIgnoreRule _dotIgnoreIgnoreRule;
         private readonly IMediaStreamLanguageService _mediaStreamLanguageService;
         private readonly Lazy<IExternalDataManager> _externalDataManagerFactory;
@@ -104,8 +105,6 @@ namespace Reefin.Server.Core.Library
         /// </summary>
         private readonly Lock _rootFolderSyncLock = new();
         private readonly Lock _userRootFolderSyncLock = new();
-
-        private readonly TimeSpan _viewRefreshInterval = TimeSpan.FromHours(24);
 
         /// <summary>
         /// The _root folder.
@@ -149,6 +148,7 @@ namespace Reefin.Server.Core.Library
         /// <param name="itemCacheStore">The item cache lifecycle port (register/invalidate side of the same cache; see PR76).</param>
         /// <param name="itemAccessService">The item access service (user visibility on top of the item lookup service; see PR77).</param>
         /// <param name="itemStore">The item store leaf (id generation, save+register; see PR106a). <see cref="LibraryManager"/> subscribes to its <see cref="IItemStore.ItemSaved"/> event and relays it as <see cref="ItemAdded"/> - a leaf dependency, not a cycle: <c>ItemStore</c> never references <see cref="ILibraryManager"/>.</param>
+        /// <param name="userViewFactory">The user-view factory leaf (named/shadow view creation; see PR106b). <see cref="GetNamedView(User, string, CollectionType?, string)"/> and the other overloads delegate to it - a leaf dependency, not a cycle: <c>UserViewFactory</c> never references <see cref="ILibraryManager"/>.</param>
         public LibraryManager(
             IServerApplicationHost appHost,
             ILoggerFactory loggerFactory,
@@ -180,7 +180,8 @@ namespace Reefin.Server.Core.Library
             IItemLookupService itemLookupService,
             IItemCacheStore itemCacheStore,
             IItemAccessService itemAccessService,
-            IItemStore itemStore)
+            IItemStore itemStore,
+            IUserViewFactory userViewFactory)
         {
             _appHost = appHost;
             _logger = loggerFactory.CreateLogger<LibraryManager>();
@@ -209,6 +210,7 @@ namespace Reefin.Server.Core.Library
 
             _itemStore = itemStore;
             _itemStore.ItemSaved += OnItemStoreItemSaved;
+            _userViewFactory = userViewFactory;
 
             _namingOptions = namingOptions;
             _peopleRepository = peopleRepository;
@@ -2789,59 +2791,39 @@ namespace Reefin.Server.Core.Library
                 .FirstOrDefault(i => i is not null);
         }
 
+        /// <inheritdoc />
+        /// <remarks>
+        /// Delegates to <see cref="IUserViewFactory"/> (PR106b) - <see cref="ILibraryManager"/> keeps
+        /// this member for API compatibility, but no longer owns the logic (RFC
+        /// <c>docs/rfc-di-query-user-views-v2.md</c> §9/PR106b).
+        /// </remarks>
         public UserView GetNamedView(
             User user,
             string name,
             CollectionType? viewType,
             string sortName)
         {
-            return GetNamedView(user, name, Guid.Empty, viewType, sortName);
+            return _userViewFactory.GetNamedView(user, name, viewType, sortName);
         }
 
+        /// <inheritdoc />
+        /// <remarks>
+        /// Delegates to <see cref="IUserViewFactory"/> (PR106b) - see remarks on the other
+        /// <see cref="GetNamedView(User, string, CollectionType?, string)"/> overload.
+        /// </remarks>
         public UserView GetNamedView(
             string name,
             CollectionType viewType,
             string sortName)
         {
-            var path = Path.Combine(
-                _configurationManager.ApplicationPaths.InternalMetadataPath,
-                "views",
-                _fileSystem.GetValidFilename(viewType.ToString()));
-
-            var id = GetNewItemId(path + "_namedview_" + name, typeof(UserView));
-
-            var item = GetItemById(id) as UserView;
-
-            var refresh = false;
-
-            if (item is null || !string.Equals(item.Path, path, StringComparison.OrdinalIgnoreCase))
-            {
-                var info = Directory.CreateDirectory(path);
-                item = new UserView
-                {
-                    Path = path,
-                    Id = id,
-                    DateCreated = info.CreationTimeUtc,
-                    DateModified = info.LastWriteTimeUtc,
-                    Name = name,
-                    ViewType = viewType,
-                    ForcedSortName = sortName
-                };
-
-                CreateItem(item, null);
-
-                refresh = true;
-            }
-
-            if (refresh)
-            {
-                item.UpdateToRepositoryAsync(ItemUpdateType.MetadataImport, CancellationToken.None).GetAwaiter().GetResult();
-                ProviderManager.QueueRefresh(item.Id, new MetadataRefreshOptions(new DirectoryService(_fileSystem)), RefreshPriority.Normal);
-            }
-
-            return item;
+            return _userViewFactory.GetNamedView(name, viewType, sortName);
         }
 
+        /// <inheritdoc />
+        /// <remarks>
+        /// Delegates to <see cref="IUserViewFactory"/> (PR106b) - see remarks on the other
+        /// <see cref="GetNamedView(User, string, CollectionType?, string)"/> overload.
+        /// </remarks>
         public UserView GetNamedView(
             User user,
             string name,
@@ -2849,128 +2831,27 @@ namespace Reefin.Server.Core.Library
             CollectionType? viewType,
             string sortName)
         {
-            var parentIdString = parentId.IsEmpty()
-                ? null
-                : parentId.ToString("N", CultureInfo.InvariantCulture);
-            var idValues = "38_namedview_" + name + user.Id.ToString("N", CultureInfo.InvariantCulture) + (parentIdString ?? string.Empty) + (viewType?.ToString() ?? string.Empty);
-
-            var id = GetNewItemId(idValues, typeof(UserView));
-
-            var path = Path.Combine(_configurationManager.ApplicationPaths.InternalMetadataPath, "views", id.ToString("N", CultureInfo.InvariantCulture));
-
-            var item = GetItemById(id) as UserView;
-
-            var isNew = false;
-
-            if (item is null)
-            {
-                var info = Directory.CreateDirectory(path);
-                item = new UserView
-                {
-                    Path = path,
-                    Id = id,
-                    DateCreated = info.CreationTimeUtc,
-                    DateModified = info.LastWriteTimeUtc,
-                    Name = name,
-                    ViewType = viewType,
-                    ForcedSortName = sortName,
-                    UserId = user.Id,
-                    DisplayParentId = parentId
-                };
-
-                CreateItem(item, null);
-
-                isNew = true;
-            }
-
-            var lastRefreshedUtc = item.DateLastRefreshed;
-            var refresh = isNew || DateTime.UtcNow - lastRefreshedUtc >= _viewRefreshInterval;
-
-            if (!refresh && !item.DisplayParentId.IsEmpty())
-            {
-                var displayParent = GetItemById(item.DisplayParentId);
-                refresh = displayParent is not null && displayParent.DateLastSaved > lastRefreshedUtc;
-            }
-
-            if (refresh)
-            {
-                ProviderManager.QueueRefresh(
-                    item.Id,
-                    new MetadataRefreshOptions(new DirectoryService(_fileSystem))
-                    {
-                        // Need to force save to increment DateLastSaved
-                        ForceSave = true
-                    },
-                    RefreshPriority.Normal);
-            }
-
-            return item;
+            return _userViewFactory.GetNamedView(user, name, parentId, viewType, sortName);
         }
 
+        /// <inheritdoc />
+        /// <remarks>
+        /// Delegates to <see cref="IUserViewFactory"/> (PR106b) - see remarks on the
+        /// <see cref="GetNamedView(User, string, CollectionType?, string)"/> overload.
+        /// </remarks>
         public UserView GetShadowView(
             BaseItem parent,
             CollectionType? viewType,
             string sortName)
         {
-            ArgumentNullException.ThrowIfNull(parent);
-
-            var name = parent.Name;
-            var parentId = parent.Id;
-
-            var idValues = "38_namedview_" + name + parentId + (viewType?.ToString() ?? string.Empty);
-
-            var id = GetNewItemId(idValues, typeof(UserView));
-
-            var path = parent.Path;
-
-            var item = GetItemById(id) as UserView;
-
-            var isNew = false;
-
-            if (item is null)
-            {
-                var info = Directory.CreateDirectory(path);
-                item = new UserView
-                {
-                    Path = path,
-                    Id = id,
-                    DateCreated = info.CreationTimeUtc,
-                    DateModified = info.LastWriteTimeUtc,
-                    Name = name,
-                    ViewType = viewType,
-                    ForcedSortName = sortName,
-                    DisplayParentId = parentId
-                };
-
-                CreateItem(item, null);
-
-                isNew = true;
-            }
-
-            var lastRefreshedUtc = item.DateLastRefreshed;
-            var refresh = isNew || DateTime.UtcNow - lastRefreshedUtc >= _viewRefreshInterval;
-
-            if (!refresh && !item.DisplayParentId.IsEmpty())
-            {
-                var displayParent = GetItemById(item.DisplayParentId);
-                refresh = displayParent is not null && displayParent.DateLastSaved > lastRefreshedUtc;
-            }
-
-            if (refresh)
-            {
-                ProviderManager.QueueRefresh(
-                    item.Id,
-                    new MetadataRefreshOptions(new DirectoryService(_fileSystem))
-                    {
-                        // Need to force save to increment DateLastSaved
-                        ForceSave = true
-                    },
-                    RefreshPriority.Normal);
-            }
-
-            return item;
+            return _userViewFactory.GetShadowView(parent, viewType, sortName);
         }
 
+        /// <inheritdoc />
+        /// <remarks>
+        /// Delegates to <see cref="IUserViewFactory"/> (PR106b) - see remarks on the
+        /// <see cref="GetNamedView(User, string, CollectionType?, string)"/> overload.
+        /// </remarks>
         public UserView GetNamedView(
             string name,
             Guid parentId,
@@ -2978,73 +2859,7 @@ namespace Reefin.Server.Core.Library
             string sortName,
             string uniqueId)
         {
-            ArgumentException.ThrowIfNullOrEmpty(name);
-
-            var parentIdString = parentId.IsEmpty()
-                ? null
-                : parentId.ToString("N", CultureInfo.InvariantCulture);
-            var idValues = "37_namedview_" + name + (parentIdString ?? string.Empty) + (viewType?.ToString() ?? string.Empty);
-            if (!string.IsNullOrEmpty(uniqueId))
-            {
-                idValues += uniqueId;
-            }
-
-            var id = GetNewItemId(idValues, typeof(UserView));
-
-            var path = Path.Combine(_configurationManager.ApplicationPaths.InternalMetadataPath, "views", id.ToString("N", CultureInfo.InvariantCulture));
-
-            var item = GetItemById(id) as UserView;
-
-            var isNew = false;
-
-            if (item is null)
-            {
-                var info = Directory.CreateDirectory(path);
-                item = new UserView
-                {
-                    Path = path,
-                    Id = id,
-                    DateCreated = info.CreationTimeUtc,
-                    DateModified = info.LastWriteTimeUtc,
-                    Name = name,
-                    ViewType = viewType,
-                    ForcedSortName = sortName,
-                    DisplayParentId = parentId
-                };
-
-                CreateItem(item, null);
-
-                isNew = true;
-            }
-
-            if (viewType != item.ViewType)
-            {
-                item.ViewType = viewType;
-                item.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, CancellationToken.None).GetAwaiter().GetResult();
-            }
-
-            var lastRefreshedUtc = item.DateLastRefreshed;
-            var refresh = isNew || DateTime.UtcNow - lastRefreshedUtc >= _viewRefreshInterval;
-
-            if (!refresh && !item.DisplayParentId.IsEmpty())
-            {
-                var displayParent = GetItemById(item.DisplayParentId);
-                refresh = displayParent is not null && displayParent.DateLastSaved > lastRefreshedUtc;
-            }
-
-            if (refresh)
-            {
-                ProviderManager.QueueRefresh(
-                    item.Id,
-                    new MetadataRefreshOptions(new DirectoryService(_fileSystem))
-                    {
-                        // Need to force save to increment DateLastSaved
-                        ForceSave = true
-                    },
-                    RefreshPriority.Normal);
-            }
-
-            return item;
+            return _userViewFactory.GetNamedView(name, parentId, viewType, sortName, uniqueId);
         }
 
         public BaseItem GetParentItem(Guid? parentId, Guid? userId)
