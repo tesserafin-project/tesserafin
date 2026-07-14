@@ -1,3 +1,5 @@
+> **REMPLACÉ** par `docs/rfc-di-query-user-views-v2.md` (PR105) — rejeté en revue externe pour cycles cachés (`IUserRootFolderProvider` aliasé sur `LibraryManager` ; cycle caché via `IChannelManager`), voir `docs/major-rewrite-plan-v13.md` § « Revue externe après PR99 ».
+
 # RFC — Démêlage du cycle DI query / user-views / channel
 
 - **PR** : PR99 (design uniquement, aucun code de production)
