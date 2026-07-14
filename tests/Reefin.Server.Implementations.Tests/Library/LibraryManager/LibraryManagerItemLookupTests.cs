@@ -44,6 +44,7 @@ public class LibraryManagerItemLookupTests
     private readonly Mock<IItemPersistenceService> _persistenceServiceMock;
     private readonly Mock<IServerConfigurationManager> _configurationManagerMock;
     private readonly Mock<IExternalDataManager> _externalDataManagerMock;
+    private readonly Mock<IUserRootFolderProvider> _userRootFolderProviderMock;
 
     public LibraryManagerItemLookupTests()
     {
@@ -62,6 +63,12 @@ public class LibraryManagerItemLookupTests
 
         _externalDataManagerMock = fixture.Freeze<Mock<IExternalDataManager>>();
         fixture.Register(() => new Lazy<IExternalDataManager>(() => _externalDataManagerMock.Object));
+
+        // PR107: LibraryManager no longer owns UserRootFolder construction/caching itself - it
+        // delegates to IUserRootFolderProvider. Freeze the auto-mock so individual tests can control
+        // what GetUserRootFolder() returns (see ValidateTopLibraryFolders_... below, which used to
+        // reach into LibraryManager's own private _userRootFolder field via reflection).
+        _userRootFolderProviderMock = fixture.Freeze<Mock<IUserRootFolderProvider>>();
 
         // PR75: LibraryManager no longer owns the item lookup cache directly - it delegates to a
         // single ItemLookupService instance. Build a *real* ItemLookupService (not a mock) from the
@@ -536,9 +543,13 @@ public class LibraryManagerItemLookupTests
         libraryManagerType
             .GetField("_rootFolder", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
             .SetValue(_libraryManager, new StubAggregateFolder());
-        libraryManagerType
-            .GetField("_userRootFolder", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
-            .SetValue(_libraryManager, new StubUserRootFolder { StubChildren = [missing] });
+
+        // PR107: UserRootFolder construction/caching moved off LibraryManager to
+        // IUserRootFolderProvider - stub the injected mock's GetUserRootFolder() instead of poking a
+        // (now-removed) private LibraryManager field.
+        _userRootFolderProviderMock
+            .Setup(p => p.GetUserRootFolder())
+            .Returns(new StubUserRootFolder { StubChildren = [missing] });
 
         await _libraryManager.ValidateTopLibraryFolders(CancellationToken.None);
 
