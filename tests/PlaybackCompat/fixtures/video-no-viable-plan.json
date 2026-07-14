@@ -1,8 +1,8 @@
 {
-  "fixtureVersion": 3,
+  "fixtureVersion": 4,
   "id": "video-no-viable-plan",
   "category": "no-viable-plan",
-  "engineVersion": 4,
+  "engineVersion": 5,
   "description": "Video codec the client cannot decode, and transcoding is disallowed by the source and the constraints. No method can produce a playable stream. Expect isViable=false with NoViablePlan.",
   "input": {
     "context": { "mediaKind": "Video" },

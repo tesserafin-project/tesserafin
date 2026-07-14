@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace Reefin.Playback.Decision;
 
 /// <summary>
@@ -13,6 +15,16 @@ namespace Reefin.Playback.Decision;
 /// <param name="MaxAudioChannels">The maximum audio channel count allowed, or <see langword="null"/> if unbounded.</param>
 /// <param name="PreferredAudioStreamIndex">The preferred audio stream index, or <see langword="null"/> for no preference.</param>
 /// <param name="PreferredSubtitleStreamIndex">The preferred subtitle stream index, or <see langword="null"/> for no preference.</param>
+/// <param name="SubtitleMode">
+/// How to auto-select a subtitle stream (PR103) when <paramref name="PreferredSubtitleStreamIndex"/>
+/// is <see langword="null"/> - mirrors the legacy user-level <c>SubtitlePlaybackMode</c> preference
+/// consumed by <c>MediaStreamSelector.GetDefaultSubtitleStreamIndex</c>.
+/// </param>
+/// <param name="PreferredSubtitleLanguages">
+/// The preferred subtitle languages, in preference order (PR103). An empty list is a wildcard -
+/// matches any language - the same semantics as the legacy
+/// <c>MediaStreamSelector.MatchesPreferredLanguage</c>.
+/// </param>
 /// <param name="AlwaysBurnInSubtitleWhenTranscoding">Whether subtitles must always be burned in whenever transcoding occurs, regardless of client subtitle capability.</param>
 /// <param name="StartTimeTicks">The playback start offset, in ticks.</param>
 public sealed record PlaybackConstraints(
@@ -25,5 +37,7 @@ public sealed record PlaybackConstraints(
     int? MaxAudioChannels,
     int? PreferredAudioStreamIndex,
     int? PreferredSubtitleStreamIndex,
+    SubtitlePlaybackMode SubtitleMode,
+    IReadOnlyList<string> PreferredSubtitleLanguages,
     bool AlwaysBurnInSubtitleWhenTranscoding,
     long StartTimeTicks);

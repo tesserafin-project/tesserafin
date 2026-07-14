@@ -94,10 +94,25 @@ public static class MediaSourceSnapshotMapper
     {
         return new SubtitleStreamSnapshot(
             Index: stream.Index,
-            Format: stream.Codec ?? string.Empty,
+            Format: NormalizeSubtitleFormat(stream.Codec),
             IsExternal: stream.IsExternal,
             IsForced: stream.IsForced,
             IsDefault: stream.IsDefault,
             Language: stream.Language);
     }
+
+    /// <summary>
+    /// Normalizes an identity alias between ffmpeg's probed codec name and the vocabulary legacy
+    /// <c>SubtitleProfile.Format</c> declares (PR103): <c>"webvtt"</c> (probed codec) and
+    /// <c>"vtt"</c> (the format/extension legacy device profiles declare, see e.g.
+    /// <c>DeviceProfile-Chrome.json</c>'s <c>SubtitleProfiles</c>) name the same format - legacy's
+    /// <c>StreamBuilder.GetExternalSubtitleProfile</c> (StreamBuilder.cs:1594-1624) resolves this via
+    /// <c>MediaStream.SupportsSubtitleConversionTo</c>, which is a no-op "conversion" for this pair.
+    /// Not a general text-subtitle-format-conversion model (srt-to-vtt real re-encoding stays
+    /// unmodeled, a documented PR103 gap) - just this one same-format spelling difference, so v2's
+    /// strict <c>EqualsIgnoreCase</c> capability match (<c>PlaybackEngine.BuildForSource</c>) sees
+    /// them as the same format, same as legacy effectively does.
+    /// </summary>
+    private static string NormalizeSubtitleFormat(string? codec) =>
+        string.Equals(codec, "webvtt", StringComparison.OrdinalIgnoreCase) ? "vtt" : codec ?? string.Empty;
 }

@@ -67,6 +67,9 @@ public static class FixtureParityTests
         Assert.Equal(expected.Output.Resolution, decision.Output.Resolution);
         Assert.Equal(expected.Output.VideoRange, decision.Output.VideoRange);
         Assert.Equal(expected.Output.AudioChannels, decision.Output.AudioChannels);
+        Assert.Equal(expected.Output.TotalBitrate, decision.Output.TotalBitrate);
+        Assert.Equal(expected.Output.VideoBitrate, decision.Output.VideoBitrate);
+        Assert.Equal(expected.Output.AudioBitrate, decision.Output.AudioBitrate);
 
         var expectedTransforms = expected.Transforms.Select(Enum.Parse<TransformKind>).ToHashSet();
         var actualTransforms = decision.Transforms.ToHashSet();
@@ -114,5 +117,8 @@ public static class FixtureParityTests
         string? AudioCodec,
         Resolution? Resolution,
         string? VideoRange,
-        int? AudioChannels);
+        int? AudioChannels,
+        int? TotalBitrate,
+        int? VideoBitrate,
+        int? AudioBitrate);
 }

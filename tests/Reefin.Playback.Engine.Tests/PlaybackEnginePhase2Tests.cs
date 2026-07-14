@@ -495,9 +495,9 @@ public static class PlaybackEnginePhase2Tests
     }
 
     [Fact]
-    public static void EngineVersion_IsFour()
+    public static void EngineVersion_IsFive()
     {
-        Assert.Equal(4, PlaybackEngine.EngineVersion);
+        Assert.Equal(5, PlaybackEngine.EngineVersion);
     }
 
     private static IEnumerable<ReasonCode> FlattenReasonCodes(ReasonNode node)

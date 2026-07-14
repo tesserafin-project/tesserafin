@@ -71,7 +71,11 @@ public static class V2DecisionProjector
             SelectedSource: decision.SelectedSource,
             OutputWidth: decision.Output.Resolution?.Width,
             OutputHeight: decision.Output.Resolution?.Height,
-            OutputBitrate: decision.Output.Bitrate,
+            // PR103: mirrors LegacyDecisionProjector's choice of the target VIDEO bitrate
+            // specifically, not a total - see that projector's remarks on why TargetTotalBitrate is
+            // avoided (it fabricates a known value out of an unknown half). OutputSpec.VideoBitrate
+            // is the same "video-axis-only" ceiling, now genuinely populated instead of always null.
+            OutputBitrate: decision.Output.VideoBitrate,
             OutputVideoRange: decision.Output.VideoRange,
             OutputAudioChannels: decision.Output.AudioChannels,
             SubtitleDeliveryMode: subtitle is not null ? MapDeliveryMode(subtitle.Delivery) : SubtitleDeliveryMode.None);

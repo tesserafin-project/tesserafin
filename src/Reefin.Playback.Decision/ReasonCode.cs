@@ -189,4 +189,12 @@ public enum ReasonCode
     /// the engine fell back to its named legacy default transcoding target (PR102).
     /// </summary>
     OutputProfileFallbackUsed,
+
+    /// <summary>
+    /// The request named a specific <c>MediaSourceId</c>, but no source with that id was present
+    /// on the item (PR103). Distinct from a requested source that exists but is not viable: that
+    /// case carries the usual non-viability reasons scoped to the requested source instead, and the
+    /// engine never falls back to a different source either way.
+    /// </summary>
+    RequestedSourceNotFound,
 }

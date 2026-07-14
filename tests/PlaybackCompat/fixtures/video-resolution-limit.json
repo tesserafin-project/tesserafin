@@ -1,8 +1,8 @@
 {
-  "fixtureVersion": 3,
+  "fixtureVersion": 4,
   "id": "video-resolution-limit",
   "category": "bitrate-resolution-limit",
-  "engineVersion": 4,
+  "engineVersion": 5,
   "description": "4K H.264 exceeding the client's 1080p max (a per-codec limit on the H.264 VideoCodecCapability, PR102b), with every OTHER dimension deliberately within limits (level, bit depth, range, bitrate all generous) so ONLY resolution trips. Video downscales (targeting the client's declared H.264 output profile); audio copied.",
   "input": {
     "context": { "mediaKind": "Video" },
@@ -39,7 +39,7 @@
   "expected": {
     "method": "Transcode",
     "selectedStreams": { "video": 0, "audio": 1, "subtitle": null },
-    "output": { "container": "mp4", "videoCodec": "h264", "audioCodec": "aac", "resolution": { "width": 1920, "height": 1080 } },
+    "output": { "container": "mp4", "videoCodec": "h264", "audioCodec": "aac", "resolution": { "width": 1920, "height": 1080 }, "totalBitrate": 100000000, "videoBitrate": 100000000 },
     "transforms": ["TranscodeVideo", "CopyAudio"],
     "reasonCodes": ["VideoResolutionNotSupported", "MethodChosen"],
     "isViable": true

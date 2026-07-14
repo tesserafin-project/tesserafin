@@ -2,12 +2,12 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://reefin/tests/PlaybackCompat/fixture.schema.json",
   "title": "Playback compatibility fixture (v2)",
-  "description": "Versioned fixture for the playback-decision compatibility lab (PR93). Input mirrors the PR91 domain objects; 'expected' describes the v2 PlaybackDecision. Legacy projection is computed at run time and compared by category (PR98), never by raw StreamInfo equality. v2 (PR102): 'capabilities' splits into 'decode' (DecodeCapabilities) and 'outputProfiles' (ordered PlaybackOutputProfile list), replacing the v1 flat capability shape. v2.2 (PR102b): 'decode.directPlayProfiles' replaces the flat 'decode.containers' list (container+codec combinations preserved, not flattened - problem #1), and per-codec 'maxResolution'/'maxBitrate' replace the old global 'decode.maxResolution'/'maxVideoBitrate'/'decode.maxAudioBitrate' fields (problem #2).",
+  "description": "Versioned fixture for the playback-decision compatibility lab (PR93). Input mirrors the PR91 domain objects; 'expected' describes the v2 PlaybackDecision. Legacy projection is computed at run time and compared by category (PR98), never by raw StreamInfo equality. v2 (PR102): 'capabilities' splits into 'decode' (DecodeCapabilities) and 'outputProfiles' (ordered PlaybackOutputProfile list), replacing the v1 flat capability shape. v2.2 (PR102b): 'decode.directPlayProfiles' replaces the flat 'decode.containers' list (container+codec combinations preserved, not flattened - problem #1), and per-codec 'maxResolution'/'maxBitrate' replace the old global 'decode.maxResolution'/'maxVideoBitrate'/'decode.maxAudioBitrate' fields (problem #2). v2.3 (PR103): 'expected.output.bitrate' replaces with 'totalBitrate'/'videoBitrate'/'audioBitrate' (OutputSpec.Bitrate was always null pre-PR103; the engine now populates per-axis ceilings), and 'constraints' gains optional 'subtitleMode'/'preferredSubtitleLanguages' driving legacy-parity subtitle auto-selection.",
   "type": "object",
   "required": ["fixtureVersion", "id", "category", "engineVersion", "input", "expected"],
   "additionalProperties": false,
   "properties": {
-    "fixtureVersion": { "const": 3 },
+    "fixtureVersion": { "const": 4 },
     "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
     "category": {
       "type": "string",
@@ -162,6 +162,15 @@
             "maxAudioChannels": { "type": ["integer", "null"] },
             "preferredAudioStreamIndex": { "type": ["integer", "null"] },
             "preferredSubtitleStreamIndex": { "type": ["integer", "null"] },
+            "subtitleMode": {
+              "enum": ["Default", "Always", "OnlyForced", "None", "Smart"],
+              "description": "PR103: how to auto-select a subtitle when preferredSubtitleStreamIndex is absent. Defaults to Default when omitted."
+            },
+            "preferredSubtitleLanguages": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "PR103: preferred subtitle languages in order; empty/omitted is a wildcard (matches any language)."
+            },
             "alwaysBurnInSubtitleWhenTranscoding": { "type": "boolean" }
           }
         }
@@ -190,7 +199,9 @@
             "resolution": { "type": ["object", "null"] },
             "videoRange": { "type": ["string", "null"] },
             "audioChannels": { "type": ["integer", "null"] },
-            "bitrate": { "type": ["integer", "null"] }
+            "totalBitrate": { "type": ["integer", "null"] },
+            "videoBitrate": { "type": ["integer", "null"] },
+            "audioBitrate": { "type": ["integer", "null"] }
           }
         },
         "transforms": {

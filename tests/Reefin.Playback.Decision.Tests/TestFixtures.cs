@@ -82,6 +82,8 @@ internal static class TestFixtures
         MaxAudioChannels: 6,
         PreferredAudioStreamIndex: 1,
         PreferredSubtitleStreamIndex: null,
+        SubtitleMode: SubtitlePlaybackMode.Default,
+        PreferredSubtitleLanguages: ["eng"],
         AlwaysBurnInSubtitleWhenTranscoding: false,
         StartTimeTicks: 0);
 
@@ -149,6 +151,8 @@ internal static class TestFixtures
         Resolution: new Resolution(1920, 1080),
         VideoRange: "SDR",
         AudioChannels: 2,
-        Bitrate: 8_000_000,
+        TotalBitrate: 8_000_000,
+        VideoBitrate: 6_000_000,
+        AudioBitrate: 2_000_000,
         Protocol: StreamingProtocol.Hls);
 }

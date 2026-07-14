@@ -88,38 +88,43 @@ public sealed class OracleParityTests
         // cases are deliberately NOT constrained: whatever they classify as is the real finding of
         // this PR.
         //
-        // PR101 finding: this fixture's DivergenceClass is now PotentialRegression, not Equivalent.
-        // Both projectors are correctly reporting their engine's real, viable plan; the plans
-        // genuinely differ on one axis. Root cause traced in PlaybackEngine.SelectSubtitle: v2 only
-        // auto-selects a subtitle when the caller passes an explicit PreferredSubtitleStreamIndex,
-        // while legacy's StreamBuilder auto-selects a default/forced subtitle without one - and this
-        // test's MediaOptions sets no subtitle preference. The pre-PR101 int?-based comparator could
-        // not see this: legacy's Selected(index) and v2's absent selection both collapsed to "not
-        // asserted" and cancelled out. This is a real, pre-existing v2 engine limitation surfaced for
-        // the first time by the tri-state fix, not a comparator bug - it is called out here rather
-        // than engineered away (see PR101 final report) and is out of scope for this PR to fix in the
-        // engine itself.
+        // PR101 finding (closed by PR103): this fixture's DivergenceClass was PotentialRegression,
+        // not Equivalent. Root cause traced in PlaybackEngine.SelectSubtitle: v2 only auto-selected a
+        // subtitle when the caller passed an explicit PreferredSubtitleStreamIndex, while legacy's
+        // StreamBuilder auto-selects a default/forced subtitle without one - and this test's
+        // MediaOptions sets no subtitle preference.
+        //
+        // PR103: PlaybackEngine now reproduces MediaStreamSelector.GetDefaultSubtitleStreamIndex's
+        // default/forced auto-selection (SelectDefaultSubtitle), so v2 also auto-selects this
+        // source's one subtitle stream (webvtt, IsExternal=true) under SubtitlePlaybackMode.Default.
+        // Closing the selection gap exposed a second, narrower one: the stream's probed codec name
+        // ("webvtt") didn't match the client's declared SubtitleProfile.Format ("vtt") under v2's
+        // strict case-insensitive equality, where legacy's StreamBuilder.GetExternalSubtitleProfile
+        // (StreamBuilder.cs:1594-1624) resolves the two as the same format via
+        // MediaStream.SupportsSubtitleConversionTo. MediaSourceSnapshotMapper.NormalizeSubtitleFormat
+        // now normalizes this one identity alias (same format, different spelling) - not a general
+        // text-subtitle-format-conversion model, which stays unbuilt (see below) - so this fixture's
+        // divergence closes for real: v2 also resolves External delivery and direct-plays.
         var (_, _, directPlayDivergence) = results.Single(r => r.Source == "mp4-h264-aac-vtt-2600k");
 
-        Assert.True(
-            directPlayDivergence.Class is DivergenceClass.Equivalent or DivergenceClass.PotentialRegression,
-            $"Direct-play case classified as {directPlayDivergence.Class}, expected Equivalent (ideal) or PotentialRegression (the known, tracked subtitle-auto-selection gap documented above). Summary: {directPlayDivergence.Summary}");
-
-        // The media pipeline itself (method, transform set, reason set) must still match exactly:
-        // this proves any divergence is confined to the subtitle axis, not a new, broader regression.
+        Assert.Equal(DivergenceClass.Equivalent, directPlayDivergence.Class);
         Assert.False(directPlayDivergence.MethodDiffers);
         Assert.Empty(directPlayDivergence.OnlyLegacy);
         Assert.Empty(directPlayDivergence.OnlyV2);
         Assert.Empty(directPlayDivergence.ReasonOnlyLegacy);
         Assert.Empty(directPlayDivergence.ReasonOnlyV2);
 
-        if (directPlayDivergence.Class == DivergenceClass.PotentialRegression)
+        // The three transcode cases all involve srt->vtt or genuinely-incompatible-format subtitle
+        // conversion (real re-encoding, not a spelling alias): PlaybackEngine has no text-subtitle-
+        // format-conversion model (only exact-format capability matching, same as pre-PR103), so it
+        // burns the subtitle in instead of delivering it externally like legacy does. This is a real,
+        // documented, out-of-scope-for-PR103 gap (RFC-worthy, like the per-codec/per-profile capability
+        // splits PR102/PR102b needed their own PRs for) - not silently accepted by loosening an
+        // assertion, just not asserted on since this test classifies rather than gates.
+        foreach (var (deviceProfile, source, divergence) in results.Where(r => r.Source != "mp4-h264-aac-vtt-2600k"))
         {
-            Assert.Contains("subtitleDelivery", directPlayDivergence.Summary, StringComparison.Ordinal);
-            foreach (var otherAxis in new[] { "videoCodec", "audioCodec", "container", "videoRange", "resolution", "bitrate", "audioChannels", "source" })
-            {
-                Assert.DoesNotContain(otherAxis, directPlayDivergence.Summary, StringComparison.Ordinal);
-            }
+            _output.WriteLine(FormattableString.Invariant(
+                $"  (unasserted, documented gap) ({deviceProfile}, {source}) -> {divergence.Class}: subtitle text-format conversion (srt/hevc source -> vtt) not modeled by v2, see PlaybackEngine remarks."));
         }
     }
 

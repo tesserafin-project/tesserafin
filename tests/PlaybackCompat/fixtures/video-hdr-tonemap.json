@@ -1,8 +1,8 @@
 {
-  "fixtureVersion": 3,
+  "fixtureVersion": 4,
   "id": "video-hdr-tonemap",
   "category": "hdr-tonemap",
-  "engineVersion": 4,
+  "engineVersion": 5,
   "description": "HEVC HDR10 whose codec, level, bit depth and resolution are all accepted, but the client supports only SDR. Only the video range trips: video re-encodes with tonemapping to SDR (targeting the client's declared HEVC output profile); audio copied; container unchanged.",
   "input": {
     "context": { "mediaKind": "Video" },
@@ -39,7 +39,7 @@
   "expected": {
     "method": "Transcode",
     "selectedStreams": { "video": 0, "audio": 1, "subtitle": null },
-    "output": { "container": "mp4", "videoCodec": "hevc", "audioCodec": "aac", "videoRange": "SDR" },
+    "output": { "container": "mp4", "videoCodec": "hevc", "audioCodec": "aac", "videoRange": "SDR", "totalBitrate": 100000000, "videoBitrate": 100000000 },
     "transforms": ["TranscodeVideo", "Tonemap", "CopyAudio"],
     "reasonCodes": ["VideoRangeTypeNotSupported", "TonemapRequired", "MethodChosen"],
     "isViable": true

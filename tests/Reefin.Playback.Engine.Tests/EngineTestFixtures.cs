@@ -26,19 +26,24 @@ internal static class EngineTestFixtures
         bool allowTranscoding = true,
         bool allowVideoStreamCopy = true,
         bool allowAudioStreamCopy = true,
+        int? maxBitrate = null,
         int? maxAudioChannels = null,
         int? preferredAudioStreamIndex = null,
         int? preferredSubtitleStreamIndex = null,
+        SubtitlePlaybackMode subtitleMode = SubtitlePlaybackMode.Default,
+        IReadOnlyList<string>? preferredSubtitleLanguages = null,
         bool alwaysBurnInSubtitleWhenTranscoding = false) => new(
         AllowDirectPlay: allowDirectPlay,
         AllowDirectStream: allowDirectStream,
         AllowTranscoding: allowTranscoding,
         AllowVideoStreamCopy: allowVideoStreamCopy,
         AllowAudioStreamCopy: allowAudioStreamCopy,
-        MaxBitrate: null,
+        MaxBitrate: maxBitrate,
         MaxAudioChannels: maxAudioChannels,
         PreferredAudioStreamIndex: preferredAudioStreamIndex,
         PreferredSubtitleStreamIndex: preferredSubtitleStreamIndex,
+        SubtitleMode: subtitleMode,
+        PreferredSubtitleLanguages: preferredSubtitleLanguages ?? [],
         AlwaysBurnInSubtitleWhenTranscoding: alwaysBurnInSubtitleWhenTranscoding,
         StartTimeTicks: 0);
 
@@ -94,14 +99,16 @@ internal static class EngineTestFixtures
         string codec,
         bool isDefault = false,
         int? channels = null,
-        int? sampleRate = null) => new(
+        int? sampleRate = null,
+        int? bitrate = null,
+        string? language = null) => new(
         Index: index,
         Codec: codec,
         Channels: channels,
         SampleRate: sampleRate,
         BitDepth: null,
-        Bitrate: null,
-        Language: null,
+        Bitrate: bitrate,
+        Language: language,
         IsDefault: isDefault);
 
     public static SubtitleStreamSnapshot SubtitleStream(
@@ -109,13 +116,14 @@ internal static class EngineTestFixtures
         string format,
         bool isExternal = false,
         bool isForced = false,
-        bool isDefault = false) => new(
+        bool isDefault = false,
+        string? language = null) => new(
         Index: index,
         Format: format,
         IsExternal: isExternal,
         IsForced: isForced,
         IsDefault: isDefault,
-        Language: null);
+        Language: language);
 
     public static MediaSourceSnapshot Source(
         string mediaSourceId,
@@ -123,13 +131,14 @@ internal static class EngineTestFixtures
         IReadOnlyList<VideoStreamSnapshot>? videoStreams = null,
         IReadOnlyList<AudioStreamSnapshot>? audioStreams = null,
         IReadOnlyList<SubtitleStreamSnapshot>? subtitleStreams = null,
+        int? bitrate = null,
         bool supportsDirectPlay = true,
         bool supportsDirectStream = true,
         bool supportsTranscoding = true) => new(
         MediaSourceId: mediaSourceId,
         Container: container,
         Protocol: "http",
-        Bitrate: null,
+        Bitrate: bitrate,
         RunTimeTicks: null,
         VideoStreams: videoStreams ?? [],
         AudioStreams: audioStreams ?? [],

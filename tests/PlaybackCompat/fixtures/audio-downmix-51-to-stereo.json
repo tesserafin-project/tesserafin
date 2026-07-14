@@ -1,8 +1,8 @@
 {
-  "fixtureVersion": 3,
+  "fixtureVersion": 4,
   "id": "audio-downmix-51-to-stereo",
   "category": "downmix",
-  "engineVersion": 4,
+  "engineVersion": 5,
   "description": "Music track: FLAC 5.1 the client accepts as a codec, but it caps at 2 channels. Expect an audio transcode that downmixes to stereo, targeting the client's declared AAC output profile.",
   "input": {
     "context": { "mediaKind": "Audio" },
