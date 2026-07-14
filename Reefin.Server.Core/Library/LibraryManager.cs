@@ -63,7 +63,7 @@ namespace Reefin.Server.Core.Library
     /// through <see cref="ILibraryManager"/> (or <see cref="IItemLookupService"/>), wired up in
     /// <c>ApplicationHost</c> (same assembly). Tests reach it via <c>InternalsVisibleTo</c>.
     /// </remarks>
-    internal class LibraryManager : ILibraryManager, IItemLookupService, IUserRootFolderProvider
+    internal class LibraryManager : ILibraryManager, IItemLookupService
     {
         private const string ShortcutFileExtension = ".mblink";
 
@@ -96,6 +96,7 @@ namespace Reefin.Server.Core.Library
         private readonly IItemAccessService _itemAccessService;
         private readonly IItemStore _itemStore;
         private readonly IUserViewFactory _userViewFactory;
+        private readonly IUserRootFolderProvider _userRootFolderProvider;
         private readonly DotIgnoreIgnoreRule _dotIgnoreIgnoreRule;
         private readonly IMediaStreamLanguageService _mediaStreamLanguageService;
         private readonly Lazy<IExternalDataManager> _externalDataManagerFactory;
@@ -104,13 +105,11 @@ namespace Reefin.Server.Core.Library
         /// The _root folder sync lock.
         /// </summary>
         private readonly Lock _rootFolderSyncLock = new();
-        private readonly Lock _userRootFolderSyncLock = new();
 
         /// <summary>
         /// The _root folder.
         /// </summary>
         private volatile AggregateFolder? _rootFolder;
-        private volatile UserRootFolder? _userRootFolder;
 
         private bool _wizardCompleted;
 
@@ -149,6 +148,7 @@ namespace Reefin.Server.Core.Library
         /// <param name="itemAccessService">The item access service (user visibility on top of the item lookup service; see PR77).</param>
         /// <param name="itemStore">The item store leaf (id generation, save+register; see PR106a). <see cref="LibraryManager"/> subscribes to its <see cref="IItemStore.ItemSaved"/> event and relays it as <see cref="ItemAdded"/> - a leaf dependency, not a cycle: <c>ItemStore</c> never references <see cref="ILibraryManager"/>.</param>
         /// <param name="userViewFactory">The user-view factory leaf (named/shadow view creation; see PR106b). <see cref="GetNamedView(User, string, CollectionType?, string)"/> and the other overloads delegate to it - a leaf dependency, not a cycle: <c>UserViewFactory</c> never references <see cref="ILibraryManager"/>.</param>
+        /// <param name="userRootFolderProvider">The user root folder provider leaf (construction/cache of the per-server <see cref="UserRootFolder"/>; see PR107). <see cref="GetUserRootFolder"/> and this class's internal callers delegate to it - a leaf dependency, not a cycle: <c>UserRootFolderProvider</c> never references <see cref="ILibraryManager"/>. <see cref="LibraryManager"/> no longer implements <see cref="IUserRootFolderProvider"/> itself (it used to be aliased onto it via a DI factory cast - RFC <c>docs/rfc-di-query-user-views-v2.md</c> §0/§1's "piège n°1").</param>
         public LibraryManager(
             IServerApplicationHost appHost,
             ILoggerFactory loggerFactory,
@@ -181,7 +181,8 @@ namespace Reefin.Server.Core.Library
             IItemCacheStore itemCacheStore,
             IItemAccessService itemAccessService,
             IItemStore itemStore,
-            IUserViewFactory userViewFactory)
+            IUserViewFactory userViewFactory,
+            IUserRootFolderProvider userRootFolderProvider)
         {
             _appHost = appHost;
             _logger = loggerFactory.CreateLogger<LibraryManager>();
@@ -211,6 +212,7 @@ namespace Reefin.Server.Core.Library
             _itemStore = itemStore;
             _itemStore.ItemSaved += OnItemStoreItemSaved;
             _userViewFactory = userViewFactory;
+            _userRootFolderProvider = userRootFolderProvider;
 
             _namingOptions = namingOptions;
             _peopleRepository = peopleRepository;
@@ -1168,51 +1170,16 @@ namespace Reefin.Server.Core.Library
         }
 
         /// <inheritdoc />
+        /// <remarks>
+        /// Delegates to <see cref="IUserRootFolderProvider"/> (PR107) - construction, caching and the
+        /// (intentional) absence of invalidation now live solely in <c>UserRootFolderProvider</c>,
+        /// not here. This facade member is kept for API compatibility with <see cref="ILibraryManager"/>
+        /// consumers; <see cref="LibraryManager"/> no longer implements <see cref="IUserRootFolderProvider"/>
+        /// itself.
+        /// </remarks>
         public Folder GetUserRootFolder()
         {
-            if (_userRootFolder is null)
-            {
-                lock (_userRootFolderSyncLock)
-                {
-                    if (_userRootFolder is null)
-                    {
-                        var userRootPath = _configurationManager.ApplicationPaths.DefaultUserViewsPath;
-
-                        _logger.LogDebug("Creating userRootPath at {Path}", userRootPath);
-                        Directory.CreateDirectory(userRootPath);
-
-                        var newItemId = GetNewItemId(userRootPath, typeof(UserRootFolder));
-                        UserRootFolder? tmpItem = null;
-                        try
-                        {
-                            tmpItem = GetItemById(newItemId) as UserRootFolder;
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogError(ex, "Error creating UserRootFolder {Path}", newItemId);
-                        }
-
-                        if (tmpItem is null)
-                        {
-                            _logger.LogDebug("Creating new userRootFolder with DeepCopy");
-                            tmpItem = (ResolvePath(_fileSystem.GetDirectoryInfo(userRootPath)) as Folder ?? throw new InvalidOperationException("Failed to get user root path"))
-                                        .DeepCopy<Folder, UserRootFolder>();
-                        }
-
-                        // In case program data folder was moved
-                        if (!string.Equals(tmpItem.Path, userRootPath, StringComparison.Ordinal))
-                        {
-                            _logger.LogInformation("Resetting user root folder path to {0}", userRootPath);
-                            tmpItem.Path = userRootPath;
-                        }
-
-                        _userRootFolder = tmpItem;
-                        _logger.LogDebug("Setting userRootFolder: {Folder}", _userRootFolder);
-                    }
-                }
-            }
-
-            return _userRootFolder;
+            return _userRootFolderProvider.GetUserRootFolder();
         }
 
         /// <inheritdoc />
