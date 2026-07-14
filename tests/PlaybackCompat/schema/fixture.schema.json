@@ -2,12 +2,12 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://reefin/tests/PlaybackCompat/fixture.schema.json",
   "title": "Playback compatibility fixture (v2)",
-  "description": "Versioned fixture for the playback-decision compatibility lab (PR93). Input mirrors the PR91 domain objects; 'expected' describes the v2 PlaybackDecision. Legacy projection is computed at run time and compared by category (PR98), never by raw StreamInfo equality. v2 (PR102): 'capabilities' splits into 'decode' (DecodeCapabilities) and 'outputProfiles' (ordered PlaybackOutputProfile list), replacing the v1 flat capability shape.",
+  "description": "Versioned fixture for the playback-decision compatibility lab (PR93). Input mirrors the PR91 domain objects; 'expected' describes the v2 PlaybackDecision. Legacy projection is computed at run time and compared by category (PR98), never by raw StreamInfo equality. v2 (PR102): 'capabilities' splits into 'decode' (DecodeCapabilities) and 'outputProfiles' (ordered PlaybackOutputProfile list), replacing the v1 flat capability shape. v2.2 (PR102b): 'decode.directPlayProfiles' replaces the flat 'decode.containers' list (container+codec combinations preserved, not flattened - problem #1), and per-codec 'maxResolution'/'maxBitrate' replace the old global 'decode.maxResolution'/'maxVideoBitrate'/'decode.maxAudioBitrate' fields (problem #2).",
   "type": "object",
   "required": ["fixtureVersion", "id", "category", "engineVersion", "input", "expected"],
   "additionalProperties": false,
   "properties": {
-    "fixtureVersion": { "const": 2 },
+    "fixtureVersion": { "const": 3 },
     "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
     "category": {
       "type": "string",
@@ -42,7 +42,20 @@
               "type": "object",
               "description": "DecodeCapabilities: what the client can read as-is, no server-side transformation.",
               "properties": {
-                "containers": { "type": "array", "items": { "type": "string" } },
+                "directPlayProfiles": {
+                  "type": "array",
+                  "description": "DecodeProfile list (PR102b): declared container+videoCodec(s)+audioCodec(s) combinations, one entry per legacy DirectPlayProfile, order preserved. Empty containers/videoCodecs/audioCodecs on an entry is a wildcard (matches anything on that axis), same semantics as an empty legacy DirectPlayProfile field. Direct play requires a single entry to accept the exact container+videoCodec+audioCodec(+MediaKind) combination - see docs/pr102b (problem #1).",
+                  "items": {
+                    "type": "object",
+                    "required": ["type"],
+                    "properties": {
+                      "type": { "enum": ["Audio", "Video"] },
+                      "containers": { "type": "array", "items": { "type": "string" } },
+                      "videoCodecs": { "type": "array", "items": { "type": "string" } },
+                      "audioCodecs": { "type": "array", "items": { "type": "string" } }
+                    }
+                  }
+                },
                 "videoCodecs": {
                   "type": "array",
                   "items": {
@@ -52,7 +65,16 @@
                       "profiles": { "type": "array", "items": { "type": "string" } },
                       "maxLevel": { "type": ["number", "null"] },
                       "maxBitDepth": { "type": ["integer", "null"] },
-                      "videoRangeTypes": { "type": "array", "items": { "type": "string" } }
+                      "videoRangeTypes": { "type": "array", "items": { "type": "string" } },
+                      "maxResolution": {
+                        "type": ["object", "null"],
+                        "description": "Per-codec resolution ceiling (PR102b problem #2) - replaces the old global decode.maxResolution.",
+                        "properties": { "width": { "type": "integer" }, "height": { "type": "integer" } }
+                      },
+                      "maxBitrate": {
+                        "type": ["integer", "null"],
+                        "description": "Per-codec video bitrate ceiling (PR102b problem #2) - replaces the old global decode.maxVideoBitrate."
+                      }
                     },
                     "required": ["codec"]
                   }
@@ -65,7 +87,11 @@
                       "codec": { "type": "string" },
                       "maxChannels": { "type": ["integer", "null"] },
                       "maxSampleRate": { "type": ["integer", "null"] },
-                      "maxBitDepth": { "type": ["integer", "null"] }
+                      "maxBitDepth": { "type": ["integer", "null"] },
+                      "maxBitrate": {
+                        "type": ["integer", "null"],
+                        "description": "Per-codec audio bitrate ceiling (PR102b) - replaces the old global decode.maxAudioBitrate."
+                      }
                     },
                     "required": ["codec"]
                   }
@@ -81,12 +107,6 @@
                     "required": ["format", "method"]
                   }
                 },
-                "maxResolution": {
-                  "type": ["object", "null"],
-                  "properties": { "width": { "type": "integer" }, "height": { "type": "integer" } }
-                },
-                "maxVideoBitrate": { "type": ["integer", "null"] },
-                "maxAudioBitrate": { "type": ["integer", "null"] },
                 "supportsHls": { "type": "boolean" },
                 "supportsDash": { "type": "boolean" }
               }

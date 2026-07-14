@@ -1,14 +1,16 @@
 {
-  "fixtureVersion": 2,
+  "fixtureVersion": 3,
   "id": "audio-downmix-51-to-stereo",
   "category": "downmix",
-  "engineVersion": 3,
+  "engineVersion": 4,
   "description": "Music track: FLAC 5.1 the client accepts as a codec, but it caps at 2 channels. Expect an audio transcode that downmixes to stereo, targeting the client's declared AAC output profile.",
   "input": {
     "context": { "mediaKind": "Audio" },
     "capabilities": {
       "decode": {
-        "containers": ["mp4", "mkv"],
+        "directPlayProfiles": [
+          { "type": "Audio", "containers": ["mp4", "mkv"], "videoCodecs": [], "audioCodecs": ["aac", "flac"] }
+        ],
         "videoCodecs": [],
         "audioCodecs": [{ "codec": "aac", "maxChannels": 2 }, { "codec": "flac", "maxChannels": 2 }],
         "subtitleDelivery": []

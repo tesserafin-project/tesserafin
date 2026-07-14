@@ -47,14 +47,21 @@ internal static class EngineTestFixtures
         IReadOnlyList<string> videoCodecs,
         IReadOnlyList<string> audioCodecs,
         IReadOnlyList<PlaybackOutputProfile>? outputProfiles = null) => new(
+        // Mirrors a real device profile's shape: a Video-type DecodeProfile carrying container +
+        // video codec(s) + audio codec(s) together, and a separate Audio-type DecodeProfile
+        // carrying container + audio codec(s) only - both declared unconditionally here so this
+        // shared builder still direct-plays for both MediaKind.Video and MediaKind.Audio tests
+        // (PR102b: DecodeProfile is MediaKind-keyed, so a caller needing only one axis still gets a
+        // matching profile for it).
         Decode: new DecodeCapabilities(
-            Containers: containers,
-            VideoCodecs: videoCodecs.Select(codec => new VideoCodecCapability(codec, [], null, null, [])).ToList(),
-            AudioCodecs: audioCodecs.Select(codec => new AudioCodecCapability(codec, null, null, null)).ToList(),
+            DirectPlayProfiles:
+            [
+                new DecodeProfile(MediaKind.Video, containers, videoCodecs, audioCodecs),
+                new DecodeProfile(MediaKind.Audio, containers, [], audioCodecs),
+            ],
+            VideoCodecs: videoCodecs.Select(codec => new VideoCodecCapability(codec, [], null, null, [], null, null)).ToList(),
+            AudioCodecs: audioCodecs.Select(codec => new AudioCodecCapability(codec, null, null, null, null)).ToList(),
             SubtitleDelivery: [],
-            MaxResolution: null,
-            MaxVideoBitrate: null,
-            MaxAudioBitrate: null,
             SupportsHls: false,
             SupportsDash: false),
         OutputProfiles: outputProfiles ?? []);

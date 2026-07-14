@@ -46,7 +46,7 @@ public sealed class V2DecisionProjectorTests
     public void Project_DirectPlay_MapsMethodStreamsAndOutput()
     {
         var streams = new SelectedStreams(0, 1, null);
-        var output = new OutputSpec("mp4", "h264", "aac", null, null, null, null);
+        var output = new OutputSpec("mp4", "h264", "aac", null, null, null, null, StreamingProtocol.Http);
         var reasoning = ReasonNode.Leaf(ReasonCode.MethodChosen, ReasonOutcome.Chosen, ReasonSubject.Method());
         var decision = PlaybackDecision.DirectPlay("source-1", streams, output, reasoning, engineVersion: 2);
 
@@ -76,7 +76,7 @@ public sealed class V2DecisionProjectorTests
     public void Project_Remux_MapsRemuxContainerToRemuxTransformClass()
     {
         var streams = new SelectedStreams(0, 1, null);
-        var output = new OutputSpec("mp4", "h264", "aac", null, null, null, null);
+        var output = new OutputSpec("mp4", "h264", "aac", null, null, null, null, StreamingProtocol.Http);
         var transforms = new List<TransformKind> { TransformKind.RemuxContainer, TransformKind.CopyVideo, TransformKind.CopyAudio };
         var reasoning = ReasonNode.Leaf(ReasonCode.ContainerNotSupported, ReasonOutcome.Rejected, ReasonSubject.Container());
         var decision = PlaybackDecision.Remux("source-1", streams, output, transforms, reasoning, engineVersion: 2);
@@ -94,7 +94,7 @@ public sealed class V2DecisionProjectorTests
     public void Project_Transcode_MapsAllTransformKindsAndFoldsReasonTree()
     {
         var streams = new SelectedStreams(0, 1, new SelectedSubtitle(2, SubtitleDeliveryMethod.Burn));
-        var output = new OutputSpec("mp4", "h264", "aac", null, "SDR", 2, null);
+        var output = new OutputSpec("mp4", "h264", "aac", null, "SDR", 2, null, StreamingProtocol.Http);
         var transforms = new List<TransformKind>
         {
             TransformKind.TranscodeVideo,

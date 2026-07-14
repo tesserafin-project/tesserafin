@@ -12,22 +12,29 @@ internal static class TestFixtures
 {
     public static ClientCapabilities SampleClientCapabilities() => new(
         Decode: new DecodeCapabilities(
-            Containers: ["mp4", "mkv"],
+            DirectPlayProfiles:
+            [
+                new DecodeProfile(MediaKind.Video, ["mp4", "mkv"], ["h264"], ["aac"]),
+            ],
             VideoCodecs:
             [
-                new VideoCodecCapability("h264", ["high", "main"], MaxLevel: 51, MaxBitDepth: 8, VideoRangeTypes: ["SDR"]),
+                new VideoCodecCapability(
+                    "h264",
+                    ["high", "main"],
+                    MaxLevel: 51,
+                    MaxBitDepth: 8,
+                    VideoRangeTypes: ["SDR"],
+                    MaxResolution: new Resolution(1920, 1080),
+                    MaxBitrate: 20_000_000),
             ],
             AudioCodecs:
             [
-                new AudioCodecCapability("aac", MaxChannels: 6, MaxSampleRate: 48000, MaxBitDepth: 16),
+                new AudioCodecCapability("aac", MaxChannels: 6, MaxSampleRate: 48000, MaxBitDepth: 16, MaxBitrate: 384_000),
             ],
             SubtitleDelivery:
             [
                 new SubtitleCapability("srt", SubtitleDeliveryMethod.External),
             ],
-            MaxResolution: new Resolution(1920, 1080),
-            MaxVideoBitrate: 20_000_000,
-            MaxAudioBitrate: 384_000,
             SupportsHls: true,
             SupportsDash: false),
         OutputProfiles:
@@ -142,5 +149,6 @@ internal static class TestFixtures
         Resolution: new Resolution(1920, 1080),
         VideoRange: "SDR",
         AudioChannels: 2,
-        Bitrate: 8_000_000);
+        Bitrate: 8_000_000,
+        Protocol: StreamingProtocol.Hls);
 }

@@ -20,8 +20,17 @@ namespace Reefin.Playback.Dlna;
 /// (<see cref="DecodeCapabilities"/>, from <c>DirectPlayProfiles</c>/<c>CodecProfiles</c>) and,
 /// separately, what the server should produce when it must transcode
 /// (<see cref="PlaybackOutputProfile"/>, from <c>TranscodingProfiles</c>, order preserved - PR102).
-/// It is the v2 engine's job (PR96-PR97, PR102) to combine this with a
+/// It is the v2 engine's job (PR96-PR97, PR102, PR102b) to combine this with a
 /// <see cref="MediaSourceSnapshot"/> and <see cref="PlaybackConstraints"/> to produce a decision.
+/// </remarks>
+/// <remarks>
+/// <c>CodecProfile.ApplyConditions</c> (conditions to apply <em>if</em> the profile's own
+/// <c>Conditions</c> match, i.e. a conditional/derived limit) is not read anywhere in this mapper -
+/// only <c>CodecProfile.Conditions</c> is projected. This was already true before PR102b; PR102b
+/// does not change it, it only relocates where the (unconditional) <c>Conditions</c> values land
+/// (per-codec instead of device-global). Modeling <c>ApplyConditions</c> would require the mapper
+/// to evaluate condition matching against a hypothetical stream, which the declared-capability
+/// snapshot this type produces has no room for - it is out of scope here, same as before.
 /// </remarks>
 public static class ClientCapabilitiesMapper
 {
@@ -43,37 +52,10 @@ public static class ClientCapabilitiesMapper
 
     private static DecodeCapabilities BuildDecodeCapabilities(DeviceProfile profile)
     {
-        var containers = profile.DirectPlayProfiles
-            .Where(static p => p.Type == DlnaProfileType.Video || p.Type == DlnaProfileType.Audio)
-            .SelectMany(static p => SplitCsv(p.Container))
-            .Select(static c => c.ToLowerInvariant())
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
-
+        var directPlayProfiles = BuildDirectPlayProfiles(profile);
         var videoCodecs = BuildVideoCodecCapabilities(profile);
         var audioCodecs = BuildAudioCodecCapabilities(profile);
         var subtitleDelivery = BuildSubtitleCapabilities(profile);
-
-        var allCodecConditions = profile.CodecProfiles
-            .SelectMany(static cp => cp.Conditions ?? [])
-            .ToList();
-
-        var minWidth = MinInt(allCodecConditions, ProfileConditionValue.Width, ProfileConditionType.LessThanEqual);
-        var minHeight = MinInt(allCodecConditions, ProfileConditionValue.Height, ProfileConditionType.LessThanEqual);
-
-        // Resolution(Width, Height) has no "unknown dimension" representation, and a single-axis
-        // limit (e.g. only Width <= 1920 declared, no Height condition at all) is not a real
-        // resolution ceiling. Rather than substitute a sentinel for the missing axis, only emit
-        // MaxResolution when both a width and a height limit were actually declared; otherwise
-        // leave it null (unbounded/unknown), same as every other optional limit in this mapper.
-        Resolution? maxResolution = minWidth.HasValue && minHeight.HasValue
-            ? new Resolution(minWidth.Value, minHeight.Value)
-            : null;
-
-        var maxVideoBitrate = MinInt(allCodecConditions, ProfileConditionValue.VideoBitrate, ProfileConditionType.LessThanEqual)
-            ?? profile.MaxStreamingBitrate;
-        var maxAudioBitrate = MinInt(allCodecConditions, ProfileConditionValue.AudioBitrate, ProfileConditionType.LessThanEqual)
-            ?? profile.MusicStreamingTranscodingBitrate;
 
         var supportsHls = profile.TranscodingProfiles.Any(static t => t.Protocol == Reefin.Data.Enums.MediaStreamProtocol.hls);
 
@@ -82,15 +64,52 @@ public static class ClientCapabilitiesMapper
         const bool supportsDash = false;
 
         return new DecodeCapabilities(
-            Containers: containers,
+            DirectPlayProfiles: directPlayProfiles,
             VideoCodecs: videoCodecs,
             AudioCodecs: audioCodecs,
             SubtitleDelivery: subtitleDelivery,
-            MaxResolution: maxResolution,
-            MaxVideoBitrate: maxVideoBitrate,
-            MaxAudioBitrate: maxAudioBitrate,
             SupportsHls: supportsHls,
             SupportsDash: supportsDash);
+    }
+
+    /// <summary>
+    /// Projects the device's <c>DirectPlayProfiles</c> into <see cref="DecodeProfile"/> entries,
+    /// one per legacy profile, order preserved and <em>not</em> flattened (PR102b problem #1): a
+    /// legacy <c>DirectPlayProfile</c> associates its container and codec(s) as a single declared
+    /// combination, so a client that declares MP4/H.264 and, separately, WebM/VP9 must not be read
+    /// as also accepting MP4/VP9.
+    /// </summary>
+    private static IReadOnlyList<DecodeProfile> BuildDirectPlayProfiles(DeviceProfile profile)
+    {
+        var result = new List<DecodeProfile>(profile.DirectPlayProfiles.Length);
+        foreach (var directPlayProfile in profile.DirectPlayProfiles)
+        {
+            MediaKind type;
+            if (directPlayProfile.Type == DlnaProfileType.Video)
+            {
+                type = MediaKind.Video;
+            }
+            else if (directPlayProfile.Type == DlnaProfileType.Audio)
+            {
+                type = MediaKind.Audio;
+            }
+            else
+            {
+                // Photo/Subtitle/Lyric direct-play profiles have no v2 MediaKind equivalent; skip
+                // rather than misclassify.
+                continue;
+            }
+
+            var containers = SplitCsv(directPlayProfile.Container).Select(static c => c.ToLowerInvariant()).ToList();
+            var videoCodecs = type == MediaKind.Video
+                ? SplitCsv(directPlayProfile.VideoCodec).Select(static c => c.ToLowerInvariant()).ToList()
+                : [];
+            var audioCodecs = SplitCsv(directPlayProfile.AudioCodec).Select(static c => c.ToLowerInvariant()).ToList();
+
+            result.Add(new DecodeProfile(type, containers, videoCodecs, audioCodecs));
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -202,7 +221,28 @@ public static class ClientCapabilitiesMapper
                 videoRangeTypes = ["SDR"];
             }
 
-            result.Add(new VideoCodecCapability(codec, profiles, maxLevel, maxBitDepth, videoRangeTypes));
+            // PR102b: resolution/bitrate limits are per-codec (a CodecProfile's Width/Height/
+            // VideoBitrate conditions are scoped to the codec(s) it applies to), not a single
+            // device-wide ceiling - see VideoCodecCapability remarks for why the old global
+            // DecodeCapabilities.MaxResolution/MaxVideoBitrate collapsed distinct per-codec limits
+            // into one artificial minimum.
+            var minWidth = MinInt(conditions, ProfileConditionValue.Width, ProfileConditionType.LessThanEqual);
+            var minHeight = MinInt(conditions, ProfileConditionValue.Height, ProfileConditionType.LessThanEqual);
+
+            // Same "both axes or neither" rule as the old global computation: a single-axis limit
+            // is not a real resolution ceiling, so only emit MaxResolution when both were declared.
+            Resolution? maxResolution = minWidth.HasValue && minHeight.HasValue
+                ? new Resolution(minWidth.Value, minHeight.Value)
+                : null;
+
+            // No per-codec VideoBitrate condition falls back to the device-wide
+            // MaxStreamingBitrate ceiling, same fallback the old global computation used - it is a
+            // genuine device-level bound (the pipe the device streams over), not a per-codec one,
+            // so every codec inherits it absent a more specific declared limit.
+            var maxBitrate = MinInt(conditions, ProfileConditionValue.VideoBitrate, ProfileConditionType.LessThanEqual)
+                ?? profile.MaxStreamingBitrate;
+
+            result.Add(new VideoCodecCapability(codec, profiles, maxLevel, maxBitDepth, videoRangeTypes, maxResolution, maxBitrate));
         }
 
         return result;
@@ -235,7 +275,13 @@ public static class ClientCapabilitiesMapper
             var maxSampleRate = MinInt(conditions, ProfileConditionValue.AudioSampleRate, ProfileConditionType.LessThanEqual);
             var maxBitDepth = MinInt(conditions, ProfileConditionValue.AudioBitDepth, ProfileConditionType.LessThanEqual);
 
-            result.Add(new AudioCodecCapability(codec, maxChannels, maxSampleRate, maxBitDepth));
+            // PR102b: same per-codec move as VideoCodecCapability.MaxBitrate, falling back to the
+            // device-wide MusicStreamingTranscodingBitrate ceiling absent a more specific
+            // per-codec AudioBitrate condition.
+            var maxBitrate = MinInt(conditions, ProfileConditionValue.AudioBitrate, ProfileConditionType.LessThanEqual)
+                ?? profile.MusicStreamingTranscodingBitrate;
+
+            result.Add(new AudioCodecCapability(codec, maxChannels, maxSampleRate, maxBitDepth, maxBitrate));
         }
 
         return result;

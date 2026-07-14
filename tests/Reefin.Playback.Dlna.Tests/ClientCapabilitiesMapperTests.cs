@@ -11,12 +11,26 @@ namespace Reefin.Playback.Dlna.Tests;
 public static class ClientCapabilitiesMapperTests
 {
     [Fact]
-    public static void ToCapabilities_ProjectsContainers()
+    public static void ToCapabilities_ProjectsDirectPlayProfilesNotFlattened()
     {
+        // RFC PR102b problem #1: the fixture declares a Video DirectPlayProfile (mp4/mkv/webm,
+        // h264/hevc) and a separate Audio DirectPlayProfile (mp4/mkv/webm, aac/ac3/mp3) - each must
+        // survive as its own DecodeProfile, not be collapsed into a flat container list.
         var capabilities = ClientCapabilitiesMapper.ToCapabilities(DeviceProfileFixture.BuildWebClientProfile());
 
-        Assert.Contains("mp4", capabilities.Decode.Containers);
-        Assert.Contains("mkv", capabilities.Decode.Containers);
+        Assert.Equal(2, capabilities.Decode.DirectPlayProfiles.Count);
+
+        var videoProfile = Assert.Single(capabilities.Decode.DirectPlayProfiles, p => p.Type == MediaKind.Video);
+        Assert.Contains("mp4", videoProfile.Containers);
+        Assert.Contains("mkv", videoProfile.Containers);
+        Assert.Contains("webm", videoProfile.Containers);
+        Assert.Equal(["h264", "hevc"], videoProfile.VideoCodecs);
+        Assert.Empty(videoProfile.AudioCodecs);
+
+        var audioProfile = Assert.Single(capabilities.Decode.DirectPlayProfiles, p => p.Type == MediaKind.Audio);
+        Assert.Contains("mp4", audioProfile.Containers);
+        Assert.Empty(audioProfile.VideoCodecs);
+        Assert.Equal(["aac", "ac3", "mp3"], audioProfile.AudioCodecs);
     }
 
     [Fact]
@@ -36,7 +50,21 @@ public static class ClientCapabilitiesMapperTests
     {
         var capabilities = ClientCapabilitiesMapper.ToCapabilities(DeviceProfileFixture.BuildWebClientProfile());
 
-        Assert.Equal(new Resolution(1920, 1080), capabilities.Decode.MaxResolution);
+        var h264 = Assert.Single(capabilities.Decode.VideoCodecs, c => c.Codec == "h264");
+        Assert.Equal(new Resolution(1920, 1080), h264.MaxResolution);
+    }
+
+    [Fact]
+    public static void ToCapabilities_CodecWithNoOwnCodecProfile_HasNoResolutionLimit()
+    {
+        // RFC PR102b problem #2: the fixture's h264 CodecProfile declares Width<=1920/Height<=1080,
+        // but hevc (declared only on the DirectPlayProfile's VideoCodec list, no CodecProfile of its
+        // own) must not inherit that limit - a per-codec model must not let one codec's limit leak
+        // onto another the way the old global minimum did.
+        var capabilities = ClientCapabilitiesMapper.ToCapabilities(DeviceProfileFixture.BuildWebClientProfile());
+
+        var hevc = Assert.Single(capabilities.Decode.VideoCodecs, c => c.Codec == "hevc");
+        Assert.Null(hevc.MaxResolution);
     }
 
     [Fact]

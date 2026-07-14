@@ -37,13 +37,10 @@ public static class PlaybackEnginePhase2Tests
     {
         var capabilities = new ClientCapabilities(
             Decode: new DecodeCapabilities(
-                Containers: ["mp4"],
-                VideoCodecs: [new VideoCodecCapability("h264", [], MaxLevel: 41, null, [])],
-                AudioCodecs: [new AudioCodecCapability("aac", null, null, null)],
+                DirectPlayProfiles: [new DecodeProfile(MediaKind.Video, ["mp4"], ["h264"], ["aac"])],
+                VideoCodecs: [new VideoCodecCapability("h264", [], MaxLevel: 41, null, [], null, null)],
+                AudioCodecs: [new AudioCodecCapability("aac", null, null, null, null)],
                 SubtitleDelivery: [],
-                MaxResolution: null,
-                MaxVideoBitrate: null,
-                MaxAudioBitrate: null,
                 SupportsHls: false,
                 SupportsDash: false),
             OutputProfiles: []);
@@ -86,13 +83,10 @@ public static class PlaybackEnginePhase2Tests
         // effMaxChannels = min(cap.MaxChannels=6, constraints.MaxAudioChannels=2) = 2.
         var capabilities = new ClientCapabilities(
             Decode: new DecodeCapabilities(
-                Containers: ["mp4"],
+                DirectPlayProfiles: [new DecodeProfile(MediaKind.Audio, ["mp4"], [], ["aac"])],
                 VideoCodecs: [],
-                AudioCodecs: [new AudioCodecCapability("aac", MaxChannels: 6, null, null)],
+                AudioCodecs: [new AudioCodecCapability("aac", MaxChannels: 6, null, null, null)],
                 SubtitleDelivery: [],
-                MaxResolution: null,
-                MaxVideoBitrate: null,
-                MaxAudioBitrate: null,
                 SupportsHls: false,
                 SupportsDash: false),
             OutputProfiles: []);
@@ -136,13 +130,10 @@ public static class PlaybackEnginePhase2Tests
     {
         var capabilities = new ClientCapabilities(
             Decode: new DecodeCapabilities(
-                Containers: ["mp4"],
-                VideoCodecs: [new VideoCodecCapability("h264", [], null, null, [])],
-                AudioCodecs: [new AudioCodecCapability("aac", null, null, null)],
+                DirectPlayProfiles: [new DecodeProfile(MediaKind.Video, ["mp4"], ["h264"], ["aac"])],
+                VideoCodecs: [new VideoCodecCapability("h264", [], null, null, [], MaxResolution: new Resolution(1920, 1080), null)],
+                AudioCodecs: [new AudioCodecCapability("aac", null, null, null, null)],
                 SubtitleDelivery: [],
-                MaxResolution: new Resolution(1920, 1080),
-                MaxVideoBitrate: null,
-                MaxAudioBitrate: null,
                 SupportsHls: false,
                 SupportsDash: false),
             OutputProfiles: []);
@@ -162,13 +153,10 @@ public static class PlaybackEnginePhase2Tests
     {
         var capabilities = new ClientCapabilities(
             Decode: new DecodeCapabilities(
-                Containers: ["mp4"],
-                VideoCodecs: [new VideoCodecCapability("h264", [], null, null, [])],
-                AudioCodecs: [new AudioCodecCapability("aac", null, null, null)],
+                DirectPlayProfiles: [new DecodeProfile(MediaKind.Video, ["mp4"], ["h264"], ["aac"])],
+                VideoCodecs: [new VideoCodecCapability("h264", [], null, null, [], null, null)],
+                AudioCodecs: [new AudioCodecCapability("aac", null, null, null, null)],
                 SubtitleDelivery: [new SubtitleCapability("srt", SubtitleDeliveryMethod.External)],
-                MaxResolution: null,
-                MaxVideoBitrate: null,
-                MaxAudioBitrate: null,
                 SupportsHls: false,
                 SupportsDash: false),
             OutputProfiles: []);
@@ -199,13 +187,10 @@ public static class PlaybackEnginePhase2Tests
     {
         var capabilities = new ClientCapabilities(
             Decode: new DecodeCapabilities(
-                Containers: ["mp4"],
-                VideoCodecs: [new VideoCodecCapability("h264", [], null, null, [])],
-                AudioCodecs: [new AudioCodecCapability("aac", null, null, null)],
+                DirectPlayProfiles: [new DecodeProfile(MediaKind.Video, ["mp4"], ["h264"], ["aac"])],
+                VideoCodecs: [new VideoCodecCapability("h264", [], null, null, [], null, null)],
+                AudioCodecs: [new AudioCodecCapability("aac", null, null, null, null)],
                 SubtitleDelivery: [new SubtitleCapability("srt", SubtitleDeliveryMethod.External)],
-                MaxResolution: null,
-                MaxVideoBitrate: null,
-                MaxAudioBitrate: null,
                 SupportsHls: false,
                 SupportsDash: false),
             OutputProfiles: []);
@@ -241,13 +226,10 @@ public static class PlaybackEnginePhase2Tests
         // happening.
         var capabilities = new ClientCapabilities(
             Decode: new DecodeCapabilities(
-                Containers: ["mp4"],
-                VideoCodecs: [new VideoCodecCapability("h264", [], null, null, [])],
-                AudioCodecs: [new AudioCodecCapability("aac", null, null, null)],
+                DirectPlayProfiles: [new DecodeProfile(MediaKind.Video, ["mp4"], ["h264"], ["aac"])],
+                VideoCodecs: [new VideoCodecCapability("h264", [], null, null, [], null, null)],
+                AudioCodecs: [new AudioCodecCapability("aac", null, null, null, null)],
                 SubtitleDelivery: [new SubtitleCapability("srt", SubtitleDeliveryMethod.External)],
-                MaxResolution: null,
-                MaxVideoBitrate: null,
-                MaxAudioBitrate: null,
                 SupportsHls: false,
                 SupportsDash: false),
             OutputProfiles: []);
@@ -277,13 +259,10 @@ public static class PlaybackEnginePhase2Tests
     {
         var capabilities = new ClientCapabilities(
             Decode: new DecodeCapabilities(
-                Containers: ["mp4"],
-                VideoCodecs: [new VideoCodecCapability("h264", [], null, null, [])],
-                AudioCodecs: [new AudioCodecCapability("aac", null, null, null)],
+                DirectPlayProfiles: [new DecodeProfile(MediaKind.Video, ["mp4"], ["h264"], ["aac"])],
+                VideoCodecs: [new VideoCodecCapability("h264", [], null, null, [], null, null)],
+                AudioCodecs: [new AudioCodecCapability("aac", null, null, null, null)],
                 SubtitleDelivery: [],
-                MaxResolution: null,
-                MaxVideoBitrate: null,
-                MaxAudioBitrate: null,
                 SupportsHls: false,
                 SupportsDash: false),
             OutputProfiles: []);
@@ -318,13 +297,10 @@ public static class PlaybackEnginePhase2Tests
         // trying to build a StreamCopyable reason with no selected stream to reference.
         var capabilities = new ClientCapabilities(
             Decode: new DecodeCapabilities(
-                Containers: ["mp4"],
-                VideoCodecs: [new VideoCodecCapability("h264", [], null, null, [])],
-                AudioCodecs: [new AudioCodecCapability("aac", null, null, null)],
+                DirectPlayProfiles: [new DecodeProfile(MediaKind.Video, ["mp4"], ["h264"], ["aac"])],
+                VideoCodecs: [new VideoCodecCapability("h264", [], null, null, [], null, null)],
+                AudioCodecs: [new AudioCodecCapability("aac", null, null, null, null)],
                 SubtitleDelivery: [],
-                MaxResolution: null,
-                MaxVideoBitrate: null,
-                MaxAudioBitrate: null,
                 SupportsHls: false,
                 SupportsDash: false),
             OutputProfiles: []);
@@ -347,13 +323,10 @@ public static class PlaybackEnginePhase2Tests
         // video transcode is forced; the client's OutputProfile lists av1 before h264.
         var capabilities = new ClientCapabilities(
             Decode: new DecodeCapabilities(
-                Containers: ["mp4"],
-                VideoCodecs: [new VideoCodecCapability("h264", [], null, null, [])],
-                AudioCodecs: [new AudioCodecCapability("aac", null, null, null)],
+                DirectPlayProfiles: [new DecodeProfile(MediaKind.Video, ["mp4"], ["h264"], ["aac"])],
+                VideoCodecs: [new VideoCodecCapability("h264", [], null, null, [], null, null)],
+                AudioCodecs: [new AudioCodecCapability("aac", null, null, null, null)],
                 SubtitleDelivery: [],
-                MaxResolution: null,
-                MaxVideoBitrate: null,
-                MaxAudioBitrate: null,
                 SupportsHls: true,
                 SupportsDash: false),
             OutputProfiles:
@@ -394,13 +367,10 @@ public static class PlaybackEnginePhase2Tests
         // inline magic-value substitution.
         var capabilities = new ClientCapabilities(
             Decode: new DecodeCapabilities(
-                Containers: ["mp4"],
+                DirectPlayProfiles: [],
                 VideoCodecs: [],
                 AudioCodecs: [],
                 SubtitleDelivery: [],
-                MaxResolution: null,
-                MaxVideoBitrate: null,
-                MaxAudioBitrate: null,
                 SupportsHls: false,
                 SupportsDash: false),
             OutputProfiles: []);
@@ -419,6 +389,115 @@ public static class PlaybackEnginePhase2Tests
         Assert.Equal("h264", decision.Output.VideoCodec);
         Assert.Equal("aac", decision.Output.AudioCodec);
         Assert.Contains(ReasonCode.OutputProfileFallbackUsed, FlattenReasonCodes(decision.Reasoning));
+    }
+
+    // --- PR102b acceptance tests ---
+
+    [Fact]
+    public static void Decide_UndeclaredContainerCodecCombo_IsNotDirectPlay()
+    {
+        // RFC PR102b problem #1: the client declares MP4/H.264 and, separately, WebM/VP9 as two
+        // distinct DirectPlayProfiles. Both containers are accepted somewhere, and both codecs are
+        // individually decodable (they appear in VideoCodecs), but the client never declared
+        // MP4+VP9 together - the old flattened model would wrongly accept it as direct play.
+        var capabilities = new ClientCapabilities(
+            Decode: new DecodeCapabilities(
+                DirectPlayProfiles:
+                [
+                    new DecodeProfile(MediaKind.Video, ["mp4"], ["h264"], ["aac"]),
+                    new DecodeProfile(MediaKind.Video, ["webm"], ["vp9"], ["aac"]),
+                ],
+                VideoCodecs:
+                [
+                    new VideoCodecCapability("h264", [], null, null, [], null, null),
+                    new VideoCodecCapability("vp9", [], null, null, [], null, null),
+                ],
+                AudioCodecs: [new AudioCodecCapability("aac", null, null, null, null)],
+                SubtitleDelivery: [],
+                SupportsHls: false,
+                SupportsDash: false),
+            OutputProfiles: []);
+
+        var source = EngineTestFixtures.Source(
+            "source-1",
+            "mp4",
+            videoStreams: [EngineTestFixtures.VideoStream(0, "vp9")],
+            audioStreams: [EngineTestFixtures.AudioStream(1, "aac", isDefault: true)]);
+
+        var engine = new PlaybackEngine();
+        var decision = engine.Decide(EngineTestFixtures.Context(MediaKind.Video), capabilities, [source], EngineTestFixtures.Constraints());
+
+        Assert.NotEqual(PlaybackMethod.DirectPlay, decision.Method);
+    }
+
+    [Fact]
+    public static void Decide_PerCodecResolutionLimit_DoesNotLeakBetweenCodecs()
+    {
+        // RFC PR102b problem #2: H.264 is limited to 1080p, HEVC separately to 2160p. A 4K HEVC
+        // stream must be judged against HEVC's own limit, not an artificial global minimum derived
+        // from H.264's tighter one.
+        var capabilities = new ClientCapabilities(
+            Decode: new DecodeCapabilities(
+                DirectPlayProfiles: [new DecodeProfile(MediaKind.Video, ["mp4"], ["h264", "hevc"], ["aac"])],
+                VideoCodecs:
+                [
+                    new VideoCodecCapability("h264", [], null, null, [], MaxResolution: new Resolution(1920, 1080), null),
+                    new VideoCodecCapability("hevc", [], null, null, [], MaxResolution: new Resolution(3840, 2160), null),
+                ],
+                AudioCodecs: [new AudioCodecCapability("aac", null, null, null, null)],
+                SubtitleDelivery: [],
+                SupportsHls: false,
+                SupportsDash: false),
+            OutputProfiles: []);
+
+        var source = EngineTestFixtures.Source(
+            "source-1",
+            "mp4",
+            videoStreams: [EngineTestFixtures.VideoStream(0, "hevc", width: 3840, height: 2160)],
+            audioStreams: [EngineTestFixtures.AudioStream(1, "aac", isDefault: true)]);
+
+        var engine = new PlaybackEngine();
+        var decision = engine.Decide(EngineTestFixtures.Context(MediaKind.Video), capabilities, [source], EngineTestFixtures.Constraints());
+
+        Assert.True(decision.IsViable);
+        Assert.Equal(PlaybackMethod.DirectPlay, decision.Method);
+        Assert.DoesNotContain(ReasonCode.VideoResolutionNotSupported, FlattenReasonCodes(decision.Reasoning));
+    }
+
+    [Fact]
+    public static void Decide_AudioOnlyDecodeProfile_DoesNotAuthorizeVideoCombo()
+    {
+        // RFC PR102b problem #1/#3: a DecodeProfile of MediaKind.Audio must never authorize a video
+        // combination even when the container and video codec each independently match one of its
+        // fields - MediaKind.Type is a hard gate, not just another wildcard-able axis. The video
+        // codec itself is kept decodable (present in VideoCodecs, no limit tripped) so a failure
+        // here can only come from the profile-type mismatch, not from codec absence.
+        var capabilities = new ClientCapabilities(
+            Decode: new DecodeCapabilities(
+                DirectPlayProfiles: [new DecodeProfile(MediaKind.Audio, ["mp4"], [], ["aac"])],
+                VideoCodecs: [new VideoCodecCapability("h264", [], null, null, [], null, null)],
+                AudioCodecs: [new AudioCodecCapability("aac", null, null, null, null)],
+                SubtitleDelivery: [],
+                SupportsHls: false,
+                SupportsDash: false),
+            OutputProfiles: []);
+
+        var source = EngineTestFixtures.Source(
+            "source-1",
+            "mp4",
+            videoStreams: [EngineTestFixtures.VideoStream(0, "h264")],
+            audioStreams: [EngineTestFixtures.AudioStream(1, "aac", isDefault: true)]);
+
+        var engine = new PlaybackEngine();
+        var decision = engine.Decide(EngineTestFixtures.Context(MediaKind.Video), capabilities, [source], EngineTestFixtures.Constraints());
+
+        Assert.NotEqual(PlaybackMethod.DirectPlay, decision.Method);
+    }
+
+    [Fact]
+    public static void EngineVersion_IsFour()
+    {
+        Assert.Equal(4, PlaybackEngine.EngineVersion);
     }
 
     private static IEnumerable<ReasonCode> FlattenReasonCodes(ReasonNode node)

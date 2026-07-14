@@ -1,18 +1,19 @@
 {
-  "fixtureVersion": 2,
+  "fixtureVersion": 3,
   "id": "video-codec-incompatible",
   "category": "video-codec-incompatible",
-  "engineVersion": 3,
+  "engineVersion": 4,
   "description": "AV1 video the client cannot decode, in an accepted MP4 container with accepted AAC audio. Only the video codec fails, so video transcodes (to the client's declared H.264 output profile) and audio is copied; container is unchanged (no remux).",
   "input": {
     "context": { "mediaKind": "Video" },
     "capabilities": {
       "decode": {
-        "containers": ["mp4"],
-        "videoCodecs": [{ "codec": "h264", "profiles": [], "maxLevel": 62, "maxBitDepth": 10, "videoRangeTypes": ["SDR"] }],
+        "directPlayProfiles": [
+          { "type": "Video", "containers": ["mp4"], "videoCodecs": ["h264"], "audioCodecs": ["aac"] }
+        ],
+        "videoCodecs": [{ "codec": "h264", "profiles": [], "maxLevel": 62, "maxBitDepth": 10, "videoRangeTypes": ["SDR"], "maxBitrate": 100000000 }],
         "audioCodecs": [{ "codec": "aac", "maxChannels": 8 }],
-        "subtitleDelivery": [],
-        "maxVideoBitrate": 100000000
+        "subtitleDelivery": []
       },
       "outputProfiles": [
         { "type": "Video", "protocol": "Http", "container": "mp4", "videoCodecs": ["h264"], "audioCodecs": ["aac"] }

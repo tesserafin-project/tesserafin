@@ -19,12 +19,22 @@ namespace Reefin.Playback.Engine;
 /// preference) - see <see cref="LegacyFallbackVideoCodec"/> for the named fallback used when the
 /// client declares none.
 /// </remarks>
+/// <remarks>
+/// PR102b: direct play now requires a single <see cref="DecodeProfile"/> to accept the exact
+/// container + video codec + audio codec (+ <see cref="MediaKind"/>) combination
+/// (<see cref="DirectPlayProfileMatches"/>), rather than independent membership in aggregate
+/// per-axis sets. Codec-level limits (resolution/level/bit depth/bitrate/etc.) are read from the
+/// matched codec's own <see cref="VideoCodecCapability"/>/<see cref="AudioCodecCapability"/>
+/// instead of a device-wide ceiling. <see cref="OutputSpec.Protocol"/> is populated from the
+/// <see cref="PlaybackOutputProfile"/> actually used, defaulting to
+/// <see cref="StreamingProtocol.Http"/> otherwise.
+/// </remarks>
 public sealed class PlaybackEngine : IPlaybackEngine
 {
     /// <summary>
     /// The version of the decision engine implemented by this type.
     /// </summary>
-    public const int EngineVersion = 3;
+    public const int EngineVersion = 4;
 
     /// <summary>
     /// The transcoding target video codec used when the client declares no
@@ -115,6 +125,7 @@ public sealed class PlaybackEngine : IPlaybackEngine
         var needVideoTranscode = false;
         var needTonemap = false;
         var needDownscale = false;
+        Resolution? downscaleTarget = null;
         var videoReasons = new List<ReasonNode>();
 
         if (selectedVideo is not null)
@@ -151,20 +162,26 @@ public sealed class PlaybackEngine : IPlaybackEngine
                     needTonemap = true;
                     videoReasons.Add(ReasonNode.Leaf(ReasonCode.VideoRangeTypeNotSupported, ReasonOutcome.Rejected, ReasonSubject.VideoStream(selectedVideo.Index)));
                 }
-            }
 
-            if (capabilities.Decode.MaxResolution is not null && selectedVideo.Width is not null && selectedVideo.Height is not null
-                && (selectedVideo.Width > capabilities.Decode.MaxResolution.Width || selectedVideo.Height > capabilities.Decode.MaxResolution.Height))
-            {
-                needVideoTranscode = true;
-                needDownscale = true;
-                videoReasons.Add(ReasonNode.Leaf(ReasonCode.VideoResolutionNotSupported, ReasonOutcome.Rejected, ReasonSubject.VideoStream(selectedVideo.Index)));
-            }
+                // PR102b: resolution/bitrate limits are this codec's own (VideoCodecCapability),
+                // not a device-wide ceiling - an H.264-limited-to-1080p client is not thereby
+                // limited to 1080p for HEVC. Checked only when the codec itself is decodable
+                // (videoCap found); an undecodable codec already forces a transcode above, and has
+                // no per-codec limit to check against.
+                if (videoCap.MaxResolution is not null && selectedVideo.Width is not null && selectedVideo.Height is not null
+                    && (selectedVideo.Width > videoCap.MaxResolution.Width || selectedVideo.Height > videoCap.MaxResolution.Height))
+                {
+                    needVideoTranscode = true;
+                    needDownscale = true;
+                    downscaleTarget = videoCap.MaxResolution;
+                    videoReasons.Add(ReasonNode.Leaf(ReasonCode.VideoResolutionNotSupported, ReasonOutcome.Rejected, ReasonSubject.VideoStream(selectedVideo.Index)));
+                }
 
-            if (capabilities.Decode.MaxVideoBitrate is not null && selectedVideo.Bitrate is not null && selectedVideo.Bitrate > capabilities.Decode.MaxVideoBitrate)
-            {
-                needVideoTranscode = true;
-                videoReasons.Add(ReasonNode.Leaf(ReasonCode.VideoBitrateNotSupported, ReasonOutcome.Rejected, ReasonSubject.VideoStream(selectedVideo.Index)));
+                if (videoCap.MaxBitrate is not null && selectedVideo.Bitrate is not null && selectedVideo.Bitrate > videoCap.MaxBitrate)
+                {
+                    needVideoTranscode = true;
+                    videoReasons.Add(ReasonNode.Leaf(ReasonCode.VideoBitrateNotSupported, ReasonOutcome.Rejected, ReasonSubject.VideoStream(selectedVideo.Index)));
+                }
             }
         }
 
@@ -244,12 +261,25 @@ public sealed class PlaybackEngine : IPlaybackEngine
 
         // --- METHOD ---
         var wantsTranscode = needVideoTranscode || needAudioTranscode || needBurnIn;
-        var containerOk = capabilities.Decode.Containers.Contains(source.Container, StringComparer.OrdinalIgnoreCase);
+
+        // PR102b problem #1: direct play requires a single DecodeProfile to accept this exact
+        // container + video codec + audio codec (+ MediaKind) combination, not independent
+        // membership in aggregate per-axis sets - the latter accepts combinations the client never
+        // declared (e.g. MP4/H.264 and WebM/VP9 declared separately would wrongly also accept
+        // MP4/VP9).
+        var hasDirectPlayMatch = capabilities.Decode.DirectPlayProfiles.Any(p =>
+            DirectPlayProfileMatches(p, context.MediaKind, source.Container, selectedVideo?.Codec, selectedAudio?.Codec));
+
         var neededMethod = wantsTranscode
             ? PlaybackMethod.Transcode
-            : !containerOk
-                ? PlaybackMethod.Remux
-                : PlaybackMethod.DirectPlay;
+            : hasDirectPlayMatch
+                ? PlaybackMethod.DirectPlay
+                : PlaybackMethod.Remux;
+
+        // The containers a DecodeProfile of this MediaKind declares together with these exact
+        // (already-decodable, no-transcode-needed) codecs - used both to gate Remux (there must be
+        // somewhere to remux into) and, below, to pick the remux target container.
+        var remuxContainers = AcceptableContainers(capabilities, context.MediaKind, selectedVideo?.Codec, selectedAudio?.Codec);
 
         var allowed = neededMethod switch
         {
@@ -258,7 +288,7 @@ public sealed class PlaybackEngine : IPlaybackEngine
                 && source.SupportsDirectStream
                 && (selectedVideo is null || constraints.AllowVideoStreamCopy)
                 && constraints.AllowAudioStreamCopy
-                && capabilities.Decode.Containers.Count > 0,
+                && remuxContainers.Count > 0,
             PlaybackMethod.DirectPlay => constraints.AllowDirectPlay && source.SupportsDirectPlay,
             _ => false,
         };
@@ -297,13 +327,26 @@ public sealed class PlaybackEngine : IPlaybackEngine
         {
             targetContainer = matchingOutputProfile.Container;
         }
-        else
+        else if (neededMethod == PlaybackMethod.Remux)
         {
             // Remux never had an OutputProfile concept to begin with (it copies streams into a
-            // container the client already decodes); Transcode with no matching profile shares the
-            // same fallback container selection as a matter of the named legacy default.
-            targetContainer = SelectTargetContainer(capabilities.Decode.Containers, source.Container);
-            usedOutputProfileFallback |= neededMethod == PlaybackMethod.Transcode;
+            // container the client already decodes without transcoding them), and PR102b scopes
+            // the candidate containers to ones actually declared together with these codecs
+            // (remuxContainers), not just any container the client accepts for something else.
+            targetContainer = SelectTargetContainer(remuxContainers, source.Container);
+        }
+        else
+        {
+            // Transcode with no matching client-declared OutputProfile: named legacy default
+            // container selection. Scoped to this MediaKind but deliberately not to the fallback
+            // target codecs (LegacyFallbackVideoCodec/LegacyFallbackAudioCodec, chosen below) -
+            // those codecs may not themselves appear in any declared DecodeProfile at all (e.g. a
+            // client whose only direct-play video codec is VP9 still needs *some* container
+            // picked here), matching the pre-PR102b engine's laxness for this already-degraded
+            // fallback path.
+            var fallbackContainers = AcceptableContainers(capabilities, context.MediaKind, videoCodec: null, audioCodec: null);
+            targetContainer = SelectTargetContainer(fallbackContainers, source.Container);
+            usedOutputProfileFallback = true;
         }
 
         var containerChanged = !string.Equals(targetContainer, source.Container, StringComparison.OrdinalIgnoreCase);
@@ -377,14 +420,21 @@ public sealed class PlaybackEngine : IPlaybackEngine
         }
 
         // --- OUTPUT ---
+        // PR102b: Protocol comes from the client-declared PlaybackOutputProfile actually used for
+        // this decision - only ever non-null when transcoding to a matched profile. Direct Play,
+        // Remux, and the no-matching-profile transcode fallback all carry no server-chosen delivery
+        // protocol, so they use the neutral value (plain HTTP).
+        var outputProtocol = matchingOutputProfile?.Protocol ?? StreamingProtocol.Http;
+
         var output = new OutputSpec(
             Container: targetContainer,
             VideoCodec: selectedVideo is not null ? (needVideoTranscode ? targetVideoCodec : selectedVideo.Codec) : null,
             AudioCodec: selectedAudio is not null ? (needAudioTranscode ? targetAudioCodec : selectedAudio.Codec) : null,
-            Resolution: needVideoTranscode && needDownscale ? capabilities.Decode.MaxResolution : null,
+            Resolution: needVideoTranscode && needDownscale ? downscaleTarget : null,
             VideoRange: needVideoTranscode && needTonemap ? "SDR" : null,
             AudioChannels: needAudioTranscode ? (needDownmix ? effMaxChannels : selectedAudio?.Channels) : null,
-            Bitrate: null);
+            Bitrate: null,
+            Protocol: outputProtocol);
 
         // --- REASONING ---
         var children = new List<ReasonNode>();
@@ -493,11 +543,85 @@ public sealed class PlaybackEngine : IPlaybackEngine
     }
 
     /// <summary>
-    /// Picks a container from the client's <em>decode</em> container list: used for
-    /// <see cref="PlaybackMethod.Remux"/> (which only ever repackages into a container the client
-    /// already decodes, never an encode target) and as the transcode container fallback when the
-    /// client declares no matching <see cref="PlaybackOutputProfile"/>. Prefers mp4, then ts, then
-    /// whatever is first, matching the pre-PR102 engine's container preference exactly.
+    /// Returns whether a single <see cref="DecodeProfile"/> accepts the given
+    /// container/video-codec/audio-codec combination for <paramref name="mediaKind"/> (PR102b
+    /// problem #1/#3): the profile's <see cref="DecodeProfile.Type"/> must match
+    /// <paramref name="mediaKind"/> exactly (an audio-only profile never authorizes a video
+    /// combination and vice versa), and each of <see cref="DecodeProfile.Containers"/>/
+    /// <see cref="DecodeProfile.VideoCodecs"/>/<see cref="DecodeProfile.AudioCodecs"/> either is
+    /// empty (wildcard - matches anything, same semantics as an empty legacy
+    /// <c>DirectPlayProfile</c> field) or contains the corresponding value. A <see langword="null"/>
+    /// <paramref name="videoCodec"/>/<paramref name="audioCodec"/> (no such stream selected) skips
+    /// that axis entirely rather than requiring a wildcard match.
+    /// </summary>
+    private static bool DirectPlayProfileMatches(DecodeProfile profile, MediaKind mediaKind, string container, string? videoCodec, string? audioCodec)
+    {
+        if (profile.Type != mediaKind)
+        {
+            return false;
+        }
+
+        if (profile.Containers.Count > 0 && !profile.Containers.Contains(container, StringComparer.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (videoCodec is not null && profile.VideoCodecs.Count > 0 && !profile.VideoCodecs.Contains(videoCodec, StringComparer.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (audioCodec is not null && profile.AudioCodecs.Count > 0 && !profile.AudioCodecs.Contains(audioCodec, StringComparer.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Collects the distinct containers declared, across all of the client's <paramref name="mediaKind"/>
+    /// <see cref="DecodeProfile"/> entries, together with <paramref name="videoCodec"/>/
+    /// <paramref name="audioCodec"/> (each axis wildcard-matched the same way as
+    /// <see cref="DirectPlayProfileMatches"/>; pass <see langword="null"/> for either codec to skip
+    /// that axis and collect containers regardless of it). A profile whose own
+    /// <see cref="DecodeProfile.Containers"/> is itself a wildcard (empty) contributes nothing
+    /// concrete here - there is no specific container to offer as a repackaging target from it, only
+    /// "accepts whatever container it already has," which is a <see cref="PlaybackMethod.DirectPlay"/>
+    /// concern (<see cref="DirectPlayProfileMatches"/>), not a <see cref="PlaybackMethod.Remux"/> one.
+    /// </summary>
+    private static IReadOnlyList<string> AcceptableContainers(ClientCapabilities capabilities, MediaKind mediaKind, string? videoCodec, string? audioCodec)
+    {
+        var result = new List<string>();
+        foreach (var profile in capabilities.Decode.DirectPlayProfiles)
+        {
+            if (profile.Type != mediaKind)
+            {
+                continue;
+            }
+
+            if (videoCodec is not null && profile.VideoCodecs.Count > 0 && !profile.VideoCodecs.Contains(videoCodec, StringComparer.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (audioCodec is not null && profile.AudioCodecs.Count > 0 && !profile.AudioCodecs.Contains(audioCodec, StringComparer.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            result.AddRange(profile.Containers);
+        }
+
+        return result.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    /// <summary>
+    /// Picks a container from a candidate container list: used for <see cref="PlaybackMethod.Remux"/>
+    /// (which only ever repackages into a container the client already decodes, never an encode
+    /// target) and as the transcode container fallback when the client declares no matching
+    /// <see cref="PlaybackOutputProfile"/>. Prefers mp4, then ts, then whatever is first, matching
+    /// the pre-PR102 engine's container preference exactly.
     /// </summary>
     private static string SelectTargetContainer(IReadOnlyList<string> containers, string sourceContainer)
     {

@@ -97,6 +97,24 @@ public static class SerializationRoundTripTests
     }
 
     [Fact]
+    public static void OutputSpec_Protocol_IsSerialized()
+    {
+        // RFC PR102b: OutputSpec.Protocol must actually appear in the wire format - a client
+        // reading the JSON cannot infer HLS-vs-HTTP delivery from any other field.
+        var decision = PlaybackDecision.Transcode(
+            "source-1",
+            TestFixtures.SampleSelectedStreams(),
+            TestFixtures.SampleOutputSpec(),
+            [TransformKind.RemuxContainer, TransformKind.CopyVideo, TransformKind.TranscodeAudio],
+            TestFixtures.SampleReasoningTree(),
+            engineVersion: 2);
+
+        var json = JsonSerializer.Serialize(decision, PlaybackDecisionJson.Options);
+
+        Assert.Contains("\"Protocol\":\"Hls\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public static void Enums_SerializeAsStrings_NotNumbers()
     {
         var decision = PlaybackDecision.DirectPlay(

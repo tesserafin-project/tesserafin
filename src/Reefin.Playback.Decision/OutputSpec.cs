@@ -10,6 +10,14 @@ namespace Reefin.Playback.Decision;
 /// <param name="VideoRange">The normalized output video range type, or <see langword="null"/> if not applicable/unchanged.</param>
 /// <param name="AudioChannels">The output audio channel count, or <see langword="null"/> if not applicable/unchanged.</param>
 /// <param name="Bitrate">The output bitrate, or <see langword="null"/> if not applicable/unbounded.</param>
+/// <param name="Protocol">
+/// The transport protocol this output is delivered over (PR102b). For Direct Play and Remux,
+/// always <see cref="StreamingProtocol.Http"/> - a protocol only diverges from plain HTTP when the
+/// server produces the encoding, i.e. when transcoding to a client-declared
+/// <see cref="PlaybackOutputProfile"/>. Non-nullable: <see cref="StreamingProtocol.Http"/> is the
+/// neutral value for the "not applicable" case too, so this decision never leaves the delivery
+/// protocol unstated.
+/// </param>
 public sealed record OutputSpec(
     string? Container,
     string? VideoCodec,
@@ -17,10 +25,11 @@ public sealed record OutputSpec(
     Resolution? Resolution,
     string? VideoRange,
     int? AudioChannels,
-    int? Bitrate)
+    int? Bitrate,
+    StreamingProtocol Protocol)
 {
     /// <summary>
     /// An output spec with no fields set, used for non-viable decisions.
     /// </summary>
-    public static readonly OutputSpec Empty = new(null, null, null, null, null, null, null);
+    public static readonly OutputSpec Empty = new(null, null, null, null, null, null, null, StreamingProtocol.Http);
 }
