@@ -1,0 +1,48 @@
+{
+  "fixtureVersion": 5,
+  "id": "video-requested-source-not-found",
+  "category": "requested-source",
+  "engineVersion": 5,
+  "description": "requestedMediaSourceId names a source that does not exist among 'sources'. Expect ReasonCode.RequestedSourceNotFound under NoViablePlan, distinct from a requested source that exists but is not viable - the engine never falls back to a different source either way.",
+  "input": {
+    "context": { "mediaKind": "Video" },
+    "capabilities": {
+      "decode": {
+        "directPlayProfiles": [
+          { "type": "Video", "containers": ["mp4"], "videoCodecs": ["h264"], "audioCodecs": ["aac"] }
+        ],
+        "videoCodecs": [{ "codec": "h264", "profiles": [], "maxLevel": 62 }],
+        "audioCodecs": [{ "codec": "aac", "maxChannels": 8 }],
+        "subtitleDelivery": []
+      },
+      "outputProfiles": []
+    },
+    "sources": [
+      {
+        "mediaSourceId": "src-1",
+        "container": "mp4",
+        "protocol": "File",
+        "bitrate": 8000000,
+        "videoStreams": [{ "index": 0, "codec": "h264", "profile": "high", "level": 40, "width": 1920, "height": 1080, "bitDepth": 8, "videoRange": "SDR", "bitrate": 6000000 }],
+        "audioStreams": [{ "index": 1, "codec": "aac", "channels": 2, "isDefault": true }],
+        "subtitleStreams": [],
+        "supportsDirectPlay": true,
+        "supportsDirectStream": true,
+        "supportsTranscoding": true
+      }
+    ],
+    "requestedMediaSourceId": "src-does-not-exist",
+    "constraints": {
+      "allowDirectPlay": true, "allowDirectStream": true, "allowTranscoding": true,
+      "allowVideoStreamCopy": true, "allowAudioStreamCopy": true
+    }
+  },
+  "expected": {
+    "method": "Transcode",
+    "selectedStreams": { "video": null, "audio": null, "subtitle": null },
+    "output": { "container": null, "videoCodec": null, "audioCodec": null },
+    "transforms": [],
+    "reasonCodes": ["NoViablePlan", "RequestedSourceNotFound"],
+    "isViable": false
+  }
+}

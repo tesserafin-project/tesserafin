@@ -1,0 +1,51 @@
+{
+  "fixtureVersion": 5,
+  "id": "video-output-profile-first-not-viable-second-viable",
+  "category": "output-profile-order",
+  "engineVersion": 5,
+  "description": "Client declares two output profiles: the first asks for HLS delivery but the client does NOT declare HLS support (structurally not viable, IsOutputProfileViable rejects it), the second asks for plain HTTP H.264 (viable). A transcode is required (source VP9 is undecodable). Expect the engine to skip the non-viable first profile and use the second, without falling back to the named legacy default (a real client-declared profile was still used).",
+  "input": {
+    "context": { "mediaKind": "Video" },
+    "capabilities": {
+      "decode": {
+        "directPlayProfiles": [
+          { "type": "Video", "containers": ["mp4"], "videoCodecs": ["h264"], "audioCodecs": ["aac"] }
+        ],
+        "videoCodecs": [{ "codec": "h264", "profiles": [], "maxLevel": 62, "maxBitDepth": 10, "videoRangeTypes": ["SDR"] }],
+        "audioCodecs": [{ "codec": "aac", "maxChannels": 8 }],
+        "subtitleDelivery": [],
+        "supportsHls": false
+      },
+      "outputProfiles": [
+        { "type": "Video", "protocol": "Hls", "container": "mp4", "videoCodecs": ["hevc"], "audioCodecs": ["aac"] },
+        { "type": "Video", "protocol": "Http", "container": "mp4", "videoCodecs": ["h264"], "audioCodecs": ["aac"] }
+      ]
+    },
+    "sources": [
+      {
+        "mediaSourceId": "src-1",
+        "container": "mp4",
+        "protocol": "File",
+        "bitrate": 12000000,
+        "videoStreams": [{ "index": 0, "codec": "vp9", "width": 1920, "height": 1080, "bitDepth": 8, "videoRange": "SDR", "bitrate": 10000000 }],
+        "audioStreams": [{ "index": 1, "codec": "aac", "channels": 2, "isDefault": true }],
+        "subtitleStreams": [],
+        "supportsDirectPlay": true,
+        "supportsDirectStream": true,
+        "supportsTranscoding": true
+      }
+    ],
+    "constraints": {
+      "allowDirectPlay": true, "allowDirectStream": true, "allowTranscoding": true,
+      "allowVideoStreamCopy": true, "allowAudioStreamCopy": true
+    }
+  },
+  "expected": {
+    "method": "Transcode",
+    "selectedStreams": { "video": 0, "audio": 1, "subtitle": null },
+    "output": { "container": "mp4", "videoCodec": "h264", "audioCodec": "aac" },
+    "transforms": ["TranscodeVideo", "CopyAudio"],
+    "reasonCodes": ["VideoCodecNotSupported", "MethodChosen"],
+    "isViable": true
+  }
+}

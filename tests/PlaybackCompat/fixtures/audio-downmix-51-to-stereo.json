@@ -1,36 +1,78 @@
 {
-  "fixtureVersion": 4,
+  "fixtureVersion": 5,
   "id": "audio-downmix-51-to-stereo",
   "category": "downmix",
   "engineVersion": 5,
   "description": "Music track: FLAC 5.1 the client accepts as a codec, but it caps at 2 channels. Expect an audio transcode that downmixes to stereo, targeting the client's declared AAC output profile.",
   "input": {
-    "context": { "mediaKind": "Audio" },
+    "context": {
+      "mediaKind": "Audio"
+    },
     "capabilities": {
       "decode": {
         "directPlayProfiles": [
-          { "type": "Audio", "containers": ["mp4", "mkv"], "videoCodecs": [], "audioCodecs": ["aac", "flac"] }
+          {
+            "type": "Audio",
+            "containers": [
+              "mp4",
+              "mkv"
+            ],
+            "videoCodecs": [],
+            "audioCodecs": [
+              "aac",
+              "flac"
+            ]
+          }
         ],
         "videoCodecs": [],
-        "audioCodecs": [{ "codec": "aac", "maxChannels": 2 }, { "codec": "flac", "maxChannels": 2 }],
+        "audioCodecs": [
+          {
+            "codec": "aac",
+            "maxChannels": 2
+          },
+          {
+            "codec": "flac",
+            "maxChannels": 2
+          }
+        ],
         "subtitleDelivery": []
       },
       "outputProfiles": [
-        { "type": "Audio", "protocol": "Http", "container": "mp4", "videoCodecs": [], "audioCodecs": ["aac"], "maxAudioChannels": 2 }
+        {
+          "type": "Audio",
+          "protocol": "Http",
+          "container": "mp4",
+          "videoCodecs": [],
+          "audioCodecs": [
+            "aac"
+          ],
+          "maxAudioChannels": 2
+        }
       ]
     },
-    "source": {
-      "mediaSourceId": "src-1",
-      "container": "flac",
-      "protocol": "File",
-      "bitrate": 4000000,
-      "videoStreams": [],
-      "audioStreams": [{ "index": 0, "codec": "flac", "channels": 6, "sampleRate": 48000, "bitDepth": 24, "isDefault": true }],
-      "subtitleStreams": [],
-      "supportsDirectPlay": true,
-      "supportsDirectStream": true,
-      "supportsTranscoding": true
-    },
+    "sources": [
+      {
+        "mediaSourceId": "src-1",
+        "container": "flac",
+        "protocol": "File",
+        "bitrate": 4000000,
+        "videoStreams": [],
+        "audioStreams": [
+          {
+            "index": 0,
+            "codec": "flac",
+            "channels": 6,
+            "sampleRate": 48000,
+            "bitDepth": 24,
+            "isDefault": true
+          }
+        ],
+        "subtitleStreams": [],
+        "supportsDirectPlay": true,
+        "supportsDirectStream": true,
+        "supportsTranscoding": true
+      }
+    ],
     "constraints": {
       "allowDirectPlay": true,
       "allowDirectStream": true,
@@ -41,10 +83,25 @@
   },
   "expected": {
     "method": "Transcode",
-    "selectedStreams": { "video": null, "audio": 0, "subtitle": null },
-    "output": { "container": "mp4", "audioCodec": "aac", "audioChannels": 2 },
-    "transforms": ["TranscodeAudio", "Downmix"],
-    "reasonCodes": ["AudioChannelsNotSupported", "DownmixRequired", "MethodChosen"],
+    "selectedStreams": {
+      "video": null,
+      "audio": 0,
+      "subtitle": null
+    },
+    "output": {
+      "container": "mp4",
+      "audioCodec": "aac",
+      "audioChannels": 2
+    },
+    "transforms": [
+      "TranscodeAudio",
+      "Downmix"
+    ],
+    "reasonCodes": [
+      "AudioChannelsNotSupported",
+      "DownmixRequired",
+      "MethodChosen"
+    ],
     "isViable": true
   }
 }

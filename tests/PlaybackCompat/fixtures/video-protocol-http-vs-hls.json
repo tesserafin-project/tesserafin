@@ -1,0 +1,50 @@
+{
+  "fixtureVersion": 5,
+  "id": "video-protocol-http-vs-hls",
+  "category": "protocol-selection",
+  "engineVersion": 5,
+  "description": "The client declares HLS support and an HLS output profile; a transcode is required (source VP9 is undecodable). Expect OutputSpec.Protocol to reflect the used output profile's declared protocol (Hls), not the neutral HTTP default that Direct Play/Remux/no-matching-profile transcodes always carry.",
+  "input": {
+    "context": { "mediaKind": "Video" },
+    "capabilities": {
+      "decode": {
+        "directPlayProfiles": [
+          { "type": "Video", "containers": ["mp4"], "videoCodecs": ["h264"], "audioCodecs": ["aac"] }
+        ],
+        "videoCodecs": [{ "codec": "h264", "profiles": [], "maxLevel": 62, "maxBitDepth": 10, "videoRangeTypes": ["SDR"] }],
+        "audioCodecs": [{ "codec": "aac", "maxChannels": 8 }],
+        "subtitleDelivery": [],
+        "supportsHls": true
+      },
+      "outputProfiles": [
+        { "type": "Video", "protocol": "Hls", "container": "mp4", "videoCodecs": ["h264"], "audioCodecs": ["aac"] }
+      ]
+    },
+    "sources": [
+      {
+        "mediaSourceId": "src-1",
+        "container": "mp4",
+        "protocol": "File",
+        "bitrate": 12000000,
+        "videoStreams": [{ "index": 0, "codec": "vp9", "width": 1920, "height": 1080, "bitDepth": 8, "videoRange": "SDR", "bitrate": 10000000 }],
+        "audioStreams": [{ "index": 1, "codec": "aac", "channels": 2, "isDefault": true }],
+        "subtitleStreams": [],
+        "supportsDirectPlay": true,
+        "supportsDirectStream": true,
+        "supportsTranscoding": true
+      }
+    ],
+    "constraints": {
+      "allowDirectPlay": true, "allowDirectStream": true, "allowTranscoding": true,
+      "allowVideoStreamCopy": true, "allowAudioStreamCopy": true
+    }
+  },
+  "expected": {
+    "method": "Transcode",
+    "selectedStreams": { "video": 0, "audio": 1, "subtitle": null },
+    "output": { "container": "mp4", "videoCodec": "h264", "audioCodec": "aac", "protocol": "Hls" },
+    "transforms": ["TranscodeVideo", "CopyAudio"],
+    "reasonCodes": ["VideoCodecNotSupported", "MethodChosen"],
+    "isViable": true
+  }
+}

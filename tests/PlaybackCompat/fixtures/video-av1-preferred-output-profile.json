@@ -1,0 +1,49 @@
+{
+  "fixtureVersion": 5,
+  "id": "video-av1-preferred-output-profile",
+  "category": "av1-preferred",
+  "engineVersion": 5,
+  "description": "The client's declared output profile lists AV1 first among its target video codecs (av1, h264, vp9 - mirrors the real Firefox HLS/MP4 TranscodingProfile, PR98/PR102). A transcode is required (source HEVC is undecodable). Expect the engine to target AV1, the client's actual first preference, not a hardcoded server default codec.",
+  "input": {
+    "context": { "mediaKind": "Video" },
+    "capabilities": {
+      "decode": {
+        "directPlayProfiles": [
+          { "type": "Video", "containers": ["mp4"], "videoCodecs": ["h264"], "audioCodecs": ["aac"] }
+        ],
+        "videoCodecs": [{ "codec": "h264", "profiles": [], "maxLevel": 62, "maxBitDepth": 10, "videoRangeTypes": ["SDR"] }],
+        "audioCodecs": [{ "codec": "aac", "maxChannels": 8 }],
+        "subtitleDelivery": []
+      },
+      "outputProfiles": [
+        { "type": "Video", "protocol": "Http", "container": "mp4", "videoCodecs": ["av1", "h264", "vp9"], "audioCodecs": ["aac"] }
+      ]
+    },
+    "sources": [
+      {
+        "mediaSourceId": "src-1",
+        "container": "mp4",
+        "protocol": "File",
+        "bitrate": 12000000,
+        "videoStreams": [{ "index": 0, "codec": "hevc", "width": 1920, "height": 1080, "bitDepth": 8, "videoRange": "SDR", "bitrate": 10000000 }],
+        "audioStreams": [{ "index": 1, "codec": "aac", "channels": 2, "isDefault": true }],
+        "subtitleStreams": [],
+        "supportsDirectPlay": true,
+        "supportsDirectStream": true,
+        "supportsTranscoding": true
+      }
+    ],
+    "constraints": {
+      "allowDirectPlay": true, "allowDirectStream": true, "allowTranscoding": true,
+      "allowVideoStreamCopy": true, "allowAudioStreamCopy": true
+    }
+  },
+  "expected": {
+    "method": "Transcode",
+    "selectedStreams": { "video": 0, "audio": 1, "subtitle": null },
+    "output": { "container": "mp4", "videoCodec": "av1", "audioCodec": "aac" },
+    "transforms": ["TranscodeVideo", "CopyAudio"],
+    "reasonCodes": ["VideoCodecNotSupported", "MethodChosen"],
+    "isViable": true
+  }
+}

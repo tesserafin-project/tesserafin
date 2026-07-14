@@ -1,0 +1,52 @@
+{
+  "fixtureVersion": 5,
+  "id": "audio-codec-bitrate-limit-applied",
+  "category": "codec-bitrate-limit",
+  "engineVersion": 5,
+  "description": "PR103: per-codec audio bitrate ceiling (AudioCodecCapability.MaxBitrate), isolated from the container-wide MaxBitrate check (constraints.maxBitrate is left null here). The source's FLAC audio stream exceeds the client's declared FLAC bitrate ceiling, forcing an audio transcode to the client's declared AAC output profile; the output's AudioBitrate/TotalBitrate cascade the output profile's ceiling against the target codec's own per-codec ceiling.",
+  "input": {
+    "context": { "mediaKind": "Audio" },
+    "capabilities": {
+      "decode": {
+        "directPlayProfiles": [
+          { "type": "Audio", "containers": ["flac", "mp4"], "videoCodecs": [], "audioCodecs": ["flac", "aac"] }
+        ],
+        "videoCodecs": [],
+        "audioCodecs": [
+          { "codec": "flac", "maxChannels": 2, "maxBitrate": 500000 },
+          { "codec": "aac", "maxChannels": 2, "maxBitrate": 320000 }
+        ],
+        "subtitleDelivery": []
+      },
+      "outputProfiles": [
+        { "type": "Audio", "protocol": "Http", "container": "mp4", "videoCodecs": [], "audioCodecs": ["aac"], "maxAudioBitrate": 256000 }
+      ]
+    },
+    "sources": [
+      {
+        "mediaSourceId": "src-1",
+        "container": "flac",
+        "protocol": "File",
+        "bitrate": 900000,
+        "videoStreams": [],
+        "audioStreams": [{ "index": 0, "codec": "flac", "channels": 2, "sampleRate": 48000, "bitrate": 900000, "isDefault": true }],
+        "subtitleStreams": [],
+        "supportsDirectPlay": true,
+        "supportsDirectStream": true,
+        "supportsTranscoding": true
+      }
+    ],
+    "constraints": {
+      "allowDirectPlay": true, "allowDirectStream": true, "allowTranscoding": true,
+      "allowAudioStreamCopy": true
+    }
+  },
+  "expected": {
+    "method": "Transcode",
+    "selectedStreams": { "video": null, "audio": 0, "subtitle": null },
+    "output": { "container": "mp4", "audioCodec": "aac", "audioChannels": 2, "totalBitrate": 256000, "audioBitrate": 256000 },
+    "transforms": ["TranscodeAudio"],
+    "reasonCodes": ["AudioBitrateNotSupported", "MethodChosen"],
+    "isViable": true
+  }
+}

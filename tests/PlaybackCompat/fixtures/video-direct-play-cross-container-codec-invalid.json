@@ -1,0 +1,51 @@
+{
+  "fixtureVersion": 5,
+  "id": "video-direct-play-cross-container-codec-invalid",
+  "category": "direct-play-mismatch",
+  "engineVersion": 5,
+  "description": "PR102b problem #1: the client declares MP4+H.264+AAC and, SEPARATELY, WebM+VP9+AAC as two distinct DirectPlayProfile entries - never MP4+VP9. The media is MP4 container with VP9 video (individually decodable) and AAC audio (individually decodable): a cartesian-flattened engine would wrongly direct play this as an accepted combination. Expect NOT direct play - a remux into WebM (the one container declared together with VP9), streams copied unchanged.",
+  "input": {
+    "context": { "mediaKind": "Video" },
+    "capabilities": {
+      "decode": {
+        "directPlayProfiles": [
+          { "type": "Video", "containers": ["mp4"], "videoCodecs": ["h264"], "audioCodecs": ["aac"] },
+          { "type": "Video", "containers": ["webm"], "videoCodecs": ["vp9"], "audioCodecs": ["aac"] }
+        ],
+        "videoCodecs": [
+          { "codec": "h264", "profiles": [], "maxLevel": 62, "maxBitDepth": 10, "videoRangeTypes": ["SDR"], "maxBitrate": 100000000 },
+          { "codec": "vp9", "profiles": [], "maxLevel": null, "maxBitDepth": 10, "videoRangeTypes": ["SDR"], "maxBitrate": 100000000 }
+        ],
+        "audioCodecs": [{ "codec": "aac", "maxChannels": 8 }],
+        "subtitleDelivery": []
+      },
+      "outputProfiles": []
+    },
+    "sources": [
+      {
+        "mediaSourceId": "src-1",
+        "container": "mp4",
+        "protocol": "File",
+        "bitrate": 8000000,
+        "videoStreams": [{ "index": 0, "codec": "vp9", "width": 1920, "height": 1080, "bitDepth": 8, "videoRange": "SDR", "bitrate": 6000000 }],
+        "audioStreams": [{ "index": 1, "codec": "aac", "channels": 2, "isDefault": true }],
+        "subtitleStreams": [],
+        "supportsDirectPlay": true,
+        "supportsDirectStream": true,
+        "supportsTranscoding": true
+      }
+    ],
+    "constraints": {
+      "allowDirectPlay": true, "allowDirectStream": true, "allowTranscoding": true,
+      "allowVideoStreamCopy": true, "allowAudioStreamCopy": true
+    }
+  },
+  "expected": {
+    "method": "Remux",
+    "selectedStreams": { "video": 0, "audio": 1, "subtitle": null },
+    "output": { "container": "webm", "videoCodec": "vp9", "audioCodec": "aac" },
+    "transforms": ["RemuxContainer", "CopyVideo", "CopyAudio"],
+    "reasonCodes": ["ContainerNotSupported", "StreamCopyable", "MethodChosen"],
+    "isViable": true
+  }
+}

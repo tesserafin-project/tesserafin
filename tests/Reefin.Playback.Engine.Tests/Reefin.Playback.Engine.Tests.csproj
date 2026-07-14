@@ -15,6 +15,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <PackageReference Include="JsonSchema.Net" />
   </ItemGroup>
 
   <ItemGroup>
@@ -22,34 +23,14 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="..\PlaybackCompat\fixtures\video-h264-aac-mp4-directplay.json" Link="fixtures\video-h264-aac-mp4-directplay.json">
+    <!-- PR104: wildcard-included so a new fixture only needs to be added to FixtureCatalog.cs and
+         tests/PlaybackCompat/fixtures/ - not also to this project file. -->
+    <None Include="..\PlaybackCompat\fixtures\*.json">
+      <Link>fixtures\%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\PlaybackCompat\fixtures\video-mkv-remux-mp4.json" Link="fixtures\video-mkv-remux-mp4.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Include="..\PlaybackCompat\fixtures\video-mkv-dts-to-aac.json" Link="fixtures\video-mkv-dts-to-aac.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Include="..\PlaybackCompat\fixtures\audio-downmix-51-to-stereo.json" Link="fixtures\audio-downmix-51-to-stereo.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Include="..\PlaybackCompat\fixtures\video-no-viable-plan.json" Link="fixtures\video-no-viable-plan.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Include="..\PlaybackCompat\fixtures\video-codec-incompatible.json" Link="fixtures\video-codec-incompatible.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Include="..\PlaybackCompat\fixtures\video-resolution-limit.json" Link="fixtures\video-resolution-limit.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Include="..\PlaybackCompat\fixtures\video-hdr-tonemap.json" Link="fixtures\video-hdr-tonemap.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Include="..\PlaybackCompat\fixtures\subtitle-pgs-burn-in.json" Link="fixtures\subtitle-pgs-burn-in.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Include="..\PlaybackCompat\fixtures\subtitle-srt-external.json" Link="fixtures\subtitle-srt-external.json">
+    <None Include="..\PlaybackCompat\schema\fixture.schema.json">
+      <Link>schema\fixture.schema.json</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>

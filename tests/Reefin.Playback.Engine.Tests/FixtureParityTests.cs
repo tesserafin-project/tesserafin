@@ -10,44 +10,77 @@ using Xunit;
 namespace Reefin.Playback.Engine.Tests;
 
 /// <summary>
-/// Compares the engine's decisions against all ten fixtures from the compatibility lab (PR93):
-/// direct play, remux, audio-transcode, downmix, no-viable-plan, video-codec-incompatible,
-/// bitrate/resolution limit, HDR tonemap, subtitle burn-in, and subtitle external delivery. Phase 2
-/// (PR97) implements transcoding, subtitle handling, resolution/bitrate limits, codec profile/
-/// level/bit-depth checks, HDR tonemapping, and channel downmix, so all ten now run here.
+/// Compares the engine's decisions against every fixture in the compatibility lab (PR93, format v5
+/// as of PR104): direct play, remux, audio-transcode, downmix, no-viable-plan,
+/// video-codec-incompatible, bitrate/resolution limit, HDR tonemap, subtitle burn-in, subtitle
+/// external delivery, live TV, alternate versions, requested-source selection, direct-play
+/// container/codec cross-mismatch, per-codec limits, output-profile ordering, HTTP/HLS protocol
+/// selection, subtitle auto-selection, invalid stream indices, codec-level bitrate limits, and AV1
+/// preference.
 /// </summary>
+/// <remarks>
+/// PR104: fixtures now carry <c>sources</c> (a list, replacing the single v1-v4 <c>source</c>) and
+/// an optional top-level <c>requestedMediaSourceId</c>; deserialization is strict
+/// (<see cref="JsonUnmappedMemberHandling.Disallow"/>) so an unknown fixture property fails the
+/// test loudly instead of silently binding to nothing; <c>fixtureVersion</c>/<c>id</c>/
+/// <c>category</c>/<c>engineVersion</c> are now asserted, not just parsed. Structural validation
+/// (required properties, enum membership, additionalProperties:false) is covered separately by
+/// <see cref="FixtureSchemaValidationTests"/> against tests/PlaybackCompat/schema/fixture.schema.json;
+/// this class is the behavioral gate (does the engine actually produce what the fixture expects).
+/// </remarks>
 public static class FixtureParityTests
 {
     // Test-local, deliberately NOT PlaybackDecisionJson.Options: the fixtures use camelCase
     // property names, the domain records are PascalCase, and PlaybackDecisionJson.Options is
     // case-sensitive. Reusing it would silently bind every field to null instead of failing loudly.
+    // UnmappedMemberHandling.Disallow (PR104) turns a stray/misspelled/stale fixture property into a
+    // hard test failure instead of a silently-ignored no-op - the same failure mode this comment
+    // already warns about for case sensitivity, closed for property names as well as casing.
     private static readonly JsonSerializerOptions FixtureOptions = new()
     {
         PropertyNameCaseInsensitive = true,
         Converters = { new JsonStringEnumConverter() },
+        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
+    };
+
+    // PR104: must be kept in sync with the "category" enum in
+    // tests/PlaybackCompat/schema/fixture.schema.json - deliberately checked here too (not just by
+    // FixtureSchemaValidationTests) so a fixture with a bogus category fails on two independent
+    // mechanisms rather than one.
+    private static readonly IReadOnlyCollection<string> KnownCategories = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "direct-play", "remux", "audio-transcode", "video-codec-incompatible",
+        "bitrate-resolution-limit", "hdr-tonemap", "subtitle-burn-in",
+        "subtitle-external", "downmix", "live-tv", "alternate-versions", "no-viable-plan",
+        "requested-source", "direct-play-mismatch", "per-codec-limit",
+        "output-profile-order", "protocol-selection", "subtitle-auto-select",
+        "invalid-index", "codec-bitrate-limit", "av1-preferred",
     };
 
     [Theory]
-    [InlineData("video-h264-aac-mp4-directplay.json")]
-    [InlineData("video-mkv-remux-mp4.json")]
-    [InlineData("video-mkv-dts-to-aac.json")]
-    [InlineData("audio-downmix-51-to-stereo.json")]
-    [InlineData("video-no-viable-plan.json")]
-    [InlineData("video-codec-incompatible.json")]
-    [InlineData("video-resolution-limit.json")]
-    [InlineData("video-hdr-tonemap.json")]
-    [InlineData("subtitle-pgs-burn-in.json")]
-    [InlineData("subtitle-srt-external.json")]
+    [MemberData(nameof(FixtureCatalog.AllFixtures), MemberType = typeof(FixtureCatalog))]
     public static void Fixture_EngineDecisionMatchesExpected(string fixtureName)
     {
-        var path = Path.Combine(AppContext.BaseDirectory, "fixtures", fixtureName);
-        var json = File.ReadAllText(path);
-        var fixture = JsonSerializer.Deserialize<FixtureFile>(json, FixtureOptions)
-            ?? throw new InvalidOperationException($"Fixture '{fixtureName}' deserialized to null.");
+        var fixture = LoadFixture(fixtureName);
+
+        Assert.Equal(5, fixture.FixtureVersion);
+        Assert.False(string.IsNullOrEmpty(fixture.Id));
+        Assert.Equal(Path.GetFileNameWithoutExtension(fixtureName), fixture.Id);
+        Assert.False(string.IsNullOrEmpty(fixture.Category));
+        Assert.Contains(fixture.Category, KnownCategories);
+        Assert.Equal(PlaybackEngine.EngineVersion, fixture.EngineVersion);
 
         var engine = new PlaybackEngine();
-        IReadOnlyList<MediaSourceSnapshot> sources = [fixture.Input.Source];
-        var decision = engine.Decide(fixture.Input.Context, fixture.Input.Capabilities, sources, fixture.Input.Constraints);
+        var context = new PlaybackRequestContext(
+            RequestId: Guid.Empty,
+            ItemId: Guid.Empty,
+            MediaSourceId: fixture.Input.RequestedMediaSourceId,
+            UserId: Guid.Empty,
+            MediaKind: fixture.Input.Context.MediaKind,
+            RequestedAt: default,
+            EngineVersion: fixture.EngineVersion);
+
+        var decision = engine.Decide(context, fixture.Input.Capabilities, fixture.Input.Sources, fixture.Input.Constraints);
 
         var expected = fixture.Expected;
 
@@ -60,7 +93,10 @@ public static class FixtureParityTests
 
         // The fixture's `expected.output` only declares the fields relevant to the case it's
         // isolating; an absent field deserializes to null on FixtureOutput, which is exactly what
-        // the engine is expected to produce when that field is not applicable/unchanged.
+        // the engine is expected to produce when that field is not applicable/unchanged. Protocol
+        // (PR104) is the one exception: it is non-nullable on OutputSpec, and an absent fixture
+        // value defaults to StreamingProtocol.Http (enum member 0) on FixtureOutput too, so the
+        // comparison is unconditional and still correct for fixtures that never mention it.
         Assert.Equal(expected.Output.Container, decision.Output.Container);
         Assert.Equal(expected.Output.VideoCodec, decision.Output.VideoCodec);
         Assert.Equal(expected.Output.AudioCodec, decision.Output.AudioCodec);
@@ -70,6 +106,7 @@ public static class FixtureParityTests
         Assert.Equal(expected.Output.TotalBitrate, decision.Output.TotalBitrate);
         Assert.Equal(expected.Output.VideoBitrate, decision.Output.VideoBitrate);
         Assert.Equal(expected.Output.AudioBitrate, decision.Output.AudioBitrate);
+        Assert.Equal(expected.Output.Protocol, decision.Output.Protocol);
 
         var expectedTransforms = expected.Transforms.Select(Enum.Parse<TransformKind>).ToHashSet();
         var actualTransforms = decision.Transforms.ToHashSet();
@@ -78,6 +115,14 @@ public static class FixtureParityTests
         var expectedReasonCodes = expected.ReasonCodes.Select(Enum.Parse<ReasonCode>).ToHashSet();
         var actualReasonCodes = FlattenReasonCodes(decision.Reasoning).ToHashSet();
         Assert.Equal(expectedReasonCodes, actualReasonCodes);
+    }
+
+    internal static FixtureFile LoadFixture(string fixtureName)
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "fixtures", fixtureName);
+        var json = File.ReadAllText(path);
+        return JsonSerializer.Deserialize<FixtureFile>(json, FixtureOptions)
+            ?? throw new InvalidOperationException($"Fixture '{fixtureName}' deserialized to null.");
     }
 
     private static IEnumerable<ReasonCode> FlattenReasonCodes(ReasonNode node)
@@ -93,15 +138,30 @@ public static class FixtureParityTests
         }
     }
 
-    private sealed record FixtureFile(FixtureInput Input, FixtureExpected Expected);
+    internal sealed record FixtureFile(
+        int FixtureVersion,
+        string Id,
+        string Category,
+        int EngineVersion,
+        string? Description,
+        FixtureInput Input,
+        FixtureExpected Expected);
 
-    private sealed record FixtureInput(
-        PlaybackRequestContext Context,
+    internal sealed record FixtureInput(
+        FixtureContext Context,
         ClientCapabilities Capabilities,
-        MediaSourceSnapshot Source,
+        IReadOnlyList<MediaSourceSnapshot> Sources,
+        string? RequestedMediaSourceId,
         PlaybackConstraints Constraints);
 
-    private sealed record FixtureExpected(
+    /// <summary>
+    /// PR104: the fixture's <c>context</c> object now carries only <see cref="MediaKind"/> - the
+    /// requested source id lives on <see cref="FixtureInput.RequestedMediaSourceId"/> instead, a
+    /// dedicated top-level field rather than a property nested inside a request-identity object.
+    /// </summary>
+    internal sealed record FixtureContext(MediaKind MediaKind);
+
+    internal sealed record FixtureExpected(
         string Method,
         FixtureSelectedStreams SelectedStreams,
         FixtureOutput Output,
@@ -109,9 +169,9 @@ public static class FixtureParityTests
         IReadOnlyList<string> ReasonCodes,
         bool IsViable);
 
-    private sealed record FixtureSelectedStreams(int? Video, int? Audio, int? Subtitle);
+    internal sealed record FixtureSelectedStreams(int? Video, int? Audio, int? Subtitle);
 
-    private sealed record FixtureOutput(
+    internal sealed record FixtureOutput(
         string? Container,
         string? VideoCodec,
         string? AudioCodec,
@@ -120,5 +180,6 @@ public static class FixtureParityTests
         int? AudioChannels,
         int? TotalBitrate,
         int? VideoBitrate,
-        int? AudioBitrate);
+        int? AudioBitrate,
+        StreamingProtocol Protocol);
 }

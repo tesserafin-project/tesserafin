@@ -1,0 +1,51 @@
+{
+  "fixtureVersion": 5,
+  "id": "subtitle-forced-auto-selected",
+  "category": "subtitle-auto-select",
+  "engineVersion": 5,
+  "description": "No preferredSubtitleStreamIndex, SubtitleMode Default. Two embedded VTT subtitle streams, neither default nor external; one is flagged forced. Expect SelectDefaultSubtitle to skip the plain (non-default/non-forced/non-external) stream - which the Default-mode predicate excludes entirely - and auto-select the forced one.",
+  "input": {
+    "context": { "mediaKind": "Video" },
+    "capabilities": {
+      "decode": {
+        "directPlayProfiles": [
+          { "type": "Video", "containers": ["mp4"], "videoCodecs": ["h264"], "audioCodecs": ["aac"] }
+        ],
+        "videoCodecs": [{ "codec": "h264", "profiles": [], "maxLevel": 62, "maxBitDepth": 10, "videoRangeTypes": ["SDR"] }],
+        "audioCodecs": [{ "codec": "aac", "maxChannels": 8 }],
+        "subtitleDelivery": [{ "format": "vtt", "method": "Embed" }]
+      },
+      "outputProfiles": []
+    },
+    "sources": [
+      {
+        "mediaSourceId": "src-1",
+        "container": "mp4",
+        "protocol": "File",
+        "bitrate": 8000000,
+        "videoStreams": [{ "index": 0, "codec": "h264", "profile": "high", "level": 40, "width": 1920, "height": 1080, "bitDepth": 8, "videoRange": "SDR", "bitrate": 6000000 }],
+        "audioStreams": [{ "index": 1, "codec": "aac", "channels": 2, "isDefault": true }],
+        "subtitleStreams": [
+          { "index": 2, "format": "vtt", "isExternal": false, "isForced": false, "isDefault": false, "language": "fre" },
+          { "index": 3, "format": "vtt", "isExternal": false, "isForced": true, "isDefault": false, "language": "eng" }
+        ],
+        "supportsDirectPlay": true,
+        "supportsDirectStream": true,
+        "supportsTranscoding": true
+      }
+    ],
+    "constraints": {
+      "allowDirectPlay": true, "allowDirectStream": true, "allowTranscoding": true,
+      "allowVideoStreamCopy": true, "allowAudioStreamCopy": true,
+      "subtitleMode": "Default"
+    }
+  },
+  "expected": {
+    "method": "DirectPlay",
+    "selectedStreams": { "video": 0, "audio": 1, "subtitle": 3 },
+    "output": { "container": "mp4", "videoCodec": "h264", "audioCodec": "aac" },
+    "transforms": [],
+    "reasonCodes": ["MethodChosen"],
+    "isViable": true
+  }
+}

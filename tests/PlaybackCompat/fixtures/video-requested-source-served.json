@@ -1,0 +1,62 @@
+{
+  "fixtureVersion": 5,
+  "id": "video-requested-source-served",
+  "category": "requested-source",
+  "engineVersion": 5,
+  "description": "Two sources: an H.264 one that would direct play, and an HEVC one that needs a transcode. requestedMediaSourceId explicitly names the HEVC (worse) source, so the engine must serve exactly that one and transcode it - never silently substituting the other, direct-playable source, even though it would otherwise be 'better'.",
+  "input": {
+    "context": { "mediaKind": "Video" },
+    "capabilities": {
+      "decode": {
+        "directPlayProfiles": [
+          { "type": "Video", "containers": ["mp4"], "videoCodecs": ["h264"], "audioCodecs": ["aac"] }
+        ],
+        "videoCodecs": [{ "codec": "h264", "profiles": [], "maxLevel": 62, "maxBitDepth": 10, "videoRangeTypes": ["SDR"], "maxBitrate": 100000000 }],
+        "audioCodecs": [{ "codec": "aac", "maxChannels": 8 }],
+        "subtitleDelivery": []
+      },
+      "outputProfiles": [
+        { "type": "Video", "protocol": "Http", "container": "mp4", "videoCodecs": ["h264"], "audioCodecs": ["aac"] }
+      ]
+    },
+    "sources": [
+      {
+        "mediaSourceId": "src-a-h264",
+        "container": "mp4",
+        "protocol": "File",
+        "bitrate": 8000000,
+        "videoStreams": [{ "index": 0, "codec": "h264", "profile": "high", "level": 40, "width": 1920, "height": 1080, "bitDepth": 8, "videoRange": "SDR", "bitrate": 6000000 }],
+        "audioStreams": [{ "index": 1, "codec": "aac", "channels": 2, "isDefault": true }],
+        "subtitleStreams": [],
+        "supportsDirectPlay": true,
+        "supportsDirectStream": true,
+        "supportsTranscoding": true
+      },
+      {
+        "mediaSourceId": "src-b-hevc",
+        "container": "mp4",
+        "protocol": "File",
+        "bitrate": 20000000,
+        "videoStreams": [{ "index": 0, "codec": "hevc", "width": 1920, "height": 1080, "bitDepth": 8, "videoRange": "SDR", "bitrate": 15000000 }],
+        "audioStreams": [{ "index": 1, "codec": "aac", "channels": 2, "isDefault": true }],
+        "subtitleStreams": [],
+        "supportsDirectPlay": true,
+        "supportsDirectStream": true,
+        "supportsTranscoding": true
+      }
+    ],
+    "requestedMediaSourceId": "src-b-hevc",
+    "constraints": {
+      "allowDirectPlay": true, "allowDirectStream": true, "allowTranscoding": true,
+      "allowVideoStreamCopy": true, "allowAudioStreamCopy": true
+    }
+  },
+  "expected": {
+    "method": "Transcode",
+    "selectedStreams": { "video": 0, "audio": 1, "subtitle": null },
+    "output": { "container": "mp4", "videoCodec": "h264", "audioCodec": "aac", "totalBitrate": 100000000, "videoBitrate": 100000000 },
+    "transforms": ["TranscodeVideo", "CopyAudio"],
+    "reasonCodes": ["VideoCodecNotSupported", "MethodChosen"],
+    "isViable": true
+  }
+}

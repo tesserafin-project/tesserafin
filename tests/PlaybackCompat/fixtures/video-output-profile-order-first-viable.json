@@ -1,0 +1,53 @@
+{
+  "fixtureVersion": 5,
+  "id": "video-output-profile-order-first-viable",
+  "category": "output-profile-order",
+  "engineVersion": 5,
+  "description": "Client declares two output profiles, both structurally viable: HEVC first, H.264 second. A transcode is required (source AV1 is undecodable). Expect the FIRST viable profile (HEVC) to win, the client's declared preference order - not a server-side codec preference.",
+  "input": {
+    "context": { "mediaKind": "Video" },
+    "capabilities": {
+      "decode": {
+        "directPlayProfiles": [
+          { "type": "Video", "containers": ["mp4"], "videoCodecs": ["hevc", "h264"], "audioCodecs": ["aac"] }
+        ],
+        "videoCodecs": [
+          { "codec": "hevc", "profiles": [], "maxLevel": 153, "maxBitDepth": 10, "videoRangeTypes": ["SDR"] },
+          { "codec": "h264", "profiles": [], "maxLevel": 62, "maxBitDepth": 10, "videoRangeTypes": ["SDR"] }
+        ],
+        "audioCodecs": [{ "codec": "aac", "maxChannels": 8 }],
+        "subtitleDelivery": []
+      },
+      "outputProfiles": [
+        { "type": "Video", "protocol": "Http", "container": "mp4", "videoCodecs": ["hevc"], "audioCodecs": ["aac"] },
+        { "type": "Video", "protocol": "Http", "container": "mp4", "videoCodecs": ["h264"], "audioCodecs": ["aac"] }
+      ]
+    },
+    "sources": [
+      {
+        "mediaSourceId": "src-1",
+        "container": "mp4",
+        "protocol": "File",
+        "bitrate": 12000000,
+        "videoStreams": [{ "index": 0, "codec": "av1", "width": 1920, "height": 1080, "bitDepth": 8, "videoRange": "SDR", "bitrate": 10000000 }],
+        "audioStreams": [{ "index": 1, "codec": "aac", "channels": 2, "isDefault": true }],
+        "subtitleStreams": [],
+        "supportsDirectPlay": true,
+        "supportsDirectStream": true,
+        "supportsTranscoding": true
+      }
+    ],
+    "constraints": {
+      "allowDirectPlay": true, "allowDirectStream": true, "allowTranscoding": true,
+      "allowVideoStreamCopy": true, "allowAudioStreamCopy": true
+    }
+  },
+  "expected": {
+    "method": "Transcode",
+    "selectedStreams": { "video": 0, "audio": 1, "subtitle": null },
+    "output": { "container": "mp4", "videoCodec": "hevc", "audioCodec": "aac" },
+    "transforms": ["TranscodeVideo", "CopyAudio"],
+    "reasonCodes": ["VideoCodecNotSupported", "MethodChosen"],
+    "isViable": true
+  }
+}

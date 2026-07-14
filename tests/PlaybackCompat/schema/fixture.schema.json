@@ -1,46 +1,54 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://reefin/tests/PlaybackCompat/fixture.schema.json",
-  "title": "Playback compatibility fixture (v2)",
-  "description": "Versioned fixture for the playback-decision compatibility lab (PR93). Input mirrors the PR91 domain objects; 'expected' describes the v2 PlaybackDecision. Legacy projection is computed at run time and compared by category (PR98), never by raw StreamInfo equality. v2 (PR102): 'capabilities' splits into 'decode' (DecodeCapabilities) and 'outputProfiles' (ordered PlaybackOutputProfile list), replacing the v1 flat capability shape. v2.2 (PR102b): 'decode.directPlayProfiles' replaces the flat 'decode.containers' list (container+codec combinations preserved, not flattened - problem #1), and per-codec 'maxResolution'/'maxBitrate' replace the old global 'decode.maxResolution'/'maxVideoBitrate'/'decode.maxAudioBitrate' fields (problem #2). v2.3 (PR103): 'expected.output.bitrate' replaces with 'totalBitrate'/'videoBitrate'/'audioBitrate' (OutputSpec.Bitrate was always null pre-PR103; the engine now populates per-axis ceilings), and 'constraints' gains optional 'subtitleMode'/'preferredSubtitleLanguages' driving legacy-parity subtitle auto-selection.",
+  "title": "Playback compatibility fixture (v5)",
+  "description": "Versioned fixture for the playback-decision compatibility lab (PR93). Input mirrors the PR91 domain objects; 'expected' describes the v2 PlaybackDecision. Legacy projection is computed at run time and compared by category (PR98), never by raw StreamInfo equality. v2 (PR102): 'capabilities' splits into 'decode' (DecodeCapabilities) and 'outputProfiles' (ordered PlaybackOutputProfile list). v2.2 (PR102b): per-codec limits replace global decode limits. v2.3 (PR103): 'expected.output' gains 'totalBitrate'/'videoBitrate'/'audioBitrate'; 'constraints' gains 'subtitleMode'/'preferredSubtitleLanguages'. v5 (PR104): 'input.source' (singular) replaced by 'input.sources' (array, at least one entry) plus optional top-level 'input.requestedMediaSourceId' (moved out of 'context', which now carries only 'mediaKind'); 'expected.output' gains 'protocol' (Http/Hls); this schema is now executed by a parameterized test (JsonSchema.Net) instead of being documentation-only, and every fixture is deserialized with unknown-member rejection - both gates are enforced by tests/Reefin.Playback.Engine.Tests, not just this file.",
   "type": "object",
   "required": ["fixtureVersion", "id", "category", "engineVersion", "input", "expected"],
   "additionalProperties": false,
   "properties": {
-    "fixtureVersion": { "const": 4 },
+    "fixtureVersion": { "const": 5 },
     "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
     "category": {
       "type": "string",
       "enum": [
         "direct-play", "remux", "audio-transcode", "video-codec-incompatible",
         "bitrate-resolution-limit", "hdr-tonemap", "subtitle-burn-in",
-        "subtitle-external", "downmix", "live-tv", "alternate-versions", "no-viable-plan"
+        "subtitle-external", "downmix", "live-tv", "alternate-versions", "no-viable-plan",
+        "requested-source", "direct-play-mismatch", "per-codec-limit",
+        "output-profile-order", "protocol-selection", "subtitle-auto-select",
+        "invalid-index", "codec-bitrate-limit", "av1-preferred"
       ]
     },
-    "engineVersion": { "type": "integer", "minimum": 1 },
+    "engineVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Must equal PlaybackEngine.EngineVersion; the runner fails the test otherwise (checked at run time, not by this schema, since the schema has no way to know the current engine constant)."
+    },
     "description": { "type": "string" },
     "input": {
       "type": "object",
-      "required": ["context", "capabilities", "source", "constraints"],
+      "required": ["context", "capabilities", "sources", "constraints"],
       "additionalProperties": false,
       "properties": {
         "context": {
           "type": "object",
+          "description": "PR104: carries only 'mediaKind' - the requested source id lives on 'input.requestedMediaSourceId' instead, since it is a top-level input concern, not a request-identity concern.",
           "required": ["mediaKind"],
+          "additionalProperties": false,
           "properties": {
-            "mediaKind": { "enum": ["Audio", "Video"] },
-            "itemId": { "type": "string" },
-            "mediaSourceId": { "type": ["string", "null"] },
-            "userId": { "type": ["string", "null"] }
+            "mediaKind": { "enum": ["Audio", "Video"] }
           }
         },
         "capabilities": {
           "type": "object",
           "description": "ClientCapabilities (PR91 §3.2, split into decode/outputProfiles by PR102). No DLNA DeviceProfile.",
+          "additionalProperties": false,
           "properties": {
             "decode": {
               "type": "object",
               "description": "DecodeCapabilities: what the client can read as-is, no server-side transformation.",
+              "additionalProperties": false,
               "properties": {
                 "directPlayProfiles": {
                   "type": "array",
@@ -48,6 +56,7 @@
                   "items": {
                     "type": "object",
                     "required": ["type"],
+                    "additionalProperties": false,
                     "properties": {
                       "type": { "enum": ["Audio", "Video"] },
                       "containers": { "type": "array", "items": { "type": "string" } },
@@ -60,6 +69,7 @@
                   "type": "array",
                   "items": {
                     "type": "object",
+                    "additionalProperties": false,
                     "properties": {
                       "codec": { "type": "string" },
                       "profiles": { "type": "array", "items": { "type": "string" } },
@@ -69,6 +79,7 @@
                       "maxResolution": {
                         "type": ["object", "null"],
                         "description": "Per-codec resolution ceiling (PR102b problem #2) - replaces the old global decode.maxResolution.",
+                        "additionalProperties": false,
                         "properties": { "width": { "type": "integer" }, "height": { "type": "integer" } }
                       },
                       "maxBitrate": {
@@ -83,6 +94,7 @@
                   "type": "array",
                   "items": {
                     "type": "object",
+                    "additionalProperties": false,
                     "properties": {
                       "codec": { "type": "string" },
                       "maxChannels": { "type": ["integer", "null"] },
@@ -100,6 +112,7 @@
                   "type": "array",
                   "items": {
                     "type": "object",
+                    "additionalProperties": false,
                     "properties": {
                       "format": { "type": "string" },
                       "method": { "enum": ["Embed", "External", "Burn", "Hls"] }
@@ -117,6 +130,7 @@
               "items": {
                 "type": "object",
                 "required": ["type", "container"],
+                "additionalProperties": false,
                 "properties": {
                   "type": { "enum": ["Audio", "Video"] },
                   "protocol": { "enum": ["Http", "Hls"] },
@@ -131,27 +145,20 @@
             }
           }
         },
-        "source": {
-          "type": "object",
-          "description": "MediaSourceSnapshot (PR91 §3.3). No file paths.",
-          "required": ["container"],
-          "properties": {
-            "mediaSourceId": { "type": ["string", "null"] },
-            "container": { "type": "string" },
-            "protocol": { "type": "string" },
-            "bitrate": { "type": ["integer", "null"] },
-            "runTimeTicks": { "type": ["integer", "null"] },
-            "videoStreams": { "type": "array", "items": { "$ref": "#/$defs/videoStream" } },
-            "audioStreams": { "type": "array", "items": { "$ref": "#/$defs/audioStream" } },
-            "subtitleStreams": { "type": "array", "items": { "$ref": "#/$defs/subtitleStream" } },
-            "supportsDirectPlay": { "type": "boolean" },
-            "supportsDirectStream": { "type": "boolean" },
-            "supportsTranscoding": { "type": "boolean" }
-          }
+        "sources": {
+          "type": "array",
+          "description": "PR104: replaces the v1-v4 singular 'source' - one or more MediaSourceSnapshot entries (PR91 §3.3), e.g. alternate versions of the same item. When 'requestedMediaSourceId' is absent the engine picks the best viable source in list order (Direct Play > Remux > Transcode); when present, only the source with that id is considered.",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/mediaSource" }
+        },
+        "requestedMediaSourceId": {
+          "type": ["string", "null"],
+          "description": "PR104: the specific source id requested, or absent/null to let the engine choose among 'sources'. Maps to PlaybackRequestContext.MediaSourceId. A value naming no source in 'sources' produces ReasonCode.RequestedSourceNotFound."
         },
         "constraints": {
           "type": "object",
           "description": "PlaybackConstraints (PR91 §3.4).",
+          "additionalProperties": false,
           "properties": {
             "allowDirectPlay": { "type": "boolean" },
             "allowDirectStream": { "type": "boolean" },
@@ -184,6 +191,7 @@
         "method": { "enum": ["DirectPlay", "Remux", "Transcode"] },
         "selectedStreams": {
           "type": "object",
+          "additionalProperties": false,
           "properties": {
             "video": { "type": ["integer", "null"] },
             "audio": { "type": ["integer", "null"] },
@@ -192,6 +200,7 @@
         },
         "output": {
           "type": "object",
+          "additionalProperties": false,
           "properties": {
             "container": { "type": ["string", "null"] },
             "videoCodec": { "type": ["string", "null"] },
@@ -201,7 +210,11 @@
             "audioChannels": { "type": ["integer", "null"] },
             "totalBitrate": { "type": ["integer", "null"] },
             "videoBitrate": { "type": ["integer", "null"] },
-            "audioBitrate": { "type": ["integer", "null"] }
+            "audioBitrate": { "type": ["integer", "null"] },
+            "protocol": {
+              "enum": ["Http", "Hls"],
+              "description": "PR104: OutputSpec.Protocol is non-nullable in the domain (Http is the neutral default); omitting this in a fixture means Http, matching the engine's own default."
+            }
           }
         },
         "transforms": {
@@ -217,9 +230,31 @@
     }
   },
   "$defs": {
+    "mediaSource": {
+      "type": "object",
+      "required": ["container"],
+      "additionalProperties": false,
+      "properties": {
+        "mediaSourceId": { "type": ["string", "null"] },
+        "container": { "type": "string" },
+        "protocol": { "type": "string" },
+        "bitrate": { "type": ["integer", "null"] },
+        "runTimeTicks": {
+          "type": ["integer", "null"],
+          "description": "PR104: null represents an unbounded/live source (see the 'live-tv' category) as well as any source of unknown duration - the engine never branches on this field, so no separate IsLive flag was needed."
+        },
+        "videoStreams": { "type": "array", "items": { "$ref": "#/$defs/videoStream" } },
+        "audioStreams": { "type": "array", "items": { "$ref": "#/$defs/audioStream" } },
+        "subtitleStreams": { "type": "array", "items": { "$ref": "#/$defs/subtitleStream" } },
+        "supportsDirectPlay": { "type": "boolean" },
+        "supportsDirectStream": { "type": "boolean" },
+        "supportsTranscoding": { "type": "boolean" }
+      }
+    },
     "videoStream": {
       "type": "object",
       "required": ["index", "codec"],
+      "additionalProperties": false,
       "properties": {
         "index": { "type": "integer" },
         "codec": { "type": "string" },
@@ -238,6 +273,7 @@
     "audioStream": {
       "type": "object",
       "required": ["index", "codec"],
+      "additionalProperties": false,
       "properties": {
         "index": { "type": "integer" },
         "codec": { "type": "string" },
@@ -252,6 +288,7 @@
     "subtitleStream": {
       "type": "object",
       "required": ["index", "format"],
+      "additionalProperties": false,
       "properties": {
         "index": { "type": "integer" },
         "format": { "type": "string" },

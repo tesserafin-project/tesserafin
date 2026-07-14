@@ -1,38 +1,110 @@
 {
-  "fixtureVersion": 4,
+  "fixtureVersion": 5,
   "id": "video-mkv-dts-to-aac",
   "category": "audio-transcode",
   "engineVersion": 5,
   "description": "The plan's canonical case: MKV container refused, H.264 video is copyable, DTS audio is not decodable by the client. Expect remux + audio transcode to AAC, video copied. The client's declared output profile targets mp4/h264/aac.",
   "input": {
-    "context": { "mediaKind": "Video" },
+    "context": {
+      "mediaKind": "Video"
+    },
     "capabilities": {
       "decode": {
         "directPlayProfiles": [
-          { "type": "Video", "containers": ["mp4", "ts"], "videoCodecs": ["h264"], "audioCodecs": ["aac", "ac3"] }
+          {
+            "type": "Video",
+            "containers": [
+              "mp4",
+              "ts"
+            ],
+            "videoCodecs": [
+              "h264"
+            ],
+            "audioCodecs": [
+              "aac",
+              "ac3"
+            ]
+          }
         ],
-        "videoCodecs": [{ "codec": "h264", "profiles": ["high"], "maxLevel": 41, "maxBitDepth": 8, "videoRangeTypes": ["SDR"], "maxResolution": { "width": 1920, "height": 1080 }, "maxBitrate": 20000000 }],
-        "audioCodecs": [{ "codec": "aac", "maxChannels": 6 }, { "codec": "ac3", "maxChannels": 6 }],
+        "videoCodecs": [
+          {
+            "codec": "h264",
+            "profiles": [
+              "high"
+            ],
+            "maxLevel": 41,
+            "maxBitDepth": 8,
+            "videoRangeTypes": [
+              "SDR"
+            ],
+            "maxResolution": {
+              "width": 1920,
+              "height": 1080
+            },
+            "maxBitrate": 20000000
+          }
+        ],
+        "audioCodecs": [
+          {
+            "codec": "aac",
+            "maxChannels": 6
+          },
+          {
+            "codec": "ac3",
+            "maxChannels": 6
+          }
+        ],
         "subtitleDelivery": [],
         "supportsHls": true,
         "supportsDash": false
       },
       "outputProfiles": [
-        { "type": "Video", "protocol": "Http", "container": "mp4", "videoCodecs": ["h264"], "audioCodecs": ["aac"] }
+        {
+          "type": "Video",
+          "protocol": "Http",
+          "container": "mp4",
+          "videoCodecs": [
+            "h264"
+          ],
+          "audioCodecs": [
+            "aac"
+          ]
+        }
       ]
     },
-    "source": {
-      "mediaSourceId": "src-1",
-      "container": "mkv",
-      "protocol": "File",
-      "bitrate": 12000000,
-      "videoStreams": [{ "index": 0, "codec": "h264", "profile": "high", "level": 40, "width": 1920, "height": 1080, "bitDepth": 8, "videoRange": "SDR" }],
-      "audioStreams": [{ "index": 2, "codec": "dts", "channels": 6, "sampleRate": 48000, "isDefault": true }],
-      "subtitleStreams": [],
-      "supportsDirectPlay": true,
-      "supportsDirectStream": true,
-      "supportsTranscoding": true
-    },
+    "sources": [
+      {
+        "mediaSourceId": "src-1",
+        "container": "mkv",
+        "protocol": "File",
+        "bitrate": 12000000,
+        "videoStreams": [
+          {
+            "index": 0,
+            "codec": "h264",
+            "profile": "high",
+            "level": 40,
+            "width": 1920,
+            "height": 1080,
+            "bitDepth": 8,
+            "videoRange": "SDR"
+          }
+        ],
+        "audioStreams": [
+          {
+            "index": 2,
+            "codec": "dts",
+            "channels": 6,
+            "sampleRate": 48000,
+            "isDefault": true
+          }
+        ],
+        "subtitleStreams": [],
+        "supportsDirectPlay": true,
+        "supportsDirectStream": true,
+        "supportsTranscoding": true
+      }
+    ],
     "constraints": {
       "allowDirectPlay": true,
       "allowDirectStream": true,
@@ -43,10 +115,27 @@
   },
   "expected": {
     "method": "Transcode",
-    "selectedStreams": { "video": 0, "audio": 2, "subtitle": null },
-    "output": { "container": "mp4", "videoCodec": "h264", "audioCodec": "aac", "audioChannels": 6 },
-    "transforms": ["RemuxContainer", "CopyVideo", "TranscodeAudio"],
-    "reasonCodes": ["ContainerNotSupported", "AudioCodecNotSupported", "MethodChosen"],
+    "selectedStreams": {
+      "video": 0,
+      "audio": 2,
+      "subtitle": null
+    },
+    "output": {
+      "container": "mp4",
+      "videoCodec": "h264",
+      "audioCodec": "aac",
+      "audioChannels": 6
+    },
+    "transforms": [
+      "RemuxContainer",
+      "CopyVideo",
+      "TranscodeAudio"
+    ],
+    "reasonCodes": [
+      "ContainerNotSupported",
+      "AudioCodecNotSupported",
+      "MethodChosen"
+    ],
     "isViable": true
   }
 }

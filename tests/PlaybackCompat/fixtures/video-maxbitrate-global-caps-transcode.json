@@ -1,0 +1,50 @@
+{
+  "fixtureVersion": 5,
+  "id": "video-maxbitrate-global-caps-transcode",
+  "category": "bitrate-resolution-limit",
+  "engineVersion": 5,
+  "description": "PR103: PlaybackConstraints.MaxBitrate is a request-wide cap on the source's overall bitrate. Video and audio codecs are both otherwise directly playable (container, codecs, profile/level/resolution all within the client's own per-codec limits), but the request's MaxBitrate is below the source's own bitrate - Direct Play/Remux cannot honor a cap tighter than the source's muxed bitrate, so only a transcode can. Expect a forced video transcode (audio copied) with TotalBitrate/VideoBitrate capped at the requested ceiling.",
+  "input": {
+    "context": { "mediaKind": "Video" },
+    "capabilities": {
+      "decode": {
+        "directPlayProfiles": [
+          { "type": "Video", "containers": ["mp4"], "videoCodecs": ["h264"], "audioCodecs": ["aac"] }
+        ],
+        "videoCodecs": [{ "codec": "h264", "profiles": [], "maxLevel": 62, "maxBitDepth": 10, "videoRangeTypes": ["SDR"], "maxResolution": { "width": 1920, "height": 1080 }, "maxBitrate": 100000000 }],
+        "audioCodecs": [{ "codec": "aac", "maxChannels": 8 }],
+        "subtitleDelivery": []
+      },
+      "outputProfiles": [
+        { "type": "Video", "protocol": "Http", "container": "mp4", "videoCodecs": ["h264"], "audioCodecs": ["aac"], "maxVideoBitrate": 5000000 }
+      ]
+    },
+    "sources": [
+      {
+        "mediaSourceId": "src-1",
+        "container": "mp4",
+        "protocol": "File",
+        "bitrate": 20000000,
+        "videoStreams": [{ "index": 0, "codec": "h264", "profile": "high", "level": 40, "width": 1920, "height": 1080, "bitDepth": 8, "videoRange": "SDR", "bitrate": 18000000 }],
+        "audioStreams": [{ "index": 1, "codec": "aac", "channels": 2, "isDefault": true }],
+        "subtitleStreams": [],
+        "supportsDirectPlay": true,
+        "supportsDirectStream": true,
+        "supportsTranscoding": true
+      }
+    ],
+    "constraints": {
+      "allowDirectPlay": true, "allowDirectStream": true, "allowTranscoding": true,
+      "allowVideoStreamCopy": true, "allowAudioStreamCopy": true,
+      "maxBitrate": 5000000
+    }
+  },
+  "expected": {
+    "method": "Transcode",
+    "selectedStreams": { "video": 0, "audio": 1, "subtitle": null },
+    "output": { "container": "mp4", "videoCodec": "h264", "audioCodec": "aac", "totalBitrate": 5000000, "videoBitrate": 5000000 },
+    "transforms": ["TranscodeVideo", "CopyAudio"],
+    "reasonCodes": ["ContainerBitrateExceedsLimit", "MethodChosen"],
+    "isViable": true
+  }
+}

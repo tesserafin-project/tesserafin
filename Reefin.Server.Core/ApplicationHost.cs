@@ -75,6 +75,7 @@ using Reefin.Networking.Manager;
 using Reefin.Networking.Udp;
 using Reefin.Photos;
 using Reefin.Playback.Engine;
+using Reefin.Playback.Shadow;
 using Reefin.Providers.Books;
 using Reefin.Providers.Books.ComicBookInfo;
 using Reefin.Providers.Books.ComicInfo;
@@ -625,13 +626,19 @@ namespace Reefin.Server.Core
             // ShadowPlaybackSessionPlanner (the IPlaybackSessionPlanner actually resolved) can wrap
             // the legacy planner - which stays the source of truth - and run the v2 engine
             // alongside it, logging a classified diff without affecting the returned plan.
+            // PR104: ShadowMetrics is now its own singleton, consultable by anything that resolves
+            // it directly (for example a future diagnostics endpoint) instead of being privately
+            // owned/defaulted by the decorator - the decorator receives it by injection like its
+            // other dependencies.
             serviceCollection.AddSingleton<PlaybackSessionPlanner>();
             serviceCollection.AddSingleton<IPlaybackEngine, PlaybackEngine>();
+            serviceCollection.AddSingleton<ShadowMetrics>();
             serviceCollection.AddSingleton<IPlaybackSessionPlanner>(provider => new ShadowPlaybackSessionPlanner(
                 provider.GetRequiredService<PlaybackSessionPlanner>(),
                 provider.GetRequiredService<IPlaybackEngine>(),
                 provider.GetRequiredService<ILogger<ShadowPlaybackSessionPlanner>>(),
-                () => provider.GetRequiredService<IServerConfigurationManager>().Configuration.PlaybackShadow));
+                () => provider.GetRequiredService<IServerConfigurationManager>().Configuration.PlaybackShadow,
+                provider.GetRequiredService<ShadowMetrics>()));
 
             serviceCollection.AddSingleton<IPlaybackSessionManager, PlaybackSessionManager>();
             serviceCollection.AddScoped<MediaInfoHelper>();

@@ -1,47 +1,134 @@
 {
-  "fixtureVersion": 4,
+  "fixtureVersion": 5,
   "id": "video-resolution-limit",
   "category": "bitrate-resolution-limit",
   "engineVersion": 5,
   "description": "4K H.264 exceeding the client's 1080p max (a per-codec limit on the H.264 VideoCodecCapability, PR102b), with every OTHER dimension deliberately within limits (level, bit depth, range, bitrate all generous) so ONLY resolution trips. Video downscales (targeting the client's declared H.264 output profile); audio copied.",
   "input": {
-    "context": { "mediaKind": "Video" },
+    "context": {
+      "mediaKind": "Video"
+    },
     "capabilities": {
       "decode": {
         "directPlayProfiles": [
-          { "type": "Video", "containers": ["mp4"], "videoCodecs": ["h264"], "audioCodecs": ["aac"] }
+          {
+            "type": "Video",
+            "containers": [
+              "mp4"
+            ],
+            "videoCodecs": [
+              "h264"
+            ],
+            "audioCodecs": [
+              "aac"
+            ]
+          }
         ],
-        "videoCodecs": [{ "codec": "h264", "profiles": [], "maxLevel": 62, "maxBitDepth": 10, "videoRangeTypes": ["SDR"], "maxResolution": { "width": 1920, "height": 1080 }, "maxBitrate": 100000000 }],
-        "audioCodecs": [{ "codec": "aac", "maxChannels": 8 }],
+        "videoCodecs": [
+          {
+            "codec": "h264",
+            "profiles": [],
+            "maxLevel": 62,
+            "maxBitDepth": 10,
+            "videoRangeTypes": [
+              "SDR"
+            ],
+            "maxResolution": {
+              "width": 1920,
+              "height": 1080
+            },
+            "maxBitrate": 100000000
+          }
+        ],
+        "audioCodecs": [
+          {
+            "codec": "aac",
+            "maxChannels": 8
+          }
+        ],
         "subtitleDelivery": []
       },
       "outputProfiles": [
-        { "type": "Video", "protocol": "Http", "container": "mp4", "videoCodecs": ["h264"], "audioCodecs": ["aac"] }
+        {
+          "type": "Video",
+          "protocol": "Http",
+          "container": "mp4",
+          "videoCodecs": [
+            "h264"
+          ],
+          "audioCodecs": [
+            "aac"
+          ]
+        }
       ]
     },
-    "source": {
-      "mediaSourceId": "src-1",
-      "container": "mp4",
-      "protocol": "file",
-      "bitrate": 25000000,
-      "videoStreams": [{ "index": 0, "codec": "h264", "profile": "high", "level": 51, "width": 3840, "height": 2160, "bitDepth": 8, "videoRange": "SDR", "bitrate": 20000000 }],
-      "audioStreams": [{ "index": 1, "codec": "aac", "channels": 2, "isDefault": true }],
-      "subtitleStreams": [],
-      "supportsDirectPlay": true,
-      "supportsDirectStream": true,
-      "supportsTranscoding": true
-    },
+    "sources": [
+      {
+        "mediaSourceId": "src-1",
+        "container": "mp4",
+        "protocol": "file",
+        "bitrate": 25000000,
+        "videoStreams": [
+          {
+            "index": 0,
+            "codec": "h264",
+            "profile": "high",
+            "level": 51,
+            "width": 3840,
+            "height": 2160,
+            "bitDepth": 8,
+            "videoRange": "SDR",
+            "bitrate": 20000000
+          }
+        ],
+        "audioStreams": [
+          {
+            "index": 1,
+            "codec": "aac",
+            "channels": 2,
+            "isDefault": true
+          }
+        ],
+        "subtitleStreams": [],
+        "supportsDirectPlay": true,
+        "supportsDirectStream": true,
+        "supportsTranscoding": true
+      }
+    ],
     "constraints": {
-      "allowDirectPlay": true, "allowDirectStream": true, "allowTranscoding": true,
-      "allowVideoStreamCopy": true, "allowAudioStreamCopy": true
+      "allowDirectPlay": true,
+      "allowDirectStream": true,
+      "allowTranscoding": true,
+      "allowVideoStreamCopy": true,
+      "allowAudioStreamCopy": true
     }
   },
   "expected": {
     "method": "Transcode",
-    "selectedStreams": { "video": 0, "audio": 1, "subtitle": null },
-    "output": { "container": "mp4", "videoCodec": "h264", "audioCodec": "aac", "resolution": { "width": 1920, "height": 1080 }, "totalBitrate": 100000000, "videoBitrate": 100000000 },
-    "transforms": ["TranscodeVideo", "CopyAudio"],
-    "reasonCodes": ["VideoResolutionNotSupported", "MethodChosen"],
+    "selectedStreams": {
+      "video": 0,
+      "audio": 1,
+      "subtitle": null
+    },
+    "output": {
+      "container": "mp4",
+      "videoCodec": "h264",
+      "audioCodec": "aac",
+      "resolution": {
+        "width": 1920,
+        "height": 1080
+      },
+      "totalBitrate": 100000000,
+      "videoBitrate": 100000000
+    },
+    "transforms": [
+      "TranscodeVideo",
+      "CopyAudio"
+    ],
+    "reasonCodes": [
+      "VideoResolutionNotSupported",
+      "MethodChosen"
+    ],
     "isViable": true
   }
 }

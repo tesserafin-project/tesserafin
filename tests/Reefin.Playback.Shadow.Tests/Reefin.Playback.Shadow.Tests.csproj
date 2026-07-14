@@ -46,6 +46,12 @@
     <None Include="..\Reefin.Model.Tests\Test Data\MediaSourceInfo-mp4-hevc-aac-srt-15200k.json" Link="Test Data\MediaSourceInfo-mp4-hevc-aac-srt-15200k.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <!-- PR104: additional oracle case reusing the same already-vtt (alias-normalized, PR103)
+         subtitle-bearing source as the existing direct-play case, paired with a different device
+         profile, plus one genuinely new source/profile pair that stays subtitle-free. -->
+    <None Include="..\Reefin.Model.Tests\Test Data\MediaSourceInfo-mkv-vp9-vorbis-vtt-2600k.json" Link="Test Data\MediaSourceInfo-mkv-vp9-vorbis-vtt-2600k.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

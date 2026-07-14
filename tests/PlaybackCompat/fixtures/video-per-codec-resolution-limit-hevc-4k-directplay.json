@@ -1,0 +1,50 @@
+{
+  "fixtureVersion": 5,
+  "id": "video-per-codec-resolution-limit-hevc-4k-directplay",
+  "category": "per-codec-limit",
+  "engineVersion": 5,
+  "description": "PR102b: per-codec resolution ceilings do not leak between codecs. The client caps H.264 at 1080p and HEVC at 2160p separately; the media is 4K (2160p) HEVC. A client wrongly collapsed to a single global 1080p ceiling (the minimum of the two) would force a downscale/transcode here; per-codec limits correctly allow direct play.",
+  "input": {
+    "context": { "mediaKind": "Video" },
+    "capabilities": {
+      "decode": {
+        "directPlayProfiles": [
+          { "type": "Video", "containers": ["mp4"], "videoCodecs": ["h264", "hevc"], "audioCodecs": ["aac"] }
+        ],
+        "videoCodecs": [
+          { "codec": "h264", "profiles": [], "maxLevel": 41, "maxBitDepth": 8, "videoRangeTypes": ["SDR"], "maxResolution": { "width": 1920, "height": 1080 }, "maxBitrate": 20000000 },
+          { "codec": "hevc", "profiles": [], "maxLevel": 153, "maxBitDepth": 10, "videoRangeTypes": ["SDR"], "maxResolution": { "width": 3840, "height": 2160 }, "maxBitrate": 100000000 }
+        ],
+        "audioCodecs": [{ "codec": "aac", "maxChannels": 8 }],
+        "subtitleDelivery": []
+      },
+      "outputProfiles": []
+    },
+    "sources": [
+      {
+        "mediaSourceId": "src-1",
+        "container": "mp4",
+        "protocol": "File",
+        "bitrate": 80000000,
+        "videoStreams": [{ "index": 0, "codec": "hevc", "width": 3840, "height": 2160, "bitDepth": 8, "videoRange": "SDR", "bitrate": 75000000 }],
+        "audioStreams": [{ "index": 1, "codec": "aac", "channels": 2, "isDefault": true }],
+        "subtitleStreams": [],
+        "supportsDirectPlay": true,
+        "supportsDirectStream": true,
+        "supportsTranscoding": true
+      }
+    ],
+    "constraints": {
+      "allowDirectPlay": true, "allowDirectStream": true, "allowTranscoding": true,
+      "allowVideoStreamCopy": true, "allowAudioStreamCopy": true
+    }
+  },
+  "expected": {
+    "method": "DirectPlay",
+    "selectedStreams": { "video": 0, "audio": 1, "subtitle": null },
+    "output": { "container": "mp4", "videoCodec": "hevc", "audioCodec": "aac" },
+    "transforms": [],
+    "reasonCodes": ["MethodChosen"],
+    "isViable": true
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "fixtureVersion": 5,
+  "id": "video-alternate-versions-best-selected",
+  "category": "alternate-versions",
+  "engineVersion": 5,
+  "description": "Two alternate versions of the same item, no requestedMediaSourceId: a worse HEVC source (needs transcode, since the client only decodes H.264) listed first, and a better H.264 source (direct playable) listed second. The engine must pick the best viable method across ALL sources (DirectPlay > Remux > Transcode), not just the first source in list order - so the second source wins despite being listed after the first.",
+  "input": {
+    "context": { "mediaKind": "Video" },
+    "capabilities": {
+      "decode": {
+        "directPlayProfiles": [
+          { "type": "Video", "containers": ["mp4"], "videoCodecs": ["h264"], "audioCodecs": ["aac"] }
+        ],
+        "videoCodecs": [{ "codec": "h264", "profiles": [], "maxLevel": 62, "maxBitDepth": 10, "videoRangeTypes": ["SDR"], "maxBitrate": 100000000 }],
+        "audioCodecs": [{ "codec": "aac", "maxChannels": 8 }],
+        "subtitleDelivery": []
+      },
+      "outputProfiles": [
+        { "type": "Video", "protocol": "Http", "container": "mp4", "videoCodecs": ["h264"], "audioCodecs": ["aac"] }
+      ]
+    },
+    "sources": [
+      {
+        "mediaSourceId": "src-hevc-worse",
+        "container": "mp4",
+        "protocol": "File",
+        "bitrate": 20000000,
+        "videoStreams": [{ "index": 0, "codec": "hevc", "width": 1920, "height": 1080, "bitDepth": 8, "videoRange": "SDR", "bitrate": 15000000 }],
+        "audioStreams": [{ "index": 1, "codec": "aac", "channels": 2, "isDefault": true }],
+        "subtitleStreams": [],
+        "supportsDirectPlay": true,
+        "supportsDirectStream": true,
+        "supportsTranscoding": true
+      },
+      {
+        "mediaSourceId": "src-h264-better",
+        "container": "mp4",
+        "protocol": "File",
+        "bitrate": 8000000,
+        "videoStreams": [{ "index": 0, "codec": "h264", "profile": "high", "level": 40, "width": 1920, "height": 1080, "bitDepth": 8, "videoRange": "SDR", "bitrate": 6000000 }],
+        "audioStreams": [{ "index": 1, "codec": "aac", "channels": 2, "isDefault": true }],
+        "subtitleStreams": [],
+        "supportsDirectPlay": true,
+        "supportsDirectStream": true,
+        "supportsTranscoding": true
+      }
+    ],
+    "constraints": {
+      "allowDirectPlay": true, "allowDirectStream": true, "allowTranscoding": true,
+      "allowVideoStreamCopy": true, "allowAudioStreamCopy": true
+    }
+  },
+  "expected": {
+    "method": "DirectPlay",
+    "selectedStreams": { "video": 0, "audio": 1, "subtitle": null },
+    "output": { "container": "mp4", "videoCodec": "h264", "audioCodec": "aac" },
+    "transforms": [],
+    "reasonCodes": ["MethodChosen"],
+    "isViable": true
+  }
+}

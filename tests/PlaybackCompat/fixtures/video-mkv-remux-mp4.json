@@ -1,36 +1,93 @@
 {
-  "fixtureVersion": 4,
+  "fixtureVersion": 5,
   "id": "video-mkv-remux-mp4",
   "category": "remux",
   "engineVersion": 5,
   "description": "H.264/AAC streams the client can copy, but in an MKV container it does not accept. The client's one DecodeProfile declares H.264/AAC together with mp4/ts (never mkv), so this is not direct play. Expect a container remux to MP4 with both streams copied (no re-encode).",
   "input": {
-    "context": { "mediaKind": "Video" },
+    "context": {
+      "mediaKind": "Video"
+    },
     "capabilities": {
       "decode": {
         "directPlayProfiles": [
-          { "type": "Video", "containers": ["mp4", "ts"], "videoCodecs": ["h264"], "audioCodecs": ["aac"] }
+          {
+            "type": "Video",
+            "containers": [
+              "mp4",
+              "ts"
+            ],
+            "videoCodecs": [
+              "h264"
+            ],
+            "audioCodecs": [
+              "aac"
+            ]
+          }
         ],
-        "videoCodecs": [{ "codec": "h264", "profiles": ["high"], "maxLevel": 41, "maxBitDepth": 8, "videoRangeTypes": ["SDR"], "maxResolution": { "width": 1920, "height": 1080 }, "maxBitrate": 20000000 }],
-        "audioCodecs": [{ "codec": "aac", "maxChannels": 6 }],
+        "videoCodecs": [
+          {
+            "codec": "h264",
+            "profiles": [
+              "high"
+            ],
+            "maxLevel": 41,
+            "maxBitDepth": 8,
+            "videoRangeTypes": [
+              "SDR"
+            ],
+            "maxResolution": {
+              "width": 1920,
+              "height": 1080
+            },
+            "maxBitrate": 20000000
+          }
+        ],
+        "audioCodecs": [
+          {
+            "codec": "aac",
+            "maxChannels": 6
+          }
+        ],
         "subtitleDelivery": [],
         "supportsHls": true,
         "supportsDash": false
       },
       "outputProfiles": []
     },
-    "source": {
-      "mediaSourceId": "src-1",
-      "container": "mkv",
-      "protocol": "File",
-      "bitrate": 9000000,
-      "videoStreams": [{ "index": 0, "codec": "h264", "profile": "high", "level": 40, "width": 1920, "height": 1080, "bitDepth": 8, "videoRange": "SDR" }],
-      "audioStreams": [{ "index": 1, "codec": "aac", "channels": 2, "sampleRate": 48000, "isDefault": true }],
-      "subtitleStreams": [],
-      "supportsDirectPlay": true,
-      "supportsDirectStream": true,
-      "supportsTranscoding": true
-    },
+    "sources": [
+      {
+        "mediaSourceId": "src-1",
+        "container": "mkv",
+        "protocol": "File",
+        "bitrate": 9000000,
+        "videoStreams": [
+          {
+            "index": 0,
+            "codec": "h264",
+            "profile": "high",
+            "level": 40,
+            "width": 1920,
+            "height": 1080,
+            "bitDepth": 8,
+            "videoRange": "SDR"
+          }
+        ],
+        "audioStreams": [
+          {
+            "index": 1,
+            "codec": "aac",
+            "channels": 2,
+            "sampleRate": 48000,
+            "isDefault": true
+          }
+        ],
+        "subtitleStreams": [],
+        "supportsDirectPlay": true,
+        "supportsDirectStream": true,
+        "supportsTranscoding": true
+      }
+    ],
     "constraints": {
       "allowDirectPlay": true,
       "allowDirectStream": true,
@@ -41,10 +98,26 @@
   },
   "expected": {
     "method": "Remux",
-    "selectedStreams": { "video": 0, "audio": 1, "subtitle": null },
-    "output": { "container": "mp4", "videoCodec": "h264", "audioCodec": "aac" },
-    "transforms": ["RemuxContainer", "CopyVideo", "CopyAudio"],
-    "reasonCodes": ["ContainerNotSupported", "StreamCopyable", "MethodChosen"],
+    "selectedStreams": {
+      "video": 0,
+      "audio": 1,
+      "subtitle": null
+    },
+    "output": {
+      "container": "mp4",
+      "videoCodec": "h264",
+      "audioCodec": "aac"
+    },
+    "transforms": [
+      "RemuxContainer",
+      "CopyVideo",
+      "CopyAudio"
+    ],
+    "reasonCodes": [
+      "ContainerNotSupported",
+      "StreamCopyable",
+      "MethodChosen"
+    ],
     "isViable": true
   }
 }
