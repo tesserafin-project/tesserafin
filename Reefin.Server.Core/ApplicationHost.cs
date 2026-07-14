@@ -560,6 +560,13 @@ namespace Reefin.Server.Core
             serviceCollection.AddTransient(provider => new Lazy<IProviderManager>(provider.GetRequiredService<IProviderManager>));
             serviceCollection.AddTransient(provider => new Lazy<IUserViewManager>(provider.GetRequiredService<IUserViewManager>));
             serviceCollection.AddTransient(provider => new Lazy<IExternalDataManager>(provider.GetRequiredService<IExternalDataManager>));
+
+            // LiveTvPresenceProvider (PR108) needs the registered ILiveTvService count to reproduce
+            // LiveTvManager.IsLiveTvEnabled, but the in-tree DefaultLiveTvService implementation
+            // takes ILibraryManager directly - a direct (non-Lazy) IEnumerable<ILiveTvService>
+            // injection would recreate the construction cycle. Same rationale as Lazy<IProviderManager>
+            // above (see LiveTvPresenceProvider's type-level remarks: RFC I1 finding, PR108).
+            serviceCollection.AddTransient(provider => new Lazy<IReadOnlyList<ILiveTvService>>(() => provider.GetServices<ILiveTvService>().ToList()));
             serviceCollection.AddSingleton<ItemLookupService>();
             serviceCollection.AddSingleton<IItemLookupService>(sp => sp.GetRequiredService<ItemLookupService>());
             serviceCollection.AddSingleton<IItemCacheStore>(sp => sp.GetRequiredService<ItemLookupService>());
@@ -567,6 +574,8 @@ namespace Reefin.Server.Core
             serviceCollection.AddSingleton<IItemStore, ItemStore>();
             serviceCollection.AddSingleton<IUserViewFactory, UserViewFactory>();
             serviceCollection.AddSingleton<IUserRootFolderProvider, UserRootFolderProvider>();
+            serviceCollection.AddSingleton<IChannelCatalog, ChannelCatalog>();
+            serviceCollection.AddSingleton<ILiveTvPresenceProvider, LiveTvPresenceProvider>();
             serviceCollection.AddSingleton<ILibraryManager, LibraryManager>();
             serviceCollection.AddSingleton<IItemQueryScopeService, ItemQueryScopeService>();
             serviceCollection.AddSingleton<NamingOptions>();
