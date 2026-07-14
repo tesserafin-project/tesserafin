@@ -94,6 +94,7 @@ namespace Reefin.Server.Core.Library
         private readonly IItemLookupService _itemLookupService;
         private readonly IItemCacheStore _itemCacheStore;
         private readonly IItemAccessService _itemAccessService;
+        private readonly IItemStore _itemStore;
         private readonly DotIgnoreIgnoreRule _dotIgnoreIgnoreRule;
         private readonly IMediaStreamLanguageService _mediaStreamLanguageService;
         private readonly Lazy<IExternalDataManager> _externalDataManagerFactory;
@@ -147,6 +148,7 @@ namespace Reefin.Server.Core.Library
         /// <param name="itemLookupService">The item lookup service (read side of the item lookup cache; see PR75/PR76).</param>
         /// <param name="itemCacheStore">The item cache lifecycle port (register/invalidate side of the same cache; see PR76).</param>
         /// <param name="itemAccessService">The item access service (user visibility on top of the item lookup service; see PR77).</param>
+        /// <param name="itemStore">The item store leaf (id generation, save+register; see PR106a). <see cref="LibraryManager"/> subscribes to its <see cref="IItemStore.ItemSaved"/> event and relays it as <see cref="ItemAdded"/> - a leaf dependency, not a cycle: <c>ItemStore</c> never references <see cref="ILibraryManager"/>.</param>
         public LibraryManager(
             IServerApplicationHost appHost,
             ILoggerFactory loggerFactory,
@@ -177,7 +179,8 @@ namespace Reefin.Server.Core.Library
             Lazy<IExternalDataManager> externalDataManagerFactory,
             IItemLookupService itemLookupService,
             IItemCacheStore itemCacheStore,
-            IItemAccessService itemAccessService)
+            IItemAccessService itemAccessService,
+            IItemStore itemStore)
         {
             _appHost = appHost;
             _logger = loggerFactory.CreateLogger<LibraryManager>();
@@ -203,6 +206,9 @@ namespace Reefin.Server.Core.Library
             _itemLookupService = itemLookupService;
             _itemCacheStore = itemCacheStore;
             _itemAccessService = itemAccessService;
+
+            _itemStore = itemStore;
+            _itemStore.ItemSaved += OnItemStoreItemSaved;
 
             _namingOptions = namingOptions;
             _peopleRepository = peopleRepository;
@@ -343,6 +349,36 @@ namespace Reefin.Server.Core.Library
             ArgumentNullException.ThrowIfNull(item);
 
             _itemCacheStore.Register(item);
+        }
+
+        /// <summary>
+        /// Relays <see cref="IItemStore.ItemSaved"/> as the historical <see cref="ItemAdded"/> event
+        /// (RFC <c>docs/rfc-di-query-user-views-v2.md</c> §2, decided contract, PR106a/PR105b).
+        /// <c>ItemStore.CreateItem</c> does not - and must not - raise <see cref="ItemAdded"/> itself,
+        /// since <c>ItemStore</c> is a separate class from <see cref="LibraryManager"/>: this relay is
+        /// the only way legacy subscribers (<c>LibraryMonitor</c>, <c>LibraryChangedNotifier</c>) still
+        /// see notifications for items created through <see cref="IItemStore"/>. This is additive: the
+        /// historical <see cref="CreateItems"/> path below still raises <see cref="ItemAdded"/> directly
+        /// and does not go through <see cref="IItemStore"/> at all, so a given creation raises
+        /// <see cref="ItemAdded"/> exactly once either way, never twice.
+        /// </summary>
+        /// <param name="sender">The <see cref="IItemStore"/> raising the event (unused; re-raised with <c>this</c> as sender, matching <see cref="CreateItems"/>'s own <c>ItemAdded(this, ...)</c> call).</param>
+        /// <param name="e">The event args to relay unchanged.</param>
+        private void OnItemStoreItemSaved(object? sender, ItemChangeEventArgs e)
+        {
+            if (ItemAdded is null)
+            {
+                return;
+            }
+
+            try
+            {
+                ItemAdded(this, e);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in ItemAdded event handler");
+            }
         }
 
         public void DeleteItem(BaseItem item, DeleteOptions options)

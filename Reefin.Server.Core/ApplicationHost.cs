@@ -564,6 +564,7 @@ namespace Reefin.Server.Core
             serviceCollection.AddSingleton<IItemLookupService>(sp => sp.GetRequiredService<ItemLookupService>());
             serviceCollection.AddSingleton<IItemCacheStore>(sp => sp.GetRequiredService<ItemLookupService>());
             serviceCollection.AddSingleton<IItemAccessService, ItemAccessService>();
+            serviceCollection.AddSingleton<IItemStore, ItemStore>();
             serviceCollection.AddSingleton<ILibraryManager, LibraryManager>();
             serviceCollection.AddSingleton<IUserRootFolderProvider>(sp => (IUserRootFolderProvider)sp.GetRequiredService<ILibraryManager>());
             serviceCollection.AddSingleton<IItemQueryScopeService, ItemQueryScopeService>();

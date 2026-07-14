@@ -3,7 +3,8 @@
 - **PR** : PR92 (design uniquement, aucun code de production)
 - **Statut** : proposé
 - **Dépend de** : PR91 (`docs/pr91-rfc-playback-decision-v2.md`)
-- **Précède** : PR105 (implémentation DTO + séparation endpoints), PR106 (diagnostic backend), PR107 (UI, dépôt web)
+- **Précède** : PR112 (implémentation DTO + séparation endpoints), PR113 (diagnostic backend), PR114 (UI, dépôt web)
+- **Numéros re-basés le 2026-07-14 (PR105b)** : la tranche PR105–PR111 est occupée par le démêlage DI (`docs/rfc-di-query-user-views-v2.md`) ; les anciens numéros PR105/106/107/108 de ce document correspondent désormais à PR112/113/114/115
 
 Ce document fige les **contrats réseau** et le **flux de diagnostic**. Les wireframes sont basse-fidélité et volontairement non stylés : le haute-fidélité attend la stabilisation des DTO. L'implémentation UI appartient au dépôt web, pas à ce serveur.
 
@@ -108,7 +109,7 @@ PlaybackDiagnosticDetail
   Timeline[]          : { Stage, At }  — Créée → planifiée → ffmpeg lancé → lecture
 ```
 
-Règle de filtrage (à tester en PR106) : jamais de `Path`/`TranscodingUrl`/token de session/clé API dans une réponse diagnostic. Le snapshot source expose les *caractéristiques* des streams, pas leur localisation.
+Règle de filtrage (à tester en PR113) : jamais de `Path`/`TranscodingUrl`/token de session/clé API dans une réponse diagnostic. Le snapshot source expose les *caractéristiques* des streams, pas leur localisation.
 
 ---
 
@@ -154,7 +155,7 @@ Client                    Serveur                         Admin
   │                            ◀──────────────────────────────│ détail + comparaison legacy/v2
 ```
 
-Tant que le shadow mode (PR98) tourne, la **vérité reste le moteur legacy** ; la réponse client peut continuer à refléter le legacy pendant que le diagnostic expose la divergence v2. La bascule vers v2 comme vérité est PR108 (feature flag/canary).
+Tant que le shadow mode (PR98) tourne, la **vérité reste le moteur legacy** ; la réponse client peut continuer à refléter le legacy pendant que le diagnostic expose la divergence v2. La bascule vers v2 comme vérité est PR115 (feature flag/canary), gated par le labo étendu (PR104+) et la clôture DI (PR111).
 
 ---
 
@@ -164,7 +165,7 @@ Tant que le shadow mode (PR98) tourne, la **vérité reste le moteur legacy** ; 
 2. `PUT` = remplacement complet ; `PATCH` réservé à un futur DTO partiel. **Retenu.**
 3. Contrat public sans `DeviceProfile`/`MediaOptions`/`StreamInfo`/`PlaybackSession` interne ; réponse = décision versionnée. **Retenu.**
 4. Diagnostic admin plus riche mais filtré (jamais chemins/secrets/tokens/args ffmpeg). **Retenu.**
-5. Haute-fidélité UI + implémentation : reportées (UI = dépôt web, PR107).
+5. Haute-fidélité UI + implémentation : reportées (UI = dépôt web, PR114).
 
 ---
 
@@ -175,4 +176,4 @@ Tant que le shadow mode (PR98) tourne, la **vérité reste le moteur legacy** ; 
 - [x] DTO stables définis, sans type DLNA ni interne.
 - [x] Règle de filtrage diagnostic posée.
 - [x] Wireframes basse-fidélité + flux.
-- [ ] Implémentation DTO/endpoints : PR105 ; diagnostic backend : PR106 ; UI : PR107.
+- [ ] Implémentation DTO/endpoints : PR112 ; diagnostic backend : PR113 ; UI : PR114.
