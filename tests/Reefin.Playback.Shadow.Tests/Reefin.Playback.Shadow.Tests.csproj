@@ -52,6 +52,19 @@
     <None Include="..\Reefin.Model.Tests\Test Data\MediaSourceInfo-mkv-vp9-vorbis-vtt-2600k.json" Link="Test Data\MediaSourceInfo-mkv-vp9-vorbis-vtt-2600k.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <!-- PR111b: 3 new mandatory HDR/10-bit oracle cases - H.264 10-bit (High 10 profile), Dolby
+         Vision natively supported by the device, and Dolby Vision NOT supported (forcing legacy to
+         fall back/transcode the range). WebOS-23 is the new device profile (its hevc CodecProfile
+         explicitly allows DOVIWithHDR10 in VideoRangeType, unlike Chrome/Firefox). -->
+    <None Include="..\Reefin.Model.Tests\Test Data\DeviceProfile-WebOS-23.json" Link="Test Data\DeviceProfile-WebOS-23.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\Reefin.Model.Tests\Test Data\MediaSourceInfo-mp4-h264-hi10p-aac-5000k.json" Link="Test Data\MediaSourceInfo-mp4-h264-hi10p-aac-5000k.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\Reefin.Model.Tests\Test Data\MediaSourceInfo-mp4-dvhe.08-eac3-15200k.json" Link="Test Data\MediaSourceInfo-mp4-dvhe.08-eac3-15200k.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

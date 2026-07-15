@@ -30,16 +30,21 @@ namespace Reefin.Playback.Shadow.Tests;
 /// so the divergences are visible, per docs/pr93-compatibility-lab.md §4.
 /// </summary>
 /// <remarks>
-/// PR104 extends the original 4 cases with 3 more (still reusing the existing Test Data
-/// infrastructure - PR98's DeviceProfile/MediaSourceInfo JSON fixtures shared with
-/// Reefin.Model.Tests' StreamBuilder tests) and turns the classification into a real gate: every
-/// case's divergence is asserted against <see cref="ApprovedDivergences"/>, an explicit,
-/// reason-carrying allow-list. A case whose <see cref="DivergenceClass"/> is
+/// PR104 extended the original 4 cases with 3 more, and PR111b adds 3 mandatory HDR/10-bit cases
+/// (H.264 10-bit, Dolby Vision natively supported, Dolby Vision fallback), still reusing the
+/// existing Test Data infrastructure - PR98's DeviceProfile/MediaSourceInfo JSON fixtures shared
+/// with Reefin.Model.Tests' StreamBuilder tests. The classification is a real gate: every case's
+/// divergence is asserted against <see cref="ApprovedDivergences"/>, an explicit, reason-carrying
+/// allow-list. A case whose <see cref="DivergenceClass"/> is
 /// <see cref="DivergenceClass.PotentialRegression"/> or <see cref="DivergenceClass.Unexplained"/>
 /// and is NOT in that allow-list fails the test - closing the PR101/PR103-era gap where this test
-/// only classified without gating. The allow-list currently contains exactly the 3 documented
-/// srt/hevc-&gt;vtt subtitle text-format-conversion cases (see the class remarks on each entry) and
-/// must not grow beyond them without a new, equally-documented reason.
+/// only classified without gating. The allow-list contains 4 root-caused entries: the 3 srt/hevc-&gt;
+/// vtt subtitle text-format-conversion cases, plus the PR111b Dolby-Vision-fallback target
+/// divergence (Chrome). PR111b's H.264-10-bit case reaches Equivalent via a real projector fix
+/// (LegacyDecisionProjector now treats SubtitleStreamIndex -1 as no-selection), and its
+/// natively-supported Dolby Vision case reaches Equivalent DirectPlay via a real v2 fix
+/// (ClientCapabilitiesMapper no longer applies MusicStreamingTranscodingBitrate as an audio decode
+/// ceiling). The list must not grow without a new, equally-documented, root-caused reason.
 /// </remarks>
 public sealed class OracleParityTests
 {
@@ -67,6 +72,22 @@ public sealed class OracleParityTests
                 "Same srt->vtt conversion gap, on the HEVC-forces-transcode path (video codec not " +
                 "supported forces a transcode which then also needs the unmodeled subtitle " +
                 "conversion).",
+            [("Chrome", "mp4-dvhe.08-eac3-15200k")] =
+                "Dolby Vision (Profile 8.1) fallback on a non-DV client: legacy and v2 AGREE the DV " +
+                "range must be transcoded away on Chrome; they only differ on the transcode target. " +
+                "The gating axis is videoRange (legacy=HLG, v2=SDR). Legacy's 'HLG' is not a " +
+                "deliberate HDR-preservation policy - it is an artifact of Enum.TryParse bitwise-ORing " +
+                "the multi-value 'SDR|HDR10|HLG' EqualsAny VideoRangeType condition (ordinals " +
+                "1|2|3 = 3, which coincidentally equals HLG's ordinal; VideoRangeType is not [Flags]). " +
+                "v2 deliberately tonemaps any unsupported HDR source down to plain SDR " +
+                "(PlaybackEngine, tonemap path) rather than trying to preserve an HDR10/HLG fallback " +
+                "the target codec profile would accept - an acknowledged v2 simplification, not a " +
+                "regression to match legacy's accidental number for. FOLLOW-UPS (tracked, not blocking " +
+                "this gate): (1) v2 could recover HDR10 here since the source carries an HDR10 base " +
+                "layer and Chrome's hevc/av1 profiles accept HDR10; (2) v2 picks av1 vs legacy's hevc " +
+                "target because it takes OutputProfile.VideoCodecs[0] instead of preferring the " +
+                "source's own codec when present (same 'prefer source codec' gap as legacy's " +
+                "StreamInfo.TargetVideoCodec) - a separate PlaybackEngine target-selection fix.",
         };
 
     private readonly ITestOutputHelper _output;
@@ -92,6 +113,16 @@ public sealed class OracleParityTests
             // engines, extending oracle coverage without touching the documented srt->vtt gap.
             ("Firefox", "mp4-h264-aac-vtt-2600k"), // direct play, second device profile
             ("Firefox", "mkv-vp9-vorbis-vtt-2600k"), // direct play, vp9/vorbis/mkv
+
+            // PR111b: 3 new mandatory HDR/10-bit cases, promoted from "documented but untested" to
+            // real oracle cases that actually run both engines and get classified.
+            ("Chrome", "mp4-h264-hi10p-aac-5000k"), // H.264 10-bit (High 10 profile) - Chrome's h264
+                                                     // CodecProfile explicitly allows "high 10"
+            ("WebOS-23", "mp4-dvhe.08-eac3-15200k"), // Dolby Vision natively supported - WebOS-23's
+                                                      // hevc CodecProfile allows DOVIWithHDR10
+            ("Chrome", "mp4-dvhe.08-eac3-15200k"), // Dolby Vision NOT supported - Chrome's hevc
+                                                    // CodecProfile only allows SDR|HDR10|HLG, forcing
+                                                    // legacy to fall back/transcode the DOVI range
         };
 
         var metrics = new ShadowMetrics();

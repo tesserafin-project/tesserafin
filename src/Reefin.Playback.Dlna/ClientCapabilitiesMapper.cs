@@ -275,11 +275,17 @@ public static class ClientCapabilitiesMapper
             var maxSampleRate = MinInt(conditions, ProfileConditionValue.AudioSampleRate, ProfileConditionType.LessThanEqual);
             var maxBitDepth = MinInt(conditions, ProfileConditionValue.AudioBitDepth, ProfileConditionType.LessThanEqual);
 
-            // PR102b: same per-codec move as VideoCodecCapability.MaxBitrate, falling back to the
-            // device-wide MusicStreamingTranscodingBitrate ceiling absent a more specific
-            // per-codec AudioBitrate condition.
-            var maxBitrate = MinInt(conditions, ProfileConditionValue.AudioBitrate, ProfileConditionType.LessThanEqual)
-                ?? profile.MusicStreamingTranscodingBitrate;
+            // Per-codec audio *decode* ceiling: only an explicit per-codec AudioBitrate condition
+            // constrains it. Unlike video (which legitimately falls back to the device-wide
+            // MaxStreamingBitrate stream ceiling), audio must NOT fall back to
+            // MusicStreamingTranscodingBitrate: that value is a music-file transcode *output* default,
+            // not a decode capability. Legacy only ever uses it as a transcode target inside
+            // GetOptimalAudioStream for pure-audio items (StreamBuilder), never to gate a video's
+            // embedded-audio direct play. Reusing it here (PR102b) spuriously rejected any
+            // video-embedded audio track above that default (e.g. 640kbps eac3 vs a 384kbps default),
+            // forcing a needless transcode where legacy direct-plays. Leave null absent an explicit
+            // condition, matching legacy.
+            var maxBitrate = MinInt(conditions, ProfileConditionValue.AudioBitrate, ProfileConditionType.LessThanEqual);
 
             result.Add(new AudioCodecCapability(codec, maxChannels, maxSampleRate, maxBitDepth, maxBitrate));
         }
