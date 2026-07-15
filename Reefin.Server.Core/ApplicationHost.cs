@@ -653,14 +653,24 @@ namespace Reefin.Server.Core
             serviceCollection.AddSingleton<PlaybackSessionPlanner>();
             serviceCollection.AddSingleton<IPlaybackEngine, PlaybackEngine>();
             serviceCollection.AddSingleton<ShadowMetrics>();
+            // PR113: one IShadowDiagnosticsStore singleton, shared between the shadow planner (which
+            // publishes a record per shadow run, ambient-scoped by PlaybackSessionManager around its
+            // Plan() call) and the manager (which attaches that record to the real session id and
+            // evicts it on removal) - see IShadowDiagnosticsStore's remarks for the full handshake.
+            serviceCollection.AddSingleton<IShadowDiagnosticsStore, InMemoryShadowDiagnosticsStore>();
             serviceCollection.AddSingleton<IPlaybackSessionPlanner>(provider => new ShadowPlaybackSessionPlanner(
                 provider.GetRequiredService<PlaybackSessionPlanner>(),
                 provider.GetRequiredService<IPlaybackEngine>(),
                 provider.GetRequiredService<ILogger<ShadowPlaybackSessionPlanner>>(),
                 () => provider.GetRequiredService<IServerConfigurationManager>().Configuration.PlaybackShadow,
-                provider.GetRequiredService<ShadowMetrics>()));
+                provider.GetRequiredService<ShadowMetrics>(),
+                provider.GetRequiredService<IShadowDiagnosticsStore>()));
 
-            serviceCollection.AddSingleton<IPlaybackSessionManager, PlaybackSessionManager>();
+            serviceCollection.AddSingleton<IPlaybackSessionManager>(provider => new PlaybackSessionManager(
+                provider.GetRequiredService<IPlaybackSessionPlanner>(),
+                provider.GetRequiredService<ITranscodeManager>(),
+                provider.GetRequiredService<ISessionManager>(),
+                provider.GetRequiredService<IShadowDiagnosticsStore>()));
             serviceCollection.AddScoped<MediaInfoHelper>();
             serviceCollection.AddScoped<AudioHelper>();
             serviceCollection.AddScoped<DynamicHlsHelper>();

@@ -1,9 +1,12 @@
 using System.Collections.Generic;
+using System.Linq;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Reefin.Api.Models.PlaybackSessionDtos;
 using Reefin.Common.Api;
 using Reefin.Controller.MediaEncoding;
+using Reefin.MediaEncoding.Playback;
 
 namespace Reefin.Api.Controllers;
 
@@ -12,10 +15,11 @@ namespace Reefin.Api.Controllers;
 /// §2): observes currently tracked playback sessions. Split out of the old
 /// <c>System/PlaybackSessions</c> route, which mixed this admin listing with the client
 /// create/replace/delete verbs under a single controller and route — this GET never shared the
-/// client protocol's authorization scope or public, only its route. For this slice (PR112), the
-/// response is still the internal <see cref="PlaybackSession"/> record; the richer, filtered
-/// diagnostic detail (<c>PlaybackDiagnosticDetail</c>, §4.3 — request context, source snapshot,
-/// full reasoning tree, legacy/v2 comparison, timeline) is PR113.
+/// client protocol's authorization scope or public, only its route. PR113: both routes now return
+/// filtered projections (<see cref="PlaybackSessionListItem"/>, <see cref="PlaybackDiagnosticDetail"/>)
+/// rather than the internal <see cref="PlaybackSession"/> record, closing the
+/// <c>MediaSourceInfo.Path</c>/<c>OpenToken</c>/<c>TranscodingUrl</c> leak that returning it directly
+/// would otherwise carry.
 /// </summary>
 [Route("System/PlaybackDiagnostics/Sessions")]
 [Authorize(Policy = Policies.RequiresElevation)]
@@ -23,43 +27,56 @@ namespace Reefin.Api.Controllers;
 public class PlaybackDiagnosticsSessionsController : BaseReefinApiController
 {
     private readonly IPlaybackSessionManager _playbackSessionManager;
+    private readonly IShadowDiagnosticsStore _diagnosticsStore;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PlaybackDiagnosticsSessionsController"/> class.
     /// </summary>
     /// <param name="playbackSessionManager">Instance of the <see cref="IPlaybackSessionManager"/> interface.</param>
-    public PlaybackDiagnosticsSessionsController(IPlaybackSessionManager playbackSessionManager)
+    /// <param name="diagnosticsStore">Instance of the <see cref="IShadowDiagnosticsStore"/> interface.</param>
+    public PlaybackDiagnosticsSessionsController(IPlaybackSessionManager playbackSessionManager, IShadowDiagnosticsStore diagnosticsStore)
     {
         _playbackSessionManager = playbackSessionManager;
+        _diagnosticsStore = diagnosticsStore;
     }
 
     /// <summary>
     /// Gets a snapshot of all currently tracked playback sessions.
     /// </summary>
     /// <response code="200">Playback sessions returned.</response>
-    /// <returns>The current sessions.</returns>
+    /// <returns>The current sessions, each flagged with whether a richer diagnostic is available.</returns>
     [HttpGet]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    public ActionResult<IReadOnlyList<PlaybackSession>> GetPlaybackSessions()
+    public ActionResult<IReadOnlyList<PlaybackSessionListItem>> GetPlaybackSessions()
     {
-        return Ok(_playbackSessionManager.GetAll());
+        IReadOnlyList<PlaybackSessionListItem> items = _playbackSessionManager.GetAll()
+            .Select(session => new PlaybackSessionListItem(
+                PlaybackSessionResponseMapper.Map(session),
+                _diagnosticsStore.TryGet(session.Id, out _)))
+            .ToList();
+
+        return Ok(items);
     }
 
     /// <summary>
-    /// Gets a single tracked playback session, for diagnostics.
+    /// Gets a single tracked playback session's diagnostic detail.
     /// </summary>
     /// <param name="id">The session to look up.</param>
-    /// <response code="200">Session returned.</response>
+    /// <response code="200">Session found; detail returned. The v2-sourced fields are populated only when a diagnostic was retained.</response>
     /// <response code="404">Session not found.</response>
-    /// <returns>The session.</returns>
+    /// <returns>The filtered diagnostic detail.</returns>
     [HttpGet("{id}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public ActionResult<PlaybackSession> GetPlaybackSession([FromRoute] PlaybackSessionId id)
+    public ActionResult<PlaybackDiagnosticDetail> GetPlaybackSession([FromRoute] PlaybackSessionId id)
     {
         var session = _playbackSessionManager.Get(id);
-        return session is null
-            ? NotFound()
-            : Ok(session);
+        if (session is null)
+        {
+            return NotFound();
+        }
+
+        _diagnosticsStore.TryGet(id, out var diagnostic);
+        return Ok(PlaybackDiagnosticDetailMapper.Map(session, diagnostic));
     }
 }

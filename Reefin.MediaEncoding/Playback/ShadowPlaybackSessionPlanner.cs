@@ -36,6 +36,7 @@ public sealed class ShadowPlaybackSessionPlanner : IPlaybackSessionPlanner
     private readonly IPlaybackEngine _engine;
     private readonly ILogger<ShadowPlaybackSessionPlanner> _logger;
     private readonly Func<PlaybackShadowOptions> _optionsAccessor;
+    private readonly IShadowDiagnosticsStore _diagnosticsStore;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ShadowPlaybackSessionPlanner"/> class with
@@ -66,12 +67,19 @@ public sealed class ShadowPlaybackSessionPlanner : IPlaybackSessionPlanner
     /// The aggregate metrics sink. Defaults to a private instance if not supplied; pass a shared
     /// one if the metrics need to be observed from outside (e.g. a diagnostics endpoint).
     /// </param>
+    /// <param name="diagnosticsStore">
+    /// PR113: where a successful shadow run publishes its <see cref="ShadowDiagnosticRecord"/> for
+    /// later correlation by <see cref="PlaybackSessionManager"/>. Defaults to a no-op instance when
+    /// not supplied, keeping every pre-PR113 call site source/binary compatible - the shadow run
+    /// then simply retains nothing, same as before this parameter existed.
+    /// </param>
     public ShadowPlaybackSessionPlanner(
         IPlaybackSessionPlanner inner,
         IPlaybackEngine engine,
         ILogger<ShadowPlaybackSessionPlanner> logger,
         Func<PlaybackShadowOptions> optionsAccessor,
-        ShadowMetrics? metrics = null)
+        ShadowMetrics? metrics = null,
+        IShadowDiagnosticsStore? diagnosticsStore = null)
     {
         ArgumentNullException.ThrowIfNull(inner);
         ArgumentNullException.ThrowIfNull(engine);
@@ -83,6 +91,7 @@ public sealed class ShadowPlaybackSessionPlanner : IPlaybackSessionPlanner
         _logger = logger;
         _optionsAccessor = optionsAccessor;
         Metrics = metrics ?? new ShadowMetrics();
+        _diagnosticsStore = diagnosticsStore ?? NoOpShadowDiagnosticsStore.Instance;
     }
 
     /// <summary>
@@ -204,6 +213,24 @@ public sealed class ShadowPlaybackSessionPlanner : IPlaybackSessionPlanner
         // (that was the PR98 noise source). They are still counted above and surface via the
         // periodic aggregate summary below.
         LogPeriodicSummaryIfAny(summary);
+
+        // PR113: publish for retention last, strictly after totalStopwatch has already stopped and
+        // every timing/logging concern above has run - the record allocation and AsyncLocal write
+        // must never perturb the measured shadow duration that feeds Metrics.RecordExecution. A
+        // shadow run that reached this point always has a record to offer, even one that exceeded
+        // its time budget. PlaybackSessionManager (the only synchronous caller of Plan(), which this
+        // call is nested inside) reads this back post-hoc once it has minted/known the real session
+        // id; the no-op default store simply drops it.
+        _diagnosticsStore.Publish(new ShadowDiagnosticRecord(
+            decision,
+            legacyVector,
+            divergence,
+            context,
+            capabilities,
+            sources,
+            constraints,
+            kind,
+            DateTimeOffset.UtcNow));
     }
 
     private void LogPeriodicSummaryIfAny(ShadowMetricsSnapshot? summary)
