@@ -38,13 +38,21 @@ namespace Reefin.Playback.Shadow.Tests;
 /// allow-list. A case whose <see cref="DivergenceClass"/> is
 /// <see cref="DivergenceClass.PotentialRegression"/> or <see cref="DivergenceClass.Unexplained"/>
 /// and is NOT in that allow-list fails the test - closing the PR101/PR103-era gap where this test
-/// only classified without gating. The allow-list contains 4 root-caused entries: the 3 srt/hevc-&gt;
-/// vtt subtitle text-format-conversion cases, plus the PR111b Dolby-Vision-fallback target
-/// divergence (Chrome). PR111b's H.264-10-bit case reaches Equivalent via a real projector fix
-/// (LegacyDecisionProjector now treats SubtitleStreamIndex -1 as no-selection), and its
-/// natively-supported Dolby Vision case reaches Equivalent DirectPlay via a real v2 fix
+/// only classified without gating. The allow-list contains 2 root-caused entries: the PR111b
+/// Dolby-Vision-fallback target divergence (Chrome), and a PR111c-exposed container-normalization
+/// bug (Chrome mp4 srt case, see its entry). PR111b's H.264-10-bit case reaches Equivalent via a
+/// real projector fix (LegacyDecisionProjector now treats SubtitleStreamIndex -1 as no-selection),
+/// and its natively-supported Dolby Vision case reaches Equivalent DirectPlay via a real v2 fix
 /// (ClientCapabilitiesMapper no longer applies MusicStreamingTranscodingBitrate as an audio decode
-/// ceiling). The list must not grow without a new, equally-documented, root-caused reason.
+/// ceiling). PR111c models subtitle text-format conversion:
+/// <see cref="Reefin.Playback.Decision.SubtitleTextConversion"/> now mirrors the real subtitle
+/// re-encode legacy's StreamBuilder performs (<c>MediaStream.SupportsSubtitleConversionTo</c>), so
+/// (Chrome, mkv-h264-ac3-srt) resolves to <see cref="DivergenceClass.Equivalent"/> and
+/// (Firefox, mp4-hevc-aac-srt) to ungated <see cref="DivergenceClass.KnownV2Limitation"/> (its HDR
+/// tonemap is now derived in LegacyDecisionProjector) - both WITHOUT an allow-list entry. The third
+/// former srt entry (Chrome mp4) had its subtitle gap closed too, but a distinct pre-existing
+/// container bug it exposed keeps it allow-listed pending its own fix. The list must not grow
+/// without a new, equally-documented, root-caused reason.
 /// </remarks>
 public sealed class OracleParityTests
 {
@@ -59,19 +67,22 @@ public sealed class OracleParityTests
     private static readonly IReadOnlyDictionary<(string DeviceProfile, string Source), string> ApprovedDivergences =
         new Dictionary<(string, string), string>
         {
-            [("Chrome", "mkv-h264-ac3-srt-2600k")] =
-                "srt->vtt subtitle text-format conversion: legacy's StreamBuilder performs a real " +
-                "subtitle re-encode (SupportsSubtitleConversionTo) that PlaybackEngine does not model " +
-                "(only exact-format/alias matching, PR103) - documented gap, RFC-worthy, not closed by " +
-                "PR104 (out of scope per the PR104 task description).",
             [("Chrome", "mp4-h264-ac3-aac-srt-2600k")] =
-                "Same srt->vtt conversion gap as (Chrome, mkv-h264-ac3-srt-2600k) - this case also " +
-                "exercises the secondary-audio-track selection, but the transcode-path divergence is " +
-                "driven by the same unmodeled subtitle conversion.",
-            [("Firefox", "mp4-hevc-aac-srt-15200k")] =
-                "Same srt->vtt conversion gap, on the HEVC-forces-transcode path (video codec not " +
-                "supported forces a transcode which then also needs the unmodeled subtitle " +
-                "conversion).",
+                "Subtitle text-format conversion (srt->vtt) is now MODELED (PR111c), so the historical " +
+                "subtitle gap on this case is CLOSED - both engines convert and copy video. The residual " +
+                "divergence (v2-only Remux transform + Container reason) is a SEPARATE, pre-existing bug " +
+                "this PR merely exposed once video stopped being force-transcoded by burn-in: legacy's " +
+                "StreamBuilder MUTATES the shared MediaSourceInfo.Container into a single value " +
+                "(NormalizeMediaSourceFormatIntoSingleContainer, StreamBuilder.cs:836) and the shadow " +
+                "flow runs legacy BEFORE snapshotting for v2 (ShadowPlaybackSessionPlanner.RunShadow, " +
+                "and the oracle here), so v2 sees the degraded container 'mov' instead of this source's " +
+                "real ffprobe set 'mov,mp4,m4a,3gp,3g2,mj2'; v2 then whole-string-compares it against " +
+                "target 'mp4' and falsely flags a container remux. Legacy emits no container reason " +
+                "(mp4 is a member of the real set). This masks whether v2 handles raw ffprobe container " +
+                "strings at all - a CANARY-READINESS question (when v2 is the sole planner no legacy " +
+                "normalizes first). FIX tracked as its own PR: (a) v2 containerChanged uses " +
+                "ContainerHelper.ContainsContainer; (b) the shadow harness snapshots the source BEFORE " +
+                "legacy mutates it - expected to move more than this one case, hence out of PR111c scope.",
             [("Chrome", "mp4-dvhe.08-eac3-15200k")] =
                 "Dolby Vision (Profile 8.1) fallback on a non-DV client: legacy and v2 AGREE the DV " +
                 "range must be transcoded away on Chrome; they only differ on the transcode target. " +

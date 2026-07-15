@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Xunit;
 
@@ -243,6 +244,43 @@ public sealed class ShadowComparerTests
         Assert.Equal(DivergenceClass.Equivalent, divergence.Class);
     }
 
+    [Fact]
+    public void Compare_DifferentSubtitleFormats_IsNotEquivalent()
+    {
+        // Proves the new OutputSubtitleFormat axis is NOT blind: a genuine srt-vs-vtt mismatch (the
+        // very divergence PR111c's subtitle conversion is meant to resolve) must still register.
+        var legacy = Vector(true, NormalizedMethod.Transcode, video: null, audio: 1, container: "mp4", videoCodec: "h264", audioCodec: "aac", transforms: [TransformClass.ConvertSubtitle], subtitle: 2, outputSubtitleFormat: "vtt");
+        var v2 = Vector(true, NormalizedMethod.Transcode, video: null, audio: 1, container: "mp4", videoCodec: "h264", audioCodec: "aac", transforms: [TransformClass.ConvertSubtitle], subtitle: 2, outputSubtitleFormat: "srt");
+
+        var divergence = ShadowComparer.Compare(legacy, v2);
+
+        Assert.NotEqual(DivergenceClass.Equivalent, divergence.Class);
+        Assert.Equal(DivergenceClass.KnownV2Limitation, divergence.Class);
+        Assert.Contains("subtitleFormat", divergence.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Compare_SameSubtitleFormat_IsEquivalent()
+    {
+        var legacy = Vector(true, NormalizedMethod.DirectPlay, video: 0, audio: 1, container: "mp4", videoCodec: "h264", audioCodec: "aac", subtitle: 2, outputSubtitleFormat: "vtt");
+        var v2 = Vector(true, NormalizedMethod.DirectPlay, video: 0, audio: 1, container: "mp4", videoCodec: "h264", audioCodec: "aac", subtitle: 2, outputSubtitleFormat: "vtt");
+
+        var divergence = ShadowComparer.Compare(legacy, v2);
+
+        Assert.Equal(DivergenceClass.Equivalent, divergence.Class);
+    }
+
+    [Fact]
+    public void Compare_UnknownSubtitleFormatOnOneSide_DoesNotCountAsDivergence()
+    {
+        var legacy = Vector(true, NormalizedMethod.DirectPlay, video: 0, audio: 1, container: "mp4", videoCodec: "h264", audioCodec: "aac", subtitle: 2, outputSubtitleFormat: null);
+        var v2 = Vector(true, NormalizedMethod.DirectPlay, video: 0, audio: 1, container: "mp4", videoCodec: "h264", audioCodec: "aac", subtitle: 2, outputSubtitleFormat: "vtt");
+
+        var divergence = ShadowComparer.Compare(legacy, v2);
+
+        Assert.Equal(DivergenceClass.Equivalent, divergence.Class);
+    }
+
     private static DecisionVector Vector(
         bool isViable,
         NormalizedMethod? method,
@@ -261,7 +299,8 @@ public sealed class ShadowComparerTests
         int? outputBitrate = null,
         string? outputVideoRange = null,
         int? outputAudioChannels = null,
-        SubtitleDeliveryMode? subtitleDeliveryMode = null) =>
+        SubtitleDeliveryMode? subtitleDeliveryMode = null,
+        string? outputSubtitleFormat = null) =>
         new(
             isViable,
             method,
@@ -279,7 +318,8 @@ public sealed class ShadowComparerTests
             OutputBitrate: outputBitrate,
             OutputVideoRange: outputVideoRange,
             OutputAudioChannels: outputAudioChannels,
-            SubtitleDeliveryMode: subtitleDeliveryMode);
+            SubtitleDeliveryMode: subtitleDeliveryMode,
+            OutputSubtitleFormat: outputSubtitleFormat);
 
     /// <summary>
     /// Mirrors the pre-PR101 int?-based test convention: a <see langword="null"/> index means "not
@@ -306,5 +346,6 @@ public sealed class ShadowComparerTests
             OutputBitrate: null,
             OutputVideoRange: null,
             OutputAudioChannels: null,
-            SubtitleDeliveryMode: null);
+            SubtitleDeliveryMode: null,
+            OutputSubtitleFormat: null);
 }

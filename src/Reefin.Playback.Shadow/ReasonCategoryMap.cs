@@ -11,8 +11,9 @@ namespace Reefin.Playback.Shadow;
 /// <see cref="V2DecisionProjector"/> drive their folding through this one map so the two sides can
 /// never fold the same underlying reason into different categories. Names not present here (v2's
 /// positive/marker codes: <c>StreamCopyable</c>, <c>SourceSelected</c>, <c>MethodChosen</c>,
-/// <c>SubtitleBurnInRequired</c>, <c>DownmixRequired</c>, <c>TonemapRequired</c>, and
-/// <c>NoViablePlan</c>) carry no comparable category and are excluded by design.
+/// <c>SubtitleBurnInRequired</c>, <c>SubtitleFormatConverted</c>, <c>DownmixRequired</c>,
+/// <c>TonemapRequired</c>, and <c>NoViablePlan</c>) carry no comparable category and are excluded by
+/// design.
 /// </summary>
 internal static class ReasonCategoryMap
 {

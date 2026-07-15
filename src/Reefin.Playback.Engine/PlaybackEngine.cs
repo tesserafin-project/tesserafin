@@ -294,6 +294,9 @@ public sealed class PlaybackEngine : IPlaybackEngine
         var needBurnIn = false;
         SubtitleDeliveryMethod? subtitleDelivery = null;
         ReasonNode? subtitleCodecNotSupportedReason = null;
+        var targetSubtitleFormat = selectedSubtitle?.Format;
+        var needSubtitleConvert = false;
+        ReasonNode? subtitleConversionReason = null;
 
         if (selectedSubtitle is not null)
         {
@@ -308,15 +311,45 @@ public sealed class PlaybackEngine : IPlaybackEngine
             }
             else
             {
-                subtitleDelivery = SubtitleDeliveryMethod.Burn;
-                needBurnIn = true;
-                subtitleCodecNotSupportedReason = ReasonNode.Leaf(ReasonCode.SubtitleCodecNotSupported, ReasonOutcome.Rejected, ReasonSubject.Subtitle(selectedSubtitle.Index));
+                // PR111c: before falling back to burn-in, look for a delivery candidate the client
+                // already declares for a DIFFERENT text subtitle format that the selected subtitle's
+                // format can be re-encoded into (mirrors legacy StreamBuilder's real subtitle
+                // re-encode via MediaStream.SupportsSubtitleConversionTo). Declared order, first
+                // match; a Burn candidate is not eligible here since burning in is the existing
+                // fallback path below, not a conversion.
+                var conversionCandidate = IsTextBasedSubtitle(selectedSubtitle.Format)
+                    ? capabilities.Decode.SubtitleDelivery.FirstOrDefault(c =>
+                        c.Method != SubtitleDeliveryMethod.Burn
+                        && IsTextBasedSubtitle(c.Format)
+                        && SubtitleTextConversion.CanConvert(selectedSubtitle.Format, c.Format))
+                    : null;
+
+                if (conversionCandidate is not null)
+                {
+                    subtitleDelivery = conversionCandidate.Method;
+                    targetSubtitleFormat = conversionCandidate.Format;
+                    needSubtitleConvert = true;
+                    subtitleConversionReason = ReasonNode.Leaf(ReasonCode.SubtitleFormatConverted, ReasonOutcome.Chosen, ReasonSubject.Subtitle(selectedSubtitle.Index));
+                }
+                else
+                {
+                    subtitleDelivery = SubtitleDeliveryMethod.Burn;
+                    needBurnIn = true;
+                    subtitleCodecNotSupportedReason = ReasonNode.Leaf(ReasonCode.SubtitleCodecNotSupported, ReasonOutcome.Rejected, ReasonSubject.Subtitle(selectedSubtitle.Index));
+                }
             }
 
             if (!needBurnIn && needVideoTranscode && constraints.AlwaysBurnInSubtitleWhenTranscoding && IsTextBasedSubtitle(selectedSubtitle.Format))
             {
                 needBurnIn = true;
                 subtitleDelivery = SubtitleDeliveryMethod.Burn;
+
+                // Burn-in always wins over a previously found conversion candidate: mirrors legacy
+                // setting Format back to the source codec when it forces burn-in (StreamBuilder.cs:1533),
+                // and prevents an incoherent ConvertSubtitle+BurnInSubtitle pair on the same decision.
+                targetSubtitleFormat = selectedSubtitle.Format;
+                needSubtitleConvert = false;
+                subtitleConversionReason = null;
             }
 
             // Burning in requires a video stream to burn into; without one (audio-only playback),
@@ -509,6 +542,11 @@ public sealed class PlaybackEngine : IPlaybackEngine
                 transforms.Add(TransformKind.BurnInSubtitle);
             }
 
+            if (needSubtitleConvert)
+            {
+                transforms.Add(TransformKind.ConvertSubtitle);
+            }
+
             if (selectedSubtitle is not null && subtitleDelivery == SubtitleDeliveryMethod.External && !selectedSubtitle.IsExternal)
             {
                 transforms.Add(TransformKind.ExtractSubtitle);
@@ -540,7 +578,8 @@ public sealed class PlaybackEngine : IPlaybackEngine
             TotalBitrate: outputTotalBitrate,
             VideoBitrate: outputVideoBitrate,
             AudioBitrate: outputAudioBitrate,
-            Protocol: outputProtocol);
+            Protocol: outputProtocol,
+            SubtitleFormat: selectedSubtitle is not null ? targetSubtitleFormat : null);
 
         // --- REASONING ---
         var children = new List<ReasonNode>();
@@ -579,6 +618,11 @@ public sealed class PlaybackEngine : IPlaybackEngine
         if (transforms.Contains(TransformKind.BurnInSubtitle))
         {
             children.Add(ReasonNode.Leaf(ReasonCode.SubtitleBurnInRequired, ReasonOutcome.Chosen, ReasonSubject.Subtitle(selectedSubtitle!.Index)));
+        }
+
+        if (subtitleConversionReason is not null)
+        {
+            children.Add(subtitleConversionReason);
         }
 
         if (usedOutputProfileFallback)

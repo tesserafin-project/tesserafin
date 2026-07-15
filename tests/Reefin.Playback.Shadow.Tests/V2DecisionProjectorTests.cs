@@ -46,7 +46,7 @@ public sealed class V2DecisionProjectorTests
     public void Project_DirectPlay_MapsMethodStreamsAndOutput()
     {
         var streams = new SelectedStreams(0, 1, null);
-        var output = new OutputSpec("mp4", "h264", "aac", null, null, null, null, null, null, StreamingProtocol.Http);
+        var output = new OutputSpec("mp4", "h264", "aac", null, null, null, null, null, null, StreamingProtocol.Http, null);
         var reasoning = ReasonNode.Leaf(ReasonCode.MethodChosen, ReasonOutcome.Chosen, ReasonSubject.Method());
         var decision = PlaybackDecision.DirectPlay("source-1", streams, output, reasoning, engineVersion: 2);
 
@@ -76,7 +76,7 @@ public sealed class V2DecisionProjectorTests
     public void Project_Remux_MapsRemuxContainerToRemuxTransformClass()
     {
         var streams = new SelectedStreams(0, 1, null);
-        var output = new OutputSpec("mp4", "h264", "aac", null, null, null, null, null, null, StreamingProtocol.Http);
+        var output = new OutputSpec("mp4", "h264", "aac", null, null, null, null, null, null, StreamingProtocol.Http, null);
         var transforms = new List<TransformKind> { TransformKind.RemuxContainer, TransformKind.CopyVideo, TransformKind.CopyAudio };
         var reasoning = ReasonNode.Leaf(ReasonCode.ContainerNotSupported, ReasonOutcome.Rejected, ReasonSubject.Container());
         var decision = PlaybackDecision.Remux("source-1", streams, output, transforms, reasoning, engineVersion: 2);
@@ -94,7 +94,7 @@ public sealed class V2DecisionProjectorTests
     public void Project_Transcode_MapsAllTransformKindsAndFoldsReasonTree()
     {
         var streams = new SelectedStreams(0, 1, new SelectedSubtitle(2, SubtitleDeliveryMethod.Burn));
-        var output = new OutputSpec("mp4", "h264", "aac", null, "SDR", 2, null, null, null, StreamingProtocol.Http);
+        var output = new OutputSpec("mp4", "h264", "aac", null, "SDR", 2, null, null, null, StreamingProtocol.Http, null);
         var transforms = new List<TransformKind>
         {
             TransformKind.TranscodeVideo,
@@ -144,5 +144,67 @@ public sealed class V2DecisionProjectorTests
         Assert.Equal(SubtitleDeliveryMode.Burn, vector.SubtitleDeliveryMode);
         Assert.Equal("SDR", vector.OutputVideoRange);
         Assert.Equal(2, vector.OutputAudioChannels);
+    }
+
+    [Fact]
+    public void Project_ConvertSubtitleTransform_MapsToConvertSubtitleTransformClass()
+    {
+        var streams = new SelectedStreams(0, 1, new SelectedSubtitle(2, SubtitleDeliveryMethod.External));
+        var output = new OutputSpec("mp4", "h264", "aac", null, null, null, null, null, null, StreamingProtocol.Http, "vtt");
+        var transforms = new List<TransformKind> { TransformKind.CopyVideo, TransformKind.TranscodeAudio, TransformKind.ConvertSubtitle };
+        var reasoning = new ReasonNode(
+            ReasonCode.MethodChosen,
+            ReasonOutcome.Chosen,
+            ReasonSubject.Method(),
+            null,
+            [
+                ReasonNode.Leaf(ReasonCode.AudioCodecNotSupported, ReasonOutcome.Rejected, ReasonSubject.AudioStream(1)),
+                ReasonNode.Leaf(ReasonCode.SubtitleFormatConverted, ReasonOutcome.Chosen, ReasonSubject.Subtitle(2)),
+            ]);
+        var decision = PlaybackDecision.Transcode("source-1", streams, output, transforms, reasoning, engineVersion: 2);
+
+        var vector = V2DecisionProjector.Project(decision);
+
+        Assert.Contains(TransformClass.ConvertSubtitle, vector.TransformClasses);
+        Assert.DoesNotContain(TransformClass.BurnInSubtitle, vector.TransformClasses);
+        Assert.Equal("vtt", vector.OutputSubtitleFormat);
+
+        // SubtitleFormatConverted is a positive marker code with no ReasonCategory entry - it must
+        // not manufacture a false v2-only reason-category divergence; only the real AudioCodec
+        // reason folds in.
+        Assert.Equal(new HashSet<ReasonCategory> { ReasonCategory.AudioCodec }, vector.ReasonCategories);
+    }
+
+    [Fact]
+    public void Project_ExactFormatMatch_DoesNotMapConvertSubtitle()
+    {
+        var streams = new SelectedStreams(0, 1, new SelectedSubtitle(2, SubtitleDeliveryMethod.External));
+        var output = new OutputSpec("mp4", "h264", "aac", null, null, null, null, null, null, StreamingProtocol.Http, "vtt");
+        var reasoning = ReasonNode.Leaf(ReasonCode.MethodChosen, ReasonOutcome.Chosen, ReasonSubject.Method());
+        var decision = PlaybackDecision.DirectPlay("source-1", streams, output, reasoning, engineVersion: 2);
+
+        var vector = V2DecisionProjector.Project(decision);
+
+        Assert.DoesNotContain(TransformClass.ConvertSubtitle, vector.TransformClasses);
+    }
+
+    [Fact]
+    public void Project_BurnInSubtitle_DoesNotMapConvertSubtitle()
+    {
+        var streams = new SelectedStreams(0, 1, new SelectedSubtitle(2, SubtitleDeliveryMethod.Burn));
+        var output = new OutputSpec("mp4", "h264", "aac", null, null, null, null, null, null, StreamingProtocol.Http, "srt");
+        var transforms = new List<TransformKind> { TransformKind.TranscodeVideo, TransformKind.BurnInSubtitle };
+        var reasoning = new ReasonNode(
+            ReasonCode.MethodChosen,
+            ReasonOutcome.Chosen,
+            ReasonSubject.Method(),
+            null,
+            [ReasonNode.Leaf(ReasonCode.SubtitleBurnInRequired, ReasonOutcome.Chosen, ReasonSubject.Subtitle(2))]);
+        var decision = PlaybackDecision.Transcode("source-1", streams, output, transforms, reasoning, engineVersion: 2);
+
+        var vector = V2DecisionProjector.Project(decision);
+
+        Assert.Contains(TransformClass.BurnInSubtitle, vector.TransformClasses);
+        Assert.DoesNotContain(TransformClass.ConvertSubtitle, vector.TransformClasses);
     }
 }

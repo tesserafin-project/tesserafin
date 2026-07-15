@@ -44,7 +44,8 @@ public static class V2DecisionProjector
                 OutputBitrate: null,
                 OutputVideoRange: null,
                 OutputAudioChannels: null,
-                SubtitleDeliveryMode: null);
+                SubtitleDeliveryMode: null,
+                OutputSubtitleFormat: null);
         }
 
         var method = MapMethod(decision.Method);
@@ -78,7 +79,8 @@ public static class V2DecisionProjector
             OutputBitrate: decision.Output.VideoBitrate,
             OutputVideoRange: decision.Output.VideoRange,
             OutputAudioChannels: decision.Output.AudioChannels,
-            SubtitleDeliveryMode: subtitle is not null ? MapDeliveryMode(subtitle.Delivery) : SubtitleDeliveryMode.None);
+            SubtitleDeliveryMode: subtitle is not null ? MapDeliveryMode(subtitle.Delivery) : SubtitleDeliveryMode.None,
+            OutputSubtitleFormat: decision.Output.SubtitleFormat);
     }
 
     private static SubtitleDeliveryMode MapDeliveryMode(SubtitleDeliveryMethod method) => method switch
@@ -112,6 +114,7 @@ public static class V2DecisionProjector
                 TransformKind.Tonemap => TransformClass.Tonemap,
                 TransformKind.BurnInSubtitle => TransformClass.BurnInSubtitle,
                 TransformKind.ExtractSubtitle => TransformClass.ExtractSubtitle,
+                TransformKind.ConvertSubtitle => TransformClass.ConvertSubtitle,
 
                 // CopyVideo/CopyAudio carry no comparable legacy signal; omitted by design.
                 TransformKind.CopyVideo => (TransformClass?)null,
@@ -133,9 +136,14 @@ public static class V2DecisionProjector
     /// <see cref="ReasonCode"/> to its <see cref="ReasonCategory"/> via the shared
     /// <see cref="ReasonCategoryMap"/> and adding it to <paramref name="categories"/>. Positive/
     /// marker codes (<c>MethodChosen</c>, <c>StreamCopyable</c>, <c>SourceSelected</c>,
-    /// <c>TonemapRequired</c>, <c>DownmixRequired</c>, <c>SubtitleBurnInRequired</c>) and
+    /// <c>TonemapRequired</c>, <c>DownmixRequired</c>, <c>SubtitleBurnInRequired</c>,
+    /// <c>SubtitleFormatConverted</c>) and
     /// <c>NoViablePlan</c> are not in the map and are excluded: viability is already captured by
-    /// <see cref="DecisionVector.IsViable"/>.
+    /// <see cref="DecisionVector.IsViable"/>. <c>SubtitleFormatConverted</c> in particular has
+    /// deliberately no <see cref="ReasonCategory"/> entry (like <c>SubtitleBurnInRequired</c>), so it
+    /// is silently excluded here rather than manufacturing a false v2-only-reason divergence against
+    /// legacy, which emits no reason bit at all for a successful subtitle conversion (see
+    /// <see cref="LegacyDecisionProjector"/>).
     /// </summary>
     private static void FoldReasonCategories(ReasonNode node, HashSet<ReasonCategory> categories)
     {

@@ -44,4 +44,9 @@ public enum TransformClass
     /// A subtitle track is extracted for external or embedded delivery.
     /// </summary>
     ExtractSubtitle,
+
+    /// <summary>
+    /// A text subtitle stream is re-encoded from one format to another for external/embedded delivery.
+    /// </summary>
+    ConvertSubtitle,
 }

@@ -170,6 +170,12 @@ public enum ReasonCode
     SubtitleBurnInRequired,
 
     /// <summary>
+    /// A text subtitle stream was re-encoded from its source format into a different format the
+    /// client can render, without burning it into the video image.
+    /// </summary>
+    SubtitleFormatConverted,
+
+    /// <summary>
     /// The audio must be downmixed to fewer channels as part of this decision.
     /// </summary>
     DownmixRequired,
