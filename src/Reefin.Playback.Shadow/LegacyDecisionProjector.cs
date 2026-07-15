@@ -1,9 +1,11 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Reefin.Controller.MediaEncoding;
 using Reefin.Data.Enums;
 using Reefin.Extensions;
 using Reefin.Model.Dlna;
+using Reefin.Model.Entities;
 using Reefin.Model.Session;
 using LegacySubtitleDeliveryMethod = Reefin.Model.Dlna.SubtitleDeliveryMethod;
 
@@ -47,14 +49,14 @@ public static class LegacyDecisionProjector
                 OutputBitrate: null,
                 OutputVideoRange: null,
                 OutputAudioChannels: null,
-                SubtitleDeliveryMode: null);
+                SubtitleDeliveryMode: null,
+                OutputSubtitleFormat: null);
         }
 
         var method = MapMethod(plan.PlayMethod);
         var reasonCategories = FoldReasonCategories(plan.TranscodeReasons);
-        var transformClasses = DeriveTransformClasses(method, reasonCategories);
-
         var streamInfo = plan.StreamInfo;
+        var transformClasses = DeriveTransformClasses(method, reasonCategories, streamInfo);
 
         // Legacy StreamInfo does not expose a video stream index cleanly (per PR98 spec): the
         // projector genuinely does not know, so this is Unknown, never None.
@@ -92,7 +94,8 @@ public static class LegacyDecisionProjector
             OutputBitrate: outputBitrate,
             OutputVideoRange: ProjectVideoRange(streamInfo),
             OutputAudioChannels: streamInfo?.TargetAudioChannels,
-            SubtitleDeliveryMode: ProjectSubtitleDeliveryMode(streamInfo));
+            SubtitleDeliveryMode: ProjectSubtitleDeliveryMode(streamInfo),
+            OutputSubtitleFormat: subtitleSelection.IsSelected ? streamInfo?.SubtitleFormat : null);
     }
 
     private static StreamSelection ProjectSubtitleSelection(StreamInfo? streamInfo)
@@ -108,6 +111,74 @@ public static class LegacyDecisionProjector
         // as no-selection. Only a non-negative index is a real selection; -1 projects to None, same as
         // null, so the shadow comparison does not report a false "subtitle selected only on legacy".
         return streamInfo.SubtitleStreamIndex is int idx && idx >= 0 ? StreamSelection.Selected(idx) : StreamSelection.None;
+    }
+
+    /// <summary>
+    /// Best-effort detection of a real legacy subtitle text-format conversion (PR111c): legacy emits
+    /// NO reason bit for a successful re-encode of a text subtitle stream (unlike v2's
+    /// <c>ReasonCode.SubtitleFormatConverted</c>), so this compares the SOURCE subtitle stream's
+    /// codec against the delivered <see cref="StreamInfo.SubtitleFormat"/> instead. <see langword="false"/>
+    /// when no subtitle was selected, or when the delivery method is <see cref="LegacySubtitleDeliveryMethod.Encode"/>
+    /// (burn-in re-encodes the video, not a subtitle format conversion for delivery).
+    /// </summary>
+    private static bool DetectedSubtitleConversion(StreamInfo? streamInfo)
+    {
+        if (streamInfo is null || streamInfo.SubtitleStreamIndex is null or < 0)
+        {
+            return false;
+        }
+
+        if (streamInfo.SubtitleDeliveryMethod == LegacySubtitleDeliveryMethod.Encode)
+        {
+            return false;
+        }
+
+        var sourceCodec = streamInfo.MediaSource?.MediaStreams
+            ?.FirstOrDefault(s => s.Type == MediaStreamType.Subtitle && s.Index == streamInfo.SubtitleStreamIndex)
+            ?.Codec;
+
+        return !string.Equals(NormalizeSubtitleFormat(sourceCodec), NormalizeSubtitleFormat(streamInfo.SubtitleFormat), StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Normalizes the <c>webvtt</c>/<c>vtt</c> spelling alias so it never looks like a real
+    /// conversion in <see cref="DetectedSubtitleConversion"/> - load-bearing on both operands: the
+    /// direct-play control case has source codec <c>webvtt</c> but a delivered
+    /// <see cref="StreamInfo.SubtitleFormat"/> of <c>vtt</c>, and without normalizing both sides the
+    /// heuristic would misfire "converted" here and break the hard-asserted Equivalent gate for that
+    /// case.
+    /// </summary>
+    private static string? NormalizeSubtitleFormat(string? format) =>
+        string.Equals(format, "webvtt", StringComparison.OrdinalIgnoreCase) ? "vtt" : format;
+
+    /// <summary>
+    /// Best-effort detection of a real legacy HDR-to-SDR tonemap (PR111c): when the source video
+    /// stream carries an HDR range (anything that is neither <see cref="VideoRangeType.SDR"/> nor
+    /// <see cref="VideoRangeType.Unknown"/>) and legacy's chosen output range
+    /// (<see cref="StreamInfo.TargetVideoRangeType"/>) is plain <see cref="VideoRangeType.SDR"/>, the
+    /// pipeline is tonemapping - even though legacy may record NO
+    /// <c>TranscodeReason.VideoRangeTypeNotSupported</c> bit for it (e.g. when the transcode is driven
+    /// by an unsupported video codec instead, so the range folding never reaches
+    /// <see cref="ReasonCategory.VideoRange"/>). Same shape as
+    /// <see cref="DetectedSubtitleConversion"/>: derive the transform from output state, not from a
+    /// reason bit legacy never set. Deliberately requires target == SDR exactly, so an HDR source
+    /// that legacy keeps as an HDR/HLG fallback (for example the Dolby-Vision-on-Chrome case, target
+    /// HLG) is NOT treated as a tonemap.
+    /// </summary>
+    private static bool DetectedTonemap(StreamInfo? streamInfo)
+    {
+        if (streamInfo is null)
+        {
+            return false;
+        }
+
+        var sourceRange = streamInfo.TargetVideoStream?.VideoRangeType;
+        if (sourceRange is null or VideoRangeType.Unknown or VideoRangeType.SDR)
+        {
+            return false;
+        }
+
+        return streamInfo.TargetVideoRangeType == VideoRangeType.SDR;
     }
 
     /// <summary>
@@ -189,7 +260,7 @@ public static class LegacyDecisionProjector
     /// <c>TranscodeReason</c> records which walls were hit, not what the pipeline will do about
     /// them.
     /// </summary>
-    private static HashSet<TransformClass> DeriveTransformClasses(NormalizedMethod method, IReadOnlySet<ReasonCategory> reasonCategories)
+    private static HashSet<TransformClass> DeriveTransformClasses(NormalizedMethod method, IReadOnlySet<ReasonCategory> reasonCategories, StreamInfo? streamInfo)
     {
         var transforms = new HashSet<TransformClass>();
 
@@ -224,9 +295,34 @@ public static class LegacyDecisionProjector
             transforms.Add(TransformClass.Tonemap);
         }
 
+        // PR111c: an HDR source transcoded to an SDR target is tonemapped even when the transcode was
+        // forced by an unsupported video codec (ReasonCategory.VideoCodec) rather than the range
+        // itself, so legacy records no VideoRangeTypeNotSupported bit and the ReasonCategory.VideoRange
+        // branch above never fires. Derived from output state (see DetectedTonemap), independently of
+        // the reason categories, and only alongside an actual video transcode - mirrors the
+        // ConvertSubtitle derivation below. TranscodeVideo is already present here whenever the video
+        // is re-encoded, so a null-range source or an HDR-preserving fallback (target != SDR) adds
+        // nothing.
+        if (transforms.Contains(TransformClass.TranscodeVideo) && DetectedTonemap(streamInfo))
+        {
+            transforms.Add(TransformClass.Tonemap);
+        }
+
         if (reasonCategories.Contains(ReasonCategory.Subtitle))
         {
             transforms.Add(TransformClass.BurnInSubtitle);
+        }
+
+        // PR111c: a real subtitle text-format conversion carries no ReasonCategory.Subtitle bit
+        // (legacy emits no reason at all for a successful re-encode - see
+        // DetectedSubtitleConversion), so this is derived independently of the reasonCategories
+        // check above. Deliberately gated to method == Transcode only, in symmetry with v2 (which
+        // can never emit a ConvertSubtitle transform on DirectPlay either - PlaybackEngine only
+        // evaluates the subtitle conversion candidate as part of building a transcode/remux
+        // candidate's transform list).
+        if (method == NormalizedMethod.Transcode && DetectedSubtitleConversion(streamInfo))
+        {
+            transforms.Add(TransformClass.ConvertSubtitle);
         }
 
         if (reasonCategories.Contains(ReasonCategory.Container))

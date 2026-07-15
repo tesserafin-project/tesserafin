@@ -53,12 +53,13 @@ public static class ShadowComparer
         var bitrateDiffers = KnownAndDiffer(legacy.OutputBitrate, v2.OutputBitrate);
         var audioChannelsDiffer = KnownAndDiffer(legacy.OutputAudioChannels, v2.OutputAudioChannels);
         var subtitleDeliveryDiffers = KnownAndDiffer(legacy.SubtitleDeliveryMode, v2.SubtitleDeliveryMode);
+        var subtitleFormatDiffers = KnownAndDiffer(legacy.OutputSubtitleFormat, v2.OutputSubtitleFormat, StringComparer.OrdinalIgnoreCase);
 
         var outputEqual = CodecEquals(legacy.OutputContainer, v2.OutputContainer)
             && CodecEquals(legacy.OutputVideoCodec, v2.OutputVideoCodec)
             && CodecEquals(legacy.OutputAudioCodec, v2.OutputAudioCodec)
             && !sourceDiffers && !videoRangeDiffers && !resolutionDiffers
-            && !bitrateDiffers && !audioChannelsDiffer && !subtitleDeliveryDiffers;
+            && !bitrateDiffers && !audioChannelsDiffer && !subtitleDeliveryDiffers && !subtitleFormatDiffers;
 
         DivergenceClass divergenceClass;
         if (legacy.IsViable == v2.IsViable && !methodDiffers && !streamsDiffer && transformsEqual && reasonsEqual && outputEqual)
@@ -106,7 +107,8 @@ public static class ShadowComparer
             resolutionDiffers,
             bitrateDiffers,
             audioChannelsDiffer,
-            subtitleDeliveryDiffers);
+            subtitleDeliveryDiffers,
+            subtitleFormatDiffers);
 
         return new ShadowDivergence(divergenceClass, methodDiffers, streamsDiffer, onlyLegacyTransforms, onlyV2Transforms, onlyLegacyReasons, onlyV2Reasons, summary);
     }
@@ -202,7 +204,8 @@ public static class ShadowComparer
         bool resolutionDiffers,
         bool bitrateDiffers,
         bool audioChannelsDiffer,
-        bool subtitleDeliveryDiffers)
+        bool subtitleDeliveryDiffers,
+        bool subtitleFormatDiffers)
     {
         if (divergenceClass == DivergenceClass.Equivalent)
         {
@@ -282,6 +285,11 @@ public static class ShadowComparer
         if (subtitleDeliveryDiffers)
         {
             parts.Add($"subtitleDelivery legacy={legacy.SubtitleDeliveryMode} v2={v2.SubtitleDeliveryMode}");
+        }
+
+        if (subtitleFormatDiffers)
+        {
+            parts.Add($"subtitleFormat legacy={legacy.OutputSubtitleFormat} v2={v2.OutputSubtitleFormat}");
         }
 
         return $"{divergenceClass}: {string.Join("; ", parts)}";

@@ -51,4 +51,9 @@ public enum TransformKind
     /// Extract a subtitle track for external or embedded delivery.
     /// </summary>
     ExtractSubtitle,
+
+    /// <summary>
+    /// Re-encode a text subtitle stream from one format to another for external/embedded delivery.
+    /// </summary>
+    ConvertSubtitle,
 }

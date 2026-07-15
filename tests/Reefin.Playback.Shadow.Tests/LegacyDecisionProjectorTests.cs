@@ -207,6 +207,98 @@ public sealed class LegacyDecisionProjectorTests
         Assert.Equal(SubtitleDeliveryMode.Burn, vector.SubtitleDeliveryMode);
     }
 
+    [Fact]
+    public void Project_Transcode_SubtitleFormatDiffersFromSource_DerivesConvertSubtitle()
+    {
+        var streamInfo = BuildStreamInfo(
+            PlayMethod.Transcode,
+            TranscodeReason.ContainerNotSupported,
+            "mp4",
+            subtitleIndex: 2,
+            subtitleDeliveryMethod: SubtitleDeliveryMethod.External,
+            subtitleCodec: "srt",
+            subtitleFormat: "vtt");
+
+        var vector = LegacyDecisionProjector.Project(new PlaybackPlan(PlayMethod.Transcode, TranscodeReason.ContainerNotSupported, streamInfo));
+
+        Assert.Contains(TransformClass.ConvertSubtitle, vector.TransformClasses);
+        Assert.Equal("vtt", vector.OutputSubtitleFormat);
+    }
+
+    [Fact]
+    public void Project_Transcode_SubtitleFormatMatchesSource_DoesNotDeriveConvertSubtitle()
+    {
+        var streamInfo = BuildStreamInfo(
+            PlayMethod.Transcode,
+            TranscodeReason.ContainerNotSupported,
+            "mp4",
+            subtitleIndex: 2,
+            subtitleDeliveryMethod: SubtitleDeliveryMethod.External,
+            subtitleCodec: "vtt",
+            subtitleFormat: "vtt");
+
+        var vector = LegacyDecisionProjector.Project(new PlaybackPlan(PlayMethod.Transcode, TranscodeReason.ContainerNotSupported, streamInfo));
+
+        Assert.DoesNotContain(TransformClass.ConvertSubtitle, vector.TransformClasses);
+    }
+
+    [Fact]
+    public void Project_Transcode_WebvttSourceVttFormat_DoesNotDeriveConvertSubtitle()
+    {
+        // The webvtt/vtt spelling alias must not be mistaken for a real conversion (load-bearing
+        // normalization: this is exactly the direct-play control case's source codec/delivered
+        // format pair, reused here on a transcode path to exercise DetectedSubtitleConversion directly).
+        var streamInfo = BuildStreamInfo(
+            PlayMethod.Transcode,
+            TranscodeReason.ContainerNotSupported,
+            "mp4",
+            subtitleIndex: 2,
+            subtitleDeliveryMethod: SubtitleDeliveryMethod.External,
+            subtitleCodec: "webvtt",
+            subtitleFormat: "vtt");
+
+        var vector = LegacyDecisionProjector.Project(new PlaybackPlan(PlayMethod.Transcode, TranscodeReason.ContainerNotSupported, streamInfo));
+
+        Assert.DoesNotContain(TransformClass.ConvertSubtitle, vector.TransformClasses);
+    }
+
+    [Fact]
+    public void Project_Transcode_BurnInDeliveryMethod_DoesNotDeriveConvertSubtitleEvenIfFormatsDiffer()
+    {
+        var streamInfo = BuildStreamInfo(
+            PlayMethod.Transcode,
+            TranscodeReason.SubtitleCodecNotSupported,
+            "mp4",
+            subtitleIndex: 2,
+            subtitleDeliveryMethod: SubtitleDeliveryMethod.Encode,
+            subtitleCodec: "srt",
+            subtitleFormat: "srt");
+
+        var vector = LegacyDecisionProjector.Project(new PlaybackPlan(PlayMethod.Transcode, TranscodeReason.SubtitleCodecNotSupported, streamInfo));
+
+        Assert.Contains(TransformClass.BurnInSubtitle, vector.TransformClasses);
+        Assert.DoesNotContain(TransformClass.ConvertSubtitle, vector.TransformClasses);
+    }
+
+    [Fact]
+    public void Project_DirectPlay_SubtitleFormatDiffersFromSource_DoesNotDeriveConvertSubtitle()
+    {
+        // DetectedSubtitleConversion is gated to method == Transcode only, in symmetry with v2 (which
+        // can never emit ConvertSubtitle on DirectPlay either).
+        var streamInfo = BuildStreamInfo(
+            PlayMethod.DirectPlay,
+            0,
+            "mp4",
+            subtitleIndex: 2,
+            subtitleDeliveryMethod: SubtitleDeliveryMethod.External,
+            subtitleCodec: "srt",
+            subtitleFormat: "vtt");
+
+        var vector = LegacyDecisionProjector.Project(new PlaybackPlan(PlayMethod.DirectPlay, 0, streamInfo));
+
+        Assert.DoesNotContain(TransformClass.ConvertSubtitle, vector.TransformClasses);
+    }
+
     private static StreamInfo BuildStreamInfo(
         PlayMethod playMethod,
         TranscodeReason reasons,
@@ -214,17 +306,26 @@ public sealed class LegacyDecisionProjectorTests
         int? audioIndex = null,
         int? subtitleIndex = null,
         SubtitleDeliveryMethod subtitleDeliveryMethod = SubtitleDeliveryMethod.Embed,
-        string? colorTransfer = null)
+        string? colorTransfer = null,
+        string? subtitleCodec = null,
+        string? subtitleFormat = null)
     {
+        var mediaStreams = new List<MediaStream>
+        {
+            new() { Type = MediaStreamType.Video, Index = 0, Codec = "h264", ColorTransfer = colorTransfer },
+            new() { Type = MediaStreamType.Audio, Index = 1, Codec = "aac", IsDefault = true },
+        };
+
+        if (subtitleIndex is int idx && subtitleCodec is not null)
+        {
+            mediaStreams.Add(new MediaStream { Type = MediaStreamType.Subtitle, Index = idx, Codec = subtitleCodec, IsDefault = true });
+        }
+
         var mediaSource = new MediaSourceInfo
         {
             Id = "source-1",
             Container = container,
-            MediaStreams =
-            [
-                new MediaStream { Type = MediaStreamType.Video, Index = 0, Codec = "h264", ColorTransfer = colorTransfer },
-                new MediaStream { Type = MediaStreamType.Audio, Index = 1, Codec = "aac", IsDefault = true },
-            ],
+            MediaStreams = mediaStreams,
         };
 
         return new StreamInfo
@@ -236,6 +337,7 @@ public sealed class LegacyDecisionProjectorTests
             AudioStreamIndex = audioIndex,
             SubtitleStreamIndex = subtitleIndex,
             SubtitleDeliveryMethod = subtitleDeliveryMethod,
+            SubtitleFormat = subtitleFormat,
             MediaSource = mediaSource,
         };
     }

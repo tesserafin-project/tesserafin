@@ -154,5 +154,6 @@ internal static class TestFixtures
         TotalBitrate: 8_000_000,
         VideoBitrate: 6_000_000,
         AudioBitrate: 2_000_000,
-        Protocol: StreamingProtocol.Hls);
+        Protocol: StreamingProtocol.Hls,
+        SubtitleFormat: null);
 }

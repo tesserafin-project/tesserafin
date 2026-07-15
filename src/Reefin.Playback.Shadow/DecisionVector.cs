@@ -39,6 +39,7 @@ namespace Reefin.Playback.Shadow;
 /// <param name="OutputVideoRange">The normalized output video range (for example <c>"SDR"</c>, <c>"HDR10"</c>), or <see langword="null"/> if not known/applicable.</param>
 /// <param name="OutputAudioChannels">The output audio channel count, or <see langword="null"/> if not known/applicable.</param>
 /// <param name="SubtitleDeliveryMode">How the selected subtitle, if any, is delivered, or <see langword="null"/> if not known.</param>
+/// <param name="OutputSubtitleFormat">The format the selected subtitle, if any, is actually delivered in, or <see langword="null"/> if not known/applicable.</param>
 public sealed record DecisionVector(
     bool IsViable,
     NormalizedMethod? Method,
@@ -56,4 +57,5 @@ public sealed record DecisionVector(
     int? OutputBitrate,
     string? OutputVideoRange,
     int? OutputAudioChannels,
-    SubtitleDeliveryMode? SubtitleDeliveryMode);
+    SubtitleDeliveryMode? SubtitleDeliveryMode,
+    string? OutputSubtitleFormat);

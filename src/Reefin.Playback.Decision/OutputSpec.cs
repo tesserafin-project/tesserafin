@@ -36,6 +36,11 @@ namespace Reefin.Playback.Decision;
 /// neutral value for the "not applicable" case too, so this decision never leaves the delivery
 /// protocol unstated.
 /// </param>
+/// <param name="SubtitleFormat">
+/// The format the client will actually receive the selected subtitle in, mirroring legacy
+/// <c>StreamInfo.SubtitleFormat</c>, or <see langword="null"/> if not applicable/no subtitle
+/// selected.
+/// </param>
 public sealed record OutputSpec(
     string? Container,
     string? VideoCodec,
@@ -46,10 +51,11 @@ public sealed record OutputSpec(
     int? TotalBitrate,
     int? VideoBitrate,
     int? AudioBitrate,
-    StreamingProtocol Protocol)
+    StreamingProtocol Protocol,
+    string? SubtitleFormat)
 {
     /// <summary>
     /// An output spec with no fields set, used for non-viable decisions.
     /// </summary>
-    public static readonly OutputSpec Empty = new(null, null, null, null, null, null, null, null, null, StreamingProtocol.Http);
+    public static readonly OutputSpec Empty = new(null, null, null, null, null, null, null, null, null, StreamingProtocol.Http, null);
 }
