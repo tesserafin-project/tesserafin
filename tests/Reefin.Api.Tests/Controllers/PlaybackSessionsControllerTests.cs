@@ -1,4 +1,6 @@
 using System;
+using System.Linq;
+using System.Reflection;
 using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
@@ -16,6 +18,7 @@ using Reefin.Database.Implementations.Entities;
 using Reefin.Model.Dlna;
 using Reefin.Model.Dto;
 using Reefin.Model.Session;
+using Reefin.Playback.Decision;
 using Xunit;
 
 namespace Reefin.Api.Tests.Controllers;
@@ -58,19 +61,63 @@ public class PlaybackSessionsControllerTests
             .ReturnsAsync([new MediaSourceInfo { Id = _itemId.ToString("N") }]);
     }
 
+    /// <summary>
+    /// Every property of <see cref="PlaybackSessionResponse"/> must be a primitive/BCL value or
+    /// drawn from the <see cref="Reefin.Playback.Decision"/> vocabulary (PR91) - never
+    /// <c>Reefin.Model.Dlna</c> or the internal <c>Reefin.Controller.MediaEncoding.PlaybackSession</c>
+    /// record. Asserted structurally so a future change can't silently reintroduce a leak.
+    /// </summary>
     [Fact]
-    public async Task CreatePlaybackSession_ViablePlan_ReturnsSession()
+    public void PlaybackSessionResponse_Properties_ReferenceOnlyDecisionVocabOrPrimitives()
+    {
+        var allowedPrimitiveTypes = new[] { typeof(Guid), typeof(int), typeof(string), typeof(bool), typeof(DateTimeOffset) };
+
+        foreach (var property in typeof(PlaybackSessionResponse).GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        {
+            var type = property.PropertyType;
+            var elementType = GetEnumerableElementTypeOrSelf(type);
+
+            var isAllowed = allowedPrimitiveTypes.Contains(elementType)
+                || elementType.Namespace == "Reefin.Playback.Decision";
+
+            Assert.True(isAllowed, $"{property.Name} ({type}) must be a primitive or Reefin.Playback.Decision type.");
+        }
+    }
+
+    private static Type GetEnumerableElementTypeOrSelf(Type type)
+    {
+        var underlying = Nullable.GetUnderlyingType(type) ?? type;
+
+        if (underlying.IsGenericType)
+        {
+            var definition = underlying.GetGenericTypeDefinition();
+            if (definition == typeof(System.Collections.Generic.IReadOnlyList<>))
+            {
+                return underlying.GetGenericArguments()[0];
+            }
+        }
+
+        return underlying;
+    }
+
+    [Fact]
+    public async Task CreatePlaybackSession_ViablePlan_ReturnsMappedResponse()
     {
         var item = new Movie { Id = _itemId };
         SetUpItemAndUser(item);
-        var expected = new PlaybackSession(PlaybackSessionId.NewId(), PlaybackMediaKind.Video, null, null, new PlaybackPlan(PlayMethod.DirectPlay, default), default, default);
+        var streamInfo = new StreamInfo { DeviceProfile = new DeviceProfile(), PlayMethod = PlayMethod.DirectPlay, Container = "mp4" };
+        var session = new PlaybackSession(PlaybackSessionId.NewId(), PlaybackMediaKind.Video, null, null, new PlaybackPlan(PlayMethod.DirectPlay, default, streamInfo), default, default);
         _playbackSessionManager
             .Setup(m => m.Create(It.IsAny<PlaybackSessionRequest>(), null))
-            .Returns(expected);
+            .Returns(session);
 
         var result = await CreateController().CreatePlaybackSession(CreateRequest());
 
-        Assert.Equal(expected, Assert.IsAssignableFrom<OkObjectResult>(result.Result).Value);
+        var response = Assert.IsType<PlaybackSessionResponse>(Assert.IsAssignableFrom<OkObjectResult>(result.Result).Value);
+        Assert.Equal(session.Id.Value, response.Id);
+        Assert.Equal(MediaKind.Video, response.Kind);
+        Assert.Equal(PlaybackSessionResponse.LegacyDecisionVersion, response.DecisionVersion);
+        Assert.Equal(PlaybackMethod.DirectPlay, response.Method);
     }
 
     [Fact]
@@ -98,7 +145,23 @@ public class PlaybackSessionsControllerTests
     }
 
     [Fact]
-    public async Task PatchPlaybackSession_UnknownSession_ReturnsNotFound()
+    public async Task ReplacePlaybackSession_ViablePlan_ReturnsMappedResponse()
+    {
+        var item = new Movie { Id = _itemId };
+        SetUpItemAndUser(item);
+        var session = new PlaybackSession(PlaybackSessionId.NewId(), PlaybackMediaKind.Video, null, null, new PlaybackPlan(PlayMethod.Transcode, TranscodeReason.VideoCodecNotSupported), default, default);
+        _playbackSessionManager
+            .Setup(m => m.Patch(It.IsAny<PlaybackSessionId>(), It.IsAny<PlaybackSessionRequest>()))
+            .Returns(session);
+
+        var result = await CreateController().ReplacePlaybackSession(session.Id, CreateRequest());
+
+        var response = Assert.IsType<PlaybackSessionResponse>(Assert.IsAssignableFrom<OkObjectResult>(result.Result).Value);
+        Assert.Equal(PlaybackMethod.Transcode, response.Method);
+    }
+
+    [Fact]
+    public async Task ReplacePlaybackSession_UnknownSession_ReturnsNotFound()
     {
         var item = new Movie { Id = _itemId };
         SetUpItemAndUser(item);
@@ -106,7 +169,7 @@ public class PlaybackSessionsControllerTests
             .Setup(m => m.Patch(It.IsAny<PlaybackSessionId>(), It.IsAny<PlaybackSessionRequest>()))
             .Returns((PlaybackSession?)null);
 
-        var result = await CreateController().PatchPlaybackSession(PlaybackSessionId.NewId(), CreateRequest());
+        var result = await CreateController().ReplacePlaybackSession(PlaybackSessionId.NewId(), CreateRequest());
 
         Assert.IsType<NotFoundResult>(result.Result);
     }
@@ -131,19 +194,5 @@ public class PlaybackSessionsControllerTests
         var result = CreateController().DeletePlaybackSession(id);
 
         Assert.IsType<NotFoundResult>(result);
-    }
-
-    [Fact]
-    public void GetPlaybackSessions_ReturnsAllTrackedSessions()
-    {
-        var sessions = new[]
-        {
-            new PlaybackSession(PlaybackSessionId.NewId(), PlaybackMediaKind.Video, null, null, new PlaybackPlan(PlayMethod.DirectPlay, default), default, default),
-        };
-        _playbackSessionManager.Setup(m => m.GetAll()).Returns(sessions);
-
-        var result = CreateController().GetPlaybackSessions();
-
-        Assert.Same(sessions, Assert.IsAssignableFrom<OkObjectResult>(result.Result).Value);
     }
 }

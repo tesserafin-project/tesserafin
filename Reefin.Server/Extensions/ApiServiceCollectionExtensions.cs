@@ -248,6 +248,23 @@ namespace Reefin.Server.Extensions
                 c.UseAllOfToExtendReferenceSchemas();
                 c.SupportNonNullableReferenceTypes();
 
+                // Disambiguate the PR91 playback decision vocabulary (Reefin.Playback.Decision),
+                // first exposed via PlaybackSessionResponse (PR112). Its short type names collide
+                // with existing schemas under the default (short-name) schemaId strategy — e.g.
+                // Reefin.Playback.Decision.SubtitleDeliveryMethod vs the already-exposed
+                // Reefin.Model.Dlna.SubtitleDeliveryMethod — which throws during OpenAPI generation.
+                // Scope the override to that one namespace and delegate to the captured framework
+                // default for everything else, so generic schema ids (e.g. QueryResultOfBaseItemDto)
+                // are preserved unchanged. The "PlaybackDecision" prefix (not a bare "Playback") is
+                // deliberate: it avoids colliding the vocabulary's own MediaKind with the internal
+                // Reefin.Controller.MediaEncoding.PlaybackMediaKind that the admin diagnostics
+                // endpoint exposes. These types are new to the contract, so prefixing costs nothing.
+                var defaultSchemaIdSelector = c.SchemaGeneratorOptions.SchemaIdSelector;
+                c.CustomSchemaIds(type =>
+                    type.Namespace is not null && type.Namespace.StartsWith("Reefin.Playback.Decision", StringComparison.Ordinal)
+                        ? "PlaybackDecision" + defaultSchemaIdSelector(type)
+                        : defaultSchemaIdSelector(type));
+
                 // TODO - remove when all types are supported in System.Text.Json
                 c.AddSwaggerTypeMappings();
 
