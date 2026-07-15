@@ -103,7 +103,11 @@ public static class LegacyDecisionProjector
             return StreamSelection.Unknown;
         }
 
-        return streamInfo.SubtitleStreamIndex is int idx ? StreamSelection.Selected(idx) : StreamSelection.None;
+        // Legacy StreamInfo uses -1 (not null) to mean "no subtitle selected": StreamBuilder leaves
+        // SubtitleStreamIndex at -1 when nothing matches, mirroring StreamInfo's own treatment of -1
+        // as no-selection. Only a non-negative index is a real selection; -1 projects to None, same as
+        // null, so the shadow comparison does not report a false "subtitle selected only on legacy".
+        return streamInfo.SubtitleStreamIndex is int idx && idx >= 0 ? StreamSelection.Selected(idx) : StreamSelection.None;
     }
 
     /// <summary>
@@ -139,7 +143,10 @@ public static class LegacyDecisionProjector
             return null;
         }
 
-        if (streamInfo.SubtitleStreamIndex is null)
+        // -1 means "no subtitle selected" (see ProjectSubtitleSelection): treat it as None regardless
+        // of the delivery method left on the StreamInfo, which is otherwise its enum default (Encode)
+        // and would be mis-projected as Burn.
+        if (streamInfo.SubtitleStreamIndex is null or < 0)
         {
             return SubtitleDeliveryMode.None;
         }
