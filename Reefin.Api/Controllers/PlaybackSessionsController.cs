@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -8,7 +7,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Reefin.Api.Helpers;
 using Reefin.Api.Models.PlaybackSessionDtos;
-using Reefin.Common.Api;
 using Reefin.Common.Extensions;
 using Reefin.Controller.Entities;
 using Reefin.Controller.Library;
@@ -19,14 +17,16 @@ using Reefin.Model.Dlna;
 namespace Reefin.Api.Controllers;
 
 /// <summary>
-/// The point-1 v2 playback session protocol: create/patch/delete, exposed alongside
-/// <c>/PlaybackInfo</c> (no removal — see docs/major-rewrite-plan-v13.md, milestone J3).
-/// Not yet a stable contract: responses are the internal <see cref="PlaybackSession"/> record,
-/// same as the read-only diagnostic listing this controller already exposed (J2).
+/// The client-facing playback session protocol (docs/pr92-design-playback-api-and-diagnostics.md
+/// §2-3): create, fully replace, and end a session. Responses are the stable, versioned
+/// <see cref="PlaybackSessionResponse"/> (PR91 decision vocabulary), never the internal
+/// <see cref="PlaybackSession"/> record. The admin-only listing/diagnostic surface this controller
+/// used to also expose has moved to <see cref="PlaybackDiagnosticsSessionsController"/> — it never
+/// shared this controller's public or authorization scope, only its route.
 /// </summary>
-[Route("System/PlaybackSessions")]
+[Route("Playback/Sessions")]
 [Authorize]
-[Tags("System")]
+[Tags("Playback")]
 public class PlaybackSessionsController : BaseReefinApiController
 {
     private readonly IPlaybackSessionManager _playbackSessionManager;
@@ -54,19 +54,6 @@ public class PlaybackSessionsController : BaseReefinApiController
     }
 
     /// <summary>
-    /// Gets a snapshot of all currently tracked playback sessions.
-    /// </summary>
-    /// <response code="200">Playback sessions returned.</response>
-    /// <returns>The current sessions.</returns>
-    [HttpGet]
-    [Authorize(Policy = Policies.RequiresElevation)]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    public ActionResult<IReadOnlyList<PlaybackSession>> GetPlaybackSessions()
-    {
-        return Ok(_playbackSessionManager.GetAll());
-    }
-
-    /// <summary>
     /// Creates (or, if <see cref="CreatePlaybackSessionRequest.PlaySessionId"/> matches an
     /// existing session, replaces) a playback session.
     /// </summary>
@@ -74,42 +61,47 @@ public class PlaybackSessionsController : BaseReefinApiController
     /// <response code="200">Session created.</response>
     /// <response code="404">Item not found.</response>
     /// <response code="422">No viable playback plan exists for the given options.</response>
-    /// <returns>The created session.</returns>
+    /// <returns>The created session's stable decision projection.</returns>
     [HttpPost]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
-    public async Task<ActionResult<PlaybackSession>> CreatePlaybackSession([FromBody] CreatePlaybackSessionRequest request)
+    public async Task<ActionResult<PlaybackSessionResponse>> CreatePlaybackSession([FromBody] CreatePlaybackSessionRequest request)
     {
         var (kind, options) = await ResolveOptions(request, CancellationToken.None).ConfigureAwait(false);
 
         var session = _playbackSessionManager.Create(new PlaybackSessionRequest(kind, options), request.PlaySessionId);
         return session is null
             ? UnprocessableEntity()
-            : Ok(session);
+            : Ok(PlaybackSessionResponseMapper.Map(session));
     }
 
     /// <summary>
-    /// Re-plans an existing session with new options.
+    /// Fully re-plans an existing session with a complete new set of options. Decision v1 (PR92
+    /// §3): this replaces the misnamed <c>PATCH</c> the point-1 protocol shipped with, which
+    /// already required a complete body — <c>PUT</c> states that honestly.
     /// </summary>
-    /// <param name="id">The session to patch.</param>
-    /// <param name="request">The new options to plan. <see cref="CreatePlaybackSessionRequest.PlaySessionId"/> is ignored — the session's existing id is used.</param>
+    /// <param name="id">The session to replace.</param>
+    /// <param name="request">
+    /// The complete new options to plan. <see cref="CreatePlaybackSessionRequest.PlaySessionId"/>
+    /// is ignored — the session's existing id (from the route) is used.
+    /// </param>
     /// <response code="200">Session updated.</response>
     /// <response code="404">Item or session not found.</response>
     /// <response code="422">No viable playback plan exists for the given options.</response>
-    /// <returns>The updated session.</returns>
-    [HttpPatch("{id}")]
+    /// <returns>The updated session's stable decision projection.</returns>
+    [HttpPut("{id}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
-    public async Task<ActionResult<PlaybackSession>> PatchPlaybackSession([FromRoute] PlaybackSessionId id, [FromBody] CreatePlaybackSessionRequest request)
+    public async Task<ActionResult<PlaybackSessionResponse>> ReplacePlaybackSession([FromRoute] PlaybackSessionId id, [FromBody] CreatePlaybackSessionRequest request)
     {
         var (kind, options) = await ResolveOptions(request, CancellationToken.None).ConfigureAwait(false);
 
         var session = _playbackSessionManager.Patch(id, new PlaybackSessionRequest(kind, options));
         return session is null
             ? NotFound()
-            : Ok(session);
+            : Ok(PlaybackSessionResponseMapper.Map(session));
     }
 
     /// <summary>

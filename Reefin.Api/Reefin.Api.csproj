@@ -22,6 +22,9 @@
     <ProjectReference Include="..\Reefin.MediaEncoding\Reefin.MediaEncoding.csproj" />
     <ProjectReference Include="..\src\Reefin.MediaEncoding.Hls\Reefin.MediaEncoding.Hls.csproj" />
     <ProjectReference Include="..\src\Reefin.Networking\Reefin.Networking.csproj" />
+    <!-- PR112: PlaybackSessionResponse and its mapper reference the stable PR91 decision
+         vocabulary, never Reefin.Model.Dlna or the internal PlaybackSession record. -->
+    <ProjectReference Include="..\src\Reefin.Playback.Decision\Reefin.Playback.Decision.csproj" />
   </ItemGroup>
 
   <!-- Code Analyzers -->
