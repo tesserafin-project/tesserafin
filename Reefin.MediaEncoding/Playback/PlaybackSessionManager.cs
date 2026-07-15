@@ -23,6 +23,7 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
     private readonly IPlaybackSessionPlanner _planner;
     private readonly ITranscodeManager _transcodeManager;
     private readonly ISessionManager _sessionManager;
+    private readonly IShadowDiagnosticsStore _diagnosticsStore;
     private readonly object _lock = new();
     private readonly Dictionary<PlaybackSessionId, PlaybackSession> _sessions = new();
     private readonly Dictionary<string, PlaybackSessionId> _byPlaySessionId = new(StringComparer.OrdinalIgnoreCase);
@@ -35,11 +36,23 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
     /// <param name="planner">Instance of the <see cref="IPlaybackSessionPlanner"/> interface.</param>
     /// <param name="transcodeManager">Instance of the <see cref="ITranscodeManager"/> interface.</param>
     /// <param name="sessionManager">Instance of the <see cref="ISessionManager"/> interface.</param>
-    public PlaybackSessionManager(IPlaybackSessionPlanner planner, ITranscodeManager transcodeManager, ISessionManager sessionManager)
+    /// <param name="diagnosticsStore">
+    /// PR113: retains whatever shadow diagnostic <paramref name="planner"/> produced for a
+    /// <see cref="Create"/>/<see cref="Patch"/> call, keyed by the resulting session id, for the
+    /// admin diagnostics endpoint. Defaults to a no-op instance when not supplied, so every
+    /// pre-PR113 (3-arg) call site - including existing test constructors - keeps compiling and
+    /// behaving exactly as before: no diagnostic is ever retained.
+    /// </param>
+    public PlaybackSessionManager(
+        IPlaybackSessionPlanner planner,
+        ITranscodeManager transcodeManager,
+        ISessionManager sessionManager,
+        IShadowDiagnosticsStore? diagnosticsStore = null)
     {
         _planner = planner;
         _transcodeManager = transcodeManager;
         _sessionManager = sessionManager;
+        _diagnosticsStore = diagnosticsStore ?? NoOpShadowDiagnosticsStore.Instance;
         transcodeManager.TranscodingJobEnded += OnTranscodingJobEnded;
         sessionManager.PlaybackStopped += OnPlaybackStopped;
         _sweepTimer = new Timer(_ => SweepExpired(DateTimeOffset.UtcNow), null, SweepInterval, SweepInterval);
@@ -48,19 +61,45 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
     /// <inheritdoc/>
     public PlaybackSession? Create(PlaybackSessionRequest request, string? playSessionId = null)
     {
-        var plan = Plan(request);
-        return plan is null ? null : StoreOrReplace(request.Kind, playSessionId, request, plan);
-    }
+        PlaybackPlan? plan;
+        ShadowDiagnosticRecord? captured;
+        using (_diagnosticsStore.BeginCapture())
+        {
+            plan = Plan(request);
+            captured = _diagnosticsStore.TakeCaptured();
+        }
 
-    /// <inheritdoc/>
-    public PlaybackSession? Patch(PlaybackSessionId id, PlaybackSessionRequest request)
-    {
-        var plan = Plan(request);
         if (plan is null)
         {
             return null;
         }
 
+        var session = StoreOrReplace(request.Kind, playSessionId, request, plan);
+        if (captured is not null)
+        {
+            _diagnosticsStore.Attach(session.Id, captured);
+        }
+
+        return session;
+    }
+
+    /// <inheritdoc/>
+    public PlaybackSession? Patch(PlaybackSessionId id, PlaybackSessionRequest request)
+    {
+        PlaybackPlan? plan;
+        ShadowDiagnosticRecord? captured;
+        using (_diagnosticsStore.BeginCapture())
+        {
+            plan = Plan(request);
+            captured = _diagnosticsStore.TakeCaptured();
+        }
+
+        if (plan is null)
+        {
+            return null;
+        }
+
+        PlaybackSession updated;
         lock (_lock)
         {
             if (!_sessions.TryGetValue(id, out var existing))
@@ -68,10 +107,16 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
                 return null;
             }
 
-            var updated = existing with { Kind = request.Kind, Request = request, Plan = plan, UpdatedAt = DateTimeOffset.UtcNow };
+            updated = existing with { Kind = request.Kind, Request = request, Plan = plan, UpdatedAt = DateTimeOffset.UtcNow };
             _sessions[id] = updated;
-            return updated;
         }
+
+        if (captured is not null)
+        {
+            _diagnosticsStore.Attach(updated.Id, captured);
+        }
+
+        return updated;
     }
 
     /// <inheritdoc/>
@@ -195,6 +240,11 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
         {
             _byPlaySessionId.Remove(session.PlaySessionId);
         }
+
+        // PR113: evicts whatever shadow diagnostic was retained for this session, if any - covers
+        // every removal path (Delete, DeleteByPlaySessionId, the transcoding-job-ended/playback-stopped
+        // handlers, and SweepExpired), since they all funnel through here.
+        _diagnosticsStore.Remove(id);
 
         return true;
     }
