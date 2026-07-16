@@ -1,0 +1,26 @@
+# Inert until a self-hosted runner registered with the labels below
+# (self-hosted, linux, x64, reefin) exists for this repository. Until
+# then this workflow simply has no runner to pick it up and never
+# executes — it does NOT consume hosted-runner Actions quota.
+#
+# See docs/local-ci.md for how to register such a runner and for the
+# reasoning behind this setup (hosted quota is currently exhausted).
+name: Local CI (self-hosted, optional)
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  local-ci:
+    runs-on: [self-hosted, linux, x64, reefin]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Run local CI (Docker)
+        run: ./ci/run.sh
