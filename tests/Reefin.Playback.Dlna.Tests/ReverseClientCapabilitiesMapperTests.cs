@@ -108,6 +108,34 @@ public static class ReverseClientCapabilitiesMapperTests
     }
 
     [Fact]
+    public static void ToDeviceProfile_ToleratesNullCollectionsFromWireBinding()
+    {
+        // System.Text.Json leaves an omitted collection property null on these records, and
+        // PlaybackSessionRequestValidator accepts that as "declared nothing" - so the mapper has to
+        // treat every null collection as empty instead of throwing (PR112b regression: a request
+        // omitting outputProfiles/subtitleDelivery produced a 500 instead of planning).
+        var capabilities = new ClientCapabilities(
+            new DecodeCapabilities(
+                DirectPlayProfiles: new[] { new DecodeProfile(MediaKind.Video, null!, null!, null!) },
+                VideoCodecs: new[] { new VideoCodecCapability("h264", null!, null, null, null!, null, null) },
+                AudioCodecs: null!,
+                SubtitleDelivery: null!,
+                SupportsHls: false,
+                SupportsDash: false),
+            OutputProfiles: null!);
+
+        var profile = ReverseClientCapabilitiesMapper.ToDeviceProfile(capabilities);
+
+        Assert.Empty(profile.TranscodingProfiles);
+        Assert.Empty(profile.SubtitleProfiles);
+        var directPlay = Assert.Single(profile.DirectPlayProfiles);
+        Assert.Equal(string.Empty, directPlay.Container);
+        var codecProfile = Assert.Single(profile.CodecProfiles);
+        Assert.Equal("h264", codecProfile.Codec);
+        Assert.Empty(codecProfile.Conditions);
+    }
+
+    [Fact]
     public static void RoundTrip_PreservesSupportsHls()
     {
         var original = ClientCapabilitiesMapper.ToCapabilities(DeviceProfileFixture.BuildWebClientProfile());
