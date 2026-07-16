@@ -51,8 +51,18 @@ public static class PlaybackDiagnosticDetailMapper
     /// v2-sourced field on the result is <see langword="null"/>/empty and only the base fields
     /// (still legacy-sourced, per <see cref="PlaybackSessionResponseMapper"/>) are populated.
     /// </param>
+    /// <param name="events">
+    /// PR113b: the real, observed lifecycle events retained for this session (ffmpeg launched,
+    /// playback started/stopped), independent of <paramref name="diagnostic"/> - or
+    /// <see langword="null"/>/empty when none were observed. Defaults to <see langword="null"/> so
+    /// every pre-PR113b (2-arg) call site keeps compiling and yields exactly the
+    /// <c>Created</c>/<c>Updated</c> timeline it always did.
+    /// </param>
     /// <returns>The mapped detail.</returns>
-    public static PlaybackDiagnosticDetail Map(PlaybackSession session, ShadowDiagnosticRecord? diagnostic)
+    public static PlaybackDiagnosticDetail Map(
+        PlaybackSession session,
+        ShadowDiagnosticRecord? diagnostic,
+        IReadOnlyList<PlaybackLifecycleEvent>? events = null)
     {
         // Reuses the existing mapper for every base field rather than re-deriving Method/Output/
         // Transforms/Reasons by hand - this DTO only adds the v2-sourced fields on top.
@@ -74,7 +84,7 @@ public static class PlaybackDiagnosticDetailMapper
             diagnostic?.Sources,
             diagnostic?.Decision.Reasoning,
             diagnostic is null ? null : MapComparison(diagnostic),
-            BuildTimeline(session));
+            BuildTimeline(session, events));
     }
 
     private static DiagnosticComparison MapComparison(ShadowDiagnosticRecord diagnostic)
@@ -105,13 +115,29 @@ public static class PlaybackDiagnosticDetailMapper
     };
 
     /// <summary>
-    /// Builds the lifecycle timeline for this slice: <c>Created</c>/<c>Updated</c> only, straight off
-    /// the session record. "ffmpeg launched" and "playback started" have no retained signal yet
-    /// (deferred - docs/pr92-design-playback-api-and-diagnostics.md §4.3).
+    /// Builds the lifecycle timeline for this session: <c>Created</c>/<c>Updated</c> straight off
+    /// the session record, followed (PR113b) by every real, observed <paramref name="events"/> in
+    /// the order they were recorded - ffmpeg launched, playback started, playback stopped.
+    /// Deliberately never fabricates an entry for a stage that was not actually observed: an event
+    /// missing from <paramref name="events"/> is simply absent from the result, not defaulted to
+    /// some approximated timestamp.
     /// </summary>
-    private static IReadOnlyList<DiagnosticTimelineEntry> BuildTimeline(PlaybackSession session) =>
-    [
-        new DiagnosticTimelineEntry("Created", session.CreatedAt),
-        new DiagnosticTimelineEntry("Updated", session.UpdatedAt),
-    ];
+    private static IReadOnlyList<DiagnosticTimelineEntry> BuildTimeline(PlaybackSession session, IReadOnlyList<PlaybackLifecycleEvent>? events)
+    {
+        var timeline = new List<DiagnosticTimelineEntry>(2 + (events?.Count ?? 0))
+        {
+            new("Created", session.CreatedAt),
+            new("Updated", session.UpdatedAt),
+        };
+
+        if (events is not null)
+        {
+            foreach (var lifecycleEvent in events)
+            {
+                timeline.Add(new DiagnosticTimelineEntry(lifecycleEvent.Stage, lifecycleEvent.At));
+            }
+        }
+
+        return timeline;
+    }
 }

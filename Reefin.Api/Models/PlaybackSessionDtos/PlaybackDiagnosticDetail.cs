@@ -34,9 +34,9 @@ namespace Reefin.Api.Models.PlaybackSessionDtos;
 /// The request context a retained shadow run captured, or <see langword="null"/> when no
 /// diagnostic was retained for this session (shadow mode off is the common case: it defaults to
 /// disabled, per <see cref="Reefin.MediaEncoding.Playback.ShadowPlaybackSessionPlanner"/>).
-/// <see cref="PlaybackRequestContext.UserId"/> is always <see cref="Guid.Empty"/> here - the legacy
-/// <c>MediaOptions</c> the shadow run maps from carries no user id, and plumbing one through is out
-/// of scope for this slice.
+/// <see cref="PlaybackRequestContext.UserId"/> (PR113b) is the real requesting user when the
+/// calling controller populated <c>MediaOptions.UserId</c>, or <see cref="Guid.Empty"/> for a
+/// caller that predates PR113b and never set it.
 /// </param>
 /// <param name="Capabilities">The client capabilities a retained shadow run captured, or <see langword="null"/> if none was retained.</param>
 /// <param name="SourceSnapshot">
@@ -47,8 +47,10 @@ namespace Reefin.Api.Models.PlaybackSessionDtos;
 /// <param name="Reasoning">The v2 engine's full structured reasoning tree, or <see langword="null"/> if no diagnostic was retained.</param>
 /// <param name="Comparison">The legacy-vs-v2 shadow comparison, or <see langword="null"/> if no diagnostic was retained.</param>
 /// <param name="Timeline">
-/// The lifecycle timeline for this session. Scoped to <c>Created</c>/<c>Updated</c> for this slice -
-/// there is no retained signal yet for "ffmpeg launched" or "playback started" (deferred).
+/// The lifecycle timeline for this session: <c>Created</c>/<c>Updated</c> from the session record,
+/// plus (PR113b) any of <c>FfmpegStarted</c>/<c>PlaybackStarted</c>/<c>PlaybackStopped</c> that was
+/// actually observed for it, each stamped with its real, received-at timestamp - never a
+/// fabricated or approximated one. A stage that was never observed is simply absent, not defaulted.
 /// </param>
 public sealed record PlaybackDiagnosticDetail(
     Guid Id,

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Reefin.Controller.MediaEncoding;
 
 namespace Reefin.MediaEncoding.Playback;
@@ -52,6 +53,15 @@ public sealed class NoOpShadowDiagnosticsStore : IShadowDiagnosticsStore
     {
         // Nothing is ever retained.
     }
+
+    /// <inheritdoc/>
+    public void RecordEvent(PlaybackSessionId id, PlaybackLifecycleEvent lifecycleEvent)
+    {
+        // Intentionally discarded: no capture is ever meaningfully retained.
+    }
+
+    /// <inheritdoc/>
+    public IReadOnlyList<PlaybackLifecycleEvent> GetEvents(PlaybackSessionId id) => Array.Empty<PlaybackLifecycleEvent>();
 
     private sealed class NullScope : IDisposable
     {

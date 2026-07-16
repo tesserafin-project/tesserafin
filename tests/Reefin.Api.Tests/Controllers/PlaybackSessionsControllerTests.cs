@@ -148,6 +148,30 @@ public class PlaybackSessionsControllerTests
         Assert.Equal(PlaybackMethod.DirectPlay, response.Method);
     }
 
+    /// <summary>
+    /// PR113b: <c>ResolveOptions</c> must carry the real requesting user (already resolved via
+    /// <c>RequestHelpers.GetUserId</c>) onto <c>MediaOptions.UserId</c>, the only vector that
+    /// reaches <c>ShadowPlaybackSessionPlanner</c> - previously left at its default
+    /// <see cref="Guid.Empty"/>.
+    /// </summary>
+    [Fact]
+    public async Task CreatePlaybackSession_ResolvesOptions_CarriesRequestingUserId()
+    {
+        var item = new Movie { Id = _itemId };
+        SetUpItemAndUser(item);
+        var session = new PlaybackSession(PlaybackSessionId.NewId(), PlaybackMediaKind.Video, null, null, new PlaybackPlan(PlayMethod.DirectPlay, default), default, default);
+        PlaybackSessionRequest? captured = null;
+        _playbackSessionManager
+            .Setup(m => m.Create(It.IsAny<PlaybackSessionRequest>(), null))
+            .Callback<PlaybackSessionRequest, string?>((request, _) => captured = request)
+            .Returns(session);
+
+        await CreateController().CreatePlaybackSession(CreateRequest());
+
+        Assert.NotNull(captured);
+        Assert.Equal(_userId, captured!.Options.UserId);
+    }
+
     [Fact]
     public async Task CreatePlaybackSession_NoViablePlan_ReturnsUnprocessableEntity()
     {

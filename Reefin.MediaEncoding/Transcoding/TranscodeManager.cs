@@ -100,6 +100,9 @@ public sealed class TranscodeManager : ITranscodeManager, IDisposable
     public event EventHandler<TranscodingJob>? TranscodingJobEnded;
 
     /// <inheritdoc />
+    public event EventHandler<TranscodingJob>? TranscodingJobStarted;
+
+    /// <inheritdoc />
     public TranscodingJob? GetTranscodingJob(string playSessionId)
     {
         lock (_activeTranscodingJobs)
@@ -505,6 +508,12 @@ public sealed class TranscodeManager : ITranscodeManager, IDisposable
 
         _logger.LogDebug("Launched FFmpeg process");
         state.TranscodingJob = transcodingJob;
+
+        // PR113b: raised only once Process.Start() has actually returned successfully - this is
+        // the real, observed "ffmpeg launched" moment, not an approximation from some earlier step
+        // (command-line build, resource acquisition) that could still fail before the process
+        // exists.
+        TranscodingJobStarted?.Invoke(this, transcodingJob);
 
         if (state.VideoRequest is not null)
         {

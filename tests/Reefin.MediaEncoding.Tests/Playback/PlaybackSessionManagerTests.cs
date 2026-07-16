@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Reefin.Controller.Library;
@@ -205,6 +206,81 @@ public class PlaybackSessionManagerTests
 
         Assert.Equal(0, removed);
         Assert.NotNull(manager.Get(session.Id));
+    }
+
+    [Fact]
+    public void TranscodingJobStarted_RecordsFfmpegStartedEventForMatchingSession()
+    {
+        var mockTranscodeManager = new Mock<ITranscodeManager>();
+        var store = new InMemoryShadowDiagnosticsStore();
+        var manager = new PlaybackSessionManager(new Mock<IPlaybackSessionPlanner>().Object, mockTranscodeManager.Object, new Mock<ISessionManager>().Object, store);
+        var session = manager.Track(PlaybackMediaKind.Video, new PlaybackPlan(PlayMethod.Transcode, default), "play-session-1");
+
+        var job = new TranscodingJob(NullLogger<TranscodingJob>.Instance) { PlaySessionId = "play-session-1" };
+        mockTranscodeManager.Raise(m => m.TranscodingJobStarted += null, mockTranscodeManager.Object, job);
+
+        var recorded = Assert.Single(store.GetEvents(session.Id));
+        Assert.Equal("FfmpegStarted", recorded.Stage);
+    }
+
+    [Fact]
+    public void TranscodingJobStarted_UnknownPlaySessionId_RecordsNothing()
+    {
+        var mockTranscodeManager = new Mock<ITranscodeManager>();
+        var store = new InMemoryShadowDiagnosticsStore();
+        var manager = new PlaybackSessionManager(new Mock<IPlaybackSessionPlanner>().Object, mockTranscodeManager.Object, new Mock<ISessionManager>().Object, store);
+        var session = manager.Track(PlaybackMediaKind.Video, new PlaybackPlan(PlayMethod.Transcode, default), "play-session-1");
+
+        var job = new TranscodingJob(NullLogger<TranscodingJob>.Instance) { PlaySessionId = "some-other-play-session" };
+        mockTranscodeManager.Raise(m => m.TranscodingJobStarted += null, mockTranscodeManager.Object, job);
+
+        Assert.Empty(store.GetEvents(session.Id));
+    }
+
+    [Fact]
+    public void PlaybackStart_RecordsPlaybackStartedEventForMatchingSession()
+    {
+        var mockSessionManager = new Mock<ISessionManager>();
+        var store = new InMemoryShadowDiagnosticsStore();
+        var manager = new PlaybackSessionManager(new Mock<IPlaybackSessionPlanner>().Object, new Mock<ITranscodeManager>().Object, mockSessionManager.Object, store);
+        var session = manager.Track(PlaybackMediaKind.Video, new PlaybackPlan(PlayMethod.DirectPlay, default), "play-session-1");
+
+        var args = new PlaybackProgressEventArgs { PlaySessionId = "play-session-1" };
+        mockSessionManager.Raise(m => m.PlaybackStart += null, mockSessionManager.Object, args);
+
+        var recorded = Assert.Single(store.GetEvents(session.Id));
+        Assert.Equal("PlaybackStarted", recorded.Stage);
+    }
+
+    /// <summary>
+    /// PR113b: <c>PlaybackStopped</c> records its event before evicting the session - but
+    /// <c>RemoveNoLock</c> (reached via <c>DeleteByPlaySessionId</c>, called synchronously right
+    /// after) evicts every retained event for the session along with it, so
+    /// <see cref="IShadowDiagnosticsStore.GetEvents"/> is empty again by the time this handler
+    /// returns. A store spy proves the ordering (<c>RecordEvent</c> then <c>Remove</c>) that a
+    /// plain end-to-end assertion on <c>GetEvents</c> after the fact could never distinguish from
+    /// "never recorded at all".
+    /// </summary>
+    [Fact]
+    public void PlaybackStopped_RecordsEventBeforeSessionRemovalEvictsIt()
+    {
+        var mockSessionManager = new Mock<ISessionManager>();
+        var mockStore = new Mock<IShadowDiagnosticsStore>();
+        var calls = new List<string>();
+        mockStore
+            .Setup(s => s.RecordEvent(It.IsAny<PlaybackSessionId>(), It.IsAny<PlaybackLifecycleEvent>()))
+            .Callback<PlaybackSessionId, PlaybackLifecycleEvent>((_, lifecycleEvent) => calls.Add($"RecordEvent:{lifecycleEvent.Stage}"));
+        mockStore
+            .Setup(s => s.Remove(It.IsAny<PlaybackSessionId>()))
+            .Callback<PlaybackSessionId>(_ => calls.Add("Remove"));
+        var manager = new PlaybackSessionManager(new Mock<IPlaybackSessionPlanner>().Object, new Mock<ITranscodeManager>().Object, mockSessionManager.Object, mockStore.Object);
+        var session = manager.Track(PlaybackMediaKind.Video, new PlaybackPlan(PlayMethod.DirectPlay, default), "play-session-1");
+
+        var args = new PlaybackStopEventArgs { PlaySessionId = "play-session-1" };
+        mockSessionManager.Raise(m => m.PlaybackStopped += null, mockSessionManager.Object, args);
+
+        Assert.Equal(new[] { "RecordEvent:PlaybackStopped", "Remove" }, calls);
+        Assert.Null(manager.Get(session.Id));
     }
 
     [Fact]
