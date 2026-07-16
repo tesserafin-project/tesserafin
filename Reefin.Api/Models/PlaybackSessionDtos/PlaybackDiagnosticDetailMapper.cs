@@ -96,7 +96,15 @@ public static class PlaybackDiagnosticDetailMapper
             .Select(code => code!.Value)
             .ToList();
 
-        return new DiagnosticComparison(legacyMethod, legacyReasons, diagnostic.Divergence.Class);
+        return new DiagnosticComparison(
+            legacyMethod,
+            legacyReasons,
+            diagnostic.Divergence.Class,
+            diagnostic.Divergence.Summary,
+            diagnostic.Decision.Method,
+            diagnostic.Decision.Output,
+            diagnostic.Decision.SelectedStreams,
+            diagnostic.Decision.Transforms);
     }
 
     /// <summary>

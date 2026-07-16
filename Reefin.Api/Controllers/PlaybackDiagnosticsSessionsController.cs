@@ -52,7 +52,9 @@ public class PlaybackDiagnosticsSessionsController : BaseReefinApiController
         IReadOnlyList<PlaybackSessionListItem> items = _playbackSessionManager.GetAll()
             .Select(session => new PlaybackSessionListItem(
                 PlaybackSessionResponseMapper.Map(session),
-                _diagnosticsStore.TryGet(session.Id, out _)))
+                _diagnosticsStore.TryGet(session.Id, out _),
+                session.Request?.Options.ItemId,
+                session.Request?.Options.DeviceId))
             .ToList();
 
         return Ok(items);

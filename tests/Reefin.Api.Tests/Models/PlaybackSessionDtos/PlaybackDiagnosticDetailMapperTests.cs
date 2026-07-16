@@ -55,6 +55,11 @@ public sealed class PlaybackDiagnosticDetailMapperTests
         Assert.Equal(PlaybackMethod.DirectPlay, detail.Comparison!.LegacyMethod);
         Assert.Contains(ReasonCode.VideoCodecNotSupported, detail.Comparison.LegacyReasons);
         Assert.Equal(DivergenceClass.Equivalent, detail.Comparison.DivergenceClass);
+        Assert.Equal("equivalent", detail.Comparison.DivergenceSummary);
+        Assert.Equal(diagnostic.Decision.Method, detail.Comparison.V2Method);
+        Assert.Same(diagnostic.Decision.Output, detail.Comparison.V2Output);
+        Assert.Same(diagnostic.Decision.SelectedStreams, detail.Comparison.V2SelectedStreams);
+        Assert.Same(diagnostic.Decision.Transforms, detail.Comparison.V2Transforms);
     }
 
     [Fact]
