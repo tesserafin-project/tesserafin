@@ -34,21 +34,22 @@ namespace Reefin.Playback.Shadow.Tests;
 /// explicit, reason-carrying allow-list. A case whose <see cref="DivergenceClass"/> is
 /// <see cref="DivergenceClass.PotentialRegression"/> or <see cref="DivergenceClass.Unexplained"/>
 /// and is NOT in that allow-list fails the test - closing the PR101/PR103-era gap where this test
-/// only classified without gating. The allow-list contains 2 root-caused entries: the PR111b
-/// Dolby-Vision-fallback target divergence (Chrome), and a PR111c-exposed container-normalization
-/// bug (Chrome mp4 srt case, see its entry). PR111b's H.264-10-bit case reaches Equivalent via a
-/// real projector fix (LegacyDecisionProjector now treats SubtitleStreamIndex -1 as no-selection),
-/// and its natively-supported Dolby Vision case reaches Equivalent DirectPlay via a real v2 fix
-/// (ClientCapabilitiesMapper no longer applies MusicStreamingTranscodingBitrate as an audio decode
-/// ceiling). PR111c models subtitle text-format conversion:
+/// only classified without gating. The allow-list contains 1 root-caused entry as of PR111e: the
+/// PR111b Dolby-Vision-fallback target divergence (Chrome). PR111b's H.264-10-bit case reaches
+/// Equivalent via a real projector fix (LegacyDecisionProjector now treats SubtitleStreamIndex -1 as
+/// no-selection), and its natively-supported Dolby Vision case reaches Equivalent DirectPlay via a
+/// real v2 fix (ClientCapabilitiesMapper no longer applies MusicStreamingTranscodingBitrate as an
+/// audio decode ceiling). PR111c models subtitle text-format conversion:
 /// <see cref="Reefin.Playback.Decision.SubtitleTextConversion"/> now mirrors the real subtitle
 /// re-encode legacy's StreamBuilder performs (<c>MediaStream.SupportsSubtitleConversionTo</c>), so
 /// (Chrome, mkv-h264-ac3-srt) resolves to <see cref="DivergenceClass.Equivalent"/> and
 /// (Firefox, mp4-hevc-aac-srt) to ungated <see cref="DivergenceClass.KnownV2Limitation"/> (its HDR
 /// tonemap is now derived in LegacyDecisionProjector) - both WITHOUT an allow-list entry. The third
-/// former srt entry (Chrome mp4) had its subtitle gap closed too, but a distinct pre-existing
-/// container bug it exposed keeps it allow-listed pending its own fix. The list must not grow
-/// without a new, equally-documented, root-caused reason.
+/// former srt entry (Chrome mp4) had its subtitle gap closed too, and PR111e closed the distinct,
+/// pre-existing container-CSV bug it had exposed (see the input-capture reordering below and
+/// <c>PlaybackEngine</c>'s CSV-aware container comparisons) - it now also resolves to Equivalent
+/// WITHOUT an allow-list entry. The list must not grow without a new, equally-documented,
+/// root-caused reason.
 /// </remarks>
 public sealed class OracleParityTests
 {
@@ -73,16 +74,24 @@ public sealed class OracleParityTests
 
             var stopwatch = Stopwatch.StartNew();
 
+            // PR111e: the v2 inputs are captured BEFORE legacy runs, exactly like the fixed
+            // ShadowPlaybackSessionPlanner - legacy's StreamBuilder mutates the shared
+            // MediaSourceInfo.Container in place (normalizing a raw ffprobe multi-value CSV down to a
+            // single value), so mapping v2's inputs afterward silently fed it legacy's
+            // already-degraded view of the source instead of the real one. See
+            // OracleCaseFixtures.ApprovedDivergences' former Chrome/mp4-h264-ac3-aac-srt-2600k entry
+            // for the divergence this ordering used to cause (now closed).
+            var capabilities = DlnaPlaybackAdapter.ToCapabilities(options.Profile);
+            var constraints = DlnaPlaybackAdapter.ToConstraints(options);
+            var sourceSnapshots = options.MediaSources.Select(DlnaPlaybackAdapter.ToSnapshot).ToList();
+            var context = DlnaPlaybackAdapter.ToContext(options.ItemId, Guid.Empty, options.MediaSourceId, MediaKind.Video, PlaybackEngine.EngineVersion);
+
             var legacyStreamInfo = OracleCaseFixtures.GetStreamBuilder().GetOptimalVideoStream(options);
             var plan = legacyStreamInfo is null
                 ? null
                 : new PlaybackPlan(legacyStreamInfo.PlayMethod, legacyStreamInfo.TranscodeReasons, legacyStreamInfo);
             var legacyVector = LegacyDecisionProjector.Project(plan);
 
-            var capabilities = DlnaPlaybackAdapter.ToCapabilities(options.Profile);
-            var constraints = DlnaPlaybackAdapter.ToConstraints(options);
-            var sourceSnapshots = options.MediaSources.Select(DlnaPlaybackAdapter.ToSnapshot).ToList();
-            var context = DlnaPlaybackAdapter.ToContext(options.ItemId, Guid.Empty, options.MediaSourceId, MediaKind.Video, PlaybackEngine.EngineVersion);
             var decision = new PlaybackEngine().Decide(context, capabilities, sourceSnapshots, constraints);
             var v2Vector = V2DecisionProjector.Project(decision);
 

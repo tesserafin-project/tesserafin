@@ -49,7 +49,17 @@ public sealed class PlaybackEngine : IPlaybackEngine
     /// <summary>
     /// The version of the decision engine implemented by this type.
     /// </summary>
-    public const int EngineVersion = 5;
+    /// <remarks>
+    /// PR111e bumped 5→6: three decision-affecting changes to <see cref="Decide"/> - CSV-aware
+    /// <c>containerChanged</c>/<c>DirectPlayProfileMatches</c> container comparisons (a raw ffprobe
+    /// container can be a multi-value CSV, previously compared by exact string equality),
+    /// <see cref="ResolveDirectPlayContainer"/> resolving which single CSV value Direct Play reports
+    /// as <see cref="OutputSpec.Container"/>, and the HDR10-or-SDR tonemap-target policy (previously
+    /// hardcoded to SDR) - following the same convention as every prior semantic change to this
+    /// class (2→3 PR102, 3→4 PR102b, 4→5 PR103; PR104 explicitly left this unchanged specifically
+    /// because it did not touch PlaybackEngine.cs at all).
+    /// </remarks>
+    public const int EngineVersion = 6;
 
     /// <summary>
     /// The transcoding target video codec used when the client declares no
@@ -372,13 +382,15 @@ public sealed class PlaybackEngine : IPlaybackEngine
         // container + video codec + audio codec (+ MediaKind) combination, not independent
         // membership in aggregate per-axis sets - the latter accepts combinations the client never
         // declared (e.g. MP4/H.264 and WebM/VP9 declared separately would wrongly also accept
-        // MP4/VP9).
-        var hasDirectPlayMatch = capabilities.Decode.DirectPlayProfiles.Any(p =>
-            DirectPlayProfileMatches(p, context.MediaKind, source.Container, selectedVideo?.Codec, selectedAudio?.Codec));
+        // MP4/VP9). PR111e: source.Container can itself be a raw ffprobe multi-value CSV, so this
+        // also resolves WHICH single CSV value actually satisfied a profile - needed below as the
+        // reported OutputSpec.Container, mirroring legacy's NormalizeMediaSourceFormatIntoSingleContainer
+        // (a raw CSV is not itself a valid single container name to report as the output).
+        var directPlayContainer = ResolveDirectPlayContainer(capabilities, context.MediaKind, source.Container, selectedVideo?.Codec, selectedAudio?.Codec);
 
         var neededMethod = wantsTranscode
             ? PlaybackMethod.Transcode
-            : hasDirectPlayMatch
+            : directPlayContainer is not null
                 ? PlaybackMethod.DirectPlay
                 : PlaybackMethod.Remux;
 
@@ -431,7 +443,9 @@ public sealed class PlaybackEngine : IPlaybackEngine
         string targetContainer;
         if (neededMethod == PlaybackMethod.DirectPlay)
         {
-            targetContainer = source.Container;
+            // directPlayContainer is never null here: neededMethod is only DirectPlay when it
+            // resolved to a value above. The ?? is defensive null-safety only, not a real fallback.
+            targetContainer = directPlayContainer ?? source.Container;
         }
         else if (matchingOutputProfile is not null)
         {
@@ -459,7 +473,13 @@ public sealed class PlaybackEngine : IPlaybackEngine
             usedOutputProfileFallback = true;
         }
 
-        var containerChanged = !string.Equals(targetContainer, source.Container, StringComparison.OrdinalIgnoreCase);
+        // PR111e: a source's container can be a raw ffprobe multi-value CSV (for example
+        // "mov,mp4,m4a,3gp,3g2,mj2" for an MP4-family file), not a single value - a plain string
+        // comparison against targetContainer falsely flagged a remux whenever the target was merely
+        // ONE of the values ffprobe reported, even though the source is already in that container.
+        // ContainsContainer (CSV-aware on both sides) replaces the exact-equality check; see its
+        // remarks for why this doesn't take a Reefin.Model dependency.
+        var containerChanged = !ContainsContainer(source.Container, targetContainer);
 
         // --- TARGET CODECS ---
         string? targetVideoCodec = null;
@@ -571,7 +591,17 @@ public sealed class PlaybackEngine : IPlaybackEngine
             VideoCodec: selectedVideo is not null ? (needVideoTranscode ? targetVideoCodec : selectedVideo.Codec) : null,
             AudioCodec: selectedAudio is not null ? (needAudioTranscode ? targetAudioCodec : selectedAudio.Codec) : null,
             Resolution: needVideoTranscode && needDownscale ? downscaleTarget : null,
-            VideoRange: needVideoTranscode && needTonemap ? "SDR" : null,
+            // PR111e named policy: DOLBY VISION / UNSUPPORTED-HDR FALLBACK. When the source's video
+            // range isn't one the target codec's declared VideoRangeTypes accepts (needTonemap), v2
+            // recovers HDR10 if the TARGET codec (the one actually being encoded to, not the source's)
+            // declares HDR10 support - otherwise it falls all the way back to SDR. This is a
+            // deliberate, minimal policy (not general HDR passthrough/mapping): a source only ever
+            // carries ONE tonemap target here, chosen by this single HDR10-or-SDR check, never HLG or
+            // any other intermediate range. See OracleCaseFixtures.ApprovedDivergences' Chrome DOVI
+            // entry for the real-world case this closes (a Chrome hevc/av1 target both declare HDR10).
+            VideoRange: needVideoTranscode && needTonemap
+                ? (targetVideoCap is not null && targetVideoCap.VideoRangeTypes.Contains("HDR10", StringComparer.OrdinalIgnoreCase) ? "HDR10" : "SDR")
+                : null,
             AudioChannels: needAudioTranscode
                 ? MinIgnoringNulls(needDownmix ? effMaxChannels : selectedAudio?.Channels, matchingOutputProfile?.MaxAudioChannels)
                 : null,
@@ -789,6 +819,43 @@ public sealed class PlaybackEngine : IPlaybackEngine
 
     private static bool EqualsIgnoreCase(string? a, string? b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Whether <paramref name="container"/> shares a value with the comma-delimited
+    /// <paramref name="containerCsv"/> (PR111e): ffprobe can report a source's container as a
+    /// multi-value CSV (for example <c>"mov,mp4,m4a,3gp,3g2,mj2"</c> for an MP4-family file) rather
+    /// than a single value. Both sides are CSV-split before matching (case-insensitive), so this is
+    /// correct whether <paramref name="container"/> is a single candidate (the Remux/Transcode target
+    /// container check) or itself the full source CSV (the Direct Play containerChanged check, where
+    /// <paramref name="container"/> and <paramref name="containerCsv"/> are the same string). Mirrors
+    /// <c>Reefin.Model.Extensions.ContainerHelper.ContainsContainer</c>'s CSV-membership semantics
+    /// without taking a dependency on Reefin.Model - this engine is deliberately decoupled from the
+    /// legacy DTO/helper layer (same "reimplement locally" precedent as
+    /// <see cref="Reefin.Playback.Decision.SubtitleTextConversion"/> mirroring
+    /// <c>MediaStream.SupportsSubtitleConversionTo</c>).
+    /// </summary>
+    private static bool ContainsContainer(string containerCsv, string container)
+    {
+        if (EqualsIgnoreCase(containerCsv, container))
+        {
+            return true;
+        }
+
+        var candidates = containerCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var targets = container.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        foreach (var target in targets)
+        {
+            foreach (var candidate in candidates)
+            {
+                if (EqualsIgnoreCase(candidate, target))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     private static bool IsTextBasedSubtitle(string format) => TextBasedSubtitleFormats.Contains(format);
 
     private static int? MinIgnoringNulls(int? a, int? b)
@@ -887,7 +954,9 @@ public sealed class PlaybackEngine : IPlaybackEngine
             return false;
         }
 
-        if (profile.Containers.Count > 0 && !profile.Containers.Contains(container, StringComparer.OrdinalIgnoreCase))
+        // PR111e: container can be a raw ffprobe multi-value CSV (see ContainsContainer remarks) -
+        // membership, not exact equality, against each declared profile container.
+        if (profile.Containers.Count > 0 && !ContainsContainer(profile.Containers, container))
         {
             return false;
         }
@@ -903,6 +972,62 @@ public sealed class PlaybackEngine : IPlaybackEngine
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Resolves Direct Play eligibility AND, when eligible, the single container value to report as
+    /// <see cref="OutputSpec.Container"/> (PR111e). <paramref name="sourceContainerCsv"/> can be a raw
+    /// ffprobe multi-value CSV (for example <c>"mov,mp4,m4a,3gp,3g2,mj2"</c>); reporting that whole
+    /// CSV verbatim as the output container is not meaningful (it is not itself a container name), so
+    /// this mirrors legacy's two-stage resolution
+    /// (<c>StreamBuilder.GetVideoDirectPlayProfile</c> + <c>NormalizeMediaSourceFormatIntoSingleContainer</c>):
+    /// first pick the WINNING profile - the first <see cref="DecodeProfile"/> in declared order whose
+    /// <see cref="DirectPlayProfileMatches"/> accepts this <paramref name="mediaKind"/>/codec
+    /// combination against the CSV as a whole (declared order is the tie-break legacy's own ranking
+    /// collapses to whenever more than one profile fully matches - see
+    /// <c>StreamBuilder.GetVideoDirectPlayProfile</c>'s <c>.ThenBy(analysis => analysis.Order)</c>) -
+    /// THEN, only within that one profile's own declared containers, return the first CSV value (in
+    /// CSV order) it accepts. Trying CSV values against every profile directly (rather than fixing the
+    /// winning profile first) can return a DIFFERENT, also-valid-looking value than legacy's, because
+    /// two profiles can each independently accept a different member of the same CSV (for example
+    /// Chrome declares both a "mp4,m4v" and a standalone "mov" video profile for h264/aac - legacy
+    /// deterministically prefers the earlier-declared "mp4,m4v" profile and reports "mp4"). A
+    /// <see langword="null"/> return means no profile matches at all - Direct Play is not viable.
+    /// </summary>
+    private static string? ResolveDirectPlayContainer(ClientCapabilities capabilities, MediaKind mediaKind, string sourceContainerCsv, string? videoCodec, string? audioCodec)
+    {
+        var winningProfile = capabilities.Decode.DirectPlayProfiles
+            .FirstOrDefault(p => DirectPlayProfileMatches(p, mediaKind, sourceContainerCsv, videoCodec, audioCodec));
+        if (winningProfile is null)
+        {
+            return null;
+        }
+
+        var candidates = sourceContainerCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (candidates.Length == 0)
+        {
+            candidates = [sourceContainerCsv];
+        }
+
+        if (winningProfile.Containers.Count == 0)
+        {
+            // Wildcard profile (matches any container): nothing to narrow to, so the first
+            // source-declared CSV value stands - mirrors NormalizeMediaSourceFormatIntoSingleContainer
+            // returning the raw input unchanged when the winning profile places no constraint on it.
+            return candidates[0];
+        }
+
+        foreach (var candidate in candidates)
+        {
+            if (winningProfile.Containers.Contains(candidate, StringComparer.OrdinalIgnoreCase))
+            {
+                return candidate;
+            }
+        }
+
+        // Defensive only: DirectPlayProfileMatches already confirmed the CSV and winningProfile.Containers
+        // intersect, so some candidate above always matches.
+        return candidates[0];
     }
 
     /// <summary>
@@ -940,6 +1065,29 @@ public sealed class PlaybackEngine : IPlaybackEngine
         }
 
         return result.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    /// <summary>
+    /// Whether any of <paramref name="profileContainers"/> (each a single declared container) is a
+    /// member of the comma-delimited <paramref name="containerCsv"/> (PR111e) - the
+    /// <see cref="DirectPlayProfileMatches"/> counterpart of the two-string
+    /// <see cref="ContainsContainer(string, string)"/> overload, for the same raw-ffprobe-CSV reason.
+    /// </summary>
+    private static bool ContainsContainer(IReadOnlyList<string> profileContainers, string containerCsv)
+    {
+        var candidates = containerCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        foreach (var profileContainer in profileContainers)
+        {
+            foreach (var candidate in candidates)
+            {
+                if (EqualsIgnoreCase(profileContainer, candidate))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /// <summary>

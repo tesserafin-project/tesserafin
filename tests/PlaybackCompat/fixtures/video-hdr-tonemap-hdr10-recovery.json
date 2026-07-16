@@ -1,9 +1,9 @@
 {
   "fixtureVersion": 5,
-  "id": "video-resolution-limit",
-  "category": "bitrate-resolution-limit",
+  "id": "video-hdr-tonemap-hdr10-recovery",
+  "category": "hdr-tonemap",
   "engineVersion": 6,
-  "description": "4K H.264 exceeding the client's 1080p max (a per-codec limit on the H.264 VideoCodecCapability, PR102b), with every OTHER dimension deliberately within limits (level, bit depth, range, bitrate all generous) so ONLY resolution trips. Video downscales (targeting the client's declared H.264 output profile); audio copied.",
+  "description": "PR111e named policy: HEVC Dolby-Vision-tagged source (DOVIWithHDR10) whose codec, level, bit depth and resolution are all accepted, but the client's hevc decode profile does not list DOVIWithHDR10 among its supported video ranges - only SDR and HDR10 - so the range trips and a tonemap is required, same as video-hdr-tonemap.json. UNLIKE that fixture, the target codec here DOES declare HDR10 support, so v2's tonemap-target policy (output HDR10 if the target codec supports it, else SDR) recovers HDR10 instead of falling all the way back to SDR: video re-encodes with tonemapping to HDR10 (targeting the client's declared HEVC output profile); audio copied; container unchanged.",
   "input": {
     "context": {
       "mediaKind": "Video"
@@ -17,7 +17,7 @@
               "mp4"
             ],
             "videoCodecs": [
-              "h264"
+              "hevc"
             ],
             "audioCodecs": [
               "aac"
@@ -26,16 +26,17 @@
         ],
         "videoCodecs": [
           {
-            "codec": "h264",
+            "codec": "hevc",
             "profiles": [],
-            "maxLevel": 62,
+            "maxLevel": 153,
             "maxBitDepth": 10,
             "videoRangeTypes": [
-              "SDR"
+              "SDR",
+              "HDR10"
             ],
             "maxResolution": {
-              "width": 1920,
-              "height": 1080
+              "width": 3840,
+              "height": 2160
             },
             "maxBitrate": 100000000
           }
@@ -54,7 +55,7 @@
           "protocol": "Http",
           "container": "mp4",
           "videoCodecs": [
-            "h264"
+            "hevc"
           ],
           "audioCodecs": [
             "aac"
@@ -67,25 +68,25 @@
         "mediaSourceId": "src-1",
         "container": "mp4",
         "protocol": "file",
-        "bitrate": 25000000,
+        "bitrate": 30000000,
         "videoStreams": [
           {
             "index": 0,
-            "codec": "h264",
-            "profile": "high",
-            "level": 51,
+            "codec": "hevc",
+            "profile": "main10",
+            "level": 150,
             "width": 3840,
             "height": 2160,
-            "bitDepth": 8,
-            "videoRange": "SDR",
-            "bitrate": 20000000
+            "bitDepth": 10,
+            "videoRange": "DOVIWithHDR10",
+            "bitrate": 25000000
           }
         ],
         "audioStreams": [
           {
             "index": 1,
             "codec": "aac",
-            "channels": 2,
+            "channels": 6,
             "isDefault": true
           }
         ],
@@ -112,21 +113,20 @@
     },
     "output": {
       "container": "mp4",
-      "videoCodec": "h264",
+      "videoCodec": "hevc",
       "audioCodec": "aac",
-      "resolution": {
-        "width": 1920,
-        "height": 1080
-      },
+      "videoRange": "HDR10",
       "totalBitrate": 100000000,
       "videoBitrate": 100000000
     },
     "transforms": [
       "TranscodeVideo",
+      "Tonemap",
       "CopyAudio"
     ],
     "reasonCodes": [
-      "VideoResolutionNotSupported",
+      "VideoRangeTypeNotSupported",
+      "TonemapRequired",
       "MethodChosen"
     ],
     "isViable": true

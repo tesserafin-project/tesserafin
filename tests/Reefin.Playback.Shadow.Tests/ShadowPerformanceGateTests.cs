@@ -109,24 +109,28 @@ public sealed class ShadowPerformanceGateTests
         // ---- Setup (untimed): one StreamBuilder + one PlaybackEngine reused across every
         // iteration and every case, mirroring production's single long-lived _engine
         // (ShadowPlaybackSessionPlanner._engine). Legacy's GetOptimalVideoStream runs EXACTLY ONCE
-        // per case here - matching production (legacy runs once per real playback request) and
-        // required because StreamBuilder mutates the shared MediaSourceInfo.Container in place
-        // (see OracleCaseFixtures.ApprovedDivergences' Chrome/mp4-h264-ac3-aac-srt-2600k entry) -
-        // calling it repeatedly per case would measure a progressively-mutated input, not a stable
-        // one.
+        // per case here - matching production (legacy runs once per real playback request) - but,
+        // since StreamBuilder mutates the shared MediaSourceInfo.Container in place (PR111e; see
+        // OracleCaseFixtures.ApprovedDivergences' former Chrome/mp4-h264-ac3-aac-srt-2600k entry, now
+        // closed), it runs against its OWN freshly-loaded MediaOptions - never the pristine one
+        // CaseSetup.Options carries into RunIteration below. Mirroring the fixed
+        // ShadowPlaybackSessionPlanner ordering (capture the v2 inputs from an object legacy has not
+        // touched), RunIteration always maps from the untouched fixture load, exactly like every real
+        // playback request's shadow run does.
         var streamBuilder = OracleCaseFixtures.GetStreamBuilder();
         var engine = new PlaybackEngine();
 
         var caseSetups = new List<CaseSetup>();
         foreach (var (deviceProfile, source) in OracleCaseFixtures.Cases)
         {
-            var options = await OracleCaseFixtures.GetMediaOptions(deviceProfile, source);
-            var legacyStreamInfo = streamBuilder.GetOptimalVideoStream(options);
+            var mappingOptions = await OracleCaseFixtures.GetMediaOptions(deviceProfile, source);
+            var legacyOptions = await OracleCaseFixtures.GetMediaOptions(deviceProfile, source);
+            var legacyStreamInfo = streamBuilder.GetOptimalVideoStream(legacyOptions);
             var plan = legacyStreamInfo is null
                 ? null
                 : new PlaybackPlan(legacyStreamInfo.PlayMethod, legacyStreamInfo.TranscodeReasons, legacyStreamInfo);
 
-            caseSetups.Add(new CaseSetup(deviceProfile, source, options, plan));
+            caseSetups.Add(new CaseSetup(deviceProfile, source, mappingOptions, plan));
         }
 
         // ---- Warm-up (discarded): let tiered JIT settle. No try/catch anywhere in this method -

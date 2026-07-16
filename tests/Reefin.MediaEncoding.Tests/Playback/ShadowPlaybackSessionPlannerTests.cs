@@ -1,11 +1,19 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Runtime.Serialization;
+using System.Text.Json;
+using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Reefin.Controller.MediaEncoding;
+using Reefin.Extensions.Json;
 using Reefin.MediaEncoding.Playback;
 using Reefin.Model.Configuration;
 using Reefin.Model.Dlna;
+using Reefin.Model.Dto;
 using Reefin.Model.Session;
 using Reefin.Playback.Decision;
 using Reefin.Playback.Engine;
@@ -308,5 +316,240 @@ public class ShadowPlaybackSessionPlannerTests
             Times.Once);
     }
 
+    // --- PR111e: pre-legacy snapshot ordering ---
+
+    [Fact]
+    public void PlanVideo_ShadowInputMappingThrows_LegacyStillRunsExactlyOnceAndResultIntact()
+    {
+        // A null entry in MediaSources forces DlnaPlaybackAdapter.ToSnapshot to throw during the
+        // PRE-legacy capture phase (PrepareShadow) - proving a mapping failure can never prevent
+        // legacy from running (exactly once) or leak into the returned plan; it is caught, logged,
+        // and counted exactly like a post-legacy shadow exception used to be.
+        var options = CreateOptions();
+        options.MediaSources = [null!];
+        var expectedPlan = new PlaybackPlan(PlayMethod.DirectPlay, default);
+
+        var mockInner = new Mock<IPlaybackSessionPlanner>();
+        mockInner.Setup(p => p.PlanVideo(options)).Returns(expectedPlan);
+
+        var mockEngine = new Mock<IPlaybackEngine>();
+
+        var decorator = new ShadowPlaybackSessionPlanner(
+            mockInner.Object,
+            mockEngine.Object,
+            NullLogger<ShadowPlaybackSessionPlanner>.Instance,
+            () => new PlaybackShadowOptions { Enabled = true, SampleRate = 1.0 });
+
+        var result = decorator.PlanVideo(options);
+
+        Assert.Same(expectedPlan, result);
+        mockInner.Verify(p => p.PlanVideo(options), Times.Once);
+        mockEngine.Verify(
+            e => e.Decide(It.IsAny<PlaybackRequestContext>(), It.IsAny<Reefin.Playback.Decision.ClientCapabilities>(), It.IsAny<IReadOnlyList<MediaSourceSnapshot>>(), It.IsAny<PlaybackConstraints>()),
+            Times.Never);
+
+        var snapshot = decorator.Metrics.GetSnapshot();
+        Assert.Equal(1, snapshot.TotalExecutions);
+        Assert.Equal(1, snapshot.ExceptionCount);
+    }
+
+    [Fact]
+    public void PlanVideo_InnerMutatesContainerDuringPlan_ShadowSnapshotKeepsOriginalValue()
+    {
+        // Reproduces legacy StreamBuilder's real side effect: it mutates the shared
+        // MediaSourceInfo.Container in place while planning (normalizing a raw ffprobe multi-value
+        // CSV down to a single value). The fake inner planner below does the same thing, from
+        // INSIDE its PlanVideo call, so the assertion genuinely exercises "captured before the call,
+        // not merely before the mutation happens to run" - PR111e's whole point.
+        var source = new MediaSourceInfo { Id = "src-1", Container = "mov,mp4,m4a,3gp,3g2,mj2" };
+        var options = CreateOptions();
+        options.MediaSources = [source];
+        var expectedPlan = new PlaybackPlan(PlayMethod.Transcode, TranscodeReason.AudioCodecNotSupported);
+
+        var mockInner = new Mock<IPlaybackSessionPlanner>();
+        mockInner
+            .Setup(p => p.PlanVideo(options))
+            .Callback(() => source.Container = "mov")
+            .Returns(expectedPlan);
+
+        IReadOnlyList<MediaSourceSnapshot>? capturedSources = null;
+        var mockEngine = new Mock<IPlaybackEngine>();
+        mockEngine
+            .Setup(e => e.Decide(It.IsAny<PlaybackRequestContext>(), It.IsAny<Reefin.Playback.Decision.ClientCapabilities>(), It.IsAny<IReadOnlyList<MediaSourceSnapshot>>(), It.IsAny<PlaybackConstraints>()))
+            .Callback<PlaybackRequestContext, Reefin.Playback.Decision.ClientCapabilities, IReadOnlyList<MediaSourceSnapshot>, PlaybackConstraints>((_, _, sources, _) => capturedSources = sources)
+            .Returns(PlaybackDecision.DirectPlay(
+                "source-1",
+                SelectedStreams.None,
+                OutputSpec.Empty,
+                ReasonNode.Leaf(ReasonCode.MethodChosen, ReasonOutcome.Chosen, ReasonSubject.Method()),
+                engineVersion: PlaybackEngine.EngineVersion));
+
+        var decorator = new ShadowPlaybackSessionPlanner(
+            mockInner.Object,
+            mockEngine.Object,
+            NullLogger<ShadowPlaybackSessionPlanner>.Instance,
+            () => new PlaybackShadowOptions { Enabled = true, SampleRate = 1.0 });
+
+        decorator.PlanVideo(options);
+
+        // The mutation genuinely happened, on the exact shared object - this is not a no-op fake.
+        Assert.Equal("mov", source.Container);
+
+        // But the engine was given the value captured BEFORE that mutation ran.
+        Assert.NotNull(capturedSources);
+        Assert.Equal("mov,mp4,m4a,3gp,3g2,mj2", capturedSources![0].Container);
+    }
+
+    [Fact]
+    public void PlanVideo_ShadowDisabled_PathologicalOptionsProveNoMappingWasAttempted()
+    {
+        // MediaSources containing null would throw if DlnaPlaybackAdapter.ToSnapshot ever ran over it
+        // - even inside PrepareShadow's own try/catch, that would still count as an exception. Shadow
+        // mode disabled must short-circuit before any mapping is attempted at all: zero exceptions
+        // recorded is the proof, not just "the engine was never invoked" (which the existing
+        // PlanVideo_ShadowDisabled_DoesNotInvokeEngineAndReturnsInnerPlanUnchanged already covers).
+        var options = CreateOptions();
+        options.MediaSources = [null!];
+        var expectedPlan = new PlaybackPlan(PlayMethod.DirectPlay, default);
+
+        var mockInner = new Mock<IPlaybackSessionPlanner>();
+        mockInner.Setup(p => p.PlanVideo(options)).Returns(expectedPlan);
+
+        var mockEngine = new Mock<IPlaybackEngine>();
+
+        var decorator = new ShadowPlaybackSessionPlanner(
+            mockInner.Object,
+            mockEngine.Object,
+            NullLogger<ShadowPlaybackSessionPlanner>.Instance,
+            () => new PlaybackShadowOptions { Enabled = false, SampleRate = 1.0 });
+
+        var result = decorator.PlanVideo(options);
+
+        Assert.Same(expectedPlan, result);
+        var snapshot = decorator.Metrics.GetSnapshot();
+        Assert.Equal(0, snapshot.TotalExecutions);
+        Assert.Equal(0, snapshot.ExceptionCount);
+    }
+
+    [Fact]
+    public void PlanVideo_SampleRateZero_PathologicalOptionsProveNoMappingWasAttempted()
+    {
+        // Same proof as PlanVideo_ShadowDisabled_PathologicalOptionsProveNoMappingWasAttempted, for
+        // the "sampled out" (rather than "disabled") skip path.
+        var options = CreateOptions();
+        options.MediaSources = [null!];
+        var expectedPlan = new PlaybackPlan(PlayMethod.DirectPlay, default);
+
+        var mockInner = new Mock<IPlaybackSessionPlanner>();
+        mockInner.Setup(p => p.PlanVideo(options)).Returns(expectedPlan);
+
+        var mockEngine = new Mock<IPlaybackEngine>();
+
+        var decorator = new ShadowPlaybackSessionPlanner(
+            mockInner.Object,
+            mockEngine.Object,
+            NullLogger<ShadowPlaybackSessionPlanner>.Instance,
+            () => new PlaybackShadowOptions { Enabled = true, SampleRate = 0.0 });
+
+        var result = decorator.PlanVideo(options);
+
+        Assert.Same(expectedPlan, result);
+        var snapshot = decorator.Metrics.GetSnapshot();
+        Assert.Equal(0, snapshot.TotalExecutions);
+        Assert.Equal(0, snapshot.ExceptionCount);
+    }
+
+    [Fact]
+    public async Task PlanVideo_RealContainerCsvFixture_V2ReceivesUnmutatedContainerAndComparisonDoesNotDiverge()
+    {
+        // PR111e regression coverage for the real (Chrome, mp4-h264-ac3-aac-srt-2600k) oracle case
+        // (see OracleCaseFixtures.ApprovedDivergences' history): this source's real ffprobe container
+        // is "mov,mp4,m4a,3gp,3g2,mj2" - legacy's StreamBuilder mutates it down to a single value as a
+        // side effect of planning. Uses the REAL legacy PlaybackSessionPlanner (a thin delegate to
+        // StreamBuilder) and the REAL v2 PlaybackEngine, not mocks, so both halves of the PR111e fix -
+        // pre-legacy capture ordering (this class) and CSV-aware container comparison (PlaybackEngine) -
+        // are exercised together exactly as production wires them.
+        var options = await GetMediaOptions("Chrome", "mp4-h264-ac3-aac-srt-2600k");
+        var originalContainer = options.MediaSources[0].Container;
+        Assert.Equal("mov,mp4,m4a,3gp,3g2,mj2", originalContainer);
+
+        var innerPlanner = new PlaybackSessionPlanner(new Mock<IMediaEncoder>().Object, NullLogger<PlaybackSessionPlanner>.Instance);
+        var engine = new PlaybackEngine();
+
+        ShadowDiagnosticRecord? published = null;
+        var mockDiagnosticsStore = new Mock<IShadowDiagnosticsStore>();
+        mockDiagnosticsStore
+            .Setup(s => s.Publish(It.IsAny<ShadowDiagnosticRecord>()))
+            .Callback<ShadowDiagnosticRecord>(record => published = record);
+
+        var decorator = new ShadowPlaybackSessionPlanner(
+            innerPlanner,
+            engine,
+            NullLogger<ShadowPlaybackSessionPlanner>.Instance,
+            () => new PlaybackShadowOptions { Enabled = true, SampleRate = 1.0 },
+            diagnosticsStore: mockDiagnosticsStore.Object);
+
+        var plan = decorator.PlanVideo(options);
+
+        Assert.NotNull(plan);
+        Assert.Equal(PlayMethod.Transcode, plan.PlayMethod);
+
+        // Legacy really did mutate the shared MediaSourceInfo, same as production - this is not a
+        // fixture that happens to dodge the bug.
+        Assert.NotEqual(originalContainer, options.MediaSources[0].Container);
+
+        // But v2's shadow snapshot - captured before legacy ran - kept the original raw ffprobe CSV.
+        Assert.NotNull(published);
+        Assert.Equal(originalContainer, published!.Sources[0].Container);
+
+        // And the (PR111e-fixed) container-CSV bug no longer causes a spurious divergence: this case
+        // used to be an approved PotentialRegression in OracleCaseFixtures.ApprovedDivergences; that
+        // entry is now gone because it classifies Equivalent.
+        Assert.NotEqual(DivergenceClass.PotentialRegression, published.Divergence.Class);
+        Assert.NotEqual(DivergenceClass.Unexplained, published.Divergence.Class);
+    }
+
     private static MediaOptions CreateOptions() => new() { Profile = new DeviceProfile() };
+
+    /// <summary>
+    /// Loads real fixture data shared with <see cref="PlaybackSessionPlannerTests"/> - same helper,
+    /// same "Test Data" JSON files, so the CSV-container regression test above exercises a genuine
+    /// production fixture rather than a hand-built one.
+    /// </summary>
+    private static async ValueTask<MediaOptions> GetMediaOptions(string deviceProfile, params string[] sources)
+    {
+        var mediaSources = sources.Select(src => TestData<MediaSourceInfo>(src))
+            .Select(val => val.Result)
+            .ToArray();
+        var mediaSourceId = mediaSources[0]?.Id;
+
+        var dp = await TestData<DeviceProfile>(deviceProfile);
+
+        return new MediaOptions()
+        {
+            ItemId = new Guid("11D229B7-2D48-4B95-9F9B-49F6AB75E613"),
+            MediaSourceId = mediaSourceId,
+            MediaSources = mediaSources,
+            DeviceId = "test-deviceId",
+            Profile = dp,
+            AllowAudioStreamCopy = true,
+            AllowVideoStreamCopy = true,
+            EnableDirectStream = false,
+        };
+    }
+
+    private static async ValueTask<T> TestData<T>(string name)
+    {
+        var path = Path.Join("Test Data", typeof(T).Name + "-" + name + ".json");
+
+        using var stream = File.OpenRead(path);
+
+        var value = await JsonSerializer.DeserializeAsync<T>(stream, JsonDefaults.Options);
+        if (value is not null)
+        {
+            return value;
+        }
+
+        throw new SerializationException("Invalid test data: " + name);
+    }
 }
