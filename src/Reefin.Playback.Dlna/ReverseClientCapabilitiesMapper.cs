@@ -59,11 +59,14 @@ public static class ReverseClientCapabilitiesMapper
             // original profile's codecs all inherited the same device-wide ceiling (the common
             // case), this recovers that exact value; where a codec had an explicit narrower limit,
             // that limit is preserved on its own CodecProfile below regardless of this value.
-            MaxStreamingBitrate = ResolveMaxStreamingBitrate(decode.VideoCodecs),
-            DirectPlayProfiles = BuildDirectPlayProfiles(decode.DirectPlayProfiles),
-            TranscodingProfiles = BuildTranscodingProfiles(capabilities.OutputProfiles),
-            CodecProfiles = BuildCodecProfiles(decode.VideoCodecs, decode.AudioCodecs),
-            SubtitleProfiles = BuildSubtitleProfiles(decode.SubtitleDelivery),
+            // PR112b: capabilities can arrive straight off the wire (System.Text.Json leaves an
+            // omitted collection property null - PlaybackSessionRequestValidator tolerates that as
+            // "declared nothing"), so every collection is coalesced here rather than trusted.
+            MaxStreamingBitrate = ResolveMaxStreamingBitrate(decode.VideoCodecs ?? []),
+            DirectPlayProfiles = BuildDirectPlayProfiles(decode.DirectPlayProfiles ?? []),
+            TranscodingProfiles = BuildTranscodingProfiles(capabilities.OutputProfiles ?? []),
+            CodecProfiles = BuildCodecProfiles(decode.VideoCodecs ?? [], decode.AudioCodecs ?? []),
+            SubtitleProfiles = BuildSubtitleProfiles(decode.SubtitleDelivery ?? []),
         };
     }
 
@@ -160,7 +163,7 @@ public static class ReverseClientCapabilitiesMapper
         foreach (var codec in videoCodecs)
         {
             var conditions = new List<ProfileCondition>();
-            if (codec.Profiles.Count > 0)
+            if (codec.Profiles is { Count: > 0 })
             {
                 conditions.Add(new ProfileCondition(ProfileConditionType.EqualsAny, ProfileConditionValue.VideoProfile, JoinTokens(codec.Profiles)));
             }
@@ -175,7 +178,7 @@ public static class ReverseClientCapabilitiesMapper
                 conditions.Add(NumericCondition(ProfileConditionValue.VideoBitDepth, codec.MaxBitDepth.Value));
             }
 
-            if (codec.VideoRangeTypes.Count > 0)
+            if (codec.VideoRangeTypes is { Count: > 0 })
             {
                 conditions.Add(new ProfileCondition(ProfileConditionType.EqualsAny, ProfileConditionValue.VideoRangeType, JoinTokens(codec.VideoRangeTypes)));
             }
@@ -255,7 +258,7 @@ public static class ReverseClientCapabilitiesMapper
     private static ProfileCondition NumericCondition(ProfileConditionValue property, int value) =>
         new(ProfileConditionType.LessThanEqual, property, value.ToString(CultureInfo.InvariantCulture));
 
-    private static string JoinCsv(IReadOnlyList<string> values) => values.Count == 0 ? string.Empty : string.Join(',', values);
+    private static string JoinCsv(IReadOnlyList<string>? values) => values is null or { Count: 0 } ? string.Empty : string.Join(',', values);
 
     private static string JoinTokens(IReadOnlyList<string> values) => string.Join(TokenSeparator, values);
 }
