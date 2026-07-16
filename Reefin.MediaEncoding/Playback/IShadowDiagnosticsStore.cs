@@ -21,18 +21,22 @@ namespace Reefin.MediaEncoding.Playback;
 public interface IShadowDiagnosticsStore
 {
     /// <summary>
-    /// Opens an ambient capture scope for one synchronous planning call. Resets the ambient slot to
-    /// <see langword="null"/> both on entry and when the returned scope is disposed, so no stale
-    /// capture from an earlier call can leak into or out of this one.
+    /// Opens a fresh ambient capture scope for one synchronous planning call, so no stale capture
+    /// from an earlier call can leak into this one. PR113a: nesting is well-defined - opening a
+    /// scope while another is already open on the same async flow suspends (rather than discards)
+    /// the outer scope's state, which is restored exactly as it was when the inner scope's
+    /// disposable is disposed.
     /// </summary>
-    /// <returns>A disposable that closes the scope.</returns>
+    /// <returns>A disposable that closes the scope, restoring whatever scope (if any) enclosed it.</returns>
     IDisposable BeginCapture();
 
     /// <summary>
     /// Publishes a record into the currently open ambient capture scope. Called by
     /// <see cref="ShadowPlaybackSessionPlanner"/> only when a shadow run actually executed (behind
     /// its enabled/sampling gate) - never called otherwise, so <see cref="TakeCaptured"/> naturally
-    /// returns <see langword="null"/> when shadow mode is off.
+    /// returns <see langword="null"/> when shadow mode is off. PR113a: if no <see cref="BeginCapture"/>
+    /// scope is currently open on this async flow, the record is silently dropped rather than
+    /// thrown or stored somewhere unscoped - a lost shadow diagnostic must never fail live playback.
     /// </summary>
     /// <param name="record">The record to publish.</param>
     void Publish(ShadowDiagnosticRecord record);
