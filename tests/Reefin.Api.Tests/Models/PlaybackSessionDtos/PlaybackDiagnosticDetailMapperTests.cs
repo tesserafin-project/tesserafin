@@ -71,6 +71,54 @@ public sealed class PlaybackDiagnosticDetailMapperTests
             detail.Timeline.Select(e => (e.Stage, e.At)).ToArray());
     }
 
+    /// <summary>
+    /// PR113b: real, observed lifecycle events (ffmpeg launched, playback started/stopped) are
+    /// appended after the always-present <c>Created</c>/<c>Updated</c> entries, in the order they
+    /// were observed - never fabricated for a stage that was not actually passed in.
+    /// </summary>
+    [Fact]
+    public void Map_WithEvents_AppendsThemAfterCreatedAndUpdated()
+    {
+        var createdAt = DateTimeOffset.UnixEpoch;
+        var updatedAt = DateTimeOffset.UnixEpoch.AddMinutes(5);
+        var session = BuildSession(createdAt, updatedAt);
+        var ffmpegStartedAt = DateTimeOffset.UnixEpoch.AddSeconds(10);
+        var playbackStartedAt = DateTimeOffset.UnixEpoch.AddSeconds(12);
+        var events = new[]
+        {
+            new PlaybackLifecycleEvent("FfmpegStarted", ffmpegStartedAt),
+            new PlaybackLifecycleEvent("PlaybackStarted", playbackStartedAt),
+        };
+
+        var detail = PlaybackDiagnosticDetailMapper.Map(session, diagnostic: null, events);
+
+        Assert.Equal(
+            new[]
+            {
+                ("Created", createdAt),
+                ("Updated", updatedAt),
+                ("FfmpegStarted", ffmpegStartedAt),
+                ("PlaybackStarted", playbackStartedAt),
+            },
+            detail.Timeline.Select(e => (e.Stage, e.At)).ToArray());
+    }
+
+    /// <summary>
+    /// A stage that was never observed must simply be absent - never defaulted to some
+    /// approximated timestamp. Covered separately from <see cref="Map_Timeline_ContainsOnlyCreatedAndUpdatedFromSession"/>
+    /// to make explicit that this holds even when the caller passes an explicit empty list, not
+    /// only the default <see langword="null"/>.
+    /// </summary>
+    [Fact]
+    public void Map_WithEmptyEvents_TimelineStillOnlyHasCreatedAndUpdated()
+    {
+        var session = BuildSession();
+
+        var detail = PlaybackDiagnosticDetailMapper.Map(session, diagnostic: null, events: []);
+
+        Assert.Equal(2, detail.Timeline.Count);
+    }
+
     [Fact]
     public void Map_LegacyVectorNonViable_FallsBackToTranscodeMethod()
     {

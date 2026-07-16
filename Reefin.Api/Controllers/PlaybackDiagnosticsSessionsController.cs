@@ -77,6 +77,43 @@ public class PlaybackDiagnosticsSessionsController : BaseReefinApiController
         }
 
         _diagnosticsStore.TryGet(id, out var diagnostic);
-        return Ok(PlaybackDiagnosticDetailMapper.Map(session, diagnostic));
+        var events = _diagnosticsStore.GetEvents(id);
+        return Ok(PlaybackDiagnosticDetailMapper.Map(session, diagnostic, events));
+    }
+
+    /// <summary>
+    /// PR113b: exports a session's retained shadow diagnostic as a playback-compatibility-lab
+    /// fixture (docs/pr92-design-playback-api-and-diagnostics.md §5, "Exporter le cas de test"),
+    /// conforming to tests/PlaybackCompat/schema/fixture.schema.json, so a real case observed in
+    /// production can be dropped into tests/PlaybackCompat/fixtures/ and replayed by the lab.
+    /// Serialized with <see cref="PlaybackCompatFixtureExporter.Options"/> (camelCase property
+    /// names) directly, bypassing this API's normal PascalCase-by-default content negotiation
+    /// (see <see cref="PlaybackCompatFixtureExporter"/> remarks) - the schema requires camelCase
+    /// regardless of what an admin client's Accept header might otherwise negotiate.
+    /// </summary>
+    /// <param name="id">The session to export.</param>
+    /// <response code="200">Fixture exported.</response>
+    /// <response code="404">Session not found.</response>
+    /// <response code="422">The session has no retained shadow diagnostic to export.</response>
+    /// <returns>The fixture, as schema-conformant JSON.</returns>
+    [HttpGet("{id}/Fixture")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
+    public ActionResult ExportFixture([FromRoute] PlaybackSessionId id)
+    {
+        var session = _playbackSessionManager.Get(id);
+        if (session is null)
+        {
+            return NotFound();
+        }
+
+        if (!_diagnosticsStore.TryGet(id, out var diagnostic) || diagnostic is null)
+        {
+            return UnprocessableEntity();
+        }
+
+        var export = PlaybackCompatFixtureExporter.Export(id, diagnostic);
+        return Content(PlaybackCompatFixtureExporter.ToJson(export), "application/json");
     }
 }

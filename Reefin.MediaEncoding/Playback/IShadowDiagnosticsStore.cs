@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Reefin.Controller.MediaEncoding;
 
 namespace Reefin.MediaEncoding.Playback;
@@ -65,8 +66,27 @@ public interface IShadowDiagnosticsStore
     bool TryGet(PlaybackSessionId id, out ShadowDiagnosticRecord? record);
 
     /// <summary>
-    /// Evicts the record retained for a session, if any. A no-op if none is retained.
+    /// Evicts the record retained for a session, if any, and every <see cref="PlaybackLifecycleEvent"/>
+    /// recorded for it. A no-op if none is retained.
     /// </summary>
-    /// <param name="id">The session whose record should be evicted.</param>
+    /// <param name="id">The session whose record and events should be evicted.</param>
     void Remove(PlaybackSessionId id);
+
+    /// <summary>
+    /// PR113b: records a real, observed lifecycle event for a session - ffmpeg launched, playback
+    /// started, playback stopped - independent of whether a <see cref="ShadowDiagnosticRecord"/> was
+    /// ever retained for it (this is never gated on shadow mode being enabled). Silently a no-op if
+    /// <paramref name="id"/> names no known session, matching <see cref="Remove"/>'s tolerance of an
+    /// unknown id - a lost lifecycle event must never fail live playback.
+    /// </summary>
+    /// <param name="id">The session this event belongs to.</param>
+    /// <param name="lifecycleEvent">The observed event, already stamped with its real timestamp.</param>
+    void RecordEvent(PlaybackSessionId id, PlaybackLifecycleEvent lifecycleEvent);
+
+    /// <summary>
+    /// Gets every lifecycle event recorded for a session, in the order they were observed.
+    /// </summary>
+    /// <param name="id">The session to look up.</param>
+    /// <returns>The recorded events, or an empty list if none were recorded.</returns>
+    IReadOnlyList<PlaybackLifecycleEvent> GetEvents(PlaybackSessionId id);
 }

@@ -107,4 +107,64 @@ public class PlaybackDiagnosticsSessionsControllerTests
 
         Assert.IsType<NotFoundResult>(result.Result);
     }
+
+    /// <summary>
+    /// PR113b: real, observed lifecycle events retrieved from the store must reach the mapped
+    /// detail's timeline, appended after the always-present <c>Created</c>/<c>Updated</c> entries.
+    /// </summary>
+    [Fact]
+    public void GetPlaybackSession_WithRecordedEvents_TimelineIncludesThem()
+    {
+        var session = new PlaybackSession(PlaybackSessionId.NewId(), PlaybackMediaKind.Video, null, null, new PlaybackPlan(PlayMethod.DirectPlay, default), default, default);
+        _playbackSessionManager.Setup(m => m.Get(session.Id)).Returns(session);
+        ShadowDiagnosticRecord? none = null;
+        _diagnosticsStore.Setup(s => s.TryGet(session.Id, out none)).Returns(false);
+        var lifecycleEvent = new PlaybackLifecycleEvent("PlaybackStarted", DateTimeOffset.UnixEpoch);
+        _diagnosticsStore.Setup(s => s.GetEvents(session.Id)).Returns([lifecycleEvent]);
+
+        var result = CreateController().GetPlaybackSession(session.Id);
+
+        var detail = Assert.IsAssignableFrom<PlaybackDiagnosticDetail>(Assert.IsAssignableFrom<OkObjectResult>(result.Result).Value);
+        Assert.Contains(detail.Timeline, e => e.Stage == "PlaybackStarted" && e.At == DateTimeOffset.UnixEpoch);
+    }
+
+    [Fact]
+    public void ExportFixture_UnknownSession_ReturnsNotFound()
+    {
+        var id = PlaybackSessionId.NewId();
+        _playbackSessionManager.Setup(m => m.Get(id)).Returns((PlaybackSession?)null);
+
+        var result = CreateController().ExportFixture(id);
+
+        Assert.IsType<NotFoundResult>(result);
+    }
+
+    [Fact]
+    public void ExportFixture_SessionWithoutRetainedDiagnostic_ReturnsUnprocessableEntity()
+    {
+        var session = new PlaybackSession(PlaybackSessionId.NewId(), PlaybackMediaKind.Video, null, null, new PlaybackPlan(PlayMethod.DirectPlay, default), default, default);
+        _playbackSessionManager.Setup(m => m.Get(session.Id)).Returns(session);
+        ShadowDiagnosticRecord? none = null;
+        _diagnosticsStore.Setup(s => s.TryGet(session.Id, out none)).Returns(false);
+
+        var result = CreateController().ExportFixture(session.Id);
+
+        Assert.IsType<UnprocessableEntityResult>(result);
+    }
+
+    [Fact]
+    public void ExportFixture_SessionWithRetainedDiagnostic_ReturnsCamelCaseJsonContent()
+    {
+        var session = new PlaybackSession(PlaybackSessionId.NewId(), PlaybackMediaKind.Video, null, null, new PlaybackPlan(PlayMethod.DirectPlay, default), default, default);
+        _playbackSessionManager.Setup(m => m.Get(session.Id)).Returns(session);
+        var record = FakeShadowDiagnosticRecordFactory.Create();
+        _diagnosticsStore.Setup(s => s.TryGet(session.Id, out record)).Returns(true);
+
+        var result = Assert.IsType<ContentResult>(CreateController().ExportFixture(session.Id));
+
+        Assert.Equal("application/json", result.ContentType);
+        Assert.Contains("\"fixtureVersion\"", result.Content, StringComparison.Ordinal);
+        Assert.Contains("\"engineVersion\"", result.Content, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"FixtureVersion\"", result.Content, StringComparison.Ordinal);
+    }
 }

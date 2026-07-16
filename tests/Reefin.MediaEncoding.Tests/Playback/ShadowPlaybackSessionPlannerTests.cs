@@ -121,6 +121,89 @@ public class ShadowPlaybackSessionPlannerTests
         Assert.Same(expectedPlan, result);
     }
 
+    [Fact]
+    public void PlanVideo_OptionsCarryRealUserId_PublishedContextUsesIt()
+    {
+        // PR113b: options.UserId (populated by the calling controller from the real requester) must
+        // reach the shadow run's PlaybackRequestContext.UserId - previously always Guid.Empty here
+        // regardless of who actually made the request.
+        var userId = Guid.NewGuid();
+        var options = CreateOptions();
+        options.UserId = userId;
+        var expectedPlan = new PlaybackPlan(PlayMethod.DirectPlay, default);
+
+        var mockInner = new Mock<IPlaybackSessionPlanner>();
+        mockInner.Setup(p => p.PlanVideo(options)).Returns(expectedPlan);
+
+        var mockEngine = new Mock<IPlaybackEngine>();
+        mockEngine
+            .Setup(e => e.Decide(It.IsAny<PlaybackRequestContext>(), It.IsAny<Reefin.Playback.Decision.ClientCapabilities>(), It.IsAny<System.Collections.Generic.IReadOnlyList<MediaSourceSnapshot>>(), It.IsAny<PlaybackConstraints>()))
+            .Returns(PlaybackDecision.DirectPlay(
+                "source-1",
+                SelectedStreams.None,
+                OutputSpec.Empty,
+                ReasonNode.Leaf(ReasonCode.MethodChosen, ReasonOutcome.Chosen, ReasonSubject.Method()),
+                engineVersion: PlaybackEngine.EngineVersion));
+
+        ShadowDiagnosticRecord? published = null;
+        var mockDiagnosticsStore = new Mock<IShadowDiagnosticsStore>();
+        mockDiagnosticsStore
+            .Setup(s => s.Publish(It.IsAny<ShadowDiagnosticRecord>()))
+            .Callback<ShadowDiagnosticRecord>(record => published = record);
+
+        var decorator = new ShadowPlaybackSessionPlanner(
+            mockInner.Object,
+            mockEngine.Object,
+            NullLogger<ShadowPlaybackSessionPlanner>.Instance,
+            () => new PlaybackShadowOptions { Enabled = true, SampleRate = 1.0 },
+            diagnosticsStore: mockDiagnosticsStore.Object);
+
+        decorator.PlanVideo(options);
+
+        Assert.NotNull(published);
+        Assert.Equal(userId, published!.Context.UserId);
+    }
+
+    [Fact]
+    public void PlanVideo_OptionsUserIdNotSet_PublishedContextUserIdIsEmpty()
+    {
+        // Backward compatibility: a caller that never sets MediaOptions.UserId (every pre-PR113b
+        // call site, and most test fixtures) must keep getting Guid.Empty, exactly as before.
+        var options = CreateOptions();
+        var expectedPlan = new PlaybackPlan(PlayMethod.DirectPlay, default);
+
+        var mockInner = new Mock<IPlaybackSessionPlanner>();
+        mockInner.Setup(p => p.PlanVideo(options)).Returns(expectedPlan);
+
+        var mockEngine = new Mock<IPlaybackEngine>();
+        mockEngine
+            .Setup(e => e.Decide(It.IsAny<PlaybackRequestContext>(), It.IsAny<Reefin.Playback.Decision.ClientCapabilities>(), It.IsAny<System.Collections.Generic.IReadOnlyList<MediaSourceSnapshot>>(), It.IsAny<PlaybackConstraints>()))
+            .Returns(PlaybackDecision.DirectPlay(
+                "source-1",
+                SelectedStreams.None,
+                OutputSpec.Empty,
+                ReasonNode.Leaf(ReasonCode.MethodChosen, ReasonOutcome.Chosen, ReasonSubject.Method()),
+                engineVersion: PlaybackEngine.EngineVersion));
+
+        ShadowDiagnosticRecord? published = null;
+        var mockDiagnosticsStore = new Mock<IShadowDiagnosticsStore>();
+        mockDiagnosticsStore
+            .Setup(s => s.Publish(It.IsAny<ShadowDiagnosticRecord>()))
+            .Callback<ShadowDiagnosticRecord>(record => published = record);
+
+        var decorator = new ShadowPlaybackSessionPlanner(
+            mockInner.Object,
+            mockEngine.Object,
+            NullLogger<ShadowPlaybackSessionPlanner>.Instance,
+            () => new PlaybackShadowOptions { Enabled = true, SampleRate = 1.0 },
+            diagnosticsStore: mockDiagnosticsStore.Object);
+
+        decorator.PlanVideo(options);
+
+        Assert.NotNull(published);
+        Assert.Equal(Guid.Empty, published!.Context.UserId);
+    }
+
     // --- PR100: options gating, sampling, timing budget, and metrics aggregation ---
 
     [Fact]

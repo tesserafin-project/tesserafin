@@ -198,6 +198,7 @@ public class MediaInfoHelper
             Context = EncodingContext.Streaming,
             DeviceId = claimsPrincipal.GetDeviceId(),
             ItemId = item.Id,
+            UserId = userId,
             Profile = profile,
             MaxAudioChannels = maxAudioChannels,
             AllowAudioStreamCopy = allowAudioStreamCopy,

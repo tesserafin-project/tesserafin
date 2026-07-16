@@ -169,7 +169,12 @@ public sealed class ShadowPlaybackSessionPlanner : IPlaybackSessionPlanner
             var constraints = DlnaPlaybackAdapter.ToConstraints(options);
             var sources = options.MediaSources.Select(DlnaPlaybackAdapter.ToSnapshot).ToList();
             var mediaKind = kind == PlaybackMediaKind.Video ? MediaKind.Video : MediaKind.Audio;
-            var context = DlnaPlaybackAdapter.ToContext(options.ItemId, Guid.Empty, options.MediaSourceId, mediaKind, PlaybackEngine.EngineVersion);
+            // PR113b: options.UserId now carries the real requesting user through from the calling
+            // controller (PlaybackSessionsController/MediaInfoHelper) - previously always
+            // Guid.Empty here, which meant every retained diagnostic's RequestContext.UserId was a
+            // lie. Callers that never set it (pre-PR113b call sites, most test fixtures) still get
+            // Guid.Empty, its default value, so this is not a behavioral change for them.
+            var context = DlnaPlaybackAdapter.ToContext(options.ItemId, options.UserId, options.MediaSourceId, mediaKind, PlaybackEngine.EngineVersion);
             mappingStopwatch.Stop();
 
             return new PreparedShadowContext(kind, options, shadowOptions, mappingStopwatch.Elapsed, capabilities, constraints, sources, context);

@@ -144,6 +144,7 @@ public class PlaybackSessionsController : BaseReefinApiController
             MediaSources = mediaSources.ToArray(),
             Context = EncodingContext.Streaming,
             ItemId = item.Id,
+            UserId = userId,
             Profile = ReverseDlnaAdapter.ToDeviceProfile(request.Capabilities),
             MediaSourceId = request.MediaSourceId,
         };

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Threading;
 using Reefin.Controller.MediaEncoding;
 
@@ -18,6 +19,12 @@ public sealed class InMemoryShadowDiagnosticsStore : IShadowDiagnosticsStore
     // nothing has been published yet" - both of which would otherwise look like a null record.
     private readonly AsyncLocal<AmbientState?> _ambient = new();
     private readonly ConcurrentDictionary<PlaybackSessionId, ShadowDiagnosticRecord> _records = new();
+
+    // PR113b: independent of _records - a session accrues lifecycle events (ffmpeg launched,
+    // playback started/stopped) whether or not a shadow diagnostic was ever retained for it, so
+    // this is keyed and evicted on the same PlaybackSessionId lifecycle but never gated on shadow
+    // mode. ConcurrentQueue preserves observation order without needing an external lock.
+    private readonly ConcurrentDictionary<PlaybackSessionId, ConcurrentQueue<PlaybackLifecycleEvent>> _events = new();
 
     /// <inheritdoc/>
     public IDisposable BeginCapture()
@@ -58,7 +65,19 @@ public sealed class InMemoryShadowDiagnosticsStore : IShadowDiagnosticsStore
     public bool TryGet(PlaybackSessionId id, out ShadowDiagnosticRecord? record) => _records.TryGetValue(id, out record);
 
     /// <inheritdoc/>
-    public void Remove(PlaybackSessionId id) => _records.TryRemove(id, out _);
+    public void Remove(PlaybackSessionId id)
+    {
+        _records.TryRemove(id, out _);
+        _events.TryRemove(id, out _);
+    }
+
+    /// <inheritdoc/>
+    public void RecordEvent(PlaybackSessionId id, PlaybackLifecycleEvent lifecycleEvent) =>
+        _events.GetOrAdd(id, static _ => new ConcurrentQueue<PlaybackLifecycleEvent>()).Enqueue(lifecycleEvent);
+
+    /// <inheritdoc/>
+    public IReadOnlyList<PlaybackLifecycleEvent> GetEvents(PlaybackSessionId id) =>
+        _events.TryGetValue(id, out var queue) ? queue.ToArray() : Array.Empty<PlaybackLifecycleEvent>();
 
     private sealed class AmbientState
     {

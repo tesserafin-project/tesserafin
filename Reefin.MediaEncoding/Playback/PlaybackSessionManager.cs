@@ -41,7 +41,11 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
     /// <see cref="Create"/>/<see cref="Patch"/> call, keyed by the resulting session id, for the
     /// admin diagnostics endpoint. Defaults to a no-op instance when not supplied, so every
     /// pre-PR113 (3-arg) call site - including existing test constructors - keeps compiling and
-    /// behaving exactly as before: no diagnostic is ever retained.
+    /// behaving exactly as before: no diagnostic is ever retained. PR113b: also the sink for real
+    /// lifecycle events (<see cref="ITranscodeManager.TranscodingJobStarted"/>,
+    /// <see cref="ISessionManager.PlaybackStart"/>/<see cref="ISessionManager.PlaybackStopped"/>),
+    /// which this constructor subscribes to unconditionally - correlation against a tracked session
+    /// silently no-ops when the store is the no-op default, same as every other diagnostics path.
     /// </param>
     public PlaybackSessionManager(
         IPlaybackSessionPlanner planner,
@@ -54,6 +58,8 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
         _sessionManager = sessionManager;
         _diagnosticsStore = diagnosticsStore ?? NoOpShadowDiagnosticsStore.Instance;
         transcodeManager.TranscodingJobEnded += OnTranscodingJobEnded;
+        transcodeManager.TranscodingJobStarted += OnTranscodingJobStarted;
+        sessionManager.PlaybackStart += OnPlaybackStart;
         sessionManager.PlaybackStopped += OnPlaybackStopped;
         _sweepTimer = new Timer(_ => SweepExpired(DateTimeOffset.UtcNow), null, SweepInterval, SweepInterval);
     }
@@ -197,6 +203,8 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
 
         _disposed = true;
         _transcodeManager.TranscodingJobEnded -= OnTranscodingJobEnded;
+        _transcodeManager.TranscodingJobStarted -= OnTranscodingJobStarted;
+        _sessionManager.PlaybackStart -= OnPlaybackStart;
         _sessionManager.PlaybackStopped -= OnPlaybackStopped;
         _sweepTimer.Dispose();
     }
@@ -276,12 +284,63 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
         }
     }
 
+    /// <summary>
+    /// PR113b: records a real "ffmpeg launched" timeline event for the session tied to this job's
+    /// play session id, if any is currently tracked. A no-op (not an error) when no tracked session
+    /// matches - the job may belong to a live stream or a request this manager never planned.
+    /// </summary>
+    private void OnTranscodingJobStarted(object? sender, TranscodingJob job) =>
+        RecordLifecycleEvent(job.PlaySessionId, "FfmpegStarted");
+
+    /// <summary>
+    /// PR113b: records a real "playback started" timeline event for the session tied to this
+    /// report's play session id, if any is currently tracked.
+    /// </summary>
+    private void OnPlaybackStart(object? sender, PlaybackProgressEventArgs e) =>
+        RecordLifecycleEvent(e.PlaySessionId, "PlaybackStarted");
+
     private void OnPlaybackStopped(object? sender, PlaybackStopEventArgs e)
     {
         if (!string.IsNullOrEmpty(e.PlaySessionId))
         {
+            // PR113b: recorded before eviction, for parity with FfmpegStarted/PlaybackStarted -
+            // but RemoveNoLock (reached via DeleteByPlaySessionId below) evicts every retained
+            // PlaybackLifecycleEvent for this session, this one included, immediately afterward.
+            // The admin diagnostics endpoint can therefore never actually observe a
+            // "PlaybackStopped" entry: by the time a session stops, RemoveNoLock has already
+            // deleted the session itself, so PlaybackSessionManager.Get(id) - and with it
+            // GetPlaybackSession - returns 404 regardless of what the event store retains. This is
+            // the pre-existing PR113 removal-on-stop design, unchanged here; recording the event
+            // anyway keeps the three signals handled uniformly and is covered at the store level by
+            // tests that read it back before the delete call that immediately follows.
+            RecordLifecycleEvent(e.PlaySessionId, "PlaybackStopped");
             DeleteByPlaySessionId(e.PlaySessionId);
         }
+    }
+
+    /// <summary>
+    /// Correlates <paramref name="playSessionId"/> to a currently tracked session id and, if found,
+    /// records <paramref name="stage"/> as observed right now. Silently does nothing for an unknown
+    /// or null/empty play session id - a lifecycle event that cannot be correlated is simply
+    /// dropped, never thrown, matching every other diagnostics-retention failure mode in this class.
+    /// </summary>
+    private void RecordLifecycleEvent(string? playSessionId, string stage)
+    {
+        if (string.IsNullOrEmpty(playSessionId))
+        {
+            return;
+        }
+
+        PlaybackSessionId id;
+        lock (_lock)
+        {
+            if (!_byPlaySessionId.TryGetValue(playSessionId, out id))
+            {
+                return;
+            }
+        }
+
+        _diagnosticsStore.RecordEvent(id, new PlaybackLifecycleEvent(stage, DateTimeOffset.UtcNow));
     }
 
     private PlaybackPlan? Plan(PlaybackSessionRequest request) => request.Kind switch

@@ -104,6 +104,57 @@ public class InMemoryShadowDiagnosticsStoreTests
         Assert.Null(store.TakeCaptured());
     }
 
+    [Fact]
+    public void GetEvents_UnknownSession_ReturnsEmpty()
+    {
+        var store = new InMemoryShadowDiagnosticsStore();
+
+        Assert.Empty(store.GetEvents(PlaybackSessionId.NewId()));
+    }
+
+    [Fact]
+    public void RecordEvent_ThenGetEvents_ReturnsThemInObservationOrder()
+    {
+        var store = new InMemoryShadowDiagnosticsStore();
+        var id = PlaybackSessionId.NewId();
+        var first = new PlaybackLifecycleEvent("FfmpegStarted", DateTimeOffset.UnixEpoch);
+        var second = new PlaybackLifecycleEvent("PlaybackStarted", DateTimeOffset.UnixEpoch.AddSeconds(1));
+
+        store.RecordEvent(id, first);
+        store.RecordEvent(id, second);
+
+        Assert.Equal(new[] { first, second }, store.GetEvents(id));
+    }
+
+    [Fact]
+    public void RecordEvent_IndependentOfRetainedDiagnostic_EventsSurviveWithoutAnyPublishedRecord()
+    {
+        // PR113b: lifecycle events are never gated on shadow mode / a retained ShadowDiagnosticRecord
+        // - a session with no diagnostic at all still accrues its own real events.
+        var store = new InMemoryShadowDiagnosticsStore();
+        var id = PlaybackSessionId.NewId();
+        var lifecycleEvent = new PlaybackLifecycleEvent("PlaybackStarted", DateTimeOffset.UnixEpoch);
+
+        store.RecordEvent(id, lifecycleEvent);
+
+        Assert.False(store.TryGet(id, out _));
+        Assert.Single(store.GetEvents(id));
+    }
+
+    [Fact]
+    public void Remove_EvictsEventsAlongsideRetainedRecord()
+    {
+        var store = new InMemoryShadowDiagnosticsStore();
+        var id = PlaybackSessionId.NewId();
+        store.Attach(id, CreateRecord());
+        store.RecordEvent(id, new PlaybackLifecycleEvent("PlaybackStarted", DateTimeOffset.UnixEpoch));
+
+        store.Remove(id);
+
+        Assert.False(store.TryGet(id, out _));
+        Assert.Empty(store.GetEvents(id));
+    }
+
     /// <summary>
     /// Builds a minimal, valid <see cref="ShadowDiagnosticRecord"/> - these tests only care about
     /// scope plumbing (which instance is captured when), not the values inside the record.

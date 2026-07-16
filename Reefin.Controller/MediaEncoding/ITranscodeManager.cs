@@ -18,6 +18,15 @@ public interface ITranscodeManager
     public event EventHandler<TranscodingJob>? TranscodingJobEnded;
 
     /// <summary>
+    /// PR113b: raised once the ffmpeg process for a transcoding job has actually been started
+    /// (<c>Process.Start()</c> returned successfully) - never before, and never for a job that
+    /// failed to start. Lets a diagnostics consumer (<see cref="Reefin.Controller.MediaEncoding.IPlaybackSessionManager"/>)
+    /// record a real, observed "ffmpeg launched" timestamp instead of approximating it from some
+    /// other event.
+    /// </summary>
+    public event EventHandler<TranscodingJob>? TranscodingJobStarted;
+
+    /// <summary>
     /// Get transcoding job.
     /// </summary>
     /// <param name="playSessionId">Playback session id.</param>
