@@ -49,8 +49,36 @@ public class PlaybackSessionsControllerTests
         return controller;
     }
 
+    private static Reefin.Playback.Decision.ClientCapabilities CreateCapabilities() => new(
+        Decode: new DecodeCapabilities(
+            DirectPlayProfiles: [new DecodeProfile(MediaKind.Video, ["mp4"], ["h264"], ["aac"])],
+            VideoCodecs: [],
+            AudioCodecs: [],
+            SubtitleDelivery: [],
+            SupportsHls: false,
+            SupportsDash: false),
+        OutputProfiles: []);
+
+    private static PlaybackConstraints CreateConstraints() => new(
+        AllowDirectPlay: true,
+        AllowDirectStream: true,
+        AllowTranscoding: true,
+        AllowVideoStreamCopy: true,
+        AllowAudioStreamCopy: true,
+        MaxBitrate: null,
+        MaxAudioChannels: null,
+        PreferredAudioStreamIndex: null,
+        PreferredSubtitleStreamIndex: null,
+        SubtitleMode: SubtitlePlaybackMode.Default,
+        PreferredSubtitleLanguages: [],
+        AlwaysBurnInSubtitleWhenTranscoding: false,
+        StartTimeTicks: 0);
+
     private CreatePlaybackSessionRequest CreateRequest(string? playSessionId = null)
-        => new(_itemId, _userId, new DeviceProfile(), PlaySessionId: playSessionId);
+        => new(_itemId, _userId, CreateCapabilities(), CreateConstraints(), PlaySessionId: playSessionId);
+
+    private ReplacePlaybackSessionRequest CreateReplaceRequest()
+        => new(_itemId, _userId, CreateCapabilities(), CreateConstraints());
 
     private void SetUpItemAndUser(Video item)
     {
@@ -154,7 +182,7 @@ public class PlaybackSessionsControllerTests
             .Setup(m => m.Patch(It.IsAny<PlaybackSessionId>(), It.IsAny<PlaybackSessionRequest>()))
             .Returns(session);
 
-        var result = await CreateController().ReplacePlaybackSession(session.Id, CreateRequest());
+        var result = await CreateController().ReplacePlaybackSession(session.Id, CreateReplaceRequest());
 
         var response = Assert.IsType<PlaybackSessionResponse>(Assert.IsAssignableFrom<OkObjectResult>(result.Result).Value);
         Assert.Equal(PlaybackMethod.Transcode, response.Method);
@@ -169,7 +197,7 @@ public class PlaybackSessionsControllerTests
             .Setup(m => m.Patch(It.IsAny<PlaybackSessionId>(), It.IsAny<PlaybackSessionRequest>()))
             .Returns((PlaybackSession?)null);
 
-        var result = await CreateController().ReplacePlaybackSession(PlaybackSessionId.NewId(), CreateRequest());
+        var result = await CreateController().ReplacePlaybackSession(PlaybackSessionId.NewId(), CreateReplaceRequest());
 
         Assert.IsType<NotFoundResult>(result.Result);
     }
