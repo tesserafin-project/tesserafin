@@ -13,6 +13,7 @@ using Reefin.Controller.Library;
 using Reefin.Controller.MediaEncoding;
 using Reefin.Data.Enums;
 using Reefin.Model.Dlna;
+using Reefin.Playback.Dlna;
 
 namespace Reefin.Api.Controllers;
 
@@ -59,16 +60,20 @@ public class PlaybackSessionsController : BaseReefinApiController
     /// </summary>
     /// <param name="request">The session to plan.</param>
     /// <response code="200">Session created.</response>
+    /// <response code="400">The declared capabilities or constraints are invalid.</response>
     /// <response code="404">Item not found.</response>
     /// <response code="422">No viable playback plan exists for the given options.</response>
     /// <returns>The created session's stable decision projection.</returns>
     [HttpPost]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
     public async Task<ActionResult<PlaybackSessionResponse>> CreatePlaybackSession([FromBody] CreatePlaybackSessionRequest request)
     {
-        var (kind, options) = await ResolveOptions(request, CancellationToken.None).ConfigureAwait(false);
+        PlaybackSessionRequestValidator.Validate(request);
+
+        var (kind, options) = await ResolveOptions(request, HttpContext.RequestAborted).ConfigureAwait(false);
 
         var session = _playbackSessionManager.Create(new PlaybackSessionRequest(kind, options), request.PlaySessionId);
         return session is null
@@ -82,21 +87,22 @@ public class PlaybackSessionsController : BaseReefinApiController
     /// already required a complete body — <c>PUT</c> states that honestly.
     /// </summary>
     /// <param name="id">The session to replace.</param>
-    /// <param name="request">
-    /// The complete new options to plan. <see cref="CreatePlaybackSessionRequest.PlaySessionId"/>
-    /// is ignored — the session's existing id (from the route) is used.
-    /// </param>
+    /// <param name="request">The complete new options to plan.</param>
     /// <response code="200">Session updated.</response>
+    /// <response code="400">The declared capabilities or constraints are invalid.</response>
     /// <response code="404">Item or session not found.</response>
     /// <response code="422">No viable playback plan exists for the given options.</response>
     /// <returns>The updated session's stable decision projection.</returns>
     [HttpPut("{id}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
-    public async Task<ActionResult<PlaybackSessionResponse>> ReplacePlaybackSession([FromRoute] PlaybackSessionId id, [FromBody] CreatePlaybackSessionRequest request)
+    public async Task<ActionResult<PlaybackSessionResponse>> ReplacePlaybackSession([FromRoute] PlaybackSessionId id, [FromBody] ReplacePlaybackSessionRequest request)
     {
-        var (kind, options) = await ResolveOptions(request, CancellationToken.None).ConfigureAwait(false);
+        PlaybackSessionRequestValidator.Validate(request);
+
+        var (kind, options) = await ResolveOptions(request, HttpContext.RequestAborted).ConfigureAwait(false);
 
         var session = _playbackSessionManager.Patch(id, new PlaybackSessionRequest(kind, options));
         return session is null
@@ -121,7 +127,7 @@ public class PlaybackSessionsController : BaseReefinApiController
             : NotFound();
     }
 
-    private async Task<(PlaybackMediaKind Kind, MediaOptions Options)> ResolveOptions(CreatePlaybackSessionRequest request, CancellationToken cancellationToken)
+    private async Task<(PlaybackMediaKind Kind, MediaOptions Options)> ResolveOptions(PlaybackPlanRequestBase request, CancellationToken cancellationToken)
     {
         var userId = RequestHelpers.GetUserId(User, request.UserId);
         var user = _userManager.GetUserById(userId) ?? throw new ResourceNotFoundException();
@@ -130,25 +136,20 @@ public class PlaybackSessionsController : BaseReefinApiController
         var mediaSources = await _mediaSourceManager.GetPlaybackMediaSources(item, user, true, true, cancellationToken)
             .ConfigureAwait(false);
 
+        // PR112b: the request now carries ClientCapabilities/PlaybackConstraints (PR91 decision
+        // vocabulary), never a raw DeviceProfile - ReverseDlnaAdapter is the TEMPORARY translation
+        // back to what the legacy pipeline still consumes (delete alongside it - PR114a).
         var options = new MediaOptions
         {
             MediaSources = mediaSources.ToArray(),
             Context = EncodingContext.Streaming,
             ItemId = item.Id,
-            Profile = request.DeviceProfile,
+            Profile = ReverseDlnaAdapter.ToDeviceProfile(request.Capabilities),
             MediaSourceId = request.MediaSourceId,
-            AudioStreamIndex = request.AudioStreamIndex,
-            SubtitleStreamIndex = request.SubtitleStreamIndex,
-            MaxAudioChannels = request.MaxAudioChannels,
-            MaxBitrate = request.MaxBitrate,
-            EnableDirectPlay = request.EnableDirectPlay,
-            EnableDirectStream = request.EnableDirectStream,
-            AllowVideoStreamCopy = request.AllowVideoStreamCopy,
-            AllowAudioStreamCopy = request.AllowAudioStreamCopy,
-            AlwaysBurnInSubtitleWhenTranscoding = request.AlwaysBurnInSubtitleWhenTranscoding,
         };
+        ReverseDlnaAdapter.ApplyConstraints(options, request.Constraints);
 
-        if (!request.EnableTranscoding)
+        if (!request.Constraints.AllowTranscoding)
         {
             foreach (var mediaSource in mediaSources)
             {

@@ -25,6 +25,11 @@
     <!-- PR112: PlaybackSessionResponse and its mapper reference the stable PR91 decision
          vocabulary, never Reefin.Model.Dlna or the internal PlaybackSession record. -->
     <ProjectReference Include="..\src\Reefin.Playback.Decision\Reefin.Playback.Decision.csproj" />
+    <!-- PR112b: the request side now accepts ClientCapabilities/PlaybackConstraints too, so
+         PlaybackSessionsController needs the TEMPORARY ReverseDlnaAdapter to translate them back
+         into the legacy DeviceProfile/MediaOptions the pipeline still consumes (delete this
+         reference alongside the adapter itself once the v2 execution layer lands - PR114a). -->
+    <ProjectReference Include="..\src\Reefin.Playback.Dlna\Reefin.Playback.Dlna.csproj" />
     <!-- PR113: PlaybackDiagnosticDetail's Comparison exposes DivergenceClass (and derives from the
          retained DecisionVector), the shadow-mode comparison vocabulary - never the internal
          ShadowDiagnosticRecord's raw PlaybackDecision/DecisionVector/ShadowDivergence types beyond
