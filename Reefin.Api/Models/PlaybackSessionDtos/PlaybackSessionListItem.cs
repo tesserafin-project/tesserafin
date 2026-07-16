@@ -1,3 +1,5 @@
+using System;
+
 namespace Reefin.Api.Models.PlaybackSessionDtos;
 
 /// <summary>
@@ -12,4 +14,16 @@ namespace Reefin.Api.Models.PlaybackSessionDtos;
 /// Whether a retained shadow diagnostic exists for this session - i.e. whether its detail route
 /// would return the v2-sourced fields populated rather than null/empty.
 /// </param>
-public sealed record PlaybackSessionListItem(PlaybackSessionResponse Session, bool HasDiagnostic);
+/// <param name="ItemId">
+/// PR114: the requested item's identifier, or <see langword="null"/> when the session was tracked
+/// directly (<c>IPlaybackSessionManager.Track</c>) rather than planned from a request, so no
+/// <c>MediaOptions</c> was ever attached. Deliberately the raw identifier only - never the resolved
+/// item name/library metadata, which would require this admin-only list to depend on
+/// <c>ILibraryManager</c> for what is otherwise a cheap, dependency-free projection.
+/// </param>
+/// <param name="DeviceId">
+/// PR114: the requesting client's device identifier, or <see langword="null"/> under the same
+/// condition as <see cref="ItemId"/>. Likewise the raw identifier only - never a resolved device/app
+/// display name.
+/// </param>
+public sealed record PlaybackSessionListItem(PlaybackSessionResponse Session, bool HasDiagnostic, Guid? ItemId, string? DeviceId);

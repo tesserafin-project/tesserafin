@@ -9,6 +9,7 @@ using Reefin.Api.Tests.Models.PlaybackSessionDtos;
 using Reefin.Common.Api;
 using Reefin.Controller.MediaEncoding;
 using Reefin.MediaEncoding.Playback;
+using Reefin.Model.Dlna;
 using Reefin.Model.Session;
 using Xunit;
 
@@ -59,6 +60,45 @@ public class PlaybackDiagnosticsSessionsControllerTests
         Assert.False(items.Single(i => i.Session.Id.Equals(withoutDiagnostic.Id.Value)).HasDiagnostic);
     }
 
+    /// <summary>
+    /// PR114: a session tracked directly (no <see cref="PlaybackSessionRequest"/> attached, the
+    /// <c>IPlaybackSessionManager.Track</c> path) must yield <see langword="null"/> list-item
+    /// <c>ItemId</c>/<c>DeviceId</c> rather than throw or fabricate a value, while a session planned
+    /// from a real request surfaces both raw identifiers as-is.
+    /// </summary>
+    [Fact]
+    public void GetPlaybackSessions_PopulatesItemIdAndDeviceIdFromRequestWhenPresent()
+    {
+        var itemId = Guid.NewGuid();
+        const string deviceId = "device-abc";
+        var options = new MediaOptions { ItemId = itemId, DeviceId = deviceId, Profile = new DeviceProfile() };
+        var withRequest = new PlaybackSession(
+            PlaybackSessionId.NewId(),
+            PlaybackMediaKind.Video,
+            null,
+            new PlaybackSessionRequest(PlaybackMediaKind.Video, options),
+            new PlaybackPlan(PlayMethod.DirectPlay, default),
+            default,
+            default);
+        var trackedOnly = new PlaybackSession(PlaybackSessionId.NewId(), PlaybackMediaKind.Video, null, null, new PlaybackPlan(PlayMethod.DirectPlay, default), default, default);
+        _playbackSessionManager.Setup(m => m.GetAll()).Returns([withRequest, trackedOnly]);
+
+        ShadowDiagnosticRecord? none = null;
+        _diagnosticsStore.Setup(s => s.TryGet(It.IsAny<PlaybackSessionId>(), out none)).Returns(false);
+
+        var result = CreateController().GetPlaybackSessions();
+
+        var items = Assert.IsAssignableFrom<System.Collections.Generic.IReadOnlyList<PlaybackSessionListItem>>(
+            Assert.IsAssignableFrom<OkObjectResult>(result.Result).Value);
+        var requestedItem = items.Single(i => i.Session.Id.Equals(withRequest.Id.Value));
+        Assert.Equal(itemId, requestedItem.ItemId);
+        Assert.Equal(deviceId, requestedItem.DeviceId);
+
+        var trackedItem = items.Single(i => i.Session.Id.Equals(trackedOnly.Id.Value));
+        Assert.Null(trackedItem.ItemId);
+        Assert.Null(trackedItem.DeviceId);
+    }
+
     [Fact]
     public void GetPlaybackSession_ExistingSessionWithDiagnostic_ReturnsFullDetail()
     {
@@ -76,6 +116,8 @@ public class PlaybackDiagnosticsSessionsControllerTests
         Assert.NotNull(detail.SourceSnapshot);
         Assert.NotNull(detail.Reasoning);
         Assert.NotNull(detail.Comparison);
+        Assert.NotNull(detail.Comparison!.DivergenceSummary);
+        Assert.Equal(record.Decision.Method, detail.Comparison.V2Method);
     }
 
     [Fact]
