@@ -21,6 +21,7 @@ internal static class FixtureCatalog
         "video-codec-incompatible.json",
         "video-resolution-limit.json",
         "video-hdr-tonemap.json",
+        "video-hdr-tonemap-hdr10-recovery.json",
         "subtitle-pgs-burn-in.json",
         "subtitle-srt-external.json",
         "video-live-tv-infinite-source.json",

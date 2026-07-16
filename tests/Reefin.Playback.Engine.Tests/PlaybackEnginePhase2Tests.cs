@@ -495,9 +495,11 @@ public static class PlaybackEnginePhase2Tests
     }
 
     [Fact]
-    public static void EngineVersion_IsFive()
+    public static void EngineVersion_IsSix()
     {
-        Assert.Equal(5, PlaybackEngine.EngineVersion);
+        // PR111e bumped 5->6: CSV-aware container comparisons, Direct Play container resolution,
+        // and the HDR10-or-SDR tonemap-target policy are all decision-affecting changes to Decide.
+        Assert.Equal(6, PlaybackEngine.EngineVersion);
     }
 
     private static IEnumerable<ReasonCode> FlattenReasonCodes(ReasonNode node)

@@ -35,38 +35,37 @@ internal static class OracleCaseFixtures
     public static readonly IReadOnlyDictionary<(string DeviceProfile, string Source), string> ApprovedDivergences =
         new Dictionary<(string, string), string>
         {
-            [("Chrome", "mp4-h264-ac3-aac-srt-2600k")] =
-                "Subtitle text-format conversion (srt->vtt) is now MODELED (PR111c), so the historical " +
-                "subtitle gap on this case is CLOSED - both engines convert and copy video. The residual " +
-                "divergence (v2-only Remux transform + Container reason) is a SEPARATE, pre-existing bug " +
-                "this PR merely exposed once video stopped being force-transcoded by burn-in: legacy's " +
-                "StreamBuilder MUTATES the shared MediaSourceInfo.Container into a single value " +
-                "(NormalizeMediaSourceFormatIntoSingleContainer, StreamBuilder.cs:836) and the shadow " +
-                "flow runs legacy BEFORE snapshotting for v2 (ShadowPlaybackSessionPlanner.RunShadow, " +
-                "and the oracle here), so v2 sees the degraded container 'mov' instead of this source's " +
-                "real ffprobe set 'mov,mp4,m4a,3gp,3g2,mj2'; v2 then whole-string-compares it against " +
-                "target 'mp4' and falsely flags a container remux. Legacy emits no container reason " +
-                "(mp4 is a member of the real set). This masks whether v2 handles raw ffprobe container " +
-                "strings at all - a CANARY-READINESS question (when v2 is the sole planner no legacy " +
-                "normalizes first). FIX tracked as its own PR: (a) v2 containerChanged uses " +
-                "ContainerHelper.ContainsContainer; (b) the shadow harness snapshots the source BEFORE " +
-                "legacy mutates it - expected to move more than this one case, hence out of PR111c scope.",
+            // PR111e CLOSED the former (Chrome, mp4-h264-ac3-aac-srt-2600k) container-CSV entry that
+            // used to live here: legacy's StreamBuilder mutates the shared MediaSourceInfo.Container
+            // into a single value (NormalizeMediaSourceFormatIntoSingleContainer, StreamBuilder.cs:836)
+            // - both ShadowPlaybackSessionPlanner and this oracle now capture the v2 inputs BEFORE
+            // legacy runs, so v2 sees the real ffprobe set (for example
+            // "mov,mp4,m4a,3gp,3g2,mj2") instead of legacy's already-degraded view of it, AND
+            // PlaybackEngine's containerChanged/DirectPlayProfileMatches/ResolveDirectPlayContainer
+            // now compare CSV-membership rather than whole-string equality. That case (and every
+            // other CSV-container source in this fixture set) now classifies Equivalent - see
+            // ShadowPlaybackSessionPlannerTests for the dedicated regression coverage of both halves
+            // of the fix (pre-legacy capture ordering; CSV-aware v2 container comparison).
             [("Chrome", "mp4-dvhe.08-eac3-15200k")] =
                 "Dolby Vision (Profile 8.1) fallback on a non-DV client: legacy and v2 AGREE the DV " +
                 "range must be transcoded away on Chrome; they only differ on the transcode target. " +
-                "The gating axis is videoRange (legacy=HLG, v2=SDR). Legacy's 'HLG' is not a " +
+                "The gating axis is videoRange (legacy=HLG, v2=HDR10). Legacy's 'HLG' is not a " +
                 "deliberate HDR-preservation policy - it is an artifact of Enum.TryParse bitwise-ORing " +
                 "the multi-value 'SDR|HDR10|HLG' EqualsAny VideoRangeType condition (ordinals " +
                 "1|2|3 = 3, which coincidentally equals HLG's ordinal; VideoRangeType is not [Flags]). " +
-                "v2 deliberately tonemaps any unsupported HDR source down to plain SDR " +
-                "(PlaybackEngine, tonemap path) rather than trying to preserve an HDR10/HLG fallback " +
-                "the target codec profile would accept - an acknowledged v2 simplification, not a " +
-                "regression to match legacy's accidental number for. FOLLOW-UPS (tracked, not blocking " +
-                "this gate): (1) v2 could recover HDR10 here since the source carries an HDR10 base " +
-                "layer and Chrome's hevc/av1 profiles accept HDR10; (2) v2 picks av1 vs legacy's hevc " +
-                "target because it takes OutputProfile.VideoCodecs[0] instead of preferring the " +
-                "source's own codec when present (same 'prefer source codec' gap as legacy's " +
-                "StreamInfo.TargetVideoCodec) - a separate PlaybackEngine target-selection fix.",
+                "v2's named policy (PR111e, PlaybackEngine's tonemap-target VideoRange logic): when a " +
+                "source's video range needs tonemapping, output HDR10 if the TARGET codec's declared " +
+                "VideoRangeTypes include HDR10, else fall all the way back to SDR - never trying to " +
+                "match legacy's HLG number, which is not a real policy to replicate. PR111e RESOLVED " +
+                "former follow-up (1) below (v2 now recovers HDR10 here, since the source carries an " +
+                "HDR10 base layer and Chrome's hevc/av1 profiles both declare HDR10 support), which is " +
+                "exactly why this entry's legacy/v2 values changed from HLG/SDR to HLG/HDR10 - the " +
+                "divergence persists (legacy's HLG is still a bug, not a target v2 should chase) so the " +
+                "case stays allow-listed, just for a different, now-intentional, v2 value. REMAINING " +
+                "FOLLOW-UP (tracked, not blocking this gate): v2 picks av1 vs legacy's hevc target " +
+                "because it takes OutputProfile.VideoCodecs[0] instead of preferring the source's own " +
+                "codec when present (same 'prefer source codec' gap as legacy's StreamInfo.TargetVideoCodec) " +
+                "- a separate PlaybackEngine target-selection fix.",
         };
 
     /// <summary>

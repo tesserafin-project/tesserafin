@@ -356,8 +356,83 @@ public static class PlaybackEnginePhase3Tests
         Assert.Equal(4_128_000, decision.Output.TotalBitrate);
     }
 
-    // Housekeeping acceptance test 10 (EngineVersion == 5) is pinned by
-    // PlaybackEnginePhase2Tests.EngineVersion_IsFive - not duplicated here.
+    // Housekeeping acceptance test 10 (EngineVersion pin) is pinned by
+    // PlaybackEnginePhase2Tests.EngineVersion_IsSix - not duplicated here.
+
+    // --- PR111e named policy: Dolby Vision / unsupported-HDR tonemap target ---
+    //
+    // When a source's video range needs tonemapping (the decode codec capability does not list it),
+    // the engine picks the tonemap TARGET by a single, explicit rule: HDR10 if the target codec
+    // (the one actually being transcoded to) declares HDR10 support, otherwise SDR. Never HLG, never
+    // any other intermediate range - see the fixture-driven case (tests/PlaybackCompat/fixtures/
+    // video-hdr-tonemap-hdr10-recovery.json) for the same policy exercised through the JSON fixture
+    // path, and OracleCaseFixtures.ApprovedDivergences' Chrome Dolby-Vision entry for the real-world
+    // case this policy was written to close (a DOVIWithHDR10 source on a client whose hevc/av1
+    // decode profiles both declare HDR10).
+
+    [Fact]
+    public static void Decide_TonemapRequired_TargetCodecSupportsHdr10_OutputsHdr10()
+    {
+        var capabilities = EngineTestFixtures.Capabilities(
+            ["mp4"],
+            ["hevc"],
+            ["aac"],
+            outputProfiles: [new PlaybackOutputProfile(MediaKind.Video, StreamingProtocol.Http, "mp4", ["hevc"], ["aac"], null, null, null)]) with
+        {
+            Decode = EngineTestFixtures.Capabilities(["mp4"], ["hevc"], ["aac"]).Decode with
+            {
+                VideoCodecs = [new VideoCodecCapability("hevc", [], null, null, ["SDR", "HDR10"], null, null)],
+            },
+        };
+
+        // DOVIWithHDR10 is not itself in the client's declared VideoRangeTypes (only SDR/HDR10 are),
+        // so the range trips and a tonemap is required - but the SAME hevc codec is both the decode
+        // capability consulted for that check and the transcode target, and it declares HDR10.
+        var source = EngineTestFixtures.Source(
+            "source-1",
+            "mp4",
+            videoStreams: [EngineTestFixtures.VideoStream(0, "hevc", videoRange: "DOVIWithHDR10")],
+            audioStreams: [EngineTestFixtures.AudioStream(1, "aac", isDefault: true)]);
+
+        var engine = new PlaybackEngine();
+        var decision = engine.Decide(EngineTestFixtures.Context(MediaKind.Video), capabilities, [source], EngineTestFixtures.Constraints());
+
+        Assert.True(decision.IsViable);
+        Assert.Equal(PlaybackMethod.Transcode, decision.Method);
+        Assert.Contains(TransformKind.Tonemap, decision.Transforms);
+        Assert.Equal("HDR10", decision.Output.VideoRange);
+    }
+
+    [Fact]
+    public static void Decide_TonemapRequired_TargetCodecDoesNotSupportHdr10_FallsBackToSdr()
+    {
+        var capabilities = EngineTestFixtures.Capabilities(
+            ["mp4"],
+            ["hevc"],
+            ["aac"],
+            outputProfiles: [new PlaybackOutputProfile(MediaKind.Video, StreamingProtocol.Http, "mp4", ["hevc"], ["aac"], null, null, null)]) with
+        {
+            Decode = EngineTestFixtures.Capabilities(["mp4"], ["hevc"], ["aac"]).Decode with
+            {
+                // Only SDR declared this time - no HDR10 to recover to.
+                VideoCodecs = [new VideoCodecCapability("hevc", [], null, null, ["SDR"], null, null)],
+            },
+        };
+
+        var source = EngineTestFixtures.Source(
+            "source-1",
+            "mp4",
+            videoStreams: [EngineTestFixtures.VideoStream(0, "hevc", videoRange: "DOVIWithHDR10")],
+            audioStreams: [EngineTestFixtures.AudioStream(1, "aac", isDefault: true)]);
+
+        var engine = new PlaybackEngine();
+        var decision = engine.Decide(EngineTestFixtures.Context(MediaKind.Video), capabilities, [source], EngineTestFixtures.Constraints());
+
+        Assert.True(decision.IsViable);
+        Assert.Equal(PlaybackMethod.Transcode, decision.Method);
+        Assert.Contains(TransformKind.Tonemap, decision.Transforms);
+        Assert.Equal("SDR", decision.Output.VideoRange);
+    }
 
     private static IEnumerable<ReasonCode> FlattenReasonCodes(ReasonNode node)
     {
