@@ -89,6 +89,86 @@ public class PlaybackSessionManagerDiagnosticsRetentionTests
     }
 
     [Fact]
+    public void Patch_NoNewCapture_EvictsPreviouslyAttachedRecord()
+    {
+        var initialOptions = CreateOptions();
+        var patchedOptions = CreateOptions();
+        var initialPlan = new PlaybackPlan(PlayMethod.DirectPlay, default);
+        var patchedPlan = new PlaybackPlan(PlayMethod.Transcode, TranscodeReason.AudioCodecNotSupported);
+        var store = new InMemoryShadowDiagnosticsStore();
+
+        var mockInner = new Mock<IPlaybackSessionPlanner>();
+        mockInner.Setup(p => p.PlanVideo(initialOptions)).Returns(initialPlan);
+        mockInner.Setup(p => p.PlanVideo(patchedOptions)).Returns(patchedPlan);
+        var mockEngine = BuildEngineMock();
+
+        // Shadow enabled for the initial Create (so a record gets attached), then disabled before
+        // the Patch - mirrors a replan that succeeds without a new capture (shadow toggled off or
+        // not sampled this call), the PR113a bug scenario.
+        var shadowEnabled = true;
+        var shadowPlanner = new ShadowPlaybackSessionPlanner(
+            mockInner.Object,
+            mockEngine.Object,
+            NullLogger<ShadowPlaybackSessionPlanner>.Instance,
+            () => new PlaybackShadowOptions { Enabled = shadowEnabled, SampleRate = 1.0 },
+            metrics: null,
+            diagnosticsStore: store);
+        var manager = new PlaybackSessionManager(shadowPlanner, new Mock<ITranscodeManager>().Object, new Mock<ISessionManager>().Object, store);
+
+        var session = manager.Create(new PlaybackSessionRequest(PlaybackMediaKind.Video, initialOptions));
+        Assert.NotNull(session);
+        Assert.True(store.TryGet(session!.Id, out _));
+
+        shadowEnabled = false;
+        var patched = manager.Patch(session.Id, new PlaybackSessionRequest(PlaybackMediaKind.Video, patchedOptions));
+
+        Assert.NotNull(patched);
+        Assert.False(store.TryGet(patched!.Id, out var record));
+        Assert.Null(record);
+    }
+
+    [Fact]
+    public void Create_ReplayedPlaySessionId_NoNewCapture_EvictsPreviouslyAttachedRecord()
+    {
+        var initialOptions = CreateOptions();
+        var replayOptions = CreateOptions();
+        var initialPlan = new PlaybackPlan(PlayMethod.DirectPlay, default);
+        var replayPlan = new PlaybackPlan(PlayMethod.Transcode, TranscodeReason.AudioCodecNotSupported);
+        var store = new InMemoryShadowDiagnosticsStore();
+
+        var mockInner = new Mock<IPlaybackSessionPlanner>();
+        mockInner.Setup(p => p.PlanVideo(initialOptions)).Returns(initialPlan);
+        mockInner.Setup(p => p.PlanVideo(replayOptions)).Returns(replayPlan);
+        var mockEngine = BuildEngineMock();
+
+        // Same shadow-toggle shape as the Patch test above, but exercised through Create with a
+        // reused playSessionId - StoreOrReplace keeps the existing session id in that case, so the
+        // same stale-attachment bug applies to Create, not just Patch.
+        var shadowEnabled = true;
+        var shadowPlanner = new ShadowPlaybackSessionPlanner(
+            mockInner.Object,
+            mockEngine.Object,
+            NullLogger<ShadowPlaybackSessionPlanner>.Instance,
+            () => new PlaybackShadowOptions { Enabled = shadowEnabled, SampleRate = 1.0 },
+            metrics: null,
+            diagnosticsStore: store);
+        var manager = new PlaybackSessionManager(shadowPlanner, new Mock<ITranscodeManager>().Object, new Mock<ISessionManager>().Object, store);
+
+        const string playSessionId = "play-session-1";
+        var session = manager.Create(new PlaybackSessionRequest(PlaybackMediaKind.Video, initialOptions), playSessionId);
+        Assert.NotNull(session);
+        Assert.True(store.TryGet(session!.Id, out _));
+
+        shadowEnabled = false;
+        var replayed = manager.Create(new PlaybackSessionRequest(PlaybackMediaKind.Video, replayOptions), playSessionId);
+
+        Assert.NotNull(replayed);
+        Assert.Equal(session.Id, replayed!.Id);
+        Assert.False(store.TryGet(replayed.Id, out var record));
+        Assert.Null(record);
+    }
+
+    [Fact]
     public void Delete_ExistingSessionWithRetainedRecord_EvictsRecord()
     {
         var options = CreateOptions();

@@ -75,9 +75,21 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
         }
 
         var session = StoreOrReplace(request.Kind, playSessionId, request, plan);
+
+        // PR113a: attach-or-remove unconditionally, not just attach-if-captured. StoreOrReplace
+        // reuses the existing session id when playSessionId matches an in-flight session, so a
+        // successful replan with no new capture (shadow disabled/not sampled this call) must evict
+        // whatever record was retained for a *previous* capture on that same id - otherwise the
+        // admin diagnostics endpoint would show the new plan next to a stale context/capabilities/
+        // reasoning from an earlier call. Remove is a documented no-op when nothing is retained, so
+        // this is safe (if slightly redundant) for the brand-new-session case too.
         if (captured is not null)
         {
             _diagnosticsStore.Attach(session.Id, captured);
+        }
+        else
+        {
+            _diagnosticsStore.Remove(session.Id);
         }
 
         return session;
@@ -111,9 +123,16 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
             _sessions[id] = updated;
         }
 
+        // PR113a: attach-or-remove unconditionally (see the matching comment in Create) - a
+        // successful Patch with no new capture must evict whatever record was retained from an
+        // earlier Create/Patch on this id, not leave it attached to the freshly replanned session.
         if (captured is not null)
         {
             _diagnosticsStore.Attach(updated.Id, captured);
+        }
+        else
+        {
+            _diagnosticsStore.Remove(updated.Id);
         }
 
         return updated;
