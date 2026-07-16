@@ -51,5 +51,43 @@ public sealed class PlaybackShadowOptionsTests
         Assert.False(options.Enabled);
         Assert.Equal(1.0, options.SampleRate);
         Assert.Equal(50, options.MaxExecutionMs);
+        Assert.Equal(PlaybackEngineMode.Legacy, options.Mode);
+        Assert.Equal(0, options.CanaryPercentage);
+    }
+
+    [Theory]
+    [InlineData(0, 0)]
+    [InlineData(100, 100)]
+    [InlineData(42, 42)]
+    [InlineData(-1, 0)]
+    [InlineData(101, 100)]
+    [InlineData(int.MinValue, 0)]
+    [InlineData(int.MaxValue, 100)]
+    public void CanaryPercentage_ClampsToZeroHundredRange(int input, int expected)
+    {
+        var options = new PlaybackShadowOptions { CanaryPercentage = input };
+
+        Assert.Equal(expected, options.CanaryPercentage);
+    }
+
+    /// <summary>
+    /// PR115a: the pre-PR115a <c>Enabled</c> flag still means shadow mode when <c>Mode</c> is left
+    /// at its <see cref="PlaybackEngineMode.Legacy"/> default, so existing configurations keep
+    /// their behavior; an explicit non-default <c>Mode</c> always wins over <c>Enabled</c>.
+    /// </summary>
+    [Theory]
+    [InlineData(PlaybackEngineMode.Legacy, false, PlaybackEngineMode.Legacy)]
+    [InlineData(PlaybackEngineMode.Legacy, true, PlaybackEngineMode.Shadow)]
+    [InlineData(PlaybackEngineMode.Shadow, false, PlaybackEngineMode.Shadow)]
+    [InlineData(PlaybackEngineMode.Shadow, true, PlaybackEngineMode.Shadow)]
+    [InlineData(PlaybackEngineMode.Canary, false, PlaybackEngineMode.Canary)]
+    [InlineData(PlaybackEngineMode.Canary, true, PlaybackEngineMode.Canary)]
+    [InlineData(PlaybackEngineMode.V2, false, PlaybackEngineMode.V2)]
+    [InlineData(PlaybackEngineMode.V2, true, PlaybackEngineMode.V2)]
+    public void GetEffectiveMode_CombinesModeAndLegacyEnabledFlag(PlaybackEngineMode mode, bool enabled, PlaybackEngineMode expected)
+    {
+        var options = new PlaybackShadowOptions { Mode = mode, Enabled = enabled };
+
+        Assert.Equal(expected, options.GetEffectiveMode());
     }
 }

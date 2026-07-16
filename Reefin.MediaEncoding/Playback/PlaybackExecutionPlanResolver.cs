@@ -7,35 +7,31 @@ namespace Reefin.MediaEncoding.Playback;
 /// <inheritdoc cref="IPlaybackExecutionPlanResolver"/>
 public sealed class PlaybackExecutionPlanResolver : IPlaybackExecutionPlanResolver
 {
-    private readonly IShadowDiagnosticsStore _diagnosticsStore;
+    private readonly IV2PlanStore _v2PlanStore;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PlaybackExecutionPlanResolver"/> class.
     /// </summary>
-    /// <param name="diagnosticsStore">
-    /// The store to read a session's retained <see cref="ShadowDiagnosticRecord"/> from - the same
-    /// singleton <see cref="PlaybackSessionManager"/> attaches records to.
+    /// <param name="v2PlanStore">
+    /// PR115a: the store to read a session's retained AUTHORITATIVE <see cref="V2PlanRecord"/> from -
+    /// the same singleton <see cref="PlaybackSessionManager"/> attaches records to. This resolver no
+    /// longer reads <see cref="IShadowDiagnosticsStore"/>: that store only ever holds observability
+    /// data, never an authoritative decision.
     /// </param>
-    public PlaybackExecutionPlanResolver(IShadowDiagnosticsStore diagnosticsStore)
+    public PlaybackExecutionPlanResolver(IV2PlanStore v2PlanStore)
     {
-        ArgumentNullException.ThrowIfNull(diagnosticsStore);
-        _diagnosticsStore = diagnosticsStore;
+        ArgumentNullException.ThrowIfNull(v2PlanStore);
+        _v2PlanStore = v2PlanStore;
     }
 
     /// <inheritdoc/>
     public PlaybackExecutionPlan? Resolve(PlaybackSessionId id)
     {
-        if (!_diagnosticsStore.TryGet(id, out var record) || record is null)
-        {
-            return null;
-        }
-
-        // PR114a: the non-throwing builder entry point on purpose - a refused decision (for example
-        // NotViable, or a shape the builder does not recognize as executable) is an ordinary "nothing
-        // to resolve" outcome here, exactly like no record being retained at all. Never propagates
-        // PlaybackExecutionPlanRefusedException: this resolver is not yet on any live path, but it
-        // must still behave like a well-behaved diagnostics-adjacent read, not a decision-maker that
-        // can fail.
-        return PlaybackExecutionPlanBuilder.TryBuild(record.Decision, out var plan, out _) ? plan : null;
+        // PR115a: the resolver now reads the session's AUTHORITATIVE v2 plan, never the shadow
+        // diagnostics store. The plan is already built at publish time by the planner (only when
+        // v2 was authoritative for that call), so there is no TryBuild here anymore - just a lookup.
+        // Returns null uniformly whether no record is retained at all, or one is retained but its
+        // decision was refused by the builder at publish time (ExecutionPlan null on the record).
+        return _v2PlanStore.TryGet(id, out var record) ? record?.ExecutionPlan : null;
     }
 }

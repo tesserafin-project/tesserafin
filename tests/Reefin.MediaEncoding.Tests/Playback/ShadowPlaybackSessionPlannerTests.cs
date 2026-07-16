@@ -592,6 +592,322 @@ public class ShadowPlaybackSessionPlannerTests
         Assert.NotEqual(DivergenceClass.Unexplained, published.Divergence.Class);
     }
 
+    // --- PR115a: canary/v2 authority gating ---
+
+    [Fact]
+    public void PlanVideo_ModeCanaryFullCohort_PublishesV2PlanRecordAndDiagnosticsStillPublish()
+    {
+        // CanaryPercentage=100 enrolls every user/device pair (CanaryCohort.IsInCohort short-circuits
+        // true at >=100), so this call is authoritative regardless of the default Guid.Empty/null
+        // user/device on CreateOptions()'s MediaOptions.
+        var options = CreateOptions();
+        var expectedPlan = new PlaybackPlan(PlayMethod.DirectPlay, default);
+
+        var mockInner = new Mock<IPlaybackSessionPlanner>();
+        mockInner.Setup(p => p.PlanVideo(options)).Returns(expectedPlan);
+
+        var mockEngine = new Mock<IPlaybackEngine>();
+        mockEngine
+            .Setup(e => e.Decide(It.IsAny<PlaybackRequestContext>(), It.IsAny<Reefin.Playback.Decision.ClientCapabilities>(), It.IsAny<IReadOnlyList<MediaSourceSnapshot>>(), It.IsAny<PlaybackConstraints>()))
+            .Returns(BuildViableDirectPlayDecision());
+
+        ShadowDiagnosticRecord? publishedDiagnostics = null;
+        var mockDiagnosticsStore = new Mock<IShadowDiagnosticsStore>();
+        mockDiagnosticsStore
+            .Setup(s => s.Publish(It.IsAny<ShadowDiagnosticRecord>()))
+            .Callback<ShadowDiagnosticRecord>(record => publishedDiagnostics = record);
+
+        var v2Store = new InMemoryV2PlanStore();
+        var decorator = new ShadowPlaybackSessionPlanner(
+            mockInner.Object,
+            mockEngine.Object,
+            NullLogger<ShadowPlaybackSessionPlanner>.Instance,
+            () => new PlaybackShadowOptions { Mode = PlaybackEngineMode.Canary, CanaryPercentage = 100, SampleRate = 1.0 },
+            metrics: null,
+            diagnosticsStore: mockDiagnosticsStore.Object,
+            v2PlanStore: v2Store);
+
+        V2PlanRecord? publishedV2;
+        using (v2Store.BeginCapture())
+        {
+            var result = decorator.PlanVideo(options);
+            Assert.Same(expectedPlan, result);
+            publishedV2 = v2Store.TakeCaptured();
+        }
+
+        Assert.NotNull(publishedV2);
+        Assert.NotNull(publishedV2!.ExecutionPlan);
+        Assert.True(publishedV2.Decision.IsViable);
+
+        // The shadow observability run happens unconditionally alongside the authoritative publish.
+        Assert.NotNull(publishedDiagnostics);
+    }
+
+    [Fact]
+    public void PlanVideo_ModeCanaryEmptyCohort_PublishesNoV2PlanRecordButDiagnosticsStillRun()
+    {
+        // CanaryPercentage=0 enrolls nobody (CanaryCohort.IsInCohort short-circuits false at <=0), so
+        // this call is never authoritative - but SampleRate=1.0 still drives the pure-observability
+        // shadow run for it.
+        var options = CreateOptions();
+        var expectedPlan = new PlaybackPlan(PlayMethod.DirectPlay, default);
+
+        var mockInner = new Mock<IPlaybackSessionPlanner>();
+        mockInner.Setup(p => p.PlanVideo(options)).Returns(expectedPlan);
+
+        var mockEngine = new Mock<IPlaybackEngine>();
+        mockEngine
+            .Setup(e => e.Decide(It.IsAny<PlaybackRequestContext>(), It.IsAny<Reefin.Playback.Decision.ClientCapabilities>(), It.IsAny<IReadOnlyList<MediaSourceSnapshot>>(), It.IsAny<PlaybackConstraints>()))
+            .Returns(BuildViableDirectPlayDecision());
+
+        ShadowDiagnosticRecord? publishedDiagnostics = null;
+        var mockDiagnosticsStore = new Mock<IShadowDiagnosticsStore>();
+        mockDiagnosticsStore
+            .Setup(s => s.Publish(It.IsAny<ShadowDiagnosticRecord>()))
+            .Callback<ShadowDiagnosticRecord>(record => publishedDiagnostics = record);
+
+        var v2Store = new InMemoryV2PlanStore();
+        var decorator = new ShadowPlaybackSessionPlanner(
+            mockInner.Object,
+            mockEngine.Object,
+            NullLogger<ShadowPlaybackSessionPlanner>.Instance,
+            () => new PlaybackShadowOptions { Mode = PlaybackEngineMode.Canary, CanaryPercentage = 0, SampleRate = 1.0 },
+            metrics: null,
+            diagnosticsStore: mockDiagnosticsStore.Object,
+            v2PlanStore: v2Store);
+
+        V2PlanRecord? publishedV2;
+        using (v2Store.BeginCapture())
+        {
+            decorator.PlanVideo(options);
+            publishedV2 = v2Store.TakeCaptured();
+        }
+
+        Assert.Null(publishedV2);
+        Assert.NotNull(publishedDiagnostics);
+    }
+
+    [Fact]
+    public void PlanVideo_ModeShadow_NeverPublishesV2PlanRecord()
+    {
+        var options = CreateOptions();
+        var expectedPlan = new PlaybackPlan(PlayMethod.DirectPlay, default);
+
+        var mockInner = new Mock<IPlaybackSessionPlanner>();
+        mockInner.Setup(p => p.PlanVideo(options)).Returns(expectedPlan);
+
+        var mockEngine = new Mock<IPlaybackEngine>();
+        mockEngine
+            .Setup(e => e.Decide(It.IsAny<PlaybackRequestContext>(), It.IsAny<Reefin.Playback.Decision.ClientCapabilities>(), It.IsAny<IReadOnlyList<MediaSourceSnapshot>>(), It.IsAny<PlaybackConstraints>()))
+            .Returns(BuildViableDirectPlayDecision());
+
+        var v2Store = new InMemoryV2PlanStore();
+        var decorator = new ShadowPlaybackSessionPlanner(
+            mockInner.Object,
+            mockEngine.Object,
+            NullLogger<ShadowPlaybackSessionPlanner>.Instance,
+            () => new PlaybackShadowOptions { Mode = PlaybackEngineMode.Shadow, SampleRate = 1.0 },
+            metrics: null,
+            diagnosticsStore: null,
+            v2PlanStore: v2Store);
+
+        V2PlanRecord? publishedV2;
+        using (v2Store.BeginCapture())
+        {
+            var result = decorator.PlanVideo(options);
+            Assert.Same(expectedPlan, result);
+            publishedV2 = v2Store.TakeCaptured();
+        }
+
+        Assert.Null(publishedV2);
+        mockEngine.Verify(
+            e => e.Decide(It.IsAny<PlaybackRequestContext>(), It.IsAny<Reefin.Playback.Decision.ClientCapabilities>(), It.IsAny<IReadOnlyList<MediaSourceSnapshot>>(), It.IsAny<PlaybackConstraints>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public void PlanVideo_ModeLegacyDefaultWithEnabledTrue_EffectiveModeIsShadow_RunsEngineButNeverPublishesV2Record()
+    {
+        // PlaybackShadowOptions.Mode left at its default (Legacy) combined with the pre-PR115a
+        // Enabled=true flag: GetEffectiveMode resolves this to Shadow, so the engine still runs for
+        // observability, but it is never authoritative.
+        var options = CreateOptions();
+        var expectedPlan = new PlaybackPlan(PlayMethod.DirectPlay, default);
+
+        var mockInner = new Mock<IPlaybackSessionPlanner>();
+        mockInner.Setup(p => p.PlanVideo(options)).Returns(expectedPlan);
+
+        var mockEngine = new Mock<IPlaybackEngine>();
+        mockEngine
+            .Setup(e => e.Decide(It.IsAny<PlaybackRequestContext>(), It.IsAny<Reefin.Playback.Decision.ClientCapabilities>(), It.IsAny<IReadOnlyList<MediaSourceSnapshot>>(), It.IsAny<PlaybackConstraints>()))
+            .Returns(BuildViableDirectPlayDecision());
+
+        var v2Store = new InMemoryV2PlanStore();
+        var decorator = new ShadowPlaybackSessionPlanner(
+            mockInner.Object,
+            mockEngine.Object,
+            NullLogger<ShadowPlaybackSessionPlanner>.Instance,
+            () => new PlaybackShadowOptions { Enabled = true, SampleRate = 1.0 },
+            metrics: null,
+            diagnosticsStore: null,
+            v2PlanStore: v2Store);
+
+        V2PlanRecord? publishedV2;
+        using (v2Store.BeginCapture())
+        {
+            var result = decorator.PlanVideo(options);
+            Assert.Same(expectedPlan, result);
+            publishedV2 = v2Store.TakeCaptured();
+        }
+
+        Assert.Null(publishedV2);
+        mockEngine.Verify(
+            e => e.Decide(It.IsAny<PlaybackRequestContext>(), It.IsAny<Reefin.Playback.Decision.ClientCapabilities>(), It.IsAny<IReadOnlyList<MediaSourceSnapshot>>(), It.IsAny<PlaybackConstraints>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public void PlanVideo_ModeV2WithSampleRateZero_StillPublishesV2PlanRecord()
+    {
+        // Sampling only ever gates pure-observability runs: an authoritative run (full v2 mode here)
+        // must happen every time regardless of SampleRate, or a session would randomly flip engines.
+        var options = CreateOptions();
+        var expectedPlan = new PlaybackPlan(PlayMethod.DirectPlay, default);
+
+        var mockInner = new Mock<IPlaybackSessionPlanner>();
+        mockInner.Setup(p => p.PlanVideo(options)).Returns(expectedPlan);
+
+        var mockEngine = new Mock<IPlaybackEngine>();
+        mockEngine
+            .Setup(e => e.Decide(It.IsAny<PlaybackRequestContext>(), It.IsAny<Reefin.Playback.Decision.ClientCapabilities>(), It.IsAny<IReadOnlyList<MediaSourceSnapshot>>(), It.IsAny<PlaybackConstraints>()))
+            .Returns(BuildViableDirectPlayDecision());
+
+        var v2Store = new InMemoryV2PlanStore();
+        var decorator = new ShadowPlaybackSessionPlanner(
+            mockInner.Object,
+            mockEngine.Object,
+            NullLogger<ShadowPlaybackSessionPlanner>.Instance,
+            () => new PlaybackShadowOptions { Mode = PlaybackEngineMode.V2, SampleRate = 0.0 },
+            metrics: null,
+            diagnosticsStore: null,
+            v2PlanStore: v2Store);
+
+        V2PlanRecord? publishedV2;
+        using (v2Store.BeginCapture())
+        {
+            var result = decorator.PlanVideo(options);
+            Assert.Same(expectedPlan, result);
+            publishedV2 = v2Store.TakeCaptured();
+        }
+
+        Assert.NotNull(publishedV2);
+        Assert.NotNull(publishedV2!.ExecutionPlan);
+        mockEngine.Verify(
+            e => e.Decide(It.IsAny<PlaybackRequestContext>(), It.IsAny<Reefin.Playback.Decision.ClientCapabilities>(), It.IsAny<IReadOnlyList<MediaSourceSnapshot>>(), It.IsAny<PlaybackConstraints>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public void PlanVideo_ModeCanaryNotViableDecision_PublishesV2PlanRecordWithNullExecutionPlan()
+    {
+        // v2 was authoritative for this session but the engine's decision was not executable: the
+        // record is still published (its presence IS the statement of authority) but with a null
+        // ExecutionPlan, so PlaybackExecutionPlanResolver.Resolve falls back to legacy for it.
+        var options = CreateOptions();
+        var expectedPlan = new PlaybackPlan(PlayMethod.Transcode, TranscodeReason.AudioCodecNotSupported);
+
+        var mockInner = new Mock<IPlaybackSessionPlanner>();
+        mockInner.Setup(p => p.PlanVideo(options)).Returns(expectedPlan);
+
+        var mockEngine = new Mock<IPlaybackEngine>();
+        mockEngine
+            .Setup(e => e.Decide(It.IsAny<PlaybackRequestContext>(), It.IsAny<Reefin.Playback.Decision.ClientCapabilities>(), It.IsAny<IReadOnlyList<MediaSourceSnapshot>>(), It.IsAny<PlaybackConstraints>()))
+            .Returns(BuildNotViableDecision());
+
+        var v2Store = new InMemoryV2PlanStore();
+        var decorator = new ShadowPlaybackSessionPlanner(
+            mockInner.Object,
+            mockEngine.Object,
+            NullLogger<ShadowPlaybackSessionPlanner>.Instance,
+            () => new PlaybackShadowOptions { Mode = PlaybackEngineMode.Canary, CanaryPercentage = 100, SampleRate = 1.0 },
+            metrics: null,
+            diagnosticsStore: null,
+            v2PlanStore: v2Store);
+
+        V2PlanRecord? publishedV2;
+        using (v2Store.BeginCapture())
+        {
+            var result = decorator.PlanVideo(options);
+            Assert.Same(expectedPlan, result);
+            publishedV2 = v2Store.TakeCaptured();
+        }
+
+        Assert.NotNull(publishedV2);
+        Assert.Null(publishedV2!.ExecutionPlan);
+        Assert.False(publishedV2.Decision.IsViable);
+    }
+
+    [Fact]
+    public void PlanVideo_ModeCanaryEngineThrows_PublishesNoV2PlanRecordAndReturnsLegacyPlanUnchanged()
+    {
+        // The engine throwing must never leave a canary session's execution authority in a partial
+        // state: RunShadow's Publish call is strictly after Decide returns successfully, so a throw
+        // there means nothing is ever published for this call.
+        var options = CreateOptions();
+        var expectedPlan = new PlaybackPlan(PlayMethod.DirectPlay, default);
+
+        var mockInner = new Mock<IPlaybackSessionPlanner>();
+        mockInner.Setup(p => p.PlanVideo(options)).Returns(expectedPlan);
+
+        var mockEngine = new Mock<IPlaybackEngine>();
+        mockEngine
+            .Setup(e => e.Decide(It.IsAny<PlaybackRequestContext>(), It.IsAny<Reefin.Playback.Decision.ClientCapabilities>(), It.IsAny<IReadOnlyList<MediaSourceSnapshot>>(), It.IsAny<PlaybackConstraints>()))
+            .Throws<InvalidOperationException>();
+
+        var v2Store = new InMemoryV2PlanStore();
+        var decorator = new ShadowPlaybackSessionPlanner(
+            mockInner.Object,
+            mockEngine.Object,
+            NullLogger<ShadowPlaybackSessionPlanner>.Instance,
+            () => new PlaybackShadowOptions { Mode = PlaybackEngineMode.Canary, CanaryPercentage = 100, SampleRate = 1.0 },
+            metrics: null,
+            diagnosticsStore: null,
+            v2PlanStore: v2Store);
+
+        V2PlanRecord? publishedV2;
+        using (v2Store.BeginCapture())
+        {
+            var result = decorator.PlanVideo(options);
+            Assert.Same(expectedPlan, result);
+            publishedV2 = v2Store.TakeCaptured();
+        }
+
+        Assert.Null(publishedV2);
+    }
+
+    private static PlaybackDecision BuildViableDirectPlayDecision() => PlaybackDecision.DirectPlay(
+        "source-1",
+        new SelectedStreams(Video: 0, Audio: 1, Subtitle: null),
+        new OutputSpec(
+            Container: "mp4",
+            VideoCodec: "h264",
+            AudioCodec: "aac",
+            Resolution: null,
+            VideoRange: null,
+            AudioChannels: null,
+            TotalBitrate: null,
+            VideoBitrate: null,
+            AudioBitrate: null,
+            Protocol: StreamingProtocol.Http,
+            SubtitleFormat: null),
+        ReasonNode.Leaf(ReasonCode.MethodChosen, ReasonOutcome.Chosen, ReasonSubject.Method()),
+        engineVersion: PlaybackEngine.EngineVersion);
+
+    private static PlaybackDecision BuildNotViableDecision() => PlaybackDecision.NotViable(
+        PlaybackMethod.Transcode,
+        new ReasonNode(ReasonCode.NoViablePlan, ReasonOutcome.Rejected, ReasonSubject.Method(), null, []),
+        engineVersion: PlaybackEngine.EngineVersion);
+
     private static MediaOptions CreateOptions() => new() { Profile = new DeviceProfile() };
 
     /// <summary>

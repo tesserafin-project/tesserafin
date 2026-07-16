@@ -15,13 +15,12 @@ namespace Reefin.Api.Models.PlaybackSessionDtos;
 /// <param name="Id">The session identifier.</param>
 /// <param name="Kind">Whether this is an audio or video session.</param>
 /// <param name="DecisionVersion">
-/// The version of the decision engine that produced this session's plan. Through PR112, the
-/// legacy planner is the only source of truth for this response (see
-/// <see cref="PlaybackSessionDtos.PlaybackSessionResponseMapper"/>), so this is always
-/// <see cref="LegacyDecisionVersion"/> — never <c>PlaybackEngine.EngineVersion</c>: v2 does not
-/// yet produce the decision this response reflects, it only shadow-compares against it (see
-/// docs/pr92-design-playback-api-and-diagnostics.md §6). A future PR that makes v2 the source of
-/// truth (PR115) would populate this from the engine that actually decided.
+/// The version of the decision engine that produced this session's plan. Since PR115a, this is
+/// the real <c>PlaybackDecision.EngineVersion</c> when the session's plan authority is v2 (canary
+/// cohort member, or full v2 mode) and this response reflects that decision (see
+/// <see cref="PlaybackSessionDtos.PlaybackSessionResponseMapper"/>'s
+/// <c>Map(PlaybackSession, Reefin.MediaEncoding.Playback.V2PlanRecord?)</c> overload) — otherwise
+/// it is <see cref="LegacyDecisionVersion"/>, the sentinel for a legacy-projected response.
 /// </param>
 /// <param name="Method">The chosen playback method.</param>
 /// <param name="Output">The shape of the output the client will receive.</param>
@@ -54,12 +53,14 @@ public sealed record PlaybackSessionResponse(
     DateTimeOffset UpdatedAt)
 {
     /// <summary>
-    /// The sentinel <see cref="DecisionVersion"/> for sessions whose plan was produced by the
-    /// legacy planner — the source of truth through PR112/PR115 — rather than the v2 decision
-    /// engine. Deliberately distinct from any real <c>PlaybackEngine.EngineVersion</c> value
-    /// (which starts at 1, per <see cref="PlaybackDecision"/>'s own invariant), so a client can
-    /// tell a legacy-sourced decision apart from a real v2 one once PR115 starts populating this
-    /// field from the engine.
+    /// The sentinel <see cref="DecisionVersion"/> for sessions whose response was projected from
+    /// the legacy planner rather than an authoritative v2 decision — either because no
+    /// <c>V2PlanRecord</c> is retained for the session, or one is retained but its decision is not
+    /// viable (PR115a: v2 was authoritative for the planning call but produced nothing executable,
+    /// so the response must not claim v2 authorship it did not deliver on). Deliberately distinct
+    /// from any real <c>PlaybackDecision.EngineVersion</c> value (which starts at 1, per
+    /// <see cref="PlaybackDecision"/>'s own invariant), so a client can tell a legacy-sourced
+    /// decision apart from a real v2 one.
     /// </summary>
     public const int LegacyDecisionVersion = 0;
 }

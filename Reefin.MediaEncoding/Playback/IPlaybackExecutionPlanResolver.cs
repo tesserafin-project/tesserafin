@@ -11,16 +11,12 @@ namespace Reefin.MediaEncoding.Playback;
 /// invented under pressure during that cutover.
 /// </summary>
 /// <remarks>
-/// Least-invasive derivation (PR114a design choice): rather than adding a new field to
-/// <see cref="PlaybackSession"/> to carry a v2 decision, this resolver derives the plan from whatever
-/// <see cref="ShadowDiagnosticRecord"/> <see cref="IShadowDiagnosticsStore"/> already retains for the
-/// session id - the same record PR113's admin diagnostics endpoint reads. That record is only
-/// retained when the shadow run for that session's planning call actually executed (shadow mode
-/// enabled and not sampled out; see <c>ShadowPlaybackSessionPlanner</c>/<c>PlaybackSessionManager</c>),
-/// so <see cref="Resolve"/> naturally returns <see langword="null"/> whenever shadow mode did not run
-/// for this session - not an error, just nothing to resolve. This piggybacks on infrastructure PR113
-/// already built and tested (capture/attach/evict lifecycle) instead of introducing a second,
-/// independently-maintained place a v2 decision could be stored per session.
+/// PR115a: resolves from the AUTHORITATIVE <see cref="V2PlanRecord"/> <see cref="IV2PlanStore"/>
+/// retains for a canary/v2 session - never from <see cref="IShadowDiagnosticsStore"/>, which only
+/// ever holds observability data and is free to be disabled or evicted without affecting this
+/// resolver. The retained record's <see cref="V2PlanRecord.ExecutionPlan"/> is already built at
+/// publish time by <c>ShadowPlaybackSessionPlanner</c>/<c>PlaybackSessionManager</c>, so this
+/// resolver performs a plain lookup - no <c>PlaybackExecutionPlanBuilder.TryBuild</c> call here.
 /// </remarks>
 public interface IPlaybackExecutionPlanResolver
 {
@@ -29,11 +25,12 @@ public interface IPlaybackExecutionPlanResolver
     /// </summary>
     /// <param name="id">The session to resolve a plan for.</param>
     /// <returns>
-    /// The session's <see cref="PlaybackExecutionPlan"/>, or <see langword="null"/> when no shadow
-    /// diagnostic is retained for the session (shadow mode did not run for it), or when one is
-    /// retained but its <see cref="ShadowDiagnosticRecord.Decision"/> is refused by
-    /// <see cref="PlaybackExecutionPlanBuilder"/> (for example, a <c>NotViable</c> decision) - never
-    /// throws for either case, since both are ordinary, expected outcomes for a dormant resolver.
+    /// The session's <see cref="PlaybackExecutionPlan"/>, or <see langword="null"/> when the session
+    /// has no authoritative v2 record (legacy/shadow-only session, out-of-cohort, engine failed), or
+    /// when one is retained but its decision was refused by the builder at publish time (the
+    /// retained record's <see cref="V2PlanRecord.ExecutionPlan"/> is itself <see langword="null"/>) -
+    /// never throws for either case, since both are ordinary, expected outcomes for a dormant
+    /// resolver.
     /// </returns>
     PlaybackExecutionPlan? Resolve(PlaybackSessionId id);
 }
