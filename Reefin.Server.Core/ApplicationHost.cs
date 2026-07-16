@@ -671,6 +671,12 @@ namespace Reefin.Server.Core
                 provider.GetRequiredService<ITranscodeManager>(),
                 provider.GetRequiredService<ISessionManager>(),
                 provider.GetRequiredService<IShadowDiagnosticsStore>()));
+
+            // PR114a: dormant resolver - reads the same IShadowDiagnosticsStore singleton, so it can
+            // resolve a session's v2 PlaybackExecutionPlan whenever a shadow diagnostic was retained
+            // for it. Registered so DI wiring exists ahead of the PR115 canary; no streaming endpoint
+            // resolves it yet.
+            serviceCollection.AddSingleton<IPlaybackExecutionPlanResolver, PlaybackExecutionPlanResolver>();
             serviceCollection.AddScoped<MediaInfoHelper>();
             serviceCollection.AddScoped<AudioHelper>();
             serviceCollection.AddScoped<DynamicHlsHelper>();

@@ -16,9 +16,15 @@ namespace Reefin.Playback.Dlna;
 /// reverse methods to it: <c>ArchitectureTests.DlnaPlaybackAdapter_AllPublicMethodsReturnDomainTypes</c>
 /// asserts every public method on that facade returns a <see cref="Reefin.Playback.Decision"/> type,
 /// and this facade's methods return the opposite direction (legacy DLNA types), so mixing them would
-/// break that invariant instead of just needing a new one. Delete this type (and the two mappers it
-/// wraps) once the v2 execution layer lands and legacy is no longer consulted for live decisions
-/// (PR114a).
+/// break that invariant instead of just needing a new one.
+/// </remarks>
+/// <remarks>
+/// PR114a correction: this type maps the client's REQUEST (pre-decision) - legacy still needs it as
+/// long as <c>StreamBuilder</c>, not the v2 engine, decides what to play. That is a different concern
+/// from <see cref="PlaybackExecutionPlanAdapter"/> (new in PR114a), which maps a v2 DECISION
+/// (post-<c>PlaybackEngine.Decide</c>) into a legacy <c>StreamInfo</c> so the execution machinery can
+/// run it. Landing the execution layer does not retire this type - it stays until legacy stops being
+/// consulted for live decisions at all, i.e. the PR115 canary cutover, not before.
 /// </remarks>
 public static class ReverseDlnaAdapter
 {

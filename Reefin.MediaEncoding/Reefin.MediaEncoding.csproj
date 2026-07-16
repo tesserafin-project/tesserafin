@@ -26,6 +26,10 @@
     <ProjectReference Include="..\src\Reefin.Playback.Shadow\Reefin.Playback.Shadow.csproj" />
     <ProjectReference Include="..\src\Reefin.Playback.Engine\Reefin.Playback.Engine.csproj" />
     <ProjectReference Include="..\src\Reefin.Playback.Dlna\Reefin.Playback.Dlna.csproj" />
+    <!-- PR114a: IPlaybackExecutionPlanResolver builds a PlaybackExecutionPlan from the
+         ShadowDiagnosticRecord.Decision already retained per session by IShadowDiagnosticsStore - no
+         cycle, Reefin.Playback.Execution references only Reefin.Playback.Decision. -->
+    <ProjectReference Include="..\src\Reefin.Playback.Execution\Reefin.Playback.Execution.csproj" />
   </ItemGroup>
 
   <ItemGroup>
