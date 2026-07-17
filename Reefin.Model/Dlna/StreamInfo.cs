@@ -807,6 +807,19 @@ public class StreamInfo
     }
 
     /// <summary>
+    /// Returns a shallow, per-call copy of this instance (PR118). Every property here is a
+    /// value/immutable-reference type re-assigned wholesale (never a collection mutated in place),
+    /// so <see cref="object.MemberwiseClone"/> is sufficient: callers that need to stamp
+    /// request-scoped fields (e.g. <see cref="PlaySessionId"/>, <see cref="StartPositionTicks"/>)
+    /// onto a <see cref="StreamInfo"/> that may be the SAME shared instance another caller also
+    /// holds - as <c>PlaybackLiveStreamResolver</c>'s legacy fallback does, returning the session's
+    /// own retained <see cref="StreamInfo"/> verbatim - must clone first so concurrent callers never
+    /// race on each other's writes.
+    /// </summary>
+    /// <returns>A shallow copy of this instance.</returns>
+    public StreamInfo Clone() => (StreamInfo)MemberwiseClone();
+
+    /// <summary>
     /// Sets a stream option.
     /// </summary>
     /// <param name="qualifier">The qualifier.</param>

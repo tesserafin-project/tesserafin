@@ -228,12 +228,25 @@ public class PlaybackSessionsControllerTests
             () => CreateController().CreatePlaybackSession(CreateRequest()));
     }
 
+    /// <summary>
+    /// A minimal existing session shaped only for the owner-or-admin check
+    /// (<c>EnsureCallerOwnsSessionOrIsAdmin</c>) that PUT/DELETE now perform against whatever
+    /// <see cref="IPlaybackSessionManager.Get"/> returns for the target id - independent of whatever
+    /// the verb's own mocked outcome (<c>Patch</c>/<c>Delete</c>) later returns.
+    /// </summary>
+    private PlaybackSession BuildExistingSessionForAuth(PlaybackSessionId id, Guid ownerId)
+    {
+        var options = new MediaOptions { ItemId = _itemId, UserId = ownerId, Profile = new DeviceProfile() };
+        return new PlaybackSession(id, PlaybackMediaKind.Video, null, new PlaybackSessionRequest(PlaybackMediaKind.Video, options), new PlaybackPlan(PlayMethod.DirectPlay, default), default, default);
+    }
+
     [Fact]
     public async Task ReplacePlaybackSession_ViablePlan_ReturnsMappedResponse()
     {
         var item = new Movie { Id = _itemId };
         SetUpItemAndUser(item);
         var session = new PlaybackSession(PlaybackSessionId.NewId(), PlaybackMediaKind.Video, null, null, new PlaybackPlan(PlayMethod.Transcode, TranscodeReason.VideoCodecNotSupported), default, default);
+        _playbackSessionManager.Setup(m => m.Get(session.Id)).Returns(BuildExistingSessionForAuth(session.Id, _userId));
         _playbackSessionManager
             .Setup(m => m.Patch(It.IsAny<PlaybackSessionId>(), It.IsAny<PlaybackSessionRequest>()))
             .Returns(session);
@@ -249,19 +262,61 @@ public class PlaybackSessionsControllerTests
     {
         var item = new Movie { Id = _itemId };
         SetUpItemAndUser(item);
-        _playbackSessionManager
-            .Setup(m => m.Patch(It.IsAny<PlaybackSessionId>(), It.IsAny<PlaybackSessionRequest>()))
-            .Returns((PlaybackSession?)null);
+        _playbackSessionManager.Setup(m => m.Get(It.IsAny<PlaybackSessionId>())).Returns((PlaybackSession?)null);
 
         var result = await CreateController().ReplacePlaybackSession(PlaybackSessionId.NewId(), CreateReplaceRequest());
 
         Assert.IsType<NotFoundResult>(result.Result);
+        _playbackSessionManager.Verify(m => m.Patch(It.IsAny<PlaybackSessionId>(), It.IsAny<PlaybackSessionRequest>()), Times.Never);
+    }
+
+    /// <summary>
+    /// PR118: PUT used to have no ownership check at all - any authenticated caller who knew the id
+    /// could re-plan someone else's session. Same owner-or-admin semantics as
+    /// <c>GetPlaybackSessionStream</c> (§4.2 of the PR117 design doc flagged this as a pre-existing,
+    /// separately tracked gap).
+    /// </summary>
+    [Fact]
+    public async Task ReplacePlaybackSession_OtherUser_ReturnsForbidden()
+    {
+        var item = new Movie { Id = _itemId };
+        SetUpItemAndUser(item);
+        var id = PlaybackSessionId.NewId();
+        _playbackSessionManager.Setup(m => m.Get(id)).Returns(BuildExistingSessionForAuth(id, Guid.NewGuid()));
+
+        var result = await CreateController().ReplacePlaybackSession(id, CreateReplaceRequest());
+
+        Assert.IsType<ForbidResult>(result.Result);
+        _playbackSessionManager.Verify(m => m.Patch(It.IsAny<PlaybackSessionId>(), It.IsAny<PlaybackSessionRequest>()), Times.Never);
+    }
+
+    /// <summary>
+    /// PR118: an administrator may replace a session it does not own - same elevated allowance
+    /// <c>GetPlaybackSessionStream</c> already grants.
+    /// </summary>
+    [Fact]
+    public async Task ReplacePlaybackSession_Admin_ReturnsMappedResponseForOtherUsersSession()
+    {
+        var item = new Movie { Id = _itemId };
+        SetUpItemAndUser(item);
+        var id = PlaybackSessionId.NewId();
+        _playbackSessionManager.Setup(m => m.Get(id)).Returns(BuildExistingSessionForAuth(id, Guid.NewGuid()));
+        var patchedSession = new PlaybackSession(id, PlaybackMediaKind.Video, null, null, new PlaybackPlan(PlayMethod.Transcode, TranscodeReason.VideoCodecNotSupported), default, default);
+        _playbackSessionManager.Setup(m => m.Patch(id, It.IsAny<PlaybackSessionRequest>())).Returns(patchedSession);
+
+        var controller = CreateController();
+        SetIdentity(controller, Guid.NewGuid(), isAdmin: true);
+
+        var result = await controller.ReplacePlaybackSession(id, CreateReplaceRequest());
+
+        Assert.IsAssignableFrom<OkObjectResult>(result.Result);
     }
 
     [Fact]
     public void DeletePlaybackSession_ExistingSession_ReturnsNoContent()
     {
         var id = PlaybackSessionId.NewId();
+        _playbackSessionManager.Setup(m => m.Get(id)).Returns(BuildExistingSessionForAuth(id, _userId));
         _playbackSessionManager.Setup(m => m.Delete(id)).Returns(true);
 
         var result = CreateController().DeletePlaybackSession(id);
@@ -273,11 +328,48 @@ public class PlaybackSessionsControllerTests
     public void DeletePlaybackSession_UnknownSession_ReturnsNotFound()
     {
         var id = PlaybackSessionId.NewId();
-        _playbackSessionManager.Setup(m => m.Delete(id)).Returns(false);
+        _playbackSessionManager.Setup(m => m.Get(id)).Returns((PlaybackSession?)null);
 
         var result = CreateController().DeletePlaybackSession(id);
 
         Assert.IsType<NotFoundResult>(result);
+        _playbackSessionManager.Verify(m => m.Delete(It.IsAny<PlaybackSessionId>()), Times.Never);
+    }
+
+    /// <summary>
+    /// PR118: DELETE used to have no ownership check at all - any authenticated caller who knew the
+    /// id could end someone else's session. Same owner-or-admin semantics as
+    /// <c>GetPlaybackSessionStream</c>.
+    /// </summary>
+    [Fact]
+    public void DeletePlaybackSession_OtherUser_ReturnsForbidden()
+    {
+        var id = PlaybackSessionId.NewId();
+        _playbackSessionManager.Setup(m => m.Get(id)).Returns(BuildExistingSessionForAuth(id, Guid.NewGuid()));
+
+        var result = CreateController().DeletePlaybackSession(id);
+
+        Assert.IsType<ForbidResult>(result);
+        _playbackSessionManager.Verify(m => m.Delete(It.IsAny<PlaybackSessionId>()), Times.Never);
+    }
+
+    /// <summary>
+    /// PR118: an administrator may delete a session it does not own - same elevated allowance
+    /// <c>GetPlaybackSessionStream</c> already grants.
+    /// </summary>
+    [Fact]
+    public void DeletePlaybackSession_Admin_ReturnsNoContentForOtherUsersSession()
+    {
+        var id = PlaybackSessionId.NewId();
+        _playbackSessionManager.Setup(m => m.Get(id)).Returns(BuildExistingSessionForAuth(id, Guid.NewGuid()));
+        _playbackSessionManager.Setup(m => m.Delete(id)).Returns(true);
+
+        var controller = CreateController();
+        SetIdentity(controller, Guid.NewGuid(), isAdmin: true);
+
+        var result = controller.DeletePlaybackSession(id);
+
+        Assert.IsType<NoContentResult>(result);
     }
 
     private PlaybackSession BuildStreamableSession(Guid ownerId, string? playSessionId, StreamInfo? streamInfo = null)
@@ -317,16 +409,15 @@ public class PlaybackSessionsControllerTests
     /// <summary>
     /// A caller authenticated without a bearer token must not receive a descriptor: the URL would
     /// lack its <c>&amp;ApiKey=</c> and 401 at fetch time, and a token-less principal has no
-    /// business receiving a tokenized URL at all.
+    /// business receiving a tokenized URL at all. PR118: the check now runs BEFORE resolution -
+    /// verified here by asserting the resolver is never invoked and diagnostics are never read, not
+    /// just that the response is a 403.
     /// </summary>
     [Fact]
     public void GetPlaybackSessionStream_CallerWithoutToken_ReturnsForbidden()
     {
         var session = BuildStreamableSession(_userId, "play-session-1");
         _playbackSessionManager.Setup(m => m.Get(session.Id)).Returns(session);
-        _liveStreamResolver
-            .Setup(r => r.Resolve(session.Id, It.IsAny<StreamInfo>(), It.IsAny<MediaSourceInfo>(), It.IsAny<DeviceProfile>(), It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<long>(), It.IsAny<bool>()))
-            .Returns(session.Plan.StreamInfo!);
 
         var controller = CreateController();
         SetIdentity(controller, _userId, token: null);
@@ -334,6 +425,12 @@ public class PlaybackSessionsControllerTests
         var result = controller.GetPlaybackSessionStream(session.Id);
 
         Assert.IsType<ForbidResult>(result.Result);
+        _liveStreamResolver.Verify(
+            r => r.Resolve(It.IsAny<PlaybackSessionId>(), It.IsAny<StreamInfo>(), It.IsAny<MediaSourceInfo>(), It.IsAny<DeviceProfile>(), It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<long>(), It.IsAny<bool>()),
+            Times.Never);
+        _liveWiringDiagnosticsStore.Verify(
+            s => s.TryGet(It.IsAny<PlaybackSessionId>(), out It.Ref<PlaybackLiveWiringOutcome?>.IsAny),
+            Times.Never);
     }
 
     [Fact]
@@ -378,6 +475,73 @@ public class PlaybackSessionsControllerTests
 
         var descriptor = Assert.IsType<PlaybackSessionStreamDescriptor>(Assert.IsAssignableFrom<OkObjectResult>(result.Result).Value);
         Assert.NotNull(descriptor.Url);
+    }
+
+    /// <summary>
+    /// PR118 regression: the legacy fallback path returns the SAME <see cref="StreamInfo"/> instance
+    /// retained in <c>session.Plan.StreamInfo</c> (not a fresh projection) - two concurrent calls
+    /// with different <c>startTimeTicks</c> used to race on that shared instance's
+    /// <see cref="StreamInfo.PlaySessionId"/>/<see cref="StreamInfo.StartPositionTicks"/> before the
+    /// URL was built. Each response's own <c>startTimeTicks</c> must always show up in ITS OWN URL,
+    /// never the other call's, and the instance the session itself retains must come out completely
+    /// untouched by either call. Uses separate controller instances per call - exactly like ASP.NET's
+    /// own per-request controller lifetime - racing on the single shared mocked session/StreamInfo,
+    /// the actual source of the bug.
+    /// </summary>
+    [Fact]
+    public async Task GetPlaybackSessionStream_ConcurrentCallsWithDifferentTicks_DoNotMutateSharedStreamInfo()
+    {
+        var session = BuildStreamableSession(_userId, "play-session-1");
+        var sharedStreamInfo = session.Plan.StreamInfo!;
+        _playbackSessionManager.Setup(m => m.Get(session.Id)).Returns(session);
+        _liveStreamResolver
+            .Setup(r => r.Resolve(session.Id, sharedStreamInfo, It.IsAny<MediaSourceInfo>(), It.IsAny<DeviceProfile>(), It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<long>(), It.IsAny<bool>()))
+            .Returns(sharedStreamInfo);
+        PlaybackLiveWiringOutcome? outcome = PlaybackLiveWiringOutcome.Fallback(PlaybackLiveFallbackReason.KillSwitch, DateTimeOffset.UtcNow);
+        _liveWiringDiagnosticsStore.Setup(s => s.TryGet(session.Id, out outcome)).Returns(true);
+
+        // Sanity: nothing has touched the shared instance yet.
+        Assert.Equal(0, sharedStreamInfo.StartPositionTicks);
+        Assert.Null(sharedStreamInfo.PlaySessionId);
+
+        const long ticksA = 1000;
+        const long ticksB = 999999;
+        PlaybackSessionStreamDescriptor? descriptorA = null;
+        PlaybackSessionStreamDescriptor? descriptorB = null;
+        var barrier = new Barrier(2);
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        var taskA = Task.Run(
+            () =>
+            {
+                var controller = CreateController();
+                barrier.SignalAndWait(cancellationToken);
+                var result = controller.GetPlaybackSessionStream(session.Id, ticksA);
+                descriptorA = Assert.IsType<PlaybackSessionStreamDescriptor>(Assert.IsAssignableFrom<OkObjectResult>(result.Result).Value);
+            },
+            cancellationToken);
+        var taskB = Task.Run(
+            () =>
+            {
+                var controller = CreateController();
+                barrier.SignalAndWait(cancellationToken);
+                var result = controller.GetPlaybackSessionStream(session.Id, ticksB);
+                descriptorB = Assert.IsType<PlaybackSessionStreamDescriptor>(Assert.IsAssignableFrom<OkObjectResult>(result.Result).Value);
+            },
+            cancellationToken);
+
+        await Task.WhenAll(taskA, taskB);
+
+        Assert.NotNull(descriptorA);
+        Assert.NotNull(descriptorB);
+        Assert.Contains($"&StartTimeTicks={ticksA}", descriptorA!.Url, StringComparison.Ordinal);
+        Assert.Contains($"&StartTimeTicks={ticksB}", descriptorB!.Url, StringComparison.Ordinal);
+        Assert.DoesNotContain($"&StartTimeTicks={ticksB}", descriptorA!.Url, StringComparison.Ordinal);
+        Assert.DoesNotContain($"&StartTimeTicks={ticksA}", descriptorB!.Url, StringComparison.Ordinal);
+
+        // The instance the session itself still holds must never have been mutated by either call.
+        Assert.Equal(0, sharedStreamInfo.StartPositionTicks);
+        Assert.Null(sharedStreamInfo.PlaySessionId);
     }
 
     /// <summary>

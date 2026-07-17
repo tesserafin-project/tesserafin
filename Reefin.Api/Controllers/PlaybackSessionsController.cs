@@ -126,17 +126,36 @@ public class PlaybackSessionsController : BaseReefinApiController
     /// <param name="request">The complete new options to plan.</param>
     /// <response code="200">Session updated.</response>
     /// <response code="400">The declared capabilities or constraints are invalid.</response>
+    /// <response code="403">The caller is neither the session's owner nor an administrator.</response>
     /// <response code="404">Item or session not found.</response>
     /// <response code="422">No viable playback plan exists for the given options.</response>
     /// <returns>The updated session's stable decision projection.</returns>
     [HttpPut("{id}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
     public async Task<ActionResult<PlaybackSessionResponse>> ReplacePlaybackSession([FromRoute] PlaybackSessionId id, [FromBody] ReplacePlaybackSessionRequest request)
     {
         PlaybackSessionRequestValidator.Validate(request);
+
+        // PR118: PUT used to have no ownership check at all - a pre-existing gap (§4.2 of the PR117
+        // design doc called it out explicitly for this endpoint) - any authenticated caller who knew
+        // an id could re-plan someone else's session. Checked against the EXISTING session (not the
+        // new request body's own UserId, which a caller fully controls) before doing any planning
+        // work, same owner-or-admin semantics as GetPlaybackSessionStream.
+        var existingSession = _playbackSessionManager.Get(id);
+        if (existingSession is null)
+        {
+            return NotFound();
+        }
+
+        var authorization = EnsureCallerOwnsSessionOrIsAdmin(existingSession);
+        if (authorization is not null)
+        {
+            return authorization;
+        }
 
         var (kind, options) = await ResolveOptions(request, HttpContext.RequestAborted).ConfigureAwait(false);
 
@@ -157,13 +176,29 @@ public class PlaybackSessionsController : BaseReefinApiController
     /// </summary>
     /// <param name="id">The session to remove.</param>
     /// <response code="204">Session removed.</response>
+    /// <response code="403">The caller is neither the session's owner nor an administrator.</response>
     /// <response code="404">Session not found.</response>
     /// <returns>No content.</returns>
     [HttpDelete("{id}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public ActionResult DeletePlaybackSession([FromRoute] PlaybackSessionId id)
     {
+        // PR118: same pre-existing gap as PUT (§4.2) - any authenticated caller who knew an id could
+        // end someone else's session. Same owner-or-admin semantics as GetPlaybackSessionStream.
+        var session = _playbackSessionManager.Get(id);
+        if (session is null)
+        {
+            return NotFound();
+        }
+
+        var authorization = EnsureCallerOwnsSessionOrIsAdmin(session);
+        if (authorization is not null)
+        {
+            return authorization;
+        }
+
         return _playbackSessionManager.Delete(id)
             ? NoContent()
             : NotFound();
@@ -207,14 +242,13 @@ public class PlaybackSessionsController : BaseReefinApiController
         }
 
         // §4.2 (mandatory, new on this endpoint): a URL carries the caller's own access token
-        // (StreamInfo.ToUrl's &ApiKey=) - unlike ReplacePlaybackSession/DeletePlaybackSession (a
-        // pre-existing, separately tracked gap, §4.2), this endpoint must never hand that token to
-        // anyone but the session's own owner or an administrator.
-        var options = session.Request?.Options;
-        var isAdmin = User.IsInRole(UserRoles.Administrator);
-        if (!isAdmin && (options is null || !options.UserId.Equals(User.GetUserId())))
+        // (StreamInfo.ToUrl's &ApiKey=) - this endpoint must never hand that token to anyone but the
+        // session's own owner or an administrator. PR118: the same check now also guards
+        // ReplacePlaybackSession/DeletePlaybackSession - see EnsureCallerOwnsSessionOrIsAdmin.
+        var authorization = EnsureCallerOwnsSessionOrIsAdmin(session);
+        if (authorization is not null)
         {
-            return Forbid();
+            return authorization;
         }
 
         // §2.3 (mandatory): a session without a PlaySessionId cannot correlate a served URL to the
@@ -224,6 +258,7 @@ public class PlaybackSessionsController : BaseReefinApiController
             return Conflict("Session has no PlaySessionId - PUT a replacement request supplying one before requesting a stream URL.");
         }
 
+        var options = session.Request?.Options;
         var legacyStreamInfo = session.Plan.StreamInfo;
         var mediaSource = legacyStreamInfo?.MediaSource;
         if (options is null || legacyStreamInfo is null || mediaSource is null)
@@ -231,7 +266,17 @@ public class PlaybackSessionsController : BaseReefinApiController
             return Conflict("Session has no plannable stream - this endpoint only serves sessions planned via Playback/Sessions.");
         }
 
-        var resolvedStreamInfo = _liveStreamResolver.Resolve(
+        // PR118 (moved up from after resolution): a URL without the caller's token would 401 at
+        // fetch time (silent client breakage), and a caller authenticated without a bearer token has
+        // no business triggering resolution at all - not just receiving a tokenized URL at the end.
+        // Checked before any operational effect (resolution, diagnostics, metrics).
+        var accessToken = User.GetToken();
+        if (string.IsNullOrEmpty(accessToken))
+        {
+            return Forbid();
+        }
+
+        var resolved = _liveStreamResolver.Resolve(
             session.Id,
             legacyStreamInfo,
             mediaSource,
@@ -242,9 +287,13 @@ public class PlaybackSessionsController : BaseReefinApiController
             startTimeTicks,
             options.AlwaysBurnInSubtitleWhenTranscoding);
 
-        // Mirrors MediaInfoHelper.SetDeviceSpecificData: re-stamped AFTER resolution, on whichever
-        // StreamInfo (v2 or legacy fallback) was actually chosen, so this call's own startTimeTicks
-        // always wins over whatever was baked in at the original planning call.
+        // PR118: the legacy fallback path returns the SAME mutable StreamInfo instance retained in
+        // session.Plan.StreamInfo (not a fresh projection, unlike the v2-adapter path) - stamping
+        // PlaySessionId/StartPositionTicks directly onto it let two concurrent calls with different
+        // startTimeTicks race on each other's writes. Clone per-request first: mirrors
+        // MediaInfoHelper.SetDeviceSpecificData's own re-stamp, but never mutates the instance the
+        // session itself still holds, on either path (v2 or legacy).
+        var resolvedStreamInfo = resolved.Clone();
         resolvedStreamInfo.PlaySessionId = session.PlaySessionId;
         resolvedStreamInfo.StartPositionTicks = startTimeTicks;
 
@@ -259,16 +308,36 @@ public class PlaybackSessionsController : BaseReefinApiController
             servedBy = v2Record.Decision.EngineVersion;
         }
 
-        // A URL without the caller's token would 401 at fetch time (silent client breakage) - and a
-        // caller authenticated without a bearer token has no business receiving a tokenized URL.
-        var accessToken = User.GetToken();
-        if (string.IsNullOrEmpty(accessToken))
+        var descriptor = PlaybackSessionStreamDescriptorMapper.Map(resolvedStreamInfo, servedBy, outcome?.FallbackReason, _mediaEncoder, accessToken);
+        return Ok(descriptor);
+    }
+
+    /// <summary>
+    /// PR118: the owner-or-admin authorization shared by all three verbs that operate on an
+    /// existing session (GET Stream, PUT, DELETE) - originally only enforced on GET Stream (PR117),
+    /// leaving PUT/DELETE reachable by any authenticated caller who knew the session id (§4.2 of the
+    /// PR117 design doc flagged this as a pre-existing, separately tracked gap). Checked against the
+    /// session's OWN stored request options, never anything the caller's request body supplies.
+    /// </summary>
+    /// <param name="session">The session being read, replaced, or deleted.</param>
+    /// <returns>
+    /// <c>null</c> if the caller may proceed; otherwise the <see cref="ForbidResult"/> to return
+    /// as-is.
+    /// </returns>
+    private ActionResult? EnsureCallerOwnsSessionOrIsAdmin(PlaybackSession session)
+    {
+        if (User.IsInRole(UserRoles.Administrator))
+        {
+            return null;
+        }
+
+        var options = session.Request?.Options;
+        if (options is null || !options.UserId.Equals(User.GetUserId()))
         {
             return Forbid();
         }
 
-        var descriptor = PlaybackSessionStreamDescriptorMapper.Map(resolvedStreamInfo, servedBy, outcome?.FallbackReason, _mediaEncoder, accessToken);
-        return Ok(descriptor);
+        return null;
     }
 
     private async Task<(PlaybackMediaKind Kind, MediaOptions Options)> ResolveOptions(PlaybackPlanRequestBase request, CancellationToken cancellationToken)
