@@ -32,6 +32,22 @@ public sealed class PlaybackExecutionPlanResolver : IPlaybackExecutionPlanResolv
         // v2 was authoritative for that call), so there is no TryBuild here anymore - just a lookup.
         // Returns null uniformly whether no record is retained at all, or one is retained but its
         // decision was refused by the builder at publish time (ExecutionPlan null on the record).
-        return _v2PlanStore.TryGet(id, out var record) ? record?.ExecutionPlan : null;
+        // PR115c: implemented in terms of the richer overload below - same lookup, same result for
+        // this signature, zero behavior change for existing callers/tests.
+        Resolve(id, out var plan);
+        return plan;
+    }
+
+    /// <inheritdoc/>
+    public PlaybackExecutionPlanResolution Resolve(PlaybackSessionId id, out PlaybackExecutionPlan? plan)
+    {
+        if (!_v2PlanStore.TryGet(id, out var record) || record is null)
+        {
+            plan = null;
+            return PlaybackExecutionPlanResolution.NoAuthoritativeRecord;
+        }
+
+        plan = record.ExecutionPlan;
+        return plan is not null ? PlaybackExecutionPlanResolution.Resolved : PlaybackExecutionPlanResolution.PlanNotExecutable;
     }
 }

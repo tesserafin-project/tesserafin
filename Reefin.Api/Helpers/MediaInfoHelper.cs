@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Net;
@@ -23,11 +24,15 @@ using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
 using Reefin.Database.Implementations.Enums;
 using Reefin.Extensions;
+using Reefin.MediaEncoding.Playback;
+using Reefin.Model.Configuration;
 using Reefin.Model.Dlna;
 using Reefin.Model.Dto;
 using Reefin.Model.Entities;
 using Reefin.Model.MediaInfo;
 using Reefin.Model.Session;
+using Reefin.Playback.Dlna;
+using Reefin.Playback.Execution;
 
 namespace Reefin.Api.Helpers;
 
@@ -45,6 +50,8 @@ public class MediaInfoHelper
     private readonly INetworkManager _networkManager;
     private readonly IDeviceManager _deviceManager;
     private readonly IPlaybackSessionManager _playbackSessionManager;
+    private readonly IPlaybackExecutionPlanResolver _executionPlanResolver;
+    private readonly IPlaybackLiveWiringDiagnosticsStore _liveWiringDiagnosticsStore;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MediaInfoHelper"/> class.
@@ -58,6 +65,18 @@ public class MediaInfoHelper
     /// <param name="networkManager">Instance of the <see cref="INetworkManager"/> interface.</param>
     /// <param name="deviceManager">Instance of the <see cref="IDeviceManager"/> interface.</param>
     /// <param name="playbackSessionManager">Instance of the <see cref="IPlaybackSessionManager"/> interface.</param>
+    /// <param name="executionPlanResolver">
+    /// PR115c: resolves the v2 execution plan for a canary-authoritative session - the entry point
+    /// PR114a/PR115a built and PR115b designed the execution context for, now actually consumed by
+    /// the live streaming path (<see cref="SetDeviceSpecificData"/>). Never called directly against
+    /// <c>IV2PlanStore</c> - this is the sole resolution point, per the PR115b design doc §4.4.
+    /// </param>
+    /// <param name="liveWiringDiagnosticsStore">
+    /// PR115c: where the serve-v2-or-fallback decision for each request is retained for the admin
+    /// diagnostics surface. Defaults to a no-op instance when not supplied, so every pre-PR115c call
+    /// site - including existing test constructors - keeps compiling and behaving exactly as before:
+    /// no outcome is ever retained.
+    /// </param>
     public MediaInfoHelper(
         IUserManager userManager,
         IItemLookupService itemLookupService,
@@ -67,7 +86,9 @@ public class MediaInfoHelper
         ILogger<MediaInfoHelper> logger,
         INetworkManager networkManager,
         IDeviceManager deviceManager,
-        IPlaybackSessionManager playbackSessionManager)
+        IPlaybackSessionManager playbackSessionManager,
+        IPlaybackExecutionPlanResolver executionPlanResolver,
+        IPlaybackLiveWiringDiagnosticsStore? liveWiringDiagnosticsStore = null)
     {
         _userManager = userManager;
         _itemLookupService = itemLookupService;
@@ -78,6 +99,8 @@ public class MediaInfoHelper
         _networkManager = networkManager;
         _deviceManager = deviceManager;
         _playbackSessionManager = playbackSessionManager;
+        _executionPlanResolver = executionPlanResolver;
+        _liveWiringDiagnosticsStore = liveWiringDiagnosticsStore ?? NoOpPlaybackLiveWiringDiagnosticsStore.Instance;
     }
 
     /// <summary>
@@ -260,6 +283,25 @@ public class MediaInfoHelper
         var session = _playbackSessionManager.Create(new PlaybackSessionRequest(kind, options), playSessionId);
         var streamInfo = session?.Plan.StreamInfo;
 
+        // PR115c: for a canary-authoritative session with an executable v2 plan, serve the StreamInfo
+        // the v2 plan describes instead of legacy's own - legacy is always the default and is
+        // replaced only on full, verified success (docs/pr115-design-canary-execution.md §4.4). Every
+        // other outcome (no record, unresolvable plan, source id mismatch, the Dolby Vision
+        // exclusion, the kill switch, an adapter exception) keeps legacy's streamInfo unchanged.
+        if (session is not null && streamInfo is not null)
+        {
+            streamInfo = ResolveServedStreamInfo(
+                session.Id,
+                streamInfo,
+                mediaSource,
+                profile,
+                item.Id,
+                options.DeviceId,
+                playSessionId,
+                startTimeTicks,
+                alwaysBurnInSubtitleWhenTranscoding);
+        }
+
         if (streamInfo is not null)
         {
             streamInfo.PlaySessionId = playSessionId;
@@ -348,6 +390,137 @@ public class MediaInfoHelper
                 attachment.Index);
         }
     }
+
+    /// <summary>
+    /// PR115c: the live-wiring decision. Legacy (<paramref name="legacyStreamInfo"/>) is always the
+    /// default and is replaced only on full, verified success - mirrors the "v2 must never break the
+    /// live path" discipline <see cref="Reefin.MediaEncoding.Playback.ShadowPlaybackSessionPlanner"/>
+    /// already applies to the shadow run. Every failure mode (kill switch, no/unresolvable plan,
+    /// source id mismatch, the Dolby Vision exclusion, an adapter exception) returns
+    /// <paramref name="legacyStreamInfo"/> unchanged, logged and retained as a typed
+    /// <see cref="PlaybackLiveFallbackReason"/> - never a silent substitution, never an exception
+    /// escaping to the caller.
+    /// </summary>
+    private StreamInfo ResolveServedStreamInfo(
+        PlaybackSessionId sessionId,
+        StreamInfo legacyStreamInfo,
+        MediaSourceInfo mediaSource,
+        DeviceProfile profile,
+        Guid itemId,
+        string? deviceId,
+        string playSessionId,
+        long startTimeTicks,
+        bool alwaysBurnInSubtitleWhenTranscoding)
+    {
+        var decidedAt = DateTimeOffset.UtcNow;
+
+        // Kill switch: an operator-controlled, immediate off-switch, independent of cohort
+        // membership - forces legacy for every session while the effective mode does not authorize
+        // serving v2 live. Reads live server configuration on every call, the same mechanism
+        // ShadowPlaybackSessionPlanner's own optionsAccessor already relies on for "no restart
+        // required" - flipping PlaybackShadow.Mode back to Legacy/Shadow takes effect on the very
+        // next request. Checked even before resolving a plan: belt-and-suspenders against a
+        // hypothetically stale IV2PlanStore record outliving a mode change, not just the ordinary
+        // "session created before the switch flipped" case IV2PlanStore's own attach-or-evict
+        // discipline in PlaybackSessionManager already handles.
+        var effectiveMode = _serverConfigurationManager.Configuration.PlaybackShadow.GetEffectiveMode();
+        if (effectiveMode is not (PlaybackEngineMode.Canary or PlaybackEngineMode.V2))
+        {
+            return FallbackToLegacy(sessionId, legacyStreamInfo, PlaybackLiveFallbackReason.KillSwitch, decidedAt);
+        }
+
+        var resolution = _executionPlanResolver.Resolve(sessionId, out var plan);
+        if (resolution != PlaybackExecutionPlanResolution.Resolved || plan is null)
+        {
+            var reason = resolution == PlaybackExecutionPlanResolution.PlanNotExecutable
+                ? PlaybackLiveFallbackReason.PlanNotExecutable
+                : PlaybackLiveFallbackReason.NoAuthoritativeRecord;
+            return FallbackToLegacy(sessionId, legacyStreamInfo, reason, decidedAt);
+        }
+
+        // Strict SourceId verification: the plan must never be applied to a different source than
+        // the one v2 actually selected. Checked explicitly here - not left to the adapter's own
+        // ArgumentException - so a mismatch is a typed, observable fallback rather than an unhandled
+        // exception reaching the caller. Same comparison (Ordinal) the adapter itself uses.
+        if (!string.Equals(mediaSource.Id, plan.SourceId, StringComparison.Ordinal))
+        {
+            return FallbackToLegacy(sessionId, legacyStreamInfo, PlaybackLiveFallbackReason.SourceIdMismatch, decidedAt);
+        }
+
+        // Mandatory exclusion (PR115b design doc, "Constat de sortie PR115b" #2): a Dolby
+        // Vision/HDR source whose codec appears in legacy's own candidate codec CSV is the class of
+        // session EncodingHelper.CanStreamCopyVideo can stream-copy incompatibly instead of
+        // transcoding - a pre-existing legacy pipeline behavior, not yet investigated for the v2 live
+        // path. Excluded unconditionally until that investigation happens; not a rollout policy knob.
+        if (IsDolbyVisionExcluded(plan, mediaSource, legacyStreamInfo.VideoCodecs))
+        {
+            return FallbackToLegacy(sessionId, legacyStreamInfo, PlaybackLiveFallbackReason.DolbyVisionExclusion, decidedAt);
+        }
+
+        try
+        {
+            var context = new PlaybackExecutionContext(
+                itemId,
+                playSessionId,
+                deviceId,
+                profile.Id?.ToString("N", CultureInfo.InvariantCulture),
+                startTimeTicks,
+                alwaysBurnInSubtitleWhenTranscoding);
+
+            var v2StreamInfo = PlaybackExecutionPlanAdapter.ToStreamInfo(plan, context, mediaSource, profile);
+            _liveWiringDiagnosticsStore.Record(sessionId, PlaybackLiveWiringOutcome.Served(decidedAt));
+            _logger.LogInformation("Playback session {SessionId} served from the v2 execution plan (PR115c canary).", sessionId);
+            return v2StreamInfo;
+        }
+#pragma warning disable CA1031 // Do not catch general exception types - v2 must never break the live path, same discipline as ShadowPlaybackSessionPlanner.
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            _logger.LogWarning(ex, "Playback session {SessionId}: v2 execution plan adapter threw; falling back to legacy.", sessionId);
+            return FallbackToLegacy(sessionId, legacyStreamInfo, PlaybackLiveFallbackReason.AdapterError, decidedAt);
+        }
+    }
+
+    private StreamInfo FallbackToLegacy(PlaybackSessionId sessionId, StreamInfo legacyStreamInfo, PlaybackLiveFallbackReason reason, DateTimeOffset decidedAt)
+    {
+        _liveWiringDiagnosticsStore.Record(sessionId, PlaybackLiveWiringOutcome.Fallback(reason, decidedAt));
+        _logger.LogInformation("Playback session {SessionId} served from legacy (PR115c fallback reason: {Reason}).", sessionId, reason);
+        return legacyStreamInfo;
+    }
+
+    /// <summary>
+    /// PR115b design doc, "Constat de sortie PR115b" #2: excludes a Dolby Vision/HDR source whose
+    /// codec appears in legacy's own candidate codec CSV (<paramref name="legacyVideoCodecsCsv"/>) -
+    /// broader than a plain <see cref="VideoRange.HDR"/> check because <see cref="VideoRangeType.DOVIWithSDR"/>
+    /// (Dolby Vision profile 8.2, base layer SDR) reports <see cref="VideoRange.SDR"/> despite still
+    /// being Dolby Vision - the exclusion must catch that case too, not just the ones that already
+    /// read as HDR.
+    /// </summary>
+    private static bool IsDolbyVisionExcluded(PlaybackExecutionPlan plan, MediaSourceInfo mediaSource, IReadOnlyList<string> legacyVideoCodecsCsv)
+    {
+        if (plan.VideoStreamIndex is not int videoIndex)
+        {
+            return false;
+        }
+
+        var videoStream = mediaSource.GetMediaStream(MediaStreamType.Video, videoIndex);
+        if (videoStream is null || string.IsNullOrEmpty(videoStream.Codec))
+        {
+            return false;
+        }
+
+        var isDolbyVisionOrHdr = videoStream.VideoRange == VideoRange.HDR || IsDolbyVisionRangeType(videoStream.VideoRangeType);
+        return isDolbyVisionOrHdr && legacyVideoCodecsCsv.Contains(videoStream.Codec, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static bool IsDolbyVisionRangeType(VideoRangeType type) => type is VideoRangeType.DOVI
+        or VideoRangeType.DOVIWithHDR10
+        or VideoRangeType.DOVIWithHLG
+        or VideoRangeType.DOVIWithSDR
+        or VideoRangeType.DOVIWithEL
+        or VideoRangeType.DOVIWithHDR10Plus
+        or VideoRangeType.DOVIWithELHDR10Plus
+        or VideoRangeType.DOVIInvalid;
 
     /// <summary>
     /// Sort media source.

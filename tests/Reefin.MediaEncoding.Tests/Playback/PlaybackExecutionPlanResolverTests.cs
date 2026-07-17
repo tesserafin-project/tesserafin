@@ -90,6 +90,52 @@ public class PlaybackExecutionPlanResolverTests
         Assert.Equal("source-1", plan.SourceId);
     }
 
+    [Fact]
+    public void Resolve_Detailed_UnknownSessionId_ReturnsNoAuthoritativeRecord()
+    {
+        var store = new InMemoryV2PlanStore();
+        var resolver = new PlaybackExecutionPlanResolver(store);
+
+        var resolution = resolver.Resolve(PlaybackSessionId.NewId(), out var plan);
+
+        Assert.Equal(PlaybackExecutionPlanResolution.NoAuthoritativeRecord, resolution);
+        Assert.Null(plan);
+    }
+
+    [Fact]
+    public void Resolve_Detailed_RecordHoldsNullExecutionPlan_ReturnsPlanNotExecutable()
+    {
+        var store = new InMemoryV2PlanStore();
+        var id = PlaybackSessionId.NewId();
+        var notViable = PlaybackDecision.NotViable(
+            PlaybackMethod.Transcode,
+            new ReasonNode(ReasonCode.NoViablePlan, ReasonOutcome.Rejected, ReasonSubject.Method(), null, []),
+            engineVersion: PlaybackEngine.EngineVersion);
+        store.Attach(id, new V2PlanRecord(notViable, ExecutionPlan: null, DateTimeOffset.UtcNow));
+        var resolver = new PlaybackExecutionPlanResolver(store);
+
+        var resolution = resolver.Resolve(id, out var plan);
+
+        Assert.Equal(PlaybackExecutionPlanResolution.PlanNotExecutable, resolution);
+        Assert.Null(plan);
+    }
+
+    [Fact]
+    public void Resolve_Detailed_RecordHoldsViableDecision_ReturnsResolvedWithTheStoredPlan()
+    {
+        var store = new InMemoryV2PlanStore();
+        var id = PlaybackSessionId.NewId();
+        var decision = BuildViableDirectPlayDecision();
+        Assert.True(PlaybackExecutionPlanBuilder.TryBuild(decision, out var builtPlan, out _));
+        store.Attach(id, new V2PlanRecord(decision, builtPlan, DateTimeOffset.UtcNow));
+        var resolver = new PlaybackExecutionPlanResolver(store);
+
+        var resolution = resolver.Resolve(id, out var plan);
+
+        Assert.Equal(PlaybackExecutionPlanResolution.Resolved, resolution);
+        Assert.Same(builtPlan, plan);
+    }
+
     /// <summary>
     /// End-to-end: real session creation with the v2 engine authoritative (canary cohort at 100%)
     /// resolves to a plan that converts into a coherent legacy <see cref="StreamInfo"/> - the source,

@@ -58,11 +58,18 @@ public static class PlaybackDiagnosticDetailMapper
     /// every pre-PR113b (2-arg) call site keeps compiling and yields exactly the
     /// <c>Created</c>/<c>Updated</c> timeline it always did.
     /// </param>
+    /// <param name="liveWiring">
+    /// PR115c: the retained live-wiring decision for this session, or <see langword="null"/> when
+    /// none has been retained - independent of <paramref name="diagnostic"/>, see
+    /// <see cref="PlaybackDiagnosticDetail.LiveWiring"/>. Defaults to <see langword="null"/> so every
+    /// pre-PR115c call site keeps compiling and yields exactly the same result it always did.
+    /// </param>
     /// <returns>The mapped detail.</returns>
     public static PlaybackDiagnosticDetail Map(
         PlaybackSession session,
         ShadowDiagnosticRecord? diagnostic,
-        IReadOnlyList<PlaybackLifecycleEvent>? events = null)
+        IReadOnlyList<PlaybackLifecycleEvent>? events = null,
+        PlaybackLiveWiringOutcome? liveWiring = null)
     {
         // Reuses the existing mapper for every base field rather than re-deriving Method/Output/
         // Transforms/Reasons by hand - this DTO only adds the v2-sourced fields on top.
@@ -84,7 +91,8 @@ public static class PlaybackDiagnosticDetailMapper
             diagnostic?.Sources,
             diagnostic?.Decision.Reasoning,
             diagnostic is null ? null : MapComparison(diagnostic),
-            BuildTimeline(session, events));
+            BuildTimeline(session, events),
+            liveWiring);
     }
 
     private static DiagnosticComparison MapComparison(ShadowDiagnosticRecord diagnostic)

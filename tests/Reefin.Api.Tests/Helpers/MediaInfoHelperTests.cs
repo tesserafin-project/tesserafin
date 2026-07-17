@@ -8,6 +8,7 @@ using Reefin.Controller.Configuration;
 using Reefin.Controller.Devices;
 using Reefin.Controller.Library;
 using Reefin.Controller.MediaEncoding;
+using Reefin.MediaEncoding.Playback;
 using Reefin.Model.Dto;
 using Reefin.Model.MediaInfo;
 using Xunit;
@@ -16,18 +17,24 @@ namespace Reefin.Api.Tests.Helpers
 {
     public class MediaInfoHelperTests
     {
-        private static MediaInfoHelper CreateHelper()
+        private static MediaInfoHelper CreateHelper(
+            IPlaybackSessionManager? playbackSessionManager = null,
+            IPlaybackExecutionPlanResolver? executionPlanResolver = null,
+            IServerConfigurationManager? serverConfigurationManager = null,
+            IPlaybackLiveWiringDiagnosticsStore? liveWiringDiagnosticsStore = null)
         {
             return new MediaInfoHelper(
                 Mock.Of<IUserManager>(),
                 Mock.Of<IItemLookupService>(),
                 Mock.Of<IMediaSourceManager>(),
                 Mock.Of<IMediaEncoder>(),
-                Mock.Of<IServerConfigurationManager>(),
+                serverConfigurationManager ?? Mock.Of<IServerConfigurationManager>(),
                 Mock.Of<ILogger<MediaInfoHelper>>(),
                 Mock.Of<INetworkManager>(),
                 Mock.Of<IDeviceManager>(),
-                Mock.Of<IPlaybackSessionManager>());
+                playbackSessionManager ?? Mock.Of<IPlaybackSessionManager>(),
+                executionPlanResolver ?? Mock.Of<IPlaybackExecutionPlanResolver>(),
+                liveWiringDiagnosticsStore);
         }
 
         private static MediaSourceInfo CreateSource(Guid itemId, int bitrate, bool supportsDirectPlay = true)
