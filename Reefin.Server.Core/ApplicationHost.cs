@@ -668,6 +668,17 @@ namespace Reefin.Server.Core
             // serve-v2-or-fallback decision (MediaInfoHelper), evicted by PlaybackSessionManager on
             // the same removal paths as the other two.
             serviceCollection.AddSingleton<IPlaybackLiveWiringDiagnosticsStore, InMemoryPlaybackLiveWiringDiagnosticsStore>();
+            // PR115d: one PlaybackOperationalMetrics singleton - the cumulative served-by-v2/
+            // fallback-by-reason/transcode-start counters behind the operational gate - and one
+            // PlaybackStopThresholdGuard singleton consulted by MediaInfoHelper on every live
+            // decision. Concrete singletons, no interface, same shape as ShadowMetrics above: this is
+            // an aggregate-counter type, not a per-session store, so it has no swap-in-tests reason to
+            // be an interface.
+            serviceCollection.AddSingleton<PlaybackOperationalMetrics>();
+            serviceCollection.AddSingleton<PlaybackStopThresholdGuard>(provider => new PlaybackStopThresholdGuard(
+                () => provider.GetRequiredService<IServerConfigurationManager>().Configuration.PlaybackShadow,
+                provider.GetRequiredService<PlaybackOperationalMetrics>(),
+                provider.GetRequiredService<ILogger<PlaybackStopThresholdGuard>>()));
             serviceCollection.AddSingleton<IPlaybackSessionPlanner>(provider => new ShadowPlaybackSessionPlanner(
                 provider.GetRequiredService<PlaybackSessionPlanner>(),
                 provider.GetRequiredService<IPlaybackEngine>(),
@@ -683,7 +694,8 @@ namespace Reefin.Server.Core
                 provider.GetRequiredService<ISessionManager>(),
                 provider.GetRequiredService<IShadowDiagnosticsStore>(),
                 provider.GetRequiredService<IV2PlanStore>(),
-                provider.GetRequiredService<IPlaybackLiveWiringDiagnosticsStore>()));
+                provider.GetRequiredService<IPlaybackLiveWiringDiagnosticsStore>(),
+                provider.GetRequiredService<PlaybackOperationalMetrics>()));
 
             // PR114a: registered so DI wiring exists ahead of the PR115 canary. PR115a: reads the
             // authoritative IV2PlanStore singleton (not IShadowDiagnosticsStore, which only ever holds

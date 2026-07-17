@@ -61,4 +61,14 @@ public enum PlaybackLiveFallbackReason
     /// shadow run.
     /// </summary>
     AdapterError,
+
+    /// <summary>
+    /// PR115d: the operational stop-threshold guard (<c>PlaybackStopThresholdGuard</c>) found that
+    /// the v2 live path's own observed error rate - <see cref="AdapterError"/> rate, or the
+    /// transcode-start failure rate for v2-served sessions - crossed an operator-configured
+    /// threshold (<see cref="Reefin.Model.Configuration.PlaybackStopThresholdOptions"/>) and forced
+    /// legacy for this request, same observable effect as <see cref="KillSwitch"/> but triggered
+    /// automatically by observed error signals rather than by an operator's own hand.
+    /// </summary>
+    StopThresholdTripped,
 }
