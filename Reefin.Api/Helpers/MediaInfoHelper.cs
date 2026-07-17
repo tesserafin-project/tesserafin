@@ -32,8 +32,6 @@ using Reefin.Model.Dto;
 using Reefin.Model.Entities;
 using Reefin.Model.MediaInfo;
 using Reefin.Model.Session;
-using Reefin.Playback.Dlna;
-using Reefin.Playback.Execution;
 
 namespace Reefin.Api.Helpers;
 
@@ -51,10 +49,7 @@ public class MediaInfoHelper
     private readonly INetworkManager _networkManager;
     private readonly IDeviceManager _deviceManager;
     private readonly IPlaybackSessionManager _playbackSessionManager;
-    private readonly IPlaybackExecutionPlanResolver _executionPlanResolver;
-    private readonly IPlaybackLiveWiringDiagnosticsStore _liveWiringDiagnosticsStore;
-    private readonly PlaybackOperationalMetrics _operationalMetrics;
-    private readonly PlaybackStopThresholdGuard _stopThresholdGuard;
+    private readonly IPlaybackLiveStreamResolver _liveStreamResolver;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MediaInfoHelper"/> class.
@@ -89,13 +84,23 @@ public class MediaInfoHelper
     /// </param>
     /// <param name="stopThresholdGuard">
     /// PR115d: the operational stop-threshold guard consulted immediately after the kill switch check
-    /// in <see cref="ResolveServedStreamInfo"/> - see <see cref="PlaybackStopThresholdGuard"/>.
+    /// in <see cref="IPlaybackLiveStreamResolver.Resolve"/> - see <see cref="PlaybackStopThresholdGuard"/>.
     /// Defaults to a guard wired against <paramref name="operationalMetrics"/> (or its own default,
     /// if that was not supplied either) and <paramref name="serverConfigurationManager"/>'s live
     /// configuration when not supplied, so every pre-PR115d call site keeps compiling and behaving
     /// exactly as before: a fresh, empty metrics instance never reaches
     /// <see cref="Reefin.Model.Configuration.PlaybackStopThresholdOptions.MinimumSampleSize"/>, so
     /// the default guard never trips.
+    /// </param>
+    /// <param name="liveStreamResolver">
+    /// PR117 (docs/pr116d-url-contract-design.md §3.3): the shared, injectable live-wiring decision
+    /// - extracted from what used to be this class's own private <c>ResolveServedStreamInfo</c>, now
+    /// also consumed by <c>Playback/Sessions/{id}/Stream</c>. Defaults to an instance built from
+    /// <paramref name="executionPlanResolver"/>/<paramref name="liveWiringDiagnosticsStore"/>/
+    /// <paramref name="operationalMetrics"/>/<paramref name="stopThresholdGuard"/>/
+    /// <paramref name="serverConfigurationManager"/> when not supplied, so every pre-PR117 call site
+    /// - including existing test constructors - keeps compiling and behaving exactly as before: same
+    /// decision, same dependencies, just relocated.
     /// </param>
     public MediaInfoHelper(
         IUserManager userManager,
@@ -110,7 +115,8 @@ public class MediaInfoHelper
         IPlaybackExecutionPlanResolver executionPlanResolver,
         IPlaybackLiveWiringDiagnosticsStore? liveWiringDiagnosticsStore = null,
         PlaybackOperationalMetrics? operationalMetrics = null,
-        PlaybackStopThresholdGuard? stopThresholdGuard = null)
+        PlaybackStopThresholdGuard? stopThresholdGuard = null,
+        IPlaybackLiveStreamResolver? liveStreamResolver = null)
     {
         _userManager = userManager;
         _itemLookupService = itemLookupService;
@@ -121,13 +127,21 @@ public class MediaInfoHelper
         _networkManager = networkManager;
         _deviceManager = deviceManager;
         _playbackSessionManager = playbackSessionManager;
-        _executionPlanResolver = executionPlanResolver;
-        _liveWiringDiagnosticsStore = liveWiringDiagnosticsStore ?? NoOpPlaybackLiveWiringDiagnosticsStore.Instance;
-        _operationalMetrics = operationalMetrics ?? new PlaybackOperationalMetrics();
-        _stopThresholdGuard = stopThresholdGuard ?? new PlaybackStopThresholdGuard(
+
+        var resolvedLiveWiringDiagnosticsStore = liveWiringDiagnosticsStore ?? NoOpPlaybackLiveWiringDiagnosticsStore.Instance;
+        var resolvedOperationalMetrics = operationalMetrics ?? new PlaybackOperationalMetrics();
+        var resolvedStopThresholdGuard = stopThresholdGuard ?? new PlaybackStopThresholdGuard(
             () => serverConfigurationManager.Configuration.PlaybackShadow,
-            _operationalMetrics,
+            resolvedOperationalMetrics,
             NullLogger<PlaybackStopThresholdGuard>.Instance);
+
+        _liveStreamResolver = liveStreamResolver ?? new PlaybackLiveStreamResolver(
+            serverConfigurationManager,
+            executionPlanResolver,
+            resolvedLiveWiringDiagnosticsStore,
+            resolvedOperationalMetrics,
+            resolvedStopThresholdGuard,
+            NullLogger<PlaybackLiveStreamResolver>.Instance);
     }
 
     /// <summary>
@@ -317,7 +331,7 @@ public class MediaInfoHelper
         // exclusion, the kill switch, an adapter exception) keeps legacy's streamInfo unchanged.
         if (session is not null && streamInfo is not null)
         {
-            streamInfo = ResolveServedStreamInfo(
+            streamInfo = _liveStreamResolver.Resolve(
                 session.Id,
                 streamInfo,
                 mediaSource,
@@ -417,149 +431,6 @@ public class MediaInfoHelper
                 attachment.Index);
         }
     }
-
-    /// <summary>
-    /// PR115c: the live-wiring decision. Legacy (<paramref name="legacyStreamInfo"/>) is always the
-    /// default and is replaced only on full, verified success - mirrors the "v2 must never break the
-    /// live path" discipline <see cref="Reefin.MediaEncoding.Playback.ShadowPlaybackSessionPlanner"/>
-    /// already applies to the shadow run. Every failure mode (kill switch, the PR115d stop-threshold
-    /// guard, no/unresolvable plan, source id mismatch, the Dolby Vision exclusion, an adapter
-    /// exception) returns
-    /// <paramref name="legacyStreamInfo"/> unchanged, logged and retained as a typed
-    /// <see cref="PlaybackLiveFallbackReason"/> - never a silent substitution, never an exception
-    /// escaping to the caller.
-    /// </summary>
-    private StreamInfo ResolveServedStreamInfo(
-        PlaybackSessionId sessionId,
-        StreamInfo legacyStreamInfo,
-        MediaSourceInfo mediaSource,
-        DeviceProfile profile,
-        Guid itemId,
-        string? deviceId,
-        string playSessionId,
-        long startTimeTicks,
-        bool alwaysBurnInSubtitleWhenTranscoding)
-    {
-        var decidedAt = DateTimeOffset.UtcNow;
-
-        // Kill switch: an operator-controlled, immediate off-switch, independent of cohort
-        // membership - forces legacy for every session while the effective mode does not authorize
-        // serving v2 live. Reads live server configuration on every call, the same mechanism
-        // ShadowPlaybackSessionPlanner's own optionsAccessor already relies on for "no restart
-        // required" - flipping PlaybackShadow.Mode back to Legacy/Shadow takes effect on the very
-        // next request. Checked even before resolving a plan: belt-and-suspenders against a
-        // hypothetically stale IV2PlanStore record outliving a mode change, not just the ordinary
-        // "session created before the switch flipped" case IV2PlanStore's own attach-or-evict
-        // discipline in PlaybackSessionManager already handles.
-        var effectiveMode = _serverConfigurationManager.Configuration.PlaybackShadow.GetEffectiveMode();
-        if (effectiveMode is not (PlaybackEngineMode.Canary or PlaybackEngineMode.V2))
-        {
-            return FallbackToLegacy(sessionId, legacyStreamInfo, PlaybackLiveFallbackReason.KillSwitch, decidedAt);
-        }
-
-        // PR115d: the operational stop-threshold guard - consulted right after the kill switch (an
-        // operator-forced override always wins first) and before resolving a plan, so a tripped guard
-        // never pays the cost of resolving/adapting a plan it is about to discard anyway. See
-        // PlaybackStopThresholdGuard's remarks for the full trip/log/reset semantics.
-        if (_stopThresholdGuard.Evaluate())
-        {
-            return FallbackToLegacy(sessionId, legacyStreamInfo, PlaybackLiveFallbackReason.StopThresholdTripped, decidedAt);
-        }
-
-        var resolution = _executionPlanResolver.Resolve(sessionId, out var plan);
-        if (resolution != PlaybackExecutionPlanResolution.Resolved || plan is null)
-        {
-            var reason = resolution == PlaybackExecutionPlanResolution.PlanNotExecutable
-                ? PlaybackLiveFallbackReason.PlanNotExecutable
-                : PlaybackLiveFallbackReason.NoAuthoritativeRecord;
-            return FallbackToLegacy(sessionId, legacyStreamInfo, reason, decidedAt);
-        }
-
-        // Strict SourceId verification: the plan must never be applied to a different source than
-        // the one v2 actually selected. Checked explicitly here - not left to the adapter's own
-        // ArgumentException - so a mismatch is a typed, observable fallback rather than an unhandled
-        // exception reaching the caller. Same comparison (Ordinal) the adapter itself uses.
-        if (!string.Equals(mediaSource.Id, plan.SourceId, StringComparison.Ordinal))
-        {
-            return FallbackToLegacy(sessionId, legacyStreamInfo, PlaybackLiveFallbackReason.SourceIdMismatch, decidedAt);
-        }
-
-        // Mandatory exclusion (PR115b design doc, "Constat de sortie PR115b" #2): a Dolby
-        // Vision/HDR source whose codec appears in legacy's own candidate codec CSV is the class of
-        // session EncodingHelper.CanStreamCopyVideo can stream-copy incompatibly instead of
-        // transcoding - a pre-existing legacy pipeline behavior, not yet investigated for the v2 live
-        // path. Excluded unconditionally until that investigation happens; not a rollout policy knob.
-        if (IsDolbyVisionExcluded(plan, mediaSource, legacyStreamInfo.VideoCodecs))
-        {
-            return FallbackToLegacy(sessionId, legacyStreamInfo, PlaybackLiveFallbackReason.DolbyVisionExclusion, decidedAt);
-        }
-
-        try
-        {
-            var context = new PlaybackExecutionContext(
-                itemId,
-                playSessionId,
-                deviceId,
-                profile.Id?.ToString("N", CultureInfo.InvariantCulture),
-                startTimeTicks,
-                alwaysBurnInSubtitleWhenTranscoding);
-
-            var v2StreamInfo = PlaybackExecutionPlanAdapter.ToStreamInfo(plan, context, mediaSource, profile);
-            _liveWiringDiagnosticsStore.Record(sessionId, PlaybackLiveWiringOutcome.Served(decidedAt));
-            _operationalMetrics.RecordServed();
-            _logger.LogInformation("Playback session {SessionId} served from the v2 execution plan (PR115c canary).", sessionId);
-            return v2StreamInfo;
-        }
-#pragma warning disable CA1031 // Do not catch general exception types - v2 must never break the live path, same discipline as ShadowPlaybackSessionPlanner.
-        catch (Exception ex)
-#pragma warning restore CA1031
-        {
-            _logger.LogWarning(ex, "Playback session {SessionId}: v2 execution plan adapter threw; falling back to legacy.", sessionId);
-            return FallbackToLegacy(sessionId, legacyStreamInfo, PlaybackLiveFallbackReason.AdapterError, decidedAt);
-        }
-    }
-
-    private StreamInfo FallbackToLegacy(PlaybackSessionId sessionId, StreamInfo legacyStreamInfo, PlaybackLiveFallbackReason reason, DateTimeOffset decidedAt)
-    {
-        _liveWiringDiagnosticsStore.Record(sessionId, PlaybackLiveWiringOutcome.Fallback(reason, decidedAt));
-        _operationalMetrics.RecordFallback(reason);
-        _logger.LogInformation("Playback session {SessionId} served from legacy (PR115c fallback reason: {Reason}).", sessionId, reason);
-        return legacyStreamInfo;
-    }
-
-    /// <summary>
-    /// PR115b design doc, "Constat de sortie PR115b" #2: excludes a Dolby Vision/HDR source whose
-    /// codec appears in legacy's own candidate codec CSV (<paramref name="legacyVideoCodecsCsv"/>) -
-    /// broader than a plain <see cref="VideoRange.HDR"/> check because <see cref="VideoRangeType.DOVIWithSDR"/>
-    /// (Dolby Vision profile 8.2, base layer SDR) reports <see cref="VideoRange.SDR"/> despite still
-    /// being Dolby Vision - the exclusion must catch that case too, not just the ones that already
-    /// read as HDR.
-    /// </summary>
-    private static bool IsDolbyVisionExcluded(PlaybackExecutionPlan plan, MediaSourceInfo mediaSource, IReadOnlyList<string> legacyVideoCodecsCsv)
-    {
-        if (plan.VideoStreamIndex is not int videoIndex)
-        {
-            return false;
-        }
-
-        var videoStream = mediaSource.GetMediaStream(MediaStreamType.Video, videoIndex);
-        if (videoStream is null || string.IsNullOrEmpty(videoStream.Codec))
-        {
-            return false;
-        }
-
-        var isDolbyVisionOrHdr = videoStream.VideoRange == VideoRange.HDR || IsDolbyVisionRangeType(videoStream.VideoRangeType);
-        return isDolbyVisionOrHdr && legacyVideoCodecsCsv.Contains(videoStream.Codec, StringComparer.OrdinalIgnoreCase);
-    }
-
-    private static bool IsDolbyVisionRangeType(VideoRangeType type) => type is VideoRangeType.DOVI
-        or VideoRangeType.DOVIWithHDR10
-        or VideoRangeType.DOVIWithHLG
-        or VideoRangeType.DOVIWithSDR
-        or VideoRangeType.DOVIWithEL
-        or VideoRangeType.DOVIWithHDR10Plus
-        or VideoRangeType.DOVIWithELHDR10Plus
-        or VideoRangeType.DOVIInvalid;
 
     /// <summary>
     /// Sort media source.
