@@ -9,6 +9,7 @@ using Reefin.Model.Dlna;
 using Reefin.Playback.Decision;
 using Reefin.Playback.Dlna;
 using Reefin.Playback.Engine;
+using Reefin.Playback.Execution;
 using Reefin.Playback.Shadow;
 
 namespace Reefin.MediaEncoding.Playback;
@@ -57,6 +58,7 @@ public sealed class ShadowPlaybackSessionPlanner : IPlaybackSessionPlanner
     private readonly ILogger<ShadowPlaybackSessionPlanner> _logger;
     private readonly Func<PlaybackShadowOptions> _optionsAccessor;
     private readonly IShadowDiagnosticsStore _diagnosticsStore;
+    private readonly IV2PlanStore _v2PlanStore;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ShadowPlaybackSessionPlanner"/> class with
@@ -93,13 +95,21 @@ public sealed class ShadowPlaybackSessionPlanner : IPlaybackSessionPlanner
     /// not supplied, keeping every pre-PR113 call site source/binary compatible - the shadow run
     /// then simply retains nothing, same as before this parameter existed.
     /// </param>
+    /// <param name="v2PlanStore">
+    /// PR115a: where an AUTHORITATIVE v2 run (canary cohort member, or full v2 mode) publishes its
+    /// <see cref="V2PlanRecord"/> for later correlation by <see cref="PlaybackSessionManager"/> -
+    /// deliberately a separate channel from <paramref name="diagnosticsStore"/>, which stays a pure
+    /// observability projection. Defaults to a no-op instance when not supplied: v2 is then never
+    /// authoritative, matching every pre-PR115a call site.
+    /// </param>
     public ShadowPlaybackSessionPlanner(
         IPlaybackSessionPlanner inner,
         IPlaybackEngine engine,
         ILogger<ShadowPlaybackSessionPlanner> logger,
         Func<PlaybackShadowOptions> optionsAccessor,
         ShadowMetrics? metrics = null,
-        IShadowDiagnosticsStore? diagnosticsStore = null)
+        IShadowDiagnosticsStore? diagnosticsStore = null,
+        IV2PlanStore? v2PlanStore = null)
     {
         ArgumentNullException.ThrowIfNull(inner);
         ArgumentNullException.ThrowIfNull(engine);
@@ -112,6 +122,7 @@ public sealed class ShadowPlaybackSessionPlanner : IPlaybackSessionPlanner
         _optionsAccessor = optionsAccessor;
         Metrics = metrics ?? new ShadowMetrics();
         _diagnosticsStore = diagnosticsStore ?? NoOpShadowDiagnosticsStore.Instance;
+        _v2PlanStore = v2PlanStore ?? NoOpV2PlanStore.Instance;
     }
 
     /// <summary>
@@ -152,12 +163,26 @@ public sealed class ShadowPlaybackSessionPlanner : IPlaybackSessionPlanner
     private PreparedShadowContext? PrepareShadow(PlaybackMediaKind kind, MediaOptions options)
     {
         var shadowOptions = _optionsAccessor();
-        if (!shadowOptions.Enabled)
+        var mode = shadowOptions.GetEffectiveMode();
+        if (mode == PlaybackEngineMode.Legacy)
         {
             return null;
         }
 
-        if (shadowOptions.SampleRate < 1.0 && Random.Shared.NextDouble() >= shadowOptions.SampleRate)
+        // PR115a: whether this planning call's v2 outcome is execution authority (published to
+        // IV2PlanStore) or pure observability. Canary cohort membership is a deterministic
+        // user/device hash - the same pair always gets the same engine, never a per-request draw.
+        var authoritative = mode switch
+        {
+            PlaybackEngineMode.V2 => true,
+            PlaybackEngineMode.Canary => CanaryCohort.IsInCohort(options.UserId, options.DeviceId, shadowOptions.CanaryPercentage),
+            _ => false,
+        };
+
+        // Sampling only ever gates pure observability runs: an authoritative run must happen for
+        // every planning call it is authoritative for, or the session would silently flip between
+        // engines depending on a random draw.
+        if (!authoritative && shadowOptions.SampleRate < 1.0 && Random.Shared.NextDouble() >= shadowOptions.SampleRate)
         {
             return null;
         }
@@ -177,7 +202,7 @@ public sealed class ShadowPlaybackSessionPlanner : IPlaybackSessionPlanner
             var context = DlnaPlaybackAdapter.ToContext(options.ItemId, options.UserId, options.MediaSourceId, mediaKind, PlaybackEngine.EngineVersion);
             mappingStopwatch.Stop();
 
-            return new PreparedShadowContext(kind, options, shadowOptions, mappingStopwatch.Elapsed, capabilities, constraints, sources, context);
+            return new PreparedShadowContext(kind, options, shadowOptions, mappingStopwatch.Elapsed, capabilities, constraints, sources, context, authoritative);
         }
 #pragma warning disable CA1031 // Do not catch general exception types - shadow-mode safety requires it: v2 must never affect the live path.
         catch (Exception ex)
@@ -261,6 +286,20 @@ public sealed class ShadowPlaybackSessionPlanner : IPlaybackSessionPlanner
         var engineStopwatch = Stopwatch.StartNew();
         var decision = _engine.Decide(prepared.Context, prepared.Capabilities, prepared.Sources, prepared.Constraints);
         engineStopwatch.Stop();
+
+        // PR115a: authority is published immediately after the engine decides, strictly BEFORE any
+        // observability work (projection, comparison, metrics, diagnostics retention) - a failure
+        // anywhere in that machinery must be able to lose a diagnostic, never a canary session's
+        // plan. TryBuild refusing (for example NotViable) still publishes, with a null plan: "v2
+        // was authoritative here but produced nothing executable" is exactly what the PR115c live
+        // path needs to see to fall back to legacy for this session.
+        if (prepared.Authoritative)
+        {
+            _v2PlanStore.Publish(new V2PlanRecord(
+                decision,
+                PlaybackExecutionPlanBuilder.TryBuild(decision, out var executionPlan, out _) ? executionPlan : null,
+                DateTimeOffset.UtcNow));
+        }
 
         var comparisonStopwatch = Stopwatch.StartNew();
         var legacyVector = LegacyDecisionProjector.Project(plan);
@@ -348,5 +387,6 @@ public sealed class ShadowPlaybackSessionPlanner : IPlaybackSessionPlanner
         ClientCapabilities Capabilities,
         PlaybackConstraints Constraints,
         IReadOnlyList<MediaSourceSnapshot> Sources,
-        PlaybackRequestContext Context);
+        PlaybackRequestContext Context,
+        bool Authoritative);
 }

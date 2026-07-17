@@ -658,24 +658,32 @@ namespace Reefin.Server.Core
             // Plan() call) and the manager (which attaches that record to the real session id and
             // evicts it on removal) - see IShadowDiagnosticsStore's remarks for the full handshake.
             serviceCollection.AddSingleton<IShadowDiagnosticsStore, InMemoryShadowDiagnosticsStore>();
+            // PR115a: one IV2PlanStore singleton, separate from IShadowDiagnosticsStore - this is the
+            // authority channel (the AUTHORITATIVE v2 plan for a canary/v2 session), not an
+            // observability one, so it must never share lifecycle/eviction semantics with the
+            // diagnostics store above.
+            serviceCollection.AddSingleton<IV2PlanStore, InMemoryV2PlanStore>();
             serviceCollection.AddSingleton<IPlaybackSessionPlanner>(provider => new ShadowPlaybackSessionPlanner(
                 provider.GetRequiredService<PlaybackSessionPlanner>(),
                 provider.GetRequiredService<IPlaybackEngine>(),
                 provider.GetRequiredService<ILogger<ShadowPlaybackSessionPlanner>>(),
                 () => provider.GetRequiredService<IServerConfigurationManager>().Configuration.PlaybackShadow,
                 provider.GetRequiredService<ShadowMetrics>(),
-                provider.GetRequiredService<IShadowDiagnosticsStore>()));
+                provider.GetRequiredService<IShadowDiagnosticsStore>(),
+                provider.GetRequiredService<IV2PlanStore>()));
 
             serviceCollection.AddSingleton<IPlaybackSessionManager>(provider => new PlaybackSessionManager(
                 provider.GetRequiredService<IPlaybackSessionPlanner>(),
                 provider.GetRequiredService<ITranscodeManager>(),
                 provider.GetRequiredService<ISessionManager>(),
-                provider.GetRequiredService<IShadowDiagnosticsStore>()));
+                provider.GetRequiredService<IShadowDiagnosticsStore>(),
+                provider.GetRequiredService<IV2PlanStore>()));
 
-            // PR114a: dormant resolver - reads the same IShadowDiagnosticsStore singleton, so it can
-            // resolve a session's v2 PlaybackExecutionPlan whenever a shadow diagnostic was retained
-            // for it. Registered so DI wiring exists ahead of the PR115 canary; no streaming endpoint
-            // resolves it yet.
+            // PR114a: dormant resolver - registered so DI wiring exists ahead of the PR115 canary; no
+            // streaming endpoint resolves it yet. PR115a: now reads the authoritative IV2PlanStore
+            // singleton (not IShadowDiagnosticsStore, which only ever holds observability data), so
+            // it can resolve a session's v2 PlaybackExecutionPlan whenever an authoritative record was
+            // retained for it. Still dormant until PR115c.
             serviceCollection.AddSingleton<IPlaybackExecutionPlanResolver, PlaybackExecutionPlanResolver>();
             serviceCollection.AddScoped<MediaInfoHelper>();
             serviceCollection.AddScoped<AudioHelper>();

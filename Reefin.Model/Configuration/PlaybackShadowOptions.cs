@@ -26,13 +26,38 @@ public class PlaybackShadowOptions
 {
     private double _sampleRate = 1.0;
     private int _maxExecutionMs = 50;
+    private int _canaryPercentage;
 
     /// <summary>
     /// Gets or sets a value indicating whether the shadow comparison runs at all. Defaults to
     /// <see langword="false"/>: shadow mode is opt-in, since PR100 removed the previous
-    /// always-on behavior for safety.
+    /// always-on behavior for safety. PR115a: kept for backward compatibility with configurations
+    /// that predate <see cref="Mode"/> - see <see cref="GetEffectiveMode"/> for how the two
+    /// combine. New configurations should set <see cref="Mode"/> instead.
     /// </summary>
     public bool Enabled { get; set; }
+
+    /// <summary>
+    /// Gets or sets the explicit role the v2 engine plays for live playback (PR115a). Defaults to
+    /// <see cref="PlaybackEngineMode.Legacy"/>. When left at that default, a pre-PR115a
+    /// configuration with <see cref="Enabled"/> set still gets shadow behavior - see
+    /// <see cref="GetEffectiveMode"/>.
+    /// </summary>
+    public PlaybackEngineMode Mode { get; set; } = PlaybackEngineMode.Legacy;
+
+    /// <summary>
+    /// Gets or sets the percentage (0-100) of user/device pairs in the canary cohort when
+    /// <see cref="Mode"/> is <see cref="PlaybackEngineMode.Canary"/>. Cohort membership is a
+    /// deterministic hash of the requesting user and device - the same pair is always in or always
+    /// out for a given percentage, never a fresh random draw per request. Clamped to [0, 100] on
+    /// set, following this type's PR104 clamp-don't-throw convention. Defaults to 0: enabling
+    /// canary mode without choosing a cohort size enrolls nobody.
+    /// </summary>
+    public int CanaryPercentage
+    {
+        get => _canaryPercentage;
+        set => _canaryPercentage = Math.Clamp(value, 0, 100);
+    }
 
     /// <summary>
     /// Gets or sets the fraction of eligible playback decisions (0.0-1.0) that actually run the
@@ -62,4 +87,15 @@ public class PlaybackShadowOptions
         get => _maxExecutionMs;
         set => _maxExecutionMs = Math.Max(1, value);
     }
+
+    /// <summary>
+    /// Resolves the mode this configuration actually asks for: <see cref="Mode"/> verbatim, except
+    /// that the <see cref="PlaybackEngineMode.Legacy"/> default combined with the pre-PR115a
+    /// <see cref="Enabled"/> flag still means shadow mode, so existing configurations keep their
+    /// behavior without being rewritten. A method rather than a property so the XML configuration
+    /// serializer never mistakes this derived value for a third persisted knob.
+    /// </summary>
+    /// <returns>The effective <see cref="PlaybackEngineMode"/>.</returns>
+    public PlaybackEngineMode GetEffectiveMode() =>
+        Mode == PlaybackEngineMode.Legacy && Enabled ? PlaybackEngineMode.Shadow : Mode;
 }

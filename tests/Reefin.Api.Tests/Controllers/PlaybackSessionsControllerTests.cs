@@ -15,6 +15,7 @@ using Reefin.Controller.Entities.Movies;
 using Reefin.Controller.Library;
 using Reefin.Controller.MediaEncoding;
 using Reefin.Database.Implementations.Entities;
+using Reefin.MediaEncoding.Playback;
 using Reefin.Model.Dlna;
 using Reefin.Model.Dto;
 using Reefin.Model.Session;
@@ -29,6 +30,7 @@ public class PlaybackSessionsControllerTests
     private readonly Mock<IItemLookupService> _itemLookupService = new();
     private readonly Mock<IUserManager> _userManager = new();
     private readonly Mock<IMediaSourceManager> _mediaSourceManager = new();
+    private readonly Mock<IV2PlanStore> _v2PlanStore = new();
     private readonly Guid _userId = Guid.NewGuid();
     private readonly Guid _itemId = Guid.NewGuid();
 
@@ -38,7 +40,8 @@ public class PlaybackSessionsControllerTests
             _playbackSessionManager.Object,
             _itemLookupService.Object,
             _userManager.Object,
-            _mediaSourceManager.Object);
+            _mediaSourceManager.Object,
+            _v2PlanStore.Object);
 
         var identity = new ClaimsIdentity([new Claim(InternalClaimTypes.UserId, _userId.ToString())], "test");
         controller.ControllerContext = new ControllerContext

@@ -24,6 +24,7 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
     private readonly ITranscodeManager _transcodeManager;
     private readonly ISessionManager _sessionManager;
     private readonly IShadowDiagnosticsStore _diagnosticsStore;
+    private readonly IV2PlanStore _v2PlanStore;
     private readonly object _lock = new();
     private readonly Dictionary<PlaybackSessionId, PlaybackSession> _sessions = new();
     private readonly Dictionary<string, PlaybackSessionId> _byPlaySessionId = new(StringComparer.OrdinalIgnoreCase);
@@ -47,16 +48,26 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
     /// which this constructor subscribes to unconditionally - correlation against a tracked session
     /// silently no-ops when the store is the no-op default, same as every other diagnostics path.
     /// </param>
+    /// <param name="v2PlanStore">
+    /// PR115a: retains the AUTHORITATIVE v2 plan (<see cref="V2PlanRecord"/>) <paramref name="planner"/>
+    /// publishes when a <see cref="Create"/>/<see cref="Patch"/> call is served by v2, keyed by the
+    /// resulting session id - a separate channel from <paramref name="diagnosticsStore"/>, which only
+    /// ever holds observability data. Defaults to a no-op instance when not supplied, so every
+    /// pre-PR115a call site - including existing test constructors - keeps compiling and behaving
+    /// exactly as before: no authoritative record is ever retained.
+    /// </param>
     public PlaybackSessionManager(
         IPlaybackSessionPlanner planner,
         ITranscodeManager transcodeManager,
         ISessionManager sessionManager,
-        IShadowDiagnosticsStore? diagnosticsStore = null)
+        IShadowDiagnosticsStore? diagnosticsStore = null,
+        IV2PlanStore? v2PlanStore = null)
     {
         _planner = planner;
         _transcodeManager = transcodeManager;
         _sessionManager = sessionManager;
         _diagnosticsStore = diagnosticsStore ?? NoOpShadowDiagnosticsStore.Instance;
+        _v2PlanStore = v2PlanStore ?? NoOpV2PlanStore.Instance;
         transcodeManager.TranscodingJobEnded += OnTranscodingJobEnded;
         transcodeManager.TranscodingJobStarted += OnTranscodingJobStarted;
         sessionManager.PlaybackStart += OnPlaybackStart;
@@ -69,10 +80,13 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
     {
         PlaybackPlan? plan;
         ShadowDiagnosticRecord? captured;
+        V2PlanRecord? v2Captured;
         using (_diagnosticsStore.BeginCapture())
+        using (_v2PlanStore.BeginCapture())
         {
             plan = Plan(request);
             captured = _diagnosticsStore.TakeCaptured();
+            v2Captured = _v2PlanStore.TakeCaptured();
         }
 
         if (plan is null)
@@ -98,6 +112,19 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
             _diagnosticsStore.Remove(session.Id);
         }
 
+        // PR115a: same attach-or-remove discipline for the authoritative v2 record. A replan that is
+        // no longer authoritative (mode changed, cohort resized) must evict the stale authoritative
+        // record, or the session would keep being served a v2 plan its current configuration no
+        // longer grants.
+        if (v2Captured is not null)
+        {
+            _v2PlanStore.Attach(session.Id, v2Captured);
+        }
+        else
+        {
+            _v2PlanStore.Remove(session.Id);
+        }
+
         return session;
     }
 
@@ -106,10 +133,13 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
     {
         PlaybackPlan? plan;
         ShadowDiagnosticRecord? captured;
+        V2PlanRecord? v2Captured;
         using (_diagnosticsStore.BeginCapture())
+        using (_v2PlanStore.BeginCapture())
         {
             plan = Plan(request);
             captured = _diagnosticsStore.TakeCaptured();
+            v2Captured = _v2PlanStore.TakeCaptured();
         }
 
         if (plan is null)
@@ -139,6 +169,19 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
         else
         {
             _diagnosticsStore.Remove(updated.Id);
+        }
+
+        // PR115a: same attach-or-remove discipline for the authoritative v2 record. A replan that is
+        // no longer authoritative (mode changed, cohort resized) must evict the stale authoritative
+        // record, or the session would keep being served a v2 plan its current configuration no
+        // longer grants.
+        if (v2Captured is not null)
+        {
+            _v2PlanStore.Attach(updated.Id, v2Captured);
+        }
+        else
+        {
+            _v2PlanStore.Remove(updated.Id);
         }
 
         return updated;
@@ -272,6 +315,10 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
         // every removal path (Delete, DeleteByPlaySessionId, the transcoding-job-ended/playback-stopped
         // handlers, and SweepExpired), since they all funnel through here.
         _diagnosticsStore.Remove(id);
+
+        // PR115a: evicts whatever authoritative v2 record was retained for this session, if any -
+        // same removal paths as the diagnostics store above.
+        _v2PlanStore.Remove(id);
 
         return true;
     }

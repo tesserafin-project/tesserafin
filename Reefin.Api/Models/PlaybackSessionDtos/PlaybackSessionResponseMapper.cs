@@ -4,6 +4,7 @@ using System.Linq;
 using Reefin.Controller.MediaEncoding;
 using Reefin.Data.Enums;
 using Reefin.Extensions;
+using Reefin.MediaEncoding.Playback;
 using Reefin.Model.Dlna;
 using Reefin.Model.Entities;
 using Reefin.Model.Session;
@@ -60,6 +61,83 @@ public static class PlaybackSessionResponseMapper
             MapReasons(plan.TranscodeReasons),
             session.CreatedAt,
             session.UpdatedAt);
+    }
+
+    /// <summary>
+    /// Maps a tracked playback session into its stable response projection, preferring the
+    /// authoritative v2 decision when one is retained (PR115a). For a session v2 is authoritative
+    /// for - <paramref name="v2Record"/> is non-null and its <see cref="V2PlanRecord.ExecutionPlan"/>
+    /// is non-null - the response is that decision verbatim, versioned with the real
+    /// <see cref="PlaybackDecision.EngineVersion"/>: no legacy derivation heuristics
+    /// (<see cref="DeriveTransforms"/>, <see cref="DetectedTonemap"/>, etc.) are involved, because
+    /// none are needed - v2 already carries <see cref="PlaybackDecision.Transforms"/> and a
+    /// structured <see cref="PlaybackDecision.Reasoning"/> tree directly. The guard is plan-centric,
+    /// not viability-centric: <see cref="V2PlanRecord.Decision"/> can be
+    /// <see cref="PlaybackDecision.IsViable"/> while <see cref="V2PlanRecord.ExecutionPlan"/> is still
+    /// <see langword="null"/> (<see cref="Reefin.Playback.Execution.PlaybackExecutionPlanBuilder"/>
+    /// refused it) - the PR115c live path falls back to legacy execution for that session, so the
+    /// response must too, or it would announce v2 authorship the client never actually gets. A
+    /// <see langword="null"/> record, or a retained record with a <see langword="null"/>
+    /// <see cref="V2PlanRecord.ExecutionPlan"/> (viable decision or not), falls back to the legacy
+    /// projection (<see cref="Map(PlaybackSession)"/>) versioned
+    /// <see cref="PlaybackSessionResponse.LegacyDecisionVersion"/> - the response must never claim v2
+    /// authorship when what the client will effectively get is legacy.
+    /// </summary>
+    /// <param name="session">The session to map.</param>
+    /// <param name="v2Record">The retained v2 plan record for this session, if any.</param>
+    /// <returns>The mapped response.</returns>
+    public static PlaybackSessionResponse Map(PlaybackSession session, V2PlanRecord? v2Record)
+    {
+        if (v2Record?.ExecutionPlan is null)
+        {
+            return Map(session);
+        }
+
+        var decision = v2Record.Decision;
+
+        return new PlaybackSessionResponse(
+            session.Id.Value,
+            MapKind(session.Kind),
+            decision.EngineVersion,
+            decision.Method,
+            decision.Output,
+            decision.SelectedStreams,
+            decision.Transforms,
+            FlattenReasons(decision.Reasoning),
+            session.CreatedAt,
+            session.UpdatedAt);
+    }
+
+    /// <summary>
+    /// Depth-first, pre-order walk of a <see cref="PlaybackDecision.Reasoning"/> tree, collecting
+    /// each node's <see cref="ReasonNode.Code"/> in first-encounter order with duplicates removed -
+    /// the same flat, code-only summary shape <see cref="MapReasons"/> produces for legacy, just
+    /// read directly off v2's own structured trace instead of derived from
+    /// <see cref="TranscodeReason"/> flags.
+    /// </summary>
+    /// <param name="root">The root of the reasoning tree.</param>
+    /// <returns>The distinct reason codes encountered, in first-encounter order.</returns>
+    private static IReadOnlyList<ReasonCode> FlattenReasons(ReasonNode root)
+    {
+        var seen = new HashSet<ReasonCode>();
+        var codes = new List<ReasonCode>();
+
+        void Visit(ReasonNode node)
+        {
+            if (seen.Add(node.Code))
+            {
+                codes.Add(node.Code);
+            }
+
+            foreach (var child in node.Children)
+            {
+                Visit(child);
+            }
+        }
+
+        Visit(root);
+
+        return codes;
     }
 
     private static MediaKind MapKind(PlaybackMediaKind kind) => kind switch

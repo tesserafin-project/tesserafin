@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Reefin.Api.Extensions;
 using Reefin.Api.Helpers;
 using Reefin.Api.Models.PlaybackSessionDtos;
 using Reefin.Common.Extensions;
@@ -12,6 +13,7 @@ using Reefin.Controller.Entities;
 using Reefin.Controller.Library;
 using Reefin.Controller.MediaEncoding;
 using Reefin.Data.Enums;
+using Reefin.MediaEncoding.Playback;
 using Reefin.Model.Dlna;
 using Reefin.Playback.Dlna;
 
@@ -23,7 +25,9 @@ namespace Reefin.Api.Controllers;
 /// <see cref="PlaybackSessionResponse"/> (PR91 decision vocabulary), never the internal
 /// <see cref="PlaybackSession"/> record. The admin-only listing/diagnostic surface this controller
 /// used to also expose has moved to <see cref="PlaybackDiagnosticsSessionsController"/> — it never
-/// shared this controller's public or authorization scope, only its route.
+/// shared this controller's public or authorization scope, only its route. Since PR115a, responses
+/// reflect the v2 decision (<c>DecisionVersion</c> = the real engine version) for sessions the
+/// canary made v2-authoritative, and the legacy projection otherwise.
 /// </summary>
 [Route("Playback/Sessions")]
 [Authorize]
@@ -34,6 +38,7 @@ public class PlaybackSessionsController : BaseReefinApiController
     private readonly IItemLookupService _itemLookupService;
     private readonly IUserManager _userManager;
     private readonly IMediaSourceManager _mediaSourceManager;
+    private readonly IV2PlanStore _v2PlanStore;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PlaybackSessionsController"/> class.
@@ -42,16 +47,19 @@ public class PlaybackSessionsController : BaseReefinApiController
     /// <param name="itemLookupService">Instance of the <see cref="IItemLookupService"/> interface.</param>
     /// <param name="userManager">Instance of the <see cref="IUserManager"/> interface.</param>
     /// <param name="mediaSourceManager">Instance of the <see cref="IMediaSourceManager"/> interface.</param>
+    /// <param name="v2PlanStore">Instance of the <see cref="IV2PlanStore"/> interface (PR115a) — looked up to see whether v2 is authoritative for a session's response.</param>
     public PlaybackSessionsController(
         IPlaybackSessionManager playbackSessionManager,
         IItemLookupService itemLookupService,
         IUserManager userManager,
-        IMediaSourceManager mediaSourceManager)
+        IMediaSourceManager mediaSourceManager,
+        IV2PlanStore v2PlanStore)
     {
         _playbackSessionManager = playbackSessionManager;
         _itemLookupService = itemLookupService;
         _userManager = userManager;
         _mediaSourceManager = mediaSourceManager;
+        _v2PlanStore = v2PlanStore;
     }
 
     /// <summary>
@@ -76,9 +84,15 @@ public class PlaybackSessionsController : BaseReefinApiController
         var (kind, options) = await ResolveOptions(request, HttpContext.RequestAborted).ConfigureAwait(false);
 
         var session = _playbackSessionManager.Create(new PlaybackSessionRequest(kind, options), request.PlaySessionId);
-        return session is null
-            ? UnprocessableEntity()
-            : Ok(PlaybackSessionResponseMapper.Map(session));
+        if (session is null)
+        {
+            return UnprocessableEntity();
+        }
+
+        // PR115a: the response reflects the v2 decision when one is retained and authoritative for
+        // this session - see PlaybackSessionResponseMapper.Map(PlaybackSession, V2PlanRecord?).
+        _v2PlanStore.TryGet(session.Id, out var v2Record);
+        return Ok(PlaybackSessionResponseMapper.Map(session, v2Record));
     }
 
     /// <summary>
@@ -105,9 +119,15 @@ public class PlaybackSessionsController : BaseReefinApiController
         var (kind, options) = await ResolveOptions(request, HttpContext.RequestAborted).ConfigureAwait(false);
 
         var session = _playbackSessionManager.Patch(id, new PlaybackSessionRequest(kind, options));
-        return session is null
-            ? NotFound()
-            : Ok(PlaybackSessionResponseMapper.Map(session));
+        if (session is null)
+        {
+            return NotFound();
+        }
+
+        // PR115a: the response reflects the v2 decision when one is retained and authoritative for
+        // this session - see PlaybackSessionResponseMapper.Map(PlaybackSession, V2PlanRecord?).
+        _v2PlanStore.TryGet(session.Id, out var v2Record);
+        return Ok(PlaybackSessionResponseMapper.Map(session, v2Record));
     }
 
     /// <summary>
@@ -147,6 +167,9 @@ public class PlaybackSessionsController : BaseReefinApiController
             UserId = userId,
             Profile = ReverseDlnaAdapter.ToDeviceProfile(request.Capabilities),
             MediaSourceId = request.MediaSourceId,
+            // PR115a: the canary cohort key is deterministic on user+device, so v2 authority for a
+            // session depends on the requesting device being identifiable here.
+            DeviceId = User.GetDeviceId(),
         };
         ReverseDlnaAdapter.ApplyConstraints(options, request.Constraints);
 
