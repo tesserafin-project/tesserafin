@@ -17,6 +17,11 @@ using System.Runtime.InteropServices;
 [assembly: NeutralResourcesLanguage("en")]
 [assembly: InternalsVisibleTo("Reefin.Model.Tests")]
 
+// PR115b (docs/pr115-design-canary-execution.md §3.C): PlaybackExecutionPlanAdapter reuses
+// StreamBuilder's internal TranscodingProfile-matching and RequireAvc/RequireNonAnamorphic
+// resolution logic rather than duplicating it (single source of truth, see that method's remarks).
+[assembly: InternalsVisibleTo("Reefin.Playback.Dlna")]
+
 // Setting ComVisible to false makes the types in this assembly not visible
 // to COM components.  If you need to access a type in this assembly from
 // COM, set the ComVisible attribute to true on that type.

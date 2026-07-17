@@ -592,7 +592,22 @@ namespace Reefin.Model.Dlna
             return item.DefaultSubtitleStreamIndex;
         }
 
-        private static void SetStreamInfoOptionsFromTranscodingProfile(MediaSourceInfo item, StreamInfo playlistItem, TranscodingProfile transcodingProfile)
+        /// <summary>
+        /// PR115b (<c>docs/pr115-design-canary-execution.md</c> §3.C, §4.2): made <c>internal</c> so
+        /// <c>Reefin.Playback.Dlna.PlaybackExecutionPlanAdapter</c> can resolve the same
+        /// <see cref="TranscodingProfile"/>-derived <see cref="StreamInfo"/> fields (<see cref="StreamInfo.CopyTimestamps"/>,
+        /// <see cref="StreamInfo.TranscodingMaxAudioChannels"/>, <see cref="StreamInfo.EstimateContentLength"/>,
+        /// <see cref="StreamInfo.EnableSubtitlesInManifest"/>, <see cref="StreamInfo.EnableMpegtsM2TsMode"/>,
+        /// <see cref="StreamInfo.EnableAudioVbrEncoding"/>, <see cref="StreamInfo.MinSegments"/>,
+        /// <see cref="StreamInfo.SegmentLength"/>, <see cref="StreamInfo.TranscodeSeekInfo"/>) that
+        /// <see cref="StreamInfo.ToUrl"/> serializes only for <c>PlayMethod == Transcode</c>, without
+        /// duplicating the matching logic (single source of truth; a fork would risk silently drifting
+        /// from legacy - see design doc §3.C, option (i)).
+        /// </summary>
+        /// <param name="item">The media source the transcoding profile applies to (mutated in place, matching legacy).</param>
+        /// <param name="playlistItem">The <see cref="StreamInfo"/> to populate.</param>
+        /// <param name="transcodingProfile">The matched transcoding profile.</param>
+        internal static void SetStreamInfoOptionsFromTranscodingProfile(MediaSourceInfo item, StreamInfo playlistItem, TranscodingProfile transcodingProfile)
         {
             var container = transcodingProfile.Container;
             var protocol = transcodingProfile.Protocol;
@@ -1728,6 +1743,117 @@ namespace Reefin.Model.Dlna
             return conditions.Where(condition => !ConditionProcessor.IsAudioConditionSatisfied(condition, audioChannels, audioBitrate, audioSampleRate, audioBitDepth));
         }
 
+        /// <summary>
+        /// PR115b (<c>docs/pr115-design-canary-execution.md</c>, "Invariant de parité exécutable" and
+        /// §3.C/§4.2/§7 #1): resolves <see cref="StreamInfo.RequireAvc"/>/<see cref="StreamInfo.RequireNonAnamorphic"/>
+        /// for <c>Reefin.Playback.Dlna.PlaybackExecutionPlanAdapter</c>, mirroring exactly the video
+        /// <see cref="CodecProfile"/> gating/matching loop this class' own <c>BuildStreamVideoItem</c>
+        /// runs (<c>StreamBuilder.cs</c>, the <c>appliedVideoConditions</c> block) - same source-stream
+        /// facts, same <see cref="CodecProfile.ApplyConditions"/> gate, same target-codec match - but
+        /// narrowed to the <see cref="ProfileConditionValue.IsAvc"/>/<see cref="ProfileConditionValue.IsAnamorphic"/>
+        /// sub-part of <see cref="ApplyTranscodingConditions"/>'s condition engine rather than the whole
+        /// switch. Deliberately narrow, not a shortcut: the full engine also processes
+        /// <see cref="ProfileConditionValue.VideoRangeType"/>, which is the PR111e-documented
+        /// <c>Enum.TryParse</c> bitwise-OR artifact behind legacy's own HLG-vs-real-target bug (see
+        /// <c>PlaybackExecutionPlanAdapter</c>'s remarks on <see cref="StreamInfo.TargetVideoRangeType"/>) -
+        /// reusing the whole engine here would silently reproduce that bug in the v2 execution path.
+        /// </summary>
+        /// <param name="profile">The device profile whose <see cref="DeviceProfile.CodecProfiles"/> may gate a requirement.</param>
+        /// <param name="playlistItem">The <see cref="StreamInfo"/> to set <see cref="StreamInfo.RequireAvc"/>/<see cref="StreamInfo.RequireNonAnamorphic"/> on.</param>
+        /// <param name="mediaSource">The source the video stream belongs to (for stream-count facts).</param>
+        /// <param name="videoStream">The selected video stream, or <see langword="null"/> when no video stream was selected (no-op).</param>
+        /// <param name="targetVideoCodecs">The already-decided target video codec(s) (a single-element list for the v2 adapter, since <c>PlaybackExecutionPlan</c> names exactly one).</param>
+        /// <param name="container">The target output container.</param>
+        /// <param name="useSubContainer">Whether HLS sub-container codec matching applies (<c>SubProtocol == hls</c>).</param>
+        internal static void ApplyRequireAvcAndNonAnamorphic(
+            DeviceProfile profile,
+            StreamInfo playlistItem,
+            MediaSourceInfo mediaSource,
+            MediaStream? videoStream,
+            IReadOnlyList<string> targetVideoCodecs,
+            string? container,
+            bool useSubContainer)
+        {
+            if (videoStream is null || targetVideoCodecs.Count == 0)
+            {
+                return;
+            }
+
+            int? width = videoStream.Width;
+            int? height = videoStream.Height;
+            int? bitDepth = videoStream.BitDepth;
+            int? videoBitrate = videoStream.BitRate;
+            double? videoLevel = videoStream.Level;
+            string? videoProfile = videoStream.Profile;
+            VideoRangeType? videoRangeType = videoStream.VideoRangeType;
+            float videoFramerate = videoStream.ReferenceFrameRate ?? 0;
+            bool? isAnamorphic = videoStream.IsAnamorphic;
+            bool? isInterlaced = videoStream.IsInterlaced;
+            string? videoCodecTag = videoStream.CodecTag;
+            bool? isAvc = videoStream.IsAVC;
+            int? videoRotation = videoStream.Rotation;
+            TransportStreamTimestamp? timestamp = mediaSource.Timestamp;
+            int? packetLength = videoStream.PacketLength;
+            int? refFrames = videoStream.RefFrames;
+
+            int numStreams = mediaSource.MediaStreams.Count;
+            int? numAudioStreams = mediaSource.GetStreamCount(MediaStreamType.Audio);
+            int? numVideoStreams = mediaSource.GetStreamCount(MediaStreamType.Video);
+
+            var appliedVideoConditions = profile.CodecProfiles
+                .Where(i => i.Type == CodecType.Video &&
+                    i.ContainsAnyCodec(targetVideoCodecs, container, useSubContainer) &&
+                    i.ApplyConditions.All(applyCondition => ConditionProcessor.IsVideoConditionSatisfied(applyCondition, width, height, bitDepth, videoBitrate, videoProfile, videoRangeType, videoLevel, videoFramerate, packetLength, timestamp, isAnamorphic, isInterlaced, refFrames, numStreams, numVideoStreams, numAudioStreams, videoCodecTag, isAvc, videoRotation)))
+                // Reverse codec profiles for backward compatibility - first codec profile has higher priority
+                .Reverse();
+
+            foreach (var condition in appliedVideoConditions)
+            {
+                foreach (var transcodingVideoCodec in targetVideoCodecs)
+                {
+                    if (condition.ContainsAnyCodec(transcodingVideoCodec, container, useSubContainer))
+                    {
+                        foreach (var profileCondition in condition.Conditions)
+                        {
+                            ApplyAvcOrAnamorphicCondition(playlistItem, profileCondition);
+                        }
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// The IsAvc/IsAnamorphic body shared by <see cref="ApplyTranscodingConditions"/>'s own switch
+        /// (gated there by <c>enableNonQualifiedConditions</c>, always <see langword="true"/> at its
+        /// video/audio call sites) and <see cref="ApplyRequireAvcAndNonAnamorphic"/> (PR115b, always
+        /// unqualified by construction) - single source of truth, see that method's remarks.
+        /// </summary>
+        private static void ApplyAvcOrAnamorphicCondition(StreamInfo item, ProfileCondition condition)
+        {
+            var value = condition.Value;
+            if (string.IsNullOrEmpty(value) || condition.Condition == ProfileConditionType.GreaterThanEqual)
+            {
+                return;
+            }
+
+            if (condition.Property == ProfileConditionValue.IsAvc && bool.TryParse(value, out var isAvc))
+            {
+                if ((isAvc && condition.Condition == ProfileConditionType.Equals)
+                    || (!isAvc && condition.Condition == ProfileConditionType.NotEquals))
+                {
+                    item.RequireAvc = true;
+                }
+            }
+            else if (condition.Property == ProfileConditionValue.IsAnamorphic && bool.TryParse(value, out var isAnamorphic))
+            {
+                if ((isAnamorphic && condition.Condition == ProfileConditionType.Equals)
+                    || (!isAnamorphic && condition.Condition == ProfileConditionType.NotEquals))
+                {
+                    item.RequireNonAnamorphic = true;
+                }
+            }
+        }
+
         private void ApplyTranscodingConditions(StreamInfo item, IEnumerable<ProfileCondition> conditions, string? qualifier, bool enableQualifiedConditions, bool enableNonQualifiedConditions)
         {
             foreach (ProfileCondition condition in conditions)
@@ -1842,17 +1968,7 @@ namespace Reefin.Model.Dlna
                                 continue;
                             }
 
-                            if (bool.TryParse(value, out var isAvc))
-                            {
-                                if (isAvc && condition.Condition == ProfileConditionType.Equals)
-                                {
-                                    item.RequireAvc = true;
-                                }
-                                else if (!isAvc && condition.Condition == ProfileConditionType.NotEquals)
-                                {
-                                    item.RequireAvc = true;
-                                }
-                            }
+                            ApplyAvcOrAnamorphicCondition(item, condition);
 
                             break;
                         }
@@ -1864,17 +1980,7 @@ namespace Reefin.Model.Dlna
                                 continue;
                             }
 
-                            if (bool.TryParse(value, out var isAnamorphic))
-                            {
-                                if (isAnamorphic && condition.Condition == ProfileConditionType.Equals)
-                                {
-                                    item.RequireNonAnamorphic = true;
-                                }
-                                else if (!isAnamorphic && condition.Condition == ProfileConditionType.NotEquals)
-                                {
-                                    item.RequireNonAnamorphic = true;
-                                }
-                            }
+                            ApplyAvcOrAnamorphicCondition(item, condition);
 
                             break;
                         }
