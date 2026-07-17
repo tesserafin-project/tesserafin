@@ -235,6 +235,67 @@ public class MediaInfoHelperLiveWiringTests
         Assert.False(outcome!.ServedByV2);
     }
 
+    [Fact]
+    public void SetDeviceSpecificData_StopThresholdGuardTripped_FallsBackToLegacyWithTypedReason()
+    {
+        // A guard pre-tripped by a seeded metrics instance (1 v2 attempt, 1 adapter error, threshold
+        // 10%, minimum sample size 1) - proving the guard overrides an otherwise-servable v2 plan,
+        // the same "checked before resolving a plan" shape as the kill switch test above.
+        var mediaSource = BuildMediaSource();
+        var legacyStreamInfo = BuildLegacyStreamInfo(mediaSource, PlayMethod.DirectPlay);
+        var plan = BuildPlan(PlaybackMethod.DirectPlay, transforms: []);
+
+        var metrics = new PlaybackOperationalMetrics();
+        metrics.RecordFallback(PlaybackLiveFallbackReason.AdapterError);
+        var shadowOptions = new PlaybackShadowOptions { Mode = PlaybackEngineMode.Canary, CanaryPercentage = 100 };
+        shadowOptions.StopThresholds.MinimumSampleSize = 1;
+        shadowOptions.StopThresholds.AdapterErrorRateThreshold = 0.10;
+        var guard = new PlaybackStopThresholdGuard(() => shadowOptions, metrics, Mock.Of<ILogger<PlaybackStopThresholdGuard>>());
+
+        var (helper, store, sessionId) = CreateFixture(
+            legacyStreamInfo,
+            PlaybackExecutionPlanResolution.Resolved,
+            plan,
+            operationalMetrics: metrics,
+            stopThresholdGuard: guard);
+
+        Invoke(helper, mediaSource);
+
+        Assert.Equal(LegacyAudioStreamIndex, mediaSource.DefaultAudioStreamIndex);
+        AssertFallback(store, sessionId, PlaybackLiveFallbackReason.StopThresholdTripped);
+    }
+
+    [Fact]
+    public void SetDeviceSpecificData_ServedByV2_RecordsIntoOperationalMetrics()
+    {
+        var mediaSource = BuildMediaSource();
+        var legacyStreamInfo = BuildLegacyStreamInfo(mediaSource, PlayMethod.DirectPlay);
+        var plan = BuildPlan(PlaybackMethod.DirectPlay, transforms: []);
+        var metrics = new PlaybackOperationalMetrics();
+
+        var (helper, _, _) = CreateFixture(legacyStreamInfo, PlaybackExecutionPlanResolution.Resolved, plan, operationalMetrics: metrics);
+
+        Invoke(helper, mediaSource);
+
+        Assert.Equal(1, metrics.ServedByV2Count);
+        Assert.Equal(0, metrics.FallbackReasonCount(PlaybackLiveFallbackReason.KillSwitch));
+    }
+
+    [Fact]
+    public void SetDeviceSpecificData_FallsBackToLegacy_RecordsFallbackReasonIntoOperationalMetrics()
+    {
+        var mediaSource = BuildMediaSource();
+        var legacyStreamInfo = BuildLegacyStreamInfo(mediaSource, PlayMethod.DirectPlay);
+        var metrics = new PlaybackOperationalMetrics();
+
+        var (helper, _, _) = CreateFixture(legacyStreamInfo, PlaybackExecutionPlanResolution.NoAuthoritativeRecord, plan: null, operationalMetrics: metrics);
+
+        Invoke(helper, mediaSource);
+
+        Assert.Equal(0, metrics.ServedByV2Count);
+        Assert.Equal(1, metrics.FallbackReasonCount(PlaybackLiveFallbackReason.NoAuthoritativeRecord));
+    }
+
     private static void AssertServed(InMemoryPlaybackLiveWiringDiagnosticsStore store, PlaybackSessionId sessionId)
     {
         var found = store.TryGet(sessionId, out var outcome);
@@ -284,7 +345,9 @@ public class MediaInfoHelperLiveWiringTests
         StreamInfo legacyStreamInfo,
         PlaybackExecutionPlanResolution resolution,
         PlaybackExecutionPlan? plan,
-        PlaybackEngineMode mode = PlaybackEngineMode.Canary)
+        PlaybackEngineMode mode = PlaybackEngineMode.Canary,
+        PlaybackOperationalMetrics? operationalMetrics = null,
+        PlaybackStopThresholdGuard? stopThresholdGuard = null)
     {
         var sessionId = PlaybackSessionId.NewId();
         var session = new PlaybackSession(
@@ -332,7 +395,9 @@ public class MediaInfoHelperLiveWiringTests
             Mock.Of<IDeviceManager>(),
             sessionManagerMock.Object,
             resolverMock.Object,
-            store);
+            store,
+            operationalMetrics,
+            stopThresholdGuard);
 
         return (helper, store, sessionId);
     }

@@ -26,9 +26,18 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
     private readonly IShadowDiagnosticsStore _diagnosticsStore;
     private readonly IV2PlanStore _v2PlanStore;
     private readonly IPlaybackLiveWiringDiagnosticsStore _liveWiringDiagnosticsStore;
+    private readonly PlaybackOperationalMetrics _operationalMetrics;
     private readonly object _lock = new();
     private readonly Dictionary<PlaybackSessionId, PlaybackSession> _sessions = new();
     private readonly Dictionary<string, PlaybackSessionId> _byPlaySessionId = new(StringComparer.OrdinalIgnoreCase);
+
+    // PR115d: play session ids for which ITranscodeManager.TranscodingJobStarted has actually fired -
+    // consulted (and removed) by RecordTranscodeStartFailureIfNeverStarted to distinguish "ffmpeg
+    // started, then the job ended" (already recorded as a success at Started time, nothing further to
+    // do) from "ffmpeg never started" (a failure, recorded here). Guarded by _lock, same as
+    // _byPlaySessionId - both are read/written from the same event handlers.
+    private readonly HashSet<string> _startedPlaySessionIds = new(StringComparer.OrdinalIgnoreCase);
+
     private readonly Timer _sweepTimer;
     private bool _disposed;
 
@@ -67,13 +76,22 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
     /// to a no-op instance when not supplied, so every pre-PR115c call site - including existing test
     /// constructors - keeps compiling and behaving exactly as before: nothing is ever retained.
     /// </param>
+    /// <param name="operationalMetrics">
+    /// PR115d: where <see cref="OnTranscodingJobStarted"/>/<see cref="OnTranscodingJobEnded"/> record
+    /// the ffmpeg transcode-start outcome for v2-served sessions - see
+    /// <see cref="PlaybackOperationalMetrics"/>'s remarks for exactly what is recorded and why.
+    /// Defaults to a fresh, unshared instance when not supplied, so every pre-PR115d call site -
+    /// including existing test constructors - keeps compiling and behaving exactly as before:
+    /// outcomes are recorded but never observed by anything outside this instance.
+    /// </param>
     public PlaybackSessionManager(
         IPlaybackSessionPlanner planner,
         ITranscodeManager transcodeManager,
         ISessionManager sessionManager,
         IShadowDiagnosticsStore? diagnosticsStore = null,
         IV2PlanStore? v2PlanStore = null,
-        IPlaybackLiveWiringDiagnosticsStore? liveWiringDiagnosticsStore = null)
+        IPlaybackLiveWiringDiagnosticsStore? liveWiringDiagnosticsStore = null,
+        PlaybackOperationalMetrics? operationalMetrics = null)
     {
         _planner = planner;
         _transcodeManager = transcodeManager;
@@ -81,6 +99,7 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
         _diagnosticsStore = diagnosticsStore ?? NoOpShadowDiagnosticsStore.Instance;
         _v2PlanStore = v2PlanStore ?? NoOpV2PlanStore.Instance;
         _liveWiringDiagnosticsStore = liveWiringDiagnosticsStore ?? NoOpPlaybackLiveWiringDiagnosticsStore.Instance;
+        _operationalMetrics = operationalMetrics ?? new PlaybackOperationalMetrics();
         transcodeManager.TranscodingJobEnded += OnTranscodingJobEnded;
         transcodeManager.TranscodingJobStarted += OnTranscodingJobStarted;
         sessionManager.PlaybackStart += OnPlaybackStart;
@@ -322,6 +341,13 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
         if (!string.IsNullOrEmpty(session.PlaySessionId))
         {
             _byPlaySessionId.Remove(session.PlaySessionId);
+
+            // PR115d: belt-and-suspenders against a leaked entry - the normal path already removes
+            // this in RecordTranscodeStartFailureIfNeverStarted's Ended handling, but a session can
+            // be evicted by a DIFFERENT path first (PlaybackStopped arriving before the transcoding
+            // job's Ended event, SweepExpired's TTL backstop, an explicit Delete) while a Started was
+            // already recorded and no Ended ever follows to clean it up otherwise.
+            _startedPlaySessionIds.Remove(session.PlaySessionId);
         }
 
         // PR113: evicts whatever shadow diagnostic was retained for this session, if any - covers
@@ -342,10 +368,16 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
 
     private void OnTranscodingJobEnded(object? sender, TranscodingJob job)
     {
-        if (!string.IsNullOrEmpty(job.PlaySessionId))
+        if (string.IsNullOrEmpty(job.PlaySessionId))
         {
-            DeleteByPlaySessionId(job.PlaySessionId);
+            return;
         }
+
+        // PR115d: recorded BEFORE DeleteByPlaySessionId below, which evicts (among the other two
+        // per-session stores) _liveWiringDiagnosticsStore - the ServedByV2 read this needs. Same
+        // ordering constraint RecordLifecycleEvent's callers already respect for the same reason.
+        RecordTranscodeStartFailureIfNeverStarted(job.PlaySessionId);
+        DeleteByPlaySessionId(job.PlaySessionId);
     }
 
     /// <summary>
@@ -353,8 +385,20 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
     /// play session id, if any is currently tracked. A no-op (not an error) when no tracked session
     /// matches - the job may belong to a live stream or a request this manager never planned.
     /// </summary>
-    private void OnTranscodingJobStarted(object? sender, TranscodingJob job) =>
+    private void OnTranscodingJobStarted(object? sender, TranscodingJob job)
+    {
+        // PR115d: records the transcode-start SUCCESS here, at Started time, not at Ended - see
+        // RecordTranscodeStartSuccessIfV2Served's remarks for why doing it here (rather than
+        // inferring "it must have started" from Ended) avoids a bias toward over-counting failures
+        // when a session is evicted (PlaybackStopped, SweepExpired) before its job's Ended event
+        // arrives.
+        if (!string.IsNullOrEmpty(job.PlaySessionId))
+        {
+            RecordTranscodeStartSuccessIfV2Served(job.PlaySessionId);
+        }
+
         RecordLifecycleEvent(job.PlaySessionId, "FfmpegStarted");
+    }
 
     /// <summary>
     /// PR113b: records a real "playback started" timeline event for the session tied to this
@@ -405,6 +449,90 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
         }
 
         _diagnosticsStore.RecordEvent(id, new PlaybackLifecycleEvent(stage, DateTimeOffset.UtcNow));
+    }
+
+    /// <summary>
+    /// PR115d: called from <see cref="OnTranscodingJobStarted"/> - correlates
+    /// <paramref name="playSessionId"/> to a currently tracked session and, only when that session
+    /// was actually served by v2 (per <see cref="_liveWiringDiagnosticsStore"/>), records a
+    /// SUCCESSFUL ffmpeg transcode start into <see cref="_operationalMetrics"/> immediately.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately recorded here, at Started time, rather than inferred at Ended time from
+    /// "<see cref="_startedPlaySessionIds"/> contains this id". A session can be evicted by a path
+    /// unrelated to this transcoding job - <see cref="OnPlaybackStopped"/> (the ordinary "user
+    /// stopped playback" signal) or <see cref="SweepExpired"/>'s TTL backstop - strictly BETWEEN this
+    /// job's Started and Ended events. Recording the success at Ended time would then find no
+    /// correlatable session (evicted) and silently drop it, while a job that never starts at all
+    /// produces no playback and therefore no <see cref="OnPlaybackStopped"/> signal, so ITS failure
+    /// (recorded by <see cref="RecordTranscodeStartFailureIfNeverStarted"/>) is essentially never
+    /// dropped the same way. Recording successes only at Ended would therefore have biased the
+    /// observed rate upward (successes silently dropped more often than failures) - exactly the
+    /// wrong direction for a rate a stop-threshold guard reads to decide whether to force legacy for
+    /// the whole cohort. Recording the success here, while the session is still guaranteed tracked
+    /// (this is the very job whose launch <see cref="ITranscodeManager.TranscodingJobStarted"/> is
+    /// reporting), removes that race entirely.
+    /// </remarks>
+    /// <param name="playSessionId">The play session id the started job belongs to.</param>
+    private void RecordTranscodeStartSuccessIfV2Served(string playSessionId)
+    {
+        PlaybackSessionId id;
+        lock (_lock)
+        {
+            // Marked unconditionally (not gated on correlation/ServedByV2) - RecordTranscodeStartFailureIfNeverStarted
+            // needs to know "did Started ever fire for this play session id" regardless of whether
+            // this manager can still correlate it to a v2-served session by then.
+            _startedPlaySessionIds.Add(playSessionId);
+
+            if (!_byPlaySessionId.TryGetValue(playSessionId, out id))
+            {
+                return;
+            }
+        }
+
+        if (_liveWiringDiagnosticsStore.TryGet(id, out var outcome) && outcome is not null && outcome.ServedByV2)
+        {
+            _operationalMetrics.RecordTranscodeStart(failed: false);
+        }
+    }
+
+    /// <summary>
+    /// PR115d: called from <see cref="OnTranscodingJobEnded"/>, BEFORE the eviction that follows it -
+    /// records a FAILED ffmpeg transcode start into <see cref="_operationalMetrics"/> when this job
+    /// ended without <see cref="RecordTranscodeStartSuccessIfV2Served"/> ever having observed a
+    /// matching <see cref="ITranscodeManager.TranscodingJobStarted"/> for this play session id (i.e.
+    /// the successful-start case already fully handled itself, at Started time - see that method's
+    /// remarks). Silently does nothing for an unknown play session id or a legacy-served session, the
+    /// same "correlate or silently no-op" discipline <see cref="RecordLifecycleEvent"/> already
+    /// follows. Idempotent against <see cref="ITranscodeManager.TranscodingJobEnded"/>'s documented
+    /// "may be raised more than once for the same job" contract: the caller
+    /// (<see cref="OnTranscodingJobEnded"/>) always evicts <paramref name="playSessionId"/> from
+    /// <see cref="_byPlaySessionId"/> right after this method returns, so a second Ended event for the
+    /// same job finds no tracked session here and records nothing a second time.
+    /// </summary>
+    /// <param name="playSessionId">The play session id the ended job belongs to.</param>
+    private void RecordTranscodeStartFailureIfNeverStarted(string playSessionId)
+    {
+        PlaybackSessionId id;
+        lock (_lock)
+        {
+            if (_startedPlaySessionIds.Remove(playSessionId))
+            {
+                // It DID start (Started fired first) - RecordTranscodeStartSuccessIfV2Served already
+                // recorded this outcome; nothing left to do here but stop tracking the id.
+                return;
+            }
+
+            if (!_byPlaySessionId.TryGetValue(playSessionId, out id))
+            {
+                return;
+            }
+        }
+
+        if (_liveWiringDiagnosticsStore.TryGet(id, out var outcome) && outcome is not null && outcome.ServedByV2)
+        {
+            _operationalMetrics.RecordTranscodeStart(failed: true);
+        }
     }
 
     private PlaybackPlan? Plan(PlaybackSessionRequest request) => request.Kind switch

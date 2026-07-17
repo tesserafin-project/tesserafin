@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Reefin.Api.Extensions;
 using Reefin.Common.Extensions;
 using Reefin.Common.Net;
@@ -52,6 +53,8 @@ public class MediaInfoHelper
     private readonly IPlaybackSessionManager _playbackSessionManager;
     private readonly IPlaybackExecutionPlanResolver _executionPlanResolver;
     private readonly IPlaybackLiveWiringDiagnosticsStore _liveWiringDiagnosticsStore;
+    private readonly PlaybackOperationalMetrics _operationalMetrics;
+    private readonly PlaybackStopThresholdGuard _stopThresholdGuard;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MediaInfoHelper"/> class.
@@ -77,6 +80,23 @@ public class MediaInfoHelper
     /// site - including existing test constructors - keeps compiling and behaving exactly as before:
     /// no outcome is ever retained.
     /// </param>
+    /// <param name="operationalMetrics">
+    /// PR115d: the cumulative served-by-v2/fallback-by-reason counters this method records into on
+    /// every decision - see <see cref="PlaybackOperationalMetrics"/>. Defaults to a fresh,
+    /// unshared instance when not supplied, so every pre-PR115d call site - including existing test
+    /// constructors - keeps compiling and behaving exactly as before: metrics are recorded but never
+    /// observed by anything outside this instance.
+    /// </param>
+    /// <param name="stopThresholdGuard">
+    /// PR115d: the operational stop-threshold guard consulted immediately after the kill switch check
+    /// in <see cref="ResolveServedStreamInfo"/> - see <see cref="PlaybackStopThresholdGuard"/>.
+    /// Defaults to a guard wired against <paramref name="operationalMetrics"/> (or its own default,
+    /// if that was not supplied either) and <paramref name="serverConfigurationManager"/>'s live
+    /// configuration when not supplied, so every pre-PR115d call site keeps compiling and behaving
+    /// exactly as before: a fresh, empty metrics instance never reaches
+    /// <see cref="Reefin.Model.Configuration.PlaybackStopThresholdOptions.MinimumSampleSize"/>, so
+    /// the default guard never trips.
+    /// </param>
     public MediaInfoHelper(
         IUserManager userManager,
         IItemLookupService itemLookupService,
@@ -88,7 +108,9 @@ public class MediaInfoHelper
         IDeviceManager deviceManager,
         IPlaybackSessionManager playbackSessionManager,
         IPlaybackExecutionPlanResolver executionPlanResolver,
-        IPlaybackLiveWiringDiagnosticsStore? liveWiringDiagnosticsStore = null)
+        IPlaybackLiveWiringDiagnosticsStore? liveWiringDiagnosticsStore = null,
+        PlaybackOperationalMetrics? operationalMetrics = null,
+        PlaybackStopThresholdGuard? stopThresholdGuard = null)
     {
         _userManager = userManager;
         _itemLookupService = itemLookupService;
@@ -101,6 +123,11 @@ public class MediaInfoHelper
         _playbackSessionManager = playbackSessionManager;
         _executionPlanResolver = executionPlanResolver;
         _liveWiringDiagnosticsStore = liveWiringDiagnosticsStore ?? NoOpPlaybackLiveWiringDiagnosticsStore.Instance;
+        _operationalMetrics = operationalMetrics ?? new PlaybackOperationalMetrics();
+        _stopThresholdGuard = stopThresholdGuard ?? new PlaybackStopThresholdGuard(
+            () => serverConfigurationManager.Configuration.PlaybackShadow,
+            _operationalMetrics,
+            NullLogger<PlaybackStopThresholdGuard>.Instance);
     }
 
     /// <summary>
@@ -395,8 +422,9 @@ public class MediaInfoHelper
     /// PR115c: the live-wiring decision. Legacy (<paramref name="legacyStreamInfo"/>) is always the
     /// default and is replaced only on full, verified success - mirrors the "v2 must never break the
     /// live path" discipline <see cref="Reefin.MediaEncoding.Playback.ShadowPlaybackSessionPlanner"/>
-    /// already applies to the shadow run. Every failure mode (kill switch, no/unresolvable plan,
-    /// source id mismatch, the Dolby Vision exclusion, an adapter exception) returns
+    /// already applies to the shadow run. Every failure mode (kill switch, the PR115d stop-threshold
+    /// guard, no/unresolvable plan, source id mismatch, the Dolby Vision exclusion, an adapter
+    /// exception) returns
     /// <paramref name="legacyStreamInfo"/> unchanged, logged and retained as a typed
     /// <see cref="PlaybackLiveFallbackReason"/> - never a silent substitution, never an exception
     /// escaping to the caller.
@@ -427,6 +455,15 @@ public class MediaInfoHelper
         if (effectiveMode is not (PlaybackEngineMode.Canary or PlaybackEngineMode.V2))
         {
             return FallbackToLegacy(sessionId, legacyStreamInfo, PlaybackLiveFallbackReason.KillSwitch, decidedAt);
+        }
+
+        // PR115d: the operational stop-threshold guard - consulted right after the kill switch (an
+        // operator-forced override always wins first) and before resolving a plan, so a tripped guard
+        // never pays the cost of resolving/adapting a plan it is about to discard anyway. See
+        // PlaybackStopThresholdGuard's remarks for the full trip/log/reset semantics.
+        if (_stopThresholdGuard.Evaluate())
+        {
+            return FallbackToLegacy(sessionId, legacyStreamInfo, PlaybackLiveFallbackReason.StopThresholdTripped, decidedAt);
         }
 
         var resolution = _executionPlanResolver.Resolve(sessionId, out var plan);
@@ -469,6 +506,7 @@ public class MediaInfoHelper
 
             var v2StreamInfo = PlaybackExecutionPlanAdapter.ToStreamInfo(plan, context, mediaSource, profile);
             _liveWiringDiagnosticsStore.Record(sessionId, PlaybackLiveWiringOutcome.Served(decidedAt));
+            _operationalMetrics.RecordServed();
             _logger.LogInformation("Playback session {SessionId} served from the v2 execution plan (PR115c canary).", sessionId);
             return v2StreamInfo;
         }
@@ -484,6 +522,7 @@ public class MediaInfoHelper
     private StreamInfo FallbackToLegacy(PlaybackSessionId sessionId, StreamInfo legacyStreamInfo, PlaybackLiveFallbackReason reason, DateTimeOffset decidedAt)
     {
         _liveWiringDiagnosticsStore.Record(sessionId, PlaybackLiveWiringOutcome.Fallback(reason, decidedAt));
+        _operationalMetrics.RecordFallback(reason);
         _logger.LogInformation("Playback session {SessionId} served from legacy (PR115c fallback reason: {Reason}).", sessionId, reason);
         return legacyStreamInfo;
     }

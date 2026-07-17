@@ -89,6 +89,15 @@ public class PlaybackShadowOptions
     }
 
     /// <summary>
+    /// Gets or sets the PR115d operational stop-threshold guard configuration - see
+    /// <see cref="PlaybackStopThresholdOptions"/> for why this is a sibling type rather than fields
+    /// on this class directly. Never <see langword="null"/>; defaults to a fresh, enabled instance
+    /// with its own PR115d defaults, so a configuration that predates PR115d still gets the guard's
+    /// protection without needing to add anything.
+    /// </summary>
+    public PlaybackStopThresholdOptions StopThresholds { get; set; } = new();
+
+    /// <summary>
     /// Resolves the mode this configuration actually asks for: <see cref="Mode"/> verbatim, except
     /// that the <see cref="PlaybackEngineMode.Legacy"/> default combined with the pre-PR115a
     /// <see cref="Enabled"/> flag still means shadow mode, so existing configurations keep their

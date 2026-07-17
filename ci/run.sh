@@ -13,6 +13,12 @@
 # uncommitted changes included — which is what makes this script a valid
 # gate for any branch.
 #
+# PR115d: the test run below excludes anything tagged Category=Smoke - today that is
+# tests/Reefin.MediaEncoding.Tests/Encoder/HlsSmokeTests.cs, a real ffmpeg/HLS synthesis test that is
+# meaningfully heavier than the rest of this suite and was scoped as an OPTIONAL, non-blocking stage.
+# Run it explicitly with ./ci/smoke.sh (also Docker-based, same image) - see that script's header for
+# exactly what it proves and does not prove.
+#
 # Usage:
 #   ./ci/run.sh
 set -euo pipefail
@@ -54,8 +60,8 @@ docker run --rm \
         dotnet restore '${SOLUTION}'
         echo '-- dotnet build (fail fast on errors) --'
         dotnet build '${SOLUTION}' --no-restore -clp:ErrorsOnly
-        echo '-- dotnet test (full suite) --'
-        dotnet test '${SOLUTION}' --no-build --nologo
+        echo '-- dotnet test (full suite, excluding the optional PR115d smoke stage) --'
+        dotnet test '${SOLUTION}' --no-build --nologo --filter 'Category!=Smoke'
     "
 STATUS=$?
 set -e
