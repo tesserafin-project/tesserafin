@@ -358,6 +358,15 @@ public class BaseItemTests
         var channelManager = new Mock<IChannelManager>();
         channelManager.Setup(x => x.EnableMediaSourceDisplay(channelItem)).Returns(channelManagerResult);
 
+        // Video.SourceType (touched via BaseItem.GetEnableMediaSourceDisplay) calls
+        // Video.IsActiveRecording(), which reads the static Video.RecordingsManager. That static is
+        // only ever assigned in production at startup (see ApplicationHost), so it must be set
+        // explicitly here rather than relying on another test in this collection having left a value
+        // behind — see BaseItemStaticStateFixture for why leaking statics between tests is fragile.
+        var recordingsManager = new Mock<IRecordingsManager>();
+        recordingsManager.Setup(x => x.GetActiveRecordingInfo(It.IsAny<string>())).Returns((ActiveRecordingInfo?)null);
+        Video.RecordingsManager = recordingsManager.Object;
+
         Assert.Equal(channelManagerResult, channelItem.GetEnableMediaSourceDisplay(channelManager.Object));
     }
 
@@ -401,6 +410,21 @@ public class BaseItemTests
         libraryManager.Setup(x => x.GetLinkedAlternateVersions(It.IsAny<Video>())).Returns(Array.Empty<Video>());
         libraryManager.Setup(x => x.GetLocalAlternateVersionIds(It.IsAny<Video>())).Returns(Array.Empty<Guid>());
         BaseItem.LibraryManager = libraryManager.Object;
+
+        // BaseItem.PathProtocol (touched via GetCommonNamePrefix -> IsFileProtocol, on the fallback
+        // path exercised here) reads the static BaseItem.MediaSourceManager rather than the
+        // mediaSourceManager instance passed into GetMediaSources below — so it must be set here too,
+        // for the same static-leak reason as Video.RecordingsManager above.
+        BaseItem.MediaSourceManager = mediaSourceManager.Object;
+
+        // Video.SourceType (touched via BaseItem.GetMediaSources' own-version fallback) calls
+        // Video.IsActiveRecording(), which reads the static Video.RecordingsManager. That static is
+        // only ever assigned in production at startup (see ApplicationHost), so it must be set
+        // explicitly here rather than relying on another test in this collection having left a value
+        // behind — see BaseItemStaticStateFixture for why leaking statics between tests is fragile.
+        var recordingsManager = new Mock<IRecordingsManager>();
+        recordingsManager.Setup(x => x.GetActiveRecordingInfo(It.IsAny<string>())).Returns((ActiveRecordingInfo?)null);
+        Video.RecordingsManager = recordingsManager.Object;
 
         var result = channelItem.GetMediaSources(false, mediaSourceManager.Object, segmentManager.Object, channelManager.Object);
 

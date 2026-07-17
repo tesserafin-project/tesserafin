@@ -258,8 +258,6 @@ deployment/collect-dist/
 
 reefin_version.ini
 
-ci/
-
 # Doxygen
 doc/
 

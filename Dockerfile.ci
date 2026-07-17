@@ -1,0 +1,44 @@
+# CI image for Reefin — local, reproducible build/test environment.
+#
+# This replaces the (currently exhausted) hosted GitHub Actions quota as the
+# mandatory merge gate. See docs/local-ci.md for the full story and ci/run.sh
+# for how this image is used.
+#
+# The repository itself is NOT baked into this image: it is bind-mounted at
+# runtime by ci/run.sh. That keeps the image small, cacheable across
+# branches, and always in sync with whatever is on disk (including
+# uncommitted changes) instead of requiring a rebuild on every source
+# change.
+#
+# Pinned by tag AND digest for reproducibility. Re-resolve the digest with:
+#   docker buildx imagetools inspect mcr.microsoft.com/dotnet/sdk:10.0
+FROM mcr.microsoft.com/dotnet/sdk:10.0@sha256:ed034a8bf0b24ded0cbbac07e17825d8e9ebfe21e308191d0f7421eaf5ad4664
+
+ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 \
+    DOTNET_NOLOGO=1 \
+    DEBIAN_FRONTEND=noninteractive \
+    NUGET_PACKAGES=/nuget
+
+# Native dependencies required at build/test time:
+#   ffmpeg          - Reefin.MediaEncoding shells out to ffmpeg/ffprobe.
+#   libfontconfig1  - SkiaSharp.NativeAssets.Linux (src/Reefin.Drawing.Skia,
+#                     pulled in transitively by the server/API test
+#                     projects) needs fontconfig present on Linux even for
+#                     non-text raster operations.
+#   ca-certificates - NuGet restore over HTTPS.
+#
+# SQLitePCLRaw needs nothing extra here: its native .so is bundled inside
+# the NuGet package itself.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ffmpeg \
+        libfontconfig1 \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /repo
+
+# Backed by a named Docker volume at runtime (see ci/run.sh: -v
+# reefin-nuget:/nuget) so package restores are cached across CI runs
+# instead of being re-downloaded every time.
+RUN mkdir -p /nuget
