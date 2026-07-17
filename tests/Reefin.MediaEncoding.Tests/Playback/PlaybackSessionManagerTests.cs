@@ -209,6 +209,30 @@ public class PlaybackSessionManagerTests
     }
 
     [Fact]
+    public void Delete_ExistingSessionWithRetainedLiveWiringOutcome_EvictsOutcome()
+    {
+        // PR115c: the live-wiring diagnostics store is never written by PlaybackSessionManager
+        // itself (MediaInfoHelper writes it, downstream, once a session already exists) - but this
+        // manager still owns eviction, on the exact same removal paths as the other two per-session
+        // stores (IShadowDiagnosticsStore, IV2PlanStore).
+        var liveWiringStore = new InMemoryPlaybackLiveWiringDiagnosticsStore();
+        var manager = new PlaybackSessionManager(
+            new Mock<IPlaybackSessionPlanner>().Object,
+            new Mock<ITranscodeManager>().Object,
+            new Mock<ISessionManager>().Object,
+            diagnosticsStore: null,
+            v2PlanStore: null,
+            liveWiringDiagnosticsStore: liveWiringStore);
+        var session = manager.Track(PlaybackMediaKind.Video, new PlaybackPlan(PlayMethod.DirectPlay, default), "play-session-1");
+        liveWiringStore.Record(session.Id, PlaybackLiveWiringOutcome.Served(DateTimeOffset.UtcNow));
+
+        var removed = manager.Delete(session.Id);
+
+        Assert.True(removed);
+        Assert.False(liveWiringStore.TryGet(session.Id, out _));
+    }
+
+    [Fact]
     public void TranscodingJobStarted_RecordsFfmpegStartedEventForMatchingSession()
     {
         var mockTranscodeManager = new Mock<ITranscodeManager>();

@@ -19,9 +19,10 @@ public class PlaybackDiagnosticsSessionsControllerTests
 {
     private readonly Mock<IPlaybackSessionManager> _playbackSessionManager = new();
     private readonly Mock<IShadowDiagnosticsStore> _diagnosticsStore = new();
+    private readonly Mock<IPlaybackLiveWiringDiagnosticsStore> _liveWiringDiagnosticsStore = new();
 
     private PlaybackDiagnosticsSessionsController CreateController()
-        => new(_playbackSessionManager.Object, _diagnosticsStore.Object);
+        => new(_playbackSessionManager.Object, _diagnosticsStore.Object, _liveWiringDiagnosticsStore.Object);
 
     /// <summary>
     /// This admin surface must never share the client controller's authorization scope: it
@@ -137,6 +138,29 @@ public class PlaybackDiagnosticsSessionsControllerTests
         Assert.Null(detail.SourceSnapshot);
         Assert.Null(detail.Reasoning);
         Assert.Null(detail.Comparison);
+    }
+
+    /// <summary>
+    /// PR115c: the live-wiring outcome retained by <c>MediaInfoHelper</c> for a session must reach
+    /// the mapped diagnostic detail, independent of whether a shadow diagnostic was ever retained
+    /// for that same session.
+    /// </summary>
+    [Fact]
+    public void GetPlaybackSession_WithRecordedLiveWiringOutcome_DetailIncludesIt()
+    {
+        var session = new PlaybackSession(PlaybackSessionId.NewId(), PlaybackMediaKind.Video, null, null, new PlaybackPlan(PlayMethod.DirectPlay, default), default, default);
+        _playbackSessionManager.Setup(m => m.Get(session.Id)).Returns(session);
+        ShadowDiagnosticRecord? none = null;
+        _diagnosticsStore.Setup(s => s.TryGet(session.Id, out none)).Returns(false);
+        PlaybackLiveWiringOutcome? outcome = PlaybackLiveWiringOutcome.Fallback(PlaybackLiveFallbackReason.KillSwitch, DateTimeOffset.UnixEpoch);
+        _liveWiringDiagnosticsStore.Setup(s => s.TryGet(session.Id, out outcome)).Returns(true);
+
+        var result = CreateController().GetPlaybackSession(session.Id);
+
+        var detail = Assert.IsAssignableFrom<PlaybackDiagnosticDetail>(Assert.IsAssignableFrom<OkObjectResult>(result.Result).Value);
+        Assert.NotNull(detail.LiveWiring);
+        Assert.False(detail.LiveWiring!.ServedByV2);
+        Assert.Equal(PlaybackLiveFallbackReason.KillSwitch, detail.LiveWiring.FallbackReason);
     }
 
     [Fact]

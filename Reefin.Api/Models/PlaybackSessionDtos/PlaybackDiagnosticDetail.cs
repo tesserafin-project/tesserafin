@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Reefin.MediaEncoding.Playback;
 using Reefin.Playback.Decision;
 using Reefin.Playback.Shadow;
 
@@ -52,6 +53,14 @@ namespace Reefin.Api.Models.PlaybackSessionDtos;
 /// actually observed for it, each stamped with its real, received-at timestamp - never a
 /// fabricated or approximated one. A stage that was never observed is simply absent, not defaulted.
 /// </param>
+/// <param name="LiveWiring">
+/// PR115c: whether the live streaming path (<c>MediaInfoHelper.SetDeviceSpecificData</c>) actually
+/// served this session from the v2 execution plan, or why it fell back to legacy - or
+/// <see langword="null"/> when no live-wiring decision has been retained for this session yet
+/// (request not yet made, or the session predates PR115c's diagnostics store). Independent of
+/// <see cref="Comparison"/>: a session can have a shadow comparison retained without ever having
+/// been through the live-wiring decision, and vice versa.
+/// </param>
 public sealed record PlaybackDiagnosticDetail(
     Guid Id,
     MediaKind Kind,
@@ -68,4 +77,5 @@ public sealed record PlaybackDiagnosticDetail(
     IReadOnlyList<MediaSourceSnapshot>? SourceSnapshot,
     ReasonNode? Reasoning,
     DiagnosticComparison? Comparison,
-    IReadOnlyList<DiagnosticTimelineEntry> Timeline);
+    IReadOnlyList<DiagnosticTimelineEntry> Timeline,
+    PlaybackLiveWiringOutcome? LiveWiring = null);

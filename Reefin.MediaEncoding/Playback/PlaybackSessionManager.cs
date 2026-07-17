@@ -25,6 +25,7 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
     private readonly ISessionManager _sessionManager;
     private readonly IShadowDiagnosticsStore _diagnosticsStore;
     private readonly IV2PlanStore _v2PlanStore;
+    private readonly IPlaybackLiveWiringDiagnosticsStore _liveWiringDiagnosticsStore;
     private readonly object _lock = new();
     private readonly Dictionary<PlaybackSessionId, PlaybackSession> _sessions = new();
     private readonly Dictionary<string, PlaybackSessionId> _byPlaySessionId = new(StringComparer.OrdinalIgnoreCase);
@@ -56,18 +57,30 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
     /// pre-PR115a call site - including existing test constructors - keeps compiling and behaving
     /// exactly as before: no authoritative record is ever retained.
     /// </param>
+    /// <param name="liveWiringDiagnosticsStore">
+    /// PR115c: retains the observable outcome (<see cref="PlaybackLiveWiringOutcome"/>) of the live
+    /// streaming path's serve-v2-or-fallback decision - a third, separate channel from both
+    /// <paramref name="diagnosticsStore"/> and <paramref name="v2PlanStore"/>. This manager never
+    /// writes to it (the decision is made downstream, in <c>MediaInfoHelper</c>, after a session is
+    /// already in hand) - it only evicts it, on the exact same removal paths as the other two
+    /// per-session stores, so a stale outcome can never outlive the session it describes. Defaults
+    /// to a no-op instance when not supplied, so every pre-PR115c call site - including existing test
+    /// constructors - keeps compiling and behaving exactly as before: nothing is ever retained.
+    /// </param>
     public PlaybackSessionManager(
         IPlaybackSessionPlanner planner,
         ITranscodeManager transcodeManager,
         ISessionManager sessionManager,
         IShadowDiagnosticsStore? diagnosticsStore = null,
-        IV2PlanStore? v2PlanStore = null)
+        IV2PlanStore? v2PlanStore = null,
+        IPlaybackLiveWiringDiagnosticsStore? liveWiringDiagnosticsStore = null)
     {
         _planner = planner;
         _transcodeManager = transcodeManager;
         _sessionManager = sessionManager;
         _diagnosticsStore = diagnosticsStore ?? NoOpShadowDiagnosticsStore.Instance;
         _v2PlanStore = v2PlanStore ?? NoOpV2PlanStore.Instance;
+        _liveWiringDiagnosticsStore = liveWiringDiagnosticsStore ?? NoOpPlaybackLiveWiringDiagnosticsStore.Instance;
         transcodeManager.TranscodingJobEnded += OnTranscodingJobEnded;
         transcodeManager.TranscodingJobStarted += OnTranscodingJobStarted;
         sessionManager.PlaybackStart += OnPlaybackStart;
@@ -319,6 +332,10 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
         // PR115a: evicts whatever authoritative v2 record was retained for this session, if any -
         // same removal paths as the diagnostics store above.
         _v2PlanStore.Remove(id);
+
+        // PR115c: evicts whatever live-wiring outcome was retained for this session, if any - same
+        // removal paths as the two stores above.
+        _liveWiringDiagnosticsStore.Remove(id);
 
         return true;
     }

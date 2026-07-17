@@ -663,6 +663,11 @@ namespace Reefin.Server.Core
             // observability one, so it must never share lifecycle/eviction semantics with the
             // diagnostics store above.
             serviceCollection.AddSingleton<IV2PlanStore, InMemoryV2PlanStore>();
+            // PR115c: one IPlaybackLiveWiringDiagnosticsStore singleton - a third channel, separate
+            // from both stores above, retaining the observable outcome of the live streaming path's
+            // serve-v2-or-fallback decision (MediaInfoHelper), evicted by PlaybackSessionManager on
+            // the same removal paths as the other two.
+            serviceCollection.AddSingleton<IPlaybackLiveWiringDiagnosticsStore, InMemoryPlaybackLiveWiringDiagnosticsStore>();
             serviceCollection.AddSingleton<IPlaybackSessionPlanner>(provider => new ShadowPlaybackSessionPlanner(
                 provider.GetRequiredService<PlaybackSessionPlanner>(),
                 provider.GetRequiredService<IPlaybackEngine>(),
@@ -677,13 +682,14 @@ namespace Reefin.Server.Core
                 provider.GetRequiredService<ITranscodeManager>(),
                 provider.GetRequiredService<ISessionManager>(),
                 provider.GetRequiredService<IShadowDiagnosticsStore>(),
-                provider.GetRequiredService<IV2PlanStore>()));
+                provider.GetRequiredService<IV2PlanStore>(),
+                provider.GetRequiredService<IPlaybackLiveWiringDiagnosticsStore>()));
 
-            // PR114a: dormant resolver - registered so DI wiring exists ahead of the PR115 canary; no
-            // streaming endpoint resolves it yet. PR115a: now reads the authoritative IV2PlanStore
-            // singleton (not IShadowDiagnosticsStore, which only ever holds observability data), so
-            // it can resolve a session's v2 PlaybackExecutionPlan whenever an authoritative record was
-            // retained for it. Still dormant until PR115c.
+            // PR114a: registered so DI wiring exists ahead of the PR115 canary. PR115a: reads the
+            // authoritative IV2PlanStore singleton (not IShadowDiagnosticsStore, which only ever holds
+            // observability data), so it can resolve a session's v2 PlaybackExecutionPlan whenever an
+            // authoritative record was retained for it. PR115c: no longer dormant - MediaInfoHelper
+            // (the live streaming path) now consumes it.
             serviceCollection.AddSingleton<IPlaybackExecutionPlanResolver, PlaybackExecutionPlanResolver>();
             serviceCollection.AddScoped<MediaInfoHelper>();
             serviceCollection.AddScoped<AudioHelper>();

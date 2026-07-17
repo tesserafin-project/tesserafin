@@ -28,16 +28,25 @@ public class PlaybackDiagnosticsSessionsController : BaseReefinApiController
 {
     private readonly IPlaybackSessionManager _playbackSessionManager;
     private readonly IShadowDiagnosticsStore _diagnosticsStore;
+    private readonly IPlaybackLiveWiringDiagnosticsStore _liveWiringDiagnosticsStore;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PlaybackDiagnosticsSessionsController"/> class.
     /// </summary>
     /// <param name="playbackSessionManager">Instance of the <see cref="IPlaybackSessionManager"/> interface.</param>
     /// <param name="diagnosticsStore">Instance of the <see cref="IShadowDiagnosticsStore"/> interface.</param>
-    public PlaybackDiagnosticsSessionsController(IPlaybackSessionManager playbackSessionManager, IShadowDiagnosticsStore diagnosticsStore)
+    /// <param name="liveWiringDiagnosticsStore">
+    /// PR115c: Instance of the <see cref="IPlaybackLiveWiringDiagnosticsStore"/> interface - surfaces
+    /// the live streaming path's serve-v2-or-fallback decision on <see cref="GetPlaybackSession"/>.
+    /// </param>
+    public PlaybackDiagnosticsSessionsController(
+        IPlaybackSessionManager playbackSessionManager,
+        IShadowDiagnosticsStore diagnosticsStore,
+        IPlaybackLiveWiringDiagnosticsStore liveWiringDiagnosticsStore)
     {
         _playbackSessionManager = playbackSessionManager;
         _diagnosticsStore = diagnosticsStore;
+        _liveWiringDiagnosticsStore = liveWiringDiagnosticsStore;
     }
 
     /// <summary>
@@ -80,7 +89,8 @@ public class PlaybackDiagnosticsSessionsController : BaseReefinApiController
 
         _diagnosticsStore.TryGet(id, out var diagnostic);
         var events = _diagnosticsStore.GetEvents(id);
-        return Ok(PlaybackDiagnosticDetailMapper.Map(session, diagnostic, events));
+        _liveWiringDiagnosticsStore.TryGet(id, out var liveWiring);
+        return Ok(PlaybackDiagnosticDetailMapper.Map(session, diagnostic, events, liveWiring));
     }
 
     /// <summary>
