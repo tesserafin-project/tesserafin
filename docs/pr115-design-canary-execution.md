@@ -27,6 +27,13 @@ Concrètement :
 
 4. **L'oracle de parité (§6) doit comparer la query string complète de `ToUrl()`**, pas un sous-ensemble choisi à la main. Aucun allow-list n'est permis pour une divergence de **valeur** sur une clé présente des deux côtés capable de changer l'exécution côté client (méthode de lecture, codec, conteneur, conditions de compatibilité comme `RequireAvc`/`RequireNonAnamorphic`) — seules restent tolérées les divergences déjà prouvées neutres pour l'exécution : absence de clé des deux côtés dans un cas où §3.C documente que la clé n'est structurellement pas sérialisée (hors `PlayMethod.Transcode`, hors `SubProtocol==hls`), ou l'ordre de sérialisation des paramètres.
 
+### Constat de sortie PR115b (implémentation) — contrainte reportée sur PR115c
+
+L'oracle implémenté (`tests/Reefin.Playback.Shadow.Tests/ExecutionPlanParityTests.cs`, classifieur `IsAllowedDivergence`) compare la query string complète et documente en code chaque divergence tolérée avec sa justification. Deux constats sortent de PR115b :
+
+1. **`VideoCodecs`/`AudioCodecs` v2 restent mono-élément** (le plan porte un codec cible unique) là où le legacy sérialise sa CSV complète de candidats. Pour 8 des 9 cas de l'oracle, seul le premier élément est consommé en aval — divergence neutre prouvée cas par cas, pas allow-listée en bloc.
+2. **Classe Dolby Vision / `CanStreamCopyVideo` : exclusion live obligatoire.** `EncodingHelper.CanStreamCopyVideo` (`Reefin.Controller/MediaEncoding/EncodingHelper.cs:2399-2444`) n'applique aucun gate de compatibilité video-range/HDR, seulement l'appartenance à la liste de codecs. Quand la CSV legacy contient le codec source (cas oracle `mp4-dvhe.08-eac3-15200k`), le legacy peut stream-copier du Dolby Vision incompatible au lieu de transcoder — comportement pré-existant du pipeline legacy, hors périmètre de PR115b (dormant). **Exigence dure pour PR115c : toute session de cette classe (source Dolby Vision/HDR dont le codec figure dans la CSV candidate legacy) doit être exclue du canary live avec fallback legacy explicite et raison typée, tant que ce comportement n'est pas investigé et tranché.** Une simple discipline de rollout (PR115d) ne suffit pas, pour les mêmes raisons que celles ayant motivé cet invariant.
+
 ---
 
 ## 1. Rappel — les 4 tranches et ce qui existe déjà

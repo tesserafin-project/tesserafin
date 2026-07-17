@@ -130,7 +130,8 @@ public class PlaybackExecutionPlanResolverTests
 
         var mediaSource = new MediaSourceInfo { Id = "source-1", Container = "mkv" };
         var deviceProfile = new DeviceProfile();
-        var streamInfo = PlaybackExecutionPlanAdapter.ToStreamInfo(plan, mediaSource, deviceProfile, itemId: Guid.NewGuid());
+        var executionContext = new PlaybackExecutionContext(Guid.NewGuid(), null, null, null, 0, false);
+        var streamInfo = PlaybackExecutionPlanAdapter.ToStreamInfo(plan, executionContext, mediaSource, deviceProfile);
 
         Assert.Equal(PlayMethod.DirectPlay, streamInfo.PlayMethod);
         Assert.Equal("mp4", streamInfo.Container);
