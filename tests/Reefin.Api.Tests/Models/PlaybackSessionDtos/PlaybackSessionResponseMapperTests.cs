@@ -9,6 +9,7 @@ using Reefin.Model.Dto;
 using Reefin.Model.Entities;
 using Reefin.Model.Session;
 using Reefin.Playback.Decision;
+using Reefin.Playback.Execution;
 using Xunit;
 using LegacySubtitleDeliveryMethod = Reefin.Model.Dlna.SubtitleDeliveryMethod;
 
@@ -250,7 +251,7 @@ public sealed class PlaybackSessionResponseMapperTests
     }
 
     [Fact]
-    public void Map_WithViableV2Record_ReturnsV2DecisionVerbatimAndDedupedFlattenedReasons()
+    public void Map_WithViableV2RecordAndExecutionPlan_ReturnsV2DecisionVerbatimAndDedupedFlattenedReasons()
     {
         // The legacy-sourced session (method/streamInfo) is deliberately different from the v2
         // decision below - proving the overload takes EVERYTHING from the v2 decision verbatim, not
@@ -298,7 +299,26 @@ public sealed class PlaybackSessionResponseMapperTests
             });
 
         var decision = PlaybackDecision.Transcode("v2-source", selectedStreams, output, transforms, reasoning, engineVersion: 6);
-        var v2Record = new V2PlanRecord(decision, ExecutionPlan: null, DateTimeOffset.UtcNow);
+        var executionPlan = new PlaybackExecutionPlan(
+            PlaybackMethod.Transcode,
+            "v2-source",
+            output.Container!,
+            output.Protocol,
+            selectedStreams.Video,
+            output.VideoCodec,
+            output.VideoBitrate,
+            output.Resolution,
+            output.VideoRange,
+            selectedStreams.Audio,
+            output.AudioCodec,
+            output.AudioBitrate,
+            output.AudioChannels,
+            output.TotalBitrate,
+            selectedStreams.Subtitle?.Index,
+            selectedStreams.Subtitle?.Delivery,
+            output.SubtitleFormat,
+            transforms);
+        var v2Record = new V2PlanRecord(decision, executionPlan, DateTimeOffset.UtcNow);
 
         var response = PlaybackSessionResponseMapper.Map(session, v2Record);
 
@@ -330,6 +350,44 @@ public sealed class PlaybackSessionResponseMapperTests
             new ReasonNode(ReasonCode.NoViablePlan, ReasonOutcome.Rejected, ReasonSubject.Method(), null, []),
             engineVersion: 6);
         var v2Record = new V2PlanRecord(notViable, ExecutionPlan: null, DateTimeOffset.UtcNow);
+
+        var legacyResponse = PlaybackSessionResponseMapper.Map(session);
+        var overloadResponse = PlaybackSessionResponseMapper.Map(session, v2Record);
+
+        AssertResponsesEqual(legacyResponse, overloadResponse);
+        Assert.Equal(PlaybackSessionResponse.LegacyDecisionVersion, overloadResponse.DecisionVersion);
+    }
+
+    [Fact]
+    public void Map_WithViableV2RecordButNullExecutionPlan_FallsBackToLegacyProjection()
+    {
+        // The plan builder can refuse a VIABLE decision (V2PlanRecord.ExecutionPlan remarks): the
+        // PR115c live path falls back to legacy execution for that session, so the response must too
+        // - it must never announce v2 authorship (DecisionVersion 6) when the client will effectively
+        // get legacy. The guard is plan-centric, not viability-centric.
+        var streamInfo = BuildStreamInfo(PlayMethod.DirectPlay, 0, "mp4", audioIndex: 1);
+        var session = BuildSession(PlayMethod.DirectPlay, 0, streamInfo);
+
+        var output = new OutputSpec(
+            Container: "mkv",
+            VideoCodec: "hevc",
+            AudioCodec: "eac3",
+            Resolution: new Resolution(1920, 1080),
+            VideoRange: "HDR10",
+            AudioChannels: 6,
+            TotalBitrate: 8_000_000,
+            VideoBitrate: 7_500_000,
+            AudioBitrate: 500_000,
+            Protocol: StreamingProtocol.Hls,
+            SubtitleFormat: "vtt");
+        var selectedStreams = new SelectedStreams(Video: 0, Audio: 2, Subtitle: null);
+        var transforms = new List<TransformKind> { TransformKind.TranscodeVideo };
+        var reasoning = ReasonNode.Leaf(ReasonCode.MethodChosen, ReasonOutcome.Chosen, ReasonSubject.Method());
+
+        var viableDecision = PlaybackDecision.Transcode("v2-source", selectedStreams, output, transforms, reasoning, engineVersion: 6);
+        Assert.True(viableDecision.IsViable);
+
+        var v2Record = new V2PlanRecord(viableDecision, ExecutionPlan: null, DateTimeOffset.UtcNow);
 
         var legacyResponse = PlaybackSessionResponseMapper.Map(session);
         var overloadResponse = PlaybackSessionResponseMapper.Map(session, v2Record);
