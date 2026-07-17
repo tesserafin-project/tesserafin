@@ -290,12 +290,12 @@ public class PlaybackSessionsController : BaseReefinApiController
         // PR118: the legacy fallback path returns the SAME mutable StreamInfo instance retained in
         // session.Plan.StreamInfo (not a fresh projection, unlike the v2-adapter path) - stamping
         // PlaySessionId/StartPositionTicks directly onto it let two concurrent calls with different
-        // startTimeTicks race on each other's writes. Clone per-request first: mirrors
-        // MediaInfoHelper.SetDeviceSpecificData's own re-stamp, but never mutates the instance the
-        // session itself still holds, on either path (v2 or legacy).
-        var resolvedStreamInfo = resolved.Clone();
-        resolvedStreamInfo.PlaySessionId = session.PlaySessionId;
-        resolvedStreamInfo.StartPositionTicks = startTimeTicks;
+        // startTimeTicks race on each other's writes. WithRequestContext copies per-request first:
+        // mirrors MediaInfoHelper.SetDeviceSpecificData's own re-stamp, but never mutates the
+        // instance the session itself still holds, on either path (v2 or legacy).
+        var resolvedStreamInfo = resolved.WithRequestContext(
+            session.PlaySessionId,
+            startTimeTicks);
 
         // §3: FallbackReason/ServedBy must reflect exactly the decision that produced
         // resolvedStreamInfo, not a separately timed lookup - read back the outcome the resolver

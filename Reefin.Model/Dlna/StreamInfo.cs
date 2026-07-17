@@ -807,17 +807,31 @@ public class StreamInfo
     }
 
     /// <summary>
-    /// Returns a shallow, per-call copy of this instance (PR118). Every property here is a
-    /// value/immutable-reference type re-assigned wholesale (never a collection mutated in place),
-    /// so <see cref="object.MemberwiseClone"/> is sufficient: callers that need to stamp
-    /// request-scoped fields (e.g. <see cref="PlaySessionId"/>, <see cref="StartPositionTicks"/>)
-    /// onto a <see cref="StreamInfo"/> that may be the SAME shared instance another caller also
-    /// holds - as <c>PlaybackLiveStreamResolver</c>'s legacy fallback does, returning the session's
-    /// own retained <see cref="StreamInfo"/> verbatim - must clone first so concurrent callers never
-    /// race on each other's writes.
+    /// Returns a shallow, per-call copy of this instance with the two request-scoped fields
+    /// (<see cref="PlaySessionId"/>, <see cref="StartPositionTicks"/>) stamped onto the copy (PR118).
+    /// Use this instead of a general clone when a caller needs to set those fields on a
+    /// <see cref="StreamInfo"/> that may be the SAME shared instance another caller also holds - as
+    /// <c>PlaybackLiveStreamResolver</c>'s legacy fallback does, returning the session's own retained
+    /// <see cref="StreamInfo"/> verbatim - so concurrent callers with different positions never race
+    /// on each other's writes.
     /// </summary>
-    /// <returns>A shallow copy of this instance.</returns>
-    public StreamInfo Clone() => (StreamInfo)MemberwiseClone();
+    /// <remarks>
+    /// The copy is deliberately SHALLOW and this method only re-assigns those two scalar fields:
+    /// reference-typed members - <see cref="MediaSource"/>, <see cref="DeviceProfile"/>,
+    /// <see cref="StreamOptions"/> and the codec/stream collections - remain SHARED with the original
+    /// and must be treated as read-only through the returned copy. Do not grow this into a general
+    /// deep clone or extend it to mutate those shared references.
+    /// </remarks>
+    /// <param name="playSessionId">The request-scoped play session id to stamp onto the copy.</param>
+    /// <param name="startPositionTicks">The request-scoped start position, in ticks.</param>
+    /// <returns>A shallow copy of this instance with the request-scoped fields set.</returns>
+    public StreamInfo WithRequestContext(string? playSessionId, long startPositionTicks)
+    {
+        var copy = (StreamInfo)MemberwiseClone();
+        copy.PlaySessionId = playSessionId;
+        copy.StartPositionTicks = startPositionTicks;
+        return copy;
+    }
 
     /// <summary>
     /// Sets a stream option.
