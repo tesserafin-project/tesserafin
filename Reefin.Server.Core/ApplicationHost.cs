@@ -703,6 +703,12 @@ namespace Reefin.Server.Core
             // authoritative record was retained for it. PR115c: no longer dormant - MediaInfoHelper
             // (the live streaming path) now consumes it.
             serviceCollection.AddSingleton<IPlaybackExecutionPlanResolver, PlaybackExecutionPlanResolver>();
+            // PR117 (docs/pr116d-url-contract-design.md §3.3): the live-wiring decision extracted
+            // from MediaInfoHelper's own former private method into a shared, injectable component -
+            // one singleton, consumed both by MediaInfoHelper (which still defaults to building its
+            // own instance from the same dependencies when not supplied, for pre-PR117 test/call site
+            // compatibility) and by PlaybackSessionsController's new GET .../Stream endpoint.
+            serviceCollection.AddSingleton<IPlaybackLiveStreamResolver, PlaybackLiveStreamResolver>();
             serviceCollection.AddScoped<MediaInfoHelper>();
             serviceCollection.AddScoped<AudioHelper>();
             serviceCollection.AddScoped<DynamicHlsHelper>();

@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
@@ -216,6 +217,60 @@ public class PlaybackDiagnosticsSessionsControllerTests
         var result = CreateController().ExportFixture(session.Id);
 
         Assert.IsType<UnprocessableEntityResult>(result);
+    }
+
+    /// <summary>
+    /// PR117 (design doc §1.4/§4.3): a type-level, reflection-based complement to the JSON test
+    /// below - <see cref="PlaybackSessionStreamDescriptor"/> must never appear as a property type on
+    /// either admin DTO, regardless of property naming, so a future rename can't defeat the JSON
+    /// substring check.
+    /// </summary>
+    [Fact]
+    public void PlaybackSessionListItemAndDiagnosticDetail_NeverReferenceStreamDescriptorType()
+    {
+        foreach (var type in new[] { typeof(PlaybackSessionListItem), typeof(PlaybackDiagnosticDetail) })
+        {
+            foreach (var property in type.GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+            {
+                Assert.NotEqual(typeof(PlaybackSessionStreamDescriptor), property.PropertyType);
+            }
+        }
+    }
+
+    /// <summary>
+    /// PR117 (docs/pr116d-url-contract-design.md §4.3, mandatory test): a structural, JSON-level
+    /// non-leak guard - <see cref="PlaybackSessionListItem"/> (list) and
+    /// <see cref="PlaybackDiagnosticDetail"/> (detail) must never carry the
+    /// <see cref="PlaybackSessionStreamDescriptor.Url"/>/<see cref="PlaybackSessionStreamDescriptor.SubtitleUrl"/>
+    /// property names, at any nesting level - the descriptor is composed ONLY into the new
+    /// <c>GET Playback/Sessions/{id}/Stream</c> response, never into either admin surface (§1.4's
+    /// leak - a URL there would hand any administrator every user's access token). A silent
+    /// regression here (someone later wraps <see cref="PlaybackSessionStreamDescriptor"/> into one of
+    /// these two types) would otherwise go undetected without this dedicated assertion.
+    /// </summary>
+    [Fact]
+    public void DiagnosticsSurface_SerializedListAndDetail_NeverCarryStreamDescriptorFields()
+    {
+        var session = new PlaybackSession(PlaybackSessionId.NewId(), PlaybackMediaKind.Video, "play-session-1", null, new PlaybackPlan(PlayMethod.DirectPlay, default), default, default);
+        _playbackSessionManager.Setup(m => m.GetAll()).Returns([session]);
+        _playbackSessionManager.Setup(m => m.Get(session.Id)).Returns(session);
+        var record = FakeShadowDiagnosticRecordFactory.Create();
+        _diagnosticsStore.Setup(s => s.TryGet(session.Id, out record)).Returns(true);
+        PlaybackLiveWiringOutcome? outcome = PlaybackLiveWiringOutcome.Served(DateTimeOffset.UtcNow);
+        _liveWiringDiagnosticsStore.Setup(s => s.TryGet(session.Id, out outcome)).Returns(true);
+
+        var listResult = CreateController().GetPlaybackSessions();
+        var listJson = JsonSerializer.Serialize(Assert.IsAssignableFrom<OkObjectResult>(listResult.Result).Value);
+
+        var detailResult = CreateController().GetPlaybackSession(session.Id);
+        var detailJson = JsonSerializer.Serialize(Assert.IsAssignableFrom<OkObjectResult>(detailResult.Result).Value);
+
+        foreach (var json in new[] { listJson, detailJson })
+        {
+            Assert.DoesNotContain("\"Url\":", json, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"SubtitleUrl\":", json, StringComparison.Ordinal);
+            Assert.DoesNotContain(nameof(PlaybackSessionStreamDescriptor), json, StringComparison.Ordinal);
+        }
     }
 
     [Fact]
