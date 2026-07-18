@@ -44,6 +44,19 @@ public class PlaybackInfoDto
     public string? MediaSourceId { get; set; }
 
     /// <summary>
+    /// Gets or sets the opaque, client-generated playback attempt id (issue #43).
+    /// </summary>
+    /// <remarks>
+    /// Optional and additive. This is the FIRST request of a playback attempt, which is precisely
+    /// why the attempt id has to exist as its own field: no session exists yet, so
+    /// <c>PlaySessionId</c> cannot cover this call, and the <c>RequestId</c> of issue #42 will be
+    /// different by the time the client reaches <c>POST Playback/Sessions</c>. The client generates
+    /// the value once here and resends it unchanged for the rest of the attempt, retries included.
+    /// Echoed back on <c>PlaybackInfoResponse</c>. Opaque, length-capped, never an authorization key.
+    /// </remarks>
+    public string? PlaybackAttemptId { get; set; }
+
+    /// <summary>
     /// Gets or sets the live stream id.
     /// </summary>
     public string? LiveStreamId { get; set; }

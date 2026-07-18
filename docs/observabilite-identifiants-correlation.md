@@ -1,7 +1,6 @@
 # Identifiants de corrélation — les trois portées
 
-> Statut : le `RequestId` décrit ici est implémenté (issue #42). Le `PlaybackAttemptId` est spécifié
-> ici pour fixer la hiérarchie, et implémenté séparément (issue #43).
+> Statut : `RequestId` implémenté par #42, `PlaybackAttemptId` par #43. Deux PR, deux champs.
 
 L'issue #34 confondait deux identifiants sous un seul nom. Elle a été scindée en #42 et #43 pour une
 raison dirimante : **un même identifiant ne peut pas à la fois changer à chaque requête HTTP et
@@ -63,3 +62,40 @@ PlaySessionId / PlaybackSessionId  ───────────────
 
 Tout est additif : chaque paramètre ajouté est optionnel et vaut `null` par défaut, donc aucun
 appelant antérieur ne change de comportement.
+
+## Implémentation (#43)
+
+- **Généré par le client**, une seule fois au début d'une tentative, et renvoyé tel quel sur toutes
+  les requêtes de cette tentative — retries compris. Le serveur ne le fabrique jamais : il le valide,
+  le stocke, l'écho. Un retry conserve la valeur ; une nouvelle tentative en génère une nouvelle.
+- **Surface (additive et optionnelle partout)** : `PlaybackInfo` en requête (`PlaybackInfoDto`) et en
+  réponse (`PlaybackInfoResponse`) ; `POST` et `PUT Playback/Sessions` (`PlaybackPlanRequestBase`,
+  donc les deux corps) ; `PlaybackSession` ; `PlaybackSessionResponse` ; diagnostics admin
+  (`PlaybackDiagnosticDetail`, et la liste via sa `PlaybackSessionResponse` imbriquée).
+  `GET .../Stream` et `DELETE` n'en ont pas besoin : à ce stade la session le porte déjà.
+- **Opaque.** Aucune structure imposée — ni GUID, ni hexadécimal, ni préfixe. Seules deux choses sont
+  vérifiées, et uniquement parce qu'une valeur non bornée ou non imprimable serait une nuisance dans
+  un fichier de log plutôt qu'une aide à la corrélation : un plafond de longueur (128 caractères) et
+  l'absence de caractères de contrôle. Rien n'est jamais extrait ni interprété de la valeur.
+- **Rejet.** Fourni-et-malformé ⇒ `ArgumentException` ⇒ 400, par le même validateur sur les deux
+  endpoints v2 et sur `PlaybackInfo` — une valeur acceptée ici et refusée deux requêtes plus loin
+  serait pire que pas de validation. Absent ⇒ `null`, valide partout : un client tiers qui ignore le
+  champ n'est jamais affecté. Une chaîne vide ou blanche est refusée plutôt que traitée comme
+  « absente » : l'accepter fabriquerait un seau de tentative fusionnant toutes les tentatives sans
+  rapport ayant elles aussi envoyé du vide.
+- **`null` n'efface pas.** Un `PUT` de la même tentative qui omet le champ conserve la valeur
+  enregistrée à la création. « Pas envoyé » n'est pas « oublie ».
+- **Jamais une clé d'autorisation** : aucune décision d'accès n'en est dérivée, il ne sert jamais à
+  retrouver une session, et il ne remplace aucun contrôle existant.
+- **Log structuré** : publié sous la propriété `PlaybackAttemptId`, dans un scope **imbriqué** dans
+  celui de #42. Une ligne porte donc les deux — et sur un retry, `PlaybackAttemptId` est identique
+  pendant que `RequestId` diffère. C'est exactement la paire qui rend les portées lisibles.
+
+### Hors périmètre de #43, explicitement
+
+- **La génération côté client** vit dans `reefin-web`, un autre dépôt. Cette PR serveur ne peut pas
+  la livrer ; elle rend le champ acceptable de bout en bout côté serveur.
+- **`openapi/openapi.json` et `contract.lock.json`** n'existent pas sur `master` : le mécanisme de
+  régénération déterministe est la PR #40, non fusionnée (cf. #44 §6). `OpenApiSpecTests` est
+  structurel (il récupère la spec servie, sans comparaison à un instantané commité), donc le champ
+  apparaît dans la spec générée sans qu'aucun fichier ne soit à régénérer ici.

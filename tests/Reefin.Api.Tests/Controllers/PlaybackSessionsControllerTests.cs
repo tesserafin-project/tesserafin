@@ -195,8 +195,8 @@ public class PlaybackSessionsControllerTests
         var session = new PlaybackSession(PlaybackSessionId.NewId(), PlaybackMediaKind.Video, null, null, new PlaybackPlan(PlayMethod.DirectPlay, default), default, default);
         PlaybackSessionRequest? captured = null;
         _playbackSessionManager
-            .Setup(m => m.Create(It.IsAny<PlaybackSessionRequest>(), null))
-            .Callback<PlaybackSessionRequest, string?>((request, _) => captured = request)
+            .Setup(m => m.Create(It.IsAny<PlaybackSessionRequest>(), null, null))
+            .Callback<PlaybackSessionRequest, string?, string?>((request, _, _) => captured = request)
             .Returns(session);
 
         await CreateController().CreatePlaybackSession(CreateRequest());

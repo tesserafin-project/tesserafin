@@ -26,9 +26,29 @@ namespace Reefin.Api.Models.PlaybackSessionDtos;
 /// single grouped object, mirroring how <see cref="Capabilities"/> replaces <c>DeviceProfile</c>.
 /// </param>
 /// <param name="MediaSourceId">Optional. A specific media source id, if playing an alternate version.</param>
+/// <param name="PlaybackAttemptId">
+/// Issue #43. Optional, opaque, client-generated. The identifier of the playback ATTEMPT this
+/// request belongs to — generated once by the client when it starts trying to play something, and
+/// resent unchanged on every request of that attempt: <c>PlaybackInfo</c>, this <c>POST</c>, the
+/// <c>PUT</c>, and any retry. A new attempt gets a new value; a retry inside the same attempt keeps
+/// the old one.
+/// <para>
+/// Distinct from both neighbouring scopes and substitutable for neither. It is NOT the
+/// <c>RequestId</c>/<c>TraceId</c> of issue #42, which is server-derived and changes on every
+/// request. It is NOT <see cref="CreatePlaybackSessionRequest.PlaySessionId"/>, which only exists
+/// once a session does — i.e. after <c>PlaybackInfo</c> has already happened — and which survives
+/// across several attempts. See <c>docs/observabilite-identifiants-correlation.md</c>.
+/// </para>
+/// <para>
+/// Diagnostics only: never an authorization key, no access decision is derived from it, and it
+/// replaces no existing access control. Validated for length and printability only (see
+/// <see cref="PlaybackAttemptIdValidator"/>); no structure is imposed and no meaning is read out of it.
+/// </para>
+/// </param>
 public abstract record PlaybackPlanRequestBase(
     Guid ItemId,
     Guid UserId,
     ClientCapabilities Capabilities,
     PlaybackConstraints Constraints,
-    string? MediaSourceId = null);
+    string? MediaSourceId = null,
+    string? PlaybackAttemptId = null);

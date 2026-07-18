@@ -43,6 +43,32 @@ public static class PlaybackSessionRequestValidatorTests
 
     private static CreatePlaybackSessionRequest ValidRequest() => new(ItemId, UserId, ValidCapabilities(), ValidConstraints());
 
+    /// <summary>
+    /// Issue #43: a supplied-but-malformed attempt id is rejected on the v2 session endpoints, by
+    /// the same validator and therefore the same 400 path, on BOTH the POST and the PUT.
+    /// </summary>
+    [Fact]
+    public static void Validate_MalformedPlaybackAttemptId_Throws()
+    {
+        var request = ValidRequest() with { PlaybackAttemptId = new string('x', PlaybackAttemptIdValidator.MaxLength + 1) };
+        Assert.Throws<ArgumentException>(() => PlaybackSessionRequestValidator.Validate(request));
+    }
+
+    /// <summary>
+    /// Issue #43: and omitting it entirely is always fine - the field must never break a
+    /// third-party client that does not know about it.
+    /// </summary>
+    [Fact]
+    public static void Validate_OmittedPlaybackAttemptId_IsAccepted()
+    {
+        Assert.Null(ValidRequest().PlaybackAttemptId);
+        PlaybackSessionRequestValidator.Validate(ValidRequest());
+    }
+
+    [Fact]
+    public static void Validate_WellFormedPlaybackAttemptId_IsAccepted() =>
+        PlaybackSessionRequestValidator.Validate(ValidRequest() with { PlaybackAttemptId = "attempt-7f3a" });
+
     [Fact]
     public static void Validate_ConsistentRequest_DoesNotThrow()
     {
