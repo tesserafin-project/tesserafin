@@ -17,4 +17,16 @@ namespace Reefin.MediaEncoding.Playback;
 /// stage name verbatim.
 /// </param>
 /// <param name="At">The real time this event was received, captured at the moment of observation.</param>
-public sealed record PlaybackLifecycleEvent(string Stage, DateTimeOffset At);
+/// <param name="RequestId">
+/// Issue #42: the correlation id of the HTTP request in flight when this event was observed, or
+/// <c>null</c> when none was — the common case for the two signals that arrive from ffmpeg/session
+/// callbacks rather than from a request. Optional and trailing, so every existing 2-argument
+/// construction keeps compiling and keeps meaning exactly what it meant.
+/// <para>
+/// Per EVENT, not per session: the grouping key remains the <see cref="Reefin.Controller.MediaEncoding.PlaybackSessionId"/>
+/// this event is filed under. Several events of one session will normally carry several different
+/// request ids, or none. It is deliberately not an attempt identifier — see issue #43 for
+/// <c>PlaybackAttemptId</c>, the value that IS stable across a whole attempt.
+/// </para>
+/// </param>
+public sealed record PlaybackLifecycleEvent(string Stage, DateTimeOffset At, string? RequestId = null);

@@ -150,7 +150,10 @@ public static class PlaybackDiagnosticDetailMapper
         {
             foreach (var lifecycleEvent in events)
             {
-                timeline.Add(new DiagnosticTimelineEntry(lifecycleEvent.Stage, lifecycleEvent.At));
+                // Issue #42: carried through verbatim, null included — never substituted with the
+                // request id of the admin call currently reading the timeline, which would be a
+                // different request entirely and would make the field actively misleading.
+                timeline.Add(new DiagnosticTimelineEntry(lifecycleEvent.Stage, lifecycleEvent.At, lifecycleEvent.RequestId));
             }
         }
 

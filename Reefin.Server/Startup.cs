@@ -19,6 +19,7 @@ using Prometheus;
 using Reefin.Api.Middleware;
 using Reefin.Common.Net;
 using Reefin.Controller.Configuration;
+using Reefin.Controller.Diagnostics;
 using Reefin.Controller.Extensions;
 using Reefin.Database.Implementations;
 using Reefin.LiveTv.Extensions;
@@ -64,6 +65,12 @@ namespace Reefin.Server
         {
             services.AddResponseCompression();
             services.AddHttpContextAccessor();
+
+            // Issue #42: one correlation id per HTTP request, readable from layers below the
+            // hosting stack (Reefin.MediaEncoding) through the Reefin.Controller-level abstraction.
+            // Singleton is correct despite the per-request value: the accessor is stateless and
+            // reads the ambient HttpContext through IHttpContextAccessor on every call.
+            services.AddSingleton<IRequestCorrelationAccessor, HttpRequestCorrelationAccessor>();
             services.AddHttpsRedirection(options =>
             {
                 options.HttpsPort = _serverApplicationHost.HttpsPort;
@@ -180,6 +187,12 @@ namespace Reefin.Server
                 }
 
                 mainApp.UseForwardedHeaders();
+
+                // Issue #42: before ExceptionMiddleware, so that a request which ends in a handled
+                // exception still gets its correlation id — both in the log scope covering the
+                // exception log line and on the error response's X-Request-Id header.
+                mainApp.UseMiddleware<RequestCorrelationMiddleware>();
+
                 mainApp.UseMiddleware<ExceptionMiddleware>();
 
                 mainApp.UseMiddleware<ResponseTimeMiddleware>();
