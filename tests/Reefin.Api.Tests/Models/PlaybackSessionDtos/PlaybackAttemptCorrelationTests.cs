@@ -5,11 +5,13 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Reefin.Api.Middleware;
+using Reefin.Api.Models.MediaInfoDtos;
 using Reefin.Api.Models.PlaybackSessionDtos;
 using Reefin.Controller.MediaEncoding;
 using Reefin.Controller.Session;
 using Reefin.MediaEncoding.Playback;
 using Reefin.Model.Dlna;
+using Reefin.Model.MediaInfo;
 using Reefin.Model.Session;
 using Xunit;
 
@@ -79,6 +81,46 @@ public class PlaybackAttemptCorrelationTests
 
         // And the attempt id is none of them — it is not derived from any request.
         Assert.DoesNotContain(AttemptId, requestIds);
+    }
+
+    /// <summary>
+    /// The leg that justifies the field existing at all. <c>PlaybackInfo</c> happens BEFORE any
+    /// session does, so <c>PlaySessionId</c> cannot possibly cover it — yet it belongs to the same
+    /// attempt as the <c>POST</c> that follows. Here the attempt id spans that boundary, carried on
+    /// the <c>PlaybackInfo</c> request, echoed on its response, and still identical on the session
+    /// created by the next request — whose <c>RequestId</c> is a different value.
+    /// </summary>
+    [Fact]
+    public async Task AttemptIdSpansPlaybackInfoAndTheSessionCreatedAfterIt()
+    {
+        var manager = BuildManager();
+        var requestIds = new List<string>();
+
+        // Request 1: PlaybackInfo. No session exists yet.
+        var infoResponse = await SimulateRequest(
+            requestIds,
+            () =>
+            {
+                var dto = new PlaybackInfoDto { PlaybackAttemptId = AttemptId };
+                PlaybackAttemptIdValidator.ValidateOrThrow(dto.PlaybackAttemptId);
+                return new PlaybackInfoResponse { PlaybackAttemptId = dto.PlaybackAttemptId };
+            });
+
+        // Request 2: POST Playback/Sessions, same attempt.
+        var session = await SimulateRequest(
+            requestIds,
+            () => manager.Create(BuildRequest(), "play-session-1", AttemptId));
+
+        // One attempt id across the session boundary...
+        Assert.Equal(AttemptId, infoResponse.PlaybackAttemptId);
+        Assert.Equal(AttemptId, session!.PlaybackAttemptId);
+
+        // ...and no PlaySessionId could have done this: the first request had none to give.
+        Assert.Null(infoResponse.PlaySessionId);
+
+        // Two requests, two different request ids.
+        Assert.Equal(2, requestIds.Count);
+        Assert.NotEqual(requestIds[0], requestIds[1]);
     }
 
     [Fact]
