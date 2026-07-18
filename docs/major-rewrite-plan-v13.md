@@ -125,6 +125,17 @@ Cible finale, côté interface :
 
 Playback v2 doit devenir le noyau de cette architecture, pas simplement une nouvelle route HTTP. Le moteur v2 (EngineVersion 6), `PlaybackExecutionPlan` (PR114a) et le diagnostic v2 (PR113/PR113b, UI PR114) en sont la première assise.
 
+Le cycle de lecture v2 visé est explicitement un cycle de vie de session, et non un appel unique de négociation :
+
+```text
+POST Playback/Sessions          → création de la session et décision de lecture
+GET  Playback/Sessions/{id}/Stream → livraison de l'URL de lecture
+PUT / GET sur la session        → changement de piste (audio, sous-titre, qualité)
+DELETE / cleanup                → fin de session et libération des ressources
+```
+
+Deux garde-fous restent attachés à ce cycle : le **fallback legacy à la demande**, qui garde l'URL servable sans redémarrage, et le **kill switch** (`PlaybackShadowOptions.Mode`), conservé tant que la bascule n'est pas éprouvée en production. Ce cadrage reste descriptif : le design détaillé du cycle de vie — sémantique exacte de `PUT`, idempotence, expiration, contrat d'erreur — fera l'objet d'une PR de conception dédiée.
+
 ### 3. Un serveur orienté capacités, pas clients nommés
 
 Le serveur ne doit pas contenir de branches du type :
@@ -254,15 +265,26 @@ L'ordre importe : ne pas lancer dix grands chantiers parallèles maintenant. Cet
 
 **Phase actuelle — prouver la nouvelle fondation.** C'est exactement l'état décrit dans le « Tableau de statut par pilier » ci-dessus :
 
-1. Terminer la preuve de Playback v2 sur un serveur réellement exécuté.
-2. Stabiliser les `CorrelationId` et l'observabilité de la session.
-3. Conserver correctement les capacités brutes déclarées par les clients.
-4. Régénérer et verrouiller OpenAPI et `reefin-sdk`.
-5. Migrer `reefin-web` sans route manuelle de contournement (PR116, prérequis serveur PR117 / `docs/pr116d-url-contract-design.md`).
-6. Valider le chemin complet avec les SHA serveur et client enregistrés.
-7. Déployer progressivement le canary jusqu'à 100 % (`CanaryPercentage`, `docs/pr115d-rollout-runbook.md`).
+1. Terminer la preuve de Playback v2 sur un serveur réellement exécuté (**PR119** : `POST Playback/Sessions` → `GET .../Stream` → requête HTTP réelle de l'URL rendue, fallback legacy sous kill switch inclus).
+2. **Régénérer et verrouiller OpenAPI et `reefin-sdk` — immédiatement après PR119**, avant la suite de la migration client (issue #36). Le contrat gelé est précisément ce que consomment les tranches de migration suivantes ; le régénérer après coup obligerait à migrer deux fois.
+3. Migrer `reefin-web` sans route manuelle de contournement (PR116, prérequis serveur PR117 / `docs/pr116d-url-contract-design.md`).
+4. Valider le chemin complet avec les SHA serveur et client enregistrés.
+5. Déployer progressivement le canary jusqu'à 100 % (`CanaryPercentage`, `docs/pr115d-rollout-runbook.md`).
+
+En parallèle, hors chemin critique : stabiliser les identifiants de corrélation et l'observabilité de la session (issue #34), et conserver correctement les capacités brutes déclarées par les clients (issue #35). Voir les deux notes ci-dessous.
 
 À ce stade seulement, la nouvelle architecture peut être considérée comme éprouvée.
+
+**Note — deux identifiants distincts, aucun des deux n'étant `PlaySessionId`.** Le plan parlait jusqu'ici d'un `CorrelationId` unique ; ce concept est ambigu et abandonné. Il faut deux identifiants aux rôles séparés :
+
+- **RequestId / TraceId** — unique par requête HTTP, **généré côté serveur**, sert au tracing transport (logs, traces, corrélation d'une requête avec ses effets internes). Il ne survit pas à la requête.
+- **PlaybackAttemptId** — **généré par le client**, partagé entre l'appel `PlaybackInfo` legacy, l'appel shadow/v2 et toutes les requêtes rattachées à une même tentative de lecture. C'est lui, et non le transport, qui corrèle une tentative de bout en bout.
+
+Ni l'un ni l'autre n'est `PlaySessionId` : ce dernier reste l'identifiant de session fourni par le client pour terminer la session quand le job de transcodage s'achève, et il couvre de nombreuses requêtes et signaux indépendants. L'issue #34 doit être reformulée autour de ces deux identifiants distincts.
+
+**Note — #34 et #35 ne bloquent pas la migration client.** Les deux issues de diagnostics peuvent avancer en parallèle des vagues 1 et 2 de migration client, mais elles n'en sont pas un prérequis : aucune ne façonne le contrat gelé au point 2. En particulier, #35 (conservation du payload natif de capacités) n'est implémentable qu'avec **taille plafonnée, sampling, TTL, redaction et flag opt-in** — jamais de token, d'URL signée ni d'identifiant sensible conservé brut. Sans ces cinq garde-fous, la conservation du payload est un risque de fuite, pas un gain de diagnostic.
+
+**Note — automatisation Project bloquée.** Les PR d'auto-ajout des issues et PR au Project (reefin #37, reefin-web #19) restent bloquées tant que le secret `ADD_TO_PROJECT_PAT` n'est pas configuré sur les deux dépôts.
 
 **Phase suivante — le serveur qui choisit correctement.** Créer un chantier cohérent, par exemple **Playback Intelligence**, regroupant : moteur de capacités ; explication des décisions ; autodétection matérielle ; sélection automatique du transcodage ; politique HDR et Dolby Vision ; diagnostics de lecture ; tests de compatibilité entre serveur et clients. Premier grand chantier produit serveur après Playback v2 ; absorbe `docs/hwa-refactor-plan.md` et le labo de compatibilité (point 14 du plan général).
 
