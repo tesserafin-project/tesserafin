@@ -385,9 +385,10 @@ trafic périodique pour un magasin en mémoire déjà borné.
 | `403` | `GET .../Stream` | jeton d'accès absent | `:273-277` |
 | `404` | `POST`, `PUT` | utilisateur ou item introuvable (`ResourceNotFoundException`) | `:346-347` |
 | `404` | `PUT`, `DELETE`, `GET` | session inconnue ou expirée | `:148-152`, `:190-194`, `:238-242` |
-| `409` | `GET .../Stream` | `session.PlaySessionId` absent | `:256-259` |
-| `409` | `GET .../Stream` | session sans plan exécutable (créée par `Track`, pas par un plan) | `:261-267` |
+| `409` | `GET .../Stream` | `session.PlaySessionId` absent — **conservé** | `:256-259` |
+| ~~`409`~~ → `422` | `GET .../Stream` | session sans plan exécutable (créée par `Track`, pas par un plan) — **change de statut** | `:261-267` |
 | `422` | `POST` | aucun plan viable | `:109-112`, corps vide |
+| `422` | `PUT` | session existante, aucun plan viable après re-planification — **nouveau** | §6.1, correction ci-dessous |
 
 Le corps d'erreur est **`text/plain`**, pas RFC 7807 : `ExceptionMiddleware.cs:93` fixe
 `MediaTypeNames.Text.Plain` et `:99` écrit la chaîne brute.
@@ -404,8 +405,39 @@ quand l'identifiant est inconnu.** Le contrôleur dispose déjà de l'informatio
 
 De même, les deux `409` du `GET .../Stream` (`:258` et `:266`) portent le même statut pour deux
 situations opposées — l'une réparable par un `PUT` fournissant un `PlaySessionId`, l'autre
-structurellement non servable. **Décision : les distinguer**, soit par deux statuts, soit par un code
-d'erreur typé dans le corps (§6.4).
+structurellement non servable.
+
+**Décision (arbitrage mainteneur) — deux statuts HTTP distincts, pas un code d'erreur typé.**
+
+- `GET .../Stream` sans `PlaySessionId` sur la session (`:256-259`) → **`409`**, inchangé. Sémantique :
+  conflit d'état réparable — le client émet un `PUT` portant le `PlaySessionId` manquant, puis rejoue
+  le `GET`. La session reste valide.
+- `GET .../Stream` sans stream planifiable (`:261-267`, session issue de `Track`) → **`422`**.
+  Sémantique : la requête est bien formée et la session existe, mais aucune entité servable ne peut en
+  être dérivée. Un `PUT` ne la répare pas ; le client doit repartir d'un plan, ou replier sur legacy.
+
+L'option « code d'erreur typé dans le corps » est **écartée**, pour deux raisons cumulatives. D'abord
+elle imposerait d'abandonner le corps `text/plain` (`ExceptionMiddleware.cs:93,99`) sur ces endpoints,
+donc un changement de format de réponse d'erreur — le contraire d'un changement additif. Ensuite, et
+c'est dirimant, **OpenAPI n'admet qu'une entrée `responses` par code de statut et par opération** : deux
+`409` discriminés par le seul corps ne sont pas représentables dans le contrat, donc invisibles pour
+tout client généré, y compris `reefin-sdk`. Le contrat ne pourrait pas décrire la distinction qu'il
+prétendrait porter.
+
+Deux statuts distincts sont en revanche **additifs pour tout client tiers correctement écrit** : le
+`422` remplace un `409` sur une branche qui, dans les deux cas, n'est pas servable — aucun client ne
+peut aujourd'hui obtenir un flux de cette branche. La surface est neuve (v2), et le risque tiers est
+donc faible, mais il est réel et assumé ici plutôt que laissé implicite.
+
+**Récapitulatif des trois statuts arbitrés :**
+
+| Endpoint | Condition | Avant | Après |
+|---|---|---|---|
+| `PUT Playback/Sessions/{id}` | session existante, aucun plan viable | `404` | **`422`** |
+| `GET Playback/Sessions/{id}/Stream` | `PlaySessionId` absent | `409` | **`409`** (conservé) |
+| `GET Playback/Sessions/{id}/Stream` | aucun stream planifiable | `409` | **`422`** |
+
+Le `404` reste strictement réservé à l'identifiant de session inconnu ou expiré.
 
 ### 6.2 Repli — v2 d'abord, legacy à la demande, sans demi-mutation
 
@@ -512,11 +544,17 @@ l'identifiant inconnu (§6.1). Aucun changement de DTO. **C'est un changement de
 qui traite aujourd'hui le `404` comme « recommence par un `POST` » verra un `422` là où il voyait un
 `404`.
 
-**(3) Désambiguïsation des deux `409` du `GET .../Stream`.** Réparable par `PUT` (absence de
-`PlaySessionId`) vs structurellement non servable (session issue de `Track`). Deux statuts distincts,
-ou un code d'erreur typé. À trancher en implémentation ; le corps étant `text/plain`, l'introduction
-d'un code typé implique de changer le format de réponse d'erreur de ces endpoints — non trivial, à
-peser contre l'option « deux statuts », qui est additive.
+**(3) Désambiguïsation des deux `409` du `GET .../Stream` — tranchée : deux statuts distincts.**
+`409` conservé pour l'absence de `PlaySessionId` (réparable par `PUT`) ; **`422` pour l'absence de
+stream planifiable** (session issue de `Track`, structurellement non servable). L'option « code
+d'erreur typé dans le corps » est écartée : elle imposerait d'abandonner le corps `text/plain`, et
+surtout OpenAPI n'admet qu'une entrée par code de statut et par opération, donc la distinction serait
+invisible pour tout client généré. Justification complète en §6.1. Aucun changement de DTO.
+
+**Régénération du contrat.** Les trois changements ci-dessus modifient le contrat OpenAPI. Ils
+imposent donc de régénérer `openapi/openapi.json` **et** `contract.lock.json` **dans la PR
+d'implémentation elle-même**, pas dans une PR de suivi — sinon le gate de dérive du contrat compare un
+verrou périmé.
 
 **Ce qui, en revanche, ne doit PAS changer** — et c'est ce qui rend cette PR bornée : les verbes
 existent tous les quatre ; `PlaybackSessionStreamDescriptor` ne bouge pas ; `PlaybackSessionResponse`
@@ -527,6 +565,38 @@ ne bouge pas ; `PlaybackSessionId` reste serveur ; le TTL reste à 6 h ; le cont
 et `DELETE` à l'arrêt, inverser l'ordre de construction (§6.2), transporter les contraintes réelles
 (§4). Ce n'est pas un changement de contrat, c'est de la consommation du contrat existant.
 
+### 6.5 Le contrat hybride v13 — assumé, pas subi
+
+§2.3 constate que `PlaybackInfo` ne peut pas disparaître. Ce constat était formulé comme une réserve.
+**Arbitrage mainteneur : ce n'est pas une réserve, c'est le contrat cible de v13**, et il est assumé
+comme tel jusqu'à la fin du cycle v13.
+
+| Rôle | Titulaire pour v13 | Portée exacte |
+|---|---|---|
+| **Read-model** des `MediaSources` et des pistes | `POST Items/{itemId}/PlaybackInfo` (legacy) | `MediaSourceInfo` complet : `MediaStreams[]`, `Container`, `RunTimeTicks`, `MediaAttachments[]`, `RequiresOpening`/`OpenToken`/`LiveStreamId`, index de pistes par défaut. Sert le sélecteur de pistes, `getTextTracks`, les sous-titres secondaires, la TV en direct. |
+| **Autorité de décision** | `POST`/`PUT Playback/Sessions` (v2) | choix `DirectPlay`/`Remux`/`Transcode`, `Reasons`, `SelectedStreams`, débit effectif, copie vidéo/audio, burn-in. Le legacy ne décide plus rien quand la voie v2 aboutit. |
+| **Autorité d'URL** | `GET Playback/Sessions/{id}/Stream` (v2) | l'URL exécutable, `ServedBy`/`FallbackReason`, l'URL de sous-titre externe de la piste par défaut. |
+| **Autorité de cycle de vie** | `POST` / `PUT` / `DELETE Playback/Sessions` (v2) | création, re-planification sur changement de piste ou de contrainte, terminaison. |
+
+**Ce que cette répartition interdit explicitement.** Aucune tranche v13 ne doit viser la suppression de
+l'appel `PlaybackInfo` : elle échouerait (§2.3). Symétriquement, aucune tranche v13 ne doit laisser une
+décision de lecture, une URL ou une transition de cycle de vie être produite par le legacy lorsque la
+voie v2 a abouti — c'est l'invariant de §6.2, et c'est ce qui rend l'hybridation supportable plutôt que
+dangereuse. L'hybridation porte sur la **provenance des données**, jamais sur la provenance d'**une même
+décision**.
+
+**Ce qui est reporté, et où.** Une projection v2 native de `MediaSourceInfo` — celle qui rendrait
+`PlaybackInfo` réellement supprimable — n'est **pas** un objectif de v13. Elle est reportée au chantier
+**Playback Intelligence**, avec les sujets qui en dépendent réellement : autodétection HWA, sélection
+automatique, HDR/Dolby Vision, explications utilisateur. Raison : une projection native n'a de valeur
+qu'associée à un moteur de décision capable d'exploiter les pistes qu'elle expose ; la livrer seule
+ajouterait une deuxième source de vérité sur les sources médias sans retirer la première, ce qui est
+strictement pire que l'hybridation assumée ci-dessus.
+
+**Conséquence pour la lane client.** L'appel `PlaybackInfo` est **conservé** pendant tout v13 pour les
+`MediaSources` et les pistes. Ce qui devient conditionnel est la construction du `streamInfo`
+exécutable (§6.2), rien d'autre.
+
 ---
 
 ## 7. Ce qui n'invalide pas la cible, et la seule réserve qui la borne
@@ -534,7 +604,8 @@ et `DELETE` à l'arrêt, inverser l'ordre de construction (§6.2), transporter l
 Aucune découverte de cet audit n'invalide le cycle cible `POST` → `GET` → `PUT`/`GET` → `DELETE`. Les
 quatre verbes existent, sont autorisés correctement (PR118) et ont une sémantique cohérente.
 
-**Une réserve borne le périmètre, sans l'arrêter** (§2.3) : « legacy à la demande » ne peut pas
+**Une réserve borne le périmètre, sans l'arrêter** — et depuis l'arbitrage de §6.5 elle n'est plus une
+réserve mais le contrat hybride assumé de v13 (§2.3) : « legacy à la demande » ne peut pas
 signifier « plus d'appel `PlaybackInfo` ». L'appel legacy reste le seul fournisseur de
 `MediaSourceInfo`, dont dépend tout le reste de `playbackmanager.js`. Ce qui devient à la demande est
 la **construction du `streamInfo` exécutable**. Une tranche d'implémentation qui viserait la
@@ -612,6 +683,17 @@ stockage, jamais comme branche de comportement.
       (§6.3).
 - [x] Réponse **oui** sur l'évolution du contrat serveur, avec la liste exacte des changements
       d'endpoint et de DTO (§6.4).
+- [x] Les trois statuts sont **arbitrés**, plus « à trancher en implémentation » : `PUT` sans plan
+      viable → `422` ; `GET .../Stream` sans `PlaySessionId` → `409` ; `GET .../Stream` sans stream
+      planifiable → `422`. L'option « code d'erreur typé » est écartée avec sa raison dirimante —
+      OpenAPI n'admet qu'une entrée par code de statut et par opération (§6.1, §6.4).
+- [x] Le **contrat hybride v13** est assumé explicitement, avec la répartition exacte des quatre rôles :
+      `PlaybackInfo` reste le read-model des `MediaSources` et des pistes ; v2 est l'autorité de
+      décision, d'URL et de cycle de vie (§6.5).
+- [x] La **projection v2 native de `MediaSourceInfo`** est reportée à Playback Intelligence, avec la
+      raison du report — elle n'a de valeur qu'associée au moteur de décision qui l'exploite (§6.5).
+- [x] Régénération de `openapi/openapi.json` et `contract.lock.json` exigée **dans la PR
+      d'implémentation**, pas dans une PR de suivi (§6.4).
 - [x] Conformité de la contrainte produit vérifiée sur le chemin de décision ; deux violations
       existantes hors chemin signalées (§8).
 - [x] Deux défauts **actifs** du chemin v2 actuel identifiés et attribués à la tranche
