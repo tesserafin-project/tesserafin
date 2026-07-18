@@ -32,6 +32,7 @@ using Reefin.Controller.Chapters;
 using Reefin.Controller.ClientEvent;
 using Reefin.Controller.Collections;
 using Reefin.Controller.Configuration;
+using Reefin.Controller.Diagnostics;
 using Reefin.Controller.Drawing;
 using Reefin.Controller.Dto;
 using Reefin.Controller.Entities;
@@ -695,7 +696,11 @@ namespace Reefin.Server.Core
                 provider.GetRequiredService<IShadowDiagnosticsStore>(),
                 provider.GetRequiredService<IV2PlanStore>(),
                 provider.GetRequiredService<IPlaybackLiveWiringDiagnosticsStore>(),
-                provider.GetRequiredService<PlaybackOperationalMetrics>()));
+                provider.GetRequiredService<PlaybackOperationalMetrics>(),
+                // Issue #42: optional in the container too — the accessor is registered by
+                // Reefin.Server's Startup, which does not exist in every host that builds this
+                // service collection (integration tests build a subset).
+                provider.GetService<IRequestCorrelationAccessor>()));
 
             // PR114a: registered so DI wiring exists ahead of the PR115 canary. PR115a: reads the
             // authoritative IV2PlanStore singleton (not IShadowDiagnosticsStore, which only ever holds

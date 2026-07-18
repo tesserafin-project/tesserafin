@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using Reefin.Controller.Diagnostics;
 using Reefin.Controller.Library;
 using Reefin.Controller.MediaEncoding;
 using Reefin.Controller.Session;
@@ -27,6 +28,7 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
     private readonly IV2PlanStore _v2PlanStore;
     private readonly IPlaybackLiveWiringDiagnosticsStore _liveWiringDiagnosticsStore;
     private readonly PlaybackOperationalMetrics _operationalMetrics;
+    private readonly IRequestCorrelationAccessor _requestCorrelation;
     private readonly object _lock = new();
     private readonly Dictionary<PlaybackSessionId, PlaybackSession> _sessions = new();
     private readonly Dictionary<string, PlaybackSessionId> _byPlaySessionId = new(StringComparer.OrdinalIgnoreCase);
@@ -84,6 +86,13 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
     /// including existing test constructors - keeps compiling and behaving exactly as before:
     /// outcomes are recorded but never observed by anything outside this instance.
     /// </param>
+    /// <param name="requestCorrelation">
+    /// Issue #42: supplies the correlation id of the HTTP request in flight, stamped onto each
+    /// <see cref="PlaybackLifecycleEvent"/> this manager records. Additive to the
+    /// <see cref="PlaybackSessionId"/> grouping key, never a replacement for it. Defaults to
+    /// <see cref="NullRequestCorrelationAccessor"/> when not supplied, so every pre-#42 call site —
+    /// including existing test constructors — keeps compiling and simply records no request id.
+    /// </param>
     public PlaybackSessionManager(
         IPlaybackSessionPlanner planner,
         ITranscodeManager transcodeManager,
@@ -91,8 +100,10 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
         IShadowDiagnosticsStore? diagnosticsStore = null,
         IV2PlanStore? v2PlanStore = null,
         IPlaybackLiveWiringDiagnosticsStore? liveWiringDiagnosticsStore = null,
-        PlaybackOperationalMetrics? operationalMetrics = null)
+        PlaybackOperationalMetrics? operationalMetrics = null,
+        IRequestCorrelationAccessor? requestCorrelation = null)
     {
+        _requestCorrelation = requestCorrelation ?? NullRequestCorrelationAccessor.Instance;
         _planner = planner;
         _transcodeManager = transcodeManager;
         _sessionManager = sessionManager;
@@ -448,7 +459,12 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
             }
         }
 
-        _diagnosticsStore.RecordEvent(id, new PlaybackLifecycleEvent(stage, DateTimeOffset.UtcNow));
+        // Issue #42: the request id is stamped per EVENT, alongside (never instead of) the
+        // session-scoped grouping key `id`. Usually null here — these three signals arrive from
+        // ffmpeg and session callbacks, not from a request — and null is the honest answer.
+        _diagnosticsStore.RecordEvent(
+            id,
+            new PlaybackLifecycleEvent(stage, DateTimeOffset.UtcNow, _requestCorrelation.CurrentRequestId));
     }
 
     /// <summary>

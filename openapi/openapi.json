@@ -3450,6 +3450,11 @@
             "format": "date-time",
             "type": "string"
           },
+          "RequestId": {
+            "description": "Issue #42: the correlation id of the HTTP request in flight when this entry was observed, or\n\u0060null\u0060 when none was \u2014 which is the normal case for entries derived from ffmpeg/session\ncallbacks and for the synthetic \u0060Created\u0060/\u0060Updated\u0060 entries. Optional and additive:\nexisting clients that ignore it are unaffected.",
+            "nullable": true,
+            "type": "string"
+          },
           "Stage": {
             "description": "The stage name, e.g. \u0060\u0022Created\u0022\u0060 or \u0060\u0022Updated\u0022\u0060.",
             "type": "string"

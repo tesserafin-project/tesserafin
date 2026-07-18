@@ -15,6 +15,7 @@ using Reefin.Common;
 using Reefin.Common.Configuration;
 using Reefin.Common.Extensions;
 using Reefin.Controller.Configuration;
+using Reefin.Controller.Diagnostics;
 using Reefin.Controller.Library;
 using Reefin.Controller.MediaEncoding;
 using Reefin.Controller.Session;
@@ -44,6 +45,7 @@ public sealed class TranscodeManager : ITranscodeManager, IDisposable
     private readonly IMediaEncoder _mediaEncoder;
     private readonly IMediaSourceManager _mediaSourceManager;
     private readonly IAttachmentExtractor _attachmentExtractor;
+    private readonly IRequestCorrelationAccessor _requestCorrelation;
 
     private readonly List<TranscodingJob> _activeTranscodingJobs = new();
     private readonly AsyncKeyedLocker<string> _transcodingLocks = new(o =>
@@ -67,6 +69,14 @@ public sealed class TranscodeManager : ITranscodeManager, IDisposable
     /// <param name="mediaEncoder">The <see cref="IMediaEncoder"/>.</param>
     /// <param name="mediaSourceManager">The <see cref="IMediaSourceManager"/>.</param>
     /// <param name="attachmentExtractor">The <see cref="IAttachmentExtractor"/>.</param>
+    /// <param name="requestCorrelation">
+    /// Issue #42: supplies the correlation id of the HTTP request currently in flight, so the
+    /// ping/kill log lines below carry it alongside the session-scoped <c>PlaySessionId</c> they
+    /// already had. Defaults to <see cref="NullRequestCorrelationAccessor"/> when not supplied, so
+    /// every existing call site — test constructors above all — keeps compiling and simply logs no
+    /// request id. Reads <c>null</c> on purpose for the timer-driven kill path, which is caused by
+    /// no request at all.
+    /// </param>
     public TranscodeManager(
         ILoggerFactory loggerFactory,
         IFileSystem fileSystem,
@@ -77,8 +87,10 @@ public sealed class TranscodeManager : ITranscodeManager, IDisposable
         EncodingHelper encodingHelper,
         IMediaEncoder mediaEncoder,
         IMediaSourceManager mediaSourceManager,
-        IAttachmentExtractor attachmentExtractor)
+        IAttachmentExtractor attachmentExtractor,
+        IRequestCorrelationAccessor? requestCorrelation = null)
     {
+        _requestCorrelation = requestCorrelation ?? NullRequestCorrelationAccessor.Instance;
         _loggerFactory = loggerFactory;
         _fileSystem = fileSystem;
         _appPaths = appPaths;
@@ -125,7 +137,14 @@ public sealed class TranscodeManager : ITranscodeManager, IDisposable
     {
         ArgumentException.ThrowIfNullOrEmpty(playSessionId);
 
-        _logger.LogDebug("PingTranscodingJob PlaySessionId={0} isUsedPaused: {1}", playSessionId, isUserPaused);
+        // Issue #42: named placeholders, so RequestId/PlaySessionId land as structured properties
+        // rather than being baked into the message text. RequestId is the id of the HTTP ping that
+        // caused this call and differs on every ping; PlaySessionId is the same for all of them.
+        _logger.LogDebug(
+            "PingTranscodingJob RequestId={RequestId} PlaySessionId={PlaySessionId} isUsedPaused: {IsUserPaused}",
+            _requestCorrelation.CurrentRequestId,
+            playSessionId,
+            isUserPaused);
 
         List<TranscodingJob> jobs;
 
@@ -191,7 +210,14 @@ public sealed class TranscodeManager : ITranscodeManager, IDisposable
             }
         }
 
-        _logger.LogInformation("Transcoding kill timer stopped for JobId {0} PlaySessionId {1}. Killing transcoding", job.Id, job.PlaySessionId);
+        // Issue #42: this path is reached from a timer callback, not from a request, so RequestId is
+        // normally null here. That is the honest value — nothing requested this kill — and it is
+        // exactly what distinguishes a timeout-driven kill from a client-driven DELETE in the logs.
+        _logger.LogInformation(
+            "Transcoding kill timer stopped for RequestId={RequestId} JobId {JobId} PlaySessionId {PlaySessionId}. Killing transcoding",
+            _requestCorrelation.CurrentRequestId,
+            job.Id,
+            job.PlaySessionId);
 
         await KillTranscodingJob(job, true, path => true).ConfigureAwait(false);
     }
@@ -225,7 +251,11 @@ public sealed class TranscodeManager : ITranscodeManager, IDisposable
     {
         job.DisposeKillTimer();
 
-        _logger.LogDebug("KillTranscodingJob - JobId {0} PlaySessionId {1}. Killing transcoding", job.Id, job.PlaySessionId);
+        _logger.LogDebug(
+            "KillTranscodingJob - RequestId={RequestId} JobId {JobId} PlaySessionId {PlaySessionId}. Killing transcoding",
+            _requestCorrelation.CurrentRequestId,
+            job.Id,
+            job.PlaySessionId);
 
         lock (_activeTranscodingJobs)
         {
