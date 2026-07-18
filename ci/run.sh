@@ -19,6 +19,13 @@
 # Run it explicitly with ./ci/smoke.sh (also Docker-based, same image) - see that script's header for
 # exactly what it proves and does not prove.
 #
+# Issue #36 / openapi: the OpenAPI contract drift check is part of the dotnet test stage below, not a
+# separate step here - OpenApiContractTests (tests/Reefin.Server.Integration.Tests) fails this gate
+# when openapi/openapi.json no longer matches what the server produces, and its failure message
+# names the fix (./ci/openapi-generate.sh). Keeping it inside the suite means it reuses the server
+# boot the suite already pays for, and leaves this script unchanged in structure and runtime.
+# See docs/openapi-contract.md.
+#
 # Usage:
 #   ./ci/run.sh
 set -euo pipefail

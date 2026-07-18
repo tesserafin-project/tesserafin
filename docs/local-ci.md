@@ -40,9 +40,13 @@ que la première (qui télécharge tout).
 
 - Build complet de `Reefin.sln` (tous les projets).
 - Suite de tests complète de `Reefin.sln` (tous les projets `tests/*`), y
-  compris `Reefin.Server.Integration.Tests` (dont `OpenApiSpecTests`, qui
-  fait donc office de vérification du contrat OpenAPI — pas d'étape séparée
-  nécessaire).
+  compris `Reefin.Server.Integration.Tests`.
+- **Contrat OpenAPI** (issue #36) : `OpenApiContractTests` fait partie de cette
+  suite et vérifie que `openapi/openapi.json` commité correspond bien à ce que
+  le serveur produit. Si ce n'est pas le cas, ce gate échoue et indique la
+  commande à lancer (`./ci/openapi-generate.sh`). C'est volontairement un test
+  et non une étape séparée de `ci/run.sh` : il réutilise le démarrage serveur
+  déjà payé par la suite. Voir `docs/openapi-contract.md`.
 - Dépendances natives nécessaires à l'exécution des tests : `ffmpeg`
   (`Reefin.MediaEncoding`), `libfontconfig1` (SkiaSharp.NativeAssets.Linux,
   utilisé par `src/Reefin.Drawing.Skia`). `SQLitePCLRaw` n'a besoin de rien
