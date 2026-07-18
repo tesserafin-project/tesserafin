@@ -345,8 +345,15 @@ public sealed class PlaybackUrlContractEndToEndTests : IClassFixture<E2eApplicat
     /// client-wide timeout, is what actually turns a hang into a clean, fast test failure - kept as
     /// defense in depth for any other genuinely stuck request, not only the one root-caused above.
     /// </summary>
-    private static CancellationTokenSource CreateBoundedCancellation(int seconds = 30) =>
-        CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken, new CancellationTokenSource(TimeSpan.FromSeconds(seconds)).Token);
+    private static CancellationTokenSource CreateBoundedCancellation(int seconds = 30)
+    {
+        // CancelAfter() on the linked source itself, rather than linking in a second, timed
+        // CancellationTokenSource: that intermediate source would never be disposed, leaking its
+        // Timer for the lifetime of the test run.
+        var linked = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        linked.CancelAfter(TimeSpan.FromSeconds(seconds));
+        return linked;
+    }
 
     /// <summary>
     /// A real ffmpeg transcode is not instantaneous - the first HLS media playlist/segment is not
