@@ -165,4 +165,110 @@ public class PlaybackSessionStreamDescriptorMapperTests
         Assert.NotNull(descriptor.SubtitleUrl);
         Assert.Contains("/Subtitles/0/", descriptor.SubtitleUrl, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// Issue #44 §8 arbitrage A: <c>Container</c> is the EFFECTIVE output container, and the check
+    /// that it really is effective is that the URL the mapper built in the same breath carries it -
+    /// <c>/stream.{container}</c>. Reading it off anything but the served <c>StreamInfo</c> (the
+    /// legacy <c>TranscodingContainer</c>, say) would be able to disagree with the URL; this cannot.
+    /// </summary>
+    [Theory]
+    [InlineData("mkv", "video/x-matroska")]
+    [InlineData("mp4", "video/mp4")]
+    [InlineData("webm", "video/webm")]
+    public void Map_Http_ContainerAndMimeTypeDescribeTheUrlItJustBuilt(string container, string expectedMimeType)
+    {
+        var streamInfo = new StreamInfo
+        {
+            ItemId = Guid.NewGuid(),
+            DeviceProfile = new DeviceProfile(),
+            PlayMethod = PlayMethod.DirectPlay,
+            Container = container,
+            SubProtocol = MediaStreamProtocol.http,
+            MediaSource = new MediaSourceInfo { Id = "source-1" },
+        };
+
+        var descriptor = PlaybackSessionStreamDescriptorMapper.Map(streamInfo, servedBy: 1, fallbackReason: null, Mock.Of<ITranscoderSupport>(), accessToken: null);
+
+        Assert.Equal(container, descriptor.Container);
+        Assert.Equal(expectedMimeType, descriptor.MimeType);
+        Assert.Contains("/stream." + container, descriptor.Url, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// On HLS the URL addresses <c>master.m3u8</c> and <c>Container</c> is the SEGMENT container
+    /// (it is emitted as <c>&amp;SegmentContainer=</c>). The container is still reported verbatim -
+    /// a client that muxes or reasons about segments needs it - but the MIME type must be the
+    /// playlist's, since that is what dereferencing <c>Url</c> actually returns.
+    /// </summary>
+    [Theory]
+    [InlineData("ts")]
+    [InlineData("mp4")]
+    public void Map_Hls_ReportsSegmentContainerButPlaylistMimeType(string segmentContainer)
+    {
+        var streamInfo = new StreamInfo
+        {
+            ItemId = Guid.NewGuid(),
+            DeviceProfile = new DeviceProfile(),
+            PlayMethod = PlayMethod.Transcode,
+            Container = segmentContainer,
+            SubProtocol = MediaStreamProtocol.hls,
+            MediaSource = new MediaSourceInfo { Id = "source-1" },
+        };
+
+        var descriptor = PlaybackSessionStreamDescriptorMapper.Map(streamInfo, servedBy: 1, fallbackReason: null, Mock.Of<ITranscoderSupport>(), accessToken: null);
+
+        Assert.Equal(segmentContainer, descriptor.Container);
+        Assert.Equal("application/vnd.apple.mpegurl", descriptor.MimeType);
+        Assert.Contains("/master.m3u8", descriptor.Url, StringComparison.Ordinal);
+        Assert.Contains("SegmentContainer=" + segmentContainer, descriptor.Url, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A served stream with no container at all: both fields are <see langword="null"/> rather than
+    /// invented. The URL degenerates to <c>/stream</c> with no extension, so there is genuinely
+    /// nothing to announce.
+    /// </summary>
+    [Fact]
+    public void Map_NoContainer_ContainerAndMimeTypeAreNull()
+    {
+        var streamInfo = new StreamInfo
+        {
+            ItemId = Guid.NewGuid(),
+            DeviceProfile = new DeviceProfile(),
+            PlayMethod = PlayMethod.DirectPlay,
+            Container = null,
+            SubProtocol = MediaStreamProtocol.http,
+            MediaSource = new MediaSourceInfo { Id = "source-1" },
+        };
+
+        var descriptor = PlaybackSessionStreamDescriptorMapper.Map(streamInfo, servedBy: 1, fallbackReason: null, Mock.Of<ITranscoderSupport>(), accessToken: null);
+
+        Assert.Null(descriptor.Container);
+        Assert.Null(descriptor.MimeType);
+    }
+
+    /// <summary>
+    /// An unmappable container yields <see langword="null"/> rather than
+    /// <c>application/octet-stream</c>: a client must be able to tell "the server does not know"
+    /// from "the server says it is opaque bytes", and only the first is true here.
+    /// </summary>
+    [Fact]
+    public void Map_UnknownContainer_MimeTypeIsNullNotOctetStream()
+    {
+        var streamInfo = new StreamInfo
+        {
+            ItemId = Guid.NewGuid(),
+            DeviceProfile = new DeviceProfile(),
+            PlayMethod = PlayMethod.DirectPlay,
+            Container = "notacontainer",
+            SubProtocol = MediaStreamProtocol.http,
+            MediaSource = new MediaSourceInfo { Id = "source-1" },
+        };
+
+        var descriptor = PlaybackSessionStreamDescriptorMapper.Map(streamInfo, servedBy: 1, fallbackReason: null, Mock.Of<ITranscoderSupport>(), accessToken: null);
+
+        Assert.Equal("notacontainer", descriptor.Container);
+        Assert.Null(descriptor.MimeType);
+    }
 }

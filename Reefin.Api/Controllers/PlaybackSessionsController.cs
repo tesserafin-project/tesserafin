@@ -128,7 +128,7 @@ public class PlaybackSessionsController : BaseReefinApiController
     /// <response code="400">The declared capabilities or constraints are invalid.</response>
     /// <response code="403">The caller is neither the session's owner nor an administrator.</response>
     /// <response code="404">Item or session not found.</response>
-    /// <response code="422">No viable playback plan exists for the given options.</response>
+    /// <response code="422">The session exists but re-planning it with these options produces no viable plan.</response>
     /// <returns>The updated session's stable decision projection.</returns>
     [HttpPut("{id}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -159,10 +159,14 @@ public class PlaybackSessionsController : BaseReefinApiController
 
         var (kind, options) = await ResolveOptions(request, HttpContext.RequestAborted).ConfigureAwait(false);
 
+        // PR #38 (docs/design-playback-v2-lifecycle.md, decided in 2cf777d2): the session was just
+        // proven to exist above, so a null here can only mean re-planning produced NO viable plan -
+        // a 404 said "unknown id" for what is really an unsatisfiable request, and left the client's
+        // track-change path unable to tell the two apart. 404 stays reserved for the unknown id.
         var session = _playbackSessionManager.Patch(id, new PlaybackSessionRequest(kind, options));
         if (session is null)
         {
-            return NotFound();
+            return UnprocessableEntity();
         }
 
         // PR115a: the response reflects the v2 decision when one is retained and authoritative for
@@ -221,6 +225,7 @@ public class PlaybackSessionsController : BaseReefinApiController
     /// <response code="403">The caller is neither the session's owner nor an administrator.</response>
     /// <response code="404">Session not found.</response>
     /// <response code="409">The session has no <c>PlaySessionId</c> - re-request via <see cref="ReplacePlaybackSession"/> supplying one.</response>
+    /// <response code="422">The session has no plannable stream - nothing can be served for it.</response>
     /// <returns>The resolved stream descriptor.</returns>
     [HttpGet("{id}/Stream")]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -228,6 +233,7 @@ public class PlaybackSessionsController : BaseReefinApiController
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
     public ActionResult<PlaybackSessionStreamDescriptor> GetPlaybackSessionStream([FromRoute] PlaybackSessionId id, [FromQuery] long startTimeTicks = 0)
     {
         if (startTimeTicks < 0)
@@ -261,9 +267,14 @@ public class PlaybackSessionsController : BaseReefinApiController
         var options = session.Request?.Options;
         var legacyStreamInfo = session.Plan.StreamInfo;
         var mediaSource = legacyStreamInfo?.MediaSource;
+        // PR #38: this used to be a second 409 on the same operation, which OpenAPI cannot express -
+        // one `responses` entry per status code per operation means two 409s discriminated only by
+        // their body are invisible to every generated client. The two conditions are genuinely
+        // different: the 409 above is REPAIRABLE by the client (PUT a request carrying a
+        // PlaySessionId), this one is structurally unservable, so it is 422.
         if (options is null || legacyStreamInfo is null || mediaSource is null)
         {
-            return Conflict("Session has no plannable stream - this endpoint only serves sessions planned via Playback/Sessions.");
+            return UnprocessableEntity("Session has no plannable stream - this endpoint only serves sessions planned via Playback/Sessions.");
         }
 
         // PR118 (moved up from after resolution): a URL without the caller's token would 401 at

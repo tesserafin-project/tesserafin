@@ -10462,6 +10462,11 @@
         "additionalProperties": false,
         "description": "PR117 (docs/pr116d-url-contract-design.md \u00A72.2): the companion, client-facing descriptor of the\nexecutable URL for a session already planned via \u0060Playback/Sessions\u0060 - returned only from\n\u0060GET Playback/Sessions/{id}/Stream\u0060, never composed into Reefin.Api.Models.PlaybackSessionDtos.PlaybackSessionListItem\nor Reefin.Api.Models.PlaybackSessionDtos.PlaybackDiagnosticDetail (design doc \u00A71.4: those two reach the admin-elevated,\ncross-user diagnostics surface, and a URL there would leak the access token\nReefin.Api.Models.PlaybackSessionDtos.PlaybackSessionStreamDescriptor.Url carries to any administrator browsing another user\u0027s session).",
         "properties": {
+          "Container": {
+            "description": "LANE S / issue #44 \u00A78 arbitrage A: the EFFECTIVE output container of the stream\nReefin.Api.Models.PlaybackSessionDtos.PlaybackSessionStreamDescriptor.Url resolves to - the very value the URL itself carries\n(\u0060/stream.{container}\u0060 on Reefin.Playback.Decision.StreamingProtocol.Http,\n\u0060\u0026SegmentContainer={container}\u0060 on Reefin.Playback.Decision.StreamingProtocol.Hls, where it is\ntherefore the SEGMENT container, not \u0060m3u8\u0060). Until this field existed the server picked a\ncontainer and reported it nowhere, so a client had no way to name what it was about to play\nwithout borrowing the legacy \u0060TranscodingContainer\u0060 - which is exactly why reefin-web #24\nhad to fall the whole remux/non-HLS-transcode decision back to legacy. null\nonly when the served stream carries no container at all.",
+            "nullable": true,
+            "type": "string"
+          },
           "FallbackReason": {
             "allOf": [
               {
@@ -10479,6 +10484,11 @@
               "StopThresholdTripped"
             ],
             "nullable": true
+          },
+          "MimeType": {
+            "description": "The content type a client should announce to its player for Reefin.Api.Models.PlaybackSessionDtos.PlaybackSessionStreamDescriptor.Url, resolved from\nReefin.Api.Models.PlaybackSessionDtos.PlaybackSessionStreamDescriptor.Container exactly the way the delivery endpoints themselves resolve their own\n\u0060Content-Type\u0060 header - \u0060application/vnd.apple.mpegurl\u0060 on\nReefin.Playback.Decision.StreamingProtocol.Hls (the playlist\u0027s type, not the segments\u0027), otherwise\n\u0060MimeTypes.GetMimeType(\u0022.\u0022 \u002B Container)\u0060, the same call\n\u0060VideosController\u0060/\u0060AudioHelper\u0060 make on the container they actually write. Reported\nrather than re-derived client-side so the announced type can never disagree with the response\nthe URL will really produce. null when no container is known, or when no\nmapping exists for it.",
+            "nullable": true,
+            "type": "string"
           },
           "Protocol": {
             "allOf": [
@@ -45728,7 +45738,7 @@
                 }
               }
             },
-            "description": "No viable playback plan exists for the given options."
+            "description": "The session exists but re-planning it with these options produces no viable plan."
           },
           "503": {
             "content": {
@@ -45900,6 +45910,26 @@
               }
             },
             "description": "The session has no \u0060PlaySessionId\u0060 - re-request via M:Reefin.Api.Controllers.PlaybackSessionsController.ReplacePlaybackSession(Reefin.Controller.MediaEncoding.PlaybackSessionId,Reefin.Api.Models.PlaybackSessionDtos.ReplacePlaybackSessionRequest) supplying one."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022CamelCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022PascalCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "The session has no plannable stream - nothing can be served for it."
           },
           "503": {
             "content": {

@@ -17,6 +17,7 @@ using Reefin.Controller.Entities;
 using Reefin.Controller.Entities.Movies;
 using Reefin.Controller.Library;
 using Reefin.Controller.MediaEncoding;
+using Reefin.Data.Enums;
 using Reefin.Database.Implementations.Entities;
 using Reefin.MediaEncoding.Playback;
 using Reefin.Model.Configuration;
@@ -583,6 +584,140 @@ public class PlaybackSessionsControllerTests
         _liveStreamResolver.Verify(
             r => r.Resolve(It.IsAny<PlaybackSessionId>(), It.IsAny<StreamInfo>(), It.IsAny<MediaSourceInfo>(), It.IsAny<DeviceProfile>(), It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<long>(), It.IsAny<bool>()),
             Times.Never);
+    }
+
+    /// <summary>
+    /// PR #38 (amended, 2cf777d2): the endpoint used to answer <c>409</c> for BOTH "no PlaySessionId"
+    /// and "no plannable stream". OpenAPI admits exactly one <c>responses</c> entry per status code
+    /// per operation, so two 409s discriminated only by their body cannot exist in the contract and
+    /// are invisible to every generated client. The conditions differ in kind - the 409 above is
+    /// repairable by a <c>PUT</c> supplying a <c>PlaySessionId</c>, this one is structurally
+    /// unservable - so this one is <c>422</c>. Asserted for each of the three shapes that reach it.
+    /// </summary>
+    [Theory]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(false, false, true)]
+    public void GetPlaybackSessionStream_NoPlannableStream_ReturnsUnprocessableEntity(bool noOptions, bool noStreamInfo, bool noMediaSource)
+    {
+        StreamInfo? streamInfo = noStreamInfo
+            ? null
+            : new StreamInfo
+            {
+                ItemId = _itemId,
+                DeviceProfile = new DeviceProfile(),
+                PlayMethod = PlayMethod.DirectPlay,
+                Container = "mkv",
+                MediaSource = noMediaSource ? null : new MediaSourceInfo { Id = "source-1" },
+            };
+
+        var request = noOptions
+            ? null
+            : new PlaybackSessionRequest(PlaybackMediaKind.Video, new MediaOptions { ItemId = _itemId, UserId = _userId, DeviceId = "device-1", Profile = new DeviceProfile() });
+
+        var session = new PlaybackSession(
+            PlaybackSessionId.NewId(),
+            PlaybackMediaKind.Video,
+            "play-session-1",
+            request,
+            new PlaybackPlan(PlayMethod.DirectPlay, default, streamInfo),
+            default,
+            default);
+        _playbackSessionManager.Setup(m => m.Get(session.Id)).Returns(session);
+
+        var controller = CreateController();
+        // A null Request means EnsureCallerOwnsSessionOrIsAdmin has no owner to compare against, so
+        // only an administrator gets far enough to observe the 422 in that shape.
+        SetIdentity(controller, _userId, isAdmin: true);
+
+        var result = controller.GetPlaybackSessionStream(session.Id);
+
+        Assert.IsType<UnprocessableEntityObjectResult>(result.Result);
+        _liveStreamResolver.Verify(
+            r => r.Resolve(It.IsAny<PlaybackSessionId>(), It.IsAny<StreamInfo>(), It.IsAny<MediaSourceInfo>(), It.IsAny<DeviceProfile>(), It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<long>(), It.IsAny<bool>()),
+            Times.Never);
+    }
+
+    /// <summary>
+    /// PR #38 (amended, 2cf777d2): the session was already proven to exist by the ownership check, so
+    /// a null from <c>Patch</c> can only mean re-planning produced no viable plan. That used to be a
+    /// <c>404</c>, indistinguishable from an unknown id - precisely the distinction a client needs on
+    /// a track change. <c>404</c> stays reserved for the unknown id
+    /// (<see cref="ReplacePlaybackSession_UnknownSession_ReturnsNotFound"/>).
+    /// </summary>
+    [Fact]
+    public async Task ReplacePlaybackSession_ExistingSessionNoViablePlan_ReturnsUnprocessableEntity()
+    {
+        var item = new Movie { Id = _itemId };
+        SetUpItemAndUser(item);
+        var id = PlaybackSessionId.NewId();
+        _playbackSessionManager.Setup(m => m.Get(id)).Returns(BuildExistingSessionForAuth(id, _userId));
+        _playbackSessionManager
+            .Setup(m => m.Patch(It.IsAny<PlaybackSessionId>(), It.IsAny<PlaybackSessionRequest>()))
+            .Returns((PlaybackSession?)null);
+
+        var result = await CreateController().ReplacePlaybackSession(id, CreateReplaceRequest());
+
+        Assert.IsType<UnprocessableEntityResult>(result.Result);
+    }
+
+    /// <summary>
+    /// Issue #44 §8 arbitrage A: the server picked a container and reported it nowhere, so the client
+    /// had to borrow the legacy <c>TranscodingContainer</c> or fall back to legacy entirely. The
+    /// descriptor now carries the effective output container and its content type, taken from the
+    /// very <see cref="StreamInfo"/> that produced <c>Url</c>.
+    /// </summary>
+    [Fact]
+    public void GetPlaybackSessionStream_Http_ReportsEffectiveContainerAndMimeType()
+    {
+        var session = BuildStreamableSession(_userId, "play-session-1");
+        _playbackSessionManager.Setup(m => m.Get(session.Id)).Returns(session);
+        _liveStreamResolver
+            .Setup(r => r.Resolve(It.IsAny<PlaybackSessionId>(), It.IsAny<StreamInfo>(), It.IsAny<MediaSourceInfo>(), It.IsAny<DeviceProfile>(), It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<long>(), It.IsAny<bool>()))
+            .Returns(session.Plan.StreamInfo!);
+        PlaybackLiveWiringOutcome? outcome = PlaybackLiveWiringOutcome.Served(DateTimeOffset.UtcNow);
+        _liveWiringDiagnosticsStore.Setup(s => s.TryGet(session.Id, out outcome)).Returns(true);
+
+        var result = CreateController().GetPlaybackSessionStream(session.Id);
+
+        var descriptor = Assert.IsType<PlaybackSessionStreamDescriptor>(Assert.IsAssignableFrom<OkObjectResult>(result.Result).Value);
+        Assert.Equal("mkv", descriptor.Container);
+        Assert.Equal("video/x-matroska", descriptor.MimeType);
+        // The container reported is the one the URL itself carries - that is the whole point.
+        Assert.Contains("/stream.mkv", descriptor.Url, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// On HLS the URL addresses <c>master.m3u8</c> while <c>Container</c> is the SEGMENT container
+    /// (<c>&amp;SegmentContainer=</c>), so the reported type must be the playlist's, never the
+    /// segments'.
+    /// </summary>
+    [Fact]
+    public void GetPlaybackSessionStream_Hls_ReportsSegmentContainerAndPlaylistMimeType()
+    {
+        var hlsStreamInfo = new StreamInfo
+        {
+            ItemId = _itemId,
+            MediaSource = new MediaSourceInfo { Id = "source-1", Container = "mkv" },
+            DeviceProfile = new DeviceProfile(),
+            PlayMethod = PlayMethod.Transcode,
+            Container = "ts",
+            SubProtocol = MediaStreamProtocol.hls,
+        };
+        var session = BuildStreamableSession(_userId, "play-session-1", hlsStreamInfo);
+        _playbackSessionManager.Setup(m => m.Get(session.Id)).Returns(session);
+        _liveStreamResolver
+            .Setup(r => r.Resolve(It.IsAny<PlaybackSessionId>(), It.IsAny<StreamInfo>(), It.IsAny<MediaSourceInfo>(), It.IsAny<DeviceProfile>(), It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<long>(), It.IsAny<bool>()))
+            .Returns(hlsStreamInfo);
+        PlaybackLiveWiringOutcome? outcome = PlaybackLiveWiringOutcome.Served(DateTimeOffset.UtcNow);
+        _liveWiringDiagnosticsStore.Setup(s => s.TryGet(session.Id, out outcome)).Returns(true);
+
+        var result = CreateController().GetPlaybackSessionStream(session.Id);
+
+        var descriptor = Assert.IsType<PlaybackSessionStreamDescriptor>(Assert.IsAssignableFrom<OkObjectResult>(result.Result).Value);
+        Assert.Equal(StreamingProtocol.Hls, descriptor.Protocol);
+        Assert.Equal("ts", descriptor.Container);
+        Assert.Equal("application/vnd.apple.mpegurl", descriptor.MimeType);
     }
 
     /// <summary>
