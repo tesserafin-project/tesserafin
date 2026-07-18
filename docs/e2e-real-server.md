@@ -155,6 +155,38 @@ Running 2 tests using 1 worker
   2 passed (25.3s)
 ```
 
+## Proposed reefin-web change — described, deliberately NOT applied
+
+**No reefin-web change is required.** `tests/e2e/theme-glass.spec.ts` passes unmodified against a
+server started by this script; the spec already reads `REEFIN_E2E_BASE_URL` / `REEFIN_E2E_USER` /
+`REEFIN_E2E_PASSWORD`, which is exactly what `--exec` exports.
+
+There is, however, one worthwhile follow-up for whoever owns reefin-web:
+
+- **`playwright.config.ts` could grow a `webServer` block** invoking this script, making
+  `npx playwright test` self-contained instead of requiring a separately-started server:
+
+  ```ts
+  webServer: {
+      command: '../reefin/ci/serve-e2e.sh --webdir ./dist --port 8096',
+      url: 'http://127.0.0.1:8096/System/Info/Public',
+      reuseExistingServer: !process.env.CI,
+      timeout: 180_000
+  }
+  ```
+
+- **That config's header comment is now stale.** It currently reads *"There is deliberately no
+  `webServer` block: starting a Reefin server (dotnet + ffmpeg + media library) is out of scope for
+  the test runner."* That premise no longer holds — `ci/serve-e2e.sh` does exactly that, in one
+  command, with automatic cleanup.
+
+It is **not applied here** for two reasons: this work owns `ci/*` in the reefin repo only and
+treats reefin-web as read-only; and a `webServer` block hard-codes a cross-repo relative path,
+which is a coupling reefin-web's maintainers should opt into deliberately rather than inherit.
+Note also that the snippet above pins `--port 8096` because Playwright's `webServer.url` must be
+known ahead of time — that gives up this script's free-port detection, so it can collide with an
+already-running Reefin instance.
+
 ## What this does not cover
 
 This harness proves the **infrastructure**: a real browser can reach a real, seeded Reefin server
