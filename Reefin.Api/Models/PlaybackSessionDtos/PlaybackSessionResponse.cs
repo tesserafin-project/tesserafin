@@ -40,6 +40,14 @@ namespace Reefin.Api.Models.PlaybackSessionDtos;
 /// </param>
 /// <param name="CreatedAt">When the session was first created.</param>
 /// <param name="UpdatedAt">When the session was last created or replaced.</param>
+/// <param name="PlaybackAttemptId">
+/// Issue #43. The opaque attempt id the client supplied on the request that created or last
+/// re-planned this session, echoed back verbatim, or <see langword="null"/> when none was supplied.
+/// Echoing it lets a client confirm the server filed its attempt under the value it meant, and lets
+/// an operator join this response to the client's own trace for the SAME attempt — including across
+/// a retry, where the value is identical while the <c>RequestId</c> of issue #42 is not.
+/// Additive and optional: a client that never sends it never sees it, and nothing else changes.
+/// </param>
 public sealed record PlaybackSessionResponse(
     Guid Id,
     MediaKind Kind,
@@ -50,7 +58,8 @@ public sealed record PlaybackSessionResponse(
     IReadOnlyList<TransformKind> Transforms,
     IReadOnlyList<ReasonCode> Reasons,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt)
+    DateTimeOffset UpdatedAt,
+    string? PlaybackAttemptId = null)
 {
     /// <summary>
     /// The sentinel <see cref="DecisionVersion"/> for sessions whose response was projected from

@@ -119,7 +119,7 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
     }
 
     /// <inheritdoc/>
-    public PlaybackSession? Create(PlaybackSessionRequest request, string? playSessionId = null)
+    public PlaybackSession? Create(PlaybackSessionRequest request, string? playSessionId = null, string? playbackAttemptId = null)
     {
         PlaybackPlan? plan;
         ShadowDiagnosticRecord? captured;
@@ -137,7 +137,7 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
             return null;
         }
 
-        var session = StoreOrReplace(request.Kind, playSessionId, request, plan);
+        var session = StoreOrReplace(request.Kind, playSessionId, request, plan, playbackAttemptId);
 
         // PR113a: attach-or-remove unconditionally, not just attach-if-captured. StoreOrReplace
         // reuses the existing session id when playSessionId matches an in-flight session, so a
@@ -172,7 +172,7 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
     }
 
     /// <inheritdoc/>
-    public PlaybackSession? Patch(PlaybackSessionId id, PlaybackSessionRequest request)
+    public PlaybackSession? Patch(PlaybackSessionId id, PlaybackSessionRequest request, string? playbackAttemptId = null)
     {
         PlaybackPlan? plan;
         ShadowDiagnosticRecord? captured;
@@ -198,7 +198,17 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
                 return null;
             }
 
-            updated = existing with { Kind = request.Kind, Request = request, Plan = plan, UpdatedAt = DateTimeOffset.UtcNow };
+            // Issue #43: a null attempt id on a re-plan means "the client did not resend it",
+            // NOT "forget the attempt". Erasing a correlation established at creation because a
+            // later request of the SAME attempt omitted the field would defeat the whole point.
+            updated = existing with
+            {
+                Kind = request.Kind,
+                Request = request,
+                Plan = plan,
+                UpdatedAt = DateTimeOffset.UtcNow,
+                PlaybackAttemptId = playbackAttemptId ?? existing.PlaybackAttemptId,
+            };
             _sessions[id] = updated;
         }
 
@@ -231,8 +241,8 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
     }
 
     /// <inheritdoc/>
-    public PlaybackSession Track(PlaybackMediaKind kind, PlaybackPlan plan, string? playSessionId = null)
-        => StoreOrReplace(kind, playSessionId, null, plan);
+    public PlaybackSession Track(PlaybackMediaKind kind, PlaybackPlan plan, string? playSessionId = null, string? playbackAttemptId = null)
+        => StoreOrReplace(kind, playSessionId, null, plan, playbackAttemptId);
 
     /// <inheritdoc/>
     public PlaybackSession TrackTranscodeOutput(string outputVideoCodec, string outputAudioCodec, TranscodeReason transcodeReasons, string? playSessionId = null)
@@ -317,7 +327,7 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
         }
     }
 
-    private PlaybackSession StoreOrReplace(PlaybackMediaKind kind, string? playSessionId, PlaybackSessionRequest? request, PlaybackPlan plan)
+    private PlaybackSession StoreOrReplace(PlaybackMediaKind kind, string? playSessionId, PlaybackSessionRequest? request, PlaybackPlan plan, string? playbackAttemptId = null)
     {
         var now = DateTimeOffset.UtcNow;
         lock (_lock)
@@ -326,12 +336,20 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
                 && _byPlaySessionId.TryGetValue(playSessionId, out var existingId)
                 && _sessions.TryGetValue(existingId, out var existing))
             {
-                var updated = existing with { Kind = kind, Request = request, Plan = plan, UpdatedAt = now };
+                // Issue #43: same "null does not erase" rule as Patch.
+                var updated = existing with
+                {
+                    Kind = kind,
+                    Request = request,
+                    Plan = plan,
+                    UpdatedAt = now,
+                    PlaybackAttemptId = playbackAttemptId ?? existing.PlaybackAttemptId,
+                };
                 _sessions[existingId] = updated;
                 return updated;
             }
 
-            var session = new PlaybackSession(PlaybackSessionId.NewId(), kind, playSessionId, request, plan, now, now);
+            var session = new PlaybackSession(PlaybackSessionId.NewId(), kind, playSessionId, request, plan, now, now, playbackAttemptId);
             _sessions[session.Id] = session;
             if (!string.IsNullOrEmpty(playSessionId))
             {

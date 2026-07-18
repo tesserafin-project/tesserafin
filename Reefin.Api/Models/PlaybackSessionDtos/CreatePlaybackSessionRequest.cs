@@ -16,11 +16,13 @@ namespace Reefin.Api.Models.PlaybackSessionDtos;
 /// Optional. The client-facing play session id. At most one session is kept per play session id:
 /// creating with the same id again replaces that session's plan and request.
 /// </param>
+/// <param name="PlaybackAttemptId">Issue #43. Optional, opaque, stable across the whole playback attempt - see <see cref="PlaybackPlanRequestBase"/>.</param>
 public sealed record CreatePlaybackSessionRequest(
     Guid ItemId,
     Guid UserId,
     ClientCapabilities Capabilities,
     PlaybackConstraints Constraints,
     string? MediaSourceId = null,
-    string? PlaySessionId = null)
-    : PlaybackPlanRequestBase(ItemId, UserId, Capabilities, Constraints, MediaSourceId);
+    string? PlaySessionId = null,
+    string? PlaybackAttemptId = null)
+    : PlaybackPlanRequestBase(ItemId, UserId, Capabilities, Constraints, MediaSourceId, PlaybackAttemptId);

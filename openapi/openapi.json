@@ -2920,6 +2920,11 @@
             "nullable": true,
             "type": "string"
           },
+          "PlaybackAttemptId": {
+            "description": "Issue #43. Optional, opaque, client-generated. The identifier of the playback ATTEMPT this\nrequest belongs to \u2014 generated once by the client when it starts trying to play something, and\nresent unchanged on every request of that attempt: \u0060PlaybackInfo\u0060, this \u0060POST\u0060, the\n\u0060PUT\u0060, and any retry. A new attempt gets a new value; a retry inside the same attempt keeps\nthe old one.\n\nDistinct from both neighbouring scopes and substitutable for neither. It is NOT the\n\u0060RequestId\u0060/\u0060TraceId\u0060 of issue #42, which is server-derived and changes on every\nrequest. It is NOT Reefin.Api.Models.PlaybackSessionDtos.CreatePlaybackSessionRequest.PlaySessionId, which only exists\nonce a session does \u2014 i.e. after \u0060PlaybackInfo\u0060 has already happened \u2014 and which survives\nacross several attempts. See \u0060docs/observabilite-identifiants-correlation.md\u0060.\nDiagnostics only: never an authorization key, no access decision is derived from it, and it\nreplaces no existing access control. Validated for length and printability only (see\nReefin.Api.Models.PlaybackSessionDtos.PlaybackAttemptIdValidator); no structure is imposed and no meaning is read out of it.",
+            "nullable": true,
+            "type": "string"
+          },
           "UserId": {
             "description": "The requesting user.",
             "format": "uuid",
@@ -9847,6 +9852,11 @@
             ],
             "description": "The shape of the output a Reefin.Playback.Decision.PlaybackDecision produces."
           },
+          "PlaybackAttemptId": {
+            "description": "Issue #43: the opaque, client-supplied attempt id recorded on this session, or\nnull when the client sent none. This is the field that lets an operator pull up\nevery session \u2014 and therefore every retry \u2014 belonging to ONE playback attempt, which neither\nReefin.Api.Models.PlaybackSessionDtos.PlaybackDiagnosticDetail.Id (per session) nor Reefin.Api.Models.PlaybackSessionDtos.DiagnosticTimelineEntry.RequestId (per request,\nissue #42) can do. Opaque: displayed verbatim, never parsed.",
+            "nullable": true,
+            "type": "string"
+          },
           "Reasoning": {
             "allOf": [
               {
@@ -10004,6 +10014,11 @@
             "nullable": true,
             "type": "string"
           },
+          "PlaybackAttemptId": {
+            "description": "Gets or sets the opaque, client-generated playback attempt id (issue #43).",
+            "nullable": true,
+            "type": "string"
+          },
           "StartTimeTicks": {
             "description": "Gets or sets the start time in ticks.",
             "format": "int64",
@@ -10052,6 +10067,11 @@
           },
           "PlaySessionId": {
             "description": "Gets or sets the play session identifier.",
+            "nullable": true,
+            "type": "string"
+          },
+          "PlaybackAttemptId": {
+            "description": "Gets or sets the opaque, client-supplied playback attempt id (issue #43), echoed back\nverbatim, or \u0060null\u0060 when the client supplied none.",
             "nullable": true,
             "type": "string"
           }
@@ -10432,6 +10452,11 @@
               }
             ],
             "description": "The shape of the output a Reefin.Playback.Decision.PlaybackDecision produces."
+          },
+          "PlaybackAttemptId": {
+            "description": "Issue #43. The opaque attempt id the client supplied on the request that created or last\nre-planned this session, echoed back verbatim, or null when none was supplied.\nEchoing it lets a client confirm the server filed its attempt under the value it meant, and lets\nan operator join this response to the client\u0027s own trace for the SAME attempt \u2014 including across\na retry, where the value is identical while the \u0060RequestId\u0060 of issue #42 is not.\nAdditive and optional: a client that never sends it never sees it, and nothing else changes.",
+            "nullable": true,
+            "type": "string"
           },
           "Reasons": {
             "description": "A flat summary of the reason codes behind this decision (no technical detail beyond the code\nitself, and never a file path, token, or ffmpeg argument). For legacy-sourced sessions, only\nthe constraint codes that mirror \u0060Reefin.Model.Session.TranscodeReason\u0060 one-to-one can be\nderived \u2014 positive/marker codes such as Reefin.Playback.Decision.ReasonCode.TonemapRequired or\nReefin.Playback.Decision.ReasonCode.MethodChosen have no legacy reason bit and never appear here.",
@@ -12345,6 +12370,11 @@
           },
           "MediaSourceId": {
             "description": "Optional. A specific media source id, if playing an alternate version.",
+            "nullable": true,
+            "type": "string"
+          },
+          "PlaybackAttemptId": {
+            "description": "Issue #43. Optional, opaque, client-generated. The identifier of the playback ATTEMPT this\nrequest belongs to \u2014 generated once by the client when it starts trying to play something, and\nresent unchanged on every request of that attempt: \u0060PlaybackInfo\u0060, this \u0060POST\u0060, the\n\u0060PUT\u0060, and any retry. A new attempt gets a new value; a retry inside the same attempt keeps\nthe old one.\n\nDistinct from both neighbouring scopes and substitutable for neither. It is NOT the\n\u0060RequestId\u0060/\u0060TraceId\u0060 of issue #42, which is server-derived and changes on every\nrequest. It is NOT Reefin.Api.Models.PlaybackSessionDtos.CreatePlaybackSessionRequest.PlaySessionId, which only exists\nonce a session does \u2014 i.e. after \u0060PlaybackInfo\u0060 has already happened \u2014 and which survives\nacross several attempts. See \u0060docs/observabilite-identifiants-correlation.md\u0060.\nDiagnostics only: never an authorization key, no access decision is derived from it, and it\nreplaces no existing access control. Validated for length and printability only (see\nReefin.Api.Models.PlaybackSessionDtos.PlaybackAttemptIdValidator); no structure is imposed and no meaning is read out of it.",
             "nullable": true,
             "type": "string"
           },

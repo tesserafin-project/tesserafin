@@ -33,6 +33,6 @@ public interface IPlaybackSessionPlanner
 /// <param name="StreamInfo">
 /// The stream info the decision was derived from, when planned by <see cref="IPlaybackSessionPlanner"/>.
 /// <c>null</c> when the plan instead records a decision made elsewhere (see
-/// <see cref="IPlaybackSessionManager.Track(PlaybackMediaKind, PlaybackPlan, string)"/>).
+/// <see cref="IPlaybackSessionManager.Track(PlaybackMediaKind, PlaybackPlan, string, string)"/>).
 /// </param>
 public sealed record PlaybackPlan(PlayMethod PlayMethod, TranscodeReason TranscodeReasons, StreamInfo? StreamInfo = null);

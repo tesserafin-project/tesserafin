@@ -1,10 +1,13 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Reefin.Api.Constants;
 using Reefin.Api.Extensions;
 using Reefin.Api.Helpers;
@@ -43,6 +46,7 @@ public class PlaybackSessionsController : BaseReefinApiController
     private readonly IPlaybackLiveStreamResolver _liveStreamResolver;
     private readonly IPlaybackLiveWiringDiagnosticsStore _liveWiringDiagnosticsStore;
     private readonly IMediaEncoder _mediaEncoder;
+    private readonly ILogger<PlaybackSessionsController> _logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PlaybackSessionsController"/> class.
@@ -64,6 +68,12 @@ public class PlaybackSessionsController : BaseReefinApiController
     /// same store the admin diagnostics detail route already surfaces (PR115c).
     /// </param>
     /// <param name="mediaEncoder">Instance of the <see cref="IMediaEncoder"/> interface - resolves the external subtitle delivery URL for the descriptor.</param>
+    /// <param name="logger">
+    /// Issue #43: carries the client-supplied <c>PlaybackAttemptId</c> into the structured log scope
+    /// for the duration of the action, so every line emitted while serving a request of one attempt
+    /// is joinable to the other requests of that same attempt. Trailing and optional so existing
+    /// test constructions keep compiling.
+    /// </param>
     public PlaybackSessionsController(
         IPlaybackSessionManager playbackSessionManager,
         IItemLookupService itemLookupService,
@@ -72,8 +82,10 @@ public class PlaybackSessionsController : BaseReefinApiController
         IV2PlanStore v2PlanStore,
         IPlaybackLiveStreamResolver liveStreamResolver,
         IPlaybackLiveWiringDiagnosticsStore liveWiringDiagnosticsStore,
-        IMediaEncoder mediaEncoder)
+        IMediaEncoder mediaEncoder,
+        ILogger<PlaybackSessionsController>? logger = null)
     {
+        _logger = logger ?? NullLogger<PlaybackSessionsController>.Instance;
         _playbackSessionManager = playbackSessionManager;
         _itemLookupService = itemLookupService;
         _userManager = userManager;
@@ -103,9 +115,14 @@ public class PlaybackSessionsController : BaseReefinApiController
     {
         PlaybackSessionRequestValidator.Validate(request);
 
+        using var attemptScope = BeginAttemptScope(request.PlaybackAttemptId);
+
         var (kind, options) = await ResolveOptions(request, HttpContext.RequestAborted).ConfigureAwait(false);
 
-        var session = _playbackSessionManager.Create(new PlaybackSessionRequest(kind, options), request.PlaySessionId);
+        var session = _playbackSessionManager.Create(
+            new PlaybackSessionRequest(kind, options),
+            request.PlaySessionId,
+            request.PlaybackAttemptId);
         if (session is null)
         {
             return UnprocessableEntity();
@@ -140,6 +157,8 @@ public class PlaybackSessionsController : BaseReefinApiController
     {
         PlaybackSessionRequestValidator.Validate(request);
 
+        using var attemptScope = BeginAttemptScope(request.PlaybackAttemptId);
+
         // PR118: PUT used to have no ownership check at all - a pre-existing gap (§4.2 of the PR117
         // design doc called it out explicitly for this endpoint) - any authenticated caller who knew
         // an id could re-plan someone else's session. Checked against the EXISTING session (not the
@@ -163,7 +182,11 @@ public class PlaybackSessionsController : BaseReefinApiController
         // proven to exist above, so a null here can only mean re-planning produced NO viable plan -
         // a 404 said "unknown id" for what is really an unsatisfiable request, and left the client's
         // track-change path unable to tell the two apart. 404 stays reserved for the unknown id.
-        var session = _playbackSessionManager.Patch(id, new PlaybackSessionRequest(kind, options));
+        //
+        // Issue #43: the SAME attempt id the POST carried, when the client is re-planning inside
+        // one attempt. That identity across two different HTTP requests is exactly what a request
+        // id could never provide, and is why this is a separate field.
+        var session = _playbackSessionManager.Patch(id, new PlaybackSessionRequest(kind, options), request.PlaybackAttemptId);
         if (session is null)
         {
             return UnprocessableEntity();
@@ -387,5 +410,25 @@ public class PlaybackSessionsController : BaseReefinApiController
 
         var kind = item.MediaType == MediaType.Audio ? PlaybackMediaKind.Audio : PlaybackMediaKind.Video;
         return (kind, options);
+    }
+
+    /// <summary>
+    /// Issue #43: opens a structured log scope carrying the attempt id for the rest of the action,
+    /// or returns <c>null</c> when the client supplied none — no scope is better than a scope
+    /// carrying a null value. Nests inside the per-request scope opened by
+    /// <c>RequestCorrelationMiddleware</c> (issue #42), so lines emitted here carry BOTH the attempt
+    /// id (same on a retry) and the request id (different on a retry).
+    /// </summary>
+    private IDisposable? BeginAttemptScope(string? playbackAttemptId)
+    {
+        if (string.IsNullOrEmpty(playbackAttemptId))
+        {
+            return null;
+        }
+
+        return _logger.BeginScope(new Dictionary<string, object>(1)
+        {
+            [PlaybackAttemptIdValidator.LogPropertyName] = playbackAttemptId
+        });
     }
 }

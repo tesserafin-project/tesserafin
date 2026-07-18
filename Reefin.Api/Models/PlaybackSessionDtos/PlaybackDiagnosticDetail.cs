@@ -61,6 +61,13 @@ namespace Reefin.Api.Models.PlaybackSessionDtos;
 /// <see cref="Comparison"/>: a session can have a shadow comparison retained without ever having
 /// been through the live-wiring decision, and vice versa.
 /// </param>
+/// <param name="PlaybackAttemptId">
+/// Issue #43: the opaque, client-supplied attempt id recorded on this session, or
+/// <see langword="null"/> when the client sent none. This is the field that lets an operator pull up
+/// every session — and therefore every retry — belonging to ONE playback attempt, which neither
+/// <see cref="Id"/> (per session) nor <see cref="DiagnosticTimelineEntry.RequestId"/> (per request,
+/// issue #42) can do. Opaque: displayed verbatim, never parsed.
+/// </param>
 public sealed record PlaybackDiagnosticDetail(
     Guid Id,
     MediaKind Kind,
@@ -78,4 +85,5 @@ public sealed record PlaybackDiagnosticDetail(
     ReasonNode? Reasoning,
     DiagnosticComparison? Comparison,
     IReadOnlyList<DiagnosticTimelineEntry> Timeline,
-    PlaybackLiveWiringOutcome? LiveWiring = null);
+    PlaybackLiveWiringOutcome? LiveWiring = null,
+    string? PlaybackAttemptId = null);

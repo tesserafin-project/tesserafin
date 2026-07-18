@@ -1,5 +1,6 @@
 using System;
 using System.Buffers;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Net.Mime;
@@ -13,6 +14,7 @@ using Reefin.Api.Attributes;
 using Reefin.Api.Extensions;
 using Reefin.Api.Helpers;
 using Reefin.Api.Models.MediaInfoDtos;
+using Reefin.Api.Models.PlaybackSessionDtos;
 using Reefin.Common.Extensions;
 using Reefin.Controller.Devices;
 using Reefin.Controller.Entities;
@@ -140,6 +142,20 @@ public class MediaInfoController : BaseReefinApiController
         [FromQuery, ParameterObsolete] bool? allowAudioStreamCopy,
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] PlaybackInfoDto? playbackInfoDto)
     {
+        // Issue #43: validated before anything else, and by the SAME rules the v2 sessions
+        // endpoints apply - a value accepted here and rejected two requests later would be worse
+        // than not validating at all. Supplied-and-malformed throws ArgumentException, which
+        // ExceptionMiddleware maps to 400; omitted is null and changes nothing for the caller.
+        var playbackAttemptId = playbackInfoDto?.PlaybackAttemptId;
+        PlaybackAttemptIdValidator.ValidateOrThrow(playbackAttemptId);
+
+        // Nests inside the per-request scope from RequestCorrelationMiddleware (issue #42), so
+        // these lines carry both: the attempt id (identical on the retry that follows) and the
+        // request id (different on it).
+        using var attemptScope = string.IsNullOrEmpty(playbackAttemptId)
+            ? null
+            : _logger.BeginScope(new Dictionary<string, object>(1) { [PlaybackAttemptIdValidator.LogPropertyName] = playbackAttemptId });
+
         var profile = playbackInfoDto?.DeviceProfile;
         _logger.LogDebug("GetPostedPlaybackInfo profile: {@Profile}", profile);
 
@@ -188,6 +204,11 @@ public class MediaInfoController : BaseReefinApiController
                 mediaSourceId,
                 liveStreamId)
             .ConfigureAwait(false);
+
+        // Issue #43: echoed back verbatim, and set BEFORE the error-code early return so a failed
+        // PlaybackInfo is still attributable to its attempt - a failure is exactly when an operator
+        // most needs to see which attempt (and which retry of it) this was.
+        info.PlaybackAttemptId = playbackAttemptId;
 
         if (info.ErrorCode is not null)
         {

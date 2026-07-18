@@ -24,16 +24,31 @@ public interface IPlaybackSessionManager
     /// session id: creating with the same id again replaces that session's plan and request,
     /// and the session is removed automatically when the transcoding job with that id ends.
     /// </param>
+    /// <param name="playbackAttemptId">
+    /// Issue #43. The opaque, client-supplied identifier of the playback ATTEMPT this call belongs
+    /// to, or <c>null</c> when the client sent none. Recorded on the resulting session for
+    /// diagnostics only — never used to look a session up, never an authorization input. Stable
+    /// across the several requests (and retries) of one attempt, unlike the per-request
+    /// <c>RequestId</c> of issue #42 and unlike <paramref name="playSessionId"/>, which can outlive
+    /// several attempts.
+    /// </param>
     /// <returns>The created (or updated) session, or <c>null</c> if no viable plan exists.</returns>
-    PlaybackSession? Create(PlaybackSessionRequest request, string? playSessionId = null);
+    PlaybackSession? Create(PlaybackSessionRequest request, string? playSessionId = null, string? playbackAttemptId = null);
 
     /// <summary>
     /// Re-plans an existing session with a new request, replacing its stored plan.
     /// </summary>
     /// <param name="id">The session to patch.</param>
     /// <param name="request">The new request to plan.</param>
+    /// <param name="playbackAttemptId">
+    /// Issue #43. The attempt id the client resent with this re-plan. A <c>PUT</c> mid-attempt
+    /// carries the SAME value the original <c>POST</c> did, which is exactly what makes the two
+    /// requests joinable; a new attempt carries a new value. <c>null</c> leaves whatever the
+    /// session already recorded untouched, so a client that omits the field on a re-plan does not
+    /// silently erase the correlation established at creation.
+    /// </param>
     /// <returns>The updated session, or <c>null</c> if the session does not exist or no viable plan exists.</returns>
-    PlaybackSession? Patch(PlaybackSessionId id, PlaybackSessionRequest request);
+    PlaybackSession? Patch(PlaybackSessionId id, PlaybackSessionRequest request, string? playbackAttemptId = null);
 
     /// <summary>
     /// Records a session whose plan was already decided elsewhere — e.g. a controller that
@@ -48,8 +63,16 @@ public interface IPlaybackSessionManager
     /// session id: tracking the same id again replaces that session's plan, and the session is
     /// removed automatically when the transcoding job with that id ends.
     /// </param>
+    /// <param name="playbackAttemptId">
+    /// Issue #43. The opaque, client-supplied identifier of the playback ATTEMPT this call belongs
+    /// to, or <c>null</c> when the client sent none. Recorded on the resulting session for
+    /// diagnostics only — never used to look a session up, never an authorization input. Stable
+    /// across the several requests (and retries) of one attempt, unlike the per-request
+    /// <c>RequestId</c> of issue #42 and unlike <paramref name="playSessionId"/>, which can outlive
+    /// several attempts.
+    /// </param>
     /// <returns>The created (or updated) session.</returns>
-    PlaybackSession Track(PlaybackMediaKind kind, PlaybackPlan plan, string? playSessionId = null);
+    PlaybackSession Track(PlaybackMediaKind kind, PlaybackPlan plan, string? playSessionId = null, string? playbackAttemptId = null);
 
     /// <summary>
     /// Tracks a video session, deriving <see cref="PlayMethod"/> from output codecs a caller has

@@ -39,6 +39,11 @@ public static class PlaybackSessionRequestValidator
         ValidateCapabilities(request.Capabilities, errors);
         ValidateConstraints(request.Constraints, errors);
 
+        // Issue #43: validated here so BOTH the POST and the PUT get it, and neither can forget to.
+        // Only a value that IS supplied and IS malformed produces an error - a third-party client
+        // that omits the field entirely must keep playing exactly as before.
+        PlaybackAttemptIdValidator.Validate(request.PlaybackAttemptId, errors);
+
         if (errors.Count > 0)
         {
             throw new ArgumentException(string.Join(" ", errors));

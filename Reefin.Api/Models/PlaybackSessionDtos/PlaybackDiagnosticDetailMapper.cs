@@ -92,7 +92,8 @@ public static class PlaybackDiagnosticDetailMapper
             diagnostic?.Decision.Reasoning,
             diagnostic is null ? null : MapComparison(diagnostic),
             BuildTimeline(session, events),
-            liveWiring);
+            liveWiring,
+            session.PlaybackAttemptId);
     }
 
     private static DiagnosticComparison MapComparison(ShadowDiagnosticRecord diagnostic)

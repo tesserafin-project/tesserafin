@@ -60,7 +60,8 @@ public static class PlaybackSessionResponseMapper
             DeriveTransforms(method, plan.TranscodeReasons, streamInfo),
             MapReasons(plan.TranscodeReasons),
             session.CreatedAt,
-            session.UpdatedAt);
+            session.UpdatedAt,
+            session.PlaybackAttemptId);
     }
 
     /// <summary>
@@ -105,7 +106,8 @@ public static class PlaybackSessionResponseMapper
             decision.Transforms,
             FlattenReasons(decision.Reasoning),
             session.CreatedAt,
-            session.UpdatedAt);
+            session.UpdatedAt,
+            session.PlaybackAttemptId);
     }
 
     /// <summary>
