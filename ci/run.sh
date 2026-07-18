@@ -65,8 +65,15 @@ docker run --rm \
         set -euo pipefail
         echo '-- dotnet restore --'
         dotnet restore '${SOLUTION}'
-        echo '-- dotnet build (fail fast on errors) --'
-        dotnet build '${SOLUTION}' --no-restore -clp:ErrorsOnly
+        echo '-- dotnet build (fail fast on errors, non-incremental) --'
+        # --no-incremental is what makes this script an honest gate. The repo is bind-mounted, so
+        # obj/ survives between runs and across host-side builds - including ./ci/openapi-generate.sh,
+        # which every PR touching a serialized surface is required to run FIRST. With a warm obj/,
+        # MSBuild considers a project up to date and skips it, and skipping a project skips its
+        # Roslyn analyzers: the gate then prints PASS for a tree that fails from a cold build.
+        # That is not hypothetical - PRs #46 and #45 were both merged on a PASS obtained this way,
+        # and the resulting master failed CA1034 on the first clean checkout.
+        dotnet build '${SOLUTION}' --no-restore --no-incremental -clp:ErrorsOnly
         echo '-- dotnet test (full suite, excluding the optional PR115d smoke stage) --'
         dotnet test '${SOLUTION}' --no-build --nologo --filter 'Category!=Smoke'
     "

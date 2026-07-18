@@ -247,6 +247,16 @@ namespace Reefin.Server.Integration.Tests.Controllers
         /// <summary>
         /// The production host, with only the two library-facing lookups the planner needs replaced.
         /// </summary>
+        /// <remarks>
+        /// Nested deliberately: it is the class fixture of exactly one test class, and it reads that
+        /// class's item-id constants. Hoisting it to a top-level type would force those constants
+        /// out too, and SA1402 forbids a second type in this file — so the alternative is a separate
+        /// file for a helper with a single consumer. xUnit constructs an <c>IClassFixture</c> by
+        /// reflection and needs it public, so the accessibility escape hatch CA1034 also offers is
+        /// closed. Suppressed the same way the rule is already suppressed elsewhere in the tree
+        /// (<c>SubtitleEncoder.cs</c>, <c>SplitStringExtensions.cs</c>, the OMDb/AudioDb providers).
+        /// </remarks>
+#pragma warning disable CA1034 // Nested types should not be visible
         public sealed class PlaybackFactory : ReefinApplicationFactory
         {
             protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -292,5 +302,6 @@ namespace Reefin.Server.Integration.Tests.Controllers
                 },
             };
         }
+#pragma warning restore CA1034
     }
 }
