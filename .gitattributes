@@ -3,3 +3,10 @@
 *.jpg binary
 
 CONTRIBUTORS.md merge=union
+
+# Generated OpenAPI contract: byte-identical on every checkout, because its
+# sha256 is a merge gate (ci/openapi-generate.sh, docs/openapi-contract.md).
+# text=auto would be enough today, but this makes the requirement explicit and
+# survives someone loosening the global rule above.
+openapi/openapi.json text eol=lf
+openapi/contract.lock.json text eol=lf
