@@ -223,8 +223,17 @@ make_movie() {
         "$dir/$title.mp4"
     log "fixture: $dir/$title.mp4"
 }
-make_movie "Reefin E2E Fixture (2020)"
-make_movie "Reefin E2E Second Fixture (2021)"
+# CROSS-REPO CONTRACT — these two titles are consumed by name in reefin-web:
+#   tests/e2e/library.spec.ts:31-32  MOVIE_TITLE / OTHER_MOVIE_TITLE
+# The specs assert on the displayed title (Reefin strips the parenthesised year), and
+# library.spec.ts:108-109 additionally relies on "Smoke Test Movie" sorting BEFORE
+# "Transcode Probe" under SortName ascending. Renaming either side in isolation silently
+# breaks those specs — the harness still boots, seeds and serves, so the failure looks like
+# an application bug rather than a fixture mismatch. That is exactly what happened with the
+# previous names ("Reefin E2E Fixture" / "Reefin E2E Second Fixture"): 2 of 7 specs failed
+# on a fully healthy rig. Change both repos together, or neither.
+make_movie "Smoke Test Movie (2020)"
+make_movie "Transcode Probe (2021)"
 
 # ---------------------------------------------------------------------------
 # network.xml — the ONLY way to set the listen port (see this script's header).
