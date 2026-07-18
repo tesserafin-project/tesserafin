@@ -2,6 +2,7 @@ using System.Linq;
 using Reefin.Data.Enums;
 using Reefin.MediaEncoding.Playback;
 using Reefin.Model.Dlna;
+using Reefin.Model.Net;
 
 namespace Reefin.Api.Models.PlaybackSessionDtos;
 
@@ -36,7 +37,34 @@ public static class PlaybackSessionStreamDescriptorMapper
             streamInfo.SubProtocol == MediaStreamProtocol.hls ? Reefin.Playback.Decision.StreamingProtocol.Hls : Reefin.Playback.Decision.StreamingProtocol.Http,
             servedBy,
             fallbackReason,
-            ResolveSubtitleUrl(streamInfo, transcoderSupport, accessToken));
+            ResolveSubtitleUrl(streamInfo, transcoderSupport, accessToken),
+            streamInfo.Container,
+            ResolveMimeType(streamInfo));
+    }
+
+    /// <summary>
+    /// Issue #44 §8 arbitrage A: the content type of what <c>StreamInfo.ToUrl</c> just addressed.
+    /// Resolved from the SAME <see cref="StreamInfo.Container"/> the URL embeds, through the SAME
+    /// <c>MimeTypes.GetMimeType</c> lookup the delivery endpoints use for their own
+    /// <c>Content-Type</c> header (<c>VideosController.GetVideoStream</c> /
+    /// <c>AudioHelper.GetAudioStream</c>: <c>GetMimeType("." + OutputContainer, false)</c>) - so the
+    /// announced type cannot disagree with the response the URL will actually produce. Deliberately
+    /// not "corrected" for audio sessions whose container maps to a <c>video/</c> type: the delivery
+    /// endpoint really does send that header, and this descriptor reports what is served, not what
+    /// would look tidier.
+    /// </summary>
+    private static string? ResolveMimeType(StreamInfo streamInfo)
+    {
+        // HLS addresses master.m3u8; Container is then the SEGMENT container (&SegmentContainer=),
+        // so mapping it here would announce the segments' type for a playlist URL.
+        if (streamInfo.SubProtocol == MediaStreamProtocol.hls)
+        {
+            return MimeTypes.GetMimeType("playlist.m3u8", null);
+        }
+
+        return string.IsNullOrEmpty(streamInfo.Container)
+            ? null
+            : MimeTypes.GetMimeType("." + streamInfo.Container, null);
     }
 
     /// <summary>
