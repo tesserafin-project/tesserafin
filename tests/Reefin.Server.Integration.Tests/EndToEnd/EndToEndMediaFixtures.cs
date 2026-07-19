@@ -29,6 +29,14 @@ public static class EndToEndMediaFixtures
     public const int Height = 240;
 
     /// <summary>
+    /// Gets the real ffprobe binary this class shells out to. Resolved as ffmpeg's own sibling when
+    /// <c>FFMPEG_PATH</c> names an explicit binary (the same override
+    /// <see cref="E2eApplicationFactory.FfmpegPath"/> honours), otherwise plain <c>"ffprobe"</c> off
+    /// <c>$PATH</c> - which <c>Dockerfile.ci</c> guarantees, exactly as it does for ffmpeg.
+    /// </summary>
+    private static string FfprobePath { get; } = ResolveFfprobePath();
+
+    /// <summary>
     /// Synthesizes a real H.264/AAC MP4 - a container/codec pair any reasonable client declares as a
     /// DirectPlay target, so this single fixture backs the DirectPlay, remux, transcode, and subtitle
     /// scenarios alike (the request's own constraints decide which method actually gets used).
@@ -62,6 +70,64 @@ public static class EndToEndMediaFixtures
     }
 
     /// <summary>
+    /// Synthesizes a real H.264/AAC MATROSKA file - same codecs as
+    /// <see cref="CreateH264AacMp4Async"/>, deliberately a different CONTAINER. Issue #57 needs a
+    /// source whose container differs from the announced output container, so "the bytes actually
+    /// served" and "the container the descriptor announces" are distinguishable at all: with an mp4
+    /// source remuxed to mp4 the defect is invisible, because serving the source verbatim still
+    /// yields mp4 bytes.
+    /// </summary>
+    /// <param name="directory">The directory to write the fixture into.</param>
+    /// <param name="fileName">The file name (including extension) to write.</param>
+    /// <returns>The full path to the synthesized file.</returns>
+    public static async Task<string> CreateH264AacMkvAsync(string directory, string fileName = "fixture.mkv")
+    {
+        var path = Path.Combine(directory, fileName);
+        string[] arguments =
+        [
+            "-hide_banner",
+            "-y",
+            "-f", "lavfi", "-i", $"testsrc=size={Width}x{Height}:rate=15:duration={DurationSeconds}",
+            "-f", "lavfi", "-i", $"sine=frequency=1000:duration={DurationSeconds}",
+            "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+            "-c:a", "aac",
+            "-f", "matroska",
+            path,
+        ];
+
+        await RunFfmpegAsync(arguments).ConfigureAwait(false);
+
+        if (!File.Exists(path) || new FileInfo(path).Length == 0)
+        {
+            throw new InvalidOperationException($"ffmpeg did not produce a non-empty fixture at {path}.");
+        }
+
+        return path;
+    }
+
+    /// <summary>
+    /// Runs the REAL ffprobe binary against a file on disk and returns its <c>format_name</c> - the
+    /// same identification a client-side player performs, and the strongest available statement about
+    /// what a byte buffer actually IS (as opposed to what a header claims). Used by the issue #57
+    /// scenario to prove the served bytes are genuinely ISOBMFF and not Matroska.
+    /// </summary>
+    /// <param name="path">The file to probe.</param>
+    /// <returns>ffprobe's own <c>format_name</c> for that file (for example <c>"mov,mp4,m4a,3gp,3g2,mj2"</c>).</returns>
+    public static async Task<string> ProbeFormatNameAsync(string path)
+    {
+        var (exitCode, stdout, stderr) = await RunAsync(
+            FfprobePath,
+            ["-hide_banner", "-v", "error", "-show_entries", "format=format_name", "-of", "default=noprint_wrappers=1:nokey=1", path]).ConfigureAwait(false);
+
+        if (exitCode != 0)
+        {
+            throw new InvalidOperationException($"ffprobe exited {exitCode} probing '{path}'.\nstderr tail: {Tail(stderr)}");
+        }
+
+        return stdout.Trim();
+    }
+
+    /// <summary>
     /// Writes a real, valid external SubRip (.srt) subtitle sidecar - no ffmpeg needed, an external
     /// subtitle is a plain sidecar file by definition (PR117 design doc §2.2's <c>SubtitleUrl</c>).
     /// </summary>
@@ -85,13 +151,36 @@ public static class EndToEndMediaFixtures
         return path;
     }
 
+    private static string ResolveFfprobePath()
+    {
+        var ffmpeg = E2eApplicationFactory.FfmpegPath;
+        var directory = Path.GetDirectoryName(ffmpeg);
+        if (string.IsNullOrEmpty(directory))
+        {
+            return "ffprobe";
+        }
+
+        var sibling = Path.Combine(directory, Path.GetFileName(ffmpeg).Replace("ffmpeg", "ffprobe", StringComparison.Ordinal));
+        return File.Exists(sibling) ? sibling : "ffprobe";
+    }
+
     private static async Task RunFfmpegAsync(string[] arguments)
+    {
+        var (exitCode, _, stderr) = await RunAsync(E2eApplicationFactory.FfmpegPath, arguments).ConfigureAwait(false);
+
+        if (exitCode != 0)
+        {
+            throw new InvalidOperationException($"ffmpeg exited {exitCode}. Arguments: {string.Join(' ', arguments)}\nstderr tail: {Tail(stderr)}");
+        }
+    }
+
+    private static async Task<(int ExitCode, string Stdout, string Stderr)> RunAsync(string fileName, string[] arguments)
     {
         using var process = new Process
         {
             StartInfo = new ProcessStartInfo
             {
-                FileName = E2eApplicationFactory.FfmpegPath,
+                FileName = fileName,
                 RedirectStandardError = true,
                 RedirectStandardOutput = true,
                 UseShellExecute = false,
@@ -114,16 +203,13 @@ public static class EndToEndMediaFixtures
         }
         catch (OperationCanceledException)
         {
-            throw new TimeoutException($"ffmpeg fixture synthesis timed out. Arguments: {string.Join(' ', arguments)}");
+            throw new TimeoutException($"'{fileName}' timed out. Arguments: {string.Join(' ', arguments)}");
         }
 
         var stderr = await stderrTask.ConfigureAwait(false);
-        await stdoutTask.ConfigureAwait(false);
+        var stdout = await stdoutTask.ConfigureAwait(false);
 
-        if (process.ExitCode != 0)
-        {
-            throw new InvalidOperationException($"ffmpeg exited {process.ExitCode}. Arguments: {string.Join(' ', arguments)}\nstderr tail: {Tail(stderr)}");
-        }
+        return (process.ExitCode, stdout, stderr);
     }
 
     private static string Tail(string text, int maxChars = 2000) => text.Length <= maxChars ? text : text[^maxChars..];

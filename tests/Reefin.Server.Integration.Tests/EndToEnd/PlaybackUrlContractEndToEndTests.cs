@@ -34,12 +34,18 @@ namespace Reefin.Server.Integration.Tests.EndToEnd;
 /// <para>
 /// <b>Scope, honestly stated (mirrors <c>ci/smoke.sh</c>'s own header discipline).</b> One real fixture
 /// (<see cref="EndToEndMediaFixtures.CreateH264AacMp4Async"/>, a genuine ffmpeg-synthesized H.264/AAC
-/// MP4) backs every scenario; what changes per scenario is the request's own
+/// MP4) backs every method-selection scenario; what changes per scenario is the request's own
 /// <see cref="PlaybackConstraints"/>/<see cref="ClientCapabilities"/> (see
 /// <see cref="EndToEndCapabilityPresets"/>'s remarks for the exact <c>StreamBuilder</c> mechanics this
 /// relies on, verified against <c>Reefin.Model/Dlna/StreamBuilder.cs</c>) - a deliberate simplification
-/// over maintaining five differently-encoded fixtures, since the play METHOD is what these tests need
-/// to control, not the codec. The library item itself is seeded directly
+/// over maintaining five differently-encoded fixtures, since the play METHOD is what those tests need
+/// to control, not the codec. The one deliberate exception is
+/// <see cref="Remux_MatroskaSourceAnnouncedAsMp4_ServesRealMp4Bytes"/> (issue #57), which asserts on
+/// the CONTENT of the served bytes rather than only on the method: it needs a source whose container
+/// genuinely differs from the announced output container, so it uses the real Matroska fixture
+/// <see cref="EndToEndMediaFixtures.CreateH264AacMkvAsync"/> - with an mp4 source the defect it pins
+/// is invisible, because serving the source verbatim still yields mp4 bytes. The library item itself
+/// is seeded directly
 /// (<see cref="LibraryItemSeeder"/>) rather than through a full virtual-folder scan - see that class's
 /// remarks for why that is a faithful shortcut of the exact same real persistence calls a scan would
 /// end up making, not a fake one.
@@ -290,6 +296,98 @@ public sealed class PlaybackUrlContractEndToEndTests : IClassFixture<E2eApplicat
         await AssertUrlServes200Async(afterDescriptor.Url, "After kill switch (legacy fallback)");
     }
 
+    /// <summary>
+    /// Scenario 6 (issue #57): a Remux decision must be EXECUTED, not merely announced.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The reported defect, measured: a Matroska source, a client that declares mp4-only decoding, a
+    /// <c>Remux</c> decision announcing <c>Container=mp4</c>/<c>MimeType=video/mp4</c> - and a media
+    /// response that was BYTE-IDENTICAL to the source <c>.mkv</c> (EBML magic <c>1a45dfa3</c>,
+    /// ffprobe <c>format_name=matroska,webm</c>) served under <c>Content-Type: video/mp4</c>. The
+    /// descriptor's URL carried <c>&amp;Static=true</c>, which
+    /// <c>VideosController.GetVideoStream</c> answers with the source file verbatim.
+    /// </para>
+    /// <para>
+    /// This test asserts the WHOLE chain in one place on purpose: method, URL shape, announced
+    /// container/MIME type, and what the bytes actually are. Any one of those alone can pass while
+    /// the defect is live - a URL-shape-only assertion in particular would have said nothing about
+    /// the bytes, which is the entire point. The byte-level assertions are deliberately layered from
+    /// cheapest to strongest: not-identical-to-source, then not-Matroska (EBML magic absent), then
+    /// positively ISOBMFF (<c>ftyp</c> at offset 4), then real ffprobe identification.
+    /// </para>
+    /// </remarks>
+    [Fact(Timeout = 90_000)]
+    public async Task Remux_MatroskaSourceAnnouncedAsMp4_ServesRealMp4Bytes()
+    {
+        var mkvPath = await EndToEndMediaFixtures.CreateH264AacMkvAsync(_workDir);
+        var itemId = LibraryItemSeeder.SeedVideo(
+            _libraryManager,
+            _mediaStreamRepository,
+            mkvPath,
+            "mkv",
+            _baseStreams,
+            $"Issue 57 matroska fixture {Guid.NewGuid()}");
+
+        var (capabilities, constraints) = EndToEndCapabilityPresets.RemuxMatroskaToMp4();
+
+        // The reported descriptor carried ServedBy=6 and NO FallbackReason - the v2 engine, not a
+        // legacy fallback. V2 mode (not merely Canary) makes every session v2-authoritative with no
+        // cohort-hash dependency; InitializeAsync resets this to Legacy before every test.
+        _configManager.Configuration.PlaybackShadow.Mode = PlaybackEngineMode.V2;
+
+        var session = await CreateSessionAsync(itemId, capabilities, constraints, "e2e-remux-mkv-to-mp4");
+        Assert.Equal(PlaybackMethod.Remux, session.Method);
+
+        var descriptor = await GetStreamDescriptorAsync(session.Id);
+
+        // Guard the premise: a legacy fallback here would silently turn this into a test of a
+        // different engine than the one issue #57 was reported against.
+        Assert.Null(descriptor.FallbackReason);
+        Assert.NotEqual(PlaybackSessionResponse.LegacyDecisionVersion, descriptor.ServedBy);
+
+        Assert.Equal(StreamingProtocol.Http, descriptor.Protocol);
+        Assert.Equal("mp4", descriptor.Container);
+        Assert.Equal("video/mp4", descriptor.MimeType);
+
+        // Static=true means "serve the source file untouched" - DirectPlay semantics. A Remux that
+        // asks for it can only ever serve the source container, whatever it announces.
+        Assert.DoesNotContain("Static=true", descriptor.Url, StringComparison.OrdinalIgnoreCase);
+
+        var served = await GetBytesAsync(descriptor.Url, "Remux (Matroska source announced as mp4)");
+        var source = await File.ReadAllBytesAsync(mkvPath, TestContext.Current.CancellationToken);
+
+        Assert.False(
+            served.AsSpan().SequenceEqual(source),
+            $"The served bytes are byte-identical to the source .mkv ({served.Length} bytes): the announced remux to mp4 never happened.");
+
+        Assert.False(
+            IsMatroska(served),
+            $"The served bytes start with the Matroska/EBML magic 1a45dfa3, but the descriptor announced Container=mp4/MimeType=video/mp4. Head: {Head(served)}");
+
+        Assert.True(
+            IsIsoBaseMediaFile(served),
+            $"The served bytes are not ISOBMFF: expected the ASCII box type 'ftyp' at offset 4. Head: {Head(served)}");
+
+        // The strongest available statement: what a real demuxer says the bytes ARE.
+        var probedPath = Path.Combine(_workDir, $"served-{Guid.NewGuid():N}.mp4");
+        await File.WriteAllBytesAsync(probedPath, served, TestContext.Current.CancellationToken);
+        var formatName = await EndToEndMediaFixtures.ProbeFormatNameAsync(probedPath);
+        Assert.DoesNotContain("matroska", formatName, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("mp4", formatName, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Matroska/EBML magic: <c>1A 45 DF A3</c> at offset 0.</summary>
+    private static bool IsMatroska(byte[] bytes) =>
+        bytes.Length >= 4 && bytes[0] == 0x1A && bytes[1] == 0x45 && bytes[2] == 0xDF && bytes[3] == 0xA3;
+
+    /// <summary>ISO base media file format: the ASCII box type <c>ftyp</c> at offset 4 (ISO/IEC 14496-12).</summary>
+    private static bool IsIsoBaseMediaFile(byte[] bytes) =>
+        bytes.Length >= 8 && bytes[4] == (byte)'f' && bytes[5] == (byte)'t' && bytes[6] == (byte)'y' && bytes[7] == (byte)'p';
+
+    private static string Head(byte[] bytes, int count = 16) =>
+        Convert.ToHexString(bytes, 0, Math.Min(count, bytes.Length));
+
     private Guid SeedItem() =>
         LibraryItemSeeder.SeedVideo(_libraryManager, _mediaStreamRepository, _fixturePath, "mp4", _baseStreams, $"PR119 fixture {Guid.NewGuid()}");
 
@@ -315,6 +413,16 @@ public sealed class PlaybackUrlContractEndToEndTests : IClassFixture<E2eApplicat
     }
 
     private async Task AssertUrlServes200Async(string relativeUrl, string diagnosticContext, int minBytes = 1)
+        => await GetBytesAsync(relativeUrl, diagnosticContext, minBytes);
+
+    /// <summary>
+    /// Fetches a URL the descriptor named and returns the bytes it actually served, asserting 200
+    /// and a minimum length first. Returning the bytes (rather than only asserting on them) is what
+    /// lets a caller assert on the CONTENT - see
+    /// <see cref="Remux_MatroskaSourceAnnouncedAsMp4_ServesRealMp4Bytes"/>, where the whole point is
+    /// that a 200 with the right Content-Type proved nothing about what was inside it.
+    /// </summary>
+    private async Task<byte[]> GetBytesAsync(string relativeUrl, string diagnosticContext, int minBytes = 1)
     {
         using var boundedCts = CreateBoundedCancellation();
         using var response = await _client.GetAsync(relativeUrl, boundedCts.Token);
@@ -323,6 +431,7 @@ public sealed class PlaybackUrlContractEndToEndTests : IClassFixture<E2eApplicat
             response.StatusCode == HttpStatusCode.OK,
             $"{diagnosticContext}: expected HTTP 200 fetching '{relativeUrl}', got {(int)response.StatusCode}. Body head: {Truncate(Encoding.UTF8.GetString(content))}");
         Assert.True(content.Length >= minBytes, $"{diagnosticContext}: '{relativeUrl}' returned 200 but only {content.Length} byte(s).");
+        return content;
     }
 
     private async Task<string> GetTextAsync(string relativeUrl, string diagnosticContext)

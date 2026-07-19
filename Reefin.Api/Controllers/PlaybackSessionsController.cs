@@ -19,6 +19,7 @@ using Reefin.Controller.MediaEncoding;
 using Reefin.Data.Enums;
 using Reefin.MediaEncoding.Playback;
 using Reefin.Model.Dlna;
+using Reefin.Model.Session;
 using Reefin.Playback.Dlna;
 
 namespace Reefin.Api.Controllers;
@@ -340,6 +341,45 @@ public class PlaybackSessionsController : BaseReefinApiController
         if (outcome is { ServedByV2: true } && _v2PlanStore.TryGet(session.Id, out var v2Record) && v2Record is not null)
         {
             servedBy = v2Record.Decision.EngineVersion;
+        }
+
+        // Issue #57: a Remux decision (domain PlaybackMethod.Remux, mapped by
+        // PlaybackExecutionPlanAdapter to legacy PlayMethod.DirectStream) announced a container the
+        // source file does not have - Container=mp4/MimeType=video/mp4 for a Matroska source - and
+        // then served that source file BYTE-IDENTICALLY. Cause: StreamInfo.ToUrl appends
+        // "&Static=true" for every IsDirectStream stream (DirectStream OR DirectPlay), and
+        // VideosController.GetVideoStream answers Static=true with
+        // FileStreamResponseHelpers.GetStaticFileResult(state.MediaPath, ...) - the source file
+        // verbatim, under the announced container's MIME type. The decision and the descriptor are
+        // both correct (the client declared it cannot decode the source container, which is exactly
+        // what the ContainerNotSupported reason means); it is the EXECUTION that must actually
+        // remux, so the URL must not ask for the static file.
+        //
+        // Normalizing PlayMethod to Transcode for URL serialization is not a re-decision: it is
+        // exactly what the legacy PlaybackInfo path already does at its own URL-minting site
+        // (MediaInfoHelper.SetDeviceSpecificData sets `streamInfo.PlayMethod = PlayMethod.Transcode`
+        // before calling ToUrl for mediaSource.TranscodingUrl), which is why that path never
+        // exhibited this defect. This v2 descriptor endpoint was the one URL-minting site that
+        // skipped the normalization.
+        //
+        // DirectPlay is deliberately NOT normalized: there Static=true is correct - the announced
+        // container IS the source's, so serving the file verbatim is the honest answer.
+        //
+        // Gated on ServedByV2, so the fix is confined to the v2 path exactly as the defect is. A
+        // LEGACY-fallback DirectStream resolved through this same endpoint announces the SOURCE
+        // container (measured: the same Matroska session that reports Container=mp4 under v2 reports
+        // Container=mkv on legacy fallback), so announced container and served bytes already agree
+        // there - it is not this defect, and normalizing it would be an unrequested behaviour change
+        // to a path that is not broken. Only the v2 adapter produces the mismatching pair
+        // (Container=mp4 for an mkv source) that makes Static=true a lie.
+        //
+        // Mutating here is safe and deliberately scoped: resolvedStreamInfo is the per-request
+        // MemberwiseClone WithRequestContext just produced (see the PR118 note above), never the
+        // instance session.Plan.StreamInfo retains, and PlayMethod is a value type. Nothing outside
+        // this method observes the change.
+        if (outcome is { ServedByV2: true } && resolvedStreamInfo.PlayMethod == PlayMethod.DirectStream)
+        {
+            resolvedStreamInfo.PlayMethod = PlayMethod.Transcode;
         }
 
         var descriptor = PlaybackSessionStreamDescriptorMapper.Map(resolvedStreamInfo, servedBy, outcome?.FallbackReason, _mediaEncoder, accessToken);
