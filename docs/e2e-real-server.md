@@ -146,20 +146,48 @@ log path.
 
 ## Verified result
 
-Against a server started by this script, from a `w13.8-reefin-glass` reefin-web checkout:
+Originally verified against `theme-glass.spec.ts` only, from a `w13.8-reefin-glass` reefin-web
+checkout (2 passed).
+
+Re-verified since against a reefin-web `main` production bundle, across the **full four-spec browser
+suite** — no spec modified, no skip, `workers: 1` untouched:
 
 ```
-Running 2 tests using 1 worker
-  ✓  1 [chromium] › theme-glass.spec.ts:152:9 › Classic (default) renders flat surfaces on /home and /library (12.0s)
-  ✓  2 [chromium] › theme-glass.spec.ts:167:9 › Glass frosts the same surfaces on /home and /library (10.4s)
-  2 passed (25.3s)
+Running 18 tests using 1 worker
+  ✓   1-9  [chromium] › glass-interaction-profiles.spec.ts  (blur tokens, lowPower, reducedTransparency,
+                        remote density, cumulative cascade, reducedMotion, no residue, Classic baseline+guard)
+  ✓  10-12 [chromium] › home.spec.ts       (sections after sign-in, ?tab= sync, keyboard-operable tab strip)
+  ✓  13-16 [chromium] › library.spec.ts    (both smoke-test movies, sort order, year round-trip, density persist)
+  ✓  17-18 [chromium] › theme-glass.spec.ts (Classic flat, Glass frosted — on /home and /library)
+  18 passed (45.9s)
 ```
+
+Reproduce it exactly with:
+
+```bash
+./ci/serve-e2e.sh --webdir <reefin-web>/dist --port 8097 \
+    --exec 'cd <reefin-web> && \
+        REEFIN_E2E_CAPTURE_DIR=/tmp/glass-captures \
+        npx playwright test \
+            tests/e2e/home.spec.ts tests/e2e/library.spec.ts \
+            tests/e2e/theme-glass.spec.ts tests/e2e/glass-interaction-profiles.spec.ts'
+```
+
+`--exec` exports `REEFIN_E2E_BASE_URL` / `REEFIN_E2E_USER` / `REEFIN_E2E_PASSWORD` and tears the
+server down afterwards. Set `REEFIN_E2E_CAPTURE_DIR` (and Playwright's `--output`) outside the
+reefin-web checkout if that tree must stay clean — `theme-glass.spec.ts` writes four PNG captures
+(`classic-home`, `classic-library`, `glass-home`, `glass-library`), which are the Glass review
+artifacts.
+
+The `library.spec.ts` assertions depend on this script's exact movies-library contract: **exactly
+two items**, `Smoke Test Movie` and `Transcode Probe`. Changing the fixtures breaks those specs.
 
 ## Proposed reefin-web change — described, deliberately NOT applied
 
-**No reefin-web change is required.** `tests/e2e/theme-glass.spec.ts` passes unmodified against a
-server started by this script; the spec already reads `REEFIN_E2E_BASE_URL` / `REEFIN_E2E_USER` /
-`REEFIN_E2E_PASSWORD`, which is exactly what `--exec` exports.
+**No reefin-web change is required.** All four browser specs (`home`, `library`, `theme-glass`,
+`glass-interaction-profiles`) pass unmodified against a server started by this script; they already
+read `REEFIN_E2E_BASE_URL` / `REEFIN_E2E_USER` / `REEFIN_E2E_PASSWORD`, which is exactly what
+`--exec` exports.
 
 There is, however, one worthwhile follow-up for whoever owns reefin-web:
 
