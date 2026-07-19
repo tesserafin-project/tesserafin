@@ -94,6 +94,74 @@ public static class EndToEndCapabilityPresets
         return (capabilities, constraints);
     }
 
+    /// <summary>
+    /// Issue #59, matrix row 2: <see cref="RemuxMatroskaToMp4"/> with transcoding explicitly
+    /// FORBIDDEN. Container is not supported but both codecs are copyable, so this is a genuine
+    /// remux - which <see cref="PlaybackConstraints.AllowDirectStream"/>=true must keep permitting.
+    /// Nothing here may be re-encoded, so <c>AllowTranscoding:false</c> must not block it.
+    /// </summary>
+    public static (ClientCapabilities Capabilities, PlaybackConstraints Constraints) RemuxMatroskaToMp4TranscodingForbidden()
+    {
+        var (capabilities, _) = RemuxMatroskaToMp4();
+        var constraints = BaseConstraints(allowDirectPlay: true, allowDirectStream: true, allowTranscoding: false);
+
+        return (capabilities, constraints);
+    }
+
+    /// <summary>
+    /// Issue #59, matrix row 3: the client cannot decode the fixture's codecs at all (it declares
+    /// vp9/opus against an h264/aac source), so no stream is copyable and the ONLY plan that could
+    /// ever serve this session is a real re-encode. With <c>AllowTranscoding:false</c> that plan is
+    /// forbidden, so the correct outcome is "no viable plan" - never a silent transcode.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="PlaybackConstraints.AllowDirectStream"/> stays true on purpose: that is the exact
+    /// combination that used to let legacy's <c>StreamBuilder.GetVideoTranscodeProfile</c> through on
+    /// the strength of <c>SupportsDirectStream</c> alone and re-encode anyway. DirectPlayProfiles is
+    /// declared but deliberately unsatisfiable (vp9/opus), which also satisfies the validator's
+    /// "declared nothing decodable" rule - so this request is VALID, and its rejection is a 422
+    /// ("no viable plan"), formally distinct from a 400 ("contradictory request").
+    /// </remarks>
+    public static (ClientCapabilities Capabilities, PlaybackConstraints Constraints) IncompatibleCodecsTranscodingForbidden()
+    {
+        const string UndecodableVideoCodec = "vp9";
+        const string UndecodableAudioCodec = "opus";
+
+        var decode = new DecodeCapabilities(
+            DirectPlayProfiles: [new DecodeProfile(MediaKind.Video, [FixtureContainer], [UndecodableVideoCodec], [UndecodableAudioCodec])],
+            VideoCodecs: [new VideoCodecCapability(UndecodableVideoCodec, [], null, null, [], null, null)],
+            AudioCodecs: [new AudioCodecCapability(UndecodableAudioCodec, null, null, null, null)],
+            SubtitleDelivery: [],
+            SupportsHls: true,
+            SupportsDash: false);
+
+        // An HLS output profile is declared so that a transcode is genuinely REACHABLE here: without
+        // it the request would be unservable for want of an output target rather than because
+        // AllowTranscoding:false forbade it, and the test would prove nothing about the constraint.
+        var outputProfiles = new List<PlaybackOutputProfile>
+        {
+            new(MediaKind.Video, StreamingProtocol.Hls, "ts", [UndecodableVideoCodec], [UndecodableAudioCodec], null, null, null),
+        };
+
+        var capabilities = new ClientCapabilities(decode, outputProfiles);
+        var constraints = BaseConstraints(allowDirectPlay: true, allowDirectStream: true, allowTranscoding: false);
+
+        return (capabilities, constraints);
+    }
+
+    /// <summary>
+    /// Issue #59, matrix row 5: every delivery method forbidden. Unlike
+    /// <see cref="IncompatibleCodecsTranscodingForbidden"/> this request is self-contradictory
+    /// (it permits no method at all), which the validator rejects with 400 before any planning runs.
+    /// </summary>
+    public static (ClientCapabilities Capabilities, PlaybackConstraints Constraints) AllMethodsForbidden()
+    {
+        var (capabilities, _) = DirectPlay();
+        var constraints = BaseConstraints(allowDirectPlay: false, allowDirectStream: false, allowTranscoding: false);
+
+        return (capabilities, constraints);
+    }
+
     public static (ClientCapabilities Capabilities, PlaybackConstraints Constraints) TranscodeHls()
     {
         // DirectPlayProfiles deliberately empty (no direct-play combination declared at all, so

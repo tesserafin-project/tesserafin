@@ -377,6 +377,134 @@ public sealed class PlaybackUrlContractEndToEndTests : IClassFixture<E2eApplicat
         Assert.Contains("mp4", formatName, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Issue #59, matrix row 2 - the STOP condition, with byte proof. A Matroska source, a client
+    /// that decodes mp4 only, and transcoding explicitly FORBIDDEN: both codecs are copyable, so this
+    /// is a genuine remux and <c>AllowDirectStream:true</c> must keep permitting it. The fix keys the
+    /// permission on the method really required, so a plan that copies every stream is never treated
+    /// as a transcode - if it over-blocked, this test is what breaks.
+    /// </summary>
+    /// <remarks>
+    /// Byte-level on purpose, and for the same reason as
+    /// <see cref="Remux_MatroskaSourceAnnouncedAsMp4_ServesRealMp4Bytes"/>: a 200 proves the request
+    /// was not refused, but only the bytes prove a REAL remux still happened under the constraint.
+    /// </remarks>
+    [Fact(Timeout = 90_000)]
+    public async Task Remux_TranscodingForbidden_StillServesRealRemuxedMp4Bytes()
+    {
+        var mkvPath = await EndToEndMediaFixtures.CreateH264AacMkvAsync(_workDir);
+        var itemId = LibraryItemSeeder.SeedVideo(
+            _libraryManager,
+            _mediaStreamRepository,
+            mkvPath,
+            "mkv",
+            _baseStreams,
+            $"Issue 59 remux-not-blocked fixture {Guid.NewGuid()}");
+
+        var (capabilities, constraints) = EndToEndCapabilityPresets.RemuxMatroskaToMp4TranscodingForbidden();
+        Assert.False(constraints.AllowTranscoding, "Premise: this row is only meaningful with transcoding forbidden.");
+
+        _configManager.Configuration.PlaybackShadow.Mode = PlaybackEngineMode.V2;
+
+        var session = await CreateSessionAsync(itemId, capabilities, constraints, "e2e-59-remux-allowed");
+        Assert.Equal(PlaybackMethod.Remux, session.Method);
+
+        var descriptor = await GetStreamDescriptorAsync(session.Id);
+        Assert.Equal("mp4", descriptor.Container);
+        Assert.DoesNotContain("Static=true", descriptor.Url, StringComparison.OrdinalIgnoreCase);
+
+        var served = await GetBytesAsync(descriptor.Url, "Remux under AllowTranscoding:false");
+        var source = await File.ReadAllBytesAsync(mkvPath, TestContext.Current.CancellationToken);
+
+        Assert.False(
+            served.AsSpan().SequenceEqual(source),
+            $"The served bytes are byte-identical to the source .mkv ({served.Length} bytes): the remux never happened.");
+        Assert.False(IsMatroska(served), $"Served bytes are still Matroska. Head: {Head(served)}");
+        Assert.True(IsIsoBaseMediaFile(served), $"Served bytes are not ISOBMFF ('ftyp' at offset 4). Head: {Head(served)}");
+
+        var probedPath = Path.Combine(_workDir, $"served-59-remux-{Guid.NewGuid():N}.mp4");
+        await File.WriteAllBytesAsync(probedPath, served, TestContext.Current.CancellationToken);
+        var formatName = await EndToEndMediaFixtures.ProbeFormatNameAsync(probedPath);
+        Assert.DoesNotContain("matroska", formatName, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("mp4", formatName, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Issue #59, matrix row 3 - the defect itself. The client cannot decode the source's codecs, so
+    /// the only plan that could serve this session is a real re-encode, and transcoding is forbidden.
+    /// The contractual answer is 422 ("no viable plan") - never a session that goes on to transcode.
+    /// </summary>
+    [Fact]
+    public async Task IncompatibleCodecs_TranscodingForbidden_YieldsNoViablePlan()
+    {
+        var itemId = SeedItem();
+        var (capabilities, constraints) = EndToEndCapabilityPresets.IncompatibleCodecsTranscodingForbidden();
+
+        _configManager.Configuration.PlaybackShadow.Mode = PlaybackEngineMode.V2;
+
+        var status = await CreateSessionExpectingFailureAsync(itemId, capabilities, constraints, "e2e-59-no-plan");
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, status);
+    }
+
+    /// <summary>
+    /// Issue #59, matrix row 3 on the LEGACY branch. Same request, but the kill switch forces the
+    /// legacy engine - the branch that used to ignore the constraint and re-encode anyway. Legacy
+    /// must now reach the same conclusion as v2.
+    /// </summary>
+    [Fact]
+    public async Task IncompatibleCodecs_TranscodingForbidden_LegacyBranchAlsoYieldsNoViablePlan()
+    {
+        var itemId = SeedItem();
+        var (capabilities, constraints) = EndToEndCapabilityPresets.IncompatibleCodecsTranscodingForbidden();
+
+        // The legacy engine, not v2: this is the branch issue #59 was reported against.
+        _configManager.Configuration.PlaybackShadow.Mode = PlaybackEngineMode.Legacy;
+
+        var status = await CreateSessionExpectingFailureAsync(itemId, capabilities, constraints, "e2e-59-no-plan-legacy");
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, status);
+    }
+
+    /// <summary>
+    /// Issue #59, matrix row 5 - a request permitting NO method at all is contradictory, and the
+    /// validator rejects it with 400 before any planning happens. Asserting 400 here and 422 above is
+    /// the point: "invalid request" and "valid request, no viable plan" must stay formally distinct.
+    /// </summary>
+    [Fact]
+    public async Task AllMethodsForbidden_IsRejectedByValidatorAsBadRequest()
+    {
+        var itemId = SeedItem();
+        var (capabilities, constraints) = EndToEndCapabilityPresets.AllMethodsForbidden();
+
+        var status = await CreateSessionExpectingFailureAsync(itemId, capabilities, constraints, "e2e-59-all-forbidden");
+
+        Assert.Equal(HttpStatusCode.BadRequest, status);
+    }
+
+    /// <summary>
+    /// POSTs a session expected NOT to succeed and returns the status code, asserting only that the
+    /// request genuinely failed. Deliberately separate from <see cref="CreateSessionAsync"/>, which
+    /// asserts success: a refusal is the assertion subject here, not an error to surface.
+    /// </summary>
+    private async Task<HttpStatusCode> CreateSessionExpectingFailureAsync(
+        Guid itemId,
+        ClientCapabilities capabilities,
+        PlaybackConstraints constraints,
+        string playSessionId)
+    {
+        var request = new CreatePlaybackSessionRequest(itemId, _userId, capabilities, constraints, MediaSourceId: null, PlaySessionId: playSessionId);
+        using var response = await _client.PostAsJsonAsync("Playback/Sessions", request, JsonDefaults.Options, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.False(
+            response.IsSuccessStatusCode,
+            $"POST Playback/Sessions was expected to be refused for PlaySessionId='{playSessionId}', but it SUCCEEDED with {(int)response.StatusCode}. " +
+            $"A session created here would go on to be served - which is exactly the issue #59 defect. Body: {Truncate(body)}");
+
+        return response.StatusCode;
+    }
+
     /// <summary>Matroska/EBML magic: <c>1A 45 DF A3</c> at offset 0.</summary>
     private static bool IsMatroska(byte[] bytes) =>
         bytes.Length >= 4 && bytes[0] == 0x1A && bytes[1] == 0x45 && bytes[2] == 0xDF && bytes[3] == 0xA3;
