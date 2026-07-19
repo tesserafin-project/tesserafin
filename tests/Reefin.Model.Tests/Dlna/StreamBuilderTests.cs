@@ -371,6 +371,144 @@ namespace Reefin.Model.Tests
             Assert.Equal(streamInfo?.SubtitleStreamIndex, options.SubtitleStreamIndex);
         }
 
+        // --- Issue #59: AllowTranscoding:false must forbid every real re-encode, on every branch,
+        // while AllowDirectStream:true must keep permitting a genuine remux / stream-copy.
+        //
+        // AllowTranscoding:false reaches StreamBuilder as MediaSourceInfo.SupportsTranscoding=false
+        // (MediaInfoHelper: "if (!enableTranscoding) mediaSource.SupportsTranscoding = false"), and
+        // AllowDirectStream:true as SupportsDirectStream=true. That is the exact combination that
+        // used to slip a real re-encode through GetVideoTranscodeProfile's OR guard.
+
+        /// <summary>
+        /// Matrix row 3 - codecs the client cannot decode, so the only remaining plan is a real
+        /// re-encode. AllowTranscoding:false must yield NO plan at all rather than a transcode.
+        /// This is the #59 regression: before the fix these cases returned PlayMethod.Transcode
+        /// (the enum's default is Transcode = 0) and the server went on to actually re-encode.
+        /// </summary>
+        [Theory]
+        // Full transcode in the baseline suite above (video codec is re-encoded):
+        [InlineData("AndroidTVExoPlayer", "mkv-vp9-vorbis-vtt-2600k")]
+        [InlineData("AndroidTVExoPlayer-NoHevcRotation", "mp4-hevc-aac-4000k-r180")]
+        [InlineData("LowBandwidth", "mkv-vp9-vorbis-vtt-2600k")]
+        public async Task BuildVideoItem_ReEncodeRequired_TranscodingForbidden_YieldsNoPlan(string deviceName, string mediaSource)
+        {
+            var options = await GetMediaOptions(deviceName, mediaSource);
+            var source = options.MediaSources[0];
+
+            // AllowTranscoding:false + AllowDirectStream:true
+            source.SupportsTranscoding = false;
+            source.SupportsDirectStream = true;
+
+            var streamInfo = GetStreamBuilder().GetOptimalVideoStream(options);
+
+            // No viable plan. Asserting null (not merely "PlayMethod != Transcode") matters: because
+            // PlayMethod is a non-nullable enum defaulting to Transcode, a half-built StreamInfo
+            // would still read as Transcode downstream.
+            Assert.Null(streamInfo);
+        }
+
+        /// <summary>
+        /// Matrix row 4 - non-regression: the very same sources still transcode normally when
+        /// AllowTranscoding is true. Guards against the fix degenerating into a blanket refusal.
+        /// </summary>
+        [Theory]
+        [InlineData("AndroidTVExoPlayer", "mkv-vp9-vorbis-vtt-2600k")]
+        [InlineData("AndroidTVExoPlayer-NoHevcRotation", "mp4-hevc-aac-4000k-r180")]
+        [InlineData("LowBandwidth", "mkv-vp9-vorbis-vtt-2600k")]
+        public async Task BuildVideoItem_ReEncodeRequired_TranscodingAllowed_StillTranscodes(string deviceName, string mediaSource)
+        {
+            var options = await GetMediaOptions(deviceName, mediaSource);
+            var source = options.MediaSources[0];
+
+            source.SupportsTranscoding = true;
+            source.SupportsDirectStream = true;
+
+            var streamInfo = GetStreamBuilder().GetOptimalVideoStream(options);
+
+            Assert.NotNull(streamInfo);
+            Assert.Equal(PlayMethod.Transcode, streamInfo.PlayMethod);
+
+            // A real re-encode: the source video codec is genuinely absent from the output codecs.
+            var sourceVideoCodecs = source.MediaStreams
+                .Where(stream => stream.Type == MediaStreamType.Video)
+                .Select(stream => stream.Codec);
+            Assert.All(sourceVideoCodecs, codec => Assert.DoesNotContain(codec, streamInfo.VideoCodecs));
+        }
+
+        /// <summary>
+        /// Matrix row 2 - the STOP condition. Container is not directly playable but every codec is
+        /// copyable, so this is a genuine remux. AllowDirectStream:true must keep it working even
+        /// though AllowTranscoding is false: the fix keys on the method actually required, so a
+        /// plan that copies every stream is never treated as a transcode.
+        /// </summary>
+        [Theory]
+        // Baseline suite classifies these as PlayMethod.Transcode in "Remux" mode: video and audio
+        // are both stream-copied, only the container changes.
+        [InlineData("WebOS-23", "mkv-dvhe.08-eac3-15200k")]
+        [InlineData("WebOS-23", "mkv-dvhe.05-eac3-28000k")]
+        public async Task BuildVideoItem_RemuxOnly_TranscodingForbidden_StillRemuxes(string deviceName, string mediaSource)
+        {
+            var options = await GetMediaOptions(deviceName, mediaSource);
+            var source = options.MediaSources[0];
+
+            source.SupportsTranscoding = false;
+            source.SupportsDirectStream = true;
+
+            var streamInfo = GetStreamBuilder().GetOptimalVideoStream(options);
+
+            Assert.NotNull(streamInfo);
+
+            // Nothing is re-encoded: both the video and the audio codec are carried through
+            // unchanged. This is the assertion that would break if the fix over-blocked remuxes.
+            var sourceVideo = source.MediaStreams.First(stream => stream.Type == MediaStreamType.Video);
+            var sourceAudio = source.MediaStreams.First(stream => stream.Type == MediaStreamType.Audio);
+
+            Assert.Contains(sourceVideo.Codec, streamInfo.TargetVideoCodec);
+            Assert.Single(streamInfo.TargetVideoCodec);
+            Assert.Contains(sourceAudio.Codec, streamInfo.AudioCodecs);
+            Assert.Single(streamInfo.AudioCodecs);
+        }
+
+        /// <summary>
+        /// Matrix row 1 - a directly playable source is untouched by the constraint: DirectPlay does
+        /// not re-encode, so AllowTranscoding:false is irrelevant to it.
+        /// </summary>
+        [Theory]
+        [InlineData("AndroidTVExoPlayer", "mp4-h264-aac-vtt-2600k")]
+        [InlineData("AndroidTVExoPlayer", "mkv-vp9-aac-srt-2600k")]
+        public async Task BuildVideoItem_DirectPlayable_TranscodingForbidden_StillDirectPlays(string deviceName, string mediaSource)
+        {
+            var options = await GetMediaOptions(deviceName, mediaSource);
+            var source = options.MediaSources[0];
+
+            source.SupportsTranscoding = false;
+            source.SupportsDirectStream = true;
+
+            var streamInfo = GetStreamBuilder().GetOptimalVideoStream(options);
+
+            Assert.NotNull(streamInfo);
+            Assert.Equal(PlayMethod.DirectPlay, streamInfo.PlayMethod);
+        }
+
+        /// <summary>
+        /// Matrix row 5 - every method forbidden. The pre-existing "neither transcoding nor direct
+        /// streaming is permitted" guard still applies and no plan is produced.
+        /// </summary>
+        [Fact]
+        public async Task BuildVideoItem_AllMethodsForbidden_YieldsNoPlan()
+        {
+            var options = await GetMediaOptions("AndroidTVExoPlayer", "mkv-vp9-vorbis-vtt-2600k");
+            var source = options.MediaSources[0];
+
+            source.SupportsTranscoding = false;
+            source.SupportsDirectStream = false;
+            source.SupportsDirectPlay = false;
+
+            var streamInfo = GetStreamBuilder().GetOptimalVideoStream(options);
+
+            Assert.Null(streamInfo);
+        }
+
         private StreamInfo? BuildVideoItemSimpleTest(MediaOptions options, PlayMethod? playMethod, TranscodeReason why, string transcodeMode, string transcodeProtocol)
         {
             if (string.IsNullOrEmpty(transcodeProtocol))

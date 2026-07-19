@@ -661,7 +661,7 @@ namespace Reefin.Model.Dlna
             playlistItem.AudioCodecs = ContainerHelper.Split(directPlayProfile?.AudioCodec);
         }
 
-        private StreamInfo BuildVideoItem(MediaSourceInfo item, MediaOptions options)
+        private StreamInfo? BuildVideoItem(MediaSourceInfo item, MediaOptions options)
         {
             ArgumentNullException.ThrowIfNull(item);
 
@@ -813,7 +813,20 @@ namespace Reefin.Model.Dlna
             {
                 // Can't direct play, find the transcoding profile
                 // If we do this for direct-stream we will overwrite the info
-                var (transcodingProfile, playMethod) = GetVideoTranscodeProfile(item, options, videoStream, audioStream, playlistItem);
+                var (transcodingProfile, playMethod, noPermittedMethod) = GetVideoTranscodeProfile(item, options, videoStream, audioStream, playlistItem);
+
+                // Issue #59: the only plan left for this source would re-encode, and this request
+                // forbids that (AllowTranscoding:false). PlayMethod is a non-nullable enum whose
+                // default is Transcode, so simply declining to set it here would hand back a
+                // StreamInfo still claiming Transcode - which is how the legacy path came to serve a
+                // real re-encode in spite of the constraint. Drop the source instead, exactly as the
+                // audio path already does when a transcode is required but not permitted
+                // (see GetOptimalAudioStream). GetOptimalVideoStream skips null sources, so a request
+                // with no other viable source surfaces as "no viable plan" rather than a silent transcode.
+                if (noPermittedMethod)
+                {
+                    return null;
+                }
 
                 if (transcodingProfile is not null && playMethod.HasValue)
                 {
@@ -852,7 +865,7 @@ namespace Reefin.Model.Dlna
             return playlistItem;
         }
 
-        private (TranscodingProfile? Profile, PlayMethod? PlayMethod) GetVideoTranscodeProfile(
+        private (TranscodingProfile? Profile, PlayMethod? PlayMethod, bool NoPermittedMethod) GetVideoTranscodeProfile(
             MediaSourceInfo item,
             MediaOptions options,
             MediaStream? videoStream,
@@ -863,9 +876,14 @@ namespace Reefin.Model.Dlna
 
             ArgumentNullException.ThrowIfNull(mediaSource);
 
+            // Neither transcoding nor direct streaming is permitted, and we only get here when
+            // DirectPlay did not resolve either (see the caller's guard) - so nothing at all can be
+            // served for this source. Reported as "no permitted method" for the same reason as the
+            // re-encode refusal below: PlayMethod defaults to Transcode, so returning without a
+            // profile would otherwise hand back a StreamInfo claiming Transcode with empty codecs.
             if (!(item.SupportsTranscoding || item.SupportsDirectStream))
             {
-                return (null, null);
+                return (null, null, NoPermittedMethod: true);
             }
 
             var transcodingProfiles = options.Profile.TranscodingProfiles
@@ -936,7 +954,29 @@ namespace Reefin.Model.Dlna
 
             var profileMatch = analyzedProfiles.FirstOrDefault();
 
-            return (profileMatch.Profile, profileMatch.PlayMethod);
+            // Issue #59: the guard above only establishes that *some* delivery is permitted
+            // (SupportsTranscoding OR SupportsDirectStream). It does not establish that the plan we
+            // actually landed on is permitted. With AllowTranscoding:false + AllowDirectStream:true
+            // (SupportsTranscoding=false, SupportsDirectStream=true) the OR let every profile
+            // through, and since the caller unconditionally labels this branch PlayMethod.Transcode
+            // (see BuildVideoItem), a genuine re-encode was served in spite of AllowTranscoding:false.
+            //
+            // So key the permission on the method this profile really requires, rather than on the
+            // aggregate capability flags: a profile that copies every stream is a remux and stays
+            // allowed under AllowDirectStream alone, while a profile that re-encodes anything needs
+            // SupportsTranscoding. Rank.Video/Rank.Audio == 1 is precisely "this stream is copied"
+            // (the same both-streams-copied test the v2 engine's own Remux gate applies); a source
+            // with no audio stream has no audio to re-encode. Rank is ordered lexicographically, so
+            // if the winning profile is not fully copyable then no candidate profile was.
+            var copiesEveryStream = profileMatch.Rank.Video == 1
+                && (audioStream is null || profileMatch.Rank.Audio == 1);
+
+            if (profileMatch.Profile is not null && !copiesEveryStream && !item.SupportsTranscoding)
+            {
+                return (null, null, NoPermittedMethod: true);
+            }
+
+            return (profileMatch.Profile, profileMatch.PlayMethod, NoPermittedMethod: false);
         }
 
         private void BuildStreamVideoItem(
