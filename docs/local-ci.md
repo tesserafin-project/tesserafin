@@ -103,6 +103,28 @@ aussi les artefacts root-owned laissés par une exécution précédente.
 > `./ci/run.sh local` serait silencieusement ignoré — la commande exacte est
 > `./ci/run.sh` tout court.
 
+### Preuve de référence de la porte
+
+Exécution probante sur `master` non modifié, au moment du parking :
+
+| | |
+| --- | --- |
+| Date | 2026-07-19 |
+| cwd | `/home/alex/Repos/.wt/it13-rig` (worktree propre) |
+| SHA | `756cea19519e8c395ad763e117abb0602c087108` |
+| Commande | purge `bin/`+`obj/`, puis `./ci/run.sh` |
+| Exit code | **0** |
+| Durée | 5 min 53 s (354 s de build+test) |
+| Résultat | `RESULT: PASS` — 21 assemblies, **4020 passés, 0 échec, 11 skipped** |
+
+Les 11 skips sont structurels et non des skips de complaisance : 4
+`ManagedFileSystemTests` Windows-only, 2 `MediaEncoding`, 2 `Controller`,
+3 `Integration`.
+
+C'est le vert de référence auquel comparer toute exécution ultérieure. Un
+`PASS` avec un total de tests **inférieur** à 4020 doit être traité comme un
+faux vert (typiquement un `obj/` non purgé) et non comme un succès.
+
 ## Comment lancer
 
 ```bash
@@ -226,12 +248,27 @@ Workflows **laissés intacts**, et pourquoi :
 
 ## Retour à la normale
 
-L'issue #62 ne pourra être close que lorsque les trois conditions suivantes
-sont vraies *simultanément* :
+Le parking supprime le bruit ; **il ne répare pas GitHub Actions**. L'issue #62
+ne pourra être close que lorsque les cinq conditions suivantes sont vraies
+*simultanément* :
 
-1. aucun check n'échoue avant son premier step ;
-2. aucun check optionnel ne reste `pending` indéfiniment ;
-3. la porte obligatoire a une autorité explicite.
+1. quota / facturation, ou allocation Actions, rétabli ;
+2. déclencheurs d'origine restaurés (tableau ci-dessus, rappelés en tête de
+   chaque fichier) ;
+3. runner self-hosted disponible, **ou** `local-ci.yml` retiré proprement ;
+4. ABI, OpenAPI, tests et CodeQL exécutent réellement leurs steps ;
+5. un run complet vert observé, **CodeQL inclus**.
+
+Corollaires des critères historiques, conservés car ils restent exigibles :
+aucun check ne doit échouer avant son premier step, aucun check optionnel ne
+doit rester `pending` indéfiniment, et la porte obligatoire doit avoir une
+autorité explicite.
+
+> **Dette de sécurité ouverte et assumée.** Tant que ce parking dure, **aucune
+> analyse CodeQL distante n'est produite**. Ce n'est pas une protection
+> prétendument active : c'est une absence, visible et temporaire. La porte
+> locale ne remplace pas CodeQL. La condition 5 exige explicitement un run
+> CodeQL vert avant clôture.
 
 Aucune de ces conditions n'est atteignable depuis le dépôt. Il faut **une
 action humaine de facturation, ou l'enregistrement d'un runner**. Et la
