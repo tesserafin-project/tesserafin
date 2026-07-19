@@ -526,22 +526,34 @@ log "authenticated — userId=${USER_ID}"
 urlenc() { printf '%s' "$1" | python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe=""))'; }
 
 add_library() {
-    # add_library DISPLAY_NAME COLLECTION_TYPE MEDIA_PATH
-    api POST "/Library/VirtualFolders?name=$(urlenc "$1")&collectionType=$2&paths=$(urlenc "$3")&refreshLibrary=true" \
+    # add_library DISPLAY_NAME COLLECTION_TYPE MEDIA_PATH REFRESH(true|false)
+    #
+    # EXACTLY ONE call in this script may pass REFRESH=true, and it must be the last one.
+    # refreshLibrary=true makes LibraryManager.AddVirtualFolder call StartScanInBackground(),
+    # which is a fire-and-forget Task.Run(ValidateMediaLibrary) over the WHOLE library root —
+    # not just the folder being added. Two such calls race: the second scan cancels the first
+    # mid-flight (visible in the server log as "Attempting to cancel Scheduled Task Scan Media
+    # Library" followed by an OperationCanceledException out of
+    # ItemPersistenceService.UpdateOrInsertItems), and the cancelled scan can leave a library
+    # with no items at all. That is a genuine, intermittent seeding failure — the rig then
+    # burns the full --timeout and dies with correct fixtures that were simply never indexed.
+    # One scan, fired after every folder is registered, covers every root.
+    api POST "/Library/VirtualFolders?name=$(urlenc "$1")&collectionType=$2&paths=$(urlenc "$3")&refreshLibrary=$4" \
         -H 'Content-Type: application/json' \
         -d '{"LibraryOptions":{"EnableRealtimeMonitor":false,"EnableChapterImageExtraction":false,"ExtractChapterImagesDuringLibraryScan":false}}' \
         >/dev/null
-    log "library '$1' (collectionType=$2) created over $3"
+    log "library '$1' (collectionType=$2, refreshLibrary=$4) created over $3"
 }
 
 # The specs specifically look for a view with CollectionType == "movies", so the
 # library MUST be created as a movies collection — and must remain the ONLY one, because
 # library.spec.ts and theme-glass.spec.ts both resolve it with a first-match `.find()`.
-add_library "Movies" movies "$MEDIA_DIR"
+add_library "Movies" movies "$MEDIA_DIR" false
 # The remux fixture lives here rather than in Movies so the movies grid keeps exactly two
 # cards. homevideos still resolves to Video items, so ffprobe metadata and external-subtitle
 # resolution work identically — only the card count of the contract library is protected.
-add_library "Codec Probes" homevideos "$PROBE_DIR"
+# Last folder registered, so this is the one that triggers the single library scan.
+add_library "Codec Probes" homevideos "$PROBE_DIR" true
 
 # ---------------------------------------------------------------------------
 # Wait for the library scan — asynchronous, so "server up" is NOT "view present".
