@@ -161,6 +161,57 @@ public class PlaybackSessionsControllerTests
         return underlying;
     }
 
+    /// <summary>
+    /// Issue #43, end-to-end over a REAL <see cref="PlaybackSessionManager"/> (every other test in
+    /// this file mocks it, which is exactly why the defect below survived): the ordinary client
+    /// sequence - POST Playback/Sessions, then an HLS segment fetch, which reaches
+    /// <see cref="IPlaybackSessionManager.Track"/> with the same PlaySessionId and no request of its
+    /// own - must leave the session's OWNER still able to end their own session.
+    ///
+    /// Before the StoreOrReplace fix, Track nulled the stored request, and
+    /// <c>EnsureCallerOwnsSessionOrIsAdmin</c> reads ownership off <c>session.Request?.Options
+    /// .UserId</c>, forbidding on null. So DELETE answered 403 to the very user who created the
+    /// session, and the client-side teardown of #43 could never complete. An administrator was
+    /// unaffected, which is what made the endpoint read as "admin only".
+    /// </summary>
+    [Fact]
+    public async Task DeletePlaybackSession_OwnerAfterSegmentFetchTrackedSession_StillSucceeds()
+    {
+        var item = new Movie { Id = _itemId };
+        SetUpItemAndUser(item);
+        var streamInfo = new StreamInfo { DeviceProfile = new DeviceProfile(), PlayMethod = PlayMethod.DirectPlay, Container = "mp4" };
+        var plan = new PlaybackPlan(PlayMethod.DirectPlay, default, streamInfo);
+        var planner = new Mock<IPlaybackSessionPlanner>();
+        planner.Setup(p => p.PlanVideo(It.IsAny<MediaOptions>())).Returns(plan);
+        using var realManager = new PlaybackSessionManager(
+            planner.Object,
+            new Mock<ITranscodeManager>().Object,
+            new Mock<Reefin.Controller.Session.ISessionManager>().Object);
+
+        var controller = new PlaybackSessionsController(
+            realManager,
+            _itemLookupService.Object,
+            _userManager.Object,
+            _mediaSourceManager.Object,
+            _v2PlanStore.Object,
+            _liveStreamResolver.Object,
+            _liveWiringDiagnosticsStore.Object,
+            _mediaEncoder.Object);
+        SetIdentity(controller, _userId);
+
+        var created = await controller.CreatePlaybackSession(CreateRequest(playSessionId: "play-session-1"));
+        var response = Assert.IsType<PlaybackSessionResponse>(
+            Assert.IsType<Reefin.Api.Results.OkResult<PlaybackSessionResponse>>(created.Result).Value);
+
+        // The HLS segment path (DynamicHlsController -> PlaybackSessionManager.Track): same play
+        // session id, no request to contribute.
+        realManager.Track(PlaybackMediaKind.Video, plan, "play-session-1");
+
+        var deleted = controller.DeletePlaybackSession(new PlaybackSessionId(response.Id));
+
+        Assert.IsType<NoContentResult>(deleted);
+    }
+
     [Fact]
     public async Task CreatePlaybackSession_ViablePlan_ReturnsMappedResponse()
     {
