@@ -1702,6 +1702,20 @@ namespace Reefin.Controller.MediaEncoding
                 || string.Equals(videoCodec, "hevc_vaapi", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(videoCodec, "av1_vaapi", StringComparison.OrdinalIgnoreCase))
             {
+                // No usable target bitrate could be derived for this job
+                // (GetVideoBitrateParamValue returns 0 when neither the request nor the
+                // source stream carries a bitrate, unlike the null case handled above).
+                // VAAPI rate control rejects a zero bitrate in both VBR and CBR mode, which
+                // makes every hardware transcode fail. Emit no rate-control arguments at all
+                // and let the encoder fall back to its native constant-QP default, which is
+                // the same policy the `OutputVideoBitrate is null` branch above already applies.
+                // Deliberately not substituting an invented bitrate or an explicit -rc_mode CQP
+                // with a hand-picked QP: no quality target is specified anywhere in the config.
+                if (bitrate <= 0)
+                {
+                    return string.Empty;
+                }
+
                 // VBR in i965 driver may result in pixelated output.
                 if (_mediaEncoder.IsVaapiDeviceInteli965)
                 {
