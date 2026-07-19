@@ -1,12 +1,38 @@
+# PARKED — manual trigger only (issue #62). Same allocation refusal as the
+# other hosted workflows: red on every pull request and every push to master
+# before the first step, plus a weekly cron that failed the same way and kept
+# burning allocation attempts for nothing. Nothing is fixed here — the trigger
+# is disarmed to stop the noise. See docs/local-ci.md.
+#
+# Loss of coverage is real and accepted for the duration of the outage: no
+# static security analysis runs while this is parked. The local gate does NOT
+# replace CodeQL. Restoring this is part of the return-to-normal checklist.
+#
+# Previous trigger: on: push (master) + pull_request (master) + schedule
+# ('24 2 * * 4')
+#
+# ── Parking stamp ──────────────────────────────────────────────────────────
+# Parked on : 2026-07-19
+# Cause     : external, account-wide. GitHub refuses runner allocation before
+#             the first step. all3f0r1 = free plan, all3f0r1/reefin = PRIVATE,
+#             so Actions minutes are metered against a 2000 min/month
+#             ACCOUNT-WIDE allowance. July 2026 weighted usage ~2646 min
+#             (Linux 634 x1 + Windows 266 x2 + macOS 148 x10), drained mostly
+#             by another repo. Spending limit is $0, so the overage is refused
+#             rather than billed.
+# Evidence  : run 29695198403 (ABI Compatibility) and run 29695198446
+#             (OpenAPI Check), both `failure` in 3-4s with ZERO steps and no
+#             annotations, while actions/permissions = {enabled: true,
+#             allowed_actions: all} and every runs-on label is valid.
+#             GET /actions/runners -> total_count: 0.
+# Restore   : see the checklist in docs/local-ci.md (section 'Retour a la
+#             normale'). The original trigger is recorded above verbatim.
+# ───────────────────────────────────────────────────────────────────────────
+
 name: "CodeQL"
 
 on:
-  push:
-    branches: [ master ]
-  pull_request:
-    branches: [ master ]
-  schedule:
-    - cron: '24 2 * * 4'
+  workflow_dispatch:
 
 permissions:
   contents: read

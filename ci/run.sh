@@ -1,10 +1,19 @@
 #!/usr/bin/env bash
 # Local CI — single entry point.
 #
-# Why this exists: hosted GitHub Actions quota has been exhausted since
-# ~2026-07-06. Until it resets (or a self-hosted runner picks up
-# .github/workflows/local-ci.yml), this script IS the mandatory merge gate.
-# See docs/local-ci.md.
+# Why this exists (issue #62): GitHub refuses to allocate a hosted runner for
+# this PRIVATE repo BEFORE the first step — the all3f0r1 account's 2000 free
+# Actions minutes/month are account-wide and exhausted (~2646 weighted minutes
+# in July 2026, drained mostly by another repo), and the spending limit is $0,
+# so the overage is refused rather than billed. No self-hosted runner is
+# registered either (total_count: 0). Until a human raises the spending limit,
+# makes the repo public, or registers a runner with the labels
+# self-hosted,linux,x64,reefin, this script IS the mandatory merge gate.
+#
+# IMPORTANT: purge every bin/ and obj/ before running this as a merge gate:
+#   find . -type d \( -name bin -o -name obj \) -prune -exec rm -rf {} +
+# See docs/local-ci.md ("Porte de référence") for why. This script takes no
+# arguments.
 #
 # What it does: builds the reefin-ci image from Dockerfile.ci (repo root),
 # then runs `dotnet build` + `dotnet test` for the full solution inside a

@@ -1,8 +1,36 @@
+# PARKED — manual trigger only (issue #62). No repository guard, hosted
+# runner, so under the current allocation refusal it produced one failed run
+# per issue opened, before its first step. It does not pollute pull requests
+# and gates no merge, but it fails the same way as the parked crons and is
+# parked for the same reason: stop emitting runs that can never start.
+# Nothing is fixed here. See docs/local-ci.md.
+#
+# NOTE: the job reads github.event.issue.*, so a manual dispatch does nothing
+# useful. The real re-enable is restoring `issues: types: [opened]`.
+#
+# Previous trigger: on: issues (types: [opened])
+#
+# ── Parking stamp ──────────────────────────────────────────────────────────
+# Parked on : 2026-07-19
+# Cause     : external, account-wide. GitHub refuses runner allocation before
+#             the first step. all3f0r1 = free plan, all3f0r1/reefin = PRIVATE,
+#             so Actions minutes are metered against a 2000 min/month
+#             ACCOUNT-WIDE allowance. July 2026 weighted usage ~2646 min
+#             (Linux 634 x1 + Windows 266 x2 + macOS 148 x10), drained mostly
+#             by another repo. Spending limit is $0, so the overage is refused
+#             rather than billed.
+# Evidence  : run 29695198403 (ABI Compatibility) and run 29695198446
+#             (OpenAPI Check), both `failure` in 3-4s with ZERO steps and no
+#             annotations, while actions/permissions = {enabled: true,
+#             allowed_actions: all} and every runs-on label is valid.
+#             GET /actions/runners -> total_count: 0.
+# Restore   : see the checklist in docs/local-ci.md (section 'Retour a la
+#             normale'). The original trigger is recorded above verbatim.
+# ───────────────────────────────────────────────────────────────────────────
+
 name: Check Issue Template
 on:
-  issues:
-    types:
-      - opened
+  workflow_dispatch:
 jobs:
   check_issue:
     runs-on: ubuntu-latest

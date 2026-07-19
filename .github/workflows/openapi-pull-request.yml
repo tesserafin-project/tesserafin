@@ -1,6 +1,41 @@
+# PARKED — manual trigger only (issue #62). Same cause as ci-compat.yml:
+# GitHub refuses to allocate a hosted runner for this PRIVATE repo BEFORE the
+# first step (account-wide free allowance exhausted, spending limit $0), so
+# "Common Ancestor" / "Head Artifact" / "Base Artifact" failed in 3-4 s with
+# zero steps executed. Nothing is fixed here — the trigger is disarmed so this
+# stops reddening every pull request. See docs/local-ci.md.
+#
+# The OpenAPI contract is NOT unguarded meanwhile: OpenApiContractTests runs
+# inside the mandatory local gate (./ci/run.sh) and fails it on drift.
+# See docs/openapi-contract.md.
+#
+# NOTE: the jobs below read github.event.pull_request.*, so a manual
+# workflow_dispatch run cannot produce a meaningful diff report. The real
+# re-enable is restoring `pull_request:`.
+#
+# Previous trigger: on: pull_request
+#
+# ── Parking stamp ──────────────────────────────────────────────────────────
+# Parked on : 2026-07-19
+# Cause     : external, account-wide. GitHub refuses runner allocation before
+#             the first step. all3f0r1 = free plan, all3f0r1/reefin = PRIVATE,
+#             so Actions minutes are metered against a 2000 min/month
+#             ACCOUNT-WIDE allowance. July 2026 weighted usage ~2646 min
+#             (Linux 634 x1 + Windows 266 x2 + macOS 148 x10), drained mostly
+#             by another repo. Spending limit is $0, so the overage is refused
+#             rather than billed.
+# Evidence  : run 29695198403 (ABI Compatibility) and run 29695198446
+#             (OpenAPI Check), both `failure` in 3-4s with ZERO steps and no
+#             annotations, while actions/permissions = {enabled: true,
+#             allowed_actions: all} and every runs-on label is valid.
+#             GET /actions/runners -> total_count: 0.
+# Restore   : see the checklist in docs/local-ci.md (section 'Retour a la
+#             normale'). The original trigger is recorded above verbatim.
+# ───────────────────────────────────────────────────────────────────────────
+
 name: OpenAPI Check
 on:
-  pull_request:
+  workflow_dispatch:
 
 jobs:
   ancestor:

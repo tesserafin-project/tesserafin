@@ -1,8 +1,33 @@
+# Cron disarmed — manual trigger only (issue #62). This has no repository
+# guard and runs on a hosted runner, so under the current allocation refusal
+# it produced one failed run per day, before its first step, forever. It is
+# not a pull-request check, but it is pure noise and it keeps requesting an
+# allocation that is being denied. Nothing is fixed here; the schedule is
+# removed and workflow_dispatch (already present) is kept. See docs/local-ci.md.
+#
+# Previous trigger: on: schedule ('30 1 * * *') + workflow_dispatch
+#
+# ── Parking stamp ──────────────────────────────────────────────────────────
+# Parked on : 2026-07-19
+# Cause     : external, account-wide. GitHub refuses runner allocation before
+#             the first step. all3f0r1 = free plan, all3f0r1/reefin = PRIVATE,
+#             so Actions minutes are metered against a 2000 min/month
+#             ACCOUNT-WIDE allowance. July 2026 weighted usage ~2646 min
+#             (Linux 634 x1 + Windows 266 x2 + macOS 148 x10), drained mostly
+#             by another repo. Spending limit is $0, so the overage is refused
+#             rather than billed.
+# Evidence  : run 29695198403 (ABI Compatibility) and run 29695198446
+#             (OpenAPI Check), both `failure` in 3-4s with ZERO steps and no
+#             annotations, while actions/permissions = {enabled: true,
+#             allowed_actions: all} and every runs-on label is valid.
+#             GET /actions/runners -> total_count: 0.
+# Restore   : see the checklist in docs/local-ci.md (section 'Retour a la
+#             normale'). The original trigger is recorded above verbatim.
+# ───────────────────────────────────────────────────────────────────────────
+
 name: Stale Issue Labeler
 
 on:
-  schedule:
-    - cron: '30 1 * * *'
   workflow_dispatch:
 
 permissions:
