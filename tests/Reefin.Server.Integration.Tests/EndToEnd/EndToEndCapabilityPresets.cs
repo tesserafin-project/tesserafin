@@ -65,6 +65,35 @@ public static class EndToEndCapabilityPresets
         return (capabilities, constraints);
     }
 
+    /// <summary>
+    /// Issue #57's exact reported shape: the client declares it can direct-play H.264/AAC in
+    /// <c>mp4</c> ONLY, against a real MATROSKA source (<c>EndToEndMediaFixtures.CreateH264AacMkvAsync</c>).
+    /// The container is not supported (<c>ContainerNotSupported</c>) but both codecs are copyable
+    /// (<c>StreamCopyable</c>), so the decision is <c>Remux</c> to <c>mp4</c> - and unlike
+    /// <see cref="Remux()"/> (mp4 source, mp4 bytes either way) the announced container and the source
+    /// container genuinely differ, which is what makes "did the server actually remux?" observable.
+    /// </summary>
+    /// <remarks>
+    /// Every method stays allowed, deliberately: the reported decision carried
+    /// <c>Reasons=[MethodChosen, ContainerNotSupported, StreamCopyable]</c>, i.e. Remux was CHOSEN on
+    /// its merits, not forced by a constraint that forbade the alternatives.
+    /// </remarks>
+    public static (ClientCapabilities Capabilities, PlaybackConstraints Constraints) RemuxMatroskaToMp4()
+    {
+        var decode = new DecodeCapabilities(
+            DirectPlayProfiles: [new DecodeProfile(MediaKind.Video, [FixtureContainer], [FixtureVideoCodec], [FixtureAudioCodec])],
+            VideoCodecs: [new VideoCodecCapability(FixtureVideoCodec, [], null, null, [], null, null)],
+            AudioCodecs: [new AudioCodecCapability(FixtureAudioCodec, null, null, null, null)],
+            SubtitleDelivery: [],
+            SupportsHls: true,
+            SupportsDash: false);
+
+        var capabilities = new ClientCapabilities(decode, OutputProfiles: []);
+        var constraints = BaseConstraints(allowDirectPlay: true, allowDirectStream: true, allowTranscoding: true);
+
+        return (capabilities, constraints);
+    }
+
     public static (ClientCapabilities Capabilities, PlaybackConstraints Constraints) TranscodeHls()
     {
         // DirectPlayProfiles deliberately empty (no direct-play combination declared at all, so

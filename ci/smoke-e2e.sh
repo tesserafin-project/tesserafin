@@ -97,7 +97,7 @@ ELAPSED=$((END_TS - START_TS))
 
 banner "SUMMARY"
 if [ "$STATUS" -eq 0 ]; then
-    echo "RESULT: PASS — all 5 PR119 end-to-end scenarios green against a real booted server with real ffmpeg (${ELAPSED}s wall time)"
+    echo "RESULT: PASS — all 6 end-to-end scenarios green against a real booted server with real ffmpeg (${ELAPSED}s wall time)"
 else
     echo "RESULT: FAIL — see the first failing stage above (dotnet restore/build/test) (${ELAPSED}s wall time)" >&2
 fi
