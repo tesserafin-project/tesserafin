@@ -483,6 +483,38 @@ public sealed class PlaybackUrlContractEndToEndTests : IClassFixture<E2eApplicat
     }
 
     /// <summary>
+    /// Issue #59, matrix row 6 - the PUT verb. Re-planning an ALREADY VIABLE session with
+    /// constraints that leave only a re-encode must be refused too (422), and the session must not
+    /// be quietly converted into a transcode. POST and GET Stream are covered by the rows above;
+    /// this closes the third verb, which re-enters planning by a different path.
+    /// </summary>
+    [Fact]
+    public async Task Replan_ToIncompatibleCodecsWithTranscodingForbidden_YieldsNoViablePlan()
+    {
+        var itemId = SeedItem();
+
+        // A genuinely viable session first, so the refusal below is caused by the re-plan and not by
+        // the session having been unservable all along.
+        var (directPlayCapabilities, directPlayConstraints) = EndToEndCapabilityPresets.DirectPlay();
+        var session = await CreateSessionAsync(itemId, directPlayCapabilities, directPlayConstraints, "e2e-59-replan-seed");
+        Assert.Equal(PlaybackMethod.DirectPlay, session.Method);
+
+        var (capabilities, constraints) = EndToEndCapabilityPresets.IncompatibleCodecsTranscodingForbidden();
+        var request = new ReplacePlaybackSessionRequest(itemId, _userId, capabilities, constraints);
+
+        using var response = await _client.PutAsJsonAsync(
+            $"Playback/Sessions/{session.Id}",
+            request,
+            JsonDefaults.Options,
+            TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(
+            response.StatusCode == HttpStatusCode.UnprocessableEntity,
+            $"PUT Playback/Sessions was expected to refuse a re-plan that only a re-encode could satisfy, got {(int)response.StatusCode}. Body: {Truncate(body)}");
+    }
+
+    /// <summary>
     /// POSTs a session expected NOT to succeed and returns the status code, asserting only that the
     /// request genuinely failed. Deliberately separate from <see cref="CreateSessionAsync"/>, which
     /// asserts success: a refusal is the assertion subject here, not an error to surface.
