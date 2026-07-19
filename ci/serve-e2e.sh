@@ -434,6 +434,40 @@ cat > "$CONFIG_DIR/network.xml" <<XML
 XML
 
 # ---------------------------------------------------------------------------
+# encoding.xml — pin SOFTWARE transcoding. This is a determinism requirement,
+# not a preference.
+#
+# Without this file the server AUTO-DETECTS hardware acceleration at startup and
+# persists the result: on a host with /dev/dri it writes
+# <HardwareAccelerationType>vaapi</HardwareAccelerationType> and every transcode
+# then runs through h264_vaapi. The transcode arguments Reefin builds include
+# `-rc_mode VBR -b:v 0 -maxrate 0 -bufsize 0`; libx264 accepts a zero bitrate,
+# but VAAPI rejects it outright:
+#
+#   [h264_vaapi] Bitrate must be set for VBR RC mode.
+#   [vost#0:0/h264_vaapi] Error while opening encoder
+#   Conversion failed!
+#
+# So the SAME fixture transcodes on a GPU-less machine and fails on a GPU-bearing
+# one. ci/run.sh never saw it because its container has no /dev/dri. This harness
+# is supposed to be reproducible; leaving the encoder to whatever hardware the
+# host happens to expose defeats that.
+#
+# Pinning `none` makes the rig match the gate and keeps the E2E scope where it
+# belongs: the URL/descriptor contract, not the encoder. The underlying VAAPI
+# zero-bitrate defect is a real server bug, tracked separately — it is NOT fixed
+# or hidden by this line, only kept out of a contract test that cannot diagnose it.
+cat > "$CONFIG_DIR/encoding.xml" <<XML
+<?xml version="1.0" encoding="utf-8"?>
+<EncodingOptions xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <HardwareAccelerationType>none</HardwareAccelerationType>
+  <EnableHardwareEncoding>false</EnableHardwareEncoding>
+  <EnableTonemapping>false</EnableTonemapping>
+  <EnableThrottling>false</EnableThrottling>
+</EncodingOptions>
+XML
+
+# ---------------------------------------------------------------------------
 # Boot
 # ---------------------------------------------------------------------------
 banner "Starting Reefin.Server on ${BASE_URL}"
