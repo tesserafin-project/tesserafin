@@ -270,6 +270,12 @@ namespace Reefin.Server.Extensions
 
                 c.SchemaFilter<IgnoreEnumSchemaFilter>();
                 c.SchemaFilter<FlagsEnumSchemaFilter>();
+
+                // Issue #51: emit `required` for the members MVC's implicit [Required] already
+                // rejects a request for omitting. Scoped to the Reefin.Playback.Decision namespace,
+                // where the rule is provable from metadata alone - see the filter's remarks and
+                // docs/pr-openapi-required-audit.md.
+                c.SchemaFilter<PlaybackDecisionRequiredSchemaFilter>();
                 c.OperationFilter<RetryOnTemporarilyUnavailableFilter>();
                 c.OperationFilter<SecurityRequirementsOperationFilter>();
                 c.OperationFilter<FileResponseFilter>();
