@@ -4,6 +4,8 @@ Basé sur lecture du plan proposé + vérification directe dans le repo (graphif
 
 > Document déplacé de `graphify-out/` vers `docs/` (2026-07-07) : `graphify-out/` est un répertoire de sortie généré, non versionné, risque d'écrasement par un re-run graphify. Ce fichier est la source de vérité du chantier — à committer avec le repo.
 
+> **Cadrage produit (ajouté 2026-07-18)** : voir « Ambition produit serveur » et « Cible NAS » plus bas — le *pourquoi* produit dont ce plan technique est la traduction.
+
 ## Constat préalable important — nom du repo
 
 Ce repo n'est **pas** "Jellyfin" au sens strict : c'est un fork nommé **Reefin** (`origin` = `github.com/all3f0r1/reefin`, `README.md:1` "Reefin", solution `Reefin.sln`). Le rename `MediaBrowser.*` / `Emby.*` → nouveau nom est **déjà en cours**, mais vers `Reefin.*`, pas `Jellyfin.*` :
@@ -47,6 +49,353 @@ Direction technique saine : monolithe modulaire conservé, pas de microservices,
 | Plugin SDK v2 | non commencé | après API v2 |
 | Persistance (PostgreSQL) | non commencé | après stabilisation domaine |
 | Observabilité / config / jobs | non audités | ultérieur |
+
+## Ambition produit serveur (2026-07-18) — cadrage manquant du plan
+
+Jusqu'ici ce document est un plan d'exécution technique : diagnostics confirmés dans le code, ordre de découpage, tranches PR, gates de compatibilité. Il ne dit pas **pour quel produit** ce chantier est mené. Cette section comble ce manque. Elle ne modifie ni l'ordre recommandé, ni les priorités des piliers en cours : elle donne l'altitude produit dont le journal de PR est la traduction technique.
+
+### Principe directeur
+
+Le serveur doit avoir **au moins le même niveau d'ambition que les clients**, mais pas sous la forme d'une multiplication visible de fonctionnalités. Son ambition doit être celle d'une **plateforme média moderne, automatisée, stable et extensible**, sur laquelle `reefin-web`, Android, iOS et les futurs clients TV deviennent simplement différentes expressions du même produit.
+
+> **Reefin Server ne devrait pas être « Jellyfin avec un backend mieux rangé ». Il devrait devenir le système d'exploitation personnel de la médiathèque.**
+
+### Le rôle du serveur dans Reefin — quatre couches
+
+1. **Reefin Server** : vérité métier, médiathèque, utilisateurs, lecture, automatisation et orchestration.
+2. **Reefin SDK** : contrat officiel, généré et versionné entre serveur et clients.
+3. **Clients officiels** : web, Android, iOS, TV.
+4. **Écosystème ouvert** : plugins, intégrations et clients tiers.
+
+Le serveur ne doit donc pas contenir de comportement spécifique à `reefin-web`. Il doit exposer des capacités assez propres pour que chaque client propose une expérience native sans réimplémenter la logique métier.
+
+C'est exactement ce que fait le travail en cours autour de Playback v2, des capacités clientes, de l'OpenAPI et du SDK (PR112b : `ClientCapabilities`/`PlaybackConstraints` symétriques, `DeviceProfile` retiré ; PR116/PR117 : migration client et contrat d'URL) : ce n'est pas seulement un refactor technique, c'est la fondation du produit Reefin.
+
+### 1. Une expérience presque sans configuration
+
+Premier grand différenciateur :
+
+> **Installer Reefin, indiquer ses bibliothèques, puis obtenir automatiquement une configuration correcte.**
+
+Côté serveur cela implique :
+
+- détection automatique du matériel ;
+- choix automatique de l'accélération matérielle ;
+- détection des codecs, profils HDR, tone mapping et capacités d'encodage ;
+- analyse des capacités du stockage et du réseau ;
+- réglages de transcodage raisonnables par défaut ;
+- contrôle automatique de la santé de l'installation ;
+- diagnostics compréhensibles plutôt que des logs cryptiques.
+
+L'utilisateur avancé doit toujours pouvoir reprendre le contrôle, mais comprendre VA-API, NVENC, QSV, les devices Docker ou les formats HDR ne doit pas être un prérequis au démarrage.
+
+C'est probablement **le chantier produit serveur le plus distinctif** face à Jellyfin. Point d'ancrage technique existant : `docs/hwa-refactor-plan.md`.
+
+### 2. Une architecture de lecture véritablement unifiée
+
+La lecture ne doit plus être un empilement de décisions dispersées entre serveur, web et clients natifs. Le serveur doit disposer d'un moteur de planification explicite :
+
+```text
+Media source
+    ↓
+Client capabilities
+    ↓
+User and server policies
+    ↓
+Playback planner
+    ↓
+Direct play / remux / transcode
+    ↓
+Observable playback session
+```
+
+Le résultat d'une décision de lecture doit pouvoir expliquer :
+
+- pourquoi le direct play a été refusé ;
+- pourquoi un remux a été choisi ;
+- pourquoi le transcodage est nécessaire ;
+- quelle piste audio ou sous-titre pose problème ;
+- quelle limitation vient du client ;
+- quelle limitation vient du serveur ;
+- quelle alternative serait possible.
+
+Cible finale, côté interface :
+
+> « Transcodage vidéo parce que ce téléviseur ne prend pas en charge l'AV1 Main 10. L'audio est copié sans modification. »
+
+Playback v2 doit devenir le noyau de cette architecture, pas simplement une nouvelle route HTTP. Le moteur v2 (EngineVersion 6), `PlaybackExecutionPlan` (PR114a) et le diagnostic v2 (PR113/PR113b, UI PR114) en sont la première assise.
+
+Le cycle de lecture v2 visé est explicitement un cycle de vie de session, et non un appel unique de négociation :
+
+```text
+POST Playback/Sessions          → création de la session et décision de lecture
+GET  Playback/Sessions/{id}/Stream → livraison de l'URL de lecture
+PUT / GET sur la session        → changement de piste (audio, sous-titre, qualité)
+DELETE / cleanup                → fin de session et libération des ressources
+```
+
+Deux garde-fous restent attachés à ce cycle : le **fallback legacy à la demande**, qui garde l'URL servable sans redémarrage, et le **kill switch** (`PlaybackShadowOptions.Mode`), conservé tant que la bascule n'est pas éprouvée en production. Ce cadrage reste descriptif : le design détaillé du cycle de vie — sémantique exacte de `PUT`, idempotence, expiration, contrat d'erreur — fera l'objet d'une PR de conception dédiée.
+
+### 3. Un serveur orienté capacités, pas clients nommés
+
+Le serveur ne doit pas contenir de branches du type :
+
+```text
+if client == webOS
+if client == Android
+if client == Safari
+```
+
+Il doit raisonner en capacités déclarées : codecs ; conteneurs ; profils ; HDR ; Dolby Vision ; formats audio ; sous-titres ; contraintes réseau ; mode d'affichage ; possibilités de décodage sécurisé ou matériel.
+
+Cela unifie web, smartphone et TV **sans les forcer à partager la même interface** : les clients restent natifs et différents, mais parlent tous le même langage de capacités. C'est aussi ce qui rend crédible la suppression progressive des quelque 190 détections matérielles et TV historiques de `reefin-web`.
+
+### 4. Une véritable couche métier indépendante des interfaces
+
+Le serveur doit porter les concepts riches que les clients ne devraient pas avoir à reconstruire :
+
+- page d'accueil personnalisée ;
+- reprise de lecture ;
+- recommandations ;
+- collections intelligentes ;
+- relations entre œuvres ;
+- éditions multiples d'un film ;
+- versions cinéma, director's cut, 4K, remaster, etc. ;
+- préférences linguistiques ;
+- politiques de sélection audio et sous-titres ;
+- profils enfants et restrictions ;
+- synchronisation de l'état entre appareils ;
+- téléchargements hors ligne ;
+- historique et progression cohérents.
+
+Aujourd'hui, beaucoup d'expériences média sont construites dans le client à partir de primitives faibles. Reefin doit inverser cette logique : **le serveur expose une expérience structurée**, les clients décident comment la présenter.
+
+### 5. Une médiathèque beaucoup plus fiable
+
+La médiathèque est le cœur du serveur ; elle mérite davantage qu'un scanner de fichiers amélioré.
+
+**Identité stable des médias.** Un élément ne doit pas perdre son identité parce qu'il est renommé, déplacé, remplacé par une meilleure version ou réorganisé dans un autre dossier. Cela demande une stratégie mêlant chemins, identifiants externes, empreintes et métadonnées persistantes.
+
+**Modèle propre des versions et éditions.** Une œuvre doit être distincte de ses fichiers physiques :
+
+```text
+Œuvre
+ ├── Édition cinéma
+ │    ├── Version 1080p
+ │    └── Version 4K HDR
+ └── Director's Cut
+      └── Version 4K Dolby Vision
+```
+
+Cette distinction simplifierait énormément les interfaces et la sélection automatique de la meilleure version.
+
+**Scanner observable et récupérable.** Le serveur doit montrer ce qu'il analyse, les erreurs rencontrées, les fichiers ignorés, les associations incertaines, l'origine des métadonnées et les conflits détectés. Un scan interrompu ou un fournisseur indisponible ne doit pas laisser la base dans un état ambigu.
+
+### 6. Une personnalisation serveur structurée
+
+Plusieurs thèmes de base sont prévus pour `reefin-web`, avec réduction du boilerplate des thèmes tiers. Le serveur peut soutenir cela sans devenir responsable du CSS. Il peut exposer :
+
+- identité visuelle de l'instance ;
+- logo, couleurs et arrière-plans ;
+- sections d'accueil configurables ;
+- navigation activée ;
+- fonctionnalités disponibles ;
+- politiques éditoriales ;
+- collections mises en avant ;
+- configuration par utilisateur ou groupe.
+
+Les thèmes consommeraient ensuite des composants Reefin standards et des **design tokens** communs. Une même identité d'instance pourrait alors être interprétée par `reefin-web`, Android, iOS et TV, sans exiger que toutes les interfaces soient visuellement identiques.
+
+### 7. Une extensibilité plus sûre que les plugins Jellyfin actuels
+
+Les plugins doivent rester possibles — Reefin Server et son API restent ouverts — mais ils ne doivent pas pouvoir modifier arbitrairement l'ensemble du processus serveur. Il faut tendre vers plusieurs niveaux d'extension : fournisseurs de métadonnées ; authentification ; notifications ; automatisations ; stockage ; hooks de médiathèque ; intégrations domotiques ; traitements média ; extensions d'interface déclaratives ; services externes via webhooks ou API.
+
+Chaque extension doit déclarer ses permissions et dépendre d'API stables.
+
+Le SDK plugin ne doit arriver qu'après stabilisation des frontières métier actuelles. Le calendrier déjà retenu reste pertinent (cf. « Ordre recommandé », point 5 : plugin SDK v2 après API v2) : migration des clients et validation de Playback v2 d'abord, SDK plugins ensuite.
+
+### 8. Une exploitation de niveau professionnel, même à domicile
+
+Reefin restera principalement auto-hébergé, mais l'auto-hébergement ne doit pas transformer l'utilisateur en administrateur système à temps partiel. Le serveur doit proposer :
+
+- page de santé complète ;
+- sauvegarde et restauration guidées ;
+- migrations de base fiables ;
+- métriques et traces structurées ;
+- journal d'audit ;
+- diagnostic exportable avec données sensibles supprimées ;
+- mises à jour contrôlées ;
+- vérification de compatibilité avant migration ;
+- possibilité de revenir en arrière lorsque c'est réaliste ;
+- notifications en cas de disque plein, scan bloqué ou transcodage défaillant.
+
+À terme, PostgreSQL peut avoir du sens pour les grosses installations (point 8 du plan général), mais **PostgreSQL ne doit pas devenir un prérequis** : SQLite doit rester une excellente solution par défaut pour un serveur domestique.
+
+Les briques déjà posées vont dans ce sens : métriques agrégées et endpoint `GET /System/PlaybackDiagnostics/Metrics` (PR115d), diagnostic filtré sans fuite de chemins (PR113), runbook de rollout (`docs/pr115d-rollout-runbook.md`).
+
+### 9. Une architecture réseau et multi-instance moderne
+
+À moyen terme, le serveur doit prendre en charge proprement : accès distant sécurisé ; découverte locale ; liens d'invitation temporaires ; authentification moderne ; passkeys ; gestion des appareils ; révocation de sessions ; proxy inverse correctement détecté ; plusieurs serveurs dans un même client ; éventuellement fédération ou recherche entre plusieurs instances.
+
+Il faut éviter de construire un compte Reefin central obligatoire : cela recréerait exactement la dépendance de plateforme façon Plex que ce projet veut éviter. Un éventuel service `reefin.com` doit rester **facultatif** — documentation, découverte de plugins, compte développeur, relais optionnel ou simplification de connexion — jamais un péage imposé entre l'utilisateur et son propre serveur.
+
+### Ce que Reefin Server ne doit pas devenir
+
+**Pas une plateforme SaaS déguisée.** Le serveur doit rester intégralement utilisable sans compte cloud Reefin.
+
+**Pas un backend réservé aux apps officielles.** L'API et le SDK restent documentés et accessibles. La différenciation commerciale vient de la qualité des apps officielles, de la marque, du support et de l'intégration, pas d'un verrou artificiel.
+
+**Pas une réécriture totale permanente.** La refonte DI et les frontières métier étaient nécessaires, mais le serveur ne doit pas rester indéfiniment en phase de « préparation à la préparation ». C'est la même crainte que celle déjà nommée dans le « Verdict global » de ce document (« la grande réécriture qui ne finit jamais »), exprimée ici comme règle d'engagement : **après la validation bout en bout de Playback v2, chaque nouveau chantier structurel doit être justifié par une capacité produit concrète.**
+
+**Pas une réécriture en Rust du serveur entier.** Des composants média, outils d'analyse ou services ciblés pourraient éventuellement être écrits en Rust. Réécrire tout le serveur ferait perdre plusieurs années sans résoudre automatiquement les problèmes de modèle métier, d'UX ou de compatibilité.
+
+### Vision produit — les trois familles
+
+**Reefin Server** — organise, comprend, sécurise et diffuse la médiathèque.
+
+**Reefin Web** — interface de référence pour la découverte, la lecture, l'administration et la personnalisation.
+
+**Reefin Android, iOS et TV** — expériences natives optimisées pour leur appareil, alimentées par le même modèle produit.
+
+Le serveur porte les fonctionnalités partagées ; les clients portent l'interaction propre à chaque écran.
+
+### Roadmap serveur recommandée
+
+L'ordre importe : ne pas lancer dix grands chantiers parallèles maintenant. Cette roadmap est la lecture produit de l'« Ordre recommandé » technique en fin de document — même trajectoire, autre altitude.
+
+**Phase actuelle — prouver la nouvelle fondation.** C'est exactement l'état décrit dans le « Tableau de statut par pilier » ci-dessus :
+
+1. ~~Terminer la preuve de Playback v2 sur un serveur réellement exécuté~~ — **fait** (PR119 = reefin #32, fusionnée le 2026-07-19) : `POST Playback/Sessions` → `GET .../Stream` → requête HTTP réelle de l'URL rendue, fallback legacy sous kill switch inclus, prouvé par `ci/smoke-e2e.sh` et `PlaybackUrlContractEndToEndTests`. La même PR a fermé un bug de `TranscodingJob.Dispose` qui remettait `job.HasExited` à faux après la sortie du process d'un transcodage rapide, ce qui faisait boucler indéfiniment la boucle de disponibilité de `DynamicHlsController.GetSegmentResult`.
+2. ~~**Régénérer et verrouiller OpenAPI — immédiatement après PR119**~~ — **fait côté contrat serveur** (issue #36 close le 2026-07-18 ; issue #48 close par reefin #52, `a9b0150e`). Il n'existe plus qu'**un seul générateur faisant autorité** : `./ci/openapi-generate.sh` écrit `openapi/openapi.json` + `openapi/contract.lock.json`, `./ci/run.sh` vérifie, et les workflows hébergés consomment le fichier canonique committé. L'ancien second générateur (`--filter OpenApiSpecTests` publiant un `openapi.json` brut depuis `tests/.../bin/Release/net10.0/`) et le bricolage `sed allOf→oneOf` sont supprimés ; `OpenApiSpecTests` subsiste mais n'atteste plus que le content-type de l'endpoint, sans rôle de source de contrat. Le contrat gelé est précisément ce que consomment les tranches de migration suivantes ; le régénérer après coup obligerait à migrer deux fois. **Reste à faire** : la régénération et le verrouillage de `reefin-sdk` sur ce contrat ne sont pas actés ici, et la correction des `required` reste ouverte (issue #51, chantier de cause racine, PR brouillon #53 portant un audit et un test de régression volontairement rouge) — `Reefin.Playback.Decision.VideoCodecCapability` est un record positionnel dont `Profiles`/`VideoRangeTypes` sont des paramètres de constructeur primaire non-nullables sans défaut, donc le `[Required]` implicite de MVC rejette en 400 les requêtes qui les omettent alors que le contrat les déclare optionnels.
+3. Migrer `reefin-web` sans route manuelle de contournement (PR116, prérequis serveur PR117 / `docs/pr116d-url-contract-design.md`).
+4. Valider le chemin complet avec les SHA serveur et client enregistrés.
+5. Déployer progressivement le canary jusqu'à 100 % (`CanaryPercentage`, `docs/pr115d-rollout-runbook.md`).
+
+En parallèle, hors chemin critique : ~~stabiliser les identifiants de corrélation et l'observabilité de la session (issue #34)~~ — **fait**, issue #34 close le 2026-07-18 —, et conserver correctement les capacités brutes déclarées par les clients (issue #35, toujours ouverte). Voir les deux notes ci-dessous.
+
+À ce stade seulement, la nouvelle architecture peut être considérée comme éprouvée.
+
+**Note — deux identifiants distincts, aucun des deux n'étant `PlaySessionId`.** Le plan parlait jusqu'ici d'un `CorrelationId` unique ; ce concept est ambigu et abandonné. Deux identifiants aux rôles séparés l'ont remplacé, et **tous deux sont désormais implémentés** :
+
+- **RequestId / TraceId** — unique par requête HTTP, **généré côté serveur**, sert au tracing transport (logs, traces, corrélation d'une requête avec ses effets internes). Il ne survit pas à la requête. Implémenté côté serveur (`RequestCorrelationMiddleware`, `IRequestCorrelationAccessor`).
+- **PlaybackAttemptId** — **généré par le client**, partagé entre l'appel `PlaybackInfo` legacy, l'appel shadow/v2 et toutes les requêtes rattachées à une même tentative de lecture. C'est lui, et non le transport, qui corrèle une tentative de bout en bout. Implémenté sur les flux existants par reefin #47 (serveur) et reefin-web #28 (client) : `src/scripts/playbackAttemptId.ts` expose `beginPlaybackAttempt()`/`applyPlaybackAttemptId()`, à portée de requête et sans état mutable au niveau du module — deux tentatives concurrentes reçoivent des identifiants distincts, prouvé par `src/scripts/playbackAttemptId.test.ts`.
+
+Ni l'un ni l'autre n'est `PlaySessionId` : ce dernier reste l'identifiant de session fourni par le client pour terminer la session quand le job de transcodage s'achève, et il couvre de nombreuses requêtes et signaux indépendants. L'issue #34, qui portait l'identifiant de corrélation serveur, est close depuis le 2026-07-18 ; le `PlaybackAttemptId` client a été livré séparément par reefin #47 et reefin-web #28.
+
+**Note — #35 ne bloque pas la migration client** (#34 est close). Cette issue de diagnostics peut avancer en parallèle des vagues 1 et 2 de migration client, mais elle n'en est pas un prérequis : elle ne façonne pas le contrat gelé au point 2. #35 (conservation du payload natif de capacités) n'est implémentable qu'avec **taille plafonnée, sampling, TTL, redaction et flag opt-in** — jamais de token, d'URL signée ni d'identifiant sensible conservé brut. Sans ces cinq garde-fous, la conservation du payload est un risque de fuite, pas un gain de diagnostic.
+
+**Note — automatisation Project bloquée.** Les PR d'auto-ajout des issues et PR au Project (reefin #37, reefin-web #19) restent bloquées tant que le secret `ADD_TO_PROJECT_PAT` n'est pas configuré sur les deux dépôts.
+
+**Phase suivante — le serveur qui choisit correctement.** Créer un chantier cohérent, par exemple **Playback Intelligence**, regroupant : moteur de capacités ; explication des décisions ; autodétection matérielle ; sélection automatique du transcodage ; politique HDR et Dolby Vision ; diagnostics de lecture ; tests de compatibilité entre serveur et clients. Premier grand chantier produit serveur après Playback v2 ; absorbe `docs/hwa-refactor-plan.md` et le labo de compatibilité (point 14 du plan général).
+
+**Phase 3 — moderniser le modèle de médiathèque** : œuvre distincte des fichiers ; éditions et versions ; identité stable ; rescans incrémentaux fiables ; provenance des métadonnées ; résolution des conflits ; meilleures collections et relations. Probablement le plus gros chantier métier après la lecture ; s'appuie sur le découpage `LibraryManager` (point 5) une fois clos.
+
+**Phase 4 — plateforme multi-client** : accueil produit par des primitives serveur ; synchronisation des préférences ; téléchargements hors ligne ; gestion des appareils ; politiques audio et sous-titres ; profils et permissions modernisés ; personnalisation d'instance consommable par tous les clients.
+
+**Phase 5 — écosystème** : SDK plugin stabilisé ; permissions d'extensions ; registre officiel facultatif ; documentation développeur ; exemples minimaux ; compatibilité contrôlée ; éventuel portail `reefin.com`. Correspond aux points 7 et 9-12 du plan général.
+
+### Verdict d'ambition
+
+L'ambition serveur doit être **plus profonde que spectaculaire**. Les apps peuvent impressionner immédiatement par leur finition ; `reefin-web` peut impressionner par son interface, ses thèmes et sa fluidité. Le serveur, lui, doit impressionner parce que :
+
+- tout fonctionne avec moins de réglages ;
+- les décisions de lecture sont correctes et explicables ;
+- les clients restent parfaitement synchronisés ;
+- la médiathèque ne se désorganise pas ;
+- les mises à jour sont sûres ;
+- les extensions ne fragilisent pas l'ensemble ;
+- l'utilisateur garde la pleine maîtrise de son serveur.
+
+La cible n'est donc pas « un meilleur serveur Jellyfin ». C'est :
+
+> **un serveur média local-first qui possède la simplicité d'un produit grand public, la transparence de l'open source et la solidité architecturale d'une plateforme conçue pour plusieurs clients officiels.**
+
+## Cible NAS (2026-07-18) — distribution et installation
+
+Le NAS est probablement l'un des environnements naturels de Reefin. Jellyfin y est déjà très souvent installé, et Reefin peut faire mieux en traitant le NAS comme une **cible de premier rang**, pas comme un serveur Linux quelconque. Point important : **le NAS héberge surtout le serveur Reefin** ; les interfaces restent accessibles via navigateur, TV, mobile ou applications natives.
+
+### Expérience d'installation idéale
+
+1. ouvrir le catalogue d'applications du NAS ;
+2. cliquer sur **Installer Reefin** ;
+3. sélectionner les dossiers Films, Séries et Musique ;
+4. laisser Reefin détecter automatiquement le matériel ;
+5. créer le compte administrateur ;
+6. commencer à regarder.
+
+L'utilisateur ne devrait normalement pas avoir à manipuler Docker, des ports, des UID/GID, FFmpeg ou des variables d'environnement.
+
+### Trois niveaux de distribution
+
+**1. Applications NAS officielles** — meilleure expérience utilisateur : Synology Package Center ; QNAP App Center ; TrueNAS Apps ; Unraid Community Applications ; éventuellement Asustor et TerraMaster. Chaque package installe en interne le même serveur Reefin mais adapte automatiquement les permissions, les volumes, les ports, le démarrage automatique, les mises à jour, l'accès au GPU et les sauvegardes. Difficulté : chaque constructeur a son propre système de packaging — il faut maintenir plusieurs petits wrappers autour d'un cœur commun.
+
+**2. Image Docker officielle** — socle universel, et probablement la première version à produire : image `reefin/reefin` multiarchitecture ; support `amd64` et `arm64` ; configuration persistante ; migrations automatiques ; health check ; tags `stable`, `beta` et versionnés ; Docker Compose très simple ; détection et exposition guidée des GPU Intel, AMD et Nvidia. Un utilisateur avancé installe avec un Compose minimal ; les packages NAS utilisent la même image en arrière-plan.
+
+**3. Installateur Reefin assisté** — page ou petit assistant demandant le modèle du NAS, les dossiers multimédias, la présence éventuelle d'un GPU, le port et le nom du serveur, puis générant la configuration correcte ou guidant directement l'installation.
+
+### Le vrai défi : l'accélération matérielle
+
+L'installation du conteneur est relativement simple. Ce qui rend aujourd'hui les serveurs multimédias pénibles sur NAS, c'est le transcodage matériel : `/dev/dri` pour Intel ou AMD ; pilotes Nvidia ; VideoToolbox sur macOS (hors NAS classique) ; droits d'accès aux périphériques ; codecs réellement supportés par le processeur ; différences entre modèles d'une même marque.
+
+Le travail prévu sur la **détection automatique de l'accélération matérielle** (§1 ci-dessus, `docs/hwa-refactor-plan.md`) est donc particulièrement précieux sur NAS. Reefin devrait pouvoir afficher :
+
+> Intel Quick Sync détecté — AV1 decode, HEVC 10-bit decode et H.264 encode activés.
+
+Et en cas d'échec :
+
+> L'accélération matérielle est disponible, mais Reefin n'a pas accès au périphérique vidéo. Cliquez ici pour corriger la configuration.
+
+L'idéal serait que les packages officiels configurent cela automatiquement.
+
+### Architecture de distribution recommandée
+
+```text
+Reefin Server
+    ↓
+Image OCI/Docker officielle multiarchitecture
+    ↓
+Adaptateurs de plateformes
+    ├── Docker Compose
+    ├── Unraid template
+    ├── TrueNAS app
+    ├── Synology package
+    ├── QNAP package
+    └── Kubernetes/Helm plus tard
+```
+
+Le serveur et sa logique d'installation restent communs ; les intégrations NAS ne contiennent presque aucune logique métier.
+
+### Ce que Reefin doit ajouter spécifiquement pour les NAS
+
+- détection automatique des dossiers partagés ;
+- avertissement lorsqu'un dossier n'est pas accessible en écriture ;
+- mode de fonctionnement adapté aux disques en veille ;
+- limitation des analyses lourdes aux horaires choisis ;
+- sauvegarde/export de la configuration en un clic ;
+- restauration après migration vers un autre NAS ;
+- surveillance de l'espace disponible ;
+- prise en charge des chemins réseau SMB/NFS ;
+- installation optionnelle de Reefin Web dans le serveur ;
+- bouton de mise à jour avec retour arrière automatique ;
+- diagnostic téléchargeable sans données personnelles.
+
+### Ordre de réalisation conseillé
+
+Ne pas commencer par six packages natifs.
+
+**Phase 1 — fondation** : image Docker/OCI officielle ; `docker-compose.yml` de référence ; amd64 + arm64 ; assistant de premier démarrage ; détection matérielle ; migrations et sauvegardes fiables.
+
+**Phase 2 — plateformes ouvertes** : template Unraid ; application TrueNAS ; documentation Portainer ; éventuellement Helm. Ces plateformes se prêtent bien aux conteneurs et permettent de valider l'expérience sans construire un package propriétaire complet.
+
+**Phase 3 — NAS grand public** : package Synology ; package QNAP ; Asustor/TerraMaster selon la demande.
+
+### Positionnement produit
+
+> **Reefin transforme votre NAS en plateforme multimédia personnelle, sans configuration complexe.**
+
+Éviter une séparation artificielle du type « Reefin NAS Edition » : le serveur reste le même partout. En revanche, le site peut proposer un parcours **Installer sur mon NAS** très visible.
+
+Conclusion : non seulement Reefin peut fonctionner sur NAS, mais il doit être conçu **dès maintenant** en considérant le NAS comme une cible principale. La combinaison image officielle, accélération matérielle automatique, packages natifs et assistant de migration constituerait un avantage concret face à Jellyfin.
 
 ## Journal synthétique des PR (source : titres de commit)
 
