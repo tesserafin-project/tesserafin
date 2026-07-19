@@ -65,9 +65,15 @@ jobs:
     - name: Detect Changes
       id: openapi-diff
       run: |
-        sed -i 's:allOf:oneOf:g' openapi-head/openapi.json
-        sed -i 's:allOf:oneOf:g' openapi-base/openapi.json
-
+        # Les deux artefacts sont désormais le contrat canonique commité
+        # (openapi/openapi.json) de chaque côté, produit par le générateur unique
+        # ./ci/openapi-generate.sh — issue #48.
+        #
+        # La réécriture `sed -i 's:allOf:oneOf:g'` appliquée aux deux entrées a été
+        # retirée. C'était un contournement symétrique, indépendant du problème
+        # brut/canonique (`allOf` vient du modèle de types C# et traverse la
+        # canonicalisation inchangé) : il modifiait la composition de schémas que
+        # openapi-diff analyse. On lui donne désormais le document réel.
         mkdir -p /tmp/openapi-report
         mv openapi-head/openapi.json /tmp/openapi-report/head.json
         mv openapi-base/openapi.json /tmp/openapi-report/base.json

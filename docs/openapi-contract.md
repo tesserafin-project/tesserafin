@@ -31,8 +31,55 @@ aujourd'hui **inertes** : le quota GitHub Actions hébergé est épuisé depuis 
 ~2026-07-06 (`ci/run.sh`, `docs/local-ci.md`). Le seul gate de merge vivant est
 `ci/run.sh`, en Docker, en local. Le contrat devait donc y être rattaché.
 
-`OpenApiSpecTests` est laissé intact : `openapi-generate.yml` le cible par
-`--filter`, et il redeviendra fonctionnel si le quota revient.
+### Un seul générateur autoritaire (issue #48)
+
+La tranche #36 avait laissé `OpenApiSpecTests` intact, `openapi-generate.yml`
+continuant à le cibler par `--filter`. Il en résultait **deux** définitions
+concurrentes du « contrat » :
+
+| | générateur | artefact | canonique ? |
+| --- | --- | --- | --- |
+| local (#36) | `./ci/openapi-generate.sh` → `OpenApiContractTests` | `openapi/openapi.json` | oui |
+| hébergé (avant #48) | `--filter OpenApiSpecTests` | `tests/.../bin/Release/net10.0/openapi.json` | **non** |
+
+L'artefact hébergé était la réponse HTTP brute : `servers` réécrit depuis
+l'en-tête `Host` du runner, ordre des clés non déterministe. Le gate hébergé
+validait donc un artefact différent du contrat canonique.
+
+Le job de diff portait par ailleurs un `sed -i 's:allOf:oneOf:g'` appliqué aux
+deux entrées. C'était un problème **distinct** : `allOf` est émis depuis le
+modèle de types C# et traverse la canonicalisation **inchangé** (`Canonicalize`
+ne trie que les clés et retire `servers` ; le contrat canonique contient 586
+occurrences d'`allOf`). Cette réécriture ne compensait donc rien du bruit
+hôte — c'était un contournement symétrique qui changeait la composition de
+schémas soumise à `openapi-diff`.
+
+Depuis #48 :
+
+- **`./ci/openapi-generate.sh` est le générateur unique.** Rien d'autre ne
+  produit un contrat.
+- `openapi-generate.yml` ne génère plus : il fait un `checkout` et téléverse le
+  fichier **commité** `openapi/openapi.json`. C'est légitime précisément parce
+  que `ci/run.sh` interdit à ce fichier de dériver du serveur (§7).
+- le `sed allOf → oneOf` a disparu : `openapi-diff` reçoit désormais le document
+  réel. **Non vérifié ici** : l'effet exact sur le rapport produit, le quota
+  Actions rendant « OpenAPI Check » inerte.
+- `OpenApiSpecTests` n'écrit plus rien et n'alimente plus aucun gate. Il ne
+  garde que son assertion non contractuelle : le point de terminaison de
+  découverte répond 2xx avec `application/json; charset=utf-8` — type de média
+  asserté nulle part ailleurs (`OpenApiContractTests` ne fait qu'un
+  `EnsureSuccessStatusCode` sur la même route).
+
+Conséquence sur `openapi-merge.yml` (publication SCP/SSH vers le serveur de
+dépôt) : ce fichier n'est **pas modifié** — déclencheurs, garde
+`contains(github.repository_owner, 'reefin')`, condition de tag et cibles SCP
+sont inchangés. Comme il consomme le même workflow réutilisable, ce qu'il
+publie devient en revanche le contrat canonique au lieu de l'artefact brut.
+Au premier `push` sur `master` après cette tranche, le `diff` côté serveur
+(garde d'idempotence du script SSH) verra donc un contenu différent et fera
+tourner les liens `unstable` une fois. C'est le comportement recherché : ce qui
+est publié devient identique à ce qui est commité et pinné par
+`contract.lock.json`.
 
 ## 2. `info.version` — provenance
 
@@ -314,5 +361,9 @@ ne justifient pas de bump de `SharedVersion.cs` par eux-mêmes : c'est le
 | `openapi/contract.lock.json` | empreinte `{version, sha256}` |
 | `tests/.../OpenApiContract.cs` | canonicalisation, empreinte, message de dérive |
 | `tests/.../OpenApiContractTests.cs` | déterminisme, provenance de version, dérive |
+| `tests/.../OpenApiSpecTests.cs` | surface HTTP du point de découverte (type de média) — plus aucun rôle de contrat |
 | `ci/run.sh` | commentaire pointant ici (aucun changement fonctionnel) |
 | `.gitattributes` | `eol=lf` explicite sur les deux fichiers générés |
+| `.github/workflows/openapi-generate.yml` | téléverse le `openapi/openapi.json` commité (ne génère pas) |
+| `.github/workflows/openapi-pull-request.yml` | diff `openapi-diff` base ↔ head sur le contrat canonique |
+| `.github/workflows/openapi-merge.yml` | publication SCP/SSH — **non modifié** par #48 |
