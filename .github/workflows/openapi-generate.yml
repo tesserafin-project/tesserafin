@@ -1,5 +1,19 @@
 name: OpenAPI Generate
 
+# Publie le contrat canonique COMMITÉ, `openapi/openapi.json`.
+#
+# Ce workflow ne génère plus rien. Le générateur autoritaire unique est
+# `./ci/openapi-generate.sh` (Docker, local), qui exécute
+# `OpenApiContractTests.CommittedContract_MatchesRunningServer` avec
+# `REEFIN_OPENAPI_WRITE=1` et écrit la forme canonique. `./ci/run.sh` rejoue le
+# même test en mode vérification : le fichier commité ne peut donc pas dériver
+# de ce que le serveur produit. Voir docs/openapi-contract.md.
+#
+# Avant, cette étape lançait un second générateur (`--filter OpenApiSpecTests`)
+# et téléversait `tests/.../bin/Release/net10.0/openapi.json` : un artefact brut,
+# dépendant de l'hôte (`servers` réécrit depuis l'en-tête `Host`, ordre des clés
+# non déterministe), donc un contrat DIFFÉRENT du contrat canonique — issue #48.
+
 on:
   workflow_call:
     inputs:
@@ -27,18 +41,13 @@ jobs:
         ref: ${{ inputs.ref }}
         repository: ${{ inputs.repository }}
 
-    - name: Configure .NET
-      uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
-      with:
-        dotnet-version: '10.0.x'
-
-    - name: Create File
-      run: dotnet test tests/Reefin.Server.Integration.Tests/Reefin.Server.Integration.Tests.csproj -c Release --filter Reefin.Server.Integration.Tests.OpenApiSpecTests
-
+    # Un seul fichier téléversé : il arrive côté consommateur à la racine de
+    # l'artefact, sous son nom de base `openapi.json` — exactement là où
+    # openapi-pull-request.yml et openapi-merge.yml le lisent déjà.
     - name: Upload Artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: ${{ inputs.artifact }}
-        path: tests/Reefin.Server.Integration.Tests/bin/Release/net10.0/openapi.json
+        path: openapi/openapi.json
         retention-days: 14
         if-no-files-found: error
