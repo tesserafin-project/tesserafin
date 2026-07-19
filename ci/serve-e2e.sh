@@ -67,7 +67,16 @@
 #   WHY THE REMUX FIXTURE IS PRODUCED WITH `-c copy` FROM THE DIRECT-PLAY MP4: that is what makes
 #   it a genuine remux scenario rather than a second encode that merely looks similar. The script
 #   asserts the two files' ffprobe stream fingerprints are byte-for-byte equal, so the ONLY
-#   difference is the container. Chromium plays H264+AAC but cannot demux Matroska.
+#   difference is the container. The unplayability here is purely container-level: Chromium's
+#   <video> accepts MP4, WebM and Ogg, and while WebM and Matroska share a demuxer it only
+#   admits the WebM codec set (VP8/VP9/AV1 + Opus/Vorbis) — H264/AAC-in-Matroska is rejected.
+#
+#   ON "CHROMIUM CAN PLAY H264/AAC": true only of builds compiled with the proprietary codecs,
+#   which is Google Chrome and Playwright's `chrome`/`msedge` channels. Vanilla open-source
+#   Chromium — including Playwright's own bundled `chromium` — omits H264, AAC, AC-3 and E-AC-3.
+#   The transcode fixture is unaffected either way (mpeg4 and ac3 are absent from EVERY build),
+#   but the direct-play fixture's direct-playability is a statement about the browser channel
+#   the specs actually run under, not about Chromium in general.
 #
 #   WHY "Codec Probes" IS A SEPARATE, NON-movies LIBRARY: reefin-web's tests/e2e/library.spec.ts
 #   asserts `toHaveCount(2)` on the movies grid in four places and indexes cards [0]/[1] by
@@ -152,7 +161,7 @@ while [ $# -gt 0 ]; do
         --timeout)  [ $# -ge 2 ] || fail_usage "--timeout requires seconds";  READY_TIMEOUT="$2"; shift 2 ;;
         --no-build) DO_BUILD=0; shift ;;
         --keep)     KEEP=1; shift ;;
-        -h|--help)  sed -n '2,106p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help)  sed -n '2,115p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)          fail_usage "unexpected argument: $1" ;;
     esac
 done
