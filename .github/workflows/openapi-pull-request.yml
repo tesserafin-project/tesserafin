@@ -1,6 +1,22 @@
+# PARKED — manual trigger only (issue #62). Same cause as ci-compat.yml:
+# GitHub refuses to allocate a hosted runner for this PRIVATE repo BEFORE the
+# first step (account-wide free allowance exhausted, spending limit $0), so
+# "Common Ancestor" / "Head Artifact" / "Base Artifact" failed in 3-4 s with
+# zero steps executed. Nothing is fixed here — the trigger is disarmed so this
+# stops reddening every pull request. See docs/local-ci.md.
+#
+# The OpenAPI contract is NOT unguarded meanwhile: OpenApiContractTests runs
+# inside the mandatory local gate (./ci/run.sh) and fails it on drift.
+# See docs/openapi-contract.md.
+#
+# NOTE: the jobs below read github.event.pull_request.*, so a manual
+# workflow_dispatch run cannot produce a meaningful diff report. The real
+# re-enable is restoring `pull_request:`.
+#
+# Previous trigger: on: pull_request
 name: OpenAPI Check
 on:
-  pull_request:
+  workflow_dispatch:
 
 jobs:
   ancestor:

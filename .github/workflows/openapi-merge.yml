@@ -1,10 +1,19 @@
+# PARKED — manual trigger only (issue #62). Not a pull-request check, but it
+# is part of the openapi-* chain and hits the same allocation refusal: it went
+# red on every push to master before its first step. Nothing is fixed here —
+# the trigger is disarmed to stop permanent red on master.
+# See docs/local-ci.md.
+#
+# Consequence to be aware of: the published/unstable OpenAPI spec is no longer
+# updated automatically on master pushes or v* tags. The spec committed under
+# openapi/ stays authoritative and is guarded by OpenApiContractTests in the
+# local gate; publishing must be dispatched by hand, or the push/tag trigger
+# restored, once allocation works again.
+#
+# Previous trigger: on: push (branches: master, tags: 'v*')
 name: OpenAPI Publish
 on:
-  push:
-    branches:
-      - master
-    tags:
-      - 'v*'
+  workflow_dispatch:
 
 jobs:
   publish-openapi:

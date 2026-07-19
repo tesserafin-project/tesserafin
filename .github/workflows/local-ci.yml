@@ -1,16 +1,26 @@
-# Inert until a self-hosted runner registered with the labels below
-# (self-hosted, linux, x64, reefin) exists for this repository. Until
-# then this workflow simply has no runner to pick it up and never
-# executes — it does NOT consume hosted-runner Actions quota.
+# MANUAL TRIGGER ONLY until a self-hosted runner carrying the labels below
+# (self-hosted, linux, x64, reefin) is registered on this repository.
 #
-# See docs/local-ci.md for how to register such a runner and for the
-# reasoning behind this setup (hosted quota is currently exhausted).
+# Verified 2026-07: GET /repos/all3f0r1/reefin/actions/runners returns
+# total_count: 0. With no matching runner, an automatically triggered run
+# does not fail — it stays `queued` FOREVER, which is worse than red: it
+# leaves a permanently pending check on every pull request that nothing can
+# ever resolve. That is why the pull_request / push triggers are removed
+# rather than left in place (issue #62).
+#
+# It costs no hosted minutes either way; the problem is the indefinite
+# pending state, not the cost.
+#
+# This workflow is intentionally left dispatchable by hand and otherwise
+# unchanged, so that the moment a runner with those labels comes online it
+# can be re-armed by simply restoring the two triggers below. Registration
+# steps: see "Runner self-hosted" in docs/local-ci.md.
+#
+# Previous trigger: on: pull_request + push (branches: [master])
 name: Local CI (self-hosted, optional)
 
 on:
-  pull_request:
-  push:
-    branches: [master]
+  workflow_dispatch:
 
 permissions:
   contents: read

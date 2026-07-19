@@ -1,6 +1,21 @@
-﻿name: ABI Compatibility
+﻿# PARKED — manual trigger only (issue #62). GitHub refuses to allocate a
+# hosted runner for this PRIVATE repo BEFORE the first step: the account's
+# 2000 free Actions minutes/month (account-wide, not per-repo) are exhausted
+# and the spending limit is $0, so the overage is refused rather than billed.
+# Every job here failed in 3-4 s with zero steps executed and no annotation.
+# Nothing is fixed or worked around here — the trigger is disarmed so this
+# stops reddening every pull request. Cause, figures and restore conditions:
+# docs/local-ci.md.
+#
+# NOTE: the jobs below read github.event.pull_request.*, so a manual
+# workflow_dispatch run cannot produce a meaningful ABI diff. The dispatch
+# trigger keeps the workflow listed and syntactically live; the real
+# re-enable is restoring `pull_request:` once allocation works again.
+#
+# Previous trigger: on: pull_request
+name: ABI Compatibility
 on:
-  pull_request:
+  workflow_dispatch:
 
 permissions: {}
 

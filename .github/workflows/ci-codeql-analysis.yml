@@ -1,12 +1,19 @@
+# PARKED — manual trigger only (issue #62). Same allocation refusal as the
+# other hosted workflows: red on every pull request and every push to master
+# before the first step, plus a weekly cron that failed the same way and kept
+# burning allocation attempts for nothing. Nothing is fixed here — the trigger
+# is disarmed to stop the noise. See docs/local-ci.md.
+#
+# Loss of coverage is real and accepted for the duration of the outage: no
+# static security analysis runs while this is parked. The local gate does NOT
+# replace CodeQL. Restoring this is part of the return-to-normal checklist.
+#
+# Previous trigger: on: push (master) + pull_request (master) + schedule
+# ('24 2 * * 4')
 name: "CodeQL"
 
 on:
-  push:
-    branches: [ master ]
-  pull_request:
-    branches: [ master ]
-  schedule:
-    - cron: '24 2 * * 4'
+  workflow_dispatch:
 
 permissions:
   contents: read

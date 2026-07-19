@@ -1,12 +1,21 @@
+# PARKED — manual trigger only (issue #62). GitHub refuses to allocate a
+# hosted runner for this PRIVATE repo BEFORE the first step (account-wide
+# 2000 free minutes/month exhausted, spending limit $0), so this went red on
+# every pull request and every push to master without running a single step.
+# Nothing is fixed here — the trigger is disarmed to stop the noise.
+#
+# The test suite is NOT unguarded meanwhile: the mandatory merge gate during
+# the outage is the local Docker CI (purge bin/ + obj/, then ./ci/run.sh),
+# which runs the same `dotnet build` + `dotnet test` over Reefin.sln.
+# See docs/local-ci.md.
+#
+# Previous trigger: on: push (master) + pull_request
+# (Original note kept for the restore: PRs run against the forked branch
+# without access to secrets —
+# https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#workflows-in-forked-repositories)
 name: Tests
 on:
-  push:
-    branches:
-      - master
-  # Run tests against the forked branch, but
-  # do not allow access to secrets
-  # https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#workflows-in-forked-repositories
-  pull_request:
+  workflow_dispatch:
 
 env:
   SDK_VERSION: "10.0.x"

@@ -1,8 +1,13 @@
+# Cron disarmed — manual trigger only (issue #62). Same reason as
+# issue-stale.yml: no repository guard, hosted runner, so under the current
+# allocation refusal it produced two failed runs per day before their first
+# step. Nothing is fixed here; the schedule is removed and workflow_dispatch
+# (already present) is kept. See docs/local-ci.md.
+#
+# Previous trigger: on: schedule ('30 */12 * * *') + workflow_dispatch
 name: Stale PR Check
 
 on:
-  schedule:
-    - cron: '30 */12 * * *'
   workflow_dispatch:
 
 permissions:

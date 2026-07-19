@@ -1,8 +1,14 @@
+# Cron disarmed — manual trigger only (issue #62). This has no repository
+# guard and runs on a hosted runner, so under the current allocation refusal
+# it produced one failed run per day, before its first step, forever. It is
+# not a pull-request check, but it is pure noise and it keeps requesting an
+# allocation that is being denied. Nothing is fixed here; the schedule is
+# removed and workflow_dispatch (already present) is kept. See docs/local-ci.md.
+#
+# Previous trigger: on: schedule ('30 1 * * *') + workflow_dispatch
 name: Stale Issue Labeler
 
 on:
-  schedule:
-    - cron: '30 1 * * *'
   workflow_dispatch:
 
 permissions:
