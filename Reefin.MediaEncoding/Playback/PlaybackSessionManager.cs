@@ -336,11 +336,30 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
                 && _byPlaySessionId.TryGetValue(playSessionId, out var existingId)
                 && _sessions.TryGetValue(existingId, out var existing))
             {
-                // Issue #43: same "null does not erase" rule as Patch.
+                // Issue #43: same "null does not erase" rule as Patch - and it now actually applies
+                // to Request too. `Request = request` was unconditional here, which this comment
+                // already claimed it was not: Track (the HLS segment path, DynamicHlsController ->
+                // Track) ALWAYS passes request: null, so any segment fetch landing on the session a
+                // previous Create established for the same play session id silently nulled the
+                // stored request.
+                //
+                // That null is load-bearing downstream, not cosmetic. PlaybackSessionsController
+                // reads ownership off session.Request?.Options.UserId
+                // (EnsureCallerOwnsSessionOrIsAdmin) and forbids when it is null, and
+                // GetPlaybackSessionStream 422s on the same null. So the ordinary client sequence -
+                // POST Playback/Sessions, then fetch a segment - locked the session's OWN OWNER out
+                // of it: PUT and DELETE answered 403 and GET Stream 422, while an administrator was
+                // unaffected (hence the endpoint reading as "admin only"). Issue #43's client-side
+                // teardown is impossible while that holds, DELETE being precisely the verb refused.
+                //
+                // Kind and Plan deliberately keep overwriting unconditionally: Track's whole purpose
+                // is to record the plan actually being executed, and GET Stream reads
+                // session.Plan.StreamInfo. Only Request has a caller that legitimately has none to
+                // contribute, so only Request needs the guard.
                 var updated = existing with
                 {
                     Kind = kind,
-                    Request = request,
+                    Request = request ?? existing.Request,
                     Plan = plan,
                     UpdatedAt = now,
                     PlaybackAttemptId = playbackAttemptId ?? existing.PlaybackAttemptId,
