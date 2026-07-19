@@ -125,6 +125,42 @@ C'est le vert de référence auquel comparer toute exécution ultérieure. Un
 `PASS` avec un total de tests **inférieur** à 4020 doit être traité comme un
 faux vert (typiquement un `obj/` non purgé) et non comme un succès.
 
+### ⚠ `./ci/run.sh` ne suffit pas à lui seul
+
+`ci/run.sh` lance `dotnet test --filter 'Category!=Smoke'` (ligne 78). Il
+**exclut donc tous les tests marqués `Category=Smoke`**, et avec eux le
+smoke et l'E2E. Un `RESULT: PASS` de `run.sh` ne dit **rien** de ces
+suites-là.
+
+C'est un piège de confiance réel : une régression prouvée par un test E2E
+peut passer un `run.sh` vert. Le cas a été rencontré sur l'issue #59, dont la
+reproduction — un ré-encodage réellement servi malgré `AllowTranscoding:false`
+— n'est visible que côté E2E.
+
+La porte de merge complète est donc **trois commandes**, pas une :
+
+```bash
+# 1. purger TOUS les bin/ et obj/ — obligatoire
+find . -type d \( -name bin -o -name obj \) -prune -exec rm -rf {} +
+
+# 2. build + suite unitaire (exclut Category=Smoke)
+./ci/run.sh
+
+# 3. les suites que run.sh a délibérément écartées
+./ci/smoke.sh
+./ci/smoke-e2e.sh
+```
+
+Références mesurées le 2026-07-19 sur le correctif #59 (SHA `48bee212`) :
+
+| Commande | Exit | Durée | Résultat |
+| --- | --- | --- | --- |
+| `./ci/run.sh` | 0 | 482 s | 4031 passés / 0 échec / 11 skipped |
+| `./ci/smoke.sh` | 0 | 110 s | 32/32 |
+| `./ci/smoke-e2e.sh` | 0 | 48 s | 11/11 |
+
+Ne conclure « porte verte » qu'après les **trois** exit 0.
+
 ## Comment lancer
 
 ```bash
