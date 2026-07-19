@@ -162,10 +162,11 @@ Running 18 tests using 1 worker
   18 passed (45.9s)
 ```
 
-Reproduce it exactly with:
+Reproduce it with (no `--port`: let the script pick a free one, so this never collides with an
+already-running Reefin instance — `--exec` exports the resulting base URL itself):
 
 ```bash
-./ci/serve-e2e.sh --webdir <reefin-web>/dist --port 8097 \
+./ci/serve-e2e.sh --webdir <reefin-web>/dist \
     --exec 'cd <reefin-web> && \
         REEFIN_E2E_CAPTURE_DIR=/tmp/glass-captures \
         npx playwright test \
