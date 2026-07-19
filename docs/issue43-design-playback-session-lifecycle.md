@@ -81,10 +81,27 @@ dropped if the current generation has moved past it (§5).
 
 `changeStream()`'s transcoding retry re-enters `getPlaybackInfo()` and rebuilds the stream
 from scratch. It is the same *attempt* (same `PlaybackAttemptId`) but a different *stream*.
-Modelling it as `PUT` would be wrong: the client re-derives a whole new `streamInfo`, and the
-v2 path re-`POST`s with a fresh `PlaySessionId`. So a retry is a **replacement**, not a
-`PUT` — new `PlaybackSessionId`, same `PlaybackAttemptId`. `PUT` is reserved for the case
-where the client keeps the same stream identity and only re-plans it.
+Modelling it as `PUT` would be wrong: the client re-derives a whole new `streamInfo`. So a
+retry is conceptually a **replacement**, not a `PUT`. `PUT` is reserved for the case where the
+client keeps the same stream identity and only re-plans it.
+
+**What actually ships today, which is narrower than the above — verified by reading the
+wiring, not assumed.** `applyV2PlaybackUrlIfEnabled` is called from exactly one site, inside
+`playAfterBitrateDetect()`, which is reached only from `playInternal()`. The retry path
+(`changeStream()` → `changeStreamToUrl()` → `setSrcIntoPlayer()`) does **not** pass through
+it. Consequences:
+
+- a transcoding retry **does not re-resolve a v2 URL**; it builds a legacy `streamInfo` and
+  assigns it to `playerData.streamInfo` directly;
+- therefore no new v2 session is established on retry, and no re-adoption happens;
+- the tracker lives on `playerData` (not `streamInfo`), so it **survives** the retry still
+  holding the session established by the initial `playInternal()`;
+- at final stop, `expectSessionId` is read from the now-legacy `streamInfo` and is therefore
+  `undefined`, which skips the name guard and releases the held session.
+
+So the initial v2 session is still correctly torn down after a retry — **there is no leak** —
+but the retry itself stays on the legacy path. Re-establishing a v2 session on retry is
+outstanding work, not shipped behaviour, and this section must not be read as describing it.
 
 ---
 
