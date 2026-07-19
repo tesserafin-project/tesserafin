@@ -272,8 +272,23 @@ public sealed class TranscodingJob : IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
+        // Deliberately does NOT null out CurrentAttempt after disposing it (contrast with every other
+        // disposable field below, which IS nulled). CurrentAttempt.Dispose() already releases the
+        // Process handle (CurrentAttempt.Process = null) - keeping the TranscodeAttempt object itself
+        // alive preserves its plain HasExited/ExitCode values for whichever caller is still holding
+        // this TranscodingJob reference. Real, observed bug this fixes: Process.Exited fires
+        // OnFfMpegProcessExited, which sets job.HasExited = true and THEN calls job.Dispose() (this
+        // method) before returning - if this nulled CurrentAttempt, HasExited's getter
+        // (CurrentAttempt?.HasExited ?? false) would silently revert to false the instant Dispose()
+        // ran, even though the process had genuinely already exited. Any concurrent poller relying on
+        // HasExited to know the transcode is done (DynamicHlsController.GetSegmentResult's
+        // "while (!transcodingJob.HasExited)" readiness loop, in particular) would then loop forever:
+        // its exit condition can never become true again, and - for a short-lived encode with only one
+        // segment - the "or the next segment appeared" alternative never becomes true either, so the
+        // request hangs indefinitely instead of serving the segment that is already correct and
+        // complete on disk. See PlaybackUrlContractEndToEndTests' Transcode_Hls_* scenario remarks for
+        // how this was originally found.
         CurrentAttempt?.Dispose();
-        CurrentAttempt = null;
         _killTimer?.Dispose();
         _killTimer = null;
         CancellationTokenSource?.Dispose();
