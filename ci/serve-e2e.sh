@@ -34,10 +34,12 @@
 #        POST /Startup/User          -> renames it to $REEFIN_E2E_USER, sets $REEFIN_E2E_PASSWORD
 #        POST /Startup/Complete      -> marks the setup wizard done
 #        POST /Users/AuthenticateByName -> obtains an access token
-#        POST /Library/VirtualFolders?collectionType=movies&refreshLibrary=true -> the library
-#        POST /Library/VirtualFolders?collectionType=homevideos&refreshLibrary=true -> the probes
-#      then POLLS /UserViews until BOTH views actually materialize (the library scan is
-#      asynchronous — "server up" is NOT "library visible").
+#        POST /Library/VirtualFolders?collectionType=movies&refreshLibrary=false      -> the library
+#        POST /Library/VirtualFolders?collectionType=homevideos&refreshLibrary=true   -> the probes
+#      refreshLibrary is requested exactly once, on the LAST folder: it scans the whole library
+#      root, so one scan covers both — and two of them race and cancel each other (see
+#      add_library). Then POLLS /UserViews until BOTH views actually materialize (the library
+#      scan is asynchronous — "server up" is NOT "library visible").
 #   8. Verifies through /Items that every fixture actually indexed with the codecs it was built
 #      with, and that the movies library still holds EXACTLY two items (see the cross-repo
 #      contract below). ffprobe proves the bytes on disk; this proves the server agreed.
@@ -150,7 +152,7 @@ while [ $# -gt 0 ]; do
         --timeout)  [ $# -ge 2 ] || fail_usage "--timeout requires seconds";  READY_TIMEOUT="$2"; shift 2 ;;
         --no-build) DO_BUILD=0; shift ;;
         --keep)     KEEP=1; shift ;;
-        -h|--help)  sed -n '2,104p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help)  sed -n '2,106p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)          fail_usage "unexpected argument: $1" ;;
     esac
 done
