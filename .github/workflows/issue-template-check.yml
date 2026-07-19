@@ -1,8 +1,17 @@
+# PARKED — manual trigger only (issue #62). No repository guard, hosted
+# runner, so under the current allocation refusal it produced one failed run
+# per issue opened, before its first step. It does not pollute pull requests
+# and gates no merge, but it fails the same way as the parked crons and is
+# parked for the same reason: stop emitting runs that can never start.
+# Nothing is fixed here. See docs/local-ci.md.
+#
+# NOTE: the job reads github.event.issue.*, so a manual dispatch does nothing
+# useful. The real re-enable is restoring `issues: types: [opened]`.
+#
+# Previous trigger: on: issues (types: [opened])
 name: Check Issue Template
 on:
-  issues:
-    types:
-      - opened
+  workflow_dispatch:
 jobs:
   check_issue:
     runs-on: ubuntu-latest

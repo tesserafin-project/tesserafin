@@ -29,6 +29,34 @@ en **3-4 secondes, avec zéro step exécuté et aucune annotation**, alors que
 Un job qui échoue *avant son premier step* n'est pas un job cassé : c'est un
 job à qui on n'a jamais donné de machine.
 
+### Corollaire — la protection de branche est indisponible
+
+Vérifié :
+
+```console
+$ gh api repos/all3f0r1/reefin/branches/master/protection
+{"message":"Upgrade to GitHub Pro or make this repository public to enable
+this feature.","status":"403"}
+$ gh api repos/all3f0r1/reefin/rulesets
+{"message":"Upgrade to GitHub Pro or make this repository public to enable
+this feature.","status":"403"}
+```
+
+Deux conséquences :
+
+1. **Bonne nouvelle** : aucun *required status check* ne peut être configuré
+   sur `master`. Basculer un workflow en `workflow_dispatch` ne risque donc
+   pas de transformer un rouge en « Expected — Waiting for status to be
+   reported » éternel. Le bruit est bien supprimé, pas seulement recoloré.
+2. **Mauvaise nouvelle** : la condition 3 du retour à la normale (« la porte
+   obligatoire a une autorité explicite ») est **mécaniquement inatteignable**
+   tant que le dépôt est privé sur le plan `free`. On ne peut rendre aucune
+   porte obligatoire — la porte locale n'a aujourd'hui qu'une autorité
+   conventionnelle (ce document), pas mécanique.
+
+C'est aussi une confirmation indépendante du diagnostic : ce 403 n'est pas un
+problème de droits, c'est GitHub qui confirme `free` + privé.
+
 ### Cause 2 — aucun runner self-hosted enregistré
 
 `.github/workflows/local-ci.yml` exige
@@ -178,6 +206,7 @@ restaurer tel quel au retour à la normale.
 | `local-ci.yml` | `pull_request` + `push` (master) | `workflow_dispatch` | Aucun runner correspondant (`total_count: 0`) : restait `queued` indéfiniment, laissant un check *pending* éternel. |
 | `issue-stale.yml` | `schedule` + `workflow_dispatch` | `workflow_dispatch` | Sans garde de dépôt : un run en échec par jour, avant le premier step. |
 | `pull-request-stale.yaml` | `schedule` + `workflow_dispatch` | `workflow_dispatch` | Idem, deux runs en échec par jour. |
+| `issue-template-check.yml` | `issues` (`opened`) | `workflow_dispatch` | Sans garde de dépôt : un run en échec par issue ouverte. Ne pollue aucune PR et ne conditionne aucun merge, mais échoue de la même façon que les crons — mis en pause pour la même raison. |
 
 Workflows **laissés intacts**, et pourquoi :
 
@@ -192,9 +221,6 @@ Workflows **laissés intacts**, et pourquoi :
   commentaire `@jellyfin-bot`. Dans ce fork ces conditions sont fausses, donc
   les jobs sont **skipped** : ils ne demandent aucun runner et ne produisent
   aucun rouge. Les toucher n'apporterait rien.
-- `issue-template-check.yml` — échoue bien avant son premier step, mais sur
-  `issues: opened` uniquement : il ne pollue aucune PR et ne conditionne aucun
-  merge. Laissé tel quel plutôt que masqué.
 - `release-bump-version.yaml` — `release: published` + `workflow_dispatch` ;
   ne se déclenche pas dans le flux courant.
 
@@ -208,7 +234,9 @@ sont vraies *simultanément* :
 3. la porte obligatoire a une autorité explicite.
 
 Aucune de ces conditions n'est atteignable depuis le dépôt. Il faut **une
-action humaine de facturation, ou l'enregistrement d'un runner**. Options,
+action humaine de facturation, ou l'enregistrement d'un runner**. Et la
+condition 3 exige en plus de lever le blocage sur la protection de branche
+(dépôt public **ou** plan GitHub Pro) — voir le corollaire plus haut. Options,
 avec leur conséquence réelle :
 
 - **Relever la limite de dépense GitHub Actions** (Settings → Billing →
