@@ -34,6 +34,8 @@ namespace Reefin.Api.Tests.Controllers;
 
 public class PlaybackSessionsControllerTests
 {
+    private const string AttemptId = "attempt-7f3a";
+
     private readonly Mock<IPlaybackSessionManager> _playbackSessionManager = new();
     private readonly Mock<IItemLookupService> _itemLookupService = new();
     private readonly Mock<IUserManager> _userManager = new();
@@ -45,7 +47,7 @@ public class PlaybackSessionsControllerTests
     private readonly Guid _userId = Guid.NewGuid();
     private readonly Guid _itemId = Guid.NewGuid();
 
-    private PlaybackSessionsController CreateController()
+    private PlaybackSessionsController CreateController(ILogger<PlaybackSessionsController>? logger = null)
     {
         var controller = new PlaybackSessionsController(
             _playbackSessionManager.Object,
@@ -55,7 +57,8 @@ public class PlaybackSessionsControllerTests
             _v2PlanStore.Object,
             _liveStreamResolver.Object,
             _liveWiringDiagnosticsStore.Object,
-            _mediaEncoder.Object);
+            _mediaEncoder.Object,
+            logger);
 
         SetIdentity(controller, _userId);
 
@@ -1001,5 +1004,230 @@ public class PlaybackSessionsControllerTests
         expectedStreamInfo.PlaySessionId = "play-session-1";
         expectedStreamInfo.StartPositionTicks = 250;
         Assert.Equal(expectedStreamInfo.ToUrl(null, "caller-token", null), descriptor.Url);
+    }
+
+    /// <summary>
+    /// Issue #43: the POST transition emits exactly one lifecycle line carrying the named
+    /// properties a log query correlates on - the session id, the attempt id, and the decided
+    /// method - and emits it inside the attempt scope the action opened.
+    /// </summary>
+    [Fact]
+    public async Task CreatePlaybackSession_ViablePlan_LogsCreatedWithAttemptIdAndMethod()
+    {
+        var item = new Movie { Id = _itemId };
+        SetUpItemAndUser(item);
+        var session = new PlaybackSession(PlaybackSessionId.NewId(), PlaybackMediaKind.Video, null, null, new PlaybackPlan(PlayMethod.DirectPlay, default), default, default, AttemptId);
+        _playbackSessionManager
+            .Setup(m => m.Create(It.IsAny<PlaybackSessionRequest>(), null, AttemptId))
+            .Returns(session);
+        var logger = new RecordingLogger();
+
+        await CreateController(logger).CreatePlaybackSession(CreateRequest() with { PlaybackAttemptId = AttemptId });
+
+        var entry = Assert.Single(logger.Entries);
+        Assert.Contains("created", entry.Message, StringComparison.Ordinal);
+        Assert.Equal(session.Id, entry.Properties["SessionId"]);
+        Assert.Equal(PlayMethod.DirectPlay, entry.Properties["PlayMethod"]);
+        Assert.Equal(AttemptId, entry.Properties["PlaybackAttemptId"]);
+        Assert.Contains(entry.ScopesAtLog, s => RecordingLogger.ScopeCarriesAttemptId(s, AttemptId));
+    }
+
+    /// <summary>
+    /// Issue #43: the PUT transition logs the bits that actually change on a re-plan (old and new
+    /// method) - and the attempt id it carries is the one the PATCHED session retains, so a PUT
+    /// that omitted the field still logs the attempt recorded at creation ("not sent" is not
+    /// "forget it").
+    /// </summary>
+    [Fact]
+    public async Task ReplacePlaybackSession_ViablePlan_LogsReplacedWithOldAndNewMethod()
+    {
+        var item = new Movie { Id = _itemId };
+        SetUpItemAndUser(item);
+        var id = PlaybackSessionId.NewId();
+        _playbackSessionManager.Setup(m => m.Get(id)).Returns(BuildExistingSessionForAuth(id, _userId) with { PlaybackAttemptId = AttemptId });
+        var patched = new PlaybackSession(id, PlaybackMediaKind.Video, null, null, new PlaybackPlan(PlayMethod.Transcode, TranscodeReason.VideoCodecNotSupported), default, default, AttemptId);
+        _playbackSessionManager
+            .Setup(m => m.Patch(id, It.IsAny<PlaybackSessionRequest>()))
+            .Returns(patched);
+        var logger = new RecordingLogger();
+
+        await CreateController(logger).ReplacePlaybackSession(id, CreateReplaceRequest());
+
+        var entry = Assert.Single(logger.Entries);
+        Assert.Contains("replaced", entry.Message, StringComparison.Ordinal);
+        Assert.Equal(id, entry.Properties["SessionId"]);
+        Assert.Equal(PlayMethod.DirectPlay, entry.Properties["OldPlayMethod"]);
+        Assert.Equal(PlayMethod.Transcode, entry.Properties["NewPlayMethod"]);
+        Assert.Equal(AttemptId, entry.Properties["PlaybackAttemptId"]);
+    }
+
+    /// <summary>
+    /// Issue #43: GET Stream carries no attempt id of its own, so the handler recovers the one
+    /// stored on the session and runs its work inside the same attempt scope POST/PUT open -
+    /// proven by observing the scope genuinely active at the moment the resolver is invoked, and
+    /// closed again by the time the action returns.
+    /// </summary>
+    [Fact]
+    public void GetPlaybackSessionStream_ExistingSession_ResolvesUnderStoredAttemptScope()
+    {
+        var session = BuildStreamableSession(_userId, "play-session-1") with { PlaybackAttemptId = AttemptId };
+        _playbackSessionManager.Setup(m => m.Get(session.Id)).Returns(session);
+        var logger = new RecordingLogger();
+        var scopeActiveDuringResolve = false;
+        _liveStreamResolver
+            .Setup(r => r.Resolve(It.IsAny<PlaybackSessionId>(), It.IsAny<StreamInfo>(), It.IsAny<MediaSourceInfo>(), It.IsAny<DeviceProfile>(), It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<long>(), It.IsAny<bool>()))
+            .Callback(() => scopeActiveDuringResolve = logger.HasActiveScopeWithAttemptId(AttemptId))
+            .Returns(session.Plan.StreamInfo!);
+        PlaybackLiveWiringOutcome? outcome = PlaybackLiveWiringOutcome.Served(DateTimeOffset.UtcNow);
+        _liveWiringDiagnosticsStore.Setup(s => s.TryGet(session.Id, out outcome)).Returns(true);
+
+        var result = CreateController(logger).GetPlaybackSessionStream(session.Id);
+
+        Assert.IsAssignableFrom<OkObjectResult>(result.Result);
+        Assert.True(scopeActiveDuringResolve);
+        Assert.Empty(logger.ActiveScopes);
+    }
+
+    /// <summary>
+    /// Issue #43: a missing session has no stored attempt id to scope with - the 404 path must not
+    /// invent one, so no attempt scope is ever opened.
+    /// </summary>
+    [Fact]
+    public void GetPlaybackSessionStream_UnknownSession_OpensNoAttemptScope()
+    {
+        var id = PlaybackSessionId.NewId();
+        _playbackSessionManager.Setup(m => m.Get(id)).Returns((PlaybackSession?)null);
+        var logger = new RecordingLogger();
+
+        var result = CreateController(logger).GetPlaybackSessionStream(id);
+
+        Assert.IsType<NotFoundResult>(result.Result);
+        Assert.Empty(logger.Scopes);
+    }
+
+    /// <summary>
+    /// Issue #43: the DELETE transition recovers the stored attempt id (a DELETE has no body to
+    /// carry one) and logs the deletion inside that attempt scope, with the named properties a log
+    /// query correlates on.
+    /// </summary>
+    [Fact]
+    public void DeletePlaybackSession_ExistingSession_LogsDeletedUnderStoredAttemptScope()
+    {
+        var id = PlaybackSessionId.NewId();
+        _playbackSessionManager.Setup(m => m.Get(id)).Returns(BuildExistingSessionForAuth(id, _userId) with { PlaybackAttemptId = AttemptId });
+        _playbackSessionManager.Setup(m => m.Delete(id)).Returns(true);
+        var logger = new RecordingLogger();
+
+        var result = CreateController(logger).DeletePlaybackSession(id);
+
+        Assert.IsType<NoContentResult>(result);
+        var entry = Assert.Single(logger.Entries);
+        Assert.Contains("deleted", entry.Message, StringComparison.Ordinal);
+        Assert.Equal(id, entry.Properties["SessionId"]);
+        Assert.Equal(AttemptId, entry.Properties["PlaybackAttemptId"]);
+        Assert.Contains(entry.ScopesAtLog, s => RecordingLogger.ScopeCarriesAttemptId(s, AttemptId));
+    }
+
+    /// <summary>
+    /// Issue #43: deleting a session that never existed (or already ended) still answers 404 - and
+    /// now says so in the log, tied to the request via the ambient RequestId scope (#42), so an e2e
+    /// can tell "teardown raced the TTL sweep" from "teardown never reached the server". No attempt
+    /// scope: a missing session has no stored attempt id, and inventing one would be worse.
+    /// </summary>
+    [Fact]
+    public void DeletePlaybackSession_UnknownSession_LogsAlreadyGoneAndReturnsNotFound()
+    {
+        var id = PlaybackSessionId.NewId();
+        _playbackSessionManager.Setup(m => m.Get(id)).Returns((PlaybackSession?)null);
+        var logger = new RecordingLogger();
+
+        var result = CreateController(logger).DeletePlaybackSession(id);
+
+        Assert.IsType<NotFoundResult>(result);
+        _playbackSessionManager.Verify(m => m.Delete(It.IsAny<PlaybackSessionId>()), Times.Never);
+        var entry = Assert.Single(logger.Entries);
+        Assert.Contains("already gone", entry.Message, StringComparison.Ordinal);
+        Assert.Equal(id, entry.Properties["SessionId"]);
+        Assert.Empty(logger.Scopes);
+    }
+
+    /// <summary>
+    /// Issue #43: the session can vanish between the existence check and the delete (PlaybackStopped,
+    /// TTL sweep, a concurrent DELETE) - same observable outcome as the not-found path: 404, logged
+    /// as already gone.
+    /// </summary>
+    [Fact]
+    public void DeletePlaybackSession_RacedAwayBetweenGetAndDelete_LogsAlreadyGoneAndReturnsNotFound()
+    {
+        var id = PlaybackSessionId.NewId();
+        _playbackSessionManager.Setup(m => m.Get(id)).Returns(BuildExistingSessionForAuth(id, _userId) with { PlaybackAttemptId = AttemptId });
+        _playbackSessionManager.Setup(m => m.Delete(id)).Returns(false);
+        var logger = new RecordingLogger();
+
+        var result = CreateController(logger).DeletePlaybackSession(id);
+
+        Assert.IsType<NotFoundResult>(result);
+        var entry = Assert.Single(logger.Entries);
+        Assert.Contains("already gone", entry.Message, StringComparison.Ordinal);
+        Assert.Equal(id, entry.Properties["SessionId"]);
+    }
+
+    /// <summary>
+    /// Issue #43: captures scopes and structured entries so tests can assert the attempt scope is
+    /// genuinely open while handler work runs and that lifecycle lines carry the named properties a
+    /// log query correlates on - same capturing approach as
+    /// <c>RequestCorrelationMiddlewareTests.ScopeCapturingLogger</c>.
+    /// </summary>
+    private sealed class RecordingLogger : ILogger<PlaybackSessionsController>
+    {
+        private readonly List<object> _activeScopes = new();
+
+        public List<object> Scopes { get; } = new();
+
+        public List<RecordedEntry> Entries { get; } = new();
+
+        public IReadOnlyList<object> ActiveScopes => _activeScopes;
+
+        public static bool ScopeCarriesAttemptId(object scope, string attemptId) =>
+            scope is IEnumerable<KeyValuePair<string, object>> pairs
+            && pairs.Any(p => p.Key == "PlaybackAttemptId" && Equals(p.Value, attemptId));
+
+        public IDisposable BeginScope<TState>(TState state)
+            where TState : notnull
+        {
+            Scopes.Add(state);
+            _activeScopes.Add(state);
+            return new ScopeHandle(_activeScopes, state);
+        }
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            var properties = state as IEnumerable<KeyValuePair<string, object?>> ?? Array.Empty<KeyValuePair<string, object?>>();
+            Entries.Add(new RecordedEntry(
+                formatter(state, exception),
+                properties.ToDictionary(p => p.Key, p => p.Value),
+                _activeScopes.ToList()));
+        }
+
+        public bool HasActiveScopeWithAttemptId(string attemptId) =>
+            _activeScopes.Any(s => ScopeCarriesAttemptId(s, attemptId));
+
+        public sealed record RecordedEntry(string Message, Dictionary<string, object?> Properties, List<object> ScopesAtLog);
+
+        private sealed class ScopeHandle : IDisposable
+        {
+            private readonly List<object> _activeScopes;
+            private readonly object _state;
+
+            public ScopeHandle(List<object> activeScopes, object state)
+            {
+                _activeScopes = activeScopes;
+                _state = state;
+            }
+
+            public void Dispose() => _activeScopes.Remove(_state);
+        }
     }
 }

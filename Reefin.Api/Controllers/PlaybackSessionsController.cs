@@ -129,6 +129,15 @@ public class PlaybackSessionsController : BaseReefinApiController
             return UnprocessableEntity();
         }
 
+        // Issue #43: the lifecycle line a browser e2e joins against X-Request-Id (the ambient
+        // RequestId scope of #42) and the attempt scope opened above. One line per transition;
+        // the PUT and DELETE transitions below each have their own.
+        _logger.LogInformation(
+            "Playback session {SessionId} created (method {PlayMethod}, attempt {PlaybackAttemptId}).",
+            session.Id,
+            session.Plan.PlayMethod,
+            session.PlaybackAttemptId);
+
         // PR115a: the response reflects the v2 decision when one is retained and authoritative for
         // this session - see PlaybackSessionResponseMapper.Map(PlaybackSession, V2PlanRecord?).
         _v2PlanStore.TryGet(session.Id, out var v2Record);
@@ -193,6 +202,16 @@ public class PlaybackSessionsController : BaseReefinApiController
             return UnprocessableEntity();
         }
 
+        // Issue #43: the re-plan transition, with the decision bits that actually change on a track/
+        // constraint change. The attempt id is read off the PATCHED session, which preserves the one
+        // recorded at creation when this PUT omitted the field ("not sent" is not "forget it").
+        _logger.LogInformation(
+            "Playback session {SessionId} replaced (method {OldPlayMethod} -> {NewPlayMethod}, attempt {PlaybackAttemptId}).",
+            session.Id,
+            existingSession.Plan.PlayMethod,
+            session.Plan.PlayMethod,
+            session.PlaybackAttemptId);
+
         // PR115a: the response reflects the v2 decision when one is retained and authoritative for
         // this session - see PlaybackSessionResponseMapper.Map(PlaybackSession, V2PlanRecord?).
         _v2PlanStore.TryGet(session.Id, out var v2Record);
@@ -218,8 +237,17 @@ public class PlaybackSessionsController : BaseReefinApiController
         var session = _playbackSessionManager.Get(id);
         if (session is null)
         {
+            // Issue #43: no session means no stored attempt id to scope with - inventing one would
+            // be worse than none. The line still ties the 404 to the request via the ambient
+            // RequestId scope (#42).
+            _logger.LogInformation("Playback session {SessionId} delete requested, but the session was already gone.", id);
             return NotFound();
         }
+
+        // Issue #43: DELETE carries no body, so the attempt id is recovered from the stored session -
+        // the same value the POST/PUT of this attempt recorded - and scopes everything after the
+        // existence check, exactly like the request-supplied scope on POST/PUT.
+        using var attemptScope = BeginAttemptScope(session.PlaybackAttemptId);
 
         var authorization = EnsureCallerOwnsSessionOrIsAdmin(session);
         if (authorization is not null)
@@ -227,9 +255,19 @@ public class PlaybackSessionsController : BaseReefinApiController
             return authorization;
         }
 
-        return _playbackSessionManager.Delete(id)
-            ? NoContent()
-            : NotFound();
+        if (!_playbackSessionManager.Delete(id))
+        {
+            // Raced away between the Get above and the Delete (PlaybackStopped, TTL sweep, a
+            // concurrent DELETE) - same observable outcome as the not-found path above.
+            _logger.LogInformation("Playback session {SessionId} delete requested, but the session was already gone.", id);
+            return NotFound();
+        }
+
+        _logger.LogInformation(
+            "Playback session {SessionId} deleted (attempt {PlaybackAttemptId}).",
+            id,
+            session.PlaybackAttemptId);
+        return NoContent();
     }
 
     /// <summary>
@@ -270,6 +308,12 @@ public class PlaybackSessionsController : BaseReefinApiController
         {
             return NotFound();
         }
+
+        // Issue #43: like DELETE, this request carries no attempt id of its own - it is recovered
+        // from the stored session, so every line emitted while resolving the URL (the live-wiring
+        // decision below logs its serve/fallback outcome) is joinable to the attempt that planned
+        // the session. A missing session (the 404 above) has none to offer, so no scope there.
+        using var attemptScope = BeginAttemptScope(session.PlaybackAttemptId);
 
         // §4.2 (mandatory, new on this endpoint): a URL carries the caller's own access token
         // (StreamInfo.ToUrl's &ApiKey=) - this endpoint must never hand that token to anyone but the
@@ -454,8 +498,9 @@ public class PlaybackSessionsController : BaseReefinApiController
 
     /// <summary>
     /// Issue #43: opens a structured log scope carrying the attempt id for the rest of the action,
-    /// or returns <c>null</c> when the client supplied none — no scope is better than a scope
-    /// carrying a null value. Nests inside the per-request scope opened by
+    /// or returns <c>null</c> when none is available — no scope is better than a scope carrying a
+    /// null value. POST/PUT pass the request's own field; GET Stream/DELETE have no body, so they
+    /// pass the id recovered from the stored session. Nests inside the per-request scope opened by
     /// <c>RequestCorrelationMiddleware</c> (issue #42), so lines emitted here carry BOTH the attempt
     /// id (same on a retry) and the request id (different on a retry).
     /// </summary>
