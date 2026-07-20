@@ -68,6 +68,15 @@ namespace Reefin.Controller.MediaEncoding
 
         public string OutputVideoCodec { get; set; }
 
+        /// <summary>
+        /// Gets or sets what the encoder selected for this job will be used for. Defaults to
+        /// <see cref="VideoEncoderUsage.Transcode"/>; only the image-extraction pipeline
+        /// (<c>MediaEncoder.ExtractVideoImagesOnInterval</c>) sets it otherwise. Encoder selection
+        /// reads it because transcoding and image extraction do not share an argument generator,
+        /// so they cannot share the same set of acceptable encoders (see issue #61).
+        /// </summary>
+        public VideoEncoderUsage EncoderUsage { get; set; } = VideoEncoderUsage.Transcode;
+
         public MediaProtocol InputProtocol { get; set; }
 
         public string MediaPath { get; set; }

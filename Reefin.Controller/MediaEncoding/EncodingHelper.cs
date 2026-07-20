@@ -247,12 +247,31 @@ namespace Reefin.Controller.MediaEncoding
             {
                 var hwType = encodingOptions.HardwareAccelerationType;
 
-                // Only enable VA-API MJPEG encoder on Intel iHD driver.
-                // Legacy platforms supported ONLY by i965 do not support MJPEG encoder.
-                if (hwType == HardwareAccelerationType.vaapi
-                    && !_mediaEncoder.IsVaapiDeviceInteliHD)
+                if (hwType == HardwareAccelerationType.vaapi)
                 {
-                    return _defaultMjpegEncoder;
+                    // Only enable VA-API MJPEG encoder on Intel iHD driver.
+                    // Legacy platforms supported ONLY by i965 do not support MJPEG encoder.
+                    if (!_mediaEncoder.IsVaapiDeviceInteliHD)
+                    {
+                        return _defaultMjpegEncoder;
+                    }
+
+                    // Issue #61: mjpeg_vaapi has no branch in GetVideoBitrateParam, so a transcode job
+                    // falls through to the catch-all and emits "-b:v 0 -maxrate 0 -bufsize 0" whenever
+                    // no target bitrate is derivable - the #55 failure mode, on a codec that has no
+                    // inter-frame rate control to begin with (MJPEG is intra-only and is driven by
+                    // quality, not bitrate). No quality target is specified anywhere in the config, so
+                    // there is nothing legitimate to emit and nothing may be invented; letting ffmpeg
+                    // or the driver pick a default silently is equally unacceptable. Transcoding
+                    // therefore falls back to the software mjpeg encoder.
+                    //
+                    // Image extraction is unaffected: it never goes through GetVideoBitrateParam and
+                    // already carries an explicit, validated -global_quality:v value
+                    // (MediaEncoder.ExtractVideoImagesOnIntervalInternal), so it keeps the VAAPI path.
+                    if (state.EncoderUsage != VideoEncoderUsage.ImageExtraction)
+                    {
+                        return _defaultMjpegEncoder;
+                    }
                 }
 
                 if (hwType != HardwareAccelerationType.none
@@ -1731,6 +1750,18 @@ namespace Reefin.Controller.MediaEncoding
                 // The `maxrate` and `bufsize` options can potentially lead to performance regression
                 // and even encoder hangs, especially when the value is very high.
                 return FormattableString.Invariant($" -b:v {bitrate} -qmin -1 -qmax -1");
+            }
+
+            // MJPEG is intra-only: it has no inter-frame rate control and is driven natively by
+            // quality, not by a bitrate. Issue #61: with no derivable target bitrate the catch-all
+            // below emitted "-b:v 0 -maxrate 0 -bufsize 0", which is meaningless for this codec.
+            // Emit no rate-control arguments at all and let the encoder use its native quality
+            // default - the same policy the "OutputVideoBitrate is null" branch above already
+            // applies. Deliberately not substituting an invented bitrate or a hand-picked
+            // -global_quality / -qscale: no quality target is specified anywhere in the config.
+            if (videoCodec.StartsWith("mjpeg", StringComparison.OrdinalIgnoreCase) && bitrate <= 0)
+            {
+                return string.Empty;
             }
 
             return FormattableString.Invariant($" -b:v {bitrate} -maxrate {bitrate} -bufsize {bufsize}");
