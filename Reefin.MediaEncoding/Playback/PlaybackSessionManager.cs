@@ -67,6 +67,16 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
     // _byPlaySessionId - both are read/written from the same event handlers.
     private readonly HashSet<string> _startedPlaySessionIds = new(StringComparer.OrdinalIgnoreCase);
 
+    // Issue #71: sessions a CLIENT established through the v2 HTTP API (Create, i.e.
+    // POST /Playback/Sessions) and therefore holds the PlaybackSessionId of. They are ended by that
+    // client's own DELETE, or by the ExpiryTtl backstop - never by a PlaySessionId-keyed signal out
+    // of the legacy transcode pipeline, which is the coupling issue #71 identifies as the root
+    // cause (shared with #70). Sessions merely Track()ed by that pipeline - the HLS segment path,
+    // DynamicHlsController -> TrackTranscodeOutput - are NOT in here: nobody holds their id and
+    // nobody will ever DELETE them, so their job ending remains the right moment to drop them.
+    // Guarded by _lock, same as _sessions and _byPlaySessionId; cleared in RemoveNoLock.
+    private readonly HashSet<PlaybackSessionId> _clientOwnedSessions = new();
+
     private readonly Timer _sweepTimer;
     private bool _disposed;
 
@@ -185,6 +195,17 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
         }
 
         var session = StoreOrReplace(request.Kind, playSessionId, request, plan, playbackAttemptId);
+
+        // Issue #71: this is the ONLY entry point a client reaches with an id it keeps. Marking it
+        // here (rather than inferring "Request is not null" downstream) states the ownership
+        // explicitly and is what exempts the session from the legacy PlaySessionId-keyed reaping in
+        // OnTranscodingJobEnded/OnPlaybackStopped. A Create landing on a session the legacy pipeline
+        // had already Track()ed promotes it, which is correct - from this point a client holds its
+        // id and owes it a DELETE.
+        lock (_lock)
+        {
+            _clientOwnedSessions.Add(session.Id);
+        }
 
         // PR113a: attach-or-remove unconditionally, not just attach-if-captured. StoreOrReplace
         // reuses the existing session id when playSessionId matches an in-flight session, so a
@@ -311,7 +332,13 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
 
     /// <inheritdoc/>
     public bool DeleteByPlaySessionId(string playSessionId)
-        => DeleteByPlaySessionId(playSessionId, PlaybackSessionRemovalReason.HttpDelete);
+    {
+        lock (_lock)
+        {
+            return _byPlaySessionId.TryGetValue(playSessionId, out var id)
+                && RemoveNoLock(id, PlaybackSessionRemovalReason.HttpDelete);
+        }
+    }
 
     /// <inheritdoc/>
     public PlaybackSession? Get(PlaybackSessionId id)
@@ -380,20 +407,39 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
     }
 
     /// <summary>
-    /// Issue #71: the reason-carrying form every internal caller uses. The public
-    /// <see cref="DeleteByPlaySessionId(string)"/> above is the interface-facing entry point and
-    /// reports <see cref="PlaybackSessionRemovalReason.HttpDelete"/>; the two event handlers
-    /// report their own actor instead, so the <see cref="RemoveNoLock"/> line can distinguish
-    /// them.
+    /// Issue #71: the LEGACY-signal reap, used by <see cref="OnTranscodingJobEnded"/> and
+    /// <see cref="OnPlaybackStopped"/> - and the fix for the defect. Both signals are keyed on
+    /// <c>PlaySessionId</c>, which is the legacy transcode pipeline's job key, not the v2 session's
+    /// identity; treating either as "this playback session is over" is what let an ffmpeg process
+    /// exiting destroy a session the user was still watching. So a session a client established and
+    /// still holds the id of (<see cref="_clientOwnedSessions"/>) is left alone here: it ends on
+    /// that client's own <c>DELETE</c>, with <see cref="SweepExpired"/>'s TTL as the backstop for
+    /// the client that never sends one. Sessions the legacy pipeline tracked by itself are reaped
+    /// exactly as before.
     /// </summary>
-    /// <param name="playSessionId">The legacy play session id keying the session to remove.</param>
-    /// <param name="reason">Which actor is asking for the removal.</param>
+    /// <param name="playSessionId">The legacy play session id the signal carried.</param>
+    /// <param name="reason">Which signal is asking.</param>
     /// <returns><c>true</c> when a session was removed.</returns>
-    private bool DeleteByPlaySessionId(string playSessionId, PlaybackSessionRemovalReason reason)
+    private bool ReapByPlaySessionId(string playSessionId, PlaybackSessionRemovalReason reason)
     {
         lock (_lock)
         {
-            return _byPlaySessionId.TryGetValue(playSessionId, out var id) && RemoveNoLock(id, reason);
+            if (!_byPlaySessionId.TryGetValue(playSessionId, out var id))
+            {
+                return false;
+            }
+
+            if (_clientOwnedSessions.Contains(id))
+            {
+                _logger.LogInformation(
+                    "Playback session {SessionId} retained across {RemovalReason} (play session {PlaySessionId}) - client-owned sessions end on an explicit DELETE or the TTL backstop.",
+                    id,
+                    reason,
+                    playSessionId);
+                return false;
+            }
+
+            return RemoveNoLock(id, reason);
         }
     }
 
@@ -481,6 +527,8 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
             return false;
         }
 
+        _clientOwnedSessions.Remove(id);
+
         // Issue #71: THE line. PlaybackAttemptId is what joins this teardown to the created/replaced
         // lines PR #69 emits on the HTTP edges; RemovalReason is what separates "the client asked"
         // from "an ffmpeg job ended while the user was still watching".
@@ -551,7 +599,7 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
             correlatedId is not null,
             correlatedId);
 
-        DeleteByPlaySessionId(job.PlaySessionId, PlaybackSessionRemovalReason.TranscodingJobEnded);
+        ReapByPlaySessionId(job.PlaySessionId, PlaybackSessionRemovalReason.TranscodingJobEnded);
     }
 
     /// <summary>
@@ -612,7 +660,7 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
                 correlatedId is not null,
                 correlatedId);
 
-            DeleteByPlaySessionId(e.PlaySessionId, PlaybackSessionRemovalReason.PlaybackStopped);
+            ReapByPlaySessionId(e.PlaySessionId, PlaybackSessionRemovalReason.PlaybackStopped);
         }
     }
 
