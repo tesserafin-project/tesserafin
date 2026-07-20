@@ -495,11 +495,13 @@ public static class PlaybackEnginePhase2Tests
     }
 
     [Fact]
-    public static void EngineVersion_IsSix()
+    public static void EngineVersion_IsSeven()
     {
         // PR111e bumped 5->6: CSV-aware container comparisons, Direct Play container resolution,
         // and the HDR10-or-SDR tonemap-target policy are all decision-affecting changes to Decide.
-        Assert.Equal(6, PlaybackEngine.EngineVersion);
+        // Issue #70 bumped 6->7: a constraint-forbidden method now demotes to the next heavier
+        // allowed method instead of vetoing the source.
+        Assert.Equal(7, PlaybackEngine.EngineVersion);
     }
 
     // ---------------------------------------------------------------------------------------
@@ -548,10 +550,52 @@ public static class PlaybackEnginePhase2Tests
     /// <summary>
     /// Demotion goes to the NEXT heavier allowed method, never straight to the heaviest: with
     /// Direct Play forbidden but Direct Stream still allowed, the streams are still copyable, so
-    /// the answer is Remux, not Transcode.
+    /// the answer is Remux, not Transcode. The client here declares both mkv and mp4 with these
+    /// codecs, so the mkv source really can be remuxed into a different container.
     /// </summary>
     [Fact]
     public static void Decide_DirectPlayForbiddenButDirectStreamAllowed_DemotesToRemuxNotTranscode()
+    {
+        var capabilities = new ClientCapabilities(
+            Decode: new DecodeCapabilities(
+                DirectPlayProfiles: [new DecodeProfile(MediaKind.Video, ["mkv", "mp4"], ["h264"], ["aac"])],
+                VideoCodecs: [new VideoCodecCapability("h264", [], null, null, [], null, null)],
+                AudioCodecs: [new AudioCodecCapability("aac", null, null, null, null)],
+                SubtitleDelivery: [],
+                SupportsHls: false,
+                SupportsDash: false),
+            OutputProfiles: [new PlaybackOutputProfile(MediaKind.Video, StreamingProtocol.Http, "mp4", ["h264"], ["aac"], null, null, null)]);
+
+        var decision = new PlaybackEngine().Decide(
+            EngineTestFixtures.Context(MediaKind.Video),
+            capabilities,
+            [
+                EngineTestFixtures.Source(
+                    "shared-source",
+                    "mkv",
+                    videoStreams: [EngineTestFixtures.VideoStream(0, "h264")],
+                    audioStreams: [EngineTestFixtures.AudioStream(1, "aac", isDefault: true, channels: 2)]),
+            ],
+            EngineTestFixtures.Constraints(allowDirectPlay: false));
+
+        Assert.True(decision.IsViable);
+        Assert.Equal(PlaybackMethod.Remux, decision.Method);
+        Assert.Contains(TransformKind.RemuxContainer, decision.Transforms);
+        Assert.Contains(TransformKind.CopyVideo, decision.Transforms);
+        Assert.Contains(TransformKind.CopyAudio, decision.Transforms);
+        Assert.DoesNotContain(TransformKind.TranscodeVideo, decision.Transforms);
+    }
+
+    /// <summary>
+    /// The named limit of the Remux rung, pinned deliberately rather than discovered later: a Remux
+    /// decision is defined by its container change (<c>PlaybackDecision.Validate</c> rejects a Remux
+    /// carrying no <see cref="TransformKind.RemuxContainer"/>). When the client declares only the
+    /// container the source already has, there is no different container to land in, so "remux"
+    /// would be a no-op v2 cannot even express - demotion skips that rung and goes to Transcode,
+    /// even though Direct Stream is nominally allowed.
+    /// </summary>
+    [Fact]
+    public static void Decide_DirectPlayForbidden_NoOtherContainerAvailable_SkipsRemuxRung()
     {
         var decision = new PlaybackEngine().Decide(
             EngineTestFixtures.Context(MediaKind.Video),
@@ -560,10 +604,7 @@ public static class PlaybackEnginePhase2Tests
             EngineTestFixtures.Constraints(allowDirectPlay: false));
 
         Assert.True(decision.IsViable);
-        Assert.Equal(PlaybackMethod.Remux, decision.Method);
-        Assert.Contains(TransformKind.CopyVideo, decision.Transforms);
-        Assert.Contains(TransformKind.CopyAudio, decision.Transforms);
-        Assert.DoesNotContain(TransformKind.TranscodeVideo, decision.Transforms);
+        Assert.Equal(PlaybackMethod.Transcode, decision.Method);
     }
 
     /// <summary>

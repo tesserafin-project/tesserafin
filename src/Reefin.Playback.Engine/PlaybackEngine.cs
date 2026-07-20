@@ -58,8 +58,14 @@ public sealed class PlaybackEngine : IPlaybackEngine
     /// hardcoded to SDR) - following the same convention as every prior semantic change to this
     /// class (2→3 PR102, 3→4 PR102b, 4→5 PR103; PR104 explicitly left this unchanged specifically
     /// because it did not touch PlaybackEngine.cs at all).
+    /// <para>
+    /// Issue #70 bumped 6→7: a method the request's <see cref="PlaybackConstraints"/> forbid now
+    /// DEMOTES to the next heavier allowed method (see <see cref="DemotionLadder"/>) instead of
+    /// vetoing the source outright - decision-affecting for every request whose constraints forbid
+    /// a method the media alone would have chosen.
+    /// </para>
     /// </remarks>
-    public const int EngineVersion = 6;
+    public const int EngineVersion = 7;
 
     /// <summary>
     /// The transcoding target video codec used when the client declares no
@@ -388,7 +394,8 @@ public sealed class PlaybackEngine : IPlaybackEngine
         // (a raw CSV is not itself a valid single container name to report as the output).
         var directPlayContainer = ResolveDirectPlayContainer(capabilities, context.MediaKind, source.Container, selectedVideo?.Codec, selectedAudio?.Codec);
 
-        var neededMethod = wantsTranscode
+        // The method the MEDIA alone calls for, before any constraint is consulted.
+        var naturalMethod = wantsTranscode
             ? PlaybackMethod.Transcode
             : directPlayContainer is not null
                 ? PlaybackMethod.DirectPlay
@@ -399,19 +406,57 @@ public sealed class PlaybackEngine : IPlaybackEngine
         // somewhere to remux into) and, below, to pick the remux target container.
         var remuxContainers = AcceptableContainers(capabilities, context.MediaKind, selectedVideo?.Codec, selectedAudio?.Codec);
 
-        var allowed = neededMethod switch
+        // Issue #70: a Remux decision is DEFINED by its container change - PlaybackDecision.Validate
+        // rejects a Remux whose transforms carry no RemuxContainer. So the Remux rung exists only
+        // when there is actually a different container to land in; "remuxing" into the container the
+        // source already has is both a no-op and unrepresentable in v2's decision vocabulary, and
+        // demotion falls through it to Transcode instead of minting an invalid decision. This never
+        // changes the natural-Remux path: that path is only reached when no DecodeProfile accepts
+        // this container with these codecs, so the target container necessarily differs.
+        var remuxChangesContainer = remuxContainers.Count > 0
+            && !ContainsContainer(source.Container, SelectTargetContainer(remuxContainers, source.Container));
+
+        bool IsAllowed(PlaybackMethod method) => method switch
         {
             PlaybackMethod.Transcode => constraints.AllowTranscoding && source.SupportsTranscoding,
             PlaybackMethod.Remux => constraints.AllowDirectStream
                 && source.SupportsDirectStream
                 && (selectedVideo is null || constraints.AllowVideoStreamCopy)
                 && constraints.AllowAudioStreamCopy
-                && remuxContainers.Count > 0,
+                && remuxChangesContainer,
             PlaybackMethod.DirectPlay => constraints.AllowDirectPlay && source.SupportsDirectPlay,
             _ => false,
         };
 
-        if (!allowed)
+        // Issue #70 - METHOD DEMOTION. A method the CONSTRAINTS forbid is not a verdict on the
+        // media: it is a request to do more work, not less. Previously a forbidden naturalMethod
+        // returned ForNotViable outright (with an EMPTY blocking-reason list, because nothing is
+        // actually wrong with the media), so a retry PUT carrying AllowDirectPlay:false over a
+        // still-directly-playable source produced NotViable -> a V2PlanRecord with a null
+        // ExecutionPlan -> PlanNotExecutable fallback to legacy on every subsequent GET /Stream.
+        // Legacy StreamBuilder has always demoted the same input instead (isEligibleForDirectPlay =
+        // options.EnableDirectPlay && ..., StreamBuilder.cs:729-730) and answered 200.
+        //
+        // Strictly DEMOTION, never promotion: the ladder only ever walks toward HEAVIER methods
+        // (DirectPlay -> Remux -> Transcode), so a forbidden lighter method can be traded for a
+        // heavier allowed one, and never the reverse. Because Transcode is the last rung, an
+        // AllowTranscoding/SupportsTranscoding veto stays absolute - there is nothing heavier to
+        // fall through to, and NotViable is still the answer.
+        //
+        // This widens no capability: every rung is built by the SAME code below that already builds
+        // that method when the media asks for it, from the same client-declared OutputProfile and
+        // the same transform vocabulary.
+        PlaybackMethod? chosenMethod = null;
+        foreach (var candidateMethod in DemotionLadder(naturalMethod))
+        {
+            if (IsAllowed(candidateMethod))
+            {
+                chosenMethod = candidateMethod;
+                break;
+            }
+        }
+
+        if (chosenMethod is null)
         {
             var blockingReasons = new List<ReasonNode>();
             blockingReasons.AddRange(videoReasons);
@@ -423,6 +468,20 @@ public sealed class PlaybackEngine : IPlaybackEngine
             }
 
             return SourceCandidate.ForNotViable(blockingReasons);
+        }
+
+        var neededMethod = chosenMethod.Value;
+
+        // Demoting INTO Transcode means the streams are re-encoded - that is what Transcode is.
+        // Setting the two per-axis flags (rather than special-casing the method downstream) is what
+        // makes the demoted decision identical to one the media itself forced: target codec
+        // selection, the output profile viability gate, the output bitrate ceilings, the transform
+        // list and OutputSpec below are all driven off exactly these flags, so demotion reuses every
+        // one of them verbatim instead of introducing a parallel path.
+        if (neededMethod == PlaybackMethod.Transcode && !wantsTranscode)
+        {
+            needVideoTranscode = selectedVideo is not null;
+            needAudioTranscode = selectedAudio is not null;
         }
 
         // --- OUTPUT PROFILE (PR102, viability PR103) ---
@@ -1097,6 +1156,24 @@ public sealed class PlaybackEngine : IPlaybackEngine
     /// <see cref="PlaybackOutputProfile"/>. Prefers mp4, then ts, then whatever is first, matching
     /// the pre-PR102 engine's container preference exactly.
     /// </summary>
+    /// <summary>
+    /// Issue #70: the methods to try for a source, in order, starting at the one the media itself
+    /// calls for and walking only ever toward HEAVIER methods
+    /// (DirectPlay -&gt; Remux -&gt; Transcode). Deliberately one-directional: a method the request's
+    /// <see cref="PlaybackConstraints"/> forbid may be traded for a heavier ALLOWED one, never for a
+    /// lighter one. Transcode is therefore terminal, which is exactly what keeps
+    /// <see cref="PlaybackConstraints.AllowTranscoding"/>/<see cref="MediaSourceSnapshot.SupportsTranscoding"/>
+    /// an absolute veto rather than one more rung to step over.
+    /// </summary>
+    /// <param name="naturalMethod">The method the media alone calls for, before constraints.</param>
+    /// <returns>The methods to try, heaviest last.</returns>
+    private static IReadOnlyList<PlaybackMethod> DemotionLadder(PlaybackMethod naturalMethod) => naturalMethod switch
+    {
+        PlaybackMethod.DirectPlay => [PlaybackMethod.DirectPlay, PlaybackMethod.Remux, PlaybackMethod.Transcode],
+        PlaybackMethod.Remux => [PlaybackMethod.Remux, PlaybackMethod.Transcode],
+        _ => [PlaybackMethod.Transcode],
+    };
+
     private static string SelectTargetContainer(IReadOnlyList<string> containers, string sourceContainer)
     {
         if (containers.Count == 0)
