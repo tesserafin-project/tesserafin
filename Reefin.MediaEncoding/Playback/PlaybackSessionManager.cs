@@ -55,6 +55,7 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
     private readonly PlaybackOperationalMetrics _operationalMetrics;
     private readonly IRequestCorrelationAccessor _requestCorrelation;
     private readonly ILogger<PlaybackSessionManager> _logger;
+    private readonly TimeProvider _timeProvider;
     private readonly object _lock = new();
     private readonly Dictionary<PlaybackSessionId, PlaybackSession> _sessions = new();
     private readonly Dictionary<string, PlaybackSessionId> _byPlaySessionId = new(StringComparer.OrdinalIgnoreCase);
@@ -128,6 +129,13 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
     /// optional-dependency discipline as every other parameter above, so existing call sites -
     /// including test constructors - keep compiling and simply log nothing.
     /// </param>
+    /// <param name="timeProvider">
+    /// Issue #71: the clock behind <c>CreatedAt</c>/<c>UpdatedAt</c> (<see cref="StoreOrReplace"/>,
+    /// <see cref="Patch"/>) and the removal line's age. Injected purely so lifetime tests can drive
+    /// creation and re-plan to distinct instants and then call the already time-injected
+    /// <see cref="SweepExpired"/> at a chosen point, instead of sleeping. Defaults to
+    /// <see cref="TimeProvider.System"/>; production behaviour is unchanged.
+    /// </param>
     public PlaybackSessionManager(
         IPlaybackSessionPlanner planner,
         ITranscodeManager transcodeManager,
@@ -137,9 +145,11 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
         IPlaybackLiveWiringDiagnosticsStore? liveWiringDiagnosticsStore = null,
         PlaybackOperationalMetrics? operationalMetrics = null,
         IRequestCorrelationAccessor? requestCorrelation = null,
-        ILogger<PlaybackSessionManager>? logger = null)
+        ILogger<PlaybackSessionManager>? logger = null,
+        TimeProvider? timeProvider = null)
     {
         _logger = logger ?? NullLogger<PlaybackSessionManager>.Instance;
+        _timeProvider = timeProvider ?? TimeProvider.System;
         _requestCorrelation = requestCorrelation ?? NullRequestCorrelationAccessor.Instance;
         _planner = planner;
         _transcodeManager = transcodeManager;
@@ -152,7 +162,7 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
         transcodeManager.TranscodingJobStarted += OnTranscodingJobStarted;
         sessionManager.PlaybackStart += OnPlaybackStart;
         sessionManager.PlaybackStopped += OnPlaybackStopped;
-        _sweepTimer = new Timer(_ => SweepExpired(DateTimeOffset.UtcNow), null, SweepInterval, SweepInterval);
+        _sweepTimer = new Timer(_ => SweepExpired(_timeProvider.GetUtcNow()), null, SweepInterval, SweepInterval);
     }
 
     /// <inheritdoc/>
@@ -243,7 +253,7 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
                 Kind = request.Kind,
                 Request = request,
                 Plan = plan,
-                UpdatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = _timeProvider.GetUtcNow(),
                 PlaybackAttemptId = playbackAttemptId ?? existing.PlaybackAttemptId,
             };
             _sessions[id] = updated;
@@ -389,7 +399,7 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
 
     private PlaybackSession StoreOrReplace(PlaybackMediaKind kind, string? playSessionId, PlaybackSessionRequest? request, PlaybackPlan plan, string? playbackAttemptId = null)
     {
-        var now = DateTimeOffset.UtcNow;
+        var now = _timeProvider.GetUtcNow();
         lock (_lock)
         {
             if (!string.IsNullOrEmpty(playSessionId)
@@ -482,7 +492,7 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
             reason,
             session.CreatedAt,
             session.UpdatedAt,
-            (DateTimeOffset.UtcNow - session.CreatedAt).TotalSeconds);
+            (_timeProvider.GetUtcNow() - session.CreatedAt).TotalSeconds);
 
         if (!string.IsNullOrEmpty(session.PlaySessionId))
         {
