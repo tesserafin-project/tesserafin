@@ -543,10 +543,13 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
 
                 // Issue #71: the in-place replacement is the one lifecycle transition that mutates a
                 // live session without removing it - #70's plan-overwrite vector. Old and new state
-                // side by side, plus whether the stored request survived, so a v2 plan silently
-                // rewritten by a legacy segment fetch (Track passes request: null) is visible.
+                // side by side, plus whether the CALLER brought a request at all, so a v2 plan
+                // silently rewritten by a legacy segment fetch (Track passes request: null) is
+                // visible. IncomingRequestWasNull is literally `request is null` - it names the
+                // caller's input, not an outcome; PlanPreserved next to it is the outcome, and the
+                // two differ precisely on a legacy-tracked session (true / false).
                 _logger.LogInformation(
-                    "Playback session {SessionId} replaced in place (play session {PlaySessionId}, method {OldPlayMethod} -> {NewPlayMethod}, kind {OldKind} -> {NewKind}, request preserved {RequestPreserved}, plan preserved {PlanPreserved}, stream info {HasStreamInfo}, attempt {PlaybackAttemptId}).",
+                    "Playback session {SessionId} replaced in place (play session {PlaySessionId}, method {OldPlayMethod} -> {NewPlayMethod}, kind {OldKind} -> {NewKind}, incoming request null {IncomingRequestWasNull}, plan preserved {PlanPreserved}, stream info {HasStreamInfo}, attempt {PlaybackAttemptId}).",
                     existingId,
                     playSessionId,
                     existing.Plan.PlayMethod,

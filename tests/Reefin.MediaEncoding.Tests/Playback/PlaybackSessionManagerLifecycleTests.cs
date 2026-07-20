@@ -243,6 +243,51 @@ public class PlaybackSessionManagerLifecycleTests
     }
 
     /// <summary>
+    /// The two sibling booleans on the "replaced in place" line say different things and must not be
+    /// read as one flag: <c>IncomingRequestWasNull</c> is literally <c>request is null</c> — the
+    /// caller (here <c>Track</c>/<c>TrackTranscodeOutput</c>, the legacy HLS segment path) brought no
+    /// request of its own — while <c>PlanPreserved</c> additionally requires the session to be
+    /// client-owned. A legacy-tracked session is the case that separates them: true and false in the
+    /// same entry. Asserting the property NAME and VALUE, not the rendered string, is what pins the
+    /// structured field a log consumer actually reads.
+    /// </summary>
+    [Fact]
+    public void TrackTranscodeOutput_OnLegacyTrackedSession_LogsIncomingRequestWasNullSeparatelyFromPlanPreserved()
+    {
+        var fixture = new Fixture();
+        fixture.Manager.Track(PlaybackMediaKind.Video, new PlaybackPlan(PlayMethod.DirectPlay, default), PlaySessionA);
+        fixture.Logger.Entries.Clear();
+
+        fixture.Manager.TrackTranscodeOutput("h264", "aac", TranscodeReason.ContainerNotSupported, PlaySessionA);
+
+        var entry = Assert.Single(fixture.Logger.Entries, e => e.Message.Contains("replaced in place", StringComparison.Ordinal));
+
+        // Track passes request: null, so the incoming request genuinely was null...
+        Assert.Equal(true, entry.Properties["IncomingRequestWasNull"]);
+
+        // ...but this session is not client-owned, so the planned decision was NOT preserved.
+        Assert.Equal(false, entry.Properties["PlanPreserved"]);
+    }
+
+    /// <summary>
+    /// The other side of the same discrimination: a re-<c>Create</c> on a live play session id does
+    /// carry a request, so the field must report false.
+    /// </summary>
+    [Fact]
+    public void Create_TwiceOnSamePlaySessionId_LogsIncomingRequestWasNullFalse()
+    {
+        var fixture = new Fixture();
+        fixture.CreateClientSession(PlaySessionA);
+        fixture.Logger.Entries.Clear();
+
+        fixture.CreateClientSession(PlaySessionA);
+
+        var entry = Assert.Single(fixture.Logger.Entries, e => e.Message.Contains("replaced in place", StringComparison.Ordinal));
+        Assert.Equal(false, entry.Properties["IncomingRequestWasNull"]);
+        Assert.Equal(false, entry.Properties["PlanPreserved"]);
+    }
+
+    /// <summary>
     /// Issue #71, interaction guard. Before the fix, PR115d's transcode-start counters got their
     /// "at most one outcome per session" property for free: <c>OnTranscodingJobEnded</c> always
     /// evicted the session, so a re-fired Ended (the event's contract explicitly allows it) and a
