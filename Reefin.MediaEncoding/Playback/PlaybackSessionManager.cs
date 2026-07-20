@@ -267,6 +267,34 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
             return null;
         }
 
+        // Issue #70, the PUT atomicity guard. The early return above only fires when the LEGACY
+        // planner refuses, and it essentially never does on a re-plan: StreamBuilder DEMOTES a
+        // request its constraints forbid rather than rejecting it, so `plan` is viable. The v2
+        // engine can still refuse (PlaybackExecutionPlanBuilder: NotViable, NoStreamsSelected,
+        // MissingOutputContainer), and ShadowPlaybackSessionPlanner publishes that refusal anyway,
+        // as a record with a null ExecutionPlan - "v2 was authoritative here and produced nothing
+        // executable". A record is only ever published when the effective mode is AUTHORITATIVE
+        // (see RunShadow's `if (prepared.Authoritative)`), so this condition IS "authoritative and
+        // unexecutable"; a Shadow-mode refusal captures nothing and is unaffected.
+        //
+        // Attaching that record would destroy the good, executable one the previous Create/Patch
+        // left behind, and the session would answer 200 while every subsequent GET Stream fell back
+        // to legacy with PlanNotExecutable. Refusing here (the controller maps a null Patch to 422)
+        // is the only outcome that keeps the operation ALL-OR-NOTHING: this returns before the
+        // _sessions write and before either store's attach-or-remove, and IV2PlanStore.Publish only
+        // ever writes into the ambient capture slot - never into the store itself - so nothing at
+        // all has been mutated at this point.
+        if (v2Captured is { ExecutionPlan: null })
+        {
+            _logger.LogInformation(
+                "Playback session {SessionId} re-plan refused (authoritative v2 decision {DecisionMethod} produced no executable plan, viable {IsViable}, engine {EngineVersion}) - previous session, plan and v2 record left intact.",
+                id,
+                v2Captured.Decision.Method,
+                v2Captured.Decision.IsViable,
+                v2Captured.Decision.EngineVersion);
+            return null;
+        }
+
         PlaybackSession updated;
         lock (_lock)
         {
@@ -477,15 +505,37 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
                 // unaffected (hence the endpoint reading as "admin only"). Issue #43's client-side
                 // teardown is impossible while that holds, DELETE being precisely the verb refused.
                 //
-                // Kind and Plan deliberately keep overwriting unconditionally: Track's whole purpose
-                // is to record the plan actually being executed, and GET Stream reads
-                // session.Plan.StreamInfo. Only Request has a caller that legitimately has none to
-                // contribute, so only Request needs the guard.
+                // Issue #70: Kind and Plan used to keep overwriting unconditionally, on the reasoning
+                // that Track's whole purpose is to record the plan actually being executed. That
+                // holds for a session the legacy pipeline established by itself - and ONLY there.
+                // TrackTranscodeOutput builds `new PlaybackPlan(playMethod, transcodeReasons)`, whose
+                // StreamInfo defaults to null (IPlaybackSessionPlanner), so for a session a CLIENT
+                // planned through POST Playback/Sessions the same overwrite REPLACED a fully planned
+                // v2 plan with a stub carrying no StreamInfo - and GET Stream reads exactly that
+                // (PlaybackSessionsController: legacyStreamInfo = session.Plan.StreamInfo,
+                // mediaSource = legacyStreamInfo?.MediaSource) and 422s when either is null. So the
+                // ordinary client sequence - POST, then fetch a segment - left the session alive but
+                // UNSERVABLE. Before issue #71 the segment path's job ending evicted the session
+                // outright, which is why nobody ever observed the degraded state.
+                //
+                // The exemption is scoped exactly as issue #71 scoped its Request guard, and for the
+                // same reason - it must not become a blanket "never overwrite":
+                //   - `request is null` : only a caller with no request of its own (Track, the HLS
+                //     segment path) is deferring here. A re-POST re-entering this branch on a live
+                //     play session id carries a freshly planned plan and must still install it.
+                //   - client-owned      : a session the legacy pipeline tracked by itself has no
+                //     v2 plan to protect and nobody holding its id; recording the executing plan
+                //     really is the right thing there, so that path is untouched.
+                var preservePlannedDecision = request is null && _clientOwnedSessions.Contains(existingId);
+
+                // UpdatedAt is deliberately still refreshed on this path even when the planned
+                // decision is preserved: it is the only stamp SweepExpired judges, so freezing it
+                // would hand issue #71's TTL backstop a session the user is actively streaming.
                 var updated = existing with
                 {
-                    Kind = kind,
+                    Kind = preservePlannedDecision ? existing.Kind : kind,
                     Request = request ?? existing.Request,
-                    Plan = plan,
+                    Plan = preservePlannedDecision ? existing.Plan : plan,
                     UpdatedAt = now,
                     PlaybackAttemptId = playbackAttemptId ?? existing.PlaybackAttemptId,
                 };
@@ -496,7 +546,7 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
                 // side by side, plus whether the stored request survived, so a v2 plan silently
                 // rewritten by a legacy segment fetch (Track passes request: null) is visible.
                 _logger.LogInformation(
-                    "Playback session {SessionId} replaced in place (play session {PlaySessionId}, method {OldPlayMethod} -> {NewPlayMethod}, kind {OldKind} -> {NewKind}, request preserved {RequestPreserved}, attempt {PlaybackAttemptId}).",
+                    "Playback session {SessionId} replaced in place (play session {PlaySessionId}, method {OldPlayMethod} -> {NewPlayMethod}, kind {OldKind} -> {NewKind}, request preserved {RequestPreserved}, plan preserved {PlanPreserved}, stream info {HasStreamInfo}, attempt {PlaybackAttemptId}).",
                     existingId,
                     playSessionId,
                     existing.Plan.PlayMethod,
@@ -504,6 +554,12 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
                     existing.Kind,
                     updated.Kind,
                     request is null,
+                    // Issue #70: the bit that says whether this in-place replacement degraded a
+                    // client's planned decision or faithfully recorded a legacy one, plus whether
+                    // what the session ended up holding is servable at all - GET Stream 422s
+                    // without a StreamInfo, so a false/false pair here IS the unservable state.
+                    preservePlannedDecision,
+                    updated.Plan.StreamInfo is not null,
                     updated.PlaybackAttemptId);
 
                 return updated;
