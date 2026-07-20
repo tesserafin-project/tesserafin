@@ -267,6 +267,34 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
             return null;
         }
 
+        // Issue #70, the PUT atomicity guard. The early return above only fires when the LEGACY
+        // planner refuses, and it essentially never does on a re-plan: StreamBuilder DEMOTES a
+        // request its constraints forbid rather than rejecting it, so `plan` is viable. The v2
+        // engine can still refuse (PlaybackExecutionPlanBuilder: NotViable, NoStreamsSelected,
+        // MissingOutputContainer), and ShadowPlaybackSessionPlanner publishes that refusal anyway,
+        // as a record with a null ExecutionPlan - "v2 was authoritative here and produced nothing
+        // executable". A record is only ever published when the effective mode is AUTHORITATIVE
+        // (see RunShadow's `if (prepared.Authoritative)`), so this condition IS "authoritative and
+        // unexecutable"; a Shadow-mode refusal captures nothing and is unaffected.
+        //
+        // Attaching that record would destroy the good, executable one the previous Create/Patch
+        // left behind, and the session would answer 200 while every subsequent GET Stream fell back
+        // to legacy with PlanNotExecutable. Refusing here (the controller maps a null Patch to 422)
+        // is the only outcome that keeps the operation ALL-OR-NOTHING: this returns before the
+        // _sessions write and before either store's attach-or-remove, and IV2PlanStore.Publish only
+        // ever writes into the ambient capture slot - never into the store itself - so nothing at
+        // all has been mutated at this point.
+        if (v2Captured is { ExecutionPlan: null })
+        {
+            _logger.LogInformation(
+                "Playback session {SessionId} re-plan refused (authoritative v2 decision {DecisionMethod} produced no executable plan, viable {IsViable}, engine {EngineVersion}) - previous session, plan and v2 record left intact.",
+                id,
+                v2Captured.Decision.Method,
+                v2Captured.Decision.IsViable,
+                v2Captured.Decision.EngineVersion);
+            return null;
+        }
+
         PlaybackSession updated;
         lock (_lock)
         {
