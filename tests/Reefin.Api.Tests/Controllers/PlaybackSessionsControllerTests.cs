@@ -36,6 +36,9 @@ public class PlaybackSessionsControllerTests
 {
     private const string AttemptId = "attempt-7f3a";
 
+    /// <summary>Issue #70: the single media source id shared by every demotion fixture below.</summary>
+    private const string DemotionSourceId = "source-1";
+
     private readonly Mock<IPlaybackSessionManager> _playbackSessionManager = new();
     private readonly Mock<IItemLookupService> _itemLookupService = new();
     private readonly Mock<IUserManager> _userManager = new();
@@ -1004,6 +1007,281 @@ public class PlaybackSessionsControllerTests
         expectedStreamInfo.PlaySessionId = "play-session-1";
         expectedStreamInfo.StartPositionTicks = 250;
         Assert.Equal(expectedStreamInfo.ToUrl(null, "caller-token", null), descriptor.Url);
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Issue #70: POST DirectPlay -> PUT AllowDirectPlay:false -> GET Stream.
+    //
+    // The retry ladder reefin-web sends when a Direct Play attempt fails re-plans the SAME,
+    // still-directly-playable media with EnableDirectPlay:false (+ EnableDirectStream:false for a
+    // local source). The v2 engine used to pick the method from the media alone, find Direct Play
+    // forbidden by the constraints, and answer NotViable - so PlaybackExecutionPlanBuilder refused,
+    // ShadowPlaybackSessionPlanner published a V2PlanRecord with a NULL ExecutionPlan, and every
+    // subsequent GET /Stream fell back to legacy with PlaybackLiveFallbackReason.PlanNotExecutable.
+    // Legacy StreamBuilder demotes the same input to Transcode and answers 200
+    // (StreamBuilder.cs:729-730).
+    //
+    // These use the REAL PlaybackEngine, PlaybackExecutionPlanBuilder, InMemoryV2PlanStore,
+    // PlaybackExecutionPlanResolver and PlaybackLiveStreamResolver - only the session manager (which
+    // this PR must not touch) and the item/user lookups stay mocked.
+    // ---------------------------------------------------------------------------------------
+
+    private static Reefin.Playback.Decision.ClientCapabilities CreateDemotionCapabilities() => new(
+        Decode: new DecodeCapabilities(
+            DirectPlayProfiles: [new DecodeProfile(MediaKind.Video, ["mp4"], ["h264"], ["aac"])],
+            VideoCodecs: [new VideoCodecCapability("h264", [], null, null, [], null, null)],
+            AudioCodecs: [new AudioCodecCapability("aac", null, null, null, null)],
+            SubtitleDelivery: [],
+            SupportsHls: false,
+            SupportsDash: false),
+        OutputProfiles: [new PlaybackOutputProfile(MediaKind.Video, StreamingProtocol.Http, "mp4", ["h264"], ["aac"], null, null, null)]);
+
+    private static PlaybackConstraints CreateDemotionConstraints(bool allowDirectPlay, bool allowDirectStream)
+        => CreateConstraints() with { AllowDirectPlay = allowDirectPlay, AllowDirectStream = allowDirectStream };
+
+    private PlaybackRequestContext CreateDemotionContext() => new(
+        RequestId: Guid.NewGuid(),
+        ItemId: _itemId,
+        MediaSourceId: null,
+        UserId: _userId,
+        MediaKind: MediaKind.Video,
+        RequestedAt: DateTimeOffset.UtcNow,
+        EngineVersion: Reefin.Playback.Engine.PlaybackEngine.EngineVersion);
+
+    /// <summary>The media the client CAN direct-play: mp4/h264/aac, exactly what the POST planned.</summary>
+    private static MediaSourceSnapshot CreateDirectlyPlayableSnapshot() => new(
+        MediaSourceId: DemotionSourceId,
+        Container: "mp4",
+        Protocol: "http",
+        Bitrate: null,
+        RunTimeTicks: null,
+        VideoStreams: [new VideoStreamSnapshot(0, "h264", null, null, null, null, null, null, null, null, false, false)],
+        AudioStreams: [new AudioStreamSnapshot(1, "aac", 2, null, null, null, null, true)],
+        SubtitleStreams: [],
+        SupportsDirectPlay: true,
+        SupportsDirectStream: true,
+        SupportsTranscoding: true);
+
+    /// <summary>
+    /// The same shape, but with codecs the client cannot decode at all - the engine reaches
+    /// Transcode from the MEDIA here, with no demotion involved. The independent oracle for the
+    /// plan-equality obligation below.
+    /// </summary>
+    private static MediaSourceSnapshot CreateUndecodableSnapshot() => new(
+        MediaSourceId: DemotionSourceId,
+        Container: "mp4",
+        Protocol: "http",
+        Bitrate: null,
+        RunTimeTicks: null,
+        VideoStreams: [new VideoStreamSnapshot(0, "hevc", null, null, null, null, null, null, null, null, false, false)],
+        AudioStreams: [new AudioStreamSnapshot(1, "ac3", 2, null, null, null, null, true)],
+        SubtitleStreams: [],
+        SupportsDirectPlay: true,
+        SupportsDirectStream: true,
+        SupportsTranscoding: true);
+
+    private static PlaybackExecutionPlan BuildPlanOrFail(PlaybackDecision decision, string label)
+    {
+        Assert.True(decision.IsViable, $"{label}: decision is not viable (method {decision.Method}).");
+        Assert.True(
+            PlaybackExecutionPlanBuilder.TryBuild(decision, out var plan, out var refusal),
+            $"{label}: PlaybackExecutionPlanBuilder refused with {refusal}.");
+        return plan!;
+    }
+
+    /// <summary>
+    /// Field-for-field plan equality. The <c>with { Transforms = [] }</c> record comparison is
+    /// deliberate belt-and-braces: it covers every field of
+    /// <see cref="PlaybackExecutionPlan"/> - including any added later - while the explicit
+    /// transform-sequence assertion covers the one member record equality compares by reference.
+    /// </summary>
+    private static void AssertExecutionPlansEqual(PlaybackExecutionPlan expected, PlaybackExecutionPlan actual)
+    {
+        Assert.Equal(expected.Method, actual.Method);
+        Assert.Equal(expected.Container, actual.Container);
+        Assert.Equal(expected.VideoCodec, actual.VideoCodec);
+        Assert.Equal(expected.AudioCodec, actual.AudioCodec);
+        Assert.Equal(expected.Transforms, actual.Transforms);
+        Assert.Equal(expected with { Transforms = [] }, actual with { Transforms = [] });
+    }
+
+    /// <summary>
+    /// Issue #70 PHASE 3, the equality obligation at the execution level: the Transcode plan the
+    /// constraint-forbidden PUT produces must be the SAME plan the engine builds for a Transcode it
+    /// reached without any demotion, and must adapt to the same legacy <see cref="StreamInfo"/> and
+    /// the same served URL. Two independent references are compared, because "the plan a fresh POST
+    /// produces for the same media" has two readings and both must hold:
+    /// <list type="number">
+    /// <item>a fresh POST carrying the retry constraints (same media, no prior session) - proves the
+    /// PUT path is not special-cased relative to a first-planning of the same request;</item>
+    /// <item>a POST whose media (hevc/ac3, undecodable by this client) forces Transcode with no
+    /// demotion at all - the reference a plan synthesized from a NotViable decision, or a widened
+    /// v2 transform capability, could not match.</item>
+    /// </list>
+    /// </summary>
+    [Fact]
+    public void ReplacePlaybackSession_DirectPlayForbidden_PlanEqualsUndemotedTranscodePlan()
+    {
+        var engine = new Reefin.Playback.Engine.PlaybackEngine();
+        var capabilities = CreateDemotionCapabilities();
+
+        // POST: the session as originally planned - Direct Play, executable.
+        var postDecision = engine.Decide(
+            CreateDemotionContext(),
+            capabilities,
+            [CreateDirectlyPlayableSnapshot()],
+            CreateDemotionConstraints(allowDirectPlay: true, allowDirectStream: true));
+        Assert.Equal(PlaybackMethod.DirectPlay, postDecision.Method);
+        BuildPlanOrFail(postDecision, "POST");
+
+        // PUT: the retry, same media, Direct Play and Direct Stream both forbidden.
+        var putPlan = BuildPlanOrFail(
+            engine.Decide(
+                CreateDemotionContext(),
+                capabilities,
+                [CreateDirectlyPlayableSnapshot()],
+                CreateDemotionConstraints(allowDirectPlay: false, allowDirectStream: false)),
+            "PUT (AllowDirectPlay:false)");
+
+        // Reference 1: a fresh POST already carrying the retry constraints.
+        var freshPlan = BuildPlanOrFail(
+            engine.Decide(
+                CreateDemotionContext(),
+                capabilities,
+                [CreateDirectlyPlayableSnapshot()],
+                CreateDemotionConstraints(allowDirectPlay: false, allowDirectStream: false)),
+            "fresh POST (AllowDirectPlay:false)");
+
+        // Reference 2: a POST the MEDIA forces to Transcode - no demotion anywhere in its path.
+        var undemotedPlan = BuildPlanOrFail(
+            engine.Decide(
+                CreateDemotionContext(),
+                capabilities,
+                [CreateUndecodableSnapshot()],
+                CreateDemotionConstraints(allowDirectPlay: true, allowDirectStream: true)),
+            "POST (media-forced transcode)");
+
+        Assert.Equal(PlaybackMethod.Transcode, undemotedPlan.Method);
+        AssertExecutionPlansEqual(freshPlan, putPlan);
+        AssertExecutionPlansEqual(undemotedPlan, putPlan);
+
+        // ... and the same plan adapts to the same legacy StreamInfo and the same served URL.
+        var mediaSource = CreateDemotionMediaSource();
+        var profile = new DeviceProfile();
+        var context = new PlaybackExecutionContext(_itemId, "play-session-1", "device-1", profile.Id?.ToString("N"), 0, false);
+        var undemotedStreamInfo = PlaybackExecutionPlanAdapter.ToStreamInfo(undemotedPlan, context, mediaSource, profile);
+        var putStreamInfo = PlaybackExecutionPlanAdapter.ToStreamInfo(putPlan, context, mediaSource, profile);
+
+        Assert.Equal(undemotedStreamInfo.PlayMethod, putStreamInfo.PlayMethod);
+        Assert.Equal(undemotedStreamInfo.Container, putStreamInfo.Container);
+        Assert.Equal(undemotedStreamInfo.VideoCodecs, putStreamInfo.VideoCodecs);
+        Assert.Equal(undemotedStreamInfo.AudioCodecs, putStreamInfo.AudioCodecs);
+        Assert.Equal(undemotedStreamInfo.AudioStreamIndex, putStreamInfo.AudioStreamIndex);
+        Assert.Equal(undemotedStreamInfo.MediaSourceId, putStreamInfo.MediaSourceId);
+        Assert.Equal(
+            undemotedStreamInfo.ToUrl(null, "caller-token", null),
+            putStreamInfo.ToUrl(null, "caller-token", null));
+    }
+
+    private static MediaSourceInfo CreateDemotionMediaSource() => new()
+    {
+        Id = DemotionSourceId,
+        Container = "mp4",
+        SupportsDirectPlay = true,
+        MediaStreams = new List<MediaStream>
+        {
+            new() { Type = MediaStreamType.Video, Index = 0, Codec = "h264" },
+            new() { Type = MediaStreamType.Audio, Index = 1, Codec = "aac" },
+        },
+    };
+
+    /// <summary>
+    /// Issue #70, the API-level regression: after a PUT forbidding Direct Play on a still-directly-
+    /// playable source replaces the session's authoritative v2 record, GET /Stream must still be
+    /// served by v2 - not fall back to legacy with
+    /// <see cref="PlaybackLiveFallbackReason.PlanNotExecutable"/>.
+    /// </summary>
+    [Fact]
+    public void GetPlaybackSessionStream_AfterReplaceForbiddingDirectPlay_ServedByV2()
+    {
+        var engine = new Reefin.Playback.Engine.PlaybackEngine();
+        var capabilities = CreateDemotionCapabilities();
+        var mediaSource = CreateDemotionMediaSource();
+        var profile = new DeviceProfile();
+        var legacyStreamInfo = new StreamInfo
+        {
+            ItemId = _itemId,
+            MediaSource = mediaSource,
+            DeviceProfile = profile,
+            // Legacy demoted the same input to Transcode and answered 200 - which is precisely why
+            // the PUT succeeded while the v2 record it attached was unexecutable.
+            PlayMethod = PlayMethod.Transcode,
+            Container = "mp4",
+            AudioStreamIndex = 1,
+        };
+        var options = new MediaOptions { ItemId = _itemId, UserId = _userId, DeviceId = "device-1", Profile = profile };
+        var session = new PlaybackSession(
+            PlaybackSessionId.NewId(),
+            PlaybackMediaKind.Video,
+            "play-session-1",
+            new PlaybackSessionRequest(PlaybackMediaKind.Video, options),
+            new PlaybackPlan(PlayMethod.Transcode, TranscodeReason.DirectPlayError, legacyStreamInfo),
+            default,
+            default);
+        _playbackSessionManager.Setup(m => m.Get(session.Id)).Returns(session);
+
+        var v2PlanStore = new InMemoryV2PlanStore();
+
+        // POST attached an executable Direct Play record ...
+        var postDecision = engine.Decide(
+            CreateDemotionContext(),
+            capabilities,
+            [CreateDirectlyPlayableSnapshot()],
+            CreateDemotionConstraints(allowDirectPlay: true, allowDirectStream: true));
+        PlaybackExecutionPlanBuilder.TryBuild(postDecision, out var postPlan, out _);
+        v2PlanStore.Attach(session.Id, new V2PlanRecord(postDecision, postPlan, DateTimeOffset.UtcNow));
+
+        // ... and the PUT replaces it with whatever the retry constraints decide. This is the exact
+        // publish shape ShadowPlaybackSessionPlanner uses: the record is attached whether or not the
+        // builder produced a plan.
+        var putDecision = engine.Decide(
+            CreateDemotionContext(),
+            capabilities,
+            [CreateDirectlyPlayableSnapshot()],
+            CreateDemotionConstraints(allowDirectPlay: false, allowDirectStream: false));
+        PlaybackExecutionPlanBuilder.TryBuild(putDecision, out var putPlan, out _);
+        v2PlanStore.Attach(session.Id, new V2PlanRecord(putDecision, putPlan, DateTimeOffset.UtcNow));
+
+        var configManager = new Mock<IServerConfigurationManager>();
+        configManager
+            .Setup(c => c.Configuration)
+            .Returns(new ServerConfiguration { PlaybackShadow = new PlaybackShadowOptions { Mode = PlaybackEngineMode.V2 } });
+        var liveWiringStore = new InMemoryPlaybackLiveWiringDiagnosticsStore();
+        var realResolver = new PlaybackLiveStreamResolver(
+            configManager.Object,
+            new PlaybackExecutionPlanResolver(v2PlanStore),
+            liveWiringStore,
+            new PlaybackOperationalMetrics(),
+            new PlaybackStopThresholdGuard(() => new PlaybackShadowOptions(), new PlaybackOperationalMetrics(), Mock.Of<ILogger<PlaybackStopThresholdGuard>>()),
+            Mock.Of<ILogger<PlaybackLiveStreamResolver>>());
+
+        var controller = new PlaybackSessionsController(
+            _playbackSessionManager.Object,
+            _itemLookupService.Object,
+            _userManager.Object,
+            _mediaSourceManager.Object,
+            v2PlanStore,
+            realResolver,
+            liveWiringStore,
+            _mediaEncoder.Object);
+        SetIdentity(controller, _userId, token: "caller-token");
+
+        var result = controller.GetPlaybackSessionStream(session.Id);
+
+        var descriptor = Assert.IsType<PlaybackSessionStreamDescriptor>(Assert.IsAssignableFrom<OkObjectResult>(result.Result).Value);
+        Assert.Null(descriptor.FallbackReason);
+        Assert.Equal(Reefin.Playback.Engine.PlaybackEngine.EngineVersion, descriptor.ServedBy);
+        Assert.Equal("mp4", descriptor.Container);
     }
 
     /// <summary>

@@ -502,6 +502,165 @@ public static class PlaybackEnginePhase2Tests
         Assert.Equal(6, PlaybackEngine.EngineVersion);
     }
 
+    // ---------------------------------------------------------------------------------------
+    // Issue #70: constraint-forbidden method DEMOTION.
+    //
+    // EngineTestFixtures.Constraints defaults allowDirectPlay to true and, before this suite, no
+    // test in this project ever passed false - which is exactly why the defect below shipped
+    // untested. A retry PUT carrying AllowDirectPlay:false over a still-directly-playable source
+    // used to pick DirectPlay from the MEDIA alone, find it forbidden by the CONSTRAINTS, and treat
+    // that as a hard veto (SourceCandidate.ForNotViable with an EMPTY blocking-reason list - nothing
+    // is actually wrong with the media). Legacy StreamBuilder demotes the same input to Transcode
+    // (StreamBuilder.cs:729-730) and answers 200; v2 answered NotViable, producing a V2PlanRecord
+    // with a null ExecutionPlan and a PlanNotExecutable fallback to legacy at
+    // PlaybackExecutionPlanResolver.cs:50-51.
+    //
+    // The rule these tests pin: a forbidden method DEMOTES to the next heavier ALLOWED method
+    // (DirectPlay -> Remux -> Transcode). Never the reverse - AllowTranscoding/SupportsTranscoding
+    // keep an absolute veto, because there is nothing heavier than Transcode to fall through to.
+    // ---------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Issue #70, the defect itself: a source the client can direct-play, with Direct Play and
+    /// Direct Stream both forbidden by the request's constraints (exactly the retry ladder
+    /// reefin-web sends: EnableDirectPlay:false + EnableDirectStream:false for a local source),
+    /// must demote to a viable Transcode - not answer NotViable.
+    /// </summary>
+    [Fact]
+    public static void Decide_DirectPlayForbiddenByConstraints_DemotesToTranscode()
+    {
+        var decision = new PlaybackEngine().Decide(
+            EngineTestFixtures.Context(MediaKind.Video),
+            DemotionCapabilities(),
+            [DirectlyPlayableSource()],
+            EngineTestFixtures.Constraints(allowDirectPlay: false, allowDirectStream: false));
+
+        Assert.True(decision.IsViable);
+        Assert.Equal(PlaybackMethod.Transcode, decision.Method);
+        Assert.Equal("shared-source", decision.SelectedSource);
+        Assert.Contains(TransformKind.TranscodeVideo, decision.Transforms);
+        Assert.Contains(TransformKind.TranscodeAudio, decision.Transforms);
+        Assert.Equal("h264", decision.Output.VideoCodec);
+        Assert.Equal("aac", decision.Output.AudioCodec);
+        Assert.Equal("mp4", decision.Output.Container);
+    }
+
+    /// <summary>
+    /// Demotion goes to the NEXT heavier allowed method, never straight to the heaviest: with
+    /// Direct Play forbidden but Direct Stream still allowed, the streams are still copyable, so
+    /// the answer is Remux, not Transcode.
+    /// </summary>
+    [Fact]
+    public static void Decide_DirectPlayForbiddenButDirectStreamAllowed_DemotesToRemuxNotTranscode()
+    {
+        var decision = new PlaybackEngine().Decide(
+            EngineTestFixtures.Context(MediaKind.Video),
+            DemotionCapabilities(),
+            [DirectlyPlayableSource()],
+            EngineTestFixtures.Constraints(allowDirectPlay: false));
+
+        Assert.True(decision.IsViable);
+        Assert.Equal(PlaybackMethod.Remux, decision.Method);
+        Assert.Contains(TransformKind.CopyVideo, decision.Transforms);
+        Assert.Contains(TransformKind.CopyAudio, decision.Transforms);
+        Assert.DoesNotContain(TransformKind.TranscodeVideo, decision.Transforms);
+    }
+
+    /// <summary>
+    /// The absolute veto is preserved in both of its forms: with every method forbidden by the
+    /// constraints there is nothing heavier to demote into, and a source that cannot be transcoded
+    /// at all (<c>SupportsTranscoding:false</c>) cannot be rescued by demotion either. Demotion is
+    /// never promotion, and never a licence to ignore a transcode veto.
+    /// </summary>
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public static void Decide_TranscodeVetoed_DirectPlayForbidden_StaysNotViable(bool allowTranscoding, bool supportsTranscoding)
+    {
+        var decision = new PlaybackEngine().Decide(
+            EngineTestFixtures.Context(MediaKind.Video),
+            DemotionCapabilities(),
+            [DirectlyPlayableSource(supportsTranscoding: supportsTranscoding)],
+            EngineTestFixtures.Constraints(allowDirectPlay: false, allowDirectStream: false, allowTranscoding: allowTranscoding));
+
+        Assert.False(decision.IsViable);
+        Assert.Contains(ReasonCode.NoViablePlan, FlattenReasonCodes(decision.Reasoning));
+    }
+
+    /// <summary>
+    /// Issue #70 PHASE 3 - the equality obligation. Demotion is only legitimate if the plan it
+    /// produces is the SAME plan the engine already builds for a transcode it arrived at without
+    /// any demotion at all. Both cases below run against the same client (same decode profile, same
+    /// declared <see cref="PlaybackOutputProfile"/>) and the same source id, differing only in HOW
+    /// the engine got to Transcode:
+    /// <list type="bullet">
+    /// <item>A: the MEDIA forces it - neither the video (hevc) nor the audio (ac3) codec is decodable.</item>
+    /// <item>B: the CONSTRAINTS force it - the media (h264/aac/mp4) is directly playable, but the
+    /// request forbids Direct Play and Direct Stream, so the engine demotes.</item>
+    /// </list>
+    /// Method, transforms, selected streams and the whole <see cref="OutputSpec"/> (target codecs,
+    /// container, protocol, channels, every bitrate ceiling) must be identical. Reasoning is
+    /// deliberately NOT compared: A legitimately reports VideoCodecNotSupported/AudioCodecNotSupported
+    /// and B has nothing wrong with its media to report. The ExecutionPlan/StreamInfo half of this
+    /// obligation is asserted in Reefin.Api.Tests (PlaybackSessionsControllerTests), the only test
+    /// project that can see Reefin.Playback.Execution.
+    /// </summary>
+    [Fact]
+    public static void Decide_ConstraintDemotedTranscode_EqualsMediaForcedTranscode()
+    {
+        var engine = new PlaybackEngine();
+        var capabilities = DemotionCapabilities();
+
+        var mediaForced = engine.Decide(
+            EngineTestFixtures.Context(MediaKind.Video),
+            capabilities,
+            [
+                EngineTestFixtures.Source(
+                    "shared-source",
+                    "mp4",
+                    videoStreams: [EngineTestFixtures.VideoStream(0, "hevc")],
+                    audioStreams: [EngineTestFixtures.AudioStream(1, "ac3", isDefault: true, channels: 2)]),
+            ],
+            EngineTestFixtures.Constraints());
+
+        var constraintDemoted = engine.Decide(
+            EngineTestFixtures.Context(MediaKind.Video),
+            capabilities,
+            [DirectlyPlayableSource()],
+            EngineTestFixtures.Constraints(allowDirectPlay: false, allowDirectStream: false));
+
+        Assert.True(mediaForced.IsViable);
+        Assert.True(constraintDemoted.IsViable);
+        Assert.Equal(PlaybackMethod.Transcode, mediaForced.Method);
+
+        Assert.Equal(mediaForced.Method, constraintDemoted.Method);
+        Assert.Equal(mediaForced.SelectedSource, constraintDemoted.SelectedSource);
+        Assert.Equal(mediaForced.SelectedStreams, constraintDemoted.SelectedStreams);
+        Assert.Equal(mediaForced.Transforms, constraintDemoted.Transforms);
+
+        // OutputSpec is a record: this single assertion pins target video codec, target audio codec,
+        // container, protocol, resolution, video range, audio channels and all three bitrate
+        // ceilings field for field.
+        Assert.Equal(mediaForced.Output, constraintDemoted.Output);
+    }
+
+    private static ClientCapabilities DemotionCapabilities() => new(
+        Decode: new DecodeCapabilities(
+            DirectPlayProfiles: [new DecodeProfile(MediaKind.Video, ["mp4"], ["h264"], ["aac"])],
+            VideoCodecs: [new VideoCodecCapability("h264", [], null, null, [], null, null)],
+            AudioCodecs: [new AudioCodecCapability("aac", null, null, null, null)],
+            SubtitleDelivery: [],
+            SupportsHls: false,
+            SupportsDash: false),
+        OutputProfiles: [new PlaybackOutputProfile(MediaKind.Video, StreamingProtocol.Http, "mp4", ["h264"], ["aac"], null, null, null)]);
+
+    private static MediaSourceSnapshot DirectlyPlayableSource(bool supportsTranscoding = true) => EngineTestFixtures.Source(
+        "shared-source",
+        "mp4",
+        videoStreams: [EngineTestFixtures.VideoStream(0, "h264")],
+        audioStreams: [EngineTestFixtures.AudioStream(1, "aac", isDefault: true, channels: 2)],
+        supportsTranscoding: supportsTranscoding);
+
     private static IEnumerable<ReasonCode> FlattenReasonCodes(ReasonNode node)
     {
         yield return node.Code;
