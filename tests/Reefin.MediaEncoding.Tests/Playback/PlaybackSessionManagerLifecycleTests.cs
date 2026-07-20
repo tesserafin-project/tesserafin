@@ -242,9 +242,62 @@ public class PlaybackSessionManagerLifecycleTests
         Assert.Equal(session.Id, Assert.IsType<PlaybackSessionId>(entry.Properties["SessionId"]));
     }
 
+    /// <summary>
+    /// Issue #71, interaction guard. Before the fix, PR115d's transcode-start counters got their
+    /// "at most one outcome per session" property for free: <c>OnTranscodingJobEnded</c> always
+    /// evicted the session, so a re-fired Ended (the event's contract explicitly allows it) and a
+    /// post-seek second job on the same play session id could never correlate and record again.
+    /// A client-owned session now survives that signal, so the cap has to be explicit — otherwise
+    /// every seek would inflate the failure rate <c>PlaybackStopThresholdGuard</c> reads to force
+    /// the whole cohort back to legacy. This is the test the metrics suite could not have caught:
+    /// every fixture there builds its session with <c>Track</c>, which is still evicted.
+    /// </summary>
+    [Fact]
+    public void TranscodingJobEnded_TwiceForLiveClientOwnedSession_RecordsAtMostOneStartOutcome()
+    {
+        var liveWiringStore = new InMemoryPlaybackLiveWiringDiagnosticsStore();
+        var metrics = new PlaybackOperationalMetrics();
+        var fixture = new Fixture(liveWiringStore, metrics);
+        var session = fixture.CreateClientSession(PlaySessionA);
+        liveWiringStore.Record(session.Id, PlaybackLiveWiringOutcome.Served(T0));
+
+        fixture.RaiseTranscodingJobEnded(PlaySessionA);
+        fixture.RaiseTranscodingJobEnded(PlaySessionA);
+
+        Assert.NotNull(fixture.Manager.Get(session.Id));
+        Assert.Equal(1, metrics.TranscodeStartAttemptsV2);
+        Assert.Equal(1, metrics.TranscodeStartFailuresV2);
+    }
+
+    /// <summary>
+    /// Issue #71, same guard on the success branch: a seek kills the job and starts a new one under
+    /// the SAME play session id, so a surviving session would otherwise record a second successful
+    /// start for what is one playback.
+    /// </summary>
+    [Fact]
+    public void TranscodingJobRestartedAfterSeek_ForLiveClientOwnedSession_RecordsAtMostOneStartOutcome()
+    {
+        var liveWiringStore = new InMemoryPlaybackLiveWiringDiagnosticsStore();
+        var metrics = new PlaybackOperationalMetrics();
+        var fixture = new Fixture(liveWiringStore, metrics);
+        var session = fixture.CreateClientSession(PlaySessionA);
+        liveWiringStore.Record(session.Id, PlaybackLiveWiringOutcome.Served(T0));
+
+        fixture.RaiseTranscodingJobStarted(PlaySessionA);
+        fixture.RaiseTranscodingJobEnded(PlaySessionA);
+        fixture.RaiseTranscodingJobStarted(PlaySessionA);
+        fixture.RaiseTranscodingJobEnded(PlaySessionA);
+
+        Assert.NotNull(fixture.Manager.Get(session.Id));
+        Assert.Equal(1, metrics.TranscodeStartAttemptsV2);
+        Assert.Equal(0, metrics.TranscodeStartFailuresV2);
+    }
+
     private sealed class Fixture
     {
-        public Fixture()
+        public Fixture(
+            IPlaybackLiveWiringDiagnosticsStore? liveWiringDiagnosticsStore = null,
+            PlaybackOperationalMetrics? operationalMetrics = null)
         {
             var options = new MediaOptions { Profile = new DeviceProfile() };
             Request = new PlaybackSessionRequest(PlaybackMediaKind.Video, options);
@@ -258,8 +311,8 @@ public class PlaybackSessionManagerLifecycleTests
                 SessionManager.Object,
                 diagnosticsStore: null,
                 v2PlanStore: null,
-                liveWiringDiagnosticsStore: null,
-                operationalMetrics: null,
+                liveWiringDiagnosticsStore: liveWiringDiagnosticsStore,
+                operationalMetrics: operationalMetrics,
                 requestCorrelation: null,
                 logger: Logger,
                 timeProvider: Clock);
@@ -288,6 +341,12 @@ public class PlaybackSessionManagerLifecycleTests
         {
             var job = new TranscodingJob(NullLogger<TranscodingJob>.Instance) { PlaySessionId = playSessionId, Id = jobId };
             TranscodeManager.Raise(m => m.TranscodingJobEnded += null, TranscodeManager.Object, job);
+        }
+
+        public void RaiseTranscodingJobStarted(string playSessionId)
+        {
+            var job = new TranscodingJob(NullLogger<TranscodingJob>.Instance) { PlaySessionId = playSessionId };
+            TranscodeManager.Raise(m => m.TranscodingJobStarted += null, TranscodeManager.Object, job);
         }
 
         public void RaisePlaybackStopped(string playSessionId) =>

@@ -67,6 +67,15 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
     // _byPlaySessionId - both are read/written from the same event handlers.
     private readonly HashSet<string> _startedPlaySessionIds = new(StringComparer.OrdinalIgnoreCase);
 
+    // Issue #71: play session ids for which a transcode-start outcome has ALREADY been recorded into
+    // _operationalMetrics. Before #71 this set was unnecessary: OnTranscodingJobEnded always evicted
+    // the session (and with it _byPlaySessionId[playSessionId]) immediately after recording, so
+    // neither a re-fired Ended nor a post-seek second job could ever correlate and record twice.
+    // Client-owned sessions now survive that signal, so the "at most one start outcome per session"
+    // invariant PlaybackStopThresholdGuard reads has to be stated explicitly instead of falling out
+    // of the eviction. Guarded by _lock; cleared in RemoveNoLock alongside _startedPlaySessionIds.
+    private readonly HashSet<string> _startOutcomeRecordedPlaySessionIds = new(StringComparer.OrdinalIgnoreCase);
+
     // Issue #71: sessions a CLIENT established through the v2 HTTP API (Create, i.e.
     // POST /Playback/Sessions) and therefore holds the PlaybackSessionId of. They are ended by that
     // client's own DELETE, or by the ExpiryTtl backstop - never by a PlaySessionId-keyed signal out
@@ -552,6 +561,10 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
             // job's Ended event, SweepExpired's TTL backstop, an explicit Delete) while a Started was
             // already recorded and no Ended ever follows to clean it up otherwise.
             _startedPlaySessionIds.Remove(session.PlaySessionId);
+
+            // Issue #71: same lifetime as the set above - the next session to reuse this play
+            // session id gets a fresh start-outcome budget.
+            _startOutcomeRecordedPlaySessionIds.Remove(session.PlaySessionId);
         }
 
         // PR113: evicts whatever shadow diagnostic was retained for this session, if any - covers
@@ -577,9 +590,12 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
             return;
         }
 
-        // PR115d: recorded BEFORE DeleteByPlaySessionId below, which evicts (among the other two
-        // per-session stores) _liveWiringDiagnosticsStore - the ServedByV2 read this needs. Same
-        // ordering constraint RecordLifecycleEvent's callers already respect for the same reason.
+        // PR115d: recorded BEFORE the reap below, which - when it does reap - evicts (among the
+        // other two per-session stores) _liveWiringDiagnosticsStore, the ServedByV2 read this needs.
+        // Same ordering constraint RecordLifecycleEvent's callers already respect. Issue #71: the
+        // reap no longer happens for a client-owned session, so this method no longer gets its
+        // idempotency from the eviction - it claims a token in _startOutcomeRecordedPlaySessionIds
+        // instead. See that field.
         RecordTranscodeStartFailureIfNeverStarted(job.PlaySessionId);
 
         // Issue #71: logged BEFORE the removal below, because the removal is exactly what this line
@@ -634,15 +650,14 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
         if (!string.IsNullOrEmpty(e.PlaySessionId))
         {
             // PR113b: recorded before eviction, for parity with FfmpegStarted/PlaybackStarted -
-            // but RemoveNoLock (reached via DeleteByPlaySessionId below) evicts every retained
+            // but RemoveNoLock (reached via the reap below, when it reaps) evicts every retained
             // PlaybackLifecycleEvent for this session, this one included, immediately afterward.
-            // The admin diagnostics endpoint can therefore never actually observe a
-            // "PlaybackStopped" entry: by the time a session stops, RemoveNoLock has already
-            // deleted the session itself, so PlaybackSessionManager.Get(id) - and with it
-            // GetPlaybackSession - returns 404 regardless of what the event store retains. This is
-            // the pre-existing PR113 removal-on-stop design, unchanged here; recording the event
-            // anyway keeps the three signals handled uniformly and is covered at the store level by
-            // tests that read it back before the delete call that immediately follows.
+            // For a LEGACY-tracked session the admin diagnostics endpoint can therefore never
+            // actually observe a "PlaybackStopped" entry: by the time it stops, RemoveNoLock has
+            // already deleted the session itself, so PlaybackSessionManager.Get(id) - and with it
+            // GetPlaybackSession - returns 404 regardless of what the event store retains.
+            // Issue #71: a CLIENT-OWNED session is no longer removed here, so for those the entry
+            // does survive and the endpoint can finally show it - a side benefit, not the point.
             RecordLifecycleEvent(e.PlaySessionId, "PlaybackStopped");
 
             // Issue #71: same before-the-removal placement and same purpose as the transcoding-job
@@ -731,6 +746,14 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
             {
                 return;
             }
+
+            // Issue #71: at most one start outcome per session - see
+            // _startOutcomeRecordedPlaySessionIds. Claimed here regardless of the ServedByV2 check
+            // below, exactly as the pre-#71 eviction consumed the opportunity regardless of it.
+            if (!_startOutcomeRecordedPlaySessionIds.Add(playSessionId))
+            {
+                return;
+            }
         }
 
         if (_liveWiringDiagnosticsStore.TryGet(id, out var outcome) && outcome is not null && outcome.ServedByV2)
@@ -748,10 +771,11 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
     /// remarks). Silently does nothing for an unknown play session id or a legacy-served session, the
     /// same "correlate or silently no-op" discipline <see cref="RecordLifecycleEvent"/> already
     /// follows. Idempotent against <see cref="ITranscodeManager.TranscodingJobEnded"/>'s documented
-    /// "may be raised more than once for the same job" contract: the caller
-    /// (<see cref="OnTranscodingJobEnded"/>) always evicts <paramref name="playSessionId"/> from
-    /// <see cref="_byPlaySessionId"/> right after this method returns, so a second Ended event for the
-    /// same job finds no tracked session here and records nothing a second time.
+    /// "may be raised more than once for the same job" contract - but, since issue #71, NOT because
+    /// the caller evicts the session: it no longer does so for a client-owned one. Idempotency now
+    /// comes from <see cref="_startOutcomeRecordedPlaySessionIds"/>, which also caps the outcomes a
+    /// single session can contribute when a seek kills one job and starts another under the same
+    /// play session id.
     /// </summary>
     /// <param name="playSessionId">The play session id the ended job belongs to.</param>
     private void RecordTranscodeStartFailureIfNeverStarted(string playSessionId)
@@ -767,6 +791,13 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
             }
 
             if (!_byPlaySessionId.TryGetValue(playSessionId, out id))
+            {
+                return;
+            }
+
+            // Issue #71: at most one start outcome per session - see the matching claim in
+            // RecordTranscodeStartSuccessIfV2Served.
+            if (!_startOutcomeRecordedPlaySessionIds.Add(playSessionId))
             {
                 return;
             }
