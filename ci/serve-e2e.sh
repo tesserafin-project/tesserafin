@@ -36,6 +36,9 @@
 #        POST /Users/AuthenticateByName -> obtains an access token
 #        POST /Library/VirtualFolders?collectionType=movies&refreshLibrary=false      -> the library
 #        POST /Library/VirtualFolders?collectionType=homevideos&refreshLibrary=true   -> the probes
+#        POST /Users/New + POST /Users/{id}/Policy -> a second, NON-admin user granted the
+#                                       Movies library only (reefin-web #15's access fixture;
+#                                       see the "Restricted user" section for its contract)
 #      refreshLibrary is requested exactly once, on the LAST folder: it scans the whole library
 #      root, so one scan covers both — and two of them race and cancel each other (see
 #      add_library). Then POLLS /UserViews until BOTH views actually materialize (the library
@@ -136,6 +139,9 @@ KEEP=0
 READY_TIMEOUT=180
 E2E_USER="${REEFIN_E2E_USER:-smokeadmin}"
 E2E_PASSWORD="${REEFIN_E2E_PASSWORD:-smokepass123}"
+# The reefin-web #15 access-restriction fixture (see the "Restricted user" section below).
+RESTRICTED_USER="${REEFIN_E2E_RESTRICTED_USER:-smokerestricted}"
+RESTRICTED_PASSWORD="${REEFIN_E2E_RESTRICTED_PASSWORD:-restrictedpass123}"
 
 banner() {
     echo ""
@@ -780,6 +786,101 @@ printf '%s\n' "$CHECK_REPORT"
 log "all four fixtures verified against the running server"
 
 # ---------------------------------------------------------------------------
+# Restricted user — the reefin-web #15 access-restriction fixture.
+#
+# A second, NON-admin user whose policy grants access to the Movies library only:
+# EnableAllFolders=false, EnabledFolders=[Movies]. The "Codec Probes" library exists on
+# the server but is deliberately NOT granted, which is what lets a browser test observe
+# the server's REAL semantics for a library that exists-but-is-invisible (reefin-web
+# library.spec.ts explicitly disclaims this case today for want of exactly this fixture).
+#
+# Everything below goes through the real public API, like the rest of this script:
+#   POST /Users/New                  -> creates the user (RequiresElevation, so admin token)
+#   GET  /Users/{id}                 -> fetches the REAL current policy
+#   POST /Users/{id}/Policy          -> posts that policy back, modified only in
+#                                       IsAdministrator/EnableAllFolders/EnabledFolders.
+#                                       Posting a hand-built partial policy instead would
+#                                       silently reset every unmentioned field to its
+#                                       serializer default — this mutation keeps the
+#                                       server's own defaults for everything else.
+#   POST /Users/AuthenticateByName   -> proves the credentials the specs will use
+#   GET  /UserViews (restricted)     -> proves the policy actually took: movies visible,
+#                                       homevideos ABSENT. This is the fixture's contract.
+#
+# What this deliberately does NOT assert: the HTTP status of directly addressing the
+# hidden library with the restricted token (404 vs empty vs 403). That is the very
+# semantics the browser test exists to pin down — the rig OBSERVES and prints it, so a
+# server-side change shows up here in the log, but the assertion belongs to the spec.
+# ---------------------------------------------------------------------------
+banner "Seeding restricted user '${RESTRICTED_USER}' (Movies only, Codec Probes withheld)"
+
+RESTRICTED_JSON="$(api POST /Users/New \
+    -H 'Content-Type: application/json' \
+    -d "{\"Name\":$(printf '%s' "$RESTRICTED_USER" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))'),\"Password\":$(printf '%s' "$RESTRICTED_PASSWORD" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')}")"
+RESTRICTED_ID="$(printf '%s' "$RESTRICTED_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["Id"])')"
+[ -n "$RESTRICTED_ID" ] || { echo "ERROR: /Users/New returned no user id" >&2; exit 1; }
+log "restricted user created — userId=${RESTRICTED_ID}"
+
+# Real current policy, mutated only where the restriction lives.
+RESTRICTED_POLICY="$(api GET "/Users/${RESTRICTED_ID}" \
+    | REEFIN_MOVIES_VIEW_ID="$MOVIES_VIEW_ID" python3 -c '
+import json, os, sys
+policy = json.load(sys.stdin)["Policy"]
+policy["IsAdministrator"] = False
+policy["EnableAllFolders"] = False
+policy["EnabledFolders"] = [os.environ["REEFIN_MOVIES_VIEW_ID"]]
+print(json.dumps(policy))')"
+api POST "/Users/${RESTRICTED_ID}/Policy" \
+    -H 'Content-Type: application/json' \
+    -d "$RESTRICTED_POLICY" >/dev/null
+log "restricted policy applied: EnableAllFolders=false, EnabledFolders=[${MOVIES_VIEW_ID}]"
+
+# The credentials the specs will use must actually authenticate.
+RESTRICTED_AUTH="$(api POST /Users/AuthenticateByName \
+    -H 'Content-Type: application/json' \
+    -d "{\"Username\":$(printf '%s' "$RESTRICTED_USER" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))'),\"Pw\":$(printf '%s' "$RESTRICTED_PASSWORD" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')}")"
+RESTRICTED_TOKEN="$(printf '%s' "$RESTRICTED_AUTH" | python3 -c 'import json,sys; print(json.load(sys.stdin)["AccessToken"])')"
+[ -n "$RESTRICTED_TOKEN" ] || { echo "ERROR: restricted user authentication returned no access token" >&2; exit 1; }
+
+# The fixture's contract: through the restricted user's own eyes, movies is there and
+# homevideos is not. Polled briefly — policy application is synchronous, but the view
+# endpoint goes through the same caches as everything else.
+restricted_ok=0
+for _ in $(seq 1 30); do
+    RVIEWS="$(curl -fsS --max-time 10 "${BASE_URL}/UserViews?userId=${RESTRICTED_ID}" \
+        -H "Authorization: ${AUTH_CLIENT}, Token=\"${RESTRICTED_TOKEN}\"" 2>/dev/null || true)"
+    if [ -n "$RVIEWS" ] && printf '%s' "$RVIEWS" | python3 -c '
+import json,sys
+types = [i.get("CollectionType") for i in json.load(sys.stdin).get("Items", [])]
+sys.exit(0 if types.count("movies") == 1 and "homevideos" not in types else 1)
+' 2>/dev/null; then
+        restricted_ok=1
+        break
+    fi
+    sleep 1
+done
+if [ "$restricted_ok" -ne 1 ]; then
+    echo "ERROR: the restricted user still sees the wrong views. Last /UserViews: ${RVIEWS:-<none>}" >&2
+    exit 1
+fi
+log "restricted /UserViews: movies visible, homevideos absent — fixture contract holds"
+
+# OBSERVED, not asserted (see the header note): what direct addressing of the withheld
+# library answers for this user, so the semantics the browser spec pins are on record here.
+OBSERVED_STATUS="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 \
+    "${BASE_URL}/Items?userId=${RESTRICTED_ID}&parentId=${PROBES_VIEW_ID}&recursive=true" \
+    -H "Authorization: ${AUTH_CLIENT}, Token=\"${RESTRICTED_TOKEN}\"" || echo 000)"
+OBSERVED_BODY_LEN="$(curl -fsS --max-time 10 \
+    "${BASE_URL}/Items?userId=${RESTRICTED_ID}&parentId=${PROBES_VIEW_ID}&recursive=true" \
+    -H "Authorization: ${AUTH_CLIENT}, Token=\"${RESTRICTED_TOKEN}\"" 2>/dev/null | python3 -c 'import json,sys
+try:
+    body = json.load(sys.stdin)
+    print("Items=%d TotalRecordCount=%s" % (len(body.get("Items", [])), body.get("TotalRecordCount")))
+except Exception:
+    print("unparseable")' || echo 'no body')"
+log "observed: GET /Items on the withheld library as the restricted user -> HTTP ${OBSERVED_STATUS} (${OBSERVED_BODY_LEN})"
+
+# ---------------------------------------------------------------------------
 # Ready
 # ---------------------------------------------------------------------------
 banner "READY"
@@ -796,12 +897,20 @@ Point the reefin-web Playwright specs at it with:
   export REEFIN_E2E_BASE_URL='${BASE_URL}'
   export REEFIN_E2E_USER='${E2E_USER}'
   export REEFIN_E2E_PASSWORD='${E2E_PASSWORD}'
+  export REEFIN_E2E_RESTRICTED_USER='${RESTRICTED_USER}'
+  export REEFIN_E2E_RESTRICTED_PASSWORD='${RESTRICTED_PASSWORD}'
+  export REEFIN_E2E_RESTRICTED_LIBRARY_ID='${PROBES_VIEW_ID}'
   cd <reefin-web> && npx playwright test tests/e2e/theme-glass.spec.ts
 EOF
 
 export REEFIN_E2E_BASE_URL="$BASE_URL"
 export REEFIN_E2E_USER="$E2E_USER"
 export REEFIN_E2E_PASSWORD="$E2E_PASSWORD"
+export REEFIN_E2E_RESTRICTED_USER="$RESTRICTED_USER"
+export REEFIN_E2E_RESTRICTED_PASSWORD="$RESTRICTED_PASSWORD"
+# The library the restricted user is NOT granted — what the reefin-web access spec addresses
+# directly to pin the server's exists-but-invisible semantics.
+export REEFIN_E2E_RESTRICTED_LIBRARY_ID="$PROBES_VIEW_ID"
 
 if [ -n "$EXEC_CMD" ]; then
     banner "Running: ${EXEC_CMD}"
