@@ -4,6 +4,17 @@ Design for the full client-owned session cycle over the v2 `Playback/Sessions` p
 `PlaybackInfo → POST → GET .../Stream → PUT → retry → DELETE`, plus what happens when the
 client never gets to say `DELETE`.
 
+> **Amended by issue #71 — §4 and §6 below no longer describe shipped behaviour as originally
+> written.** This document declared server-side reaping *authoritative* and named
+> `TranscodingJobEnded` as one of its triggers. Issue #71 proved that trigger wrong: a
+> transcoding job ending is the *ffmpeg process* exiting, which is not the same event as
+> *playback* ending — ffmpeg routinely finishes encoding minutes before the user stops watching,
+> and a seek kills the job outright (`DynamicHlsController.GetDynamicSegment` →
+> `KillTranscodingJobs`). It destroyed sessions the client was still using. The reaping rule is
+> therefore **narrowed, deliberately, as a product decision**: a session established through the
+> v2 API is ended by that client's `DELETE` or by the TTL backstop, and by nothing else. The
+> sections below carry the amended text inline. See §4.1 and §6.1.
+
 Companion to `docs/pr92-design-playback-api-and-diagnostics.md` (the protocol) and
 `docs/design-playback-v2-lifecycle.md` (the canary). Nothing here activates v2: every client
 behaviour described below fires **only** for a session v2 actually established, behind the
@@ -134,13 +145,41 @@ reason to tear down a session that is still playing.
 | client teardown twice | second is a no-op, never a second request | client state machine |
 
 The client treats **`404` on `DELETE` as success**. The goal is "the session is not there",
-and a `404` means precisely that — whether this client removed it or the server's own
-`PlaybackStopped`/`TranscodingJobEnded` handler got there first (both call
-`DeleteByPlaySessionId`, which is very often the *real* reason a session disappears before the
-client's own `DELETE` lands). Treating `404` as failure would produce retry storms against
-sessions the server already correctly reaped.
+and a `404` means precisely that. Treating `404` as failure would produce retry storms against
+sessions the server already correctly reaped. This client-side rule is **unchanged** by #71.
 
 `403` is **not** retried: it is a permanent statement about this caller.
+
+### 4.1 What #71 changed — `404` is no longer the *normal* outcome
+
+As originally written, this section went on to say a `404` was very often the *real* reason a
+session disappeared, because the server's own `PlaybackStopped`/`TranscodingJobEnded` handlers
+call `DeleteByPlaySessionId` and get there first. That was true, and it was the defect:
+
+- **`TranscodingJobEnded` is not an end-of-playback signal at all.** It is the ffmpeg process
+  exiting. It fires when encoding completes ahead of playback, when a seek kills and restarts
+  the job (`DynamicHlsController.GetDynamicSegment` → `KillTranscodingJobs`), and when a ping
+  timeout stops the kill timer. In every one of those cases the user is still watching. A
+  session removed there is removed *while live*: the `PlaybackSessionId` the client still holds
+  is dead, `GET .../Stream` for it 404s, and the eventual `DELETE` can only 404 too.
+- **`PlaybackStopped` is a genuine end-of-playback signal, but it is keyed on `PlaySessionId`,**
+  the legacy transcode pipeline's job key, and `PlaystateController.ReportPlaybackStopped`
+  raises it *before* the client's own `DELETE` can land. Leaving it destructive would keep the
+  happy path answering `404` **by construction** — which makes the `deleted` line unobservable
+  and the whole teardown contract of this document untestable. §5's own rule already says it:
+  "teardown must key on the server id and not on `PlaySessionId`". These handlers were the one
+  place that did not.
+
+**Amended rule.** A session established through the v2 API (`POST /Playback/Sessions`) is
+*client-owned*: the client holds its `PlaybackSessionId` and owes it a `DELETE`. It is removed
+by that `DELETE`, or by §6's TTL backstop. Neither `TranscodingJobEnded` nor `PlaybackStopped`
+removes it. Sessions the **legacy** pipeline tracked by itself (`DynamicHlsController` →
+`TrackTranscodeOutput` → `Track`) are unaffected: nobody holds their id and nobody will ever
+`DELETE` them, so their transcoding job ending remains the right moment to drop them, and it
+still does.
+
+Consequence for the table above: `DELETE` on a live session now returns `204`, and `404` means
+what it says — already torn down, or expired. The client behaviour does not change.
 
 ---
 
@@ -192,14 +231,40 @@ Consequences, taken seriously rather than papered over:
 
 - Teardown is fired from `pagehide` **and** `visibilitychange → hidden`, deduplicated by the
   same idempotence machinery as everything else, and issued with `keepalive: true`.
-- Because none of that is guaranteed, **the authoritative cleanup remains server-side**:
-  `PlaybackSessionManager` already reaps on `PlaybackStopped` and `TranscodingJobEnded`, and
-  `SweepExpired` backstops both with a 6 h TTL. The client `DELETE` is an *optimisation* that
-  frees the session promptly; correctness does not depend on it.
+- Because none of that is guaranteed, **a server-side backstop is still required** — but see
+  §6.1: since #71 that backstop is `SweepExpired`'s 6 h TTL *alone*. The client `DELETE` is
+  what frees the session promptly; correctness does not depend on it.
 - A `visibilitychange → hidden` that is **not** a teardown (user switched tabs mid-playback)
   must not kill a live session. So the hidden-state teardown fires only when the tracker is
   already in `tearing-down`/`idle`-pending state — i.e. it flushes a teardown that is already
   owed, and never initiates one for a session still playing.
+
+### 6.1 What #71 changed — the backstop is the TTL, and only the TTL
+
+The bullet above used to read "the authoritative cleanup remains server-side:
+`PlaybackSessionManager` already reaps on `PlaybackStopped` and `TranscodingJobEnded`, and
+`SweepExpired` backstops both with a 6 h TTL". Two of those three are gone for client-owned
+sessions, for the reasons in §4.1. What remains:
+
+| Signal | Client-owned session (`POST /Playback/Sessions`) | Legacy-tracked session (`Track`) |
+|---|---|---|
+| `DELETE /Playback/Sessions/{id}` | removes it | n/a — no client holds the id |
+| `TranscodingJobEnded` | **retained** (logged, not removed) | removes it, as before |
+| `PlaybackStopped` | **retained** (logged, not removed) | removes it, as before |
+| `SweepExpired` (6 h TTL) | removes it | removes it |
+
+**The trade this buys, stated plainly.** A client that never sends its `DELETE` — the
+`pagehide`/`visibilitychange` miss this section is entirely about — now leaves a session
+resident for up to 6 h instead of until the next `PlaybackStopped`. That is the deliberate
+price. It is an in-memory record with a bounded lifetime and a hard TTL, whereas the previous
+behaviour destroyed sessions users were actively watching. The failure modes are not
+comparable, and `ExpiryTtl`/`SweepInterval` are **unchanged** by #71 — the TTL was never the
+actor here, and tuning it would not have addressed the defect.
+
+**Root cause, shared with #70.** `PlaySessionId` was the single coupling key binding the legacy
+transcode pipeline to the v2 session lifecycle. The same key that lets a legacy segment fetch
+overwrite a v2 plan (#70) let a legacy ffmpeg exit delete a v2 session (#71). The narrowing
+above is the liveness half of that decoupling.
 
 ---
 

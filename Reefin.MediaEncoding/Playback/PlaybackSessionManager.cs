@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Reefin.Controller.Diagnostics;
 using Reefin.Controller.Library;
 using Reefin.Controller.MediaEncoding;
@@ -9,6 +11,29 @@ using Reefin.Controller.Session;
 using Reefin.Model.Session;
 
 namespace Reefin.MediaEncoding.Playback;
+
+/// <summary>
+/// Issue #71: why a <see cref="PlaybackSession"/> was removed. Threaded down to
+/// <c>PlaybackSessionManager.RemoveNoLock</c> - the single removal funnel - from each of its
+/// callers, so the one structured line that funnel emits says which actor reaped the session.
+/// The whole #71 investigation turns on telling <see cref="TranscodingJobEnded"/> (the ffmpeg job
+/// ending, which is NOT playback ending) apart from <see cref="HttpDelete"/> (the client's own
+/// explicit teardown) and <see cref="TtlSweep"/> (the 6 h backstop).
+/// </summary>
+internal enum PlaybackSessionRemovalReason
+{
+    /// <summary>An explicit <c>DELETE /Playback/Sessions/{id}</c> from the client.</summary>
+    HttpDelete,
+
+    /// <summary><see cref="ITranscodeManager.TranscodingJobEnded"/> - the ffmpeg job ended.</summary>
+    TranscodingJobEnded,
+
+    /// <summary><see cref="ISessionManager.PlaybackStopped"/> - the legacy playback-stop report.</summary>
+    PlaybackStopped,
+
+    /// <summary>The <see cref="PlaybackSessionManager.SweepExpired"/> TTL backstop.</summary>
+    TtlSweep,
+}
 
 /// <inheritdoc cref="IPlaybackSessionManager"/>
 public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposable
@@ -29,6 +54,8 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
     private readonly IPlaybackLiveWiringDiagnosticsStore _liveWiringDiagnosticsStore;
     private readonly PlaybackOperationalMetrics _operationalMetrics;
     private readonly IRequestCorrelationAccessor _requestCorrelation;
+    private readonly ILogger<PlaybackSessionManager> _logger;
+    private readonly TimeProvider _timeProvider;
     private readonly object _lock = new();
     private readonly Dictionary<PlaybackSessionId, PlaybackSession> _sessions = new();
     private readonly Dictionary<string, PlaybackSessionId> _byPlaySessionId = new(StringComparer.OrdinalIgnoreCase);
@@ -39,6 +66,25 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
     // do) from "ffmpeg never started" (a failure, recorded here). Guarded by _lock, same as
     // _byPlaySessionId - both are read/written from the same event handlers.
     private readonly HashSet<string> _startedPlaySessionIds = new(StringComparer.OrdinalIgnoreCase);
+
+    // Issue #71: play session ids for which a transcode-start outcome has ALREADY been recorded into
+    // _operationalMetrics. Before #71 this set was unnecessary: OnTranscodingJobEnded always evicted
+    // the session (and with it _byPlaySessionId[playSessionId]) immediately after recording, so
+    // neither a re-fired Ended nor a post-seek second job could ever correlate and record twice.
+    // Client-owned sessions now survive that signal, so the "at most one start outcome per session"
+    // invariant PlaybackStopThresholdGuard reads has to be stated explicitly instead of falling out
+    // of the eviction. Guarded by _lock; cleared in RemoveNoLock alongside _startedPlaySessionIds.
+    private readonly HashSet<string> _startOutcomeRecordedPlaySessionIds = new(StringComparer.OrdinalIgnoreCase);
+
+    // Issue #71: sessions a CLIENT established through the v2 HTTP API (Create, i.e.
+    // POST /Playback/Sessions) and therefore holds the PlaybackSessionId of. They are ended by that
+    // client's own DELETE, or by the ExpiryTtl backstop - never by a PlaySessionId-keyed signal out
+    // of the legacy transcode pipeline, which is the coupling issue #71 identifies as the root
+    // cause (shared with #70). Sessions merely Track()ed by that pipeline - the HLS segment path,
+    // DynamicHlsController -> TrackTranscodeOutput - are NOT in here: nobody holds their id and
+    // nobody will ever DELETE them, so their job ending remains the right moment to drop them.
+    // Guarded by _lock, same as _sessions and _byPlaySessionId; cleared in RemoveNoLock.
+    private readonly HashSet<PlaybackSessionId> _clientOwnedSessions = new();
 
     private readonly Timer _sweepTimer;
     private bool _disposed;
@@ -93,6 +139,22 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
     /// <see cref="NullRequestCorrelationAccessor"/> when not supplied, so every pre-#42 call site —
     /// including existing test constructors — keeps compiling and simply records no request id.
     /// </param>
+    /// <param name="logger">
+    /// Issue #71: the sink for this class's removal/replacement lifecycle lines - most importantly
+    /// the single line <see cref="RemoveNoLock"/> emits for EVERY session removal, carrying the
+    /// <see cref="PlaybackSessionRemovalReason"/> that says which actor reaped it. PR #69
+    /// instrumented the four HTTP edges but nothing on the removal side, which is precisely where a
+    /// session disappears. Defaults to <see cref="NullLogger{T}"/> when not supplied, the same
+    /// optional-dependency discipline as every other parameter above, so existing call sites -
+    /// including test constructors - keep compiling and simply log nothing.
+    /// </param>
+    /// <param name="timeProvider">
+    /// Issue #71: the clock behind <c>CreatedAt</c>/<c>UpdatedAt</c> (<see cref="StoreOrReplace"/>,
+    /// <see cref="Patch"/>) and the removal line's age. Injected purely so lifetime tests can drive
+    /// creation and re-plan to distinct instants and then call the already time-injected
+    /// <see cref="SweepExpired"/> at a chosen point, instead of sleeping. Defaults to
+    /// <see cref="TimeProvider.System"/>; production behaviour is unchanged.
+    /// </param>
     public PlaybackSessionManager(
         IPlaybackSessionPlanner planner,
         ITranscodeManager transcodeManager,
@@ -101,8 +163,12 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
         IV2PlanStore? v2PlanStore = null,
         IPlaybackLiveWiringDiagnosticsStore? liveWiringDiagnosticsStore = null,
         PlaybackOperationalMetrics? operationalMetrics = null,
-        IRequestCorrelationAccessor? requestCorrelation = null)
+        IRequestCorrelationAccessor? requestCorrelation = null,
+        ILogger<PlaybackSessionManager>? logger = null,
+        TimeProvider? timeProvider = null)
     {
+        _logger = logger ?? NullLogger<PlaybackSessionManager>.Instance;
+        _timeProvider = timeProvider ?? TimeProvider.System;
         _requestCorrelation = requestCorrelation ?? NullRequestCorrelationAccessor.Instance;
         _planner = planner;
         _transcodeManager = transcodeManager;
@@ -115,7 +181,7 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
         transcodeManager.TranscodingJobStarted += OnTranscodingJobStarted;
         sessionManager.PlaybackStart += OnPlaybackStart;
         sessionManager.PlaybackStopped += OnPlaybackStopped;
-        _sweepTimer = new Timer(_ => SweepExpired(DateTimeOffset.UtcNow), null, SweepInterval, SweepInterval);
+        _sweepTimer = new Timer(_ => SweepExpired(_timeProvider.GetUtcNow()), null, SweepInterval, SweepInterval);
     }
 
     /// <inheritdoc/>
@@ -138,6 +204,17 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
         }
 
         var session = StoreOrReplace(request.Kind, playSessionId, request, plan, playbackAttemptId);
+
+        // Issue #71: this is the ONLY entry point a client reaches with an id it keeps. Marking it
+        // here (rather than inferring "Request is not null" downstream) states the ownership
+        // explicitly and is what exempts the session from the legacy PlaySessionId-keyed reaping in
+        // OnTranscodingJobEnded/OnPlaybackStopped. A Create landing on a session the legacy pipeline
+        // had already Track()ed promotes it, which is correct - from this point a client holds its
+        // id and owes it a DELETE.
+        lock (_lock)
+        {
+            _clientOwnedSessions.Add(session.Id);
+        }
 
         // PR113a: attach-or-remove unconditionally, not just attach-if-captured. StoreOrReplace
         // reuses the existing session id when playSessionId matches an in-flight session, so a
@@ -206,7 +283,7 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
                 Kind = request.Kind,
                 Request = request,
                 Plan = plan,
-                UpdatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = _timeProvider.GetUtcNow(),
                 PlaybackAttemptId = playbackAttemptId ?? existing.PlaybackAttemptId,
             };
             _sessions[id] = updated;
@@ -258,7 +335,7 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
     {
         lock (_lock)
         {
-            return RemoveNoLock(id);
+            return RemoveNoLock(id, PlaybackSessionRemovalReason.HttpDelete);
         }
     }
 
@@ -267,7 +344,8 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
     {
         lock (_lock)
         {
-            return _byPlaySessionId.TryGetValue(playSessionId, out var id) && RemoveNoLock(id);
+            return _byPlaySessionId.TryGetValue(playSessionId, out var id)
+                && RemoveNoLock(id, PlaybackSessionRemovalReason.HttpDelete);
         }
     }
 
@@ -317,19 +395,66 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
     {
         lock (_lock)
         {
-            var expired = _sessions.Values.Where(s => now - s.UpdatedAt > ExpiryTtl).Select(s => s.Id).ToList();
-            foreach (var id in expired)
+            var expired = _sessions.Values.Where(s => now - s.UpdatedAt > ExpiryTtl).ToList();
+            foreach (var session in expired)
             {
-                RemoveNoLock(id);
+                // Issue #71: the TTL reap is logged with the two numbers that make it falsifiable -
+                // the UpdatedAt it judged and the instant that stamp expired - so a TTL reap can
+                // never be mistaken for an event-driven one in an incident timeline.
+                _logger.LogInformation(
+                    "Playback session {SessionId} expired (play session {PlaySessionId}, updated {UpdatedAt}, expired at {ExpiresAt}, sweep of {ExpiredCount}).",
+                    session.Id,
+                    session.PlaySessionId,
+                    session.UpdatedAt,
+                    session.UpdatedAt + ExpiryTtl,
+                    expired.Count);
+                RemoveNoLock(session.Id, PlaybackSessionRemovalReason.TtlSweep);
             }
 
             return expired.Count;
         }
     }
 
+    /// <summary>
+    /// Issue #71: the LEGACY-signal reap, used by <see cref="OnTranscodingJobEnded"/> and
+    /// <see cref="OnPlaybackStopped"/> - and the fix for the defect. Both signals are keyed on
+    /// <c>PlaySessionId</c>, which is the legacy transcode pipeline's job key, not the v2 session's
+    /// identity; treating either as "this playback session is over" is what let an ffmpeg process
+    /// exiting destroy a session the user was still watching. So a session a client established and
+    /// still holds the id of (<see cref="_clientOwnedSessions"/>) is left alone here: it ends on
+    /// that client's own <c>DELETE</c>, with <see cref="SweepExpired"/>'s TTL as the backstop for
+    /// the client that never sends one. Sessions the legacy pipeline tracked by itself are reaped
+    /// exactly as before.
+    /// </summary>
+    /// <param name="playSessionId">The legacy play session id the signal carried.</param>
+    /// <param name="reason">Which signal is asking.</param>
+    /// <returns><c>true</c> when a session was removed.</returns>
+    private bool ReapByPlaySessionId(string playSessionId, PlaybackSessionRemovalReason reason)
+    {
+        lock (_lock)
+        {
+            if (!_byPlaySessionId.TryGetValue(playSessionId, out var id))
+            {
+                return false;
+            }
+
+            if (_clientOwnedSessions.Contains(id))
+            {
+                _logger.LogInformation(
+                    "Playback session {SessionId} retained across {RemovalReason} (play session {PlaySessionId}) - client-owned sessions end on an explicit DELETE or the TTL backstop.",
+                    id,
+                    reason,
+                    playSessionId);
+                return false;
+            }
+
+            return RemoveNoLock(id, reason);
+        }
+    }
+
     private PlaybackSession StoreOrReplace(PlaybackMediaKind kind, string? playSessionId, PlaybackSessionRequest? request, PlaybackPlan plan, string? playbackAttemptId = null)
     {
-        var now = DateTimeOffset.UtcNow;
+        var now = _timeProvider.GetUtcNow();
         lock (_lock)
         {
             if (!string.IsNullOrEmpty(playSessionId)
@@ -365,6 +490,22 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
                     PlaybackAttemptId = playbackAttemptId ?? existing.PlaybackAttemptId,
                 };
                 _sessions[existingId] = updated;
+
+                // Issue #71: the in-place replacement is the one lifecycle transition that mutates a
+                // live session without removing it - #70's plan-overwrite vector. Old and new state
+                // side by side, plus whether the stored request survived, so a v2 plan silently
+                // rewritten by a legacy segment fetch (Track passes request: null) is visible.
+                _logger.LogInformation(
+                    "Playback session {SessionId} replaced in place (play session {PlaySessionId}, method {OldPlayMethod} -> {NewPlayMethod}, kind {OldKind} -> {NewKind}, request preserved {RequestPreserved}, attempt {PlaybackAttemptId}).",
+                    existingId,
+                    playSessionId,
+                    existing.Plan.PlayMethod,
+                    updated.Plan.PlayMethod,
+                    existing.Kind,
+                    updated.Kind,
+                    request is null,
+                    updated.PlaybackAttemptId);
+
                 return updated;
             }
 
@@ -379,12 +520,36 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
         }
     }
 
-    private bool RemoveNoLock(PlaybackSessionId id)
+    /// <summary>
+    /// The single funnel every removal path goes through. Issue #71: it is therefore the only place
+    /// that can emit one line per removal, and the <paramref name="reason"/> its callers thread down
+    /// is the whole point - a session that disappears mid-playback is diagnosable only if the line
+    /// says WHICH actor removed it.
+    /// </summary>
+    /// <param name="id">The session to remove.</param>
+    /// <param name="reason">Which actor is removing it.</param>
+    /// <returns><c>true</c> when a session was actually removed.</returns>
+    private bool RemoveNoLock(PlaybackSessionId id, PlaybackSessionRemovalReason reason)
     {
         if (!_sessions.Remove(id, out var session))
         {
             return false;
         }
+
+        _clientOwnedSessions.Remove(id);
+
+        // Issue #71: THE line. PlaybackAttemptId is what joins this teardown to the created/replaced
+        // lines PR #69 emits on the HTTP edges; RemovalReason is what separates "the client asked"
+        // from "an ffmpeg job ended while the user was still watching".
+        _logger.LogInformation(
+            "Playback session {SessionId} removed (play session {PlaySessionId}, attempt {PlaybackAttemptId}, reason {RemovalReason}, created {CreatedAt}, updated {UpdatedAt}, age {AgeSeconds}s).",
+            id,
+            session.PlaySessionId,
+            session.PlaybackAttemptId,
+            reason,
+            session.CreatedAt,
+            session.UpdatedAt,
+            (_timeProvider.GetUtcNow() - session.CreatedAt).TotalSeconds);
 
         if (!string.IsNullOrEmpty(session.PlaySessionId))
         {
@@ -396,6 +561,10 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
             // job's Ended event, SweepExpired's TTL backstop, an explicit Delete) while a Started was
             // already recorded and no Ended ever follows to clean it up otherwise.
             _startedPlaySessionIds.Remove(session.PlaySessionId);
+
+            // Issue #71: same lifetime as the set above - the next session to reuse this play
+            // session id gets a fresh start-outcome budget.
+            _startOutcomeRecordedPlaySessionIds.Remove(session.PlaySessionId);
         }
 
         // PR113: evicts whatever shadow diagnostic was retained for this session, if any - covers
@@ -421,11 +590,32 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
             return;
         }
 
-        // PR115d: recorded BEFORE DeleteByPlaySessionId below, which evicts (among the other two
-        // per-session stores) _liveWiringDiagnosticsStore - the ServedByV2 read this needs. Same
-        // ordering constraint RecordLifecycleEvent's callers already respect for the same reason.
+        // PR115d: recorded BEFORE the reap below, which - when it does reap - evicts (among the
+        // other two per-session stores) _liveWiringDiagnosticsStore, the ServedByV2 read this needs.
+        // Same ordering constraint RecordLifecycleEvent's callers already respect. Issue #71: the
+        // reap no longer happens for a client-owned session, so this method no longer gets its
+        // idempotency from the eviction - it claims a token in _startOutcomeRecordedPlaySessionIds
+        // instead. See that field.
         RecordTranscodeStartFailureIfNeverStarted(job.PlaySessionId);
-        DeleteByPlaySessionId(job.PlaySessionId);
+
+        // Issue #71: logged BEFORE the removal below, because the removal is exactly what this line
+        // exists to attribute. Correlated says whether this ffmpeg job's play session id currently
+        // addresses a tracked v2 session at all - when it does, the removal that follows is the
+        // ffmpeg job's end being treated as playback's end, which is the defect under investigation.
+        PlaybackSessionId? correlatedId;
+        lock (_lock)
+        {
+            correlatedId = _byPlaySessionId.TryGetValue(job.PlaySessionId, out var found) ? found : null;
+        }
+
+        _logger.LogInformation(
+            "Transcoding job ended for play session {PlaySessionId} (job {JobId}, correlated {Correlated}, session {SessionId}).",
+            job.PlaySessionId,
+            job.Id,
+            correlatedId is not null,
+            correlatedId);
+
+        ReapByPlaySessionId(job.PlaySessionId, PlaybackSessionRemovalReason.TranscodingJobEnded);
     }
 
     /// <summary>
@@ -460,17 +650,32 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
         if (!string.IsNullOrEmpty(e.PlaySessionId))
         {
             // PR113b: recorded before eviction, for parity with FfmpegStarted/PlaybackStarted -
-            // but RemoveNoLock (reached via DeleteByPlaySessionId below) evicts every retained
+            // but RemoveNoLock (reached via the reap below, when it reaps) evicts every retained
             // PlaybackLifecycleEvent for this session, this one included, immediately afterward.
-            // The admin diagnostics endpoint can therefore never actually observe a
-            // "PlaybackStopped" entry: by the time a session stops, RemoveNoLock has already
-            // deleted the session itself, so PlaybackSessionManager.Get(id) - and with it
-            // GetPlaybackSession - returns 404 regardless of what the event store retains. This is
-            // the pre-existing PR113 removal-on-stop design, unchanged here; recording the event
-            // anyway keeps the three signals handled uniformly and is covered at the store level by
-            // tests that read it back before the delete call that immediately follows.
+            // For a LEGACY-tracked session the admin diagnostics endpoint can therefore never
+            // actually observe a "PlaybackStopped" entry: by the time it stops, RemoveNoLock has
+            // already deleted the session itself, so PlaybackSessionManager.Get(id) - and with it
+            // GetPlaybackSession - returns 404 regardless of what the event store retains.
+            // Issue #71: a CLIENT-OWNED session is no longer removed here, so for those the entry
+            // does survive and the endpoint can finally show it - a side benefit, not the point.
             RecordLifecycleEvent(e.PlaySessionId, "PlaybackStopped");
-            DeleteByPlaySessionId(e.PlaySessionId);
+
+            // Issue #71: same before-the-removal placement and same purpose as the transcoding-job
+            // line above - this is the OTHER PlaySessionId-keyed reap, and an incident timeline has
+            // to be able to tell the two apart.
+            PlaybackSessionId? correlatedId;
+            lock (_lock)
+            {
+                correlatedId = _byPlaySessionId.TryGetValue(e.PlaySessionId, out var found) ? found : null;
+            }
+
+            _logger.LogInformation(
+                "Playback stopped reported for play session {PlaySessionId} (correlated {Correlated}, session {SessionId}).",
+                e.PlaySessionId,
+                correlatedId is not null,
+                correlatedId);
+
+            ReapByPlaySessionId(e.PlaySessionId, PlaybackSessionRemovalReason.PlaybackStopped);
         }
     }
 
@@ -541,6 +746,14 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
             {
                 return;
             }
+
+            // Issue #71: at most one start outcome per session - see
+            // _startOutcomeRecordedPlaySessionIds. Claimed here regardless of the ServedByV2 check
+            // below, exactly as the pre-#71 eviction consumed the opportunity regardless of it.
+            if (!_startOutcomeRecordedPlaySessionIds.Add(playSessionId))
+            {
+                return;
+            }
         }
 
         if (_liveWiringDiagnosticsStore.TryGet(id, out var outcome) && outcome is not null && outcome.ServedByV2)
@@ -558,10 +771,11 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
     /// remarks). Silently does nothing for an unknown play session id or a legacy-served session, the
     /// same "correlate or silently no-op" discipline <see cref="RecordLifecycleEvent"/> already
     /// follows. Idempotent against <see cref="ITranscodeManager.TranscodingJobEnded"/>'s documented
-    /// "may be raised more than once for the same job" contract: the caller
-    /// (<see cref="OnTranscodingJobEnded"/>) always evicts <paramref name="playSessionId"/> from
-    /// <see cref="_byPlaySessionId"/> right after this method returns, so a second Ended event for the
-    /// same job finds no tracked session here and records nothing a second time.
+    /// "may be raised more than once for the same job" contract - but, since issue #71, NOT because
+    /// the caller evicts the session: it no longer does so for a client-owned one. Idempotency now
+    /// comes from <see cref="_startOutcomeRecordedPlaySessionIds"/>, which also caps the outcomes a
+    /// single session can contribute when a seek kills one job and starts another under the same
+    /// play session id.
     /// </summary>
     /// <param name="playSessionId">The play session id the ended job belongs to.</param>
     private void RecordTranscodeStartFailureIfNeverStarted(string playSessionId)
@@ -577,6 +791,13 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
             }
 
             if (!_byPlaySessionId.TryGetValue(playSessionId, out id))
+            {
+                return;
+            }
+
+            // Issue #71: at most one start outcome per session - see the matching claim in
+            // RecordTranscodeStartSuccessIfV2Served.
+            if (!_startOutcomeRecordedPlaySessionIds.Add(playSessionId))
             {
                 return;
             }

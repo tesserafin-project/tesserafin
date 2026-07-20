@@ -427,6 +427,99 @@ public class PlaybackSessionsControllerTests
         Assert.IsType<NoContentResult>(result);
     }
 
+    /// <summary>
+    /// Issue #71, against a REAL <see cref="PlaybackSessionManager"/> rather than a mock: the
+    /// session the POST established is still there the instant before the DELETE, the DELETE
+    /// answers 204, and the <c>deleted</c> line PR #69 added actually gets emitted — carrying the
+    /// session id and the attempt id that join it to the <c>created</c> line. The whole point of
+    /// #71 is that this sequence was NOT observable: an ffmpeg job ending in between reaped the
+    /// session, so the happy path answered 404 and the <c>deleted</c> line never appeared.
+    /// </summary>
+    [Fact]
+    public async Task DeletePlaybackSession_RealManagerAfterCreate_IsStillPresentAndLogsDeleted()
+    {
+        var (controller, manager, logger) = CreateRealManagerFixture();
+        using var owned = manager;
+
+        var created = await controller.CreatePlaybackSession(
+            CreateRequest(playSessionId: "play-session-1") with { PlaybackAttemptId = AttemptId });
+        var response = Assert.IsType<PlaybackSessionResponse>(
+            Assert.IsType<Reefin.Api.Results.OkResult<PlaybackSessionResponse>>(created.Result).Value);
+        var id = new PlaybackSessionId(response.Id);
+
+        Assert.NotNull(manager.Get(id));
+        logger.Entries.Clear();
+
+        var deleted = controller.DeletePlaybackSession(id);
+
+        Assert.IsType<NoContentResult>(deleted);
+        var entry = Assert.Single(logger.Entries, e => e.Message.Contains("deleted", StringComparison.Ordinal));
+        Assert.Equal(id, entry.Properties["SessionId"]);
+        Assert.Equal(AttemptId, entry.Properties["PlaybackAttemptId"]);
+        Assert.Null(manager.Get(id));
+    }
+
+    /// <summary>
+    /// Issue #71, the other half of the contract: when the server's own reaping genuinely got there
+    /// first — <c>DeleteByPlaySessionId</c>, the primitive both lifecycle handlers and the TTL
+    /// backstop funnel into — the DELETE answers 404 and says so in the log. This is the case
+    /// <c>docs/issue43-design-playback-session-lifecycle.md</c> §4 calls a client-side success; what
+    /// #71 changes is only that an ffmpeg job ending no longer produces it.
+    /// </summary>
+    [Fact]
+    public async Task DeletePlaybackSession_AfterServerSideReap_ReturnsNotFoundAndLogsAlreadyGone()
+    {
+        var (controller, manager, logger) = CreateRealManagerFixture();
+        using var owned = manager;
+
+        var created = await controller.CreatePlaybackSession(
+            CreateRequest(playSessionId: "play-session-1") with { PlaybackAttemptId = AttemptId });
+        var response = Assert.IsType<PlaybackSessionResponse>(
+            Assert.IsType<Reefin.Api.Results.OkResult<PlaybackSessionResponse>>(created.Result).Value);
+        var id = new PlaybackSessionId(response.Id);
+
+        // The server-side reap primitive both lifecycle handlers (and the TTL sweep) funnel into.
+        Assert.True(manager.DeleteByPlaySessionId("play-session-1"));
+        logger.Entries.Clear();
+
+        var deleted = controller.DeletePlaybackSession(id);
+
+        Assert.IsType<NotFoundResult>(deleted);
+        var entry = Assert.Single(logger.Entries, e => e.Message.Contains("already gone", StringComparison.Ordinal));
+        Assert.Equal(id, entry.Properties["SessionId"]);
+    }
+
+    /// <summary>
+    /// Issue #71: builds the controller over a real <see cref="PlaybackSessionManager"/>, so the
+    /// DELETE tests above exercise genuine session bookkeeping instead of a mock that can be made
+    /// to say anything.
+    /// </summary>
+    private (PlaybackSessionsController Controller, PlaybackSessionManager Manager, RecordingLogger Logger) CreateRealManagerFixture()
+    {
+        SetUpItemAndUser(new Movie { Id = _itemId });
+        var streamInfo = new StreamInfo { DeviceProfile = new DeviceProfile(), PlayMethod = PlayMethod.DirectPlay, Container = "mp4" };
+        var plan = new PlaybackPlan(PlayMethod.DirectPlay, default, streamInfo);
+        var planner = new Mock<IPlaybackSessionPlanner>();
+        planner.Setup(p => p.PlanVideo(It.IsAny<MediaOptions>())).Returns(plan);
+        var manager = new PlaybackSessionManager(
+            planner.Object,
+            new Mock<ITranscodeManager>().Object,
+            new Mock<Reefin.Controller.Session.ISessionManager>().Object);
+        var logger = new RecordingLogger();
+        var controller = new PlaybackSessionsController(
+            manager,
+            _itemLookupService.Object,
+            _userManager.Object,
+            _mediaSourceManager.Object,
+            _v2PlanStore.Object,
+            _liveStreamResolver.Object,
+            _liveWiringDiagnosticsStore.Object,
+            _mediaEncoder.Object,
+            logger);
+        SetIdentity(controller, _userId);
+        return (controller, manager, logger);
+    }
+
     private PlaybackSession BuildStreamableSession(Guid ownerId, string? playSessionId, StreamInfo? streamInfo = null)
     {
         var mediaSource = new MediaSourceInfo { Id = "source-1", Container = "mkv", SupportsDirectPlay = true };
