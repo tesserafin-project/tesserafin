@@ -940,7 +940,8 @@ namespace Reefin.MediaEncoding.Encoder
                 VideoStream = imageStream,
                 BaseRequest = baseRequest,  // GetVideoProcessingFilterParam errors if null
                 MediaPath = inputFile,
-                OutputVideoCodec = "mjpeg"
+                OutputVideoCodec = "mjpeg",
+                EncoderUsage = VideoEncoderUsage.ImageExtraction
             };
             var vidEncoder = enableHwEncoding ? encodingHelper.GetVideoEncoder(jobState, options) : jobState.OutputVideoCodec;
 

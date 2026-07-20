@@ -159,15 +159,29 @@ public class EncodingHelperVideoEncoderSelectionTests
     }
 
     [Fact]
-    public void GetMjpegEncoder_VaapiWithIntelIHD_ReturnsHwEncoder()
+    public void GetMjpegEncoder_VaapiWithIntelIHD_ImageExtraction_ReturnsHwEncoder()
     {
+        var helper = CreateHelper(out var mediaEncoder);
+        mediaEncoder.Setup(m => m.SupportsEncoder("mjpeg_vaapi")).Returns(true);
+        mediaEncoder.Setup(m => m.IsVaapiDeviceInteliHD).Returns(true);
+        var state = BuildVideoFileState();
+        state.EncoderUsage = VideoEncoderUsage.ImageExtraction;
+        var options = new EncodingOptions { HardwareAccelerationType = HardwareAccelerationType.vaapi, EnableHardwareEncoding = true };
+
+        Assert.Equal("mjpeg_vaapi", helper.GetVideoEncoder(WithCodec(state, "mjpeg"), options));
+    }
+
+    [Fact]
+    public void GetMjpegEncoder_VaapiWithIntelIHD_Transcode_FallsBackToSoftware()
+    {
+        // Issue #61: mjpeg_vaapi is not a usable transcoding encoder - see EncodingHelperMjpegVaapiTests.
         var helper = CreateHelper(out var mediaEncoder);
         mediaEncoder.Setup(m => m.SupportsEncoder("mjpeg_vaapi")).Returns(true);
         mediaEncoder.Setup(m => m.IsVaapiDeviceInteliHD).Returns(true);
         var state = BuildVideoFileState();
         var options = new EncodingOptions { HardwareAccelerationType = HardwareAccelerationType.vaapi, EnableHardwareEncoding = true };
 
-        Assert.Equal("mjpeg_vaapi", helper.GetVideoEncoder(WithCodec(state, "mjpeg"), options));
+        Assert.Equal("mjpeg", helper.GetVideoEncoder(WithCodec(state, "mjpeg"), options));
     }
 
     [Theory]
