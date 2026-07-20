@@ -83,6 +83,15 @@ public sealed class PlaybackEngine : IPlaybackEngine
     /// </summary>
     private const string LegacyFallbackAudioCodec = "aac";
 
+    /// <summary>Issue #70: the demotion ladders, held as statics so <see cref="DemotionLadder"/> allocates nothing on the hot path.</summary>
+    private static readonly PlaybackMethod[] LadderFromDirectPlay = [PlaybackMethod.DirectPlay, PlaybackMethod.Remux, PlaybackMethod.Transcode];
+
+    /// <summary>Issue #70: see <see cref="LadderFromDirectPlay"/>.</summary>
+    private static readonly PlaybackMethod[] LadderFromRemux = [PlaybackMethod.Remux, PlaybackMethod.Transcode];
+
+    /// <summary>Issue #70: see <see cref="LadderFromDirectPlay"/>. Transcode is terminal - there is nothing heavier to demote into.</summary>
+    private static readonly PlaybackMethod[] LadderFromTranscode = [PlaybackMethod.Transcode];
+
     private static readonly IReadOnlyCollection<string> TextBasedSubtitleFormats =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "srt", "subrip", "ass", "ssa", "vtt", "webvtt", "ttml", "sami", "smi" };
 
@@ -1167,11 +1176,11 @@ public sealed class PlaybackEngine : IPlaybackEngine
     /// </summary>
     /// <param name="naturalMethod">The method the media alone calls for, before constraints.</param>
     /// <returns>The methods to try, heaviest last.</returns>
-    private static IReadOnlyList<PlaybackMethod> DemotionLadder(PlaybackMethod naturalMethod) => naturalMethod switch
+    private static ReadOnlySpan<PlaybackMethod> DemotionLadder(PlaybackMethod naturalMethod) => naturalMethod switch
     {
-        PlaybackMethod.DirectPlay => [PlaybackMethod.DirectPlay, PlaybackMethod.Remux, PlaybackMethod.Transcode],
-        PlaybackMethod.Remux => [PlaybackMethod.Remux, PlaybackMethod.Transcode],
-        _ => [PlaybackMethod.Transcode],
+        PlaybackMethod.DirectPlay => LadderFromDirectPlay,
+        PlaybackMethod.Remux => LadderFromRemux,
+        _ => LadderFromTranscode,
     };
 
     private static string SelectTargetContainer(IReadOnlyList<string> containers, string sourceContainer)
