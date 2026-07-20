@@ -74,51 +74,79 @@ public static class PlaybackSessionRequestValidator
             errors.Add("capabilities.decode must declare at least one direct-play profile, video codec, or audio codec - a client that can decode nothing cannot play anything.");
         }
 
-        foreach (var codec in videoCodecs)
+        for (var i = 0; i < videoCodecs.Count; i++)
         {
-            if (codec.MaxBitrate is <= 0)
+            if (videoCodecs[i].MaxBitrate is <= 0)
             {
-                errors.Add($"capabilities.decode.videoCodecs['{codec.Codec}'].maxBitrate must be positive if specified - a non-positive cap declares the codec supported and simultaneously unusable.");
+                errors.Add($"capabilities.decode.videoCodecs[{i}].maxBitrate must be positive if specified - a non-positive cap declares the codec supported and simultaneously unusable.");
             }
         }
 
-        foreach (var codec in audioCodecs)
+        for (var i = 0; i < audioCodecs.Count; i++)
         {
-            if (codec.MaxBitrate is <= 0)
+            if (audioCodecs[i].MaxBitrate is <= 0)
             {
-                errors.Add($"capabilities.decode.audioCodecs['{codec.Codec}'].maxBitrate must be positive if specified - a non-positive cap declares the codec supported and simultaneously unusable.");
+                errors.Add($"capabilities.decode.audioCodecs[{i}].maxBitrate must be positive if specified - a non-positive cap declares the codec supported and simultaneously unusable.");
             }
         }
 
-        var duplicateVideoCodec = videoCodecs.Select(c => c.Codec).GroupBy(c => c, StringComparer.OrdinalIgnoreCase).FirstOrDefault(g => g.Count() > 1);
-        if (duplicateVideoCodec is not null)
+        var duplicateVideoCodecIndex = FirstDuplicateIndex(videoCodecs.Select(c => c.Codec));
+        if (duplicateVideoCodecIndex >= 0)
         {
-            errors.Add($"capabilities.decode.videoCodecs declares '{duplicateVideoCodec.Key}' more than once.");
+            errors.Add($"capabilities.decode.videoCodecs declares a duplicate codec at index {duplicateVideoCodecIndex}.");
         }
 
-        var duplicateAudioCodec = audioCodecs.Select(c => c.Codec).GroupBy(c => c, StringComparer.OrdinalIgnoreCase).FirstOrDefault(g => g.Count() > 1);
-        if (duplicateAudioCodec is not null)
+        var duplicateAudioCodecIndex = FirstDuplicateIndex(audioCodecs.Select(c => c.Codec));
+        if (duplicateAudioCodecIndex >= 0)
         {
-            errors.Add($"capabilities.decode.audioCodecs declares '{duplicateAudioCodec.Key}' more than once.");
+            errors.Add($"capabilities.decode.audioCodecs declares a duplicate codec at index {duplicateAudioCodecIndex}.");
         }
 
-        foreach (var profile in capabilities.OutputProfiles ?? [])
+        var outputProfiles = capabilities.OutputProfiles ?? [];
+        for (var i = 0; i < outputProfiles.Count; i++)
         {
+            var profile = outputProfiles[i];
+
             if (profile.MaxVideoBitrate is <= 0)
             {
-                errors.Add($"capabilities.outputProfiles['{profile.Container}'].maxVideoBitrate must be positive if specified.");
+                errors.Add($"capabilities.outputProfiles[{i}].maxVideoBitrate must be positive if specified.");
             }
 
             if (profile.MaxAudioBitrate is <= 0)
             {
-                errors.Add($"capabilities.outputProfiles['{profile.Container}'].maxAudioBitrate must be positive if specified.");
+                errors.Add($"capabilities.outputProfiles[{i}].maxAudioBitrate must be positive if specified.");
             }
 
             if (profile.MaxAudioChannels is <= 0)
             {
-                errors.Add($"capabilities.outputProfiles['{profile.Container}'].maxAudioChannels must be positive if specified.");
+                errors.Add($"capabilities.outputProfiles[{i}].maxAudioChannels must be positive if specified.");
             }
         }
+    }
+
+    /// <summary>
+    /// Returns the index of the first value that repeats an earlier one (case-insensitively), or
+    /// <c>-1</c> when there is no repeat. Issue #79: the index is the only thing reported, because it
+    /// is computed by the server; the repeated value itself is client-supplied free-form text and
+    /// must never reach an exception message, a response body, or a log sink.
+    /// </summary>
+    private static int FirstDuplicateIndex(IEnumerable<string> values)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var index = 0;
+        foreach (var value in values)
+        {
+            // A null codec name is not a domain concept, but the client controls the JSON: treat it
+            // as its own bucket rather than letting the comparer throw.
+            if (!seen.Add(value ?? string.Empty))
+            {
+                return index;
+            }
+
+            index++;
+        }
+
+        return -1;
     }
 
     private static void ValidateConstraints(PlaybackConstraints? constraints, List<string> errors)

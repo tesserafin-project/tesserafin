@@ -125,7 +125,11 @@ public static class PlaybackSessionRequestValidatorTests
         var request = ValidRequest() with { Capabilities = capabilities };
 
         var exception = Assert.Throws<ArgumentException>(() => PlaybackSessionRequestValidator.Validate(request));
-        Assert.Contains("h264", exception.Message, StringComparison.Ordinal);
+
+        // Issue #79: the message names the contract path and the server-computed index of the
+        // repeat, never the duplicated codec name - that string is client-supplied.
+        Assert.Contains("capabilities.decode.videoCodecs declares a duplicate codec at index 1.", exception.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("h264", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
