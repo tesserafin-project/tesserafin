@@ -12,7 +12,7 @@ namespace Tesserafin.Extensions
     public static partial class StringExtensions
     {
         private static readonly Lazy<string> _transliteratorId = new(() =>
-            Environment.GetEnvironmentVariable("REEFIN_TRANSLITERATOR_ID")
+            Environment.GetEnvironmentVariable("TESSERAFIN_TRANSLITERATOR_ID")
             ?? "Any-Latin; Latin-Ascii; Lower; NFD; [:Nonspacing Mark:] Remove; [:Punctuation:] Remove;");
 
         private static readonly Lazy<Transliterator?> _transliterator = new(() =>

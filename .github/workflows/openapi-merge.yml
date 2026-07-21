@@ -55,7 +55,7 @@ jobs:
       - name: Set unstable dated version
         id: version
         run: |-
-          echo "REEFIN_VERSION=$(date +'%Y%m%d%H%M%S')" >> $GITHUB_ENV
+          echo "TESSERAFIN_VERSION=$(date +'%Y%m%d%H%M%S')" >> $GITHUB_ENV
       - name: Download openapi-head
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -69,7 +69,7 @@ jobs:
           key: "${{ secrets.REPO_KEY }}"
           source: openapi-head/openapi.json
           strip_components: 1
-          target: "/srv/incoming/openapi/unstable/reefin-openapi-${{ env.REEFIN_VERSION }}"
+          target: "/srv/incoming/openapi/unstable/reefin-openapi-${{ env.TESSERAFIN_VERSION }}"
       - name: Move openapi.json (unstable) into place
         uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
         with:
@@ -87,18 +87,18 @@ jobs:
             TGT_DIR="/srv/repository/main/openapi"
             LAST_SPEC="$( ls -lt ${TGT_DIR}/unstable/ | grep 'reefin-openapi' | head -1 | awk '{ print $NF }' )"
             # If new and previous spec don't differ (diff retcode 0), remove incoming and finish
-            if diff /srv/incoming/openapi/unstable/reefin-openapi-${{ env.REEFIN_VERSION }}/openapi.json ${TGT_DIR}/unstable/${LAST_SPEC} &>/dev/null; then
-                rm -r /srv/incoming/openapi/unstable/reefin-openapi-${{ env.REEFIN_VERSION }}
+            if diff /srv/incoming/openapi/unstable/reefin-openapi-${{ env.TESSERAFIN_VERSION }}/openapi.json ${TGT_DIR}/unstable/${LAST_SPEC} &>/dev/null; then
+                rm -r /srv/incoming/openapi/unstable/reefin-openapi-${{ env.TESSERAFIN_VERSION }}
                 exit 0
             fi
             # Move new spec into place
-            sudo mv /srv/incoming/openapi/unstable/reefin-openapi-${{ env.REEFIN_VERSION }}/openapi.json ${TGT_DIR}/unstable/reefin-openapi-${{ env.REEFIN_VERSION }}.json
+            sudo mv /srv/incoming/openapi/unstable/reefin-openapi-${{ env.TESSERAFIN_VERSION }}/openapi.json ${TGT_DIR}/unstable/reefin-openapi-${{ env.TESSERAFIN_VERSION }}.json
             # Delete previous reefin-openapi-unstable_previous.json
             sudo rm ${TGT_DIR}/reefin-openapi-unstable_previous.json
             # Move current reefin-openapi-unstable.json symlink to reefin-openapi-unstable_previous.json
             sudo mv ${TGT_DIR}/reefin-openapi-unstable.json ${TGT_DIR}/reefin-openapi-unstable_previous.json
             # Create new reefin-openapi-unstable.json symlink
-            sudo ln -s unstable/reefin-openapi-${{ env.REEFIN_VERSION }}.json ${TGT_DIR}/reefin-openapi-unstable.json
+            sudo ln -s unstable/reefin-openapi-${{ env.TESSERAFIN_VERSION }}.json ${TGT_DIR}/reefin-openapi-unstable.json
             # Check that the previous openapi unstable spec link is correct
             if [[ "$( readlink ${TGT_DIR}/reefin-openapi-unstable_previous.json )" != "unstable/${LAST_SPEC}" ]]; then
                 sudo rm ${TGT_DIR}/reefin-openapi-unstable_previous.json
@@ -116,7 +116,7 @@ jobs:
       - name: Set version number
         id: version
         run: |-
-          echo "REEFIN_VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
+          echo "TESSERAFIN_VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
       - name: Download openapi-head
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -130,7 +130,7 @@ jobs:
           key: "${{ secrets.REPO_KEY }}"
           source: openapi-head/openapi.json
           strip_components: 1
-          target: "/srv/incoming/openapi/stable/reefin-openapi-${{ env.REEFIN_VERSION }}"
+          target: "/srv/incoming/openapi/stable/reefin-openapi-${{ env.TESSERAFIN_VERSION }}"
       - name: Move openapi.json (stable) into place
         uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
         with:
@@ -148,18 +148,18 @@ jobs:
             TGT_DIR="/srv/repository/main/openapi"
             LAST_SPEC="$( ls -lt ${TGT_DIR}/stable/ | grep 'reefin-openapi' | head -1 | awk '{ print $NF }' )"
             # If new and previous spec don't differ (diff retcode 0), remove incoming and finish
-            if diff /srv/incoming/openapi/stable/reefin-openapi-${{ env.REEFIN_VERSION }}/openapi.json ${TGT_DIR}/stable/${LAST_SPEC} &>/dev/null; then
-                rm -r /srv/incoming/openapi/stable/reefin-openapi-${{ env.REEFIN_VERSION }}
+            if diff /srv/incoming/openapi/stable/reefin-openapi-${{ env.TESSERAFIN_VERSION }}/openapi.json ${TGT_DIR}/stable/${LAST_SPEC} &>/dev/null; then
+                rm -r /srv/incoming/openapi/stable/reefin-openapi-${{ env.TESSERAFIN_VERSION }}
                 exit 0
             fi
             # Move new spec into place
-            sudo mv /srv/incoming/openapi/stable/reefin-openapi-${{ env.REEFIN_VERSION }}/openapi.json ${TGT_DIR}/stable/reefin-openapi-${{ env.REEFIN_VERSION }}.json
+            sudo mv /srv/incoming/openapi/stable/reefin-openapi-${{ env.TESSERAFIN_VERSION }}/openapi.json ${TGT_DIR}/stable/reefin-openapi-${{ env.TESSERAFIN_VERSION }}.json
             # Delete previous reefin-openapi-stable_previous.json
             sudo rm ${TGT_DIR}/reefin-openapi-stable_previous.json
             # Move current reefin-openapi-stable.json symlink to reefin-openapi-stable_previous.json
             sudo mv ${TGT_DIR}/reefin-openapi-stable.json ${TGT_DIR}/reefin-openapi-stable_previous.json
             # Create new reefin-openapi-stable.json symlink
-            sudo ln -s stable/reefin-openapi-${{ env.REEFIN_VERSION }}.json ${TGT_DIR}/reefin-openapi-stable.json
+            sudo ln -s stable/reefin-openapi-${{ env.TESSERAFIN_VERSION }}.json ${TGT_DIR}/reefin-openapi-stable.json
             # Check that the previous openapi stable spec link is correct
             if [[ "$( readlink ${TGT_DIR}/reefin-openapi-stable_previous.json )" != "stable/${LAST_SPEC}" ]]; then
                 sudo rm ${TGT_DIR}/reefin-openapi-stable_previous.json

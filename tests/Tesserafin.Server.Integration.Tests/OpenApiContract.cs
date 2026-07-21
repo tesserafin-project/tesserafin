@@ -57,7 +57,7 @@ namespace Tesserafin.Server.Integration.Tests
         /// Environment variable that switches the contract test from "verify" to "regenerate".
         /// Set by <c>ci/openapi-generate.sh</c> only.
         /// </summary>
-        public const string WriteEnvironmentVariable = "REEFIN_OPENAPI_WRITE";
+        public const string WriteEnvironmentVariable = "TESSERAFIN_OPENAPI_WRITE";
 
         /// <summary>
         /// The exact command a developer must run to refresh the committed contract.

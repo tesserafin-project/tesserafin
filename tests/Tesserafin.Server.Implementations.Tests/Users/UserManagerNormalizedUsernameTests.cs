@@ -98,7 +98,7 @@ namespace Tesserafin.Server.Implementations.Tests.Users
         // Spanish tilde-n
         [InlineData("Ñoño", "ÑOÑO")]
         // ASCII, invariant uppercase lookup
-        [InlineData("reefin", "REEFIN")]
+        [InlineData("tesserafin", "TESSERAFIN")]
         // Turkish cedilla: invariant 'i' uppercases to 'I' (U+0049), not Turkish 'İ' (U+0130)
         [InlineData("Çelebi", "ÇELEBI")]
         public async Task GetUserByName_WithNonAsciiUsername_FindsUserByNormalizedName(

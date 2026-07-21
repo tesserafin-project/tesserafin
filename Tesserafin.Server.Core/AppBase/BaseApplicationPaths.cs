@@ -73,7 +73,7 @@ namespace Tesserafin.Server.Core.AppBase
         public string CachePath { get; set; }
 
         /// <inheritdoc/>
-        public string TempDirectory => Path.Join(Path.GetTempPath(), "reefin");
+        public string TempDirectory => Path.Join(Path.GetTempPath(), "tesserafin");
 
         /// <inheritdoc />
         public string TrickplayPath => Path.Combine(DataPath, "trickplay");

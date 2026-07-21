@@ -52,7 +52,7 @@ namespace Tesserafin.Server.Integration.Tests
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             // Skip ffmpeg check for testing
-            Environment.SetEnvironmentVariable("REEFIN_FFMPEG__NOVALIDATION", "true");
+            Environment.SetEnvironmentVariable("TESSERAFIN_FFMPEG__NOVALIDATION", "true");
             // Specify the startup command line options
             var commandLineOpts = new StartupOptions();
 
@@ -95,7 +95,7 @@ namespace Tesserafin.Server.Integration.Tests
                     builder
                         .SetBasePath(appPaths.ConfigurationDirectoryPath)
                         .AddInMemoryCollection(ConfigurationOptions.DefaultConfiguration)
-                        .AddEnvironmentVariables("REEFIN_")
+                        .AddEnvironmentVariables("TESSERAFIN_")
                         .AddInMemoryCollection(commandLineOpts.ConvertToConfig());
                 })
                 .ConfigureServices(e => e

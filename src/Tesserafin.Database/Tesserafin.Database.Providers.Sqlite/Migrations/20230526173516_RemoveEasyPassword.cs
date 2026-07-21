@@ -12,72 +12,72 @@ namespace Tesserafin.Server.Implementations.Migrations
         {
             migrationBuilder.DropColumn(
                 name: "EasyPassword",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "Users");
 
             migrationBuilder.RenameTable(
                 name: "Users",
-                schema: "reefin",
+                schema: "tesserafin",
                 newName: "Users");
 
             migrationBuilder.RenameTable(
                 name: "Preferences",
-                schema: "reefin",
+                schema: "tesserafin",
                 newName: "Preferences");
 
             migrationBuilder.RenameTable(
                 name: "Permissions",
-                schema: "reefin",
+                schema: "tesserafin",
                 newName: "Permissions");
 
             migrationBuilder.RenameTable(
                 name: "ItemDisplayPreferences",
-                schema: "reefin",
+                schema: "tesserafin",
                 newName: "ItemDisplayPreferences");
 
             migrationBuilder.RenameTable(
                 name: "ImageInfos",
-                schema: "reefin",
+                schema: "tesserafin",
                 newName: "ImageInfos");
 
             migrationBuilder.RenameTable(
                 name: "HomeSection",
-                schema: "reefin",
+                schema: "tesserafin",
                 newName: "HomeSection");
 
             migrationBuilder.RenameTable(
                 name: "DisplayPreferences",
-                schema: "reefin",
+                schema: "tesserafin",
                 newName: "DisplayPreferences");
 
             migrationBuilder.RenameTable(
                 name: "Devices",
-                schema: "reefin",
+                schema: "tesserafin",
                 newName: "Devices");
 
             migrationBuilder.RenameTable(
                 name: "DeviceOptions",
-                schema: "reefin",
+                schema: "tesserafin",
                 newName: "DeviceOptions");
 
             migrationBuilder.RenameTable(
                 name: "CustomItemDisplayPreferences",
-                schema: "reefin",
+                schema: "tesserafin",
                 newName: "CustomItemDisplayPreferences");
 
             migrationBuilder.RenameTable(
                 name: "ApiKeys",
-                schema: "reefin",
+                schema: "tesserafin",
                 newName: "ApiKeys");
 
             migrationBuilder.RenameTable(
                 name: "ActivityLogs",
-                schema: "reefin",
+                schema: "tesserafin",
                 newName: "ActivityLogs");
 
             migrationBuilder.RenameTable(
                 name: "AccessSchedules",
-                schema: "reefin",
+                schema: "tesserafin",
                 newName: "AccessSchedules");
         }
 
@@ -85,76 +85,76 @@ namespace Tesserafin.Server.Implementations.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.EnsureSchema(
-                name: "reefin");
+                name: "tesserafin");
 
             migrationBuilder.RenameTable(
                 name: "Users",
                 newName: "Users",
-                newSchema: "reefin");
+                newSchema: "tesserafin");
 
             migrationBuilder.RenameTable(
                 name: "Preferences",
                 newName: "Preferences",
-                newSchema: "reefin");
+                newSchema: "tesserafin");
 
             migrationBuilder.RenameTable(
                 name: "Permissions",
                 newName: "Permissions",
-                newSchema: "reefin");
+                newSchema: "tesserafin");
 
             migrationBuilder.RenameTable(
                 name: "ItemDisplayPreferences",
                 newName: "ItemDisplayPreferences",
-                newSchema: "reefin");
+                newSchema: "tesserafin");
 
             migrationBuilder.RenameTable(
                 name: "ImageInfos",
                 newName: "ImageInfos",
-                newSchema: "reefin");
+                newSchema: "tesserafin");
 
             migrationBuilder.RenameTable(
                 name: "HomeSection",
                 newName: "HomeSection",
-                newSchema: "reefin");
+                newSchema: "tesserafin");
 
             migrationBuilder.RenameTable(
                 name: "DisplayPreferences",
                 newName: "DisplayPreferences",
-                newSchema: "reefin");
+                newSchema: "tesserafin");
 
             migrationBuilder.RenameTable(
                 name: "Devices",
                 newName: "Devices",
-                newSchema: "reefin");
+                newSchema: "tesserafin");
 
             migrationBuilder.RenameTable(
                 name: "DeviceOptions",
                 newName: "DeviceOptions",
-                newSchema: "reefin");
+                newSchema: "tesserafin");
 
             migrationBuilder.RenameTable(
                 name: "CustomItemDisplayPreferences",
                 newName: "CustomItemDisplayPreferences",
-                newSchema: "reefin");
+                newSchema: "tesserafin");
 
             migrationBuilder.RenameTable(
                 name: "ApiKeys",
                 newName: "ApiKeys",
-                newSchema: "reefin");
+                newSchema: "tesserafin");
 
             migrationBuilder.RenameTable(
                 name: "ActivityLogs",
                 newName: "ActivityLogs",
-                newSchema: "reefin");
+                newSchema: "tesserafin");
 
             migrationBuilder.RenameTable(
                 name: "AccessSchedules",
                 newName: "AccessSchedules",
-                newSchema: "reefin");
+                newSchema: "tesserafin");
 
             migrationBuilder.AddColumn<string>(
                 name: "EasyPassword",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "Users",
                 type: "TEXT",
                 maxLength: 65535,

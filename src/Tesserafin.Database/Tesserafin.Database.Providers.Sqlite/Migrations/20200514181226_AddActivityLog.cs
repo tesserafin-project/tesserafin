@@ -11,11 +11,11 @@ namespace Tesserafin.Server.Implementations.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.EnsureSchema(
-                name: "reefin");
+                name: "tesserafin");
 
             migrationBuilder.CreateTable(
                 name: "ActivityLogs",
-                schema: "reefin",
+                schema: "tesserafin",
                 columns: table => new
                 {
                     Id = table.Column<int>(nullable: false)
@@ -40,7 +40,7 @@ namespace Tesserafin.Server.Implementations.Migrations
         {
             migrationBuilder.DropTable(
                 name: "ActivityLogs",
-                schema: "reefin");
+                schema: "tesserafin");
         }
     }
 }

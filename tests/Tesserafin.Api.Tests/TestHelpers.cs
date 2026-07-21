@@ -26,7 +26,7 @@ namespace Tesserafin.Api.Tests
             IEnumerable<AccessSchedule>? accessSchedules = null)
         {
             var user = new User(
-                "reefin",
+                "tesserafin",
                 typeof(DefaultAuthenticationProvider).FullName!,
                 typeof(DefaultPasswordResetProvider).FullName!);
 
@@ -48,7 +48,7 @@ namespace Tesserafin.Api.Tests
             var claims = new[]
             {
                 new Claim(ClaimTypes.Role, role),
-                new Claim(ClaimTypes.Name, "reefin"),
+                new Claim(ClaimTypes.Name, "tesserafin"),
                 new Claim(InternalClaimTypes.UserId, Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture)),
                 new Claim(InternalClaimTypes.DeviceId, Guid.Empty.ToString("N", CultureInfo.InvariantCulture)),
                 new Claim(InternalClaimTypes.Device, "test"),

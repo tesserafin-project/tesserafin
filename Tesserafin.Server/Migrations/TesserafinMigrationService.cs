@@ -393,7 +393,7 @@ internal class TesserafinMigrationService
 
         if (backupInstruction.TesserafinDb && _reefinDatabaseProvider is not null)
         {
-            logger.LogInformation("A migration will attempt to modify the reefin.db, will attempt to backup the file now.");
+            logger.LogInformation("A migration will attempt to modify the tesserafin.db, will attempt to backup the file now.");
             _backupKey = (_backupKey.LibraryDb, await _reefinDatabaseProvider.MigrationBackupFast(CancellationToken.None).ConfigureAwait(false), _backupKey.FullBackup);
             logger.LogInformation("Tesserafin database has been backed up as {BackupPath}", _backupKey.TesserafinDb);
         }

@@ -31,7 +31,7 @@
 #   6. Waits for readiness by POLLING /System/Info/Public — never a fixed `sleep`.
 #   7. Seeds through the REAL public API, no database surgery and no invented endpoints:
 #        GET  /Startup/User          -> initializes the user manager, creates the default user
-#        POST /Startup/User          -> renames it to $REEFIN_E2E_USER, sets $REEFIN_E2E_PASSWORD
+#        POST /Startup/User          -> renames it to $TESSERAFIN_E2E_USER, sets $TESSERAFIN_E2E_PASSWORD
 #        POST /Startup/Complete      -> marks the setup wizard done
 #        POST /Users/AuthenticateByName -> obtains an access token
 #        POST /Library/VirtualFolders?collectionType=movies&refreshLibrary=false      -> the library
@@ -98,7 +98,7 @@
 #   # Foreground: boot, seed, print the URL, hold the server up until Ctrl-C.
 #   ./ci/serve-e2e.sh --webdir ../reefin-web/dist
 #
-#   # One-shot: boot, seed, run a command with REEFIN_E2E_* exported, tear everything down.
+#   # One-shot: boot, seed, run a command with TESSERAFIN_E2E_* exported, tear everything down.
 #   ./ci/serve-e2e.sh --webdir ../reefin-web/dist \
 #       --exec 'cd ../reefin-web && npx playwright test tests/e2e/theme-glass.spec.ts'
 #
@@ -109,8 +109,8 @@
 #   --webdir PATH     reefin-web production bundle to serve (default: ../reefin-web/dist)
 #   --port N          TCP port to bind (default: an auto-detected free port)
 #   --exec CMD        run CMD once the server is seeded and ready, then tear down; exit with its status
-#   --user NAME       admin username to create   (default: $REEFIN_E2E_USER or smokeadmin)
-#   --password PW     admin password to set      (default: $REEFIN_E2E_PASSWORD or smokepass123)
+#   --user NAME       admin username to create   (default: $TESSERAFIN_E2E_USER or smokeadmin)
+#   --password PW     admin password to set      (default: $TESSERAFIN_E2E_PASSWORD or smokepass123)
 #   --datadir PATH    use PATH instead of a mktemp -d tree (implies --keep)
 #   --no-build        skip `dotnet build`, reuse the existing Tesserafin.Server binary
 #   --keep            do not delete the temp tree on exit (prints its path)
@@ -122,9 +122,9 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
 SERVER_PROJECT="Tesserafin.Server/Tesserafin.Server.csproj"
-# Tesserafin.Server.csproj sets <AssemblyName>reefin</AssemblyName>, so the built entry
-# point is reefin.dll — NOT Tesserafin.Server.dll.
-SERVER_DLL="Tesserafin.Server/bin/Debug/net10.0/reefin.dll"
+# Tesserafin.Server.csproj sets <AssemblyName>tesserafin</AssemblyName>, so the built entry
+# point is tesserafin.dll — NOT Tesserafin.Server.dll.
+SERVER_DLL="Tesserafin.Server/bin/Debug/net10.0/tesserafin.dll"
 
 # The Authorization header shape Tesserafin requires on every request. Mirrors the one
 # reefin-web's tests/e2e specs send, so seeding and the specs authenticate identically.
@@ -137,11 +137,11 @@ DATADIR=""
 DO_BUILD=1
 KEEP=0
 READY_TIMEOUT=180
-E2E_USER="${REEFIN_E2E_USER:-smokeadmin}"
-E2E_PASSWORD="${REEFIN_E2E_PASSWORD:-smokepass123}"
+E2E_USER="${TESSERAFIN_E2E_USER:-smokeadmin}"
+E2E_PASSWORD="${TESSERAFIN_E2E_PASSWORD:-smokepass123}"
 # The reefin-web #15 access-restriction fixture (see the "Restricted user" section below).
-RESTRICTED_USER="${REEFIN_E2E_RESTRICTED_USER:-smokerestricted}"
-RESTRICTED_PASSWORD="${REEFIN_E2E_RESTRICTED_PASSWORD:-restrictedpass123}"
+RESTRICTED_USER="${TESSERAFIN_E2E_RESTRICTED_USER:-smokerestricted}"
+RESTRICTED_PASSWORD="${TESSERAFIN_E2E_RESTRICTED_PASSWORD:-restrictedpass123}"
 
 banner() {
     echo ""
@@ -679,7 +679,7 @@ for _ in $(seq 1 "$READY_TIMEOUT"); do
         sleep 1
         continue
     fi
-    if CHECK_REPORT="$(REEFIN_ITEMS_MOVIES="$ITEMS_MOVIES" REEFIN_ITEMS_PROBES="$ITEMS_PROBES" python3 -c '
+    if CHECK_REPORT="$(TESSERAFIN_ITEMS_MOVIES="$ITEMS_MOVIES" TESSERAFIN_ITEMS_PROBES="$ITEMS_PROBES" python3 -c '
 import json, os, sys
 
 def load(var):
@@ -688,8 +688,8 @@ def load(var):
     except Exception:
         sys.exit(1)
 
-movies = [i for i in load("REEFIN_ITEMS_MOVIES") if i.get("Type") == "Movie"]
-probes = [i for i in load("REEFIN_ITEMS_PROBES") if i.get("Type") in ("Video", "Movie")]
+movies = [i for i in load("TESSERAFIN_ITEMS_MOVIES") if i.get("Type") == "Movie"]
+probes = [i for i in load("TESSERAFIN_ITEMS_PROBES") if i.get("Type") in ("Video", "Movie")]
 
 problems = []
 
@@ -764,9 +764,9 @@ if [ "$items_verified" -ne 1 ]; then
     printf '%s\n' "$CHECK_REPORT" >&2
     echo "Everything the server did return:" >&2
     EMPTY_JSON='{}'
-    REEFIN_ITEMS_MOVIES="${ITEMS_MOVIES:-$EMPTY_JSON}" REEFIN_ITEMS_PROBES="${ITEMS_PROBES:-$EMPTY_JSON}" python3 -c '
+    TESSERAFIN_ITEMS_MOVIES="${ITEMS_MOVIES:-$EMPTY_JSON}" TESSERAFIN_ITEMS_PROBES="${ITEMS_PROBES:-$EMPTY_JSON}" python3 -c '
 import json, os, sys
-for var in ("REEFIN_ITEMS_MOVIES", "REEFIN_ITEMS_PROBES"):
+for var in ("TESSERAFIN_ITEMS_MOVIES", "TESSERAFIN_ITEMS_PROBES"):
     print("== %s ==" % var, file=sys.stderr)
     try:
         for i in json.loads(os.environ[var]).get("Items", []):
@@ -823,12 +823,12 @@ log "restricted user created — userId=${RESTRICTED_ID}"
 
 # Real current policy, mutated only where the restriction lives.
 RESTRICTED_POLICY="$(api GET "/Users/${RESTRICTED_ID}" \
-    | REEFIN_MOVIES_VIEW_ID="$MOVIES_VIEW_ID" python3 -c '
+    | TESSERAFIN_MOVIES_VIEW_ID="$MOVIES_VIEW_ID" python3 -c '
 import json, os, sys
 policy = json.load(sys.stdin)["Policy"]
 policy["IsAdministrator"] = False
 policy["EnableAllFolders"] = False
-policy["EnabledFolders"] = [os.environ["REEFIN_MOVIES_VIEW_ID"]]
+policy["EnabledFolders"] = [os.environ["TESSERAFIN_MOVIES_VIEW_ID"]]
 print(json.dumps(policy))')"
 api POST "/Users/${RESTRICTED_ID}/Policy" \
     -H 'Content-Type: application/json' \
@@ -894,23 +894,23 @@ Server log:${LOG_FILE}
 
 Point the reefin-web Playwright specs at it with:
 
-  export REEFIN_E2E_BASE_URL='${BASE_URL}'
-  export REEFIN_E2E_USER='${E2E_USER}'
-  export REEFIN_E2E_PASSWORD='${E2E_PASSWORD}'
-  export REEFIN_E2E_RESTRICTED_USER='${RESTRICTED_USER}'
-  export REEFIN_E2E_RESTRICTED_PASSWORD='${RESTRICTED_PASSWORD}'
-  export REEFIN_E2E_RESTRICTED_LIBRARY_ID='${PROBES_VIEW_ID}'
+  export TESSERAFIN_E2E_BASE_URL='${BASE_URL}'
+  export TESSERAFIN_E2E_USER='${E2E_USER}'
+  export TESSERAFIN_E2E_PASSWORD='${E2E_PASSWORD}'
+  export TESSERAFIN_E2E_RESTRICTED_USER='${RESTRICTED_USER}'
+  export TESSERAFIN_E2E_RESTRICTED_PASSWORD='${RESTRICTED_PASSWORD}'
+  export TESSERAFIN_E2E_RESTRICTED_LIBRARY_ID='${PROBES_VIEW_ID}'
   cd <reefin-web> && npx playwright test tests/e2e/theme-glass.spec.ts
 EOF
 
-export REEFIN_E2E_BASE_URL="$BASE_URL"
-export REEFIN_E2E_USER="$E2E_USER"
-export REEFIN_E2E_PASSWORD="$E2E_PASSWORD"
-export REEFIN_E2E_RESTRICTED_USER="$RESTRICTED_USER"
-export REEFIN_E2E_RESTRICTED_PASSWORD="$RESTRICTED_PASSWORD"
+export TESSERAFIN_E2E_BASE_URL="$BASE_URL"
+export TESSERAFIN_E2E_USER="$E2E_USER"
+export TESSERAFIN_E2E_PASSWORD="$E2E_PASSWORD"
+export TESSERAFIN_E2E_RESTRICTED_USER="$RESTRICTED_USER"
+export TESSERAFIN_E2E_RESTRICTED_PASSWORD="$RESTRICTED_PASSWORD"
 # The library the restricted user is NOT granted — what the reefin-web access spec addresses
 # directly to pin the server's exists-but-invisible semantics.
-export REEFIN_E2E_RESTRICTED_LIBRARY_ID="$PROBES_VIEW_ID"
+export TESSERAFIN_E2E_RESTRICTED_LIBRARY_ID="$PROBES_VIEW_ID"
 
 if [ -n "$EXEC_CMD" ]; then
     banner "Running: ${EXEC_CMD}"

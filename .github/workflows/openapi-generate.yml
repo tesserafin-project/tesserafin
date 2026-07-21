@@ -5,7 +5,7 @@ name: OpenAPI Generate
 # Ce workflow ne génère plus rien. Le générateur autoritaire unique est
 # `./ci/openapi-generate.sh` (Docker, local), qui exécute
 # `OpenApiContractTests.CommittedContract_MatchesRunningServer` avec
-# `REEFIN_OPENAPI_WRITE=1` et écrit la forme canonique. `./ci/run.sh` rejoue le
+# `TESSERAFIN_OPENAPI_WRITE=1` et écrit la forme canonique. `./ci/run.sh` rejoue le
 # même test en mode vérification : le fichier commité ne peut donc pas dériver
 # de ce que le serveur produit. Voir docs/openapi-contract.md.
 #

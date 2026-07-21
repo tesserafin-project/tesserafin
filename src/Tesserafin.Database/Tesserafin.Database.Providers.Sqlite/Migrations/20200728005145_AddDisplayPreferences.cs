@@ -12,7 +12,7 @@ namespace Tesserafin.Server.Implementations.Migrations
         {
             migrationBuilder.CreateTable(
                 name: "DisplayPreferences",
-                schema: "reefin",
+                schema: "tesserafin",
                 columns: table => new
                 {
                     Id = table.Column<int>(nullable: false)
@@ -36,7 +36,7 @@ namespace Tesserafin.Server.Implementations.Migrations
                     table.ForeignKey(
                         name: "FK_DisplayPreferences_Users_UserId",
                         column: x => x.UserId,
-                        principalSchema: "reefin",
+                        principalSchema: "tesserafin",
                         principalTable: "Users",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
@@ -44,7 +44,7 @@ namespace Tesserafin.Server.Implementations.Migrations
 
             migrationBuilder.CreateTable(
                 name: "ItemDisplayPreferences",
-                schema: "reefin",
+                schema: "tesserafin",
                 columns: table => new
                 {
                     Id = table.Column<int>(nullable: false)
@@ -65,7 +65,7 @@ namespace Tesserafin.Server.Implementations.Migrations
                     table.ForeignKey(
                         name: "FK_ItemDisplayPreferences_Users_UserId",
                         column: x => x.UserId,
-                        principalSchema: "reefin",
+                        principalSchema: "tesserafin",
                         principalTable: "Users",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
@@ -73,7 +73,7 @@ namespace Tesserafin.Server.Implementations.Migrations
 
             migrationBuilder.CreateTable(
                 name: "HomeSection",
-                schema: "reefin",
+                schema: "tesserafin",
                 columns: table => new
                 {
                     Id = table.Column<int>(nullable: false)
@@ -88,7 +88,7 @@ namespace Tesserafin.Server.Implementations.Migrations
                     table.ForeignKey(
                         name: "FK_HomeSection_DisplayPreferences_DisplayPreferencesId",
                         column: x => x.DisplayPreferencesId,
-                        principalSchema: "reefin",
+                        principalSchema: "tesserafin",
                         principalTable: "DisplayPreferences",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
@@ -96,20 +96,20 @@ namespace Tesserafin.Server.Implementations.Migrations
 
             migrationBuilder.CreateIndex(
                 name: "IX_DisplayPreferences_UserId",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "DisplayPreferences",
                 column: "UserId",
                 unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_HomeSection_DisplayPreferencesId",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "HomeSection",
                 column: "DisplayPreferencesId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_ItemDisplayPreferences_UserId",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "ItemDisplayPreferences",
                 column: "UserId");
         }
@@ -118,15 +118,15 @@ namespace Tesserafin.Server.Implementations.Migrations
         {
             migrationBuilder.DropTable(
                 name: "HomeSection",
-                schema: "reefin");
+                schema: "tesserafin");
 
             migrationBuilder.DropTable(
                 name: "ItemDisplayPreferences",
-                schema: "reefin");
+                schema: "tesserafin");
 
             migrationBuilder.DropTable(
                 name: "DisplayPreferences",
-                schema: "reefin");
+                schema: "tesserafin");
         }
     }
 }

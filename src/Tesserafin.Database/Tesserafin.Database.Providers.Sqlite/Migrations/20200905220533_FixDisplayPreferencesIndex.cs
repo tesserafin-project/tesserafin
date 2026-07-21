@@ -11,18 +11,18 @@ namespace Tesserafin.Server.Implementations.Migrations
         {
             migrationBuilder.DropIndex(
                 name: "IX_DisplayPreferences_UserId",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "DisplayPreferences");
 
             migrationBuilder.CreateIndex(
                 name: "IX_DisplayPreferences_UserId",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "DisplayPreferences",
                 column: "UserId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_DisplayPreferences_UserId_Client",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "DisplayPreferences",
                 columns: new[] { "UserId", "Client" },
                 unique: true);
@@ -32,17 +32,17 @@ namespace Tesserafin.Server.Implementations.Migrations
         {
             migrationBuilder.DropIndex(
                 name: "IX_DisplayPreferences_UserId",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "DisplayPreferences");
 
             migrationBuilder.DropIndex(
                 name: "IX_DisplayPreferences_UserId_Client",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "DisplayPreferences");
 
             migrationBuilder.CreateIndex(
                 name: "IX_DisplayPreferences_UserId",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "DisplayPreferences",
                 column: "UserId",
                 unique: true);

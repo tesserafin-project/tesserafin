@@ -88,8 +88,8 @@ namespace Tesserafin.Server
             ServerApplicationPaths appPaths = StartupHelpers.CreateApplicationPaths(options);
             appPaths.MakeSanityCheckOrThrow();
 
-            // $REEFIN_LOG_DIR needs to be set for the logger configuration manager
-            Environment.SetEnvironmentVariable("REEFIN_LOG_DIR", appPaths.LogDirectoryPath);
+            // $TESSERAFIN_LOG_DIR needs to be set for the logger configuration manager
+            Environment.SetEnvironmentVariable("TESSERAFIN_LOG_DIR", appPaths.LogDirectoryPath);
 
             // Enable cl-va P010 interop for tonemapping on Intel VAAPI
             Environment.SetEnvironmentVariable("NEOReadDebugKeys", "1");
@@ -172,7 +172,7 @@ namespace Tesserafin.Server
                     .ConfigureWebHostDefaults(webHostBuilder =>
                     {
                         webHostBuilder.ConfigureWebHostBuilder(appHost, startupConfig, appPaths, _logger);
-                        if (bool.TryParse(Environment.GetEnvironmentVariable("REEFIN_ENABLE_IIS"), out var iisEnabled) && iisEnabled)
+                        if (bool.TryParse(Environment.GetEnvironmentVariable("TESSERAFIN_ENABLE_IIS"), out var iisEnabled) && iisEnabled)
                         {
                             _logger.LogCritical("UNSUPPORTED HOSTING ENVIRONMENT Microsoft Internet Information Services. The option to run Tesserafin on IIS is an unsupported and untested feature. Only use at your own discretion.");
                             webHostBuilder.UseIIS();
@@ -363,7 +363,7 @@ namespace Tesserafin.Server
                 .AddInMemoryCollection(inMemoryDefaultConfig)
                 .AddJsonFile(LoggingConfigFileDefault, optional: false, reloadOnChange: true)
                 .AddJsonFile(LoggingConfigFileSystem, optional: true, reloadOnChange: true)
-                .AddEnvironmentVariables("REEFIN_")
+                .AddEnvironmentVariables("TESSERAFIN_")
                 .AddInMemoryCollection(commandLineOpts.ConvertToConfig());
         }
 

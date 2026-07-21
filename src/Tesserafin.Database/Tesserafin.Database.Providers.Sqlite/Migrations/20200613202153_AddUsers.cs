@@ -12,7 +12,7 @@ namespace Tesserafin.Server.Implementations.Migrations
         {
             migrationBuilder.CreateTable(
                 name: "Users",
-                schema: "reefin",
+                schema: "tesserafin",
                 columns: table => new
                 {
                     Id = table.Column<Guid>(nullable: false),
@@ -52,7 +52,7 @@ namespace Tesserafin.Server.Implementations.Migrations
 
             migrationBuilder.CreateTable(
                 name: "AccessSchedules",
-                schema: "reefin",
+                schema: "tesserafin",
                 columns: table => new
                 {
                     Id = table.Column<int>(nullable: false)
@@ -68,7 +68,7 @@ namespace Tesserafin.Server.Implementations.Migrations
                     table.ForeignKey(
                         name: "FK_AccessSchedules_Users_UserId",
                         column: x => x.UserId,
-                        principalSchema: "reefin",
+                        principalSchema: "tesserafin",
                         principalTable: "Users",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
@@ -76,7 +76,7 @@ namespace Tesserafin.Server.Implementations.Migrations
 
             migrationBuilder.CreateTable(
                 name: "ImageInfos",
-                schema: "reefin",
+                schema: "tesserafin",
                 columns: table => new
                 {
                     Id = table.Column<int>(nullable: false)
@@ -91,7 +91,7 @@ namespace Tesserafin.Server.Implementations.Migrations
                     table.ForeignKey(
                         name: "FK_ImageInfos_Users_UserId",
                         column: x => x.UserId,
-                        principalSchema: "reefin",
+                        principalSchema: "tesserafin",
                         principalTable: "Users",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Restrict);
@@ -99,7 +99,7 @@ namespace Tesserafin.Server.Implementations.Migrations
 
             migrationBuilder.CreateTable(
                 name: "Permissions",
-                schema: "reefin",
+                schema: "tesserafin",
                 columns: table => new
                 {
                     Id = table.Column<int>(nullable: false)
@@ -115,7 +115,7 @@ namespace Tesserafin.Server.Implementations.Migrations
                     table.ForeignKey(
                         name: "FK_Permissions_Users_Permission_Permissions_Guid",
                         column: x => x.Permission_Permissions_Guid,
-                        principalSchema: "reefin",
+                        principalSchema: "tesserafin",
                         principalTable: "Users",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Restrict);
@@ -123,7 +123,7 @@ namespace Tesserafin.Server.Implementations.Migrations
 
             migrationBuilder.CreateTable(
                 name: "Preferences",
-                schema: "reefin",
+                schema: "tesserafin",
                 columns: table => new
                 {
                     Id = table.Column<int>(nullable: false)
@@ -139,7 +139,7 @@ namespace Tesserafin.Server.Implementations.Migrations
                     table.ForeignKey(
                         name: "FK_Preferences_Users_Preference_Preferences_Guid",
                         column: x => x.Preference_Preferences_Guid,
-                        principalSchema: "reefin",
+                        principalSchema: "tesserafin",
                         principalTable: "Users",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Restrict);
@@ -147,26 +147,26 @@ namespace Tesserafin.Server.Implementations.Migrations
 
             migrationBuilder.CreateIndex(
                 name: "IX_AccessSchedules_UserId",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "AccessSchedules",
                 column: "UserId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_ImageInfos_UserId",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "ImageInfos",
                 column: "UserId",
                 unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_Permissions_Permission_Permissions_Guid",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "Permissions",
                 column: "Permission_Permissions_Guid");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Preferences_Preference_Preferences_Guid",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "Preferences",
                 column: "Preference_Preferences_Guid");
         }
@@ -175,23 +175,23 @@ namespace Tesserafin.Server.Implementations.Migrations
         {
             migrationBuilder.DropTable(
                 name: "AccessSchedules",
-                schema: "reefin");
+                schema: "tesserafin");
 
             migrationBuilder.DropTable(
                 name: "ImageInfos",
-                schema: "reefin");
+                schema: "tesserafin");
 
             migrationBuilder.DropTable(
                 name: "Permissions",
-                schema: "reefin");
+                schema: "tesserafin");
 
             migrationBuilder.DropTable(
                 name: "Preferences",
-                schema: "reefin");
+                schema: "tesserafin");
 
             migrationBuilder.DropTable(
                 name: "Users",
-                schema: "reefin");
+                schema: "tesserafin");
         }
     }
 }

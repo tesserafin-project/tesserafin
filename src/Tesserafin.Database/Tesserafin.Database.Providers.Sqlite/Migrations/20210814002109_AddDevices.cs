@@ -11,7 +11,7 @@ namespace Tesserafin.Server.Implementations.Migrations
         {
             migrationBuilder.CreateTable(
                 name: "ApiKeys",
-                schema: "reefin",
+                schema: "tesserafin",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "INTEGER", nullable: false)
@@ -28,7 +28,7 @@ namespace Tesserafin.Server.Implementations.Migrations
 
             migrationBuilder.CreateTable(
                 name: "DeviceOptions",
-                schema: "reefin",
+                schema: "tesserafin",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "INTEGER", nullable: false)
@@ -43,7 +43,7 @@ namespace Tesserafin.Server.Implementations.Migrations
 
             migrationBuilder.CreateTable(
                 name: "Devices",
-                schema: "reefin",
+                schema: "tesserafin",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "INTEGER", nullable: false)
@@ -65,7 +65,7 @@ namespace Tesserafin.Server.Implementations.Migrations
                     table.ForeignKey(
                         name: "FK_Devices_Users_UserId",
                         column: x => x.UserId,
-                        principalSchema: "reefin",
+                        principalSchema: "tesserafin",
                         principalTable: "Users",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
@@ -73,39 +73,39 @@ namespace Tesserafin.Server.Implementations.Migrations
 
             migrationBuilder.CreateIndex(
                 name: "IX_ApiKeys_AccessToken",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "ApiKeys",
                 column: "AccessToken",
                 unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_DeviceOptions_DeviceId",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "DeviceOptions",
                 column: "DeviceId",
                 unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_Devices_AccessToken_DateLastActivity",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "Devices",
                 columns: new[] { "AccessToken", "DateLastActivity" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_Devices_DeviceId",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "Devices",
                 column: "DeviceId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Devices_DeviceId_DateLastActivity",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "Devices",
                 columns: new[] { "DeviceId", "DateLastActivity" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_Devices_UserId_DeviceId",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "Devices",
                 columns: new[] { "UserId", "DeviceId" });
         }
@@ -114,15 +114,15 @@ namespace Tesserafin.Server.Implementations.Migrations
         {
             migrationBuilder.DropTable(
                 name: "ApiKeys",
-                schema: "reefin");
+                schema: "tesserafin");
 
             migrationBuilder.DropTable(
                 name: "DeviceOptions",
-                schema: "reefin");
+                schema: "tesserafin");
 
             migrationBuilder.DropTable(
                 name: "Devices",
-                schema: "reefin");
+                schema: "tesserafin");
         }
     }
 }

@@ -25,7 +25,7 @@ namespace Tesserafin.Server.Helpers;
 /// </summary>
 public static class StartupHelpers
 {
-    private static readonly string[] _relevantEnvVarPrefixes = { "REEFIN_", "DOTNET_", "ASPNETCORE_" };
+    private static readonly string[] _relevantEnvVarPrefixes = { "TESSERAFIN_", "DOTNET_", "ASPNETCORE_" };
 
     /// <summary>
     /// Logs relevant environment variables and information about the host.
@@ -82,12 +82,12 @@ public static class StartupHelpers
         // macOS: NSApplicationSupportDirectory
         // UNIX: $XDG_DATA_HOME
         var dataDir = options.DataDir
-            ?? Environment.GetEnvironmentVariable("REEFIN_DATA_DIR")
+            ?? Environment.GetEnvironmentVariable("TESSERAFIN_DATA_DIR")
             ?? Path.Join(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData, Environment.SpecialFolderOption.DoNotVerify),
-                "reefin");
+                "tesserafin");
 
-        var configDir = options.ConfigDir ?? Environment.GetEnvironmentVariable("REEFIN_CONFIG_DIR");
+        var configDir = options.ConfigDir ?? Environment.GetEnvironmentVariable("TESSERAFIN_CONFIG_DIR");
         if (configDir is null)
         {
             configDir = Path.Join(dataDir, "config");
@@ -99,11 +99,11 @@ public static class StartupHelpers
                 // UNIX: $XDG_CONFIG_HOME
                 configDir = Path.Join(
                     Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData, Environment.SpecialFolderOption.DoNotVerify),
-                    "reefin");
+                    "tesserafin");
             }
         }
 
-        var cacheDir = options.CacheDir ?? Environment.GetEnvironmentVariable("REEFIN_CACHE_DIR");
+        var cacheDir = options.CacheDir ?? Environment.GetEnvironmentVariable("TESSERAFIN_CACHE_DIR");
         if (cacheDir is null)
         {
             if (OperatingSystem.IsWindows() || OperatingSystem.IsMacOS())
@@ -112,17 +112,17 @@ public static class StartupHelpers
             }
             else
             {
-                cacheDir = Path.Join(GetXdgCacheHome(), "reefin");
+                cacheDir = Path.Join(GetXdgCacheHome(), "tesserafin");
             }
         }
 
-        var webDir = options.WebDir ?? Environment.GetEnvironmentVariable("REEFIN_WEB_DIR");
+        var webDir = options.WebDir ?? Environment.GetEnvironmentVariable("TESSERAFIN_WEB_DIR");
         if (webDir is null)
         {
             webDir = Path.Join(AppContext.BaseDirectory, "jellyfin-web");
         }
 
-        var logDir = options.LogDir ?? Environment.GetEnvironmentVariable("REEFIN_LOG_DIR");
+        var logDir = options.LogDir ?? Environment.GetEnvironmentVariable("TESSERAFIN_LOG_DIR");
         if (logDir is null)
         {
             logDir = Path.Join(dataDir, "log");
@@ -183,7 +183,7 @@ public static class StartupHelpers
 
         if (string.IsNullOrEmpty(socketPath))
         {
-            const string SocketFile = "reefin.sock";
+            const string SocketFile = "tesserafin.sock";
 
             var xdgRuntimeDir = Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR");
             if (xdgRuntimeDir is null)
