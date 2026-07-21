@@ -14,7 +14,7 @@
     <Authors>Reefin Contributors</Authors>
     <PackageId>Reefin.Database.Implementations</PackageId>
     <VersionPrefix>10.11.0</VersionPrefix>
-    <RepositoryUrl>https://github.com/jellyfin/jellyfin</RepositoryUrl>
+    <RepositoryUrl>https://github.com/tesserafin/tesserafin</RepositoryUrl>
     <PackageLicenseExpression>GPL-3.0-only</PackageLicenseExpression>
   </PropertyGroup>
 

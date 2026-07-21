@@ -1,0 +1,23 @@
+Tesserafin
+Copyright (C) 2026  Tesserafin Contributors
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, version 2 of the License. See the LICENSE file for the full text.
+
+Fork attribution
+----------------
+Tesserafin is a fork of Jellyfin (https://github.com/jellyfin/jellyfin), the
+Free Software Media System, and inherits its GPL-2.0 licensing. Jellyfin is
+itself descended from Emby's 3.5.2 release. All prior copyright of the Jellyfin
+project and its contributors is retained; this fork does not revoke or replace
+any upstream attribution.
+
+Tesserafin is an independent project. It keeps the "fin" in its name in
+recognition of the Jellyfin lineage, but it does NOT claim product or protocol
+compatibility with Jellyfin, nor is it endorsed by or affiliated with the
+Jellyfin project.
+
+Third-party components retain their own copyright and license notices, which are
+preserved in the source tree (for example the ListenBrainz plugin NOTICE and the
+LICENSE files of bundled dependencies).
