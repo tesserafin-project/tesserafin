@@ -129,17 +129,31 @@ public sealed class PlaybackContractScannerTests
     }
 
     [Fact]
-    public void KnownNumericSentAsString_WrongType_StillCounts_NeverLeaked()
+    public void KnownNumericSentAsBindingString_WrongType_ReachesSink()
     {
-        // MaxBitrate is declared numeric; sent as a JSON string it still binds (AllowReadingFromString)
-        // so the request reaches the shadow point, and the scan flags it WrongType against the
-        // enclosing VideoCodecs path - having read only the token kind, never the string.
-        var scan = Scan("{\"Capabilities\":{\"Decode\":{\"VideoCodecs\":[{\"Codec\":\"h264\",\"MaxBitrate\":\"" + Sentinel + "\"}]}}}");
+        // MaxBitrate is declared numeric. A NUMERIC-LOOKING string ("64000") is the only wrong-typed
+        // case that still binds under the real options (NumberHandling.AllowReadingFromString), so it
+        // is the only WrongType that actually reaches a sink: the request binds, validates, plans, and
+        // the retained diagnostic carries the flag. The scan reads only the token kind, never the
+        // string. (A NON-numeric string here would 400 at the binder and never reach a sink - that is
+        // covered structurally by the leak tests, not asserted as a reachable WrongType.)
+        var scan = Scan("{\"Capabilities\":{\"Decode\":{\"VideoCodecs\":[{\"Codec\":\"h264\",\"MaxBitrate\":\"64000\"}]}}}");
 
         Assert.Equal(0, scan.UnknownMemberTotal);
         var issue = Assert.Single(scan.WrongTypes);
         Assert.Equal(ContractPath.DecodeVideoCodecs, issue.Path);
         Assert.Equal(ContractIssueCode.WrongType, issue.Code);
+    }
+
+    [Fact]
+    public void KnownNumericSentAsNonBindingString_ScannerFlagsButValueNeverLeaks()
+    {
+        // A non-numeric string under a numeric member: the SCANNER still flags WrongType (it judges by
+        // token kind), but at the real binder this body 400s and never reaches a sink. Asserted here
+        // only to prove the value never leaks into the scan output regardless.
+        var scan = Scan("{\"Capabilities\":{\"Decode\":{\"VideoCodecs\":[{\"MaxBitrate\":\"" + Sentinel + "\"}]}}}");
+
+        Assert.Single(scan.WrongTypes);
         Assert.DoesNotContain(Sentinel, SerializeAll(scan), StringComparison.Ordinal);
     }
 

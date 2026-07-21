@@ -39,30 +39,34 @@ public sealed class PlaybackContractScanFilterTests
         return mock.Object;
     }
 
-    private static (ResourceExecutingContext Context, byte[] Read) BuildContext(string method)
+    private static ResourceExecutingContext BuildContext(string method, byte[] body, long? contentLength)
     {
         var httpContext = new DefaultHttpContext();
         httpContext.Request.Method = method;
         httpContext.Request.ContentType = "application/json";
-        httpContext.Request.ContentLength = _bodyBytes.Length;
-        httpContext.Request.Body = new MemoryStream(_bodyBytes, writable: false);
+        httpContext.Request.ContentLength = contentLength;
+        httpContext.Request.Body = new MemoryStream(body, writable: false);
 
         var actionContext = new Microsoft.AspNetCore.Mvc.ActionContext(
             httpContext,
             new RouteData(),
             new ControllerActionDescriptor());
 
-        var context = new ResourceExecutingContext(actionContext, new List<IFilterMetadata>(), new List<IValueProviderFactory>());
-        return (context, Array.Empty<byte>());
+        return new ResourceExecutingContext(actionContext, new List<IFilterMetadata>(), new List<IValueProviderFactory>());
     }
 
-    private static async Task<(IDictionary<object, object?> Items, byte[] BodySeenByBinding, ListLogger Logger)> RunAsync(PlaybackShadowOptions shadow, string method = "POST")
+    private static async Task<(IDictionary<object, object?> Items, byte[] BodySeenByBinding, ListLogger Logger)> RunAsync(
+        PlaybackShadowOptions shadow,
+        string method = "POST",
+        byte[]? body = null,
+        long? contentLength = null)
     {
         var provider = new PlaybackContractScanModelProvider();
         var logger = new ListLogger();
         var filter = new PlaybackContractScanFilter(Config(shadow), provider, logger);
 
-        var (context, _) = BuildContext(method);
+        var actualBody = body ?? _bodyBytes;
+        var context = BuildContext(method, actualBody, contentLength ?? actualBody.Length);
 
         byte[] bodySeen = Array.Empty<byte>();
         async Task<ResourceExecutedContext> Next()
@@ -119,6 +123,53 @@ public sealed class PlaybackContractScanFilterTests
 
         Assert.True(items.ContainsKey(PlaybackContractScanFilter.ScanResultKey));
         Assert.Equal(_bodyBytes, bodySeen);
+    }
+
+    [Fact]
+    public async Task ChunkedRequest_NoContentLength_ReportsMeasuredSize()
+    {
+        // A chunked/streamed request carries no Content-Length. The scan reads the body and reports
+        // the actually-read size - the "size when Content-Length is absent" the spec asks for.
+        var body = Encoding.UTF8.GetBytes("{\"ItemId\":\"x\",\"Bogus\":1}");
+        var (items, bodySeen, _) = await RunAsync(new PlaybackShadowOptions { Enabled = true, SampleRate = 1.0 }, body: body, contentLength: null);
+
+        var scan = Assert.IsType<ContractStructuralScan>(items[PlaybackContractScanFilter.ScanResultKey]);
+        Assert.False(scan.BodyLimitExceeded);
+        Assert.Equal(body.Length, scan.ScannedBodyByteCount);
+        Assert.Equal(1, scan.UnknownMemberTotal);
+        Assert.Equal(body, bodySeen);
+    }
+
+    [Fact]
+    public async Task BodyExactlyAtLimit_ScannedNormally()
+    {
+        // Exactly the limit: read fully, scanned, not flagged over-limit.
+        var pad = new string('A', PlaybackContractScanFilter.BodySizeLimitBytes - "{\"Pad\":\"\"}".Length);
+        var body = Encoding.UTF8.GetBytes("{\"Pad\":\"" + pad + "\"}");
+        Assert.Equal(PlaybackContractScanFilter.BodySizeLimitBytes, body.Length);
+
+        var (items, _, _) = await RunAsync(new PlaybackShadowOptions { Enabled = true, SampleRate = 1.0 }, body: body);
+
+        var scan = Assert.IsType<ContractStructuralScan>(items[PlaybackContractScanFilter.ScanResultKey]);
+        Assert.False(scan.BodyLimitExceeded);
+        Assert.Equal(1, scan.UnknownMemberTotal);
+    }
+
+    [Fact]
+    public async Task BodyJustOverLimit_NotParsed_ButBindingStillSeesWholeBody()
+    {
+        // Just over the limit: the scan stops and only flags it; model binding still receives every
+        // original byte, byte-for-byte, from position 0.
+        var pad = new string('A', PlaybackContractScanFilter.BodySizeLimitBytes); // pushes total well past the limit
+        var body = Encoding.UTF8.GetBytes("{\"Pad\":\"" + pad + "\"}");
+        Assert.True(body.Length > PlaybackContractScanFilter.BodySizeLimitBytes);
+
+        var (items, bodySeen, _) = await RunAsync(new PlaybackShadowOptions { Enabled = true, SampleRate = 1.0 }, body: body);
+
+        var scan = Assert.IsType<ContractStructuralScan>(items[PlaybackContractScanFilter.ScanResultKey]);
+        Assert.True(scan.BodyLimitExceeded);
+        Assert.Equal(0, scan.UnknownMemberTotal);
+        Assert.Equal(body, bodySeen);
     }
 
     [Fact]

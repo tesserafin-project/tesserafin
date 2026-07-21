@@ -43,10 +43,13 @@ namespace Reefin.Playback.Contract.Diagnostics;
 /// </param>
 /// <param name="WrongTypes">
 /// Closed-vocabulary <see cref="ContractIssueCode.WrongType"/> issues for KNOWN members only: a
-/// member the contract declares as numeric that arrived as a JSON string. The scan sees only the
-/// JSON token kind, never the string's content; the lenient binder still coerces it (which is why
-/// the request reaches the shadow publication point at all), and the operator learns "a known
-/// numeric member arrived string-typed under this path", never which value.
+/// member the contract declares as numeric that arrived as a JSON string. The scan judges by JSON
+/// token kind alone and never reads the string's content. Which of these actually SURVIVES to a
+/// retained diagnostic is bounded by the binder: only a numeric-looking string (e.g. <c>"64000"</c>)
+/// binds under <c>NumberHandling.AllowReadingFromString</c> and lets the request reach the shadow
+/// publication point; a non-numeric string 400s at the binder, so its (leak-free) WrongType is
+/// observed by the scan but never retained. Either way the operator learns only "a known numeric
+/// member arrived string-typed under this path", never which value.
 /// </param>
 /// <param name="ScannedBodyByteCount">
 /// The number of bytes the scan actually read from the request body. This is the honest measured
