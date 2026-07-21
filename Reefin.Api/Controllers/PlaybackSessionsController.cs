@@ -12,6 +12,7 @@ using Reefin.Api.Constants;
 using Reefin.Api.Extensions;
 using Reefin.Api.Helpers;
 using Reefin.Api.Models.PlaybackSessionDtos;
+using Reefin.Api.Playback;
 using Reefin.Common.Extensions;
 using Reefin.Controller.Entities;
 using Reefin.Controller.Library;
@@ -20,6 +21,7 @@ using Reefin.Data.Enums;
 using Reefin.MediaEncoding.Playback;
 using Reefin.Model.Dlna;
 using Reefin.Model.Session;
+using Reefin.Playback.Contract.Diagnostics;
 using Reefin.Playback.Dlna;
 
 namespace Reefin.Api.Controllers;
@@ -120,6 +122,7 @@ public class PlaybackSessionsController : BaseReefinApiController
     /// <response code="422">No viable playback plan exists for the given options.</response>
     /// <returns>The created session's stable decision projection.</returns>
     [HttpPost]
+    [ServiceFilter(typeof(PlaybackContractScanFilter))]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -140,7 +143,7 @@ public class PlaybackSessionsController : BaseReefinApiController
         // shadow mode is off (the default) the shadow run never executes and this scope costs one
         // AsyncLocal write and produces nothing.
         PlaybackSession? session;
-        using (_shadowDiagnosticsStore.BeginCapture(new ShadowCaptureInputs(request.Capabilities, HttpContext.Request.ContentLength)))
+        using (_shadowDiagnosticsStore.BeginCapture(new ShadowCaptureInputs(request.Capabilities, HttpContext.Request.ContentLength, ReadCapturedScan())))
         {
             session = _playbackSessionManager.Create(
                 new PlaybackSessionRequest(kind, options),
@@ -223,7 +226,7 @@ public class PlaybackSessionsController : BaseReefinApiController
         // Issue #75: same ambient scope as the POST - a PUT re-plans with a complete new body, so it
         // carries its own declared capabilities and its own Content-Length.
         PlaybackSession? session;
-        using (_shadowDiagnosticsStore.BeginCapture(new ShadowCaptureInputs(request.Capabilities, HttpContext.Request.ContentLength)))
+        using (_shadowDiagnosticsStore.BeginCapture(new ShadowCaptureInputs(request.Capabilities, HttpContext.Request.ContentLength, ReadCapturedScan())))
         {
             session = _playbackSessionManager.Patch(id, new PlaybackSessionRequest(kind, options), request.PlaybackAttemptId);
         }
@@ -488,6 +491,18 @@ public class PlaybackSessionsController : BaseReefinApiController
 
         return null;
     }
+
+    /// <summary>
+    /// Issue #75 slice 75b: reads back the bounded structural scan the
+    /// <see cref="PlaybackContractScanFilter"/> stashed (before model binding, behind the shadow
+    /// gate) for this request, or <see langword="null"/> when the request was not scanned. The
+    /// closed result carries only counts - never a client key or value.
+    /// </summary>
+    /// <returns>The captured scan, or <see langword="null"/> if none was stashed.</returns>
+    private ContractStructuralScan? ReadCapturedScan() =>
+        HttpContext.Items.TryGetValue(PlaybackContractScanFilter.ScanResultKey, out var value)
+            ? value as ContractStructuralScan
+            : null;
 
     private async Task<(PlaybackMediaKind Kind, MediaOptions Options)> ResolveOptions(PlaybackPlanRequestBase request, CancellationToken cancellationToken)
     {

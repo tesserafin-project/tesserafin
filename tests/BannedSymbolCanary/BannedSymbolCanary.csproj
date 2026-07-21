@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Issue #75 slice 75b: NOT part of Reefin.sln and never built by CI's solution build. It exists
+       only so PlaybackContractScannerBanTests can invoke `dotnet build` on it and assert the scan
+       assembly's BannedSymbols.txt actually FAILS the build (RS0030) when a client key/value would be
+       materialized - proving the ban is mechanical, not a review convention, without leaving a
+       permanently-red project in the solution. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The SAME ban list the scan assembly ships. -->
+    <AdditionalFiles Include="BannedSymbols.txt" />
+  </ItemGroup>
+
+</Project>

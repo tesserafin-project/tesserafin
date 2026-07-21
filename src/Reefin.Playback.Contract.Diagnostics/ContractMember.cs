@@ -43,4 +43,11 @@ public enum ContractMember
 
     /// <summary>The declared transcoding output targets, in the client's preference order.</summary>
     OutputProfiles = 9,
+
+    /// <summary>
+    /// Issue #75 slice 75b: the request body root itself, as a container - the outermost object the
+    /// bounded structural scan walks. Names the level a top-level unknown member is attributed to
+    /// (see <see cref="ContractUnknownMemberCount"/>). A container segment, never a value.
+    /// </summary>
+    Request = 10,
 }

@@ -74,6 +74,9 @@ public sealed class ContractVocabularyClosedTests
                 "SupportsHls",
                 "SupportsDash",
                 "OutputProfiles",
+                // Issue #75 slice 75b: the request-root container segment the structural scan
+                // attributes a top-level unknown member to. Still a closed, server-owned segment.
+                "Request",
             },
             Enum.GetNames<ContractMember>());
     }

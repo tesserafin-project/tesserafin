@@ -35,6 +35,7 @@
          ShadowDiagnosticRecord's raw PlaybackDecision/DecisionVector/ShadowDivergence types beyond
          what the mapper projects out of them. -->
     <ProjectReference Include="..\src\Reefin.Playback.Shadow\Reefin.Playback.Shadow.csproj" />
+    <ProjectReference Include="..\src\Reefin.Playback.Contract.Scan\Reefin.Playback.Contract.Scan.csproj" />
   </ItemGroup>
 
   <!-- Code Analyzers -->

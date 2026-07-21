@@ -51,10 +51,22 @@ public static class ContractMappingDiagnosticFactory
     /// <param name="mapped">The capabilities the server actually planned with, after the round trip.</param>
     /// <param name="payloadSizeBytes">
     /// The request's <c>Content-Length</c>, or <see langword="null"/> when the header was absent.
-    /// Never measured by reading the body - request buffering stays off.
+    /// Read from the header, never derived by reading the body.
+    /// </param>
+    /// <param name="structuralScan">
+    /// Issue #75 slice 75b: the bounded structural scan of the raw request body, or
+    /// <see langword="null"/> when the request was not scanned (shadow off, or not sampled). Folded
+    /// verbatim into the returned diagnostic's <see cref="ContractMappingDiagnostic.StructuralScan"/>;
+    /// its non-null presence is what makes a scan that actually ran distinguishable from one that did
+    /// not. This factory neither reads nor reshapes it - the closed result already carries only
+    /// counts.
     /// </param>
     /// <returns>The diagnostic, or <see langword="null"/> when there is nothing to compare.</returns>
-    public static ContractMappingDiagnostic? Create(ClientCapabilities? declared, ClientCapabilities? mapped, long? payloadSizeBytes)
+    public static ContractMappingDiagnostic? Create(
+        ClientCapabilities? declared,
+        ClientCapabilities? mapped,
+        long? payloadSizeBytes,
+        ContractStructuralScan? structuralScan = null)
     {
         if (declared is null || mapped is null)
         {
@@ -79,9 +91,12 @@ public static class ContractMappingDiagnosticFactory
         AddScalarDelta(deltas, ContractPath.DecodeSupportsHls, declared.Decode?.SupportsHls ?? false, mapped.Decode?.SupportsHls ?? false);
         AddScalarDelta(deltas, ContractPath.DecodeSupportsDash, declared.Decode?.SupportsDash ?? false, mapped.Decode?.SupportsDash ?? false);
 
-        // UnknownMemberTotal is deliberately null, never 0: Option 1 cannot observe unknown members
-        // at all, so the count is unknown rather than zero. See ContractMappingDiagnostic.
-        return new ContractMappingDiagnostic(MappingVersion, payloadSizeBytes, null, deltas, _noFieldIssues);
+        // The OUTER UnknownMemberTotal stays null, never 0: the 75a mapping comparison still cannot
+        // observe unknown members, so its own count-shaped slot remains honestly unknown. The 75b
+        // structural scan's truthful total (0 or more) rides on structuralScan.UnknownMemberTotal
+        // instead - see ContractMappingDiagnostic. structuralScan is null on every request the scan
+        // did not run for, which keeps this diagnostic identical to a 75a-only one for those.
+        return new ContractMappingDiagnostic(MappingVersion, payloadSizeBytes, null, deltas, _noFieldIssues, structuralScan);
     }
 
     private static int Count<T>(IReadOnlyList<T>? values) => values?.Count ?? 0;

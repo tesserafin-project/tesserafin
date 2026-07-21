@@ -50,12 +50,12 @@ namespace Reefin.Playback.Contract.Diagnostics;
 /// content.
 /// </param>
 /// <param name="UnknownMemberTotal">
-/// ALWAYS <see langword="null"/> in this iteration, and that is the honest answer rather than a
-/// missing feature. Counting members the client sent that the contract does not declare requires
-/// reading the raw body structurally; Option 1 does not do that, so the server does not KNOW the
-/// number. Reporting 0 would be a lying zero - indistinguishable from "the client sent no unknown
-/// members", which the server cannot establish. Issue #75 permits a count and forbids names; this
-/// field is the count-shaped slot, left null until a source exists that can fill it truthfully.
+/// The count-shaped slot slice 75a leaves <see langword="null"/>: the 75a mapping comparison does
+/// not read the raw body, so on a diagnostic that carries no <see cref="StructuralScan"/> this is
+/// honestly null (unknown, never a lying 0). Slice 75b's bounded structural scan reports its own
+/// truthful total on <see cref="ContractStructuralScan.UnknownMemberTotal"/> instead of mutating
+/// this field, so every slice-75a assertion that this stays null keeps holding while the scanned
+/// total is still available (on <see cref="StructuralScan"/>) when a scan actually ran.
 /// </param>
 /// <param name="Deltas">
 /// The before/after comparison for the known contract members that LOST something across the
@@ -70,9 +70,19 @@ namespace Reefin.Playback.Contract.Diagnostics;
 /// or is structurally unobservable at this point in the pipeline. Present so the shape does not
 /// have to change when one of them becomes truthfully emittable.
 /// </param>
+/// <param name="StructuralScan">
+/// Issue #75 slice 75b: the result of the bounded, single-pass structural scan of the raw request
+/// body, or <see langword="null"/> when no scan ran for this diagnostic - which is the case for
+/// every slice-75a-only diagnostic, and whenever the request was not sampled for scanning. Trailing
+/// and nullable so every slice-75a call site and OpenAPI consumer keeps working unchanged; a
+/// non-null value is the signal that the scan actually executed (a silently-disabled scan cannot
+/// present one). Like the rest of this type, its entire closure is enums and integers - see
+/// <see cref="ContractStructuralScan"/>.
+/// </param>
 public sealed record ContractMappingDiagnostic(
     int MappingVersion,
     long? PayloadSizeBytes,
     int? UnknownMemberTotal,
     IReadOnlyList<ContractMappingDelta> Deltas,
-    IReadOnlyList<ContractFieldIssue> FieldIssues);
+    IReadOnlyList<ContractFieldIssue> FieldIssues,
+    ContractStructuralScan? StructuralScan = null);
