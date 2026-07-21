@@ -37,7 +37,7 @@ namespace Tesserafin.Server.Integration.Tests.EndToEnd;
 /// <remarks>
 /// <para>
 /// <see cref="TesserafinApplicationFactory"/> unconditionally sets the process-wide
-/// <c>REEFIN_FFMPEG__NOVALIDATION</c> environment variable, which makes
+/// <c>TESSERAFIN_FFMPEG__NOVALIDATION</c> environment variable, which makes
 /// <c>Tesserafin.MediaEncoding.Encoder.MediaEncoder.SetFFmpegPath</c> return immediately without ever
 /// resolving <c>_ffmpegPath</c> (see that method's early-return branch) - correct for the rest of
 /// this project's tests, which never transcode, but fatal for this one: <c>TranscodeManager</c> would
@@ -135,7 +135,7 @@ public class E2eApplicationFactory : WebApplicationFactory<Startup>
     {
         builder.UseEnvironment("Development");
 
-        // Deliberately NOT setting REEFIN_FFMPEG__NOVALIDATION here (contrast with
+        // Deliberately NOT setting TESSERAFIN_FFMPEG__NOVALIDATION here (contrast with
         // TesserafinApplicationFactory) - this factory wants the real validation/probing path to run
         // against FfmpegPath below.
         var commandLineOpts = new StartupOptions
@@ -199,10 +199,10 @@ public class E2eApplicationFactory : WebApplicationFactory<Startup>
                 configBuilder
                     .SetBasePath(appPaths.ConfigurationDirectoryPath)
                     .AddInMemoryCollection(ConfigurationOptions.DefaultConfiguration)
-                    .AddEnvironmentVariables("REEFIN_")
+                    .AddEnvironmentVariables("TESSERAFIN_")
                     .AddInMemoryCollection(commandLineOpts.ConvertToConfig())
                     // Last, highest-precedence: guards against a sibling TesserafinApplicationFactory-based
-                    // test in the same process having left REEFIN_FFMPEG__NOVALIDATION=true behind it.
+                    // test in the same process having left TESSERAFIN_FFMPEG__NOVALIDATION=true behind it.
                     .AddInMemoryCollection(new Dictionary<string, string?>
                     {
                         [Tesserafin.Controller.Extensions.ConfigurationExtensions.FfmpegSkipValidationKey] = bool.FalseString,

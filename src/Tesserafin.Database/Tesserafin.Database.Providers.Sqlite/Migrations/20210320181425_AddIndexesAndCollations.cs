@@ -12,42 +12,42 @@ namespace Tesserafin.Server.Implementations.Migrations
         {
             migrationBuilder.DropForeignKey(
                 name: "FK_ImageInfos_Users_UserId",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "ImageInfos");
 
             migrationBuilder.DropForeignKey(
                 name: "FK_Permissions_Users_Permission_Permissions_Guid",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "Permissions");
 
             migrationBuilder.DropForeignKey(
                 name: "FK_Preferences_Users_Preference_Preferences_Guid",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "Preferences");
 
             migrationBuilder.DropIndex(
                 name: "IX_Preferences_Preference_Preferences_Guid",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "Preferences");
 
             migrationBuilder.DropIndex(
                 name: "IX_Permissions_Permission_Permissions_Guid",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "Permissions");
 
             migrationBuilder.DropIndex(
                 name: "IX_DisplayPreferences_UserId",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "DisplayPreferences");
 
             migrationBuilder.DropIndex(
                 name: "IX_CustomItemDisplayPreferences_UserId",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "CustomItemDisplayPreferences");
 
             migrationBuilder.AlterColumn<string>(
                 name: "Username",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "Users",
                 type: "TEXT",
                 maxLength: 255,
@@ -59,14 +59,14 @@ namespace Tesserafin.Server.Implementations.Migrations
 
             migrationBuilder.AddColumn<Guid>(
                 name: "UserId",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "Preferences",
                 type: "TEXT",
                 nullable: true);
 
             migrationBuilder.AddColumn<Guid>(
                 name: "UserId",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "Permissions",
                 type: "TEXT",
                 nullable: true);
@@ -76,14 +76,14 @@ namespace Tesserafin.Server.Implementations.Migrations
 
             migrationBuilder.CreateIndex(
                 name: "IX_Users_Username",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "Users",
                 column: "Username",
                 unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_Preferences_UserId_Kind",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "Preferences",
                 columns: new[] { "UserId", "Kind" },
                 unique: true,
@@ -91,7 +91,7 @@ namespace Tesserafin.Server.Implementations.Migrations
 
             migrationBuilder.CreateIndex(
                 name: "IX_Permissions_UserId_Kind",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "Permissions",
                 columns: new[] { "UserId", "Kind" },
                 unique: true,
@@ -99,30 +99,30 @@ namespace Tesserafin.Server.Implementations.Migrations
 
             migrationBuilder.AddForeignKey(
                 name: "FK_ImageInfos_Users_UserId",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "ImageInfos",
                 column: "UserId",
-                principalSchema: "reefin",
+                principalSchema: "tesserafin",
                 principalTable: "Users",
                 principalColumn: "Id",
                 onDelete: ReferentialAction.Cascade);
 
             migrationBuilder.AddForeignKey(
                 name: "FK_Permissions_Users_UserId",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "Permissions",
                 column: "UserId",
-                principalSchema: "reefin",
+                principalSchema: "tesserafin",
                 principalTable: "Users",
                 principalColumn: "Id",
                 onDelete: ReferentialAction.Cascade);
 
             migrationBuilder.AddForeignKey(
                 name: "FK_Preferences_Users_UserId",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "Preferences",
                 column: "UserId",
-                principalSchema: "reefin",
+                principalSchema: "tesserafin",
                 principalTable: "Users",
                 principalColumn: "Id",
                 onDelete: ReferentialAction.Cascade);
@@ -132,47 +132,47 @@ namespace Tesserafin.Server.Implementations.Migrations
         {
             migrationBuilder.DropForeignKey(
                 name: "FK_ImageInfos_Users_UserId",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "ImageInfos");
 
             migrationBuilder.DropForeignKey(
                 name: "FK_Permissions_Users_UserId",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "Permissions");
 
             migrationBuilder.DropForeignKey(
                 name: "FK_Preferences_Users_UserId",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "Preferences");
 
             migrationBuilder.DropIndex(
                 name: "IX_Users_Username",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "Users");
 
             migrationBuilder.DropIndex(
                 name: "IX_Preferences_UserId_Kind",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "Preferences");
 
             migrationBuilder.DropIndex(
                 name: "IX_Permissions_UserId_Kind",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "Permissions");
 
             migrationBuilder.DropColumn(
                 name: "UserId",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "Preferences");
 
             migrationBuilder.DropColumn(
                 name: "UserId",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "Permissions");
 
             migrationBuilder.AlterColumn<string>(
                 name: "Username",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "Users",
                 type: "TEXT",
                 maxLength: 255,
@@ -184,54 +184,54 @@ namespace Tesserafin.Server.Implementations.Migrations
 
             migrationBuilder.CreateIndex(
                 name: "IX_Preferences_Preference_Preferences_Guid",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "Preferences",
                 column: "Preference_Preferences_Guid");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Permissions_Permission_Permissions_Guid",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "Permissions",
                 column: "Permission_Permissions_Guid");
 
             migrationBuilder.CreateIndex(
                 name: "IX_DisplayPreferences_UserId",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "DisplayPreferences",
                 column: "UserId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_CustomItemDisplayPreferences_UserId",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "CustomItemDisplayPreferences",
                 column: "UserId");
 
             migrationBuilder.AddForeignKey(
                 name: "FK_ImageInfos_Users_UserId",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "ImageInfos",
                 column: "UserId",
-                principalSchema: "reefin",
+                principalSchema: "tesserafin",
                 principalTable: "Users",
                 principalColumn: "Id",
                 onDelete: ReferentialAction.Restrict);
 
             migrationBuilder.AddForeignKey(
                 name: "FK_Permissions_Users_Permission_Permissions_Guid",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "Permissions",
                 column: "Permission_Permissions_Guid",
-                principalSchema: "reefin",
+                principalSchema: "tesserafin",
                 principalTable: "Users",
                 principalColumn: "Id",
                 onDelete: ReferentialAction.Restrict);
 
             migrationBuilder.AddForeignKey(
                 name: "FK_Preferences_Users_Preference_Preferences_Guid",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "Preferences",
                 column: "Preference_Preferences_Guid",
-                principalSchema: "reefin",
+                principalSchema: "tesserafin",
                 principalTable: "Users",
                 principalColumn: "Id",
                 onDelete: ReferentialAction.Restrict);

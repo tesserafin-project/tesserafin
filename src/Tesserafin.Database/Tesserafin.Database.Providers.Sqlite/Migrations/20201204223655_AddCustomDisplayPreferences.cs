@@ -11,12 +11,12 @@ namespace Tesserafin.Server.Implementations.Migrations
         {
             migrationBuilder.DropIndex(
                 name: "IX_DisplayPreferences_UserId_Client",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "DisplayPreferences");
 
             migrationBuilder.AlterColumn<int>(
                 name: "MaxActiveSessions",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "Users",
                 type: "INTEGER",
                 nullable: false,
@@ -27,7 +27,7 @@ namespace Tesserafin.Server.Implementations.Migrations
 
             migrationBuilder.AddColumn<Guid>(
                 name: "ItemId",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "DisplayPreferences",
                 type: "TEXT",
                 nullable: false,
@@ -35,7 +35,7 @@ namespace Tesserafin.Server.Implementations.Migrations
 
             migrationBuilder.CreateTable(
                 name: "CustomItemDisplayPreferences",
-                schema: "reefin",
+                schema: "tesserafin",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "INTEGER", nullable: false)
@@ -53,20 +53,20 @@ namespace Tesserafin.Server.Implementations.Migrations
 
             migrationBuilder.CreateIndex(
                 name: "IX_DisplayPreferences_UserId_ItemId_Client",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "DisplayPreferences",
                 columns: new[] { "UserId", "ItemId", "Client" },
                 unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_CustomItemDisplayPreferences_UserId",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "CustomItemDisplayPreferences",
                 column: "UserId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_CustomItemDisplayPreferences_UserId_ItemId_Client_Key",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "CustomItemDisplayPreferences",
                 columns: new[] { "UserId", "ItemId", "Client", "Key" },
                 unique: true);
@@ -76,21 +76,21 @@ namespace Tesserafin.Server.Implementations.Migrations
         {
             migrationBuilder.DropTable(
                 name: "CustomItemDisplayPreferences",
-                schema: "reefin");
+                schema: "tesserafin");
 
             migrationBuilder.DropIndex(
                 name: "IX_DisplayPreferences_UserId_ItemId_Client",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "DisplayPreferences");
 
             migrationBuilder.DropColumn(
                 name: "ItemId",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "DisplayPreferences");
 
             migrationBuilder.AlterColumn<int>(
                 name: "MaxActiveSessions",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "Users",
                 type: "INTEGER",
                 nullable: true,
@@ -99,7 +99,7 @@ namespace Tesserafin.Server.Implementations.Migrations
 
             migrationBuilder.CreateIndex(
                 name: "IX_DisplayPreferences_UserId_Client",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "DisplayPreferences",
                 columns: new[] { "UserId", "Client" },
                 unique: true);

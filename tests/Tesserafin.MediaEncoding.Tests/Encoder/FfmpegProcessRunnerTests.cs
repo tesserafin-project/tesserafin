@@ -92,16 +92,16 @@ public class FfmpegProcessRunnerTests
     public async Task RunProbeAsync_EnvironmentVariables_AreDeliveredToChildProcessOnly()
     {
         var command = ShellCommand(
-            unix: "echo value=$REEFIN_TEST_VAR",
-            windows: "echo value=%REEFIN_TEST_VAR%") with
+            unix: "echo value=$TESSERAFIN_TEST_VAR",
+            windows: "echo value=%TESSERAFIN_TEST_VAR%") with
         {
-            EnvironmentVariables = ImmutableDictionary<string, string>.Empty.Add("REEFIN_TEST_VAR", "hello-from-command"),
+            EnvironmentVariables = ImmutableDictionary<string, string>.Empty.Add("TESSERAFIN_TEST_VAR", "hello-from-command"),
         };
 
         var result = await _runner.RunProbeAsync(command, _ample, CancellationToken.None);
 
         Assert.Contains("value=hello-from-command", result.StandardOutput, StringComparison.Ordinal);
-        Assert.Null(Environment.GetEnvironmentVariable("REEFIN_TEST_VAR"));
+        Assert.Null(Environment.GetEnvironmentVariable("TESSERAFIN_TEST_VAR"));
     }
 
     [Fact]

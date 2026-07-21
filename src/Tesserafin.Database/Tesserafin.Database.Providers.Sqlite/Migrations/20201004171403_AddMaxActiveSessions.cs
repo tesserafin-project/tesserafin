@@ -11,7 +11,7 @@ namespace Tesserafin.Server.Implementations.Migrations
         {
             migrationBuilder.AddColumn<int>(
                 name: "MaxActiveSessions",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "Users",
                 nullable: false,
                 defaultValue: 0);
@@ -21,7 +21,7 @@ namespace Tesserafin.Server.Implementations.Migrations
         {
             migrationBuilder.DropColumn(
                 name: "MaxActiveSessions",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "Users");
         }
     }

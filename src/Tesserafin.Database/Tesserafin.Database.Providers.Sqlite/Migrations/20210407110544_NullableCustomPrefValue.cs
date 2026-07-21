@@ -10,7 +10,7 @@ namespace Tesserafin.Server.Implementations.Migrations
         {
             migrationBuilder.AlterColumn<string>(
                 name: "Value",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "CustomItemDisplayPreferences",
                 type: "TEXT",
                 nullable: true,
@@ -22,7 +22,7 @@ namespace Tesserafin.Server.Implementations.Migrations
         {
             migrationBuilder.AlterColumn<string>(
                 name: "Value",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "CustomItemDisplayPreferences",
                 type: "TEXT",
                 nullable: false,

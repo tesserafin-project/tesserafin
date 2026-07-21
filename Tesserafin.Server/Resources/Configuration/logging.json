@@ -21,7 +21,7 @@
                         {
                             "Name": "File",
                             "Args": {
-                                "path": "%REEFIN_LOG_DIR%//log_.log",
+                                "path": "%TESSERAFIN_LOG_DIR%//log_.log",
                                 "rollingInterval": "Day",
                                 "retainedFileCountLimit": 3,
                                 "rollOnFileSizeLimit": true,

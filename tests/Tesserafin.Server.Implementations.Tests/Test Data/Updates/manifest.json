@@ -4,7 +4,7 @@
         "name": "Anime",
         "description": "Manage your anime in Tesserafin. This plugin supports several different metadata providers and options for organizing your collection.\n",
         "overview": "Manage your anime from Tesserafin",
-        "owner": "reefin",
+        "owner": "tesserafin",
         "category": "Metadata",
         "versions": [
             {
@@ -30,7 +30,7 @@
         "name": "Auto Organize",
         "description": "Automatically organize your media",
         "overview": "Automatically organize your media",
-        "owner": "reefin",
+        "owner": "tesserafin",
         "category": "General",
         "versions": [
             {
@@ -56,7 +56,7 @@
         "name": "Bookshelf",
         "description": "Supports several different metadata providers and options for organizing your collection.\n",
         "overview": "Manage your books",
-        "owner": "reefin",
+        "owner": "tesserafin",
         "category": "Metadata",
         "versions": [
             {
@@ -82,7 +82,7 @@
         "name": "Email",
         "description": "Send SMTP email notifications",
         "overview": "Send SMTP email notifications",
-        "owner": "reefin",
+        "owner": "tesserafin",
         "category": "Notifications",
         "versions": [
             {
@@ -108,7 +108,7 @@
         "name": "Fanart",
         "description": "Scrape poster images for movies, shows, and artists in your library.",
         "overview": "Scrape poster images from Fanart",
-        "owner": "reefin",
+        "owner": "tesserafin",
         "category": "Metadata",
         "versions": [
             {
@@ -152,7 +152,7 @@
         "name": "IPTV",
         "description": "Enable IPTV support in Tesserafin",
         "overview": "Enable IPTV support in Tesserafin",
-        "owner": "reefin",
+        "owner": "tesserafin",
         "category": "Channel",
         "versions": [
             {
@@ -170,7 +170,7 @@
         "name": "ISO Mounter",
         "description": "Mount your ISO files for Tesserafin.\n",
         "overview": "Mount your ISO files for Tesserafin",
-        "owner": "reefin",
+        "owner": "tesserafin",
         "category": "Metadata",
         "versions": [
             {
@@ -188,7 +188,7 @@
         "name": "Kodi Sync Queue",
         "description": "This plugin will track all media changes while Kodi clients are offline to decrease sync times.",
         "overview": "Sync all media changes with Kodi clients",
-        "owner": "reefin",
+        "owner": "tesserafin",
         "category": "General",
         "versions": [
             {
@@ -214,7 +214,7 @@
         "name": "LDAP Authentication",
         "description": "Authenticate your Tesserafin users against an LDAP database, and optionally create users who do not yet exist automatically.\nAllows the administrator to customize most aspects of the LDAP authentication process, including customizable search attributes, username attribute, and a search filter for administrative users (set on user creation). The user, via the \"Manual Login\" process, can enter any valid attribute value, which will be mapped back to the specified username attribute automatically as well.\n",
         "overview": "Authenticate users against an LDAP database",
-        "owner": "reefin",
+        "owner": "tesserafin",
         "category": "Authentication",
         "versions": [
             {
@@ -248,7 +248,7 @@
         "name": "NextPVR",
         "description": "Provides access to live TV, program guide, and recordings from NextPVR.\n",
         "overview": "Live TV plugin for NextPVR",
-        "owner": "reefin",
+        "owner": "tesserafin",
         "category": "LiveTV",
         "versions": [
             {
@@ -274,7 +274,7 @@
         "name": "Open Subtitles",
         "description": "Download subtitles from the internet to use with your media files.",
         "overview": "Download subtitles for your media",
-        "owner": "reefin",
+        "owner": "tesserafin",
         "category": "Metadata",
         "versions": [
             {
@@ -300,7 +300,7 @@
         "name": "Playback Reporting",
         "description": "Collect and show user play statistics",
         "overview": "Collect and show user play statistics",
-        "owner": "reefin",
+        "owner": "tesserafin",
         "category": "General",
         "versions": [
             {
@@ -334,7 +334,7 @@
         "name": "Pushbullet",
         "description": "Get notifications via Pushbullet.\n",
         "overview": "Pushbullet notification plugin",
-        "owner": "reefin",
+        "owner": "tesserafin",
         "category": "Notifications",
         "versions": [
             {
@@ -378,7 +378,7 @@
         "name": "Reports",
         "description": "Generate reports of your media library",
         "overview": "Generate reports of your media library",
-        "owner": "reefin",
+        "owner": "tesserafin",
         "category": "General",
         "versions": [
             {
@@ -412,7 +412,7 @@
         "name": "ServerWMC",
         "description": "Provides access to Live TV, Program Guide and Recordings from your Windows MediaCenter Server running ServerWMC. Requires ServerWMC to be installed and running on your Windows MediaCenter machine.\n",
         "overview": "Tesserafin Live TV plugin for Windows MediaCenter with ServerWMC",
-        "owner": "reefin",
+        "owner": "tesserafin",
         "category": "LiveTV",
         "versions": [
             {
@@ -438,7 +438,7 @@
         "name": "Slack Notifications",
         "description": "Get notifications via Slack.\n",
         "overview": "Get notifications via Slack",
-        "owner": "reefin",
+        "owner": "tesserafin",
         "category": "Notifications",
         "versions": [
             {
@@ -464,7 +464,7 @@
         "name": "TMDb Box Sets",
         "description": "Automatically create movie box sets based on TMDb collections",
         "overview": "Automatically create movie box sets based on TMDb collections",
-        "owner": "reefin",
+        "owner": "tesserafin",
         "category": "Metadata",
         "versions": [
             {
@@ -490,7 +490,7 @@
         "name": "Trakt",
         "description": "Record your watched media with Trakt.\n",
         "overview": "Record your watched media with Trakt",
-        "owner": "reefin",
+        "owner": "tesserafin",
         "category": "General",
         "versions": [
             {
@@ -516,7 +516,7 @@
         "name": "TVHeadend",
         "description": "Manage TVHeadend from Tesserafin",
         "overview": "Manage TVHeadend from Tesserafin",
-        "owner": "reefin",
+        "owner": "tesserafin",
         "category": "LiveTV",
         "versions": [
             {
@@ -584,7 +584,7 @@
         "name": "Cover Art Archive",
         "description": "This plugin provides images from the Cover Art Archive https://musicbrainz.org/doc/Cover_Art_Archive and depends on the MusicBrainz metadata provider to know what images belong where\n",
         "overview": "MusicBrainz Cover Art Archive",
-        "owner": "reefin",
+        "owner": "tesserafin",
         "category": "Metadata",
         "versions": [
             {
@@ -610,7 +610,7 @@
         "name": "TV Maze",
         "description": "Get TV metadata from TV Maze\n",
         "overview": "Get TV metadata from TV Maze",
-        "owner": "reefin",
+        "owner": "tesserafin",
         "category": "Metadata",
         "versions": [
             {
@@ -660,7 +660,7 @@
         "name": "TheTVDB",
         "description": "Get TV metadata from TheTvdb\n",
         "overview": "Get TV metadata from TheTvdb",
-        "owner": "reefin",
+        "owner": "tesserafin",
         "category": "Metadata",
         "versions": [
             {

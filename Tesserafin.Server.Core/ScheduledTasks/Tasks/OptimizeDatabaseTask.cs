@@ -82,7 +82,7 @@ public class OptimizeDatabaseTask : IScheduledTask, IConfigurableScheduledTask
             return;
         }
 
-        _logger.LogInformation("Optimizing and vacuuming reefin.db...");
+        _logger.LogInformation("Optimizing and vacuuming tesserafin.db...");
 
         try
         {
@@ -90,7 +90,7 @@ public class OptimizeDatabaseTask : IScheduledTask, IConfigurableScheduledTask
         }
         catch (Exception e)
         {
-            _logger.LogError(e, "Error while optimizing reefin.db");
+            _logger.LogError(e, "Error while optimizing tesserafin.db");
         }
     }
 }

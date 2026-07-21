@@ -52,7 +52,7 @@ docker run --rm \
     -v "$PWD":/repo \
     -v "${NUGET_VOLUME}":/nuget \
     -w /repo \
-    -e REEFIN_OPENAPI_WRITE=1 \
+    -e TESSERAFIN_OPENAPI_WRITE=1 \
     "$IMAGE_TAG" \
     bash -c "
         set -euo pipefail

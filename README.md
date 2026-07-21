@@ -81,7 +81,7 @@ After the required extensions are installed, you can run the server by pressing 
 To run the server from the command line you can use the `dotnet run` command. The example below shows how to do this if you have cloned the repository into a directory named `reefin` (the default directory name) and should work on all operating systems.
 
 ```bash
-cd reefin                          # Move into the repository directory
+cd tesserafin                          # Move into the repository directory
 dotnet run --project Tesserafin.Server --webdir /absolute/path/to/jellyfin-web/dist # Run the server startup project
 ```
 
@@ -94,7 +94,7 @@ dotnet build                       # Build the project
 cd Tesserafin.Server/bin/Debug/net10.0 # Change into the build output directory
 ```
 
-2. Execute the build output. On Linux, Mac, etc. use `./reefin` and on Windows use `reefin.exe`.
+2. Execute the build output. On Linux, Mac, etc. use `./tesserafin` and on Windows use `tesserafin.exe`.
 
 #### Accessing the Hosted Web Client
 
@@ -118,7 +118,7 @@ The following sections describe some more advanced scenarios for running the ser
 
 It is not necessary to host the frontend web client as part of the backend server. Hosting these two components separately may be useful for frontend developers who would prefer to host the client in a separate webpack development server for a tighter development loop. See the [tesserafin-web](https://github.com/tesserafin/tesserafin-web) repo for instructions on how to do this.
 
-To instruct the server not to host the web content, there is a `nowebclient` configuration flag that must be set. This can be specified using the command line switch `--nowebclient` or the environment variable `REEFIN_NOWEBCONTENT=true`.
+To instruct the server not to host the web content, there is a `nowebclient` configuration flag that must be set. This can be specified using the command line switch `--nowebclient` or the environment variable `TESSERAFIN_NOWEBCONTENT=true`.
 
 Since this is a common scenario, there is also a separate launch profile defined for Visual Studio called `Tesserafin.Server (nowebcontent)` that can be selected from the 'Start Debugging' dropdown in the main toolbar.
 

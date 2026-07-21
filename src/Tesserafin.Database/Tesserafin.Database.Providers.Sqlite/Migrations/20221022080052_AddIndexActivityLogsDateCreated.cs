@@ -12,7 +12,7 @@ namespace Tesserafin.Server.Implementations.Migrations
         {
             migrationBuilder.CreateIndex(
                 name: "IX_ActivityLogs_DateCreated",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "ActivityLogs",
                 column: "DateCreated");
         }
@@ -21,7 +21,7 @@ namespace Tesserafin.Server.Implementations.Migrations
         {
             migrationBuilder.DropIndex(
                 name: "IX_ActivityLogs_DateCreated",
-                schema: "reefin",
+                schema: "tesserafin",
                 table: "ActivityLogs");
         }
     }

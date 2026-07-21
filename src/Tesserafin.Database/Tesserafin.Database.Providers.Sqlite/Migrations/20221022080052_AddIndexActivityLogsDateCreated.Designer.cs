@@ -20,7 +20,7 @@ namespace Tesserafin.Server.Implementations.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasDefaultSchema("reefin")
+                .HasDefaultSchema("tesserafin")
                 .HasAnnotation("ProductVersion", "6.0.9");
 
             modelBuilder.Entity("Tesserafin.Data.Entities.AccessSchedule", b =>
@@ -45,7 +45,7 @@ namespace Tesserafin.Server.Implementations.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("AccessSchedules", "reefin");
+                    b.ToTable("AccessSchedules", "tesserafin");
                 });
 
             modelBuilder.Entity("Tesserafin.Data.Entities.ActivityLog", b =>
@@ -93,7 +93,7 @@ namespace Tesserafin.Server.Implementations.Migrations
 
                     b.HasIndex("DateCreated");
 
-                    b.ToTable("ActivityLogs", "reefin");
+                    b.ToTable("ActivityLogs", "tesserafin");
                 });
 
             modelBuilder.Entity("Tesserafin.Data.Entities.CustomItemDisplayPreferences", b =>
@@ -125,7 +125,7 @@ namespace Tesserafin.Server.Implementations.Migrations
                     b.HasIndex("UserId", "ItemId", "Client", "Key")
                         .IsUnique();
 
-                    b.ToTable("CustomItemDisplayPreferences", "reefin");
+                    b.ToTable("CustomItemDisplayPreferences", "tesserafin");
                 });
 
             modelBuilder.Entity("Tesserafin.Data.Entities.DisplayPreferences", b =>
@@ -182,7 +182,7 @@ namespace Tesserafin.Server.Implementations.Migrations
                     b.HasIndex("UserId", "ItemId", "Client")
                         .IsUnique();
 
-                    b.ToTable("DisplayPreferences", "reefin");
+                    b.ToTable("DisplayPreferences", "tesserafin");
                 });
 
             modelBuilder.Entity("Tesserafin.Data.Entities.HomeSection", b =>
@@ -204,7 +204,7 @@ namespace Tesserafin.Server.Implementations.Migrations
 
                     b.HasIndex("DisplayPreferencesId");
 
-                    b.ToTable("HomeSection", "reefin");
+                    b.ToTable("HomeSection", "tesserafin");
                 });
 
             modelBuilder.Entity("Tesserafin.Data.Entities.ImageInfo", b =>
@@ -229,7 +229,7 @@ namespace Tesserafin.Server.Implementations.Migrations
                     b.HasIndex("UserId")
                         .IsUnique();
 
-                    b.ToTable("ImageInfos", "reefin");
+                    b.ToTable("ImageInfos", "tesserafin");
                 });
 
             modelBuilder.Entity("Tesserafin.Data.Entities.ItemDisplayPreferences", b =>
@@ -273,7 +273,7 @@ namespace Tesserafin.Server.Implementations.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("ItemDisplayPreferences", "reefin");
+                    b.ToTable("ItemDisplayPreferences", "tesserafin");
                 });
 
             modelBuilder.Entity("Tesserafin.Data.Entities.Permission", b =>
@@ -304,7 +304,7 @@ namespace Tesserafin.Server.Implementations.Migrations
                         .IsUnique()
                         .HasFilter("[UserId] IS NOT NULL");
 
-                    b.ToTable("Permissions", "reefin");
+                    b.ToTable("Permissions", "tesserafin");
                 });
 
             modelBuilder.Entity("Tesserafin.Data.Entities.Preference", b =>
@@ -337,7 +337,7 @@ namespace Tesserafin.Server.Implementations.Migrations
                         .IsUnique()
                         .HasFilter("[UserId] IS NOT NULL");
 
-                    b.ToTable("Preferences", "reefin");
+                    b.ToTable("Preferences", "tesserafin");
                 });
 
             modelBuilder.Entity("Tesserafin.Data.Entities.Security.ApiKey", b =>
@@ -366,7 +366,7 @@ namespace Tesserafin.Server.Implementations.Migrations
                     b.HasIndex("AccessToken")
                         .IsUnique();
 
-                    b.ToTable("ApiKeys", "reefin");
+                    b.ToTable("ApiKeys", "tesserafin");
                 });
 
             modelBuilder.Entity("Tesserafin.Data.Entities.Security.Device", b =>
@@ -424,7 +424,7 @@ namespace Tesserafin.Server.Implementations.Migrations
 
                     b.HasIndex("UserId", "DeviceId");
 
-                    b.ToTable("Devices", "reefin");
+                    b.ToTable("Devices", "tesserafin");
                 });
 
             modelBuilder.Entity("Tesserafin.Data.Entities.Security.DeviceOptions", b =>
@@ -445,7 +445,7 @@ namespace Tesserafin.Server.Implementations.Migrations
                     b.HasIndex("DeviceId")
                         .IsUnique();
 
-                    b.ToTable("DeviceOptions", "reefin");
+                    b.ToTable("DeviceOptions", "tesserafin");
                 });
 
             modelBuilder.Entity("Tesserafin.Data.Entities.User", b =>
@@ -558,7 +558,7 @@ namespace Tesserafin.Server.Implementations.Migrations
                     b.HasIndex("Username")
                         .IsUnique();
 
-                    b.ToTable("Users", "reefin");
+                    b.ToTable("Users", "tesserafin");
                 });
 
             modelBuilder.Entity("Tesserafin.Data.Entities.AccessSchedule", b =>

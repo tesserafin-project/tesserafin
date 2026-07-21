@@ -62,7 +62,7 @@ public sealed class SqliteDatabaseProvider : ITesserafinDatabaseProvider
 
         var sqliteConnectionBuilder = new SqliteConnectionStringBuilder
         {
-            DataSource = GetOption(customOptions, "path", e => e, () => Path.Combine(_applicationPaths.DataPath, "reefin.db")),
+            DataSource = GetOption(customOptions, "path", e => e, () => Path.Combine(_applicationPaths.DataPath, "tesserafin.db")),
             Cache = GetOption(customOptions, "cache", Enum.Parse<SqliteCacheMode>, () => SqliteCacheMode.Default),
             Pooling = GetOption(customOptions, "pooling", e => e.Equals(bool.TrueString, StringComparison.OrdinalIgnoreCase), () => true),
             DefaultTimeout = GetOption(customOptions, "command-timeout", int.Parse, () => 60)
@@ -108,7 +108,7 @@ public sealed class SqliteDatabaseProvider : ITesserafinDatabaseProvider
             await context.Database.ExecuteSqlRawAsync("PRAGMA optimize", cancellationToken).ConfigureAwait(false);
             await context.Database.ExecuteSqlRawAsync("VACUUM", cancellationToken).ConfigureAwait(false);
             await context.Database.ExecuteSqlRawAsync("PRAGMA wal_checkpoint(TRUNCATE)", cancellationToken).ConfigureAwait(false);
-            _logger.LogInformation("reefin.db optimized successfully!");
+            _logger.LogInformation("tesserafin.db optimized successfully!");
         }
     }
 
@@ -146,11 +146,11 @@ public sealed class SqliteDatabaseProvider : ITesserafinDatabaseProvider
     public Task<string> MigrationBackupFast(CancellationToken cancellationToken)
     {
         var key = DateTime.UtcNow.ToString("yyyyMMddhhmmss", CultureInfo.InvariantCulture);
-        var path = Path.Combine(_applicationPaths.DataPath, "reefin.db");
+        var path = Path.Combine(_applicationPaths.DataPath, "tesserafin.db");
         var backupFile = Path.Combine(_applicationPaths.DataPath, BackupFolderName);
         Directory.CreateDirectory(backupFile);
 
-        backupFile = Path.Combine(backupFile, $"{key}_reefin.db");
+        backupFile = Path.Combine(backupFile, $"{key}_tesserafin.db");
         File.Copy(path, backupFile);
         return Task.FromResult(key);
     }
@@ -160,8 +160,8 @@ public sealed class SqliteDatabaseProvider : ITesserafinDatabaseProvider
     {
         // ensure there are absolutely no dangling Sqlite connections.
         SqliteConnection.ClearAllPools();
-        var path = Path.Combine(_applicationPaths.DataPath, "reefin.db");
-        var backupFile = Path.Combine(_applicationPaths.DataPath, BackupFolderName, $"{key}_reefin.db");
+        var path = Path.Combine(_applicationPaths.DataPath, "tesserafin.db");
+        var backupFile = Path.Combine(_applicationPaths.DataPath, BackupFolderName, $"{key}_tesserafin.db");
 
         if (!File.Exists(backupFile))
         {
@@ -176,7 +176,7 @@ public sealed class SqliteDatabaseProvider : ITesserafinDatabaseProvider
     /// <inheritdoc />
     public Task DeleteBackup(string key)
     {
-        var backupFile = Path.Combine(_applicationPaths.DataPath, BackupFolderName, $"{key}_reefin.db");
+        var backupFile = Path.Combine(_applicationPaths.DataPath, BackupFolderName, $"{key}_tesserafin.db");
 
         if (!File.Exists(backupFile))
         {

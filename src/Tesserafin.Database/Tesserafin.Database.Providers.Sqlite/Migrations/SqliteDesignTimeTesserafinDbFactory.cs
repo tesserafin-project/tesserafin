@@ -15,7 +15,7 @@ namespace Tesserafin.Database.Providers.Sqlite.Migrations
         public TesserafinDbContext CreateDbContext(string[] args)
         {
             var optionsBuilder = new DbContextOptionsBuilder<TesserafinDbContext>();
-            optionsBuilder.UseSqlite("Data Source=reefin.db", f => f.MigrationsAssembly(GetType().Assembly));
+            optionsBuilder.UseSqlite("Data Source=tesserafin.db", f => f.MigrationsAssembly(GetType().Assembly));
 
             return new TesserafinDbContext(
                 optionsBuilder.Options,

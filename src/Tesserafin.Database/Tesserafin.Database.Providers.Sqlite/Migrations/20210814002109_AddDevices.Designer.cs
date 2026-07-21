@@ -18,7 +18,7 @@ namespace Tesserafin.Server.Implementations.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasDefaultSchema("reefin")
+                .HasDefaultSchema("tesserafin")
                 .HasAnnotation("ProductVersion", "5.0.7");
 
             modelBuilder.Entity("Tesserafin.Data.Entities.AccessSchedule", b =>
