@@ -15,6 +15,7 @@ using Reefin.Model.Configuration;
 using Reefin.Model.Dlna;
 using Reefin.Model.Dto;
 using Reefin.Model.Session;
+using Reefin.Playback.Contract.Diagnostics;
 using Reefin.Playback.Decision;
 using Reefin.Playback.Engine;
 using Reefin.Playback.Shadow;
@@ -883,6 +884,118 @@ public class ShadowPlaybackSessionPlannerTests
         }
 
         Assert.Null(publishedV2);
+    }
+
+    // Issue #75 slice 75b: the end-to-end seam. A structural scan captured into the ambient scope
+    // (as the Reefin.Api filter does) must reach the retained diagnostic through a real plan run.
+    [Fact]
+    public void PlanVideo_CapturedStructuralScan_ReachesRetainedDiagnostic_AndEvictsWithSession()
+    {
+        var options = CreateOptions();
+        var expectedPlan = new PlaybackPlan(PlayMethod.DirectPlay, default);
+
+        var mockInner = new Mock<IPlaybackSessionPlanner>();
+        mockInner.Setup(p => p.PlanVideo(options)).Returns(expectedPlan);
+
+        var mockEngine = new Mock<IPlaybackEngine>();
+        mockEngine
+            .Setup(e => e.Decide(It.IsAny<PlaybackRequestContext>(), It.IsAny<Reefin.Playback.Decision.ClientCapabilities>(), It.IsAny<IReadOnlyList<MediaSourceSnapshot>>(), It.IsAny<PlaybackConstraints>()))
+            .Returns(BuildViableDirectPlayDecision());
+
+        var store = new InMemoryShadowDiagnosticsStore();
+        var decorator = new ShadowPlaybackSessionPlanner(
+            mockInner.Object,
+            mockEngine.Object,
+            NullLogger<ShadowPlaybackSessionPlanner>.Instance,
+            () => new PlaybackShadowOptions { Enabled = true, SampleRate = 1.0 },
+            metrics: null,
+            diagnosticsStore: store);
+
+        var scan = SampleScan();
+
+        ShadowDiagnosticRecord? published;
+        using (store.BeginCapture(new ShadowCaptureInputs(EmptyDeclaredCapabilities(), 1234, scan)))
+        {
+            var result = decorator.PlanVideo(options);
+            Assert.Same(expectedPlan, result);
+            published = store.TakeCaptured();
+        }
+
+        // The scan captured into the scope reached the retained diagnostic unchanged.
+        Assert.NotNull(published);
+        Assert.NotNull(published!.ContractMapping);
+        Assert.Same(scan, published.ContractMapping!.StructuralScan);
+        Assert.Equal(1234, published.ContractMapping.PayloadSizeBytes);
+
+        // TTL / eviction: the scan data lives on the session record and is evicted with the session,
+        // via the EXISTING store lifecycle - no new TTL was introduced.
+        var id = PlaybackSessionId.NewId();
+        store.Attach(id, published);
+        Assert.True(store.TryGet(id, out var retained));
+        Assert.NotNull(retained!.ContractMapping!.StructuralScan);
+        store.Remove(id);
+        Assert.False(store.TryGet(id, out _));
+    }
+
+    [Fact]
+    public void PlanVideo_NoCapturedScan_LeavesStructuralScanNull()
+    {
+        // Anti-vacuity: a run with no captured scan yields a diagnostic whose StructuralScan is null,
+        // so a scan that did not run is always distinguishable from one that ran and found nothing.
+        var options = CreateOptions();
+        var expectedPlan = new PlaybackPlan(PlayMethod.DirectPlay, default);
+
+        var mockInner = new Mock<IPlaybackSessionPlanner>();
+        mockInner.Setup(p => p.PlanVideo(options)).Returns(expectedPlan);
+
+        var mockEngine = new Mock<IPlaybackEngine>();
+        mockEngine
+            .Setup(e => e.Decide(It.IsAny<PlaybackRequestContext>(), It.IsAny<Reefin.Playback.Decision.ClientCapabilities>(), It.IsAny<IReadOnlyList<MediaSourceSnapshot>>(), It.IsAny<PlaybackConstraints>()))
+            .Returns(BuildViableDirectPlayDecision());
+
+        var store = new InMemoryShadowDiagnosticsStore();
+        var decorator = new ShadowPlaybackSessionPlanner(
+            mockInner.Object,
+            mockEngine.Object,
+            NullLogger<ShadowPlaybackSessionPlanner>.Instance,
+            () => new PlaybackShadowOptions { Enabled = true, SampleRate = 1.0 },
+            metrics: null,
+            diagnosticsStore: store);
+
+        ShadowDiagnosticRecord? published;
+        using (store.BeginCapture(new ShadowCaptureInputs(EmptyDeclaredCapabilities(), null)))
+        {
+            decorator.PlanVideo(options);
+            published = store.TakeCaptured();
+        }
+
+        Assert.NotNull(published);
+        Assert.NotNull(published!.ContractMapping);
+        Assert.Null(published.ContractMapping!.StructuralScan);
+    }
+
+    private static ContractStructuralScan SampleScan() => new(
+        UnknownMemberTotal: 2,
+        UnknownMembers: new[]
+        {
+            new ContractUnknownMemberCount(ContractPath.Request, 1),
+            new ContractUnknownMemberCount(ContractPath.Decode, 1),
+        },
+        WrongTypes: Array.Empty<ContractFieldIssue>(),
+        ScannedBodyByteCount: 4096,
+        BodyLimitExceeded: false);
+
+    private static Reefin.Playback.Decision.ClientCapabilities EmptyDeclaredCapabilities()
+    {
+        var decode = new DecodeCapabilities(
+            Array.Empty<DecodeProfile>(),
+            Array.Empty<VideoCodecCapability>(),
+            Array.Empty<AudioCodecCapability>(),
+            Array.Empty<SubtitleCapability>(),
+            SupportsHls: false,
+            SupportsDash: false);
+
+        return new Reefin.Playback.Decision.ClientCapabilities(decode, Array.Empty<PlaybackOutputProfile>());
     }
 
     private static PlaybackDecision BuildViableDirectPlayDecision() => PlaybackDecision.DirectPlay(

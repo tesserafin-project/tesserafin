@@ -1,3 +1,4 @@
+using Reefin.Playback.Contract.Diagnostics;
 using Reefin.Playback.Decision;
 
 namespace Reefin.MediaEncoding.Playback;
@@ -20,8 +21,17 @@ namespace Reefin.MediaEncoding.Playback;
 /// </param>
 /// <param name="PayloadSizeBytes">
 /// The request's <c>Content-Length</c> header value, or <see langword="null"/> when the header is
-/// absent. Read from the header only - request buffering is NOT enabled to measure the body.
+/// absent. Read from the header only - the header read is not what buffers the body.
+/// </param>
+/// <param name="StructuralScan">
+/// Issue #75 slice 75b: the result of the bounded, single-pass structural scan of the raw request
+/// body, or <see langword="null"/> when the request was not scanned. The scan runs on the Reefin.Api
+/// side, strictly before model binding and ONLY behind the same shadow gate + sampling this capture
+/// scope is opened under, and its closed result rides in through this member so the shadow run can
+/// fold it into the retained <see cref="ContractMappingDiagnostic"/>. Nothing here can carry a
+/// client key or value - see <see cref="ContractStructuralScan"/>.
 /// </param>
 public sealed record ShadowCaptureInputs(
     ClientCapabilities? DeclaredCapabilities,
-    long? PayloadSizeBytes);
+    long? PayloadSizeBytes,
+    ContractStructuralScan? StructuralScan = null);

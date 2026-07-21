@@ -2963,8 +2963,17 @@
             "nullable": true,
             "type": "integer"
           },
+          "StructuralScan": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractStructuralScan"
+              }
+            ],
+            "description": "Issue #75 slice 75b: the result of the bounded, single-pass structural scan of the raw request\nbody, or null when no scan ran for this diagnostic - which is the case for\nevery slice-75a-only diagnostic, and whenever the request was not sampled for scanning. Trailing\nand nullable so every slice-75a call site and OpenAPI consumer keeps working unchanged; a\nnon-null value is the signal that the scan actually executed (a silently-disabled scan cannot\npresent one). Like the rest of this type, its entire closure is enums and integers - see\nReefin.Playback.Contract.Diagnostics.ContractStructuralScan.",
+            "nullable": true
+          },
           "UnknownMemberTotal": {
-            "description": "ALWAYS null in this iteration, and that is the honest answer rather than a\nmissing feature. Counting members the client sent that the contract does not declare requires\nreading the raw body structurally; Option 1 does not do that, so the server does not KNOW the\nnumber. Reporting 0 would be a lying zero - indistinguishable from \u0022the client sent no unknown\nmembers\u0022, which the server cannot establish. Issue #75 permits a count and forbids names; this\nfield is the count-shaped slot, left null until a source exists that can fill it truthfully.",
+            "description": "The count-shaped slot slice 75a leaves null: the 75a mapping comparison does\nnot read the raw body, so on a diagnostic that carries no Reefin.Playback.Contract.Diagnostics.ContractMappingDiagnostic.StructuralScan this is\nhonestly null (unknown, never a lying 0). Slice 75b\u0027s bounded structural scan reports its own\ntruthful total on Reefin.Playback.Contract.Diagnostics.ContractStructuralScan.UnknownMemberTotal instead of mutating\nthis field, so every slice-75a assertion that this stays null keeps holding while the scanned\ntotal is still available (on Reefin.Playback.Contract.Diagnostics.ContractMappingDiagnostic.StructuralScan) when a scan actually ran.",
             "format": "int32",
             "nullable": true,
             "type": "integer"
@@ -2984,7 +2993,8 @@
           "SubtitleDelivery",
           "SupportsHls",
           "SupportsDash",
-          "OutputProfiles"
+          "OutputProfiles",
+          "Request"
         ],
         "type": "string"
       },
@@ -3009,7 +3019,8 @@
               "SubtitleDelivery",
               "SupportsHls",
               "SupportsDash",
-              "OutputProfiles"
+              "OutputProfiles",
+              "Request"
             ]
           },
           "Leaf": {
@@ -3029,7 +3040,8 @@
               "SubtitleDelivery",
               "SupportsHls",
               "SupportsDash",
-              "OutputProfiles"
+              "OutputProfiles",
+              "Request"
             ]
           },
           "Root": {
@@ -3049,8 +3061,65 @@
               "SubtitleDelivery",
               "SupportsHls",
               "SupportsDash",
-              "OutputProfiles"
+              "OutputProfiles",
+              "Request"
             ]
+          }
+        },
+        "type": "object"
+      },
+      "ContractStructuralScan": {
+        "additionalProperties": false,
+        "description": "Issue #75 slice 75b: the result of the BOUNDED, SINGLE-PASS structural scan of ONE raw playback\nrequest body - what the server can honestly count about members the client sent, without ever\nmaterializing a key, a value, an excerpt, a truncated form, or a hash of any of them.",
+        "properties": {
+          "BodyLimitExceeded": {
+            "description": "True when the request body exceeded the scan\u0027s explicit size limit, so the scan stopped without\nproducing counts. The bound is on how much the scan reads; model binding is unaffected and still\nsees the whole body. Lets \u0022the body was too large to scan\u0022 be told apart from \u0022the body was\nscanned and had no unknown members\u0022.",
+            "type": "boolean"
+          },
+          "ScannedBodyByteCount": {
+            "description": "The number of bytes the scan actually read from the request body. This is the honest measured\nsize when the \u0060Content-Length\u0060 header was absent (a chunked/streamed request), where\nReefin.Playback.Contract.Diagnostics.ContractMappingDiagnostic.PayloadSizeBytes is null. A count of bytes, never a byte\nof content. Null only if the body was not read (see Reefin.Playback.Contract.Diagnostics.ContractStructuralScan.BodyLimitExceeded).",
+            "format": "int64",
+            "nullable": true,
+            "type": "integer"
+          },
+          "UnknownMemberTotal": {
+            "description": "The total number of members the client sent, anywhere the scan looked, that the contract does\nnot declare. A count, never a name. 0 is meaningful here (unlike on\nReefin.Playback.Contract.Diagnostics.ContractMappingDiagnostic.UnknownMemberTotal): the scan actually ran, so \u0022the\nclient sent no unknown members\u0022 is a fact the server can now establish rather than a lying zero.",
+            "format": "int32",
+            "type": "integer"
+          },
+          "UnknownMembers": {
+            "description": "The per-container breakdown of Reefin.Playback.Contract.Diagnostics.ContractStructuralScan.UnknownMemberTotal: one entry per known container\nthat had at least one unknown member directly inside it. Empty when\nReefin.Playback.Contract.Diagnostics.ContractStructuralScan.UnknownMemberTotal is 0. The entries sum to Reefin.Playback.Contract.Diagnostics.ContractStructuralScan.UnknownMemberTotal.",
+            "items": {
+              "$ref": "#/components/schemas/ContractUnknownMemberCount"
+            },
+            "type": "array"
+          },
+          "WrongTypes": {
+            "description": "Closed-vocabulary Reefin.Playback.Contract.Diagnostics.ContractIssueCode.WrongType issues for KNOWN members only: a\nmember the contract declares as numeric that arrived as a JSON string. The scan judges by JSON\ntoken kind alone and never reads the string\u0027s content. Which of these actually SURVIVES to a\nretained diagnostic is bounded by the binder: only a numeric-looking string (e.g. \u0060\u002264000\u0022\u0060)\nbinds under \u0060NumberHandling.AllowReadingFromString\u0060 and lets the request reach the shadow\npublication point; a non-numeric string 400s at the binder, so its (leak-free) WrongType is\nobserved by the scan but never retained. Either way the operator learns only \u0022a known numeric\nmember arrived string-typed under this path\u0022, never which value.",
+            "items": {
+              "$ref": "#/components/schemas/ContractFieldIssue"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "ContractUnknownMemberCount": {
+        "additionalProperties": false,
+        "description": "Issue #75 slice 75b: HOW MANY members the client sent that the contract does not declare, under\none known container named by a server-owned Reefin.Playback.Contract.Diagnostics.ContractPath - never WHICH members,\nand never a single character of any of their names.",
+        "properties": {
+          "Count": {
+            "description": "How many unknown members appeared directly under Path. Always \u003E 0 - a container with no unknown members produces no entry.",
+            "format": "int32",
+            "type": "integer"
+          },
+          "Path": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractPath"
+              }
+            ],
+            "description": "The known container the unknown members appeared inside."
           }
         },
         "type": "object"

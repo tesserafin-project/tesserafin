@@ -362,10 +362,14 @@ public sealed class ShadowPlaybackSessionPlanner : IPlaybackSessionPlanner
         //   - a request rejected earlier (validation, unknown item, no viable plan) never gets here,
         //     so no diagnostic is ever created for one.
         // Returns null on the legacy MediaInfoHelper path, which supplies no ShadowCaptureInputs.
+        // Issue #75 slice 75b: the structural scan the Reefin.Api resource filter captured into this
+        // same ambient scope (behind the same shadow gate + sampling) rides through CapturedInputs
+        // and is folded into the diagnostic here - null whenever the request was not scanned.
         var contractMapping = ContractMappingDiagnosticFactory.Create(
             _diagnosticsStore.CapturedInputs?.DeclaredCapabilities,
             prepared.Capabilities,
-            _diagnosticsStore.CapturedInputs?.PayloadSizeBytes);
+            _diagnosticsStore.CapturedInputs?.PayloadSizeBytes,
+            _diagnosticsStore.CapturedInputs?.StructuralScan);
 
         _diagnosticsStore.Publish(new ShadowDiagnosticRecord(
             decision,

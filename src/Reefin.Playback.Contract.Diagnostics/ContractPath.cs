@@ -39,4 +39,22 @@ public readonly record struct ContractPath(
 
     /// <summary>Gets the path to the declared transcoding output targets.</summary>
     public static ContractPath OutputProfiles => new(ContractMember.Capabilities, ContractMember.OutputProfiles, ContractMember.None);
+
+    /// <summary>
+    /// Gets the path naming the request body root as a container (issue #75 slice 75b). A top-level
+    /// member the client sent that the contract does not declare is attributed here.
+    /// </summary>
+    public static ContractPath Request => new(ContractMember.Request, ContractMember.None, ContractMember.None);
+
+    /// <summary>
+    /// Gets the path naming the declared client-capabilities object as a container (issue #75 slice
+    /// 75b). An unknown member directly under <c>Capabilities</c> is attributed here.
+    /// </summary>
+    public static ContractPath Capabilities => new(ContractMember.Capabilities, ContractMember.None, ContractMember.None);
+
+    /// <summary>
+    /// Gets the path naming the declared decode-capabilities object as a container (issue #75 slice
+    /// 75b). An unknown member directly under <c>Capabilities.Decode</c> is attributed here.
+    /// </summary>
+    public static ContractPath Decode => new(ContractMember.Capabilities, ContractMember.Decode, ContractMember.None);
 }
