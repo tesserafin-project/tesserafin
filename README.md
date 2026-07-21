@@ -5,7 +5,7 @@
 
 <p align="center">
 <a href="LICENSE">
-<img alt="GPL 2.0 License" src="https://img.shields.io/badge/license-GPL--2.0--only-blue.svg"/>
+<img alt="GPL-2.0-or-later License" src="https://img.shields.io/badge/license-GPL--2.0--or--later-blue.svg"/>
 </a>
 </p>
 
