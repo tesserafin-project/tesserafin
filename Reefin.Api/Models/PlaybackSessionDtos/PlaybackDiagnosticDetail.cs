@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Reefin.MediaEncoding.Playback;
+using Reefin.Playback.Contract.Diagnostics;
 using Reefin.Playback.Decision;
 using Reefin.Playback.Shadow;
 
@@ -68,6 +69,20 @@ namespace Reefin.Api.Models.PlaybackSessionDtos;
 /// <see cref="Id"/> (per session) nor <see cref="DiagnosticTimelineEntry.RequestId"/> (per request,
 /// issue #42) can do. Opaque: displayed verbatim, never parsed.
 /// </param>
+/// <param name="ContractMapping">
+/// Issue #75 (Option 1): what the client's DECLARED capabilities lost on their way through the
+/// request mapping, in a strictly closed server-owned vocabulary - or <see langword="null"/> when no
+/// shadow diagnostic was retained (shadow mode is off by default), or when the session was planned
+/// by a caller that declares no domain capabilities (the legacy path). Additive and nullable: a
+/// client that ignores this member sees no change.
+/// <para>
+/// This member, unlike <see cref="Capabilities"/> and <see cref="PlaybackAttemptId"/> (both of which
+/// intentionally echo client-supplied data and are catalogued as such in issue #80), cannot carry a
+/// client-supplied value at all: its entire transitive type closure is enums, booleans and integers.
+/// See <see cref="ContractMappingDiagnostic"/> for the closure guarantee and for an explicit account
+/// of what Option 1 does NOT observe - unknown members above all.
+/// </para>
+/// </param>
 public sealed record PlaybackDiagnosticDetail(
     Guid Id,
     MediaKind Kind,
@@ -86,4 +101,5 @@ public sealed record PlaybackDiagnosticDetail(
     DiagnosticComparison? Comparison,
     IReadOnlyList<DiagnosticTimelineEntry> Timeline,
     PlaybackLiveWiringOutcome? LiveWiring = null,
-    string? PlaybackAttemptId = null);
+    string? PlaybackAttemptId = null,
+    ContractMappingDiagnostic? ContractMapping = null);

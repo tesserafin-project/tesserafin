@@ -190,7 +190,13 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
         PlaybackPlan? plan;
         ShadowDiagnosticRecord? captured;
         V2PlanRecord? v2Captured;
-        using (_diagnosticsStore.BeginCapture())
+        // Issue #75: inherit whatever ShadowCaptureInputs an ENCLOSING scope was opened with
+        // (PlaybackSessionsController opens one carrying the v2 request body's declared
+        // capabilities and Content-Length). PR113a's nesting rule means this inner scope would
+        // otherwise shadow the outer one with null inputs, and the shadow run - which publishes
+        // into the innermost scope - would see nothing. Null everywhere else, which is exactly the
+        // legacy MediaInfoHelper path's situation.
+        using (_diagnosticsStore.BeginCapture(_diagnosticsStore.CapturedInputs))
         using (_v2PlanStore.BeginCapture())
         {
             plan = Plan(request);
@@ -254,7 +260,13 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
         PlaybackPlan? plan;
         ShadowDiagnosticRecord? captured;
         V2PlanRecord? v2Captured;
-        using (_diagnosticsStore.BeginCapture())
+        // Issue #75: inherit whatever ShadowCaptureInputs an ENCLOSING scope was opened with
+        // (PlaybackSessionsController opens one carrying the v2 request body's declared
+        // capabilities and Content-Length). PR113a's nesting rule means this inner scope would
+        // otherwise shadow the outer one with null inputs, and the shadow run - which publishes
+        // into the innermost scope - would see nothing. Null everywhere else, which is exactly the
+        // legacy MediaInfoHelper path's situation.
+        using (_diagnosticsStore.BeginCapture(_diagnosticsStore.CapturedInputs))
         using (_v2PlanStore.BeginCapture())
         {
             plan = Plan(request);

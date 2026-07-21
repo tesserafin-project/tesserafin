@@ -352,6 +352,21 @@ public sealed class ShadowPlaybackSessionPlanner : IPlaybackSessionPlanner
         // its time budget. PlaybackSessionManager (the only synchronous caller of Plan(), which this
         // call is nested inside) reads this back post-hoc once it has minted/known the real session
         // id; the no-op default store simply drops it.
+        // Issue #75 (Option 1): the closed contract-mapping diagnostic, computed HERE and nowhere
+        // else. Three properties follow from that placement, and all three are required:
+        //   - it is behind the EXISTING shadow gate: RunShadow is only reached when the effective
+        //     mode is not Legacy and this call was not sampled out, so it is off by default;
+        //   - it is strictly AFTER the shadow publication point's timing/metrics work, so it cannot
+        //     perturb the measured shadow duration, and inside CompleteShadow's catch-all, so it can
+        //     never reach the live path;
+        //   - a request rejected earlier (validation, unknown item, no viable plan) never gets here,
+        //     so no diagnostic is ever created for one.
+        // Returns null on the legacy MediaInfoHelper path, which supplies no ShadowCaptureInputs.
+        var contractMapping = ContractMappingDiagnosticFactory.Create(
+            _diagnosticsStore.CapturedInputs?.DeclaredCapabilities,
+            prepared.Capabilities,
+            _diagnosticsStore.CapturedInputs?.PayloadSizeBytes);
+
         _diagnosticsStore.Publish(new ShadowDiagnosticRecord(
             decision,
             legacyVector,
@@ -361,7 +376,8 @@ public sealed class ShadowPlaybackSessionPlanner : IPlaybackSessionPlanner
             prepared.Sources,
             prepared.Constraints,
             prepared.Kind,
-            DateTimeOffset.UtcNow));
+            DateTimeOffset.UtcNow,
+            contractMapping));
     }
 
     private void LogPeriodicSummaryIfAny(ShadowMetricsSnapshot? summary)

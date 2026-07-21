@@ -21,7 +21,7 @@ public interface IV2PlanStore
 {
     /// <summary>
     /// Opens a fresh ambient capture scope for one synchronous planning call. Nesting restores the
-    /// enclosing scope's state on dispose, same as <see cref="IShadowDiagnosticsStore.BeginCapture"/>.
+    /// enclosing scope's state on dispose, same as <see cref="IShadowDiagnosticsStore.BeginCapture()"/>.
     /// </summary>
     /// <returns>A disposable that closes the scope, restoring whatever scope (if any) enclosed it.</returns>
     IDisposable BeginCapture();

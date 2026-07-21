@@ -8,6 +8,9 @@
 
   <ItemGroup>
     <ProjectReference Include="../Reefin.Playback.Decision/Reefin.Playback.Decision.csproj" />
+    <!-- Issue #75: the closed diagnostic vocabulary ContractMappingDiagnosticFactory produces. That
+         assembly references nothing itself; the string handling the comparison needs stays here. -->
+    <ProjectReference Include="../Reefin.Playback.Contract.Diagnostics/Reefin.Playback.Contract.Diagnostics.csproj" />
     <ProjectReference Include="../../Reefin.Model/Reefin.Model.csproj" />
     <!-- PlaybackPlan (the legacy-side projection input) lives in Reefin.Controller, alongside
          IPlaybackSessionPlanner. No cycle: Reefin.Controller does not reference Reefin.MediaEncoding
