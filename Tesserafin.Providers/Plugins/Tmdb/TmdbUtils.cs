@@ -63,10 +63,10 @@ namespace Tesserafin.Providers.Plugins.Tmdb
         }
 
         /// <summary>
-        /// Maps the TMDb provided roles for crew members to Reefin roles.
+        /// Maps the TMDb provided roles for crew members to Tesserafin roles.
         /// </summary>
-        /// <param name="crew">Crew member to map against the Reefin person types.</param>
-        /// <returns>The Reefin person type.</returns>
+        /// <param name="crew">Crew member to map against the Tesserafin person types.</param>
+        /// <returns>The Tesserafin person type.</returns>
         public static PersonKind MapCrewToPersonType(Crew crew)
         {
             if (string.Equals(crew.Department, "directing", StringComparison.OrdinalIgnoreCase)

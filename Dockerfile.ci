@@ -1,4 +1,4 @@
-# CI image for Reefin — local, reproducible build/test environment.
+# CI image for Tesserafin — local, reproducible build/test environment.
 #
 # This replaces the (currently exhausted) hosted GitHub Actions quota as the
 # mandatory merge gate. See docs/local-ci.md for the full story and ci/run.sh

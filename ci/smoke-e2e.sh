@@ -5,7 +5,7 @@
 #
 # WHAT THIS PROVES, PRECISELY — read this before trusting a green run:
 #
-#   A REAL, booted Reefin server (Tesserafin.Server.Integration.Tests/EndToEnd/E2eApplicationFactory.cs -
+#   A REAL, booted Tesserafin server (Tesserafin.Server.Integration.Tests/EndToEnd/E2eApplicationFactory.cs -
 #   a real ffmpeg/ffprobe binary wired in, unlike the rest of that project's TesserafinApplicationFactory,
 #   which explicitly skips ffmpeg validation), driven only through its public HTTP surface:
 #     POST Playback/Sessions -> GET Playback/Sessions/{id}/Stream -> a real HTTP GET of the URL the

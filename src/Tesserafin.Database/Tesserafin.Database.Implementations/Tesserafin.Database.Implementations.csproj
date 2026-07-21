@@ -11,7 +11,7 @@
   </ItemGroup>
 
   <PropertyGroup>
-    <Authors>Reefin Contributors</Authors>
+    <Authors>Tesserafin Contributors</Authors>
     <PackageId>Tesserafin.Database.Implementations</PackageId>
     <VersionPrefix>10.11.0</VersionPrefix>
     <RepositoryUrl>https://github.com/tesserafin/tesserafin</RepositoryUrl>

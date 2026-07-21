@@ -24,7 +24,7 @@ public interface IBackupService
     Task<BackupManifestDto[]> EnumerateBackups();
 
     /// <summary>
-    /// Gets a single backup manifest if the path defines a valid Reefin backup archive.
+    /// Gets a single backup manifest if the path defines a valid Tesserafin backup archive.
     /// </summary>
     /// <param name="archivePath">The path to be loaded.</param>
     /// <returns>The containing backup manifest or null if not existing or compatiable.</returns>

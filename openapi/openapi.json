@@ -8074,7 +8074,7 @@
             "type": "boolean"
           },
           "BaseUrl": {
-            "description": "Gets or sets a value used to specify the URL prefix that your Reefin instance can be accessed at.",
+            "description": "Gets or sets a value used to specify the URL prefix that your Tesserafin instance can be accessed at.",
             "type": "string"
           },
           "CertificatePassword": {
@@ -8136,7 +8136,7 @@
             "type": "array"
           },
           "LocalNetworkAddresses": {
-            "description": "Gets or sets the interface addresses which Reefin will bind to. If empty, all interfaces will be used.",
+            "description": "Gets or sets the interface addresses which Tesserafin will bind to. If empty, all interfaces will be used.",
             "items": {
               "type": "string"
             },
@@ -18140,7 +18140,7 @@
     }
   },
   "info": {
-    "title": "Reefin API",
+    "title": "Tesserafin API",
     "version": "12.0.0",
     "x-reefin-version": "12.0.0"
   },

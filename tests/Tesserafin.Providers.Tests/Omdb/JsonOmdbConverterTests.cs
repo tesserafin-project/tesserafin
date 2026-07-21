@@ -56,7 +56,7 @@ namespace Tesserafin.Providers.Tests.Omdb
         }
 
         [Theory]
-        [InlineData("\"Reefin\"", "Reefin")]
+        [InlineData("\"Tesserafin\"", "Tesserafin")]
         public void Deserialize_Normal_String_Success(string input, string expected)
         {
             var result = JsonSerializer.Deserialize<string?>(input, _options);

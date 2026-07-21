@@ -44,7 +44,7 @@ namespace Tesserafin.Providers.Plugins.StudioImages
         public override string Name => "Studio Images";
 
         /// <inheritdoc/>
-        public override string Description => "Get artwork for studios from any Reefin-compatible repository.";
+        public override string Description => "Get artwork for studios from any Tesserafin-compatible repository.";
 
         // TODO remove when plugin removed from server.
 

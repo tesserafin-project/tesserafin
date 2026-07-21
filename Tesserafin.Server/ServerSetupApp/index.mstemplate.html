@@ -10,10 +10,10 @@
         {{#IF isInReportingMode}}
         ❌
         {{/IF}}
-        Reefin
+        Tesserafin
     </title>
     <style>
-        /* Noto Sans (latin), matching the Reefin web client font. Embedded so the page renders
+        /* Noto Sans (latin), matching the Tesserafin web client font. Embedded so the page renders
            identically before the web client is available. */
         @font-face {
             font-family: "Noto Sans";
@@ -427,7 +427,7 @@
 
 <body>
     <div class="page">
-                    <svg class="logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 251 72" fill="none" role="img" aria-label="Reefin">
+                    <svg class="logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 251 72" fill="none" role="img" aria-label="Tesserafin">
                 <g clip-path="url(#a)">
                     <path fill="url(#b)" d="M24.212 49.158C22.66 46.042 32.838 27.588 36 27.588c3.167.002 13.323 18.488 11.788 21.57-1.534 3.082-22.025 3.116-23.576 0" />
                     <path fill="url(#c)" fill-rule="evenodd" d="M.482 64.995C-4.195 55.605 26.477 0 36 0c9.533 0 40.153 55.713 35.527 64.995s-66.368 9.39-71.045 0m12.254-8.148c3.064 6.152 43.518 6.084 46.548 0 3.03-6.086-17.032-42.586-23.275-42.586S9.671 50.694 12.736 56.847" clip-rule="evenodd" />
@@ -456,11 +456,11 @@
                 <div class="mdl-spinner__layer mdl-spinner__layer-3"><div class="mdl-spinner__circle-clipper mdl-spinner__left"><div class="mdl-spinner__circle mdl-spinner__circleLeft"></div></div><div class="mdl-spinner__circle-clipper mdl-spinner__right"><div class="mdl-spinner__circle mdl-spinner__circleRight"></div></div></div>
                 <div class="mdl-spinner__layer mdl-spinner__layer-4"><div class="mdl-spinner__circle-clipper mdl-spinner__left"><div class="mdl-spinner__circle mdl-spinner__circleLeft"></div></div><div class="mdl-spinner__circle-clipper mdl-spinner__right"><div class="mdl-spinner__circle mdl-spinner__circleRight"></div></div></div>
             </div>
-            <p class="status-text">Reefin is still starting. Please wait&hellip; {{currentActivity}}</p>
+            <p class="status-text">Tesserafin is still starting. Please wait&hellip; {{currentActivity}}</p>
         </div>
         {{#ELSE}}
         <div class="status is-error">
-            <p class="status-text">Reefin has encountered an error and was not able to start.</p>
+            <p class="status-text">Tesserafin has encountered an error and was not able to start.</p>
         </div>
         {{/ELSE}}
         {{/IF}}
@@ -602,7 +602,7 @@
                     status.classList.add('is-success');
                 }
                 if (statusText) {
-                    statusText.textContent = 'Reefin started successfully.';
+                    statusText.textContent = 'Tesserafin started successfully.';
                 }
                 if (!status) {
                     window.location.reload();
@@ -643,7 +643,7 @@
                     var continueButton = document.createElement('button');
                     continueButton.type = 'button';
                     continueButton.className = 'jf-button jf-button-primary';
-                    continueButton.textContent = 'Continue to Reefin';
+                    continueButton.textContent = 'Continue to Tesserafin';
                     continueButton.addEventListener('click', function () {
                         window.location.reload();
                     });

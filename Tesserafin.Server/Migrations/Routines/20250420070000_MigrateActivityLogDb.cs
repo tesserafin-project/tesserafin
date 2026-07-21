@@ -77,7 +77,7 @@ namespace Tesserafin.Server.Migrations.Routines
 
                 using var userDbConnection = new SqliteConnection($"Filename={Path.Combine(dataPath, "users.db")}");
                 userDbConnection.Open();
-                _logger.LogWarning("Migrating the activity database may take a while, do not stop Reefin.");
+                _logger.LogWarning("Migrating the activity database may take a while, do not stop Tesserafin.");
                 using var dbContext = _provider.CreateDbContext();
 
                 // Make sure that the database is empty in case of failed migration due to power outages, etc.

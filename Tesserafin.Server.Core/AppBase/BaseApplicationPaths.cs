@@ -115,7 +115,7 @@ namespace Tesserafin.Server.Core.AppBase
                 File.WriteAllText(
                     tagPath,
                     "Signature: 8a477f597d28d172789f06886806bc55\n"
-                    + "# This file is a cache directory tag created by Reefin.\n"
+                    + "# This file is a cache directory tag created by Tesserafin.\n"
                     + "# For information about cache directory tags, see:\n"
                     + "#\thttps://bford.info/cachedir/\n");
             }

@@ -2,7 +2,7 @@
 
 This shall provide context on how to work with entity frameworks multi provider migration feature.
 
-Reefin will support multiple database providers in the future, namely SQLite as its default and the experimental PostgreSQL.
+Tesserafin will support multiple database providers in the future, namely SQLite as its default and the experimental PostgreSQL.
 
 Each provider has its own set of migrations, as they contain provider specific instructions to migrate the specific changes to their respective systems.
 
@@ -12,12 +12,12 @@ When creating a new migration, you always have to create migrations for all prov
 dotnet ef migrations add MIGRATION_NAME --project "PATH_TO_PROJECT" -- --provider PROVIDER_KEY
 ```
 
-with SQLite currently being the only supported provider, you need to run the Entity Framework tool with the correct project to tell EFCore where to store the migrations and the correct provider key to tell Reefin to load that provider.
+with SQLite currently being the only supported provider, you need to run the Entity Framework tool with the correct project to tell EFCore where to store the migrations and the correct provider key to tell Tesserafin to load that provider.
 
 The example is made from the root folder of the project e.g for codespaces `/workspaces/reefin`
 
 ```cmd
-dotnet ef migrations add {MIGRATION_NAME} --project "src/Tesserafin.Database/Tesserafin.Database.Providers.Sqlite" --output-dir Migrations -- --migration-provider Reefin-SQLite
+dotnet ef migrations add {MIGRATION_NAME} --project "src/Tesserafin.Database/Tesserafin.Database.Providers.Sqlite" --output-dir Migrations -- --migration-provider Tesserafin-SQLite
 ```
 
 If you get the error: `Run "dotnet tool restore" to make the "dotnet-ef" command available.` Run `dotnet restore`.

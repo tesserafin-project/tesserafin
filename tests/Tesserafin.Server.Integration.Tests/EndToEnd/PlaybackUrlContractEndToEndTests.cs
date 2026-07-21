@@ -25,7 +25,7 @@ namespace Tesserafin.Server.Integration.Tests.EndToEnd;
 
 /// <summary>
 /// PR119: the end-to-end proof <c>ci/smoke.sh</c>'s own header names as a real, deliberate gap left
-/// by PR117 - a real, booted Reefin server, driven only through its public HTTP surface, planning a
+/// by PR117 - a real, booted Tesserafin server, driven only through its public HTTP surface, planning a
 /// session (<c>POST Playback/Sessions</c>), resolving the PR117 URL contract
 /// (<c>GET Playback/Sessions/{id}/Stream</c>), and then a real HTTP client fetching the URL the
 /// descriptor names, asserting it actually serves bytes - not just that the descriptor LOOKS right.

@@ -103,7 +103,7 @@ namespace Tesserafin.Server.Extensions
         }
 
         /// <summary>
-        /// Extension method for adding the Reefin API to the service collection.
+        /// Extension method for adding the Tesserafin API to the service collection.
         /// </summary>
         /// <param name="serviceCollection">The service collection.</param>
         /// <param name="pluginAssemblies">An IEnumerable containing all plugin assemblies with API controllers.</param>
@@ -207,7 +207,7 @@ namespace Tesserafin.Server.Extensions
                 var version = typeof(ApplicationHost).Assembly.GetName().Version?.ToString(3) ?? "0.0.1";
                 c.SwaggerDoc("api-docs", new OpenApiInfo
                 {
-                    Title = "Reefin API",
+                    Title = "Tesserafin API",
                     Version = version,
                     Extensions = new Dictionary<string, IOpenApiExtension>
                     {

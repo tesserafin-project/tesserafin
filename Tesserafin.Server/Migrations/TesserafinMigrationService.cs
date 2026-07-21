@@ -23,7 +23,7 @@ using Tesserafin.Server.ServerSetupApp;
 namespace Tesserafin.Server.Migrations;
 
 /// <summary>
-/// Handles Migration of the Reefin data structure.
+/// Handles Migration of the Tesserafin data structure.
 /// </summary>
 internal class TesserafinMigrationService
 {
@@ -107,7 +107,7 @@ internal class TesserafinMigrationService
             await using (dbContext.ConfigureAwait(false))
             {
                 var databaseCreator = dbContext.Database.GetService<IDatabaseCreator>() as IRelationalDatabaseCreator
-                    ?? throw new InvalidOperationException("Reefin does only support relational databases.");
+                    ?? throw new InvalidOperationException("Tesserafin does only support relational databases.");
                 if (!await databaseCreator.ExistsAsync().ConfigureAwait(false))
                 {
                     await databaseCreator.CreateAsync().ConfigureAwait(false);
@@ -395,7 +395,7 @@ internal class TesserafinMigrationService
         {
             logger.LogInformation("A migration will attempt to modify the reefin.db, will attempt to backup the file now.");
             _backupKey = (_backupKey.LibraryDb, await _reefinDatabaseProvider.MigrationBackupFast(CancellationToken.None).ConfigureAwait(false), _backupKey.FullBackup);
-            logger.LogInformation("Reefin database has been backed up as {BackupPath}", _backupKey.TesserafinDb);
+            logger.LogInformation("Tesserafin database has been backed up as {BackupPath}", _backupKey.TesserafinDb);
         }
 
         if (_backupService is not null && (backupInstruction.Metadata || backupInstruction.Subtitles || backupInstruction.Trickplay))

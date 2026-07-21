@@ -21,7 +21,7 @@ public interface ITesserafinDatabaseProvider
     /// Initialises reefins EFCore database access.
     /// </summary>
     /// <param name="options">The EFCore database options.</param>
-    /// <param name="databaseConfiguration">The Reefin database options.</param>
+    /// <param name="databaseConfiguration">The Tesserafin database options.</param>
     void Initialise(DbContextOptionsBuilder options, DatabaseConfigurationOptions databaseConfiguration);
 
     /// <summary>

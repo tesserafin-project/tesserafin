@@ -26,7 +26,7 @@ public class ActivityManager : IActivityManager
     /// <summary>
     /// Initializes a new instance of the <see cref="ActivityManager"/> class.
     /// </summary>
-    /// <param name="provider">The Reefin database provider.</param>
+    /// <param name="provider">The Tesserafin database provider.</param>
     public ActivityManager(IDbContextFactory<TesserafinDbContext> provider)
     {
         _provider = provider;

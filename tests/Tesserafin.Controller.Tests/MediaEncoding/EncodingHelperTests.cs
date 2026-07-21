@@ -75,7 +75,7 @@ public class EncodingHelperTests
     public void GetMapArgs_SecondExternalSrt_StillMaps1Colon0()
     {
         // Two separate .srt files — selecting the second one still maps 1:0
-        // because Reefin feeds only the selected file as ffmpeg input 1.
+        // because Tesserafin feeds only the selected file as ffmpeg input 1.
         var ext1 = new MediaStream
         {
             Index = 2,

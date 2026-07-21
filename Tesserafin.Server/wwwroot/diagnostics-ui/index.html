@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>Reefin — Playback Diagnostics</title>
+<title>Tesserafin — Playback Diagnostics</title>
 <style>
   :root {
     color-scheme: dark;
@@ -255,7 +255,7 @@
 <body>
 
 <header>
-  <h1>Reefin · Playback Diagnostics</h1>
+  <h1>Tesserafin · Playback Diagnostics</h1>
   <div class="spacer"></div>
   <div class="field-group">
     <input type="password" id="token-input" placeholder="Access token (MediaBrowser Token)" autocomplete="off">
@@ -293,7 +293,7 @@
 
   <section id="detail-view" style="display:none;"></section>
 
-  <footer>Reefin admin-only diagnostics UI · not part of the stable API contract · PR114</footer>
+  <footer>Tesserafin admin-only diagnostics UI · not part of the stable API contract · PR114</footer>
 </main>
 
 <script>
@@ -370,7 +370,7 @@
     var token = getToken();
     var headers = { "Accept": "application/json" };
     if (token) {
-      headers["Authorization"] = 'MediaBrowser Client="Reefin Diagnostics UI", Device="Browser", DeviceId="reefin-diagnostics-ui", Version="1", Token="' + token + '"';
+      headers["Authorization"] = 'MediaBrowser Client="Tesserafin Diagnostics UI", Device="Browser", DeviceId="reefin-diagnostics-ui", Version="1", Token="' + token + '"';
     }
     return headers;
   }

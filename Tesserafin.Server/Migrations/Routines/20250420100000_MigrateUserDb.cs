@@ -64,7 +64,7 @@ public class MigrateUserDb : IMigrationRoutine
             return;
         }
 
-        _logger.LogInformation("Migrating the user database may take a while, do not stop Reefin.");
+        _logger.LogInformation("Migrating the user database may take a while, do not stop Tesserafin.");
 
         using (var connection = new SqliteConnection($"Filename={userDbPath}"))
         {

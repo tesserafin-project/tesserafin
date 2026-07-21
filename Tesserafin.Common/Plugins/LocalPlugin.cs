@@ -16,7 +16,7 @@ namespace Tesserafin.Common.Plugins
         /// Initializes a new instance of the <see cref="LocalPlugin"/> class.
         /// </summary>
         /// <param name="path">The plugin path.</param>
-        /// <param name="isSupported"><b>True</b> if Reefin supports this version of the plugin.</param>
+        /// <param name="isSupported"><b>True</b> if Tesserafin supports this version of the plugin.</param>
         /// <param name="manifest">The manifest record for this plugin, or null if one does not exist.</param>
         public LocalPlugin(string path, bool isSupported, PluginManifest manifest)
         {
@@ -68,7 +68,7 @@ namespace Tesserafin.Common.Plugins
         public IPlugin? Instance { get; set; }
 
         /// <summary>
-        /// Gets a value indicating whether Reefin supports this version of the plugin, and it's enabled.
+        /// Gets a value indicating whether Tesserafin supports this version of the plugin, and it's enabled.
         /// </summary>
         public bool IsEnabledAndSupported => _supported && Manifest.Status >= PluginStatus.Active;
 

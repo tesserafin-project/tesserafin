@@ -72,7 +72,7 @@ public class BoxSetMetadataService : MetadataService<BoxSet, BoxSetInfo>
 
         if (mergeMetadataSettings)
         {
-            // Only merge LinkedChildren from metadata for external collections (not managed by Reefin).
+            // Only merge LinkedChildren from metadata for external collections (not managed by Tesserafin).
             // For internal collections, the database LinkedChildren table is the source of truth.
             var targetPath = targetItem.Path;
             if (!string.IsNullOrEmpty(targetPath)

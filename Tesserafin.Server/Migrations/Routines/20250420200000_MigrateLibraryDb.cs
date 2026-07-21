@@ -62,7 +62,7 @@ internal class MigrateLibraryDb : IDatabaseMigrationRoutine
     /// <inheritdoc/>
     public void Perform()
     {
-        _logger.LogInformation("Migrating the userdata from library.db may take a while, do not stop Reefin.");
+        _logger.LogInformation("Migrating the userdata from library.db may take a while, do not stop Tesserafin.");
 
         var dataPath = _paths.DataPath;
         var libraryDbPath = Path.Combine(dataPath, DbFilename);

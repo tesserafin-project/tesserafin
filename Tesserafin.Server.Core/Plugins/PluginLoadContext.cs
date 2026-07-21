@@ -4,7 +4,7 @@ using System.Runtime.Loader;
 namespace Tesserafin.Server.Core.Plugins;
 
 /// <summary>
-/// A custom <see cref="AssemblyLoadContext"/> for loading Reefin plugins.
+/// A custom <see cref="AssemblyLoadContext"/> for loading Tesserafin plugins.
 /// </summary>
 public class PluginLoadContext : AssemblyLoadContext
 {

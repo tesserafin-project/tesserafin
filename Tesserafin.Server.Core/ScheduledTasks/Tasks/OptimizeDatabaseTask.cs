@@ -11,7 +11,7 @@ using Tesserafin.Model.Tasks;
 namespace Tesserafin.Server.Core.ScheduledTasks.Tasks;
 
 /// <summary>
-/// Optimizes Reefin's database by issuing a VACUUM command.
+/// Optimizes Tesserafin's database by issuing a VACUUM command.
 /// </summary>
 public class OptimizeDatabaseTask : IScheduledTask, IConfigurableScheduledTask
 {
