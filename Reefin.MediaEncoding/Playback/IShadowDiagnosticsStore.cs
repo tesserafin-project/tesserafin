@@ -12,7 +12,7 @@ namespace Reefin.MediaEncoding.Playback;
 /// No session id exists yet when <see cref="ShadowPlaybackSessionPlanner"/> runs the shadow
 /// comparison (<c>Plan()</c> is called before <c>PlaybackSessionManager.StoreOrReplace</c> mints
 /// one), so correlation happens in two steps: the shadow run publishes its record into an ambient
-/// slot via <see cref="Publish"/>, scoped by <see cref="BeginCapture"/> around the synchronous
+/// slot via <see cref="Publish"/>, scoped by <see cref="BeginCapture()"/> around the synchronous
 /// <c>Plan()</c> call; the caller then reads it back with <see cref="TakeCaptured"/> and, once the
 /// real id is known, calls <see cref="Attach"/>. This works because the shadow run is entirely
 /// synchronous within that scope - an <see cref="System.Threading.AsyncLocal{T}"/> write in a
@@ -22,6 +22,12 @@ namespace Reefin.MediaEncoding.Playback;
 public interface IShadowDiagnosticsStore
 {
     /// <summary>
+    /// Gets the <see cref="ShadowCaptureInputs"/> the currently open ambient capture scope was
+    /// opened with, or <see langword="null"/> when no scope is open or the scope carries none.
+    /// </summary>
+    ShadowCaptureInputs? CapturedInputs { get; }
+
+    /// <summary>
     /// Opens a fresh ambient capture scope for one synchronous planning call, so no stale capture
     /// from an earlier call can leak into this one. PR113a: nesting is well-defined - opening a
     /// scope while another is already open on the same async flow suspends (rather than discards)
@@ -29,13 +35,24 @@ public interface IShadowDiagnosticsStore
     /// disposable is disposed.
     /// </summary>
     /// <returns>A disposable that closes the scope, restoring whatever scope (if any) enclosed it.</returns>
-    IDisposable BeginCapture();
+    IDisposable BeginCapture() => BeginCapture(null);
+
+    /// <summary>
+    /// Issue #75: opens a capture scope carrying the request-scoped facts the shadow run cannot
+    /// recover on its own (see <see cref="ShadowCaptureInputs"/>), readable during the scope through
+    /// <see cref="CapturedInputs"/>. Identical to <see cref="BeginCapture()"/> in every other
+    /// respect - same nesting semantics, same restore-on-dispose. Deliberately an overload of the
+    /// EXISTING ambient scope rather than a second channel: issue #75 forbids a new store.
+    /// </summary>
+    /// <param name="inputs">The request-scoped facts, or <see langword="null"/> for a caller that has none.</param>
+    /// <returns>A disposable that closes the scope, restoring whatever scope (if any) enclosed it.</returns>
+    IDisposable BeginCapture(ShadowCaptureInputs? inputs);
 
     /// <summary>
     /// Publishes a record into the currently open ambient capture scope. Called by
     /// <see cref="ShadowPlaybackSessionPlanner"/> only when a shadow run actually executed (behind
     /// its enabled/sampling gate) - never called otherwise, so <see cref="TakeCaptured"/> naturally
-    /// returns <see langword="null"/> when shadow mode is off. PR113a: if no <see cref="BeginCapture"/>
+    /// returns <see langword="null"/> when shadow mode is off. PR113a: if no <see cref="BeginCapture()"/>
     /// scope is currently open on this async flow, the record is silently dropped rather than
     /// thrown or stored somewhere unscoped - a lost shadow diagnostic must never fail live playback.
     /// </summary>

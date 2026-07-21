@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Reefin.Controller.MediaEncoding;
+using Reefin.Playback.Contract.Diagnostics;
 using Reefin.Playback.Decision;
 using Reefin.Playback.Shadow;
 
@@ -27,6 +28,16 @@ namespace Reefin.MediaEncoding.Playback;
 /// <param name="Constraints">The playback constraints the v2 engine was given.</param>
 /// <param name="Kind">Whether this was an audio or video planning call.</param>
 /// <param name="CapturedAt">When this record was produced.</param>
+/// <param name="ContractMapping">
+/// Issue #75 (Option 1): the structurally closed diagnostic of what the request lost on its way
+/// through the capability mapping, or <see langword="null"/> when there was nothing to compare -
+/// which is the case for every caller that is not the v2 request contract (the legacy
+/// <c>MediaInfoHelper</c> path declares no domain <see cref="ClientCapabilities"/>), and for every
+/// request rejected before this record is published. Trailing and optional so every pre-#75 call
+/// site keeps compiling. Unlike <see cref="Capabilities"/> - which intentionally echoes the client's
+/// declaration and is catalogued as such in issue #80 - NOTHING inside this member can carry a
+/// client-supplied value: see <c>Reefin.Playback.Contract.Diagnostics.ContractMappingDiagnostic</c>.
+/// </param>
 public sealed record ShadowDiagnosticRecord(
     PlaybackDecision Decision,
     DecisionVector LegacyVector,
@@ -36,4 +47,5 @@ public sealed record ShadowDiagnosticRecord(
     IReadOnlyList<MediaSourceSnapshot> Sources,
     PlaybackConstraints Constraints,
     PlaybackMediaKind Kind,
-    DateTimeOffset CapturedAt);
+    DateTimeOffset CapturedAt,
+    ContractMappingDiagnostic? ContractMapping = null);

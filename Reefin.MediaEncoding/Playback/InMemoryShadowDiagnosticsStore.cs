@@ -27,13 +27,19 @@ public sealed class InMemoryShadowDiagnosticsStore : IShadowDiagnosticsStore
     private readonly ConcurrentDictionary<PlaybackSessionId, ConcurrentQueue<PlaybackLifecycleEvent>> _events = new();
 
     /// <inheritdoc/>
-    public IDisposable BeginCapture()
+    public ShadowCaptureInputs? CapturedInputs => _ambient.Value?.Inputs;
+
+    /// <inheritdoc/>
+    public IDisposable BeginCapture() => BeginCapture(null);
+
+    /// <inheritdoc/>
+    public IDisposable BeginCapture(ShadowCaptureInputs? inputs)
     {
         // PR113a: save the enclosing scope's state (null if there is none) so a nested
         // BeginCapture - however unlikely in the current single-level Create/Patch usage -
         // restores the exact parent state on Dispose instead of clobbering it with null.
         var previous = _ambient.Value;
-        _ambient.Value = new AmbientState();
+        _ambient.Value = new AmbientState { Inputs = inputs };
         return new CaptureScope(_ambient, previous);
     }
 
@@ -82,6 +88,11 @@ public sealed class InMemoryShadowDiagnosticsStore : IShadowDiagnosticsStore
     private sealed class AmbientState
     {
         public ShadowDiagnosticRecord? Record { get; set; }
+
+        // Issue #75: set once when the scope opens and never mutated afterwards - unlike Record,
+        // which the shadow run publishes into. Nothing derived from it is retained beyond the
+        // counts/flags the published record's ContractMapping carries.
+        public ShadowCaptureInputs? Inputs { get; init; }
     }
 
     private sealed class CaptureScope : IDisposable

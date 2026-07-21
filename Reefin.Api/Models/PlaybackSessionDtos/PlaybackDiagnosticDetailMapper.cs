@@ -93,7 +93,11 @@ public static class PlaybackDiagnosticDetailMapper
             diagnostic is null ? null : MapComparison(diagnostic),
             BuildTimeline(session, events),
             liveWiring,
-            session.PlaybackAttemptId);
+            session.PlaybackAttemptId,
+            // Issue #75: passed straight through from the retained record - this mapper computes
+            // nothing here and has nothing to filter, because the type it forwards is structurally
+            // incapable of carrying a client-supplied value.
+            diagnostic?.ContractMapping);
     }
 
     private static DiagnosticComparison MapComparison(ShadowDiagnosticRecord diagnostic)

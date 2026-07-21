@@ -47,6 +47,7 @@ public class PlaybackSessionsController : BaseReefinApiController
     private readonly IPlaybackLiveStreamResolver _liveStreamResolver;
     private readonly IPlaybackLiveWiringDiagnosticsStore _liveWiringDiagnosticsStore;
     private readonly IMediaEncoder _mediaEncoder;
+    private readonly IShadowDiagnosticsStore _shadowDiagnosticsStore;
     private readonly ILogger<PlaybackSessionsController> _logger;
 
     /// <summary>
@@ -75,6 +76,15 @@ public class PlaybackSessionsController : BaseReefinApiController
     /// is joinable to the other requests of that same attempt. Trailing and optional so existing
     /// test constructions keep compiling.
     /// </param>
+    /// <param name="shadowDiagnosticsStore">
+    /// Issue #75: the SAME store PR113 already uses to correlate a shadow run with its session - not
+    /// a new one. This controller is the only place that holds both halves issue #75's mapping
+    /// comparison needs (the declared <c>ClientCapabilities</c> off the request body, and the
+    /// request's <c>Content-Length</c>), so it opens the ambient capture scope carrying them; the
+    /// scope PlaybackSessionManager opens around planning inherits them. Trailing and optional,
+    /// defaulting to the no-op store, so every existing test construction keeps compiling and simply
+    /// produces no contract-mapping diagnostic.
+    /// </param>
     public PlaybackSessionsController(
         IPlaybackSessionManager playbackSessionManager,
         IItemLookupService itemLookupService,
@@ -84,9 +94,11 @@ public class PlaybackSessionsController : BaseReefinApiController
         IPlaybackLiveStreamResolver liveStreamResolver,
         IPlaybackLiveWiringDiagnosticsStore liveWiringDiagnosticsStore,
         IMediaEncoder mediaEncoder,
-        ILogger<PlaybackSessionsController>? logger = null)
+        ILogger<PlaybackSessionsController>? logger = null,
+        IShadowDiagnosticsStore? shadowDiagnosticsStore = null)
     {
         _logger = logger ?? NullLogger<PlaybackSessionsController>.Instance;
+        _shadowDiagnosticsStore = shadowDiagnosticsStore ?? NoOpShadowDiagnosticsStore.Instance;
         _playbackSessionManager = playbackSessionManager;
         _itemLookupService = itemLookupService;
         _userManager = userManager;
@@ -120,10 +132,22 @@ public class PlaybackSessionsController : BaseReefinApiController
 
         var (kind, options) = await ResolveOptions(request, HttpContext.RequestAborted).ConfigureAwait(false);
 
-        var session = _playbackSessionManager.Create(
-            new PlaybackSessionRequest(kind, options),
-            request.PlaySessionId,
-            request.PlaybackAttemptId);
+        // Issue #75: the ambient scope carrying the two request-scoped facts the shadow run cannot
+        // recover on its own. Content-Length is read from the HEADER only - request buffering stays
+        // off, and an absent header stays null rather than becoming a lying 0. Opened around the
+        // planning call and closed immediately after: nothing derived from these inputs is retained
+        // beyond the counts and presence flags of the resulting ContractMappingDiagnostic. When
+        // shadow mode is off (the default) the shadow run never executes and this scope costs one
+        // AsyncLocal write and produces nothing.
+        PlaybackSession? session;
+        using (_shadowDiagnosticsStore.BeginCapture(new ShadowCaptureInputs(request.Capabilities, HttpContext.Request.ContentLength)))
+        {
+            session = _playbackSessionManager.Create(
+                new PlaybackSessionRequest(kind, options),
+                request.PlaySessionId,
+                request.PlaybackAttemptId);
+        }
+
         if (session is null)
         {
             return UnprocessableEntity();
@@ -196,7 +220,14 @@ public class PlaybackSessionsController : BaseReefinApiController
         // Issue #43: the SAME attempt id the POST carried, when the client is re-planning inside
         // one attempt. That identity across two different HTTP requests is exactly what a request
         // id could never provide, and is why this is a separate field.
-        var session = _playbackSessionManager.Patch(id, new PlaybackSessionRequest(kind, options), request.PlaybackAttemptId);
+        // Issue #75: same ambient scope as the POST - a PUT re-plans with a complete new body, so it
+        // carries its own declared capabilities and its own Content-Length.
+        PlaybackSession? session;
+        using (_shadowDiagnosticsStore.BeginCapture(new ShadowCaptureInputs(request.Capabilities, HttpContext.Request.ContentLength)))
+        {
+            session = _playbackSessionManager.Patch(id, new PlaybackSessionRequest(kind, options), request.PlaybackAttemptId);
+        }
+
         if (session is null)
         {
             return UnprocessableEntity();

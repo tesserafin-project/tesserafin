@@ -24,7 +24,13 @@ public sealed class NoOpShadowDiagnosticsStore : IShadowDiagnosticsStore
     public static NoOpShadowDiagnosticsStore Instance { get; } = new();
 
     /// <inheritdoc/>
+    public ShadowCaptureInputs? CapturedInputs => null;
+
+    /// <inheritdoc/>
     public IDisposable BeginCapture() => NullScope.Instance;
+
+    /// <inheritdoc/>
+    public IDisposable BeginCapture(ShadowCaptureInputs? inputs) => NullScope.Instance;
 
     /// <inheritdoc/>
     public void Publish(ShadowDiagnosticRecord record)
