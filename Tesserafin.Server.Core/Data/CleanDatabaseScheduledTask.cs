@@ -1,0 +1,164 @@
+#pragma warning disable CS1591
+
+using System;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Tesserafin.Controller.Channels;
+using Tesserafin.Controller.Entities;
+using Tesserafin.Controller.IO;
+using Tesserafin.Controller.Library;
+using Tesserafin.Controller.MediaSegments;
+using Tesserafin.Controller.Playlists;
+using Tesserafin.Data.Enums;
+using Tesserafin.Database.Implementations;
+
+namespace Tesserafin.Server.Core.Data;
+
+public class CleanDatabaseScheduledTask : ILibraryPostScanTask
+{
+    private readonly ILibraryManager _libraryManager;
+    private readonly ILogger<CleanDatabaseScheduledTask> _logger;
+    private readonly IDbContextFactory<TesserafinDbContext> _dbProvider;
+    private readonly IPathManager _pathManager;
+    private readonly IMediaSourceManager _mediaSourceManager;
+    private readonly IMediaSegmentManager _mediaSegmentManager;
+    private readonly IChannelManager _channelManager;
+
+    public CleanDatabaseScheduledTask(
+        ILibraryManager libraryManager,
+        ILogger<CleanDatabaseScheduledTask> logger,
+        IDbContextFactory<TesserafinDbContext> dbProvider,
+        IPathManager pathManager,
+        IMediaSourceManager mediaSourceManager,
+        IMediaSegmentManager mediaSegmentManager,
+        IChannelManager channelManager)
+    {
+        _libraryManager = libraryManager;
+        _logger = logger;
+        _dbProvider = dbProvider;
+        _pathManager = pathManager;
+        _mediaSourceManager = mediaSourceManager;
+        _mediaSegmentManager = mediaSegmentManager;
+        _channelManager = channelManager;
+    }
+
+    public async Task Run(IProgress<double> progress, CancellationToken cancellationToken)
+    {
+        var deadItemsProgress = new Progress<double>(val => progress.Report(val * 0.8));
+        await CleanDeadItems(cancellationToken, deadItemsProgress).ConfigureAwait(false);
+
+        var playlistProgress = new Progress<double>(val => progress.Report(80 + (val * 0.2)));
+        await CleanOrphanedFilePlaylistsAsync(cancellationToken, playlistProgress).ConfigureAwait(false);
+    }
+
+    private async Task CleanDeadItems(CancellationToken cancellationToken, IProgress<double> progress)
+    {
+        var itemIds = _libraryManager.GetItemIds(new InternalItemsQuery
+        {
+            HasDeadParentId = true
+        });
+
+        var numComplete = 0;
+        var numItems = itemIds.Count + 1;
+
+        _logger.LogDebug("Cleaning {Number} items with dead parents", numItems);
+
+        IProgress<double> subProgress = new Progress<double>((val) => progress.Report(val / 2));
+
+        foreach (var itemId in itemIds)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var item = _libraryManager.GetItemById(itemId);
+            if (item is not null)
+            {
+                _logger.LogInformation("Cleaning item {Item} type: {Type} path: {Path}", item.Name, item.GetType().Name, item.Path ?? string.Empty);
+
+                foreach (var mediaSource in item.GetMediaSources(false, _mediaSourceManager, _mediaSegmentManager, _channelManager))
+                {
+                    // Delete extracted data
+                    var mediaSourceItem = _libraryManager.GetItemById(mediaSource.Id);
+                    if (mediaSourceItem is null)
+                    {
+                        continue;
+                    }
+
+                    var extractedDataFolders = _pathManager.GetExtractedDataPaths(mediaSourceItem);
+                    foreach (var folder in extractedDataFolders)
+                    {
+                        if (Directory.Exists(folder))
+                        {
+                            try
+                            {
+                                Directory.Delete(folder, true);
+                            }
+                            catch (Exception e)
+                            {
+                                _logger.LogWarning("Failed to remove {Folder}: {Exception}", folder, e.Message);
+                            }
+                        }
+                    }
+                }
+
+                // Delete item
+                _libraryManager.DeleteItem(item, new DeleteOptions
+                {
+                    DeleteFileLocation = false
+                });
+            }
+
+            numComplete++;
+            double percent = numComplete;
+            percent /= numItems;
+            subProgress.Report(percent * 100);
+        }
+
+        subProgress = new Progress<double>((val) => progress.Report((val / 2) + 50));
+        var context = await _dbProvider.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using (context.ConfigureAwait(false))
+        {
+            var transaction = await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            await using (transaction.ConfigureAwait(false))
+            {
+                await context.ItemValues.Where(e => e.BaseItemsMap!.Count == 0).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+                subProgress.Report(50);
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                subProgress.Report(100);
+            }
+        }
+
+        progress.Report(100);
+    }
+
+    private async Task CleanOrphanedFilePlaylistsAsync(CancellationToken cancellationToken, IProgress<double> progress)
+    {
+        var playlists = _libraryManager.GetItemList(new InternalItemsQuery
+        {
+            IncludeItemTypes = [BaseItemKind.Playlist],
+            Recursive = true
+        }).OfType<Playlist>().ToList();
+
+        var numComplete = 0;
+        var numItems = Math.Max(playlists.Count, 1);
+
+        foreach (var playlist in playlists)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (playlist.IsFile && !File.Exists(playlist.Path))
+            {
+                _logger.LogInformation("Removing file-based playlist {Name} because source file {Path} no longer exists", playlist.Name, playlist.Path);
+                _libraryManager.DeleteItem(playlist, new DeleteOptions { DeleteFileLocation = false });
+            }
+
+            numComplete++;
+            progress.Report((double)numComplete / numItems * 100);
+        }
+
+        progress.Report(100);
+    }
+}

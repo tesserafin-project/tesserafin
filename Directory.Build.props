@@ -20,8 +20,8 @@
   </ItemGroup>
 
   <!-- Custom Analyzers -->
-  <ItemGroup Condition=" '$(MSBuildProjectName)' != 'Reefin.CodeAnalysis' AND '$(Configuration)' == 'Debug' ">
-    <ProjectReference Include="$(MSBuildThisFileDirectory)src/Reefin.CodeAnalysis/Reefin.CodeAnalysis.csproj" OutputItemType="Analyzer" />
+  <ItemGroup Condition=" '$(MSBuildProjectName)' != 'Tesserafin.CodeAnalysis' AND '$(Configuration)' == 'Debug' ">
+    <ProjectReference Include="$(MSBuildThisFileDirectory)src/Tesserafin.CodeAnalysis/Tesserafin.CodeAnalysis.csproj" OutputItemType="Analyzer" />
   </ItemGroup>
 
 </Project>

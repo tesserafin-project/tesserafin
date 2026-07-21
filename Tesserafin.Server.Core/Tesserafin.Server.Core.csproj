@@ -1,0 +1,78 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- ProjectGuid is only included as a requirement for SonarQube analysis -->
+  <PropertyGroup>
+    <ProjectGuid>{E383961B-9356-4D5D-8233-9A1079D03055}</ProjectGuid>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Tesserafin.Naming\Tesserafin.Naming.csproj" />
+    <ProjectReference Include="..\Tesserafin.Api\Tesserafin.Api.csproj" />
+    <ProjectReference Include="..\Tesserafin.Server.Implementations\Tesserafin.Server.Implementations.csproj" />
+    <ProjectReference Include="..\Tesserafin.Model\Tesserafin.Model.csproj" />
+    <ProjectReference Include="..\Tesserafin.Common\Tesserafin.Common.csproj" />
+    <ProjectReference Include="..\Tesserafin.Controller\Tesserafin.Controller.csproj" />
+    <ProjectReference Include="..\Tesserafin.Providers\Tesserafin.Providers.csproj" />
+    <ProjectReference Include="..\Tesserafin.XbmcMetadata\Tesserafin.XbmcMetadata.csproj" />
+    <ProjectReference Include="..\Tesserafin.LocalMetadata\Tesserafin.LocalMetadata.csproj" />
+    <ProjectReference Include="..\Tesserafin.Photos\Tesserafin.Photos.csproj" />
+    <ProjectReference Include="..\src\Tesserafin.Drawing\Tesserafin.Drawing.csproj" />
+    <ProjectReference Include="..\Tesserafin.MediaEncoding\Tesserafin.MediaEncoding.csproj" />
+    <ProjectReference Include="..\src\Tesserafin.Database\Tesserafin.Database.Implementations\Tesserafin.Database.Implementations.csproj" />
+    <!-- PR98 shadow mode DI: registers the v2 IPlaybackEngine used by ShadowPlaybackSessionPlanner. -->
+    <ProjectReference Include="..\src\Tesserafin.Playback.Engine\Tesserafin.Playback.Engine.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BitFaster.Caching" />
+    <PackageReference Include="DiscUtils.Udf" />
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="prometheus-net.DotNetRuntime" />
+    <PackageReference Include="DotNet.Glob" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\SharedVersion.cs" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+    <CodeAnalysisTreatWarningsAsErrors>false</CodeAnalysisTreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <!-- Code Analyzers -->
+  <ItemGroup Condition=" '$(Configuration)' == 'Debug' ">
+    <!-- TODO: Add IDisposableAnalyzers -->
+    <!-- <PackageReference Include="IDisposableAnalyzers">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference> -->
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="SerilogAnalyzer" PrivateAssets="All" />
+    <PackageReference Include="StyleCop.Analyzers" PrivateAssets="All" />
+    <PackageReference Include="SmartAnalyzers.MultithreadingAnalyzer" PrivateAssets="All" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Ignore" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Localization\iso6392.txt" />
+    <EmbeddedResource Include="Localization\countries.json" />
+    <EmbeddedResource Include="Localization\Core\*.json" />
+    <EmbeddedResource Include="Localization\Ratings\*.json" />
+  </ItemGroup>
+</Project>

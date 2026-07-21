@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../Tesserafin.Common/Tesserafin.Common.csproj" />
+    <ProjectReference Include="../../Tesserafin.Model/Tesserafin.Model.csproj" />
+    <ProjectReference Include="../../Tesserafin.Controller/Tesserafin.Controller.csproj" />
+    <ProjectReference Include="../Tesserafin.MediaEncoding.Keyframes/Tesserafin.MediaEncoding.Keyframes.csproj" />
+  </ItemGroup>
+
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>Tesserafin.MediaEncoding.Hls.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,19 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Tesserafin.Database.Implementations.Entities;
+
+namespace Tesserafin.Database.Implementations.ModelConfiguration;
+
+/// <summary>
+/// BaseItemProvider configuration.
+/// </summary>
+public class BaseItemProviderConfiguration : IEntityTypeConfiguration<BaseItemProvider>
+{
+    /// <inheritdoc/>
+    public void Configure(EntityTypeBuilder<BaseItemProvider> builder)
+    {
+        builder.HasKey(e => new { e.ItemId, e.ProviderId });
+        builder.HasOne(e => e.Item);
+        builder.HasIndex(e => new { e.ProviderId, e.ItemId, e.ProviderValue });
+    }
+}

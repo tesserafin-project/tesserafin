@@ -20,8 +20,8 @@ ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 \
     NUGET_PACKAGES=/nuget
 
 # Native dependencies required at build/test time:
-#   ffmpeg          - Reefin.MediaEncoding shells out to ffmpeg/ffprobe.
-#   libfontconfig1  - SkiaSharp.NativeAssets.Linux (src/Reefin.Drawing.Skia,
+#   ffmpeg          - Tesserafin.MediaEncoding shells out to ffmpeg/ffprobe.
+#   libfontconfig1  - SkiaSharp.NativeAssets.Linux (src/Tesserafin.Drawing.Skia,
 #                     pulled in transitively by the server/API test
 #                     projects) needs fontconfig present on Linux even for
 #                     non-text raster operations.

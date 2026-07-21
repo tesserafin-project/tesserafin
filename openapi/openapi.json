@@ -722,7 +722,7 @@
                 "$ref": "#/components/schemas/SessionInfoDto"
               }
             ],
-            "description": "Gets or sets the session info.",
+            "description": "Session info DTO.",
             "nullable": true
           },
           "User": {
@@ -731,7 +731,7 @@
                 "$ref": "#/components/schemas/UserDto"
               }
             ],
-            "description": "Gets or sets the user.",
+            "description": "Class UserDto.",
             "nullable": true
           }
         },
@@ -804,7 +804,7 @@
         "description": "Defines properties used to start a restore process.",
         "properties": {
           "ArchiveFileName": {
-            "description": "Gets or Sets the name of the backup archive to restore from. Must be present in Reefin.Common.Configuration.IApplicationPaths.BackupPath.",
+            "description": "Gets or Sets the name of the backup archive to restore from. Must be present in Tesserafin.Common.Configuration.IApplicationPaths.BackupPath.",
             "type": "string"
           }
         },
@@ -2685,10 +2685,10 @@
       },
       "CodecProfile": {
         "additionalProperties": false,
-        "description": "Defines the Reefin.Model.Dlna.CodecProfile.",
+        "description": "Defines the Tesserafin.Model.Dlna.CodecProfile.",
         "properties": {
           "ApplyConditions": {
-            "description": "Gets or sets the list of Reefin.Model.Dlna.ProfileCondition to apply if this profile is met.",
+            "description": "Gets or sets the list of Tesserafin.Model.Dlna.ProfileCondition to apply if this profile is met.",
             "items": {
               "$ref": "#/components/schemas/ProfileCondition"
             },
@@ -2700,7 +2700,7 @@
             "type": "string"
           },
           "Conditions": {
-            "description": "Gets or sets the list of Reefin.Model.Dlna.ProfileCondition which this profile must meet.",
+            "description": "Gets or sets the list of Tesserafin.Model.Dlna.ProfileCondition which this profile must meet.",
             "items": {
               "$ref": "#/components/schemas/ProfileCondition"
             },
@@ -2722,7 +2722,7 @@
                 "$ref": "#/components/schemas/CodecType"
               }
             ],
-            "description": "Gets or sets the Reefin.Model.Dlna.CodecType which this container must meet.",
+            "description": "Gets or sets the Tesserafin.Model.Dlna.CodecType which this container must meet.",
             "enum": [
               "Video",
               "VideoAudio",
@@ -2821,10 +2821,10 @@
       },
       "ContainerProfile": {
         "additionalProperties": false,
-        "description": "Defines the Reefin.Model.Dlna.ContainerProfile.",
+        "description": "Defines the Tesserafin.Model.Dlna.ContainerProfile.",
         "properties": {
           "Conditions": {
-            "description": "Gets or sets the list of Reefin.Model.Dlna.ProfileCondition which this container will be applied to.",
+            "description": "Gets or sets the list of Tesserafin.Model.Dlna.ProfileCondition which this container will be applied to.",
             "items": {
               "$ref": "#/components/schemas/ProfileCondition"
             },
@@ -2846,7 +2846,7 @@
                 "$ref": "#/components/schemas/DlnaProfileType"
               }
             ],
-            "description": "Gets or sets the Reefin.Model.Dlna.DlnaProfileType which this container must meet.",
+            "description": "Gets or sets the Tesserafin.Model.Dlna.DlnaProfileType which this container must meet.",
             "enum": [
               "Audio",
               "Video",
@@ -2906,12 +2906,12 @@
         "description": "The before/after comparison of ONE known contract member across the request mapping\n(issue #75, \u0022comparaison avant/apr\u00E8s uniquement pour les membres d\u00E9j\u00E0 d\u00E9finis dans le\ncontrat\u0022). This is the signal Option 1 actually delivers: it separates case (b) - the client\ndeclared something and the mapping lost it - from case (c) - the mapping kept everything and the\ndecision engine is what changed.",
         "properties": {
           "CountAfter": {
-            "description": "How many entries survived the mapping, under the same convention as Reefin.Playback.Contract.Diagnostics.ContractMappingDelta.CountBefore.",
+            "description": "How many entries survived the mapping, under the same convention as Tesserafin.Playback.Contract.Diagnostics.ContractMappingDelta.CountBefore.",
             "format": "int32",
             "type": "integer"
           },
           "CountBefore": {
-            "description": "How many entries the client declared for a collection member, or 0 for a scalar member (whose\nsignal is Reefin.Playback.Contract.Diagnostics.ContractMappingDelta.PresentBefore/Reefin.Playback.Contract.Diagnostics.ContractMappingDelta.PresentAfter instead).",
+            "description": "How many entries the client declared for a collection member, or 0 for a scalar member (whose\nsignal is Tesserafin.Playback.Contract.Diagnostics.ContractMappingDelta.PresentBefore/Tesserafin.Playback.Contract.Diagnostics.ContractMappingDelta.PresentAfter instead).",
             "format": "int32",
             "type": "integer"
           },
@@ -2946,7 +2946,7 @@
             "type": "array"
           },
           "FieldIssues": {
-            "description": "Closed-vocabulary issues for known members. Empty in this iteration: see\nReefin.Playback.Contract.Diagnostics.ContractIssueCode for why each code either has no semantically correct source yet\nor is structurally unobservable at this point in the pipeline. Present so the shape does not\nhave to change when one of them becomes truthfully emittable.",
+            "description": "Closed-vocabulary issues for known members. Empty in this iteration: see\nTesserafin.Playback.Contract.Diagnostics.ContractIssueCode for why each code either has no semantically correct source yet\nor is structurally unobservable at this point in the pipeline. Present so the shape does not\nhave to change when one of them becomes truthfully emittable.",
             "items": {
               "$ref": "#/components/schemas/ContractFieldIssue"
             },
@@ -2969,11 +2969,11 @@
                 "$ref": "#/components/schemas/ContractStructuralScan"
               }
             ],
-            "description": "Issue #75 slice 75b: the result of the bounded, single-pass structural scan of the raw request\nbody, or null when no scan ran for this diagnostic - which is the case for\nevery slice-75a-only diagnostic, and whenever the request was not sampled for scanning. Trailing\nand nullable so every slice-75a call site and OpenAPI consumer keeps working unchanged; a\nnon-null value is the signal that the scan actually executed (a silently-disabled scan cannot\npresent one). Like the rest of this type, its entire closure is enums and integers - see\nReefin.Playback.Contract.Diagnostics.ContractStructuralScan.",
+            "description": "Issue #75 slice 75b: the result of the bounded, single-pass structural scan of the raw request\nbody, or null when no scan ran for this diagnostic - which is the case for\nevery slice-75a-only diagnostic, and whenever the request was not sampled for scanning. Trailing\nand nullable so every slice-75a call site and OpenAPI consumer keeps working unchanged; a\nnon-null value is the signal that the scan actually executed (a silently-disabled scan cannot\npresent one). Like the rest of this type, its entire closure is enums and integers - see\nTesserafin.Playback.Contract.Diagnostics.ContractStructuralScan.",
             "nullable": true
           },
           "UnknownMemberTotal": {
-            "description": "The count-shaped slot slice 75a leaves null: the 75a mapping comparison does\nnot read the raw body, so on a diagnostic that carries no Reefin.Playback.Contract.Diagnostics.ContractMappingDiagnostic.StructuralScan this is\nhonestly null (unknown, never a lying 0). Slice 75b\u0027s bounded structural scan reports its own\ntruthful total on Reefin.Playback.Contract.Diagnostics.ContractStructuralScan.UnknownMemberTotal instead of mutating\nthis field, so every slice-75a assertion that this stays null keeps holding while the scanned\ntotal is still available (on Reefin.Playback.Contract.Diagnostics.ContractMappingDiagnostic.StructuralScan) when a scan actually ran.",
+            "description": "The count-shaped slot slice 75a leaves null: the 75a mapping comparison does\nnot read the raw body, so on a diagnostic that carries no Tesserafin.Playback.Contract.Diagnostics.ContractMappingDiagnostic.StructuralScan this is\nhonestly null (unknown, never a lying 0). Slice 75b\u0027s bounded structural scan reports its own\ntruthful total on Tesserafin.Playback.Contract.Diagnostics.ContractStructuralScan.UnknownMemberTotal instead of mutating\nthis field, so every slice-75a assertion that this stays null keeps holding while the scanned\ntotal is still available (on Tesserafin.Playback.Contract.Diagnostics.ContractMappingDiagnostic.StructuralScan) when a scan actually ran.",
             "format": "int32",
             "nullable": true,
             "type": "integer"
@@ -2982,7 +2982,7 @@
         "type": "object"
       },
       "ContractMember": {
-        "description": "One segment of a Reefin.Playback.Contract.Diagnostics.ContractPath: a member the SERVER declares in the playback\nrequest contract, named by a server-owned enum rather than by any text the client sent\n(issue #75, \u0022chemins connus repr\u00E9sent\u00E9s par un enum interne au serveur, jamais par une cha\u00EEne\nfournie par le client\u0022).",
+        "description": "One segment of a Tesserafin.Playback.Contract.Diagnostics.ContractPath: a member the SERVER declares in the playback\nrequest contract, named by a server-owned enum rather than by any text the client sent\n(issue #75, \u0022chemins connus repr\u00E9sent\u00E9s par un enum interne au serveur, jamais par une cha\u00EEne\nfournie par le client\u0022).",
         "enum": [
           "None",
           "Capabilities",
@@ -3000,7 +3000,7 @@
       },
       "ContractPath": {
         "additionalProperties": false,
-        "description": "A path to a known member of the playback request contract, expressed as a fixed-arity tuple of\nserver-owned Reefin.Playback.Contract.Diagnostics.ContractMember segments (issue #75).",
+        "description": "A path to a known member of the playback request contract, expressed as a fixed-arity tuple of\nserver-owned Tesserafin.Playback.Contract.Diagnostics.ContractMember segments (issue #75).",
         "properties": {
           "Branch": {
             "allOf": [
@@ -3008,7 +3008,7 @@
                 "$ref": "#/components/schemas/ContractMember"
               }
             ],
-            "description": "The middle segment, or Reefin.Playback.Contract.Diagnostics.ContractMember.None for a one-segment path.",
+            "description": "The middle segment, or Tesserafin.Playback.Contract.Diagnostics.ContractMember.None for a one-segment path.",
             "enum": [
               "None",
               "Capabilities",
@@ -3029,7 +3029,7 @@
                 "$ref": "#/components/schemas/ContractMember"
               }
             ],
-            "description": "The innermost segment, or Reefin.Playback.Contract.Diagnostics.ContractMember.None for a shorter path.",
+            "description": "The innermost segment, or Tesserafin.Playback.Contract.Diagnostics.ContractMember.None for a shorter path.",
             "enum": [
               "None",
               "Capabilities",
@@ -3077,25 +3077,25 @@
             "type": "boolean"
           },
           "ScannedBodyByteCount": {
-            "description": "The number of bytes the scan actually read from the request body. This is the honest measured\nsize when the \u0060Content-Length\u0060 header was absent (a chunked/streamed request), where\nReefin.Playback.Contract.Diagnostics.ContractMappingDiagnostic.PayloadSizeBytes is null. A count of bytes, never a byte\nof content. Null only if the body was not read (see Reefin.Playback.Contract.Diagnostics.ContractStructuralScan.BodyLimitExceeded).",
+            "description": "The number of bytes the scan actually read from the request body. This is the honest measured\nsize when the \u0060Content-Length\u0060 header was absent (a chunked/streamed request), where\nTesserafin.Playback.Contract.Diagnostics.ContractMappingDiagnostic.PayloadSizeBytes is null. A count of bytes, never a byte\nof content. Null only if the body was not read (see Tesserafin.Playback.Contract.Diagnostics.ContractStructuralScan.BodyLimitExceeded).",
             "format": "int64",
             "nullable": true,
             "type": "integer"
           },
           "UnknownMemberTotal": {
-            "description": "The total number of members the client sent, anywhere the scan looked, that the contract does\nnot declare. A count, never a name. 0 is meaningful here (unlike on\nReefin.Playback.Contract.Diagnostics.ContractMappingDiagnostic.UnknownMemberTotal): the scan actually ran, so \u0022the\nclient sent no unknown members\u0022 is a fact the server can now establish rather than a lying zero.",
+            "description": "The total number of members the client sent, anywhere the scan looked, that the contract does\nnot declare. A count, never a name. 0 is meaningful here (unlike on\nTesserafin.Playback.Contract.Diagnostics.ContractMappingDiagnostic.UnknownMemberTotal): the scan actually ran, so \u0022the\nclient sent no unknown members\u0022 is a fact the server can now establish rather than a lying zero.",
             "format": "int32",
             "type": "integer"
           },
           "UnknownMembers": {
-            "description": "The per-container breakdown of Reefin.Playback.Contract.Diagnostics.ContractStructuralScan.UnknownMemberTotal: one entry per known container\nthat had at least one unknown member directly inside it. Empty when\nReefin.Playback.Contract.Diagnostics.ContractStructuralScan.UnknownMemberTotal is 0. The entries sum to Reefin.Playback.Contract.Diagnostics.ContractStructuralScan.UnknownMemberTotal.",
+            "description": "The per-container breakdown of Tesserafin.Playback.Contract.Diagnostics.ContractStructuralScan.UnknownMemberTotal: one entry per known container\nthat had at least one unknown member directly inside it. Empty when\nTesserafin.Playback.Contract.Diagnostics.ContractStructuralScan.UnknownMemberTotal is 0. The entries sum to Tesserafin.Playback.Contract.Diagnostics.ContractStructuralScan.UnknownMemberTotal.",
             "items": {
               "$ref": "#/components/schemas/ContractUnknownMemberCount"
             },
             "type": "array"
           },
           "WrongTypes": {
-            "description": "Closed-vocabulary Reefin.Playback.Contract.Diagnostics.ContractIssueCode.WrongType issues for KNOWN members only: a\nmember the contract declares as numeric that arrived as a JSON string. The scan judges by JSON\ntoken kind alone and never reads the string\u0027s content. Which of these actually SURVIVES to a\nretained diagnostic is bounded by the binder: only a numeric-looking string (e.g. \u0060\u002264000\u0022\u0060)\nbinds under \u0060NumberHandling.AllowReadingFromString\u0060 and lets the request reach the shadow\npublication point; a non-numeric string 400s at the binder, so its (leak-free) WrongType is\nobserved by the scan but never retained. Either way the operator learns only \u0022a known numeric\nmember arrived string-typed under this path\u0022, never which value.",
+            "description": "Closed-vocabulary Tesserafin.Playback.Contract.Diagnostics.ContractIssueCode.WrongType issues for KNOWN members only: a\nmember the contract declares as numeric that arrived as a JSON string. The scan judges by JSON\ntoken kind alone and never reads the string\u0027s content. Which of these actually SURVIVES to a\nretained diagnostic is bounded by the binder: only a numeric-looking string (e.g. \u0060\u002264000\u0022\u0060)\nbinds under \u0060NumberHandling.AllowReadingFromString\u0060 and lets the request reach the shadow\npublication point; a non-numeric string 400s at the binder, so its (leak-free) WrongType is\nobserved by the scan but never retained. Either way the operator learns only \u0022a known numeric\nmember arrived string-typed under this path\u0022, never which value.",
             "items": {
               "$ref": "#/components/schemas/ContractFieldIssue"
             },
@@ -3106,7 +3106,7 @@
       },
       "ContractUnknownMemberCount": {
         "additionalProperties": false,
-        "description": "Issue #75 slice 75b: HOW MANY members the client sent that the contract does not declare, under\none known container named by a server-owned Reefin.Playback.Contract.Diagnostics.ContractPath - never WHICH members,\nand never a single character of any of their names.",
+        "description": "Issue #75 slice 75b: HOW MANY members the client sent that the contract does not declare, under\none known container named by a server-owned Tesserafin.Playback.Contract.Diagnostics.ContractPath - never WHICH members,\nand never a single character of any of their names.",
         "properties": {
           "Count": {
             "description": "How many unknown members appeared directly under Path. Always \u003E 0 - a container with no unknown members produces no entry.",
@@ -3153,7 +3153,7 @@
       },
       "CreatePlaybackSessionRequest": {
         "additionalProperties": false,
-        "description": "Request body for creating (or replacing, when Reefin.Api.Models.PlaybackSessionDtos.CreatePlaybackSessionRequest.PlaySessionId matches an existing\nsession) a playback session via the point-1 v2 protocol.",
+        "description": "Request body for creating (or replacing, when Tesserafin.Api.Models.PlaybackSessionDtos.CreatePlaybackSessionRequest.PlaySessionId matches an existing\nsession) a playback session via the point-1 v2 protocol.",
         "properties": {
           "Capabilities": {
             "allOf": [
@@ -3161,7 +3161,7 @@
                 "$ref": "#/components/schemas/PlaybackDecisionClientCapabilities"
               }
             ],
-            "description": "Everything the v2 engine needs to know about a requesting client: what it can decode as-is\n(Reefin.Playback.Decision.ClientCapabilities.Decode), and separately, what the server should produce when it must transcode\n(Reefin.Playback.Decision.ClientCapabilities.OutputProfiles)."
+            "description": "Everything the v2 engine needs to know about a requesting client: what it can decode as-is\n(Tesserafin.Playback.Decision.ClientCapabilities.Decode), and separately, what the server should produce when it must transcode\n(Tesserafin.Playback.Decision.ClientCapabilities.OutputProfiles)."
           },
           "Constraints": {
             "allOf": [
@@ -3187,7 +3187,7 @@
             "type": "string"
           },
           "PlaybackAttemptId": {
-            "description": "Issue #43. Optional, opaque, client-generated. The identifier of the playback ATTEMPT this\nrequest belongs to \u2014 generated once by the client when it starts trying to play something, and\nresent unchanged on every request of that attempt: \u0060PlaybackInfo\u0060, this \u0060POST\u0060, the\n\u0060PUT\u0060, and any retry. A new attempt gets a new value; a retry inside the same attempt keeps\nthe old one.\n\nDistinct from both neighbouring scopes and substitutable for neither. It is NOT the\n\u0060RequestId\u0060/\u0060TraceId\u0060 of issue #42, which is server-derived and changes on every\nrequest. It is NOT Reefin.Api.Models.PlaybackSessionDtos.CreatePlaybackSessionRequest.PlaySessionId, which only exists\nonce a session does \u2014 i.e. after \u0060PlaybackInfo\u0060 has already happened \u2014 and which survives\nacross several attempts. See \u0060docs/observabilite-identifiants-correlation.md\u0060.\nDiagnostics only: never an authorization key, no access decision is derived from it, and it\nreplaces no existing access control. Validated for length and printability only (see\nReefin.Api.Models.PlaybackSessionDtos.PlaybackAttemptIdValidator); no structure is imposed and no meaning is read out of it.",
+            "description": "Issue #43. Optional, opaque, client-generated. The identifier of the playback ATTEMPT this\nrequest belongs to \u2014 generated once by the client when it starts trying to play something, and\nresent unchanged on every request of that attempt: \u0060PlaybackInfo\u0060, this \u0060POST\u0060, the\n\u0060PUT\u0060, and any retry. A new attempt gets a new value; a retry inside the same attempt keeps\nthe old one.\n\nDistinct from both neighbouring scopes and substitutable for neither. It is NOT the\n\u0060RequestId\u0060/\u0060TraceId\u0060 of issue #42, which is server-derived and changes on every\nrequest. It is NOT Tesserafin.Api.Models.PlaybackSessionDtos.CreatePlaybackSessionRequest.PlaySessionId, which only exists\nonce a session does \u2014 i.e. after \u0060PlaybackInfo\u0060 has already happened \u2014 and which survives\nacross several attempts. See \u0060docs/observabilite-identifiants-correlation.md\u0060.\nDiagnostics only: never an authorization key, no access decision is derived from it, and it\nreplaces no existing access control. Validated for length and printability only (see\nTesserafin.Api.Models.PlaybackSessionDtos.PlaybackAttemptIdValidator); no structure is imposed and no meaning is read out of it.",
             "nullable": true,
             "type": "string"
           },
@@ -3555,7 +3555,7 @@
       },
       "DeviceProfile": {
         "additionalProperties": false,
-        "description": "A Reefin.Model.Dlna.DeviceProfile represents a set of metadata which determines which content a certain device is able to play.\n\n\nSpecifically, it defines the supported \u003Csee cref=\u0022P:Reefin.Model.Dlna.DeviceProfile.ContainerProfiles\u0022\u003Econtainers\u003C/see\u003E and\n\u003Csee cref=\u0022P:Reefin.Model.Dlna.DeviceProfile.CodecProfiles\u0022\u003Ecodecs\u003C/see\u003E (video and/or audio, including codec profiles and levels)\nthe device is able to direct play (without transcoding or remuxing),\nas well as which \u003Csee cref=\u0022P:Reefin.Model.Dlna.DeviceProfile.TranscodingProfiles\u0022\u003Econtainers/codecs to transcode to\u003C/see\u003E in case it isn\u0027t.",
+        "description": "A Tesserafin.Model.Dlna.DeviceProfile represents a set of metadata which determines which content a certain device is able to play.\n\n\nSpecifically, it defines the supported \u003Csee cref=\u0022P:Tesserafin.Model.Dlna.DeviceProfile.ContainerProfiles\u0022\u003Econtainers\u003C/see\u003E and\n\u003Csee cref=\u0022P:Tesserafin.Model.Dlna.DeviceProfile.CodecProfiles\u0022\u003Ecodecs\u003C/see\u003E (video and/or audio, including codec profiles and levels)\nthe device is able to direct play (without transcoding or remuxing),\nas well as which \u003Csee cref=\u0022P:Tesserafin.Model.Dlna.DeviceProfile.TranscodingProfiles\u0022\u003Econtainers/codecs to transcode to\u003C/see\u003E in case it isn\u0027t.",
         "properties": {
           "CodecProfiles": {
             "description": "Gets or sets the codec profiles.",
@@ -3632,7 +3632,7 @@
       },
       "DiagnosticComparison": {
         "additionalProperties": false,
-        "description": "The legacy-vs-v2 shadow comparison for a session\u0027s retained diagnostic (\u00A74.3): what legacy (the\nsource of truth) actually decided, the v2 engine\u0027s own decision shape, and the heuristic\nclassification of how the two compare. PR114: Reefin.Api.Models.PlaybackSessionDtos.DiagnosticComparison.V2Method/Reefin.Api.Models.PlaybackSessionDtos.DiagnosticComparison.V2Output/\nReefin.Api.Models.PlaybackSessionDtos.DiagnosticComparison.V2SelectedStreams/Reefin.Api.Models.PlaybackSessionDtos.DiagnosticComparison.V2Transforms were added so the admin diagnostics\nUI can render a real \u0022live legacy vs. v2 decision\u0022 comparison - before this, only v2\u0027s\nReefin.Api.Models.PlaybackSessionDtos.PlaybackDiagnosticDetail.Reasoning tree was exposed, never its concrete decision\nshape (the parent Reefin.Api.Models.PlaybackSessionDtos.PlaybackDiagnosticDetail\u0027s own \u0060Method\u0060/\u0060Output\u0060/\n\u0060SelectedStreams\u0060/\u0060Transforms\u0060 are always legacy-sourced, per\nReefin.Api.Models.PlaybackSessionDtos.PlaybackSessionResponseMapper - never v2\u0027s).",
+        "description": "The legacy-vs-v2 shadow comparison for a session\u0027s retained diagnostic (\u00A74.3): what legacy (the\nsource of truth) actually decided, the v2 engine\u0027s own decision shape, and the heuristic\nclassification of how the two compare. PR114: Tesserafin.Api.Models.PlaybackSessionDtos.DiagnosticComparison.V2Method/Tesserafin.Api.Models.PlaybackSessionDtos.DiagnosticComparison.V2Output/\nTesserafin.Api.Models.PlaybackSessionDtos.DiagnosticComparison.V2SelectedStreams/Tesserafin.Api.Models.PlaybackSessionDtos.DiagnosticComparison.V2Transforms were added so the admin diagnostics\nUI can render a real \u0022live legacy vs. v2 decision\u0022 comparison - before this, only v2\u0027s\nTesserafin.Api.Models.PlaybackSessionDtos.PlaybackDiagnosticDetail.Reasoning tree was exposed, never its concrete decision\nshape (the parent Tesserafin.Api.Models.PlaybackSessionDtos.PlaybackDiagnosticDetail\u0027s own \u0060Method\u0060/\u0060Output\u0060/\n\u0060SelectedStreams\u0060/\u0060Transforms\u0060 are always legacy-sourced, per\nTesserafin.Api.Models.PlaybackSessionDtos.PlaybackSessionResponseMapper - never v2\u0027s).",
         "properties": {
           "DivergenceClass": {
             "allOf": [
@@ -3650,7 +3650,7 @@
             ]
           },
           "DivergenceSummary": {
-            "description": "A short, human-readable summary of the divergence (\u0060ShadowDivergence.Summary\u0060), suitable\nfor display alongside Reefin.Api.Models.PlaybackSessionDtos.DiagnosticComparison.DivergenceClass without the reader having to know the\nclassification vocabulary.",
+            "description": "A short, human-readable summary of the divergence (\u0060ShadowDivergence.Summary\u0060), suitable\nfor display alongside Tesserafin.Api.Models.PlaybackSessionDtos.DiagnosticComparison.DivergenceClass without the reader having to know the\nclassification vocabulary.",
             "type": "string"
           },
           "LegacyMethod": {
@@ -3667,7 +3667,7 @@
             ]
           },
           "LegacyReasons": {
-            "description": "The reason codes behind the legacy decision, best-effort recovered from the retained\n\u0060DecisionVector.ReasonCategories\u0060 - see Reefin.Api.Models.PlaybackSessionDtos.PlaybackDiagnosticDetailMapper for the\ndocumented lossiness of this mapping.",
+            "description": "The reason codes behind the legacy decision, best-effort recovered from the retained\n\u0060DecisionVector.ReasonCategories\u0060 - see Tesserafin.Api.Models.PlaybackSessionDtos.PlaybackDiagnosticDetailMapper for the\ndocumented lossiness of this mapping.",
             "items": {
               "$ref": "#/components/schemas/PlaybackDecisionReasonCode"
             },
@@ -3692,7 +3692,7 @@
                 "$ref": "#/components/schemas/PlaybackDecisionOutputSpec"
               }
             ],
-            "description": "The shape of the output a Reefin.Playback.Decision.PlaybackDecision produces."
+            "description": "The shape of the output a Tesserafin.Playback.Decision.PlaybackDecision produces."
           },
           "V2SelectedStreams": {
             "allOf": [
@@ -3700,7 +3700,7 @@
                 "$ref": "#/components/schemas/PlaybackDecisionSelectedStreams"
               }
             ],
-            "description": "The video, audio, and subtitle streams selected for a Reefin.Playback.Decision.PlaybackDecision."
+            "description": "The video, audio, and subtitle streams selected for a Tesserafin.Playback.Decision.PlaybackDecision."
           },
           "V2Transforms": {
             "description": "The pipeline transforms the v2 engine\u0027s decision implies.",
@@ -3735,7 +3735,7 @@
       },
       "DirectPlayProfile": {
         "additionalProperties": false,
-        "description": "Defines the Reefin.Model.Dlna.DirectPlayProfile.",
+        "description": "Defines the Tesserafin.Model.Dlna.DirectPlayProfile.",
         "properties": {
           "AudioCodec": {
             "description": "Gets or sets the audio codec.",
@@ -3820,7 +3820,7 @@
                 "$ref": "#/components/schemas/ScrollDirection"
               }
             ],
-            "description": "Gets or sets the scroll direction.",
+            "description": "An enum representing the axis that should be scrolled.",
             "enum": [
               "Horizontal",
               "Vertical"
@@ -3845,7 +3845,7 @@
                 "$ref": "#/components/schemas/SortOrder"
               }
             ],
-            "description": "Gets or sets the sort order.",
+            "description": "An enum representing the sorting order.",
             "enum": [
               "Ascending",
               "Descending"
@@ -3860,7 +3860,7 @@
         "type": "object"
       },
       "DivergenceClass": {
-        "description": "The classification Reefin.Playback.Shadow.ShadowComparer assigns to a divergence between a legacy and a\nv2 Reefin.Playback.Shadow.DecisionVector, per docs/pr93-compatibility-lab.md \u00A74.2. This is a heuristic,\nnot a formal proof: it triages divergences for human review rather than certifying correctness.",
+        "description": "The classification Tesserafin.Playback.Shadow.ShadowComparer assigns to a divergence between a legacy and a\nv2 Tesserafin.Playback.Shadow.DecisionVector, per docs/pr93-compatibility-lab.md \u00A74.2. This is a heuristic,\nnot a formal proof: it triages divergences for human review rather than certifying correctness.",
         "enum": [
           "Equivalent",
           "ExpectedImprovement",
@@ -4317,7 +4317,7 @@
         "type": "object"
       },
       "ExternalIdMediaType": {
-        "description": "The specific media type of an Reefin.Model.Providers.ExternalIdInfo.",
+        "description": "The specific media type of an Tesserafin.Model.Providers.ExternalIdInfo.",
         "enum": [
           "Album",
           "AlbumArtist",
@@ -4418,7 +4418,7 @@
             "type": "string"
           },
           "FreeSpace": {
-            "description": "Gets the free space of the underlying storage device of the Reefin.Api.Models.SystemInfoDtos.FolderStorageDto.Path.",
+            "description": "Gets the free space of the underlying storage device of the Tesserafin.Api.Models.SystemInfoDtos.FolderStorageDto.Path.",
             "format": "int64",
             "type": "integer"
           },
@@ -4427,12 +4427,12 @@
             "type": "string"
           },
           "StorageType": {
-            "description": "Gets the kind of storage device of the Reefin.Api.Models.SystemInfoDtos.FolderStorageDto.Path.",
+            "description": "Gets the kind of storage device of the Tesserafin.Api.Models.SystemInfoDtos.FolderStorageDto.Path.",
             "nullable": true,
             "type": "string"
           },
           "UsedSpace": {
-            "description": "Gets the used space of the underlying storage device of the Reefin.Api.Models.SystemInfoDtos.FolderStorageDto.Path.",
+            "description": "Gets the used space of the underlying storage device of the Tesserafin.Api.Models.SystemInfoDtos.FolderStorageDto.Path.",
             "format": "int64",
             "type": "integer"
           }
@@ -5186,7 +5186,7 @@
       },
       "IPlugin": {
         "additionalProperties": false,
-        "description": "Defines the Reefin.Common.Plugins.IPlugin.",
+        "description": "Defines the Tesserafin.Common.Plugins.IPlugin.",
         "properties": {
           "AssemblyFilePath": {
             "description": "Gets the path to the assembly file.",
@@ -5784,7 +5784,7 @@
                 "$ref": "#/components/schemas/LibraryUpdateInfo"
               }
             ],
-            "description": "Gets or sets the data.",
+            "description": "Class LibraryUpdateInfo.",
             "nullable": true
           },
           "MessageId": {
@@ -6817,7 +6817,7 @@
               }
             ],
             "default": "Unknown",
-            "description": "Gets or sets the type of content this segment defines.",
+            "description": "Defines the types of content an individual Tesserafin.Database.Implementations.Entities.MediaSegment represents.",
             "enum": [
               "Unknown",
               "Commercial",
@@ -6855,7 +6855,7 @@
         "type": "object"
       },
       "MediaSegmentType": {
-        "description": "Defines the types of content an individual Reefin.Database.Implementations.Entities.MediaSegment represents.",
+        "description": "Defines the types of content an individual Tesserafin.Database.Implementations.Entities.MediaSegment represents.",
         "enum": [
           "Unknown",
           "Commercial",
@@ -8067,7 +8067,7 @@
       },
       "NetworkConfiguration": {
         "additionalProperties": false,
-        "description": "Defines the Reefin.Common.Net.NetworkConfiguration.",
+        "description": "Defines the Tesserafin.Common.Net.NetworkConfiguration.",
         "properties": {
           "AutoDiscovery": {
             "description": "Gets or sets a value indicating whether Autodiscovery is enabled.",
@@ -8078,7 +8078,7 @@
             "type": "string"
           },
           "CertificatePassword": {
-            "description": "Gets or sets the password required to access the X.509 certificate data in the file specified by Reefin.Common.Net.NetworkConfiguration.CertificatePath.",
+            "description": "Gets or sets the password required to access the X.509 certificate data in the file specified by Tesserafin.Common.Net.NetworkConfiguration.CertificatePath.",
             "type": "string"
           },
           "CertificatePath": {
@@ -8111,7 +8111,7 @@
             "type": "boolean"
           },
           "IgnoreVirtualInterfaces": {
-            "description": "Gets or sets a value indicating whether address names that match Reefin.Common.Net.NetworkConfiguration.VirtualInterfaceNames should be ignored for the purposes of binding.",
+            "description": "Gets or sets a value indicating whether address names that match Tesserafin.Common.Net.NetworkConfiguration.VirtualInterfaceNames should be ignored for the purposes of binding.",
             "type": "boolean"
           },
           "InternalHttpPort": {
@@ -8125,7 +8125,7 @@
             "type": "integer"
           },
           "IsRemoteIPFilterBlacklist": {
-            "description": "Gets or sets a value indicating whether \u003Cseealso cref=\u0022P:Reefin.Common.Net.NetworkConfiguration.RemoteIPFilter\u0022 /\u003E contains a blacklist or a whitelist. Default is a whitelist.",
+            "description": "Gets or sets a value indicating whether \u003Cseealso cref=\u0022P:Tesserafin.Common.Net.NetworkConfiguration.RemoteIPFilter\u0022 /\u003E contains a blacklist or a whitelist. Default is a whitelist.",
             "type": "boolean"
           },
           "KnownProxies": {
@@ -8167,7 +8167,7 @@
             "type": "array"
           },
           "RemoteIPFilter": {
-            "description": "Gets or sets the filter for remote IP connectivity. Used in conjunction with \u003Cseealso cref=\u0022P:Reefin.Common.Net.NetworkConfiguration.IsRemoteIPFilterBlacklist\u0022 /\u003E.",
+            "description": "Gets or sets the filter for remote IP connectivity. Used in conjunction with \u003Cseealso cref=\u0022P:Tesserafin.Common.Net.NetworkConfiguration.IsRemoteIPFilterBlacklist\u0022 /\u003E.",
             "items": {
               "type": "string"
             },
@@ -8178,7 +8178,7 @@
             "type": "boolean"
           },
           "VirtualInterfaceNames": {
-            "description": "Gets or sets a value indicating the interface name prefixes that should be ignored. The list can be comma separated and values are case-insensitive. \u003Cseealso cref=\u0022P:Reefin.Common.Net.NetworkConfiguration.IgnoreVirtualInterfaces\u0022 /\u003E.",
+            "description": "Gets or sets a value indicating the interface name prefixes that should be ignored. The list can be comma separated and values are case-insensitive. \u003Cseealso cref=\u0022P:Tesserafin.Common.Net.NetworkConfiguration.IgnoreVirtualInterfaces\u0022 /\u003E.",
             "items": {
               "type": "string"
             },
@@ -8233,7 +8233,7 @@
                 "$ref": "#/components/schemas/DeviceProfile"
               }
             ],
-            "description": "A Reefin.Model.Dlna.DeviceProfile represents a set of metadata which determines which content a certain device is able to play.\n\n\nSpecifically, it defines the supported \u003Csee cref=\u0022P:Reefin.Model.Dlna.DeviceProfile.ContainerProfiles\u0022\u003Econtainers\u003C/see\u003E and\n\u003Csee cref=\u0022P:Reefin.Model.Dlna.DeviceProfile.CodecProfiles\u0022\u003Ecodecs\u003C/see\u003E (video and/or audio, including codec profiles and levels)\nthe device is able to direct play (without transcoding or remuxing),\nas well as which \u003Csee cref=\u0022P:Reefin.Model.Dlna.DeviceProfile.TranscodingProfiles\u0022\u003Econtainers/codecs to transcode to\u003C/see\u003E in case it isn\u0027t.",
+            "description": "Gets or sets the device profile.",
             "nullable": true
           },
           "DirectPlayProtocols": {
@@ -8573,7 +8573,7 @@
       },
       "PathSubstitution": {
         "additionalProperties": false,
-        "description": "Defines the Reefin.Model.Configuration.PathSubstitution.",
+        "description": "Defines the Tesserafin.Model.Configuration.PathSubstitution.",
         "properties": {
           "From": {
             "description": "Gets or sets the value to substitute.",
@@ -8713,7 +8713,7 @@
         "additionalProperties": false,
         "properties": {
           "Success": {
-            "description": "Gets or sets a value indicating whether this Reefin.Model.Users.PinRedeemResult is success.",
+            "description": "Gets or sets a value indicating whether this Tesserafin.Model.Users.PinRedeemResult is success.",
             "type": "boolean"
           },
           "UsersReset": {
@@ -8766,7 +8766,7 @@
                 "$ref": "#/components/schemas/PlayRequest"
               }
             ],
-            "description": "Gets or sets the data.",
+            "description": "Class PlayRequest.",
             "nullable": true
           },
           "MessageId": {
@@ -9051,7 +9051,7 @@
       },
       "PlaybackDecisionAudioStreamSnapshot": {
         "additionalProperties": false,
-        "description": "A frozen snapshot of one audio stream on a Reefin.Playback.Decision.MediaSourceSnapshot, decoupled from any\nprobing/model type.",
+        "description": "A frozen snapshot of one audio stream on a Tesserafin.Playback.Decision.MediaSourceSnapshot, decoupled from any\nprobing/model type.",
         "properties": {
           "BitDepth": {
             "description": "The bit depth, or null if unknown.",
@@ -9103,7 +9103,7 @@
       },
       "PlaybackDecisionClientCapabilities": {
         "additionalProperties": false,
-        "description": "Everything the v2 engine needs to know about a requesting client: what it can decode as-is\n(Reefin.Playback.Decision.ClientCapabilities.Decode), and separately, what the server should produce when it must transcode\n(Reefin.Playback.Decision.ClientCapabilities.OutputProfiles).",
+        "description": "Everything the v2 engine needs to know about a requesting client: what it can decode as-is\n(Tesserafin.Playback.Decision.ClientCapabilities.Decode), and separately, what the server should produce when it must transcode\n(Tesserafin.Playback.Decision.ClientCapabilities.OutputProfiles).",
         "properties": {
           "Decode": {
             "allOf": [
@@ -9139,7 +9139,7 @@
             "type": "array"
           },
           "DirectPlayProfiles": {
-            "description": "The direct-play combinations the client declares, in declared order. Distinct from\nReefin.Playback.Decision.DecodeCapabilities.VideoCodecs/Reefin.Playback.Decision.DecodeCapabilities.AudioCodecs: those describe per-codec decode limits\n(used regardless of container), while this describes which container\u002Bcodec(s) combinations are\nactually playable together without transcoding (RFC PR102b problem #1).",
+            "description": "The direct-play combinations the client declares, in declared order. Distinct from\nTesserafin.Playback.Decision.DecodeCapabilities.VideoCodecs/Tesserafin.Playback.Decision.DecodeCapabilities.AudioCodecs: those describe per-codec decode limits\n(used regardless of container), while this describes which container\u002Bcodec(s) combinations are\nactually playable together without transcoding (RFC PR102b problem #1).",
             "items": {
               "$ref": "#/components/schemas/PlaybackDecisionDecodeProfile"
             },
@@ -9178,7 +9178,7 @@
       },
       "PlaybackDecisionDecodeProfile": {
         "additionalProperties": false,
-        "description": "One direct-play combination a client declares: this exact container packaged with this exact\nvideo codec and this exact audio codec (for Reefin.Playback.Decision.MediaKind.Video), or this exact\ncontainer with this exact audio codec (for Reefin.Playback.Decision.MediaKind.Audio).",
+        "description": "One direct-play combination a client declares: this exact container packaged with this exact\nvideo codec and this exact audio codec (for Tesserafin.Playback.Decision.MediaKind.Video), or this exact\ncontainer with this exact audio codec (for Tesserafin.Playback.Decision.MediaKind.Audio).",
         "properties": {
           "AudioCodecs": {
             "description": "The audio codecs this profile accepts. Empty is a wildcard (matches any audio codec), same\nsemantics as a legacy \u0060DirectPlayProfile\u0060 with no \u0060AudioCodec\u0060 declared.",
@@ -9207,7 +9207,7 @@
             ]
           },
           "VideoCodecs": {
-            "description": "The video codecs this profile accepts. Empty is a wildcard (matches any video codec), same\nsemantics as a legacy \u0060DirectPlayProfile\u0060 with no \u0060VideoCodec\u0060 declared. Always empty\nfor a Reefin.Playback.Decision.MediaKind.Audio profile.",
+            "description": "The video codecs this profile accepts. Empty is a wildcard (matches any video codec), same\nsemantics as a legacy \u0060DirectPlayProfile\u0060 with no \u0060VideoCodec\u0060 declared. Always empty\nfor a Tesserafin.Playback.Decision.MediaKind.Audio profile.",
             "items": {
               "type": "string"
             },
@@ -9303,10 +9303,10 @@
       },
       "PlaybackDecisionOutputSpec": {
         "additionalProperties": false,
-        "description": "The shape of the output a Reefin.Playback.Decision.PlaybackDecision produces.",
+        "description": "The shape of the output a Tesserafin.Playback.Decision.PlaybackDecision produces.",
         "properties": {
           "AudioBitrate": {
-            "description": "The output audio stream\u0027s bitrate ceiling (PR103), or null if not\napplicable/unbounded. Populated only when the audio is being transcoded, as the narrowest of the\nused Reefin.Playback.Decision.PlaybackOutputProfile.MaxAudioBitrate and the target codec\u0027s\nReefin.Playback.Decision.AudioCodecCapability.MaxBitrate.",
+            "description": "The output audio stream\u0027s bitrate ceiling (PR103), or null if not\napplicable/unbounded. Populated only when the audio is being transcoded, as the narrowest of the\nused Tesserafin.Playback.Decision.PlaybackOutputProfile.MaxAudioBitrate and the target codec\u0027s\nTesserafin.Playback.Decision.AudioCodecCapability.MaxBitrate.",
             "format": "int32",
             "nullable": true,
             "type": "integer"
@@ -9333,7 +9333,7 @@
                 "$ref": "#/components/schemas/PlaybackDecisionStreamingProtocol"
               }
             ],
-            "description": "The transport protocol this output is delivered over (PR102b). For Direct Play and Remux,\nalways Reefin.Playback.Decision.StreamingProtocol.Http - a protocol only diverges from plain HTTP when the\nserver produces the encoding, i.e. when transcoding to a client-declared\nReefin.Playback.Decision.PlaybackOutputProfile. Non-nullable: Reefin.Playback.Decision.StreamingProtocol.Http is the\nneutral value for the \u0022not applicable\u0022 case too, so this decision never leaves the delivery\nprotocol unstated.",
+            "description": "The transport protocol this output is delivered over (PR102b). For Direct Play and Remux,\nalways Tesserafin.Playback.Decision.StreamingProtocol.Http - a protocol only diverges from plain HTTP when the\nserver produces the encoding, i.e. when transcoding to a client-declared\nTesserafin.Playback.Decision.PlaybackOutputProfile. Non-nullable: Tesserafin.Playback.Decision.StreamingProtocol.Http is the\nneutral value for the \u0022not applicable\u0022 case too, so this decision never leaves the delivery\nprotocol unstated.",
             "enum": [
               "Http",
               "Hls"
@@ -9354,13 +9354,13 @@
             "type": "string"
           },
           "TotalBitrate": {
-            "description": "The output\u0027s overall bitrate ceiling (PR103), or null if not\napplicable/unbounded. Populated only when transcoding, as the narrowest of\nReefin.Playback.Decision.PlaybackConstraints.MaxBitrate (the request\u0027s global cap) and the sum of\nReefin.Playback.Decision.OutputSpec.VideoBitrate/Reefin.Playback.Decision.OutputSpec.AudioBitrate when both are known - never a fabricated\nvalue out of unknown per-stream ceilings.",
+            "description": "The output\u0027s overall bitrate ceiling (PR103), or null if not\napplicable/unbounded. Populated only when transcoding, as the narrowest of\nTesserafin.Playback.Decision.PlaybackConstraints.MaxBitrate (the request\u0027s global cap) and the sum of\nTesserafin.Playback.Decision.OutputSpec.VideoBitrate/Tesserafin.Playback.Decision.OutputSpec.AudioBitrate when both are known - never a fabricated\nvalue out of unknown per-stream ceilings.",
             "format": "int32",
             "nullable": true,
             "type": "integer"
           },
           "VideoBitrate": {
-            "description": "The output video stream\u0027s bitrate ceiling (PR103), or null if not\napplicable/unbounded. Populated only when the video is being transcoded, as the narrowest of the\nused Reefin.Playback.Decision.PlaybackOutputProfile.MaxVideoBitrate and the target codec\u0027s\nReefin.Playback.Decision.VideoCodecCapability.MaxBitrate.",
+            "description": "The output video stream\u0027s bitrate ceiling (PR103), or null if not\napplicable/unbounded. Populated only when the video is being transcoded, as the narrowest of the\nused Tesserafin.Playback.Decision.PlaybackOutputProfile.MaxVideoBitrate and the target codec\u0027s\nTesserafin.Playback.Decision.VideoCodecCapability.MaxBitrate.",
             "format": "int32",
             "nullable": true,
             "type": "integer"
@@ -9474,7 +9474,7 @@
       },
       "PlaybackDecisionPlaybackOutputProfile": {
         "additionalProperties": false,
-        "description": "One target format the server can produce for this client when it must transcode, distinct from\nwhat the client can already read as-is (Reefin.Playback.Decision.DecodeCapabilities). A client can declare\nseveral of these on Reefin.Playback.Decision.ClientCapabilities.OutputProfiles; their list order is the\nclient\u0027s preference order, most preferred first - PR102 exists precisely so that order survives\nfrom the legacy \u0060TranscodingProfile\u0060 list all the way to the engine, instead of being\ncollapsed into a flat capability set and replaced by hardcoded server-side preferences.",
+        "description": "One target format the server can produce for this client when it must transcode, distinct from\nwhat the client can already read as-is (Tesserafin.Playback.Decision.DecodeCapabilities). A client can declare\nseveral of these on Tesserafin.Playback.Decision.ClientCapabilities.OutputProfiles; their list order is the\nclient\u0027s preference order, most preferred first - PR102 exists precisely so that order survives\nfrom the legacy \u0060TranscodingProfile\u0060 list all the way to the engine, instead of being\ncollapsed into a flat capability set and replaced by hardcoded server-side preferences.",
         "properties": {
           "AudioCodecs": {
             "description": "The target audio codecs, in the client\u0027s preference order (index 0 = most preferred).",
@@ -9530,7 +9530,7 @@
             ]
           },
           "VideoCodecs": {
-            "description": "The target video codecs, in the client\u0027s preference order (index 0 = most preferred). Empty for\nan audio-only profile (Reefin.Playback.Decision.PlaybackOutputProfile.Type of Reefin.Playback.Decision.MediaKind.Audio).",
+            "description": "The target video codecs, in the client\u0027s preference order (index 0 = most preferred). Empty for\nan audio-only profile (Tesserafin.Playback.Decision.PlaybackOutputProfile.Type of Tesserafin.Playback.Decision.MediaKind.Audio).",
             "items": {
               "type": "string"
             },
@@ -9594,7 +9594,7 @@
         "type": "object"
       },
       "PlaybackDecisionReasonCode": {
-        "description": "A closed, stable, string-serialized reason code identifying a single leaf fact in a\nReefin.Playback.Decision.ReasonNode tree. The constraint members mirror\n\u0060Reefin.Model.Session.TranscodeReason\u0060 one-to-one (that flags enum lists which walls a\nlegacy decision hit, without saying why); the positive/decision members and\nReefin.Playback.Decision.ReasonCode.NoViablePlan have no legacy equivalent.",
+        "description": "A closed, stable, string-serialized reason code identifying a single leaf fact in a\nTesserafin.Playback.Decision.ReasonNode tree. The constraint members mirror\n\u0060Tesserafin.Model.Session.TranscodeReason\u0060 one-to-one (that flags enum lists which walls a\nlegacy decision hit, without saying why); the positive/decision members and\nTesserafin.Playback.Decision.ReasonCode.NoViablePlan have no legacy equivalent.",
         "enum": [
           "ContainerNotSupported",
           "VideoCodecNotSupported",
@@ -9639,7 +9639,7 @@
       },
       "PlaybackDecisionReasonNode": {
         "additionalProperties": false,
-        "description": "One node in the structured explanation tree for a Reefin.Playback.Decision.PlaybackDecision: what was\nevaluated, what came of it, and (via Reefin.Playback.Decision.ReasonNode.Children) what sub-reasons led there. This\nreplaces a flat reason enum with causality: not just which walls were hit, but why the chosen\nmethod follows from them.",
+        "description": "One node in the structured explanation tree for a Tesserafin.Playback.Decision.PlaybackDecision: what was\nevaluated, what came of it, and (via Tesserafin.Playback.Decision.ReasonNode.Children) what sub-reasons led there. This\nreplaces a flat reason enum with causality: not just which walls were hit, but why the chosen\nmethod follows from them.",
         "properties": {
           "Children": {
             "description": "The sub-reasons that led to this node, or empty for a leaf.",
@@ -9730,7 +9730,7 @@
         "type": "object"
       },
       "PlaybackDecisionReasonOutcome": {
-        "description": "The result a Reefin.Playback.Decision.ReasonNode records for its Reefin.Playback.Decision.ReasonSubject.",
+        "description": "The result a Tesserafin.Playback.Decision.ReasonNode records for its Tesserafin.Playback.Decision.ReasonSubject.",
         "enum": [
           "Rejected",
           "Accepted",
@@ -9740,7 +9740,7 @@
       },
       "PlaybackDecisionReasonSubject": {
         "additionalProperties": false,
-        "description": "Identifies what a Reefin.Playback.Decision.ReasonNode is talking about: a container, a specific\nvideo/audio/subtitle stream, a source, or the playback method as a whole.",
+        "description": "Identifies what a Tesserafin.Playback.Decision.ReasonNode is talking about: a container, a specific\nvideo/audio/subtitle stream, a source, or the playback method as a whole.",
         "properties": {
           "Kind": {
             "allOf": [
@@ -9759,12 +9759,12 @@
             ]
           },
           "SourceId": {
-            "description": "The source identifier, when Kind is Reefin.Playback.Decision.ReasonSubjectKind.Source; otherwise null.",
+            "description": "The source identifier, when Kind is Tesserafin.Playback.Decision.ReasonSubjectKind.Source; otherwise null.",
             "nullable": true,
             "type": "string"
           },
           "StreamIndex": {
-            "description": "The stream index, when Kind is Reefin.Playback.Decision.ReasonSubjectKind.VideoStream, Reefin.Playback.Decision.ReasonSubjectKind.AudioStream, or Reefin.Playback.Decision.ReasonSubjectKind.Subtitle; otherwise null.",
+            "description": "The stream index, when Kind is Tesserafin.Playback.Decision.ReasonSubjectKind.VideoStream, Tesserafin.Playback.Decision.ReasonSubjectKind.AudioStream, or Tesserafin.Playback.Decision.ReasonSubjectKind.Subtitle; otherwise null.",
             "format": "int32",
             "nullable": true,
             "type": "integer"
@@ -9773,7 +9773,7 @@
         "type": "object"
       },
       "PlaybackDecisionReasonSubjectKind": {
-        "description": "The kind of entity a Reefin.Playback.Decision.ReasonNode is reasoning about.",
+        "description": "The kind of entity a Tesserafin.Playback.Decision.ReasonNode is reasoning about.",
         "enum": [
           "Container",
           "VideoStream",
@@ -9803,7 +9803,7 @@
       },
       "PlaybackDecisionSelectedStreams": {
         "additionalProperties": false,
-        "description": "The video, audio, and subtitle streams selected for a Reefin.Playback.Decision.PlaybackDecision.",
+        "description": "The video, audio, and subtitle streams selected for a Tesserafin.Playback.Decision.PlaybackDecision.",
         "properties": {
           "Audio": {
             "description": "The selected audio stream index, or null if no audio stream was selected.",
@@ -9831,7 +9831,7 @@
       },
       "PlaybackDecisionSelectedSubtitle": {
         "additionalProperties": false,
-        "description": "The subtitle stream selected for a Reefin.Playback.Decision.PlaybackDecision, and how it will be delivered.",
+        "description": "The subtitle stream selected for a Tesserafin.Playback.Decision.PlaybackDecision, and how it will be delivered.",
         "properties": {
           "Delivery": {
             "allOf": [
@@ -9856,7 +9856,7 @@
         "type": "object"
       },
       "PlaybackDecisionStreamingProtocol": {
-        "description": "The transport protocol an output stream is delivered over. Deliberately neutral vocabulary\n(not \u0060Reefin.Data.Enums.MediaStreamProtocol\u0060 or any other legacy/DLNA type): the domain\ndepends on nothing outside itself (RFC PR91 \u00A74).",
+        "description": "The transport protocol an output stream is delivered over. Deliberately neutral vocabulary\n(not \u0060Tesserafin.Data.Enums.MediaStreamProtocol\u0060 or any other legacy/DLNA type): the domain\ndepends on nothing outside itself (RFC PR91 \u00A74).",
         "enum": [
           "Http",
           "Hls"
@@ -9902,7 +9902,7 @@
         "type": "string"
       },
       "PlaybackDecisionSubtitlePlaybackMode": {
-        "description": "How a user wants subtitles auto-selected when no explicit stream index is requested. Mirrors\nthe legacy \u0060Reefin.Database.Implementations.Enums.SubtitlePlaybackMode\u0060 (same member names\nand numeric values) without depending on it: the domain assembly references nothing outside\nitself (RFC PR91 \u00A74/\u00A77), so this is a domain-local copy of the vocabulary, not a reuse of the\nlegacy type.",
+        "description": "How a user wants subtitles auto-selected when no explicit stream index is requested. Mirrors\nthe legacy \u0060Tesserafin.Database.Implementations.Enums.SubtitlePlaybackMode\u0060 (same member names\nand numeric values) without depending on it: the domain assembly references nothing outside\nitself (RFC PR91 \u00A74/\u00A77), so this is a domain-local copy of the vocabulary, not a reuse of the\nlegacy type.",
         "enum": [
           "Default",
           "Always",
@@ -9914,7 +9914,7 @@
       },
       "PlaybackDecisionSubtitleStreamSnapshot": {
         "additionalProperties": false,
-        "description": "A frozen snapshot of one subtitle stream on a Reefin.Playback.Decision.MediaSourceSnapshot, decoupled from\nany probing/model type.",
+        "description": "A frozen snapshot of one subtitle stream on a Tesserafin.Playback.Decision.MediaSourceSnapshot, decoupled from\nany probing/model type.",
         "properties": {
           "Format": {
             "description": "The normalized subtitle format (for example \u0060\u0022srt\u0022\u0060, \u0060\u0022pgs\u0022\u0060).",
@@ -9949,7 +9949,7 @@
         "type": "object"
       },
       "PlaybackDecisionTransformKind": {
-        "description": "A single transformation the playback pipeline must perform to realize a Reefin.Playback.Decision.PlaybackDecision.\nOrthogonal to Reefin.Playback.Decision.PlaybackMethod: the method says which delivery strategy was chosen,\nthe transforms say what work that strategy actually requires of the pipeline.",
+        "description": "A single transformation the playback pipeline must perform to realize a Tesserafin.Playback.Decision.PlaybackDecision.\nOrthogonal to Tesserafin.Playback.Decision.PlaybackMethod: the method says which delivery strategy was chosen,\nthe transforms say what work that strategy actually requires of the pipeline.",
         "enum": [
           "RemuxContainer",
           "TranscodeVideo",
@@ -10023,7 +10023,7 @@
       },
       "PlaybackDecisionVideoStreamSnapshot": {
         "additionalProperties": false,
-        "description": "A frozen snapshot of one video stream on a Reefin.Playback.Decision.MediaSourceSnapshot, decoupled from any\nprobing/model type.",
+        "description": "A frozen snapshot of one video stream on a Tesserafin.Playback.Decision.MediaSourceSnapshot, decoupled from any\nprobing/model type.",
         "properties": {
           "BitDepth": {
             "description": "The bit depth, or null if unknown.",
@@ -10096,7 +10096,7 @@
       },
       "PlaybackDiagnosticDetail": {
         "additionalProperties": false,
-        "description": "The richer, admin-only diagnostic projection of a tracked playback session\n(docs/pr92-design-playback-api-and-diagnostics.md \u00A74.3, PR113): every\nReefin.Api.Models.PlaybackSessionDtos.PlaybackSessionResponse field, plus the request context, client capabilities,\nsource snapshot, full reasoning tree, and legacy/v2 comparison retained from a shadow run - when\none was retained at all.",
+        "description": "The richer, admin-only diagnostic projection of a tracked playback session\n(docs/pr92-design-playback-api-and-diagnostics.md \u00A74.3, PR113): every\nTesserafin.Api.Models.PlaybackSessionDtos.PlaybackSessionResponse field, plus the request context, client capabilities,\nsource snapshot, full reasoning tree, and legacy/v2 comparison retained from a shadow run - when\none was retained at all.",
         "properties": {
           "Capabilities": {
             "allOf": [
@@ -10104,7 +10104,7 @@
                 "$ref": "#/components/schemas/PlaybackDecisionClientCapabilities"
               }
             ],
-            "description": "Everything the v2 engine needs to know about a requesting client: what it can decode as-is\n(Reefin.Playback.Decision.ClientCapabilities.Decode), and separately, what the server should produce when it must transcode\n(Reefin.Playback.Decision.ClientCapabilities.OutputProfiles).",
+            "description": "Everything the v2 engine needs to know about a requesting client: what it can decode as-is\n(Tesserafin.Playback.Decision.ClientCapabilities.Decode), and separately, what the server should produce when it must transcode\n(Tesserafin.Playback.Decision.ClientCapabilities.OutputProfiles).",
             "nullable": true
           },
           "Comparison": {
@@ -10122,7 +10122,7 @@
                 "$ref": "#/components/schemas/ContractMappingDiagnostic"
               }
             ],
-            "description": "Issue #75 (Option 1): what the client\u0027s DECLARED capabilities lost on their way through the\nrequest mapping, in a strictly closed server-owned vocabulary - or null when no\nshadow diagnostic was retained (shadow mode is off by default), or when the session was planned\nby a caller that declares no domain capabilities (the legacy path). Additive and nullable: a\nclient that ignores this member sees no change.\n\nThis member, unlike Reefin.Api.Models.PlaybackSessionDtos.PlaybackDiagnosticDetail.Capabilities and Reefin.Api.Models.PlaybackSessionDtos.PlaybackDiagnosticDetail.PlaybackAttemptId (both of which\nintentionally echo client-supplied data and are catalogued as such in issue #80), cannot carry a\nclient-supplied value at all: its entire transitive type closure is enums, booleans and integers.\nSee Reefin.Playback.Contract.Diagnostics.ContractMappingDiagnostic for the closure guarantee and for an explicit account\nof what Option 1 does NOT observe - unknown members above all.",
+            "description": "Issue #75 (Option 1): what the client\u0027s DECLARED capabilities lost on their way through the\nrequest mapping, in a strictly closed server-owned vocabulary - or null when no\nshadow diagnostic was retained (shadow mode is off by default), or when the session was planned\nby a caller that declares no domain capabilities (the legacy path). Additive and nullable: a\nclient that ignores this member sees no change.\n\nThis member, unlike Tesserafin.Api.Models.PlaybackSessionDtos.PlaybackDiagnosticDetail.Capabilities and Tesserafin.Api.Models.PlaybackSessionDtos.PlaybackDiagnosticDetail.PlaybackAttemptId (both of which\nintentionally echo client-supplied data and are catalogued as such in issue #80), cannot carry a\nclient-supplied value at all: its entire transitive type closure is enums, booleans and integers.\nSee Tesserafin.Playback.Contract.Diagnostics.ContractMappingDiagnostic for the closure guarantee and for an explicit account\nof what Option 1 does NOT observe - unknown members above all.",
             "nullable": true
           },
           "CreatedAt": {
@@ -10131,7 +10131,7 @@
             "type": "string"
           },
           "DecisionVersion": {
-            "description": "See Reefin.Api.Models.PlaybackSessionDtos.PlaybackSessionResponse.DecisionVersion.",
+            "description": "See Tesserafin.Api.Models.PlaybackSessionDtos.PlaybackSessionResponse.DecisionVersion.",
             "format": "int32",
             "type": "integer"
           },
@@ -10158,7 +10158,7 @@
                 "$ref": "#/components/schemas/PlaybackLiveWiringOutcome"
               }
             ],
-            "description": "PR115c: the observable outcome of the live-wiring decision \u0060MediaInfoHelper.SetDeviceSpecificData\u0060\nmakes for one request - whether the response was actually served from the v2\nReefin.Playback.Execution.PlaybackExecutionPlan, or why it fell back to the legacy\n\u0060StreamInfo\u0060 instead. Retained per session (last decision wins, mirroring\nReefin.MediaEncoding.Playback.V2PlanRecord\u0027s own per-session retention) so the admin diagnostics surface can show\nit - see Reefin.MediaEncoding.Playback.IPlaybackLiveWiringDiagnosticsStore.",
+            "description": "PR115c: whether the live streaming path (\u0060MediaInfoHelper.SetDeviceSpecificData\u0060) actually\nserved this session from the v2 execution plan, or why it fell back to legacy - or\nnull when no live-wiring decision has been retained for this session yet\n(request not yet made, or the session predates PR115c\u0027s diagnostics store). Independent of\nTesserafin.Api.Models.PlaybackSessionDtos.PlaybackDiagnosticDetail.Comparison: a session can have a shadow comparison retained without ever having\nbeen through the live-wiring decision, and vice versa.",
             "nullable": true
           },
           "Method": {
@@ -10180,10 +10180,10 @@
                 "$ref": "#/components/schemas/PlaybackDecisionOutputSpec"
               }
             ],
-            "description": "The shape of the output a Reefin.Playback.Decision.PlaybackDecision produces."
+            "description": "The shape of the output a Tesserafin.Playback.Decision.PlaybackDecision produces."
           },
           "PlaybackAttemptId": {
-            "description": "Issue #43: the opaque, client-supplied attempt id recorded on this session, or\nnull when the client sent none. This is the field that lets an operator pull up\nevery session \u2014 and therefore every retry \u2014 belonging to ONE playback attempt, which neither\nReefin.Api.Models.PlaybackSessionDtos.PlaybackDiagnosticDetail.Id (per session) nor Reefin.Api.Models.PlaybackSessionDtos.DiagnosticTimelineEntry.RequestId (per request,\nissue #42) can do. Opaque: displayed verbatim, never parsed.",
+            "description": "Issue #43: the opaque, client-supplied attempt id recorded on this session, or\nnull when the client sent none. This is the field that lets an operator pull up\nevery session \u2014 and therefore every retry \u2014 belonging to ONE playback attempt, which neither\nTesserafin.Api.Models.PlaybackSessionDtos.PlaybackDiagnosticDetail.Id (per session) nor Tesserafin.Api.Models.PlaybackSessionDtos.DiagnosticTimelineEntry.RequestId (per request,\nissue #42) can do. Opaque: displayed verbatim, never parsed.",
             "nullable": true,
             "type": "string"
           },
@@ -10193,7 +10193,7 @@
                 "$ref": "#/components/schemas/PlaybackDecisionReasonNode"
               }
             ],
-            "description": "One node in the structured explanation tree for a Reefin.Playback.Decision.PlaybackDecision: what was\nevaluated, what came of it, and (via Reefin.Playback.Decision.ReasonNode.Children) what sub-reasons led there. This\nreplaces a flat reason enum with causality: not just which walls were hit, but why the chosen\nmethod follows from them.",
+            "description": "One node in the structured explanation tree for a Tesserafin.Playback.Decision.PlaybackDecision: what was\nevaluated, what came of it, and (via Tesserafin.Playback.Decision.ReasonNode.Children) what sub-reasons led there. This\nreplaces a flat reason enum with causality: not just which walls were hit, but why the chosen\nmethod follows from them.",
             "nullable": true
           },
           "Reasons": {
@@ -10218,10 +10218,10 @@
                 "$ref": "#/components/schemas/PlaybackDecisionSelectedStreams"
               }
             ],
-            "description": "The video, audio, and subtitle streams selected for a Reefin.Playback.Decision.PlaybackDecision."
+            "description": "The video, audio, and subtitle streams selected for a Tesserafin.Playback.Decision.PlaybackDecision."
           },
           "SourceSnapshot": {
-            "description": "The media source characteristics (codecs/streams/protocol) a retained shadow run captured, or\nnull if none was retained. Never a file path or URL -\nReefin.Playback.Decision.MediaSourceSnapshot carries none by construction.",
+            "description": "The media source characteristics (codecs/streams/protocol) a retained shadow run captured, or\nnull if none was retained. Never a file path or URL -\nTesserafin.Playback.Decision.MediaSourceSnapshot carries none by construction.",
             "items": {
               "$ref": "#/components/schemas/PlaybackDecisionMediaSourceSnapshot"
             },
@@ -10251,7 +10251,7 @@
         "type": "object"
       },
       "PlaybackEngineMode": {
-        "description": "The role the v2 playback decision engine (\u0060Reefin.Playback.Engine\u0060) plays for live playback\n(PR115a). This is the single explicit switch a canary rollout moves through; it supersedes the\nimplicit \u0022shadow on/off\u0022 toggle as the statement of intent, while Reefin.Model.Configuration.PlaybackShadowOptions.Enabled\nis kept for backward compatibility (see M:Reefin.Model.Configuration.PlaybackShadowOptions.GetEffectiveMode).",
+        "description": "The role the v2 playback decision engine (\u0060Tesserafin.Playback.Engine\u0060) plays for live playback\n(PR115a). This is the single explicit switch a canary rollout moves through; it supersedes the\nimplicit \u0022shadow on/off\u0022 toggle as the statement of intent, while Tesserafin.Model.Configuration.PlaybackShadowOptions.Enabled\nis kept for backward compatibility (see M:Tesserafin.Model.Configuration.PlaybackShadowOptions.GetEffectiveMode).",
         "enum": [
           "Legacy",
           "Shadow",
@@ -10304,7 +10304,7 @@
                 "$ref": "#/components/schemas/DeviceProfile"
               }
             ],
-            "description": "A Reefin.Model.Dlna.DeviceProfile represents a set of metadata which determines which content a certain device is able to play.\n\n\nSpecifically, it defines the supported \u003Csee cref=\u0022P:Reefin.Model.Dlna.DeviceProfile.ContainerProfiles\u0022\u003Econtainers\u003C/see\u003E and\n\u003Csee cref=\u0022P:Reefin.Model.Dlna.DeviceProfile.CodecProfiles\u0022\u003Ecodecs\u003C/see\u003E (video and/or audio, including codec profiles and levels)\nthe device is able to direct play (without transcoding or remuxing),\nas well as which \u003Csee cref=\u0022P:Reefin.Model.Dlna.DeviceProfile.TranscodingProfiles\u0022\u003Econtainers/codecs to transcode to\u003C/see\u003E in case it isn\u0027t.",
+            "description": "Gets or sets the device profile.",
             "nullable": true
           },
           "EnableDirectPlay": {
@@ -10409,7 +10409,7 @@
         "type": "object"
       },
       "PlaybackLiveFallbackReason": {
-        "description": "PR115c: why a live playback request fell back to the legacy \u0060StreamInfo\u0060 instead of being\nserved from the v2 Reefin.Playback.Execution.PlaybackExecutionPlan, for a session\nthis server otherwise had an opportunity to serve from v2. Every value here is meant to be\nobservable (logged and retained for the admin diagnostics surface, mirroring the PR113/PR114\nshadow diagnostics pattern) - a fallback must never be silent.",
+        "description": "PR115c: why a live playback request fell back to the legacy \u0060StreamInfo\u0060 instead of being\nserved from the v2 Tesserafin.Playback.Execution.PlaybackExecutionPlan, for a session\nthis server otherwise had an opportunity to serve from v2. Every value here is meant to be\nobservable (logged and retained for the admin diagnostics surface, mirroring the PR113/PR114\nshadow diagnostics pattern) - a fallback must never be silent.",
         "enum": [
           "NoAuthoritativeRecord",
           "PlanNotExecutable",
@@ -10423,7 +10423,7 @@
       },
       "PlaybackLiveWiringOutcome": {
         "additionalProperties": false,
-        "description": "PR115c: the observable outcome of the live-wiring decision \u0060MediaInfoHelper.SetDeviceSpecificData\u0060\nmakes for one request - whether the response was actually served from the v2\nReefin.Playback.Execution.PlaybackExecutionPlan, or why it fell back to the legacy\n\u0060StreamInfo\u0060 instead. Retained per session (last decision wins, mirroring\nReefin.MediaEncoding.Playback.V2PlanRecord\u0027s own per-session retention) so the admin diagnostics surface can show\nit - see Reefin.MediaEncoding.Playback.IPlaybackLiveWiringDiagnosticsStore.",
+        "description": "PR115c: the observable outcome of the live-wiring decision \u0060MediaInfoHelper.SetDeviceSpecificData\u0060\nmakes for one request - whether the response was actually served from the v2\nTesserafin.Playback.Execution.PlaybackExecutionPlan, or why it fell back to the legacy\n\u0060StreamInfo\u0060 instead. Retained per session (last decision wins, mirroring\nTesserafin.MediaEncoding.Playback.V2PlanRecord\u0027s own per-session retention) so the admin diagnostics surface can show\nit - see Tesserafin.MediaEncoding.Playback.IPlaybackLiveWiringDiagnosticsStore.",
         "properties": {
           "DecidedAt": {
             "description": "When this decision was made.",
@@ -10449,7 +10449,7 @@
             "nullable": true
           },
           "ServedByV2": {
-            "description": "true when the response was built by M:Reefin.Playback.Dlna.PlaybackExecutionPlanAdapter.ToStreamInfo(Reefin.Playback.Execution.PlaybackExecutionPlan,Reefin.Playback.Execution.PlaybackExecutionContext,Reefin.Model.Dto.MediaSourceInfo,Reefin.Model.Dlna.DeviceProfile)\n            from the v2 plan; false when legacy\u0027s own \u0060StreamInfo\u0060 was served instead.",
+            "description": "true when the response was built by M:Tesserafin.Playback.Dlna.PlaybackExecutionPlanAdapter.ToStreamInfo(Tesserafin.Playback.Execution.PlaybackExecutionPlan,Tesserafin.Playback.Execution.PlaybackExecutionContext,Tesserafin.Model.Dto.MediaSourceInfo,Tesserafin.Model.Dlna.DeviceProfile)\n            from the v2 plan; false when legacy\u0027s own \u0060StreamInfo\u0060 was served instead.",
             "type": "boolean"
           }
         },
@@ -10457,15 +10457,15 @@
       },
       "PlaybackOperationalMetricsResponse": {
         "additionalProperties": false,
-        "description": "PR115d: the admin-only operational gate surface for the v2 canary - the response body of\n\u0060GET System/PlaybackDiagnostics/Metrics\u0060. Cumulative, cross-session counters\n(Reefin.MediaEncoding.Playback.PlaybackOperationalMetrics) plus the live\nstop-threshold guard state (Reefin.MediaEncoding.Playback.PlaybackStopThresholdGuard) -\ndeliberately counters only, never session identifiers/paths/URLs, so this can stay a cheap,\ndependency-free projection like the sibling Reefin.Api.Models.PlaybackSessionDtos.PlaybackSessionListItem.",
+        "description": "PR115d: the admin-only operational gate surface for the v2 canary - the response body of\n\u0060GET System/PlaybackDiagnostics/Metrics\u0060. Cumulative, cross-session counters\n(Tesserafin.MediaEncoding.Playback.PlaybackOperationalMetrics) plus the live\nstop-threshold guard state (Tesserafin.MediaEncoding.Playback.PlaybackStopThresholdGuard) -\ndeliberately counters only, never session identifiers/paths/URLs, so this can stay a cheap,\ndependency-free projection like the sibling Tesserafin.Api.Models.PlaybackSessionDtos.PlaybackSessionListItem.",
         "properties": {
           "AdapterAttempts": {
-            "description": "Live requests that reached the adapter at all - served-by-v2 plus \u0060AdapterError\u0060 - the\ndenominator Reefin.Api.Models.PlaybackSessionDtos.PlaybackOperationalMetricsResponse.AdapterErrorRate is computed over.",
+            "description": "Live requests that reached the adapter at all - served-by-v2 plus \u0060AdapterError\u0060 - the\ndenominator Tesserafin.Api.Models.PlaybackSessionDtos.PlaybackOperationalMetricsResponse.AdapterErrorRate is computed over.",
             "format": "int64",
             "type": "integer"
           },
           "AdapterErrorRate": {
-            "description": "Fraction of Reefin.Api.Models.PlaybackSessionDtos.PlaybackOperationalMetricsResponse.AdapterAttempts that ended in \u0060AdapterError\u0060.",
+            "description": "Fraction of Tesserafin.Api.Models.PlaybackSessionDtos.PlaybackOperationalMetricsResponse.AdapterAttempts that ended in \u0060AdapterError\u0060.",
             "format": "double",
             "type": "number"
           },
@@ -10497,7 +10497,7 @@
             "type": "boolean"
           },
           "StopThresholdGuardTripped": {
-            "description": "Whether the guard is forcing legacy for every live request right now - see\nReefin.MediaEncoding.Playback.PlaybackStopThresholdGuard\u0027s remarks: sticky in\npractice once tripped, cleared only by an operator config change.",
+            "description": "Whether the guard is forcing legacy for every live request right now - see\nTesserafin.MediaEncoding.Playback.PlaybackStopThresholdGuard\u0027s remarks: sticky in\npractice once tripped, cleared only by an operator config change.",
             "type": "boolean"
           },
           "TranscodeStartAttemptsV2": {
@@ -10506,7 +10506,7 @@
             "type": "integer"
           },
           "TranscodeStartFailureRate": {
-            "description": "Fraction of Reefin.Api.Models.PlaybackSessionDtos.PlaybackOperationalMetricsResponse.TranscodeStartAttemptsV2 that failed to start.",
+            "description": "Fraction of Tesserafin.Api.Models.PlaybackSessionDtos.PlaybackOperationalMetricsResponse.TranscodeStartAttemptsV2 that failed to start.",
             "format": "double",
             "type": "number"
           },
@@ -10691,7 +10691,7 @@
       },
       "PlaybackSessionId": {
         "additionalProperties": false,
-        "description": "Opaque identifier for a Reefin.Controller.MediaEncoding.PlaybackSession.",
+        "description": "Opaque identifier for a Tesserafin.Controller.MediaEncoding.PlaybackSession.",
         "properties": {
           "Value": {
             "description": "The underlying identifier value.",
@@ -10703,10 +10703,10 @@
       },
       "PlaybackSessionListItem": {
         "additionalProperties": false,
-        "description": "One row in the admin playback-diagnostics session list (docs/pr92-design-playback-api-and-diagnostics.md\n\u00A74.3, PR113): the same stable projection Reefin.Api.Models.PlaybackSessionDtos.PlaybackSessionResponse already exposes,\nplus whether a richer diagnostic is available for this session\u0027s \u0060{id}\u0060 detail route. Never\nthe internal \u0060Reefin.Controller.MediaEncoding.PlaybackSession\u0060 record - same rule as the\ndetail endpoint.",
+        "description": "One row in the admin playback-diagnostics session list (docs/pr92-design-playback-api-and-diagnostics.md\n\u00A74.3, PR113): the same stable projection Tesserafin.Api.Models.PlaybackSessionDtos.PlaybackSessionResponse already exposes,\nplus whether a richer diagnostic is available for this session\u0027s \u0060{id}\u0060 detail route. Never\nthe internal \u0060Tesserafin.Controller.MediaEncoding.PlaybackSession\u0060 record - same rule as the\ndetail endpoint.",
         "properties": {
           "DeviceId": {
-            "description": "PR114: the requesting client\u0027s device identifier, or null under the same\ncondition as Reefin.Api.Models.PlaybackSessionDtos.PlaybackSessionListItem.ItemId. Likewise the raw identifier only - never a resolved device/app\ndisplay name.",
+            "description": "PR114: the requesting client\u0027s device identifier, or null under the same\ncondition as Tesserafin.Api.Models.PlaybackSessionDtos.PlaybackSessionListItem.ItemId. Likewise the raw identifier only - never a resolved device/app\ndisplay name.",
             "nullable": true,
             "type": "string"
           },
@@ -10733,7 +10733,7 @@
       },
       "PlaybackSessionResponse": {
         "additionalProperties": false,
-        "description": "The stable client-facing playback session response (docs/pr92-design-playback-api-and-diagnostics.md\n\u00A74.2): a versioned projection of a playback decision, never the internal\n\u0060Reefin.Controller.MediaEncoding.PlaybackSession\u0060 record. Every property is either a\nprimitive or drawn from the N:Reefin.Playback.Decision vocabulary (PR91) \u2014 no\n\u0060Reefin.Model.Dlna\u0060 type (\u0060DeviceProfile\u0060, \u0060MediaOptions\u0060, \u0060StreamInfo\u0060)\never appears here, so the shape stays stable regardless of which engine produced the decision.",
+        "description": "The stable client-facing playback session response (docs/pr92-design-playback-api-and-diagnostics.md\n\u00A74.2): a versioned projection of a playback decision, never the internal\n\u0060Tesserafin.Controller.MediaEncoding.PlaybackSession\u0060 record. Every property is either a\nprimitive or drawn from the N:Tesserafin.Playback.Decision vocabulary (PR91) \u2014 no\n\u0060Tesserafin.Model.Dlna\u0060 type (\u0060DeviceProfile\u0060, \u0060MediaOptions\u0060, \u0060StreamInfo\u0060)\never appears here, so the shape stays stable regardless of which engine produced the decision.",
         "properties": {
           "CreatedAt": {
             "description": "When the session was first created.",
@@ -10741,7 +10741,7 @@
             "type": "string"
           },
           "DecisionVersion": {
-            "description": "The version of the decision engine that produced this session\u0027s plan. Since PR115a, this is\nthe real \u0060PlaybackDecision.EngineVersion\u0060 when the session\u0027s plan authority is v2 (canary\ncohort member, or full v2 mode) and this response reflects that decision (see\nReefin.Api.Models.PlaybackSessionDtos.PlaybackSessionResponseMapper\u0027s\n\u0060Map(PlaybackSession, Reefin.MediaEncoding.Playback.V2PlanRecord?)\u0060 overload) \u2014 otherwise\nit is Reefin.Api.Models.PlaybackSessionDtos.PlaybackSessionResponse.LegacyDecisionVersion, the sentinel for a legacy-projected response.",
+            "description": "The version of the decision engine that produced this session\u0027s plan. Since PR115a, this is\nthe real \u0060PlaybackDecision.EngineVersion\u0060 when the session\u0027s plan authority is v2 (canary\ncohort member, or full v2 mode) and this response reflects that decision (see\nTesserafin.Api.Models.PlaybackSessionDtos.PlaybackSessionResponseMapper\u0027s\n\u0060Map(PlaybackSession, Tesserafin.MediaEncoding.Playback.V2PlanRecord?)\u0060 overload) \u2014 otherwise\nit is Tesserafin.Api.Models.PlaybackSessionDtos.PlaybackSessionResponse.LegacyDecisionVersion, the sentinel for a legacy-projected response.",
             "format": "int32",
             "type": "integer"
           },
@@ -10781,7 +10781,7 @@
                 "$ref": "#/components/schemas/PlaybackDecisionOutputSpec"
               }
             ],
-            "description": "The shape of the output a Reefin.Playback.Decision.PlaybackDecision produces."
+            "description": "The shape of the output a Tesserafin.Playback.Decision.PlaybackDecision produces."
           },
           "PlaybackAttemptId": {
             "description": "Issue #43. The opaque attempt id the client supplied on the request that created or last\nre-planned this session, echoed back verbatim, or null when none was supplied.\nEchoing it lets a client confirm the server filed its attempt under the value it meant, and lets\nan operator join this response to the client\u0027s own trace for the SAME attempt \u2014 including across\na retry, where the value is identical while the \u0060RequestId\u0060 of issue #42 is not.\nAdditive and optional: a client that never sends it never sees it, and nothing else changes.",
@@ -10789,7 +10789,7 @@
             "type": "string"
           },
           "Reasons": {
-            "description": "A flat summary of the reason codes behind this decision (no technical detail beyond the code\nitself, and never a file path, token, or ffmpeg argument). For legacy-sourced sessions, only\nthe constraint codes that mirror \u0060Reefin.Model.Session.TranscodeReason\u0060 one-to-one can be\nderived \u2014 positive/marker codes such as Reefin.Playback.Decision.ReasonCode.TonemapRequired or\nReefin.Playback.Decision.ReasonCode.MethodChosen have no legacy reason bit and never appear here.",
+            "description": "A flat summary of the reason codes behind this decision (no technical detail beyond the code\nitself, and never a file path, token, or ffmpeg argument). For legacy-sourced sessions, only\nthe constraint codes that mirror \u0060Tesserafin.Model.Session.TranscodeReason\u0060 one-to-one can be\nderived \u2014 positive/marker codes such as Tesserafin.Playback.Decision.ReasonCode.TonemapRequired or\nTesserafin.Playback.Decision.ReasonCode.MethodChosen have no legacy reason bit and never appear here.",
             "items": {
               "$ref": "#/components/schemas/PlaybackDecisionReasonCode"
             },
@@ -10801,10 +10801,10 @@
                 "$ref": "#/components/schemas/PlaybackDecisionSelectedStreams"
               }
             ],
-            "description": "The video, audio, and subtitle streams selected for a Reefin.Playback.Decision.PlaybackDecision."
+            "description": "The video, audio, and subtitle streams selected for a Tesserafin.Playback.Decision.PlaybackDecision."
           },
           "Transforms": {
-            "description": "The pipeline transforms this decision implies. For legacy-sourced sessions this is\nbest-effort, not read directly off the plan \u2014 see\nReefin.Api.Models.PlaybackSessionDtos.PlaybackSessionResponseMapper for the derivation and its\ndocumented approximations.",
+            "description": "The pipeline transforms this decision implies. For legacy-sourced sessions this is\nbest-effort, not read directly off the plan \u2014 see\nTesserafin.Api.Models.PlaybackSessionDtos.PlaybackSessionResponseMapper for the derivation and its\ndocumented approximations.",
             "items": {
               "$ref": "#/components/schemas/PlaybackDecisionTransformKind"
             },
@@ -10820,10 +10820,10 @@
       },
       "PlaybackSessionStreamDescriptor": {
         "additionalProperties": false,
-        "description": "PR117 (docs/pr116d-url-contract-design.md \u00A72.2): the companion, client-facing descriptor of the\nexecutable URL for a session already planned via \u0060Playback/Sessions\u0060 - returned only from\n\u0060GET Playback/Sessions/{id}/Stream\u0060, never composed into Reefin.Api.Models.PlaybackSessionDtos.PlaybackSessionListItem\nor Reefin.Api.Models.PlaybackSessionDtos.PlaybackDiagnosticDetail (design doc \u00A71.4: those two reach the admin-elevated,\ncross-user diagnostics surface, and a URL there would leak the access token\nReefin.Api.Models.PlaybackSessionDtos.PlaybackSessionStreamDescriptor.Url carries to any administrator browsing another user\u0027s session).",
+        "description": "PR117 (docs/pr116d-url-contract-design.md \u00A72.2): the companion, client-facing descriptor of the\nexecutable URL for a session already planned via \u0060Playback/Sessions\u0060 - returned only from\n\u0060GET Playback/Sessions/{id}/Stream\u0060, never composed into Tesserafin.Api.Models.PlaybackSessionDtos.PlaybackSessionListItem\nor Tesserafin.Api.Models.PlaybackSessionDtos.PlaybackDiagnosticDetail (design doc \u00A71.4: those two reach the admin-elevated,\ncross-user diagnostics surface, and a URL there would leak the access token\nTesserafin.Api.Models.PlaybackSessionDtos.PlaybackSessionStreamDescriptor.Url carries to any administrator browsing another user\u0027s session).",
         "properties": {
           "Container": {
-            "description": "LANE S / issue #44 \u00A78 arbitrage A: the EFFECTIVE output container of the stream\nReefin.Api.Models.PlaybackSessionDtos.PlaybackSessionStreamDescriptor.Url resolves to - the very value the URL itself carries\n(\u0060/stream.{container}\u0060 on Reefin.Playback.Decision.StreamingProtocol.Http,\n\u0060\u0026SegmentContainer={container}\u0060 on Reefin.Playback.Decision.StreamingProtocol.Hls, where it is\ntherefore the SEGMENT container, not \u0060m3u8\u0060). Until this field existed the server picked a\ncontainer and reported it nowhere, so a client had no way to name what it was about to play\nwithout borrowing the legacy \u0060TranscodingContainer\u0060 - which is exactly why reefin-web #24\nhad to fall the whole remux/non-HLS-transcode decision back to legacy. null\nonly when the served stream carries no container at all.",
+            "description": "LANE S / issue #44 \u00A78 arbitrage A: the EFFECTIVE output container of the stream\nTesserafin.Api.Models.PlaybackSessionDtos.PlaybackSessionStreamDescriptor.Url resolves to - the very value the URL itself carries\n(\u0060/stream.{container}\u0060 on Tesserafin.Playback.Decision.StreamingProtocol.Http,\n\u0060\u0026SegmentContainer={container}\u0060 on Tesserafin.Playback.Decision.StreamingProtocol.Hls, where it is\ntherefore the SEGMENT container, not \u0060m3u8\u0060). Until this field existed the server picked a\ncontainer and reported it nowhere, so a client had no way to name what it was about to play\nwithout borrowing the legacy \u0060TranscodingContainer\u0060 - which is exactly why reefin-web #24\nhad to fall the whole remux/non-HLS-transcode decision back to legacy. null\nonly when the served stream carries no container at all.",
             "nullable": true,
             "type": "string"
           },
@@ -10833,7 +10833,7 @@
                 "$ref": "#/components/schemas/PlaybackLiveFallbackReason"
               }
             ],
-            "description": "Why legacy was served instead of v2, or null when Reefin.Api.Models.PlaybackSessionDtos.PlaybackSessionStreamDescriptor.ServedBy is a\nreal v2 engine version. Same restricted enum already surfaced on the admin diagnostics detail\nroute (design doc \u00A72.2/\u00A74).",
+            "description": "Why legacy was served instead of v2, or null when Tesserafin.Api.Models.PlaybackSessionDtos.PlaybackSessionStreamDescriptor.ServedBy is a\nreal v2 engine version. Same restricted enum already surfaced on the admin diagnostics detail\nroute (design doc \u00A72.2/\u00A74).",
             "enum": [
               "NoAuthoritativeRecord",
               "PlanNotExecutable",
@@ -10846,7 +10846,7 @@
             "nullable": true
           },
           "MimeType": {
-            "description": "The content type a client should announce to its player for Reefin.Api.Models.PlaybackSessionDtos.PlaybackSessionStreamDescriptor.Url, resolved from\nReefin.Api.Models.PlaybackSessionDtos.PlaybackSessionStreamDescriptor.Container exactly the way the delivery endpoints themselves resolve their own\n\u0060Content-Type\u0060 header - \u0060application/vnd.apple.mpegurl\u0060 on\nReefin.Playback.Decision.StreamingProtocol.Hls (the playlist\u0027s type, not the segments\u0027), otherwise\n\u0060MimeTypes.GetMimeType(\u0022.\u0022 \u002B Container)\u0060, the same call\n\u0060VideosController\u0060/\u0060AudioHelper\u0060 make on the container they actually write. Reported\nrather than re-derived client-side so the announced type can never disagree with the response\nthe URL will really produce. null when no container is known, or when no\nmapping exists for it.",
+            "description": "The content type a client should announce to its player for Tesserafin.Api.Models.PlaybackSessionDtos.PlaybackSessionStreamDescriptor.Url, resolved from\nTesserafin.Api.Models.PlaybackSessionDtos.PlaybackSessionStreamDescriptor.Container exactly the way the delivery endpoints themselves resolve their own\n\u0060Content-Type\u0060 header - \u0060application/vnd.apple.mpegurl\u0060 on\nTesserafin.Playback.Decision.StreamingProtocol.Hls (the playlist\u0027s type, not the segments\u0027), otherwise\n\u0060MimeTypes.GetMimeType(\u0022.\u0022 \u002B Container)\u0060, the same call\n\u0060VideosController\u0060/\u0060AudioHelper\u0060 make on the container they actually write. Reported\nrather than re-derived client-side so the announced type can never disagree with the response\nthe URL will really produce. null when no container is known, or when no\nmapping exists for it.",
             "nullable": true,
             "type": "string"
           },
@@ -10856,19 +10856,19 @@
                 "$ref": "#/components/schemas/PlaybackDecisionStreamingProtocol"
               }
             ],
-            "description": "The transport protocol an output stream is delivered over. Deliberately neutral vocabulary\n(not \u0060Reefin.Data.Enums.MediaStreamProtocol\u0060 or any other legacy/DLNA type): the domain\ndepends on nothing outside itself (RFC PR91 \u00A74).",
+            "description": "The transport protocol an output stream is delivered over. Deliberately neutral vocabulary\n(not \u0060Tesserafin.Data.Enums.MediaStreamProtocol\u0060 or any other legacy/DLNA type): the domain\ndepends on nothing outside itself (RFC PR91 \u00A74).",
             "enum": [
               "Http",
               "Hls"
             ]
           },
           "ServedBy": {
-            "description": "The version of the engine that actually produced Reefin.Api.Models.PlaybackSessionDtos.PlaybackSessionStreamDescriptor.Url, resolved at THIS call - same\nsentinel as Reefin.Api.Models.PlaybackSessionDtos.PlaybackSessionResponse.LegacyDecisionVersion, but deliberately distinct\nfrom the \u0060DecisionVersion\u0060 the originating \u0060POST\u0060/\u0060PUT\u0060 announced (design doc \u00A73.1:\nthe two can diverge, this field is authoritative for what is actually served).",
+            "description": "The version of the engine that actually produced Tesserafin.Api.Models.PlaybackSessionDtos.PlaybackSessionStreamDescriptor.Url, resolved at THIS call - same\nsentinel as Tesserafin.Api.Models.PlaybackSessionDtos.PlaybackSessionResponse.LegacyDecisionVersion, but deliberately distinct\nfrom the \u0060DecisionVersion\u0060 the originating \u0060POST\u0060/\u0060PUT\u0060 announced (design doc \u00A73.1:\nthe two can diverge, this field is authoritative for what is actually served).",
             "format": "int32",
             "type": "integer"
           },
           "SubtitleUrl": {
-            "description": "The external subtitle delivery URL, present only when the served stream\u0027s selected subtitle\ndelivery method is Reefin.Playback.Decision.SubtitleDeliveryMethod.External - null\notherwise (design doc \u00A72.2).",
+            "description": "The external subtitle delivery URL, present only when the served stream\u0027s selected subtitle\ndelivery method is Tesserafin.Playback.Decision.SubtitleDeliveryMethod.External - null\notherwise (design doc \u00A72.2).",
             "nullable": true,
             "type": "string"
           },
@@ -10881,15 +10881,15 @@
       },
       "PlaybackShadowOptions": {
         "additionalProperties": false,
-        "description": "Configures the PR98 shadow mode that dual-runs the v2 playback decision engine\n(\u0060Reefin.Playback.Engine\u0060) alongside the legacy \u0060StreamBuilder\u0060-based planner for\ncomparison. Legacy always remains the source of truth for the plan returned to clients,\nregardless of these settings; they only control whether/how often/how expensively the shadow\ncomparison itself runs.",
+        "description": "Configures the PR98 shadow mode that dual-runs the v2 playback decision engine\n(\u0060Tesserafin.Playback.Engine\u0060) alongside the legacy \u0060StreamBuilder\u0060-based planner for\ncomparison. Legacy always remains the source of truth for the plan returned to clients,\nregardless of these settings; they only control whether/how often/how expensively the shadow\ncomparison itself runs.",
         "properties": {
           "CanaryPercentage": {
-            "description": "Gets or sets the percentage (0-100) of user/device pairs in the canary cohort when\nReefin.Model.Configuration.PlaybackShadowOptions.Mode is Reefin.Model.Configuration.PlaybackEngineMode.Canary. Cohort membership is a\ndeterministic hash of the requesting user and device - the same pair is always in or always\nout for a given percentage, never a fresh random draw per request. Clamped to [0, 100] on\nset, following this type\u0027s PR104 clamp-don\u0027t-throw convention. Defaults to 0: enabling\ncanary mode without choosing a cohort size enrolls nobody.",
+            "description": "Gets or sets the percentage (0-100) of user/device pairs in the canary cohort when\nTesserafin.Model.Configuration.PlaybackShadowOptions.Mode is Tesserafin.Model.Configuration.PlaybackEngineMode.Canary. Cohort membership is a\ndeterministic hash of the requesting user and device - the same pair is always in or always\nout for a given percentage, never a fresh random draw per request. Clamped to [0, 100] on\nset, following this type\u0027s PR104 clamp-don\u0027t-throw convention. Defaults to 0: enabling\ncanary mode without choosing a cohort size enrolls nobody.",
             "format": "int32",
             "type": "integer"
           },
           "Enabled": {
-            "description": "Gets or sets a value indicating whether the shadow comparison runs at all. Defaults to\nfalse: shadow mode is opt-in, since PR100 removed the previous\nalways-on behavior for safety. PR115a: kept for backward compatibility with configurations\nthat predate Reefin.Model.Configuration.PlaybackShadowOptions.Mode - see M:Reefin.Model.Configuration.PlaybackShadowOptions.GetEffectiveMode for how the two\ncombine. New configurations should set Reefin.Model.Configuration.PlaybackShadowOptions.Mode instead.",
+            "description": "Gets or sets a value indicating whether the shadow comparison runs at all. Defaults to\nfalse: shadow mode is opt-in, since PR100 removed the previous\nalways-on behavior for safety. PR115a: kept for backward compatibility with configurations\nthat predate Tesserafin.Model.Configuration.PlaybackShadowOptions.Mode - see M:Tesserafin.Model.Configuration.PlaybackShadowOptions.GetEffectiveMode for how the two\ncombine. New configurations should set Tesserafin.Model.Configuration.PlaybackShadowOptions.Mode instead.",
             "type": "boolean"
           },
           "MaxExecutionMs": {
@@ -10903,7 +10903,7 @@
                 "$ref": "#/components/schemas/PlaybackEngineMode"
               }
             ],
-            "description": "Gets or sets the explicit role the v2 engine plays for live playback (PR115a). Defaults to\nReefin.Model.Configuration.PlaybackEngineMode.Legacy. When left at that default, a pre-PR115a\nconfiguration with Reefin.Model.Configuration.PlaybackShadowOptions.Enabled set still gets shadow behavior - see\nM:Reefin.Model.Configuration.PlaybackShadowOptions.GetEffectiveMode.",
+            "description": "Gets or sets the explicit role the v2 engine plays for live playback (PR115a). Defaults to\nTesserafin.Model.Configuration.PlaybackEngineMode.Legacy. When left at that default, a pre-PR115a\nconfiguration with Tesserafin.Model.Configuration.PlaybackShadowOptions.Enabled set still gets shadow behavior - see\nM:Tesserafin.Model.Configuration.PlaybackShadowOptions.GetEffectiveMode.",
             "enum": [
               "Legacy",
               "Shadow",
@@ -10912,7 +10912,7 @@
             ]
           },
           "SampleRate": {
-            "description": "Gets or sets the fraction of eligible playback decisions (0.0-1.0) that actually run the\nshadow comparison when Reefin.Model.Configuration.PlaybackShadowOptions.Enabled is true. 1.0 (the default)\nmeans every decision is shadowed; lower values sample. PR104: clamped to [0, 1] on set - a\nvalue outside that range (including NaN, clamped to 0) has no meaningful sampling\ninterpretation, so it is corrected rather than left to produce nonsensical behavior\ndownstream (for example a negative rate always sampling out, or a rate above 1 being\nindistinguishable from 1).",
+            "description": "Gets or sets the fraction of eligible playback decisions (0.0-1.0) that actually run the\nshadow comparison when Tesserafin.Model.Configuration.PlaybackShadowOptions.Enabled is true. 1.0 (the default)\nmeans every decision is shadowed; lower values sample. PR104: clamped to [0, 1] on set - a\nvalue outside that range (including NaN, clamped to 0) has no meaningful sampling\ninterpretation, so it is corrected rather than left to produce nonsensical behavior\ndownstream (for example a negative rate always sampling out, or a rate above 1 being\nindistinguishable from 1).",
             "format": "double",
             "type": "number"
           },
@@ -10922,7 +10922,7 @@
                 "$ref": "#/components/schemas/PlaybackStopThresholdOptions"
               }
             ],
-            "description": "Gets or sets the PR115d operational stop-threshold guard configuration - see\nReefin.Model.Configuration.PlaybackStopThresholdOptions for why this is a sibling type rather than fields\non this class directly. Never null; defaults to a fresh, enabled instance\nwith its own PR115d defaults, so a configuration that predates PR115d still gets the guard\u0027s\nprotection without needing to add anything."
+            "description": "Gets or sets the PR115d operational stop-threshold guard configuration - see\nTesserafin.Model.Configuration.PlaybackStopThresholdOptions for why this is a sibling type rather than fields\non this class directly. Never null; defaults to a fresh, enabled instance\nwith its own PR115d defaults, so a configuration that predates PR115d still gets the guard\u0027s\nprotection without needing to add anything."
           }
         },
         "type": "object"
@@ -11072,7 +11072,7 @@
         "description": "Class PlaybackStopInfo.",
         "properties": {
           "Failed": {
-            "description": "Gets or sets a value indicating whether this Reefin.Model.Session.PlaybackStopInfo is failed.",
+            "description": "Gets or sets a value indicating whether this Tesserafin.Model.Session.PlaybackStopInfo is failed.",
             "type": "boolean"
           },
           "Item": {
@@ -11135,24 +11135,24 @@
       },
       "PlaybackStopThresholdOptions": {
         "additionalProperties": false,
-        "description": "PR115d: configures the operational stop-threshold guard for the v2 canary - an automatic,\nconfig-driven safety net that forces every live playback request back to legacy (the same\nobservable effect as the Reefin.Model.Configuration.PlaybackShadowOptions.Mode kill switch) once the v2 live\npath\u0027s own error signals cross an operator-chosen threshold, without waiting for a human to\nnotice and flip the kill switch by hand. A sibling of Reefin.Model.Configuration.PlaybackShadowOptions rather\nthan a merge into it - Reefin.Model.Configuration.PlaybackShadowOptions.StopThresholds holds one instance -\nso the two concerns (what role v2 plays; when it auto-disqualifies itself) stay independently\nreadable and independently testable, matching this configuration surface\u0027s existing\none-concern-per-type shape (\u0060TrickplayOptions\u0060, \u0060PlaybackShadowOptions\u0060 itself).",
+        "description": "PR115d: configures the operational stop-threshold guard for the v2 canary - an automatic,\nconfig-driven safety net that forces every live playback request back to legacy (the same\nobservable effect as the Tesserafin.Model.Configuration.PlaybackShadowOptions.Mode kill switch) once the v2 live\npath\u0027s own error signals cross an operator-chosen threshold, without waiting for a human to\nnotice and flip the kill switch by hand. A sibling of Tesserafin.Model.Configuration.PlaybackShadowOptions rather\nthan a merge into it - Tesserafin.Model.Configuration.PlaybackShadowOptions.StopThresholds holds one instance -\nso the two concerns (what role v2 plays; when it auto-disqualifies itself) stay independently\nreadable and independently testable, matching this configuration surface\u0027s existing\none-concern-per-type shape (\u0060TrickplayOptions\u0060, \u0060PlaybackShadowOptions\u0060 itself).",
         "properties": {
           "AdapterErrorRateThreshold": {
-            "description": "Gets or sets the fraction (0.0-1.0) of v2-attempted live requests that may end in an\n\u0060AdapterError\u0060 (\u0060Reefin.MediaEncoding.Playback.PlaybackLiveFallbackReason\u0060) before\nthe guard trips. \u0022v2-attempted\u0022 means the request passed every earlier gate (kill switch,\ncohort, resolvable plan, source id match, Dolby Vision exclusion) and reached the adapter\n(\u0060Reefin.Playback.Dlna.PlaybackExecutionPlanAdapter.ToStreamInfo\u0060) - the denominator is\nserved-by-v2 count plus adapter-error count, not the count of every live request. Not a\n\u0060cref\u0060 to either type: this project (\u0060Reefin.Model\u0060) sits below both in the\ndependency graph and must not reference them. Defaults\nto 0.10 (10%): the adapter is expected to succeed on essentially every eligible plan (PR115b\u0027s\nexecutable-parity invariant exists precisely to make adapter failures rare), so a double-digit\nerror rate is already a strong signal something is wrong. Clamped to [0, 1] on set, following\nthis type\u0027s PR104 clamp-don\u0027t-throw convention.",
+            "description": "Gets or sets the fraction (0.0-1.0) of v2-attempted live requests that may end in an\n\u0060AdapterError\u0060 (\u0060Tesserafin.MediaEncoding.Playback.PlaybackLiveFallbackReason\u0060) before\nthe guard trips. \u0022v2-attempted\u0022 means the request passed every earlier gate (kill switch,\ncohort, resolvable plan, source id match, Dolby Vision exclusion) and reached the adapter\n(\u0060Tesserafin.Playback.Dlna.PlaybackExecutionPlanAdapter.ToStreamInfo\u0060) - the denominator is\nserved-by-v2 count plus adapter-error count, not the count of every live request. Not a\n\u0060cref\u0060 to either type: this project (\u0060Tesserafin.Model\u0060) sits below both in the\ndependency graph and must not reference them. Defaults\nto 0.10 (10%): the adapter is expected to succeed on essentially every eligible plan (PR115b\u0027s\nexecutable-parity invariant exists precisely to make adapter failures rare), so a double-digit\nerror rate is already a strong signal something is wrong. Clamped to [0, 1] on set, following\nthis type\u0027s PR104 clamp-don\u0027t-throw convention.",
             "format": "double",
             "type": "number"
           },
           "Enabled": {
-            "description": "Gets or sets a value indicating whether the stop-threshold guard evaluates at all. Defaults\nto true - deliberately the opposite default from Reefin.Model.Configuration.PlaybackShadowOptions.Enabled:\nPR115d\u0027s scope requires the guard to protect production canary traffic by default, with an\noperator having to make an explicit, visible choice to turn the safety net off, rather than\nhaving to remember to turn it on.",
+            "description": "Gets or sets a value indicating whether the stop-threshold guard evaluates at all. Defaults\nto true - deliberately the opposite default from Tesserafin.Model.Configuration.PlaybackShadowOptions.Enabled:\nPR115d\u0027s scope requires the guard to protect production canary traffic by default, with an\noperator having to make an explicit, visible choice to turn the safety net off, rather than\nhaving to remember to turn it on.",
             "type": "boolean"
           },
           "MinimumSampleSize": {
-            "description": "Gets or sets the minimum number of samples (v2 attempts, for Reefin.Model.Configuration.PlaybackStopThresholdOptions.AdapterErrorRateThreshold;\nv2 transcode starts, for Reefin.Model.Configuration.PlaybackStopThresholdOptions.TranscodeStartFailureRateThreshold) required before a\nrate is trusted enough to trip the guard. Defaults to 20: without a floor, the very first v2\nrequest failing would already be a \u0022100% error rate\u0022 and would trip the guard on a single\nunlucky sample - exactly the kind of premature, noisy trip an operator opening a 1% canary\ncohort cannot afford to chase. Clamped to a minimum of 1 on set (mirrors\nReefin.Model.Configuration.PlaybackShadowOptions.MaxExecutionMs\u0027s own floor) - zero would make any single\nfailure trip the guard, which is never the intent of a misconfigured value.",
+            "description": "Gets or sets the minimum number of samples (v2 attempts, for Tesserafin.Model.Configuration.PlaybackStopThresholdOptions.AdapterErrorRateThreshold;\nv2 transcode starts, for Tesserafin.Model.Configuration.PlaybackStopThresholdOptions.TranscodeStartFailureRateThreshold) required before a\nrate is trusted enough to trip the guard. Defaults to 20: without a floor, the very first v2\nrequest failing would already be a \u0022100% error rate\u0022 and would trip the guard on a single\nunlucky sample - exactly the kind of premature, noisy trip an operator opening a 1% canary\ncohort cannot afford to chase. Clamped to a minimum of 1 on set (mirrors\nTesserafin.Model.Configuration.PlaybackShadowOptions.MaxExecutionMs\u0027s own floor) - zero would make any single\nfailure trip the guard, which is never the intent of a misconfigured value.",
             "format": "int32",
             "type": "integer"
           },
           "TranscodeStartFailureRateThreshold": {
-            "description": "Gets or sets the fraction (0.0-1.0) of ffmpeg transcode starts for v2-served sessions that may\nfail to actually launch before the guard trips - see \u0060PlaybackOperationalMetrics\u0060\u0027s remarks\nfor exactly what \u0022failed to start\u0022 means and how it is observed\n(\u0060ITranscodeManager.TranscodingJobStarted\u0060/\u0060TranscodingJobEnded\u0060). Defaults to 0.20\n(20%): transcode start failures have causes entirely outside the v2/legacy decision itself\n(disk space, hardware encoder contention, a malformed source), so this threshold is\ndeliberately looser than Reefin.Model.Configuration.PlaybackStopThresholdOptions.AdapterErrorRateThreshold - it exists to catch a v2\nplan that is systematically producing FFmpeg arguments ffmpeg cannot start with, not every\ntransient environmental failure. Clamped to [0, 1] on set, following this type\u0027s PR104\nclamp-don\u0027t-throw convention.",
+            "description": "Gets or sets the fraction (0.0-1.0) of ffmpeg transcode starts for v2-served sessions that may\nfail to actually launch before the guard trips - see \u0060PlaybackOperationalMetrics\u0060\u0027s remarks\nfor exactly what \u0022failed to start\u0022 means and how it is observed\n(\u0060ITranscodeManager.TranscodingJobStarted\u0060/\u0060TranscodingJobEnded\u0060). Defaults to 0.20\n(20%): transcode start failures have causes entirely outside the v2/legacy decision itself\n(disk space, hardware encoder contention, a malformed source), so this threshold is\ndeliberately looser than Tesserafin.Model.Configuration.PlaybackStopThresholdOptions.AdapterErrorRateThreshold - it exists to catch a v2\nplan that is systematically producing FFmpeg arguments ffmpeg cannot start with, not every\ntransient environmental failure. Clamped to [0, 1] on set, following this type\u0027s PR104\nclamp-don\u0027t-throw convention.",
             "format": "double",
             "type": "number"
           }
@@ -11487,7 +11487,7 @@
                 "$ref": "#/components/schemas/InstallationInfo"
               }
             ],
-            "description": "Gets or sets the data.",
+            "description": "Class InstallationInfo.",
             "nullable": true
           },
           "MessageId": {
@@ -11554,7 +11554,7 @@
                 "$ref": "#/components/schemas/InstallationInfo"
               }
             ],
-            "description": "Gets or sets the data.",
+            "description": "Class InstallationInfo.",
             "nullable": true
           },
           "MessageId": {
@@ -11621,7 +11621,7 @@
                 "$ref": "#/components/schemas/InstallationInfo"
               }
             ],
-            "description": "Gets or sets the data.",
+            "description": "Class InstallationInfo.",
             "nullable": true
           },
           "MessageId": {
@@ -11688,7 +11688,7 @@
                 "$ref": "#/components/schemas/InstallationInfo"
               }
             ],
-            "description": "Gets or sets the data.",
+            "description": "Class InstallationInfo.",
             "nullable": true
           },
           "MessageId": {
@@ -11769,7 +11769,7 @@
                 "$ref": "#/components/schemas/PluginInfo"
               }
             ],
-            "description": "Gets or sets the data.",
+            "description": "This is a serializable stub class that is used by the api to provide information about installed plugins.",
             "nullable": true
           },
           "MessageId": {
@@ -12133,7 +12133,7 @@
                 "$ref": "#/components/schemas/GroupQueueMode"
               }
             ],
-            "description": "Enum GroupQueueMode.",
+            "description": "Gets or sets the mode in which to add the new items.",
             "enum": [
               "Queue",
               "QueueNext"
@@ -12675,7 +12675,7 @@
       },
       "ReplacePlaybackSessionRequest": {
         "additionalProperties": false,
-        "description": "Request body for fully re-planning an existing playback session (PR92 \u00A73\u0027s \u0060PUT\u0060 decision\nv1). Distinct from Reefin.Api.Models.PlaybackSessionDtos.CreatePlaybackSessionRequest: a replace targets the session named\nin the route, so there is no \u0060PlaySessionId\u0060 field to (mis)use for that purpose.",
+        "description": "Request body for fully re-planning an existing playback session (PR92 \u00A73\u0027s \u0060PUT\u0060 decision\nv1). Distinct from Tesserafin.Api.Models.PlaybackSessionDtos.CreatePlaybackSessionRequest: a replace targets the session named\nin the route, so there is no \u0060PlaySessionId\u0060 field to (mis)use for that purpose.",
         "properties": {
           "Capabilities": {
             "allOf": [
@@ -12683,7 +12683,7 @@
                 "$ref": "#/components/schemas/PlaybackDecisionClientCapabilities"
               }
             ],
-            "description": "Everything the v2 engine needs to know about a requesting client: what it can decode as-is\n(Reefin.Playback.Decision.ClientCapabilities.Decode), and separately, what the server should produce when it must transcode\n(Reefin.Playback.Decision.ClientCapabilities.OutputProfiles)."
+            "description": "Everything the v2 engine needs to know about a requesting client: what it can decode as-is\n(Tesserafin.Playback.Decision.ClientCapabilities.Decode), and separately, what the server should produce when it must transcode\n(Tesserafin.Playback.Decision.ClientCapabilities.OutputProfiles)."
           },
           "Constraints": {
             "allOf": [
@@ -12704,7 +12704,7 @@
             "type": "string"
           },
           "PlaybackAttemptId": {
-            "description": "Issue #43. Optional, opaque, client-generated. The identifier of the playback ATTEMPT this\nrequest belongs to \u2014 generated once by the client when it starts trying to play something, and\nresent unchanged on every request of that attempt: \u0060PlaybackInfo\u0060, this \u0060POST\u0060, the\n\u0060PUT\u0060, and any retry. A new attempt gets a new value; a retry inside the same attempt keeps\nthe old one.\n\nDistinct from both neighbouring scopes and substitutable for neither. It is NOT the\n\u0060RequestId\u0060/\u0060TraceId\u0060 of issue #42, which is server-derived and changes on every\nrequest. It is NOT Reefin.Api.Models.PlaybackSessionDtos.CreatePlaybackSessionRequest.PlaySessionId, which only exists\nonce a session does \u2014 i.e. after \u0060PlaybackInfo\u0060 has already happened \u2014 and which survives\nacross several attempts. See \u0060docs/observabilite-identifiants-correlation.md\u0060.\nDiagnostics only: never an authorization key, no access decision is derived from it, and it\nreplaces no existing access control. Validated for length and printability only (see\nReefin.Api.Models.PlaybackSessionDtos.PlaybackAttemptIdValidator); no structure is imposed and no meaning is read out of it.",
+            "description": "Issue #43. Optional, opaque, client-generated. The identifier of the playback ATTEMPT this\nrequest belongs to \u2014 generated once by the client when it starts trying to play something, and\nresent unchanged on every request of that attempt: \u0060PlaybackInfo\u0060, this \u0060POST\u0060, the\n\u0060PUT\u0060, and any retry. A new attempt gets a new value; a retry inside the same attempt keeps\nthe old one.\n\nDistinct from both neighbouring scopes and substitutable for neither. It is NOT the\n\u0060RequestId\u0060/\u0060TraceId\u0060 of issue #42, which is server-derived and changes on every\nrequest. It is NOT Tesserafin.Api.Models.PlaybackSessionDtos.CreatePlaybackSessionRequest.PlaySessionId, which only exists\nonce a session does \u2014 i.e. after \u0060PlaybackInfo\u0060 has already happened \u2014 and which survives\nacross several attempts. See \u0060docs/observabilite-identifiants-correlation.md\u0060.\nDiagnostics only: never an authorization key, no access decision is derived from it, and it\nreplaces no existing access control. Validated for length and printability only (see\nTesserafin.Api.Models.PlaybackSessionDtos.PlaybackAttemptIdValidator); no structure is imposed and no meaning is read out of it.",
             "nullable": true,
             "type": "string"
           },
@@ -12805,7 +12805,7 @@
                 "$ref": "#/components/schemas/TaskResult"
               }
             ],
-            "description": "Gets or sets the data.",
+            "description": "Class TaskExecutionInfo.",
             "nullable": true
           },
           "MessageId": {
@@ -14708,7 +14708,7 @@
                 "$ref": "#/components/schemas/GroupRepeatMode"
               }
             ],
-            "description": "Enum GroupRepeatMode.",
+            "description": "Gets or sets the repeat mode.",
             "enum": [
               "RepeatOne",
               "RepeatAll",
@@ -14728,7 +14728,7 @@
                 "$ref": "#/components/schemas/GroupShuffleMode"
               }
             ],
-            "description": "Enum GroupShuffleMode.",
+            "description": "Gets or sets the shuffle mode.",
             "enum": [
               "Sorted",
               "Shuffle"
@@ -14976,7 +14976,7 @@
                 "$ref": "#/components/schemas/SendCommand"
               }
             ],
-            "description": "Gets or sets the data.",
+            "description": "Class SendCommand.",
             "nullable": true
           },
           "MessageId": {
@@ -16561,7 +16561,7 @@
       },
       "TranscodingProfile": {
         "additionalProperties": false,
-        "description": "A class for transcoding profile information.\nNote for client developers: Conditions defined in Reefin.Model.Dlna.CodecProfile has higher priority and can override values defined here.",
+        "description": "A class for transcoding profile information.\nNote for client developers: Conditions defined in Tesserafin.Model.Dlna.CodecProfile has higher priority and can override values defined here.",
         "properties": {
           "AudioCodec": {
             "description": "Gets or sets the audio codec.",
@@ -17106,7 +17106,7 @@
             "type": "string"
           },
           "Likes": {
-            "description": "Gets or sets a value indicating whether this Reefin.Model.Dto.UpdateUserItemDataDto is likes.",
+            "description": "Gets or sets a value indicating whether this Tesserafin.Model.Dto.UpdateUserItemDataDto is likes.",
             "nullable": true,
             "type": "boolean"
           },
@@ -17123,7 +17123,7 @@
             "type": "integer"
           },
           "Played": {
-            "description": "Gets or sets a value indicating whether this Reefin.Model.Dto.UserItemDataDto is played.",
+            "description": "Gets or sets a value indicating whether this Tesserafin.Model.Dto.UserItemDataDto is played.",
             "nullable": true,
             "type": "boolean"
           },
@@ -17333,7 +17333,7 @@
                 "$ref": "#/components/schemas/UserDataChangeInfo"
               }
             ],
-            "description": "Gets or sets the data.",
+            "description": "Class UserDataChangeInfo.",
             "nullable": true
           },
           "MessageId": {
@@ -17568,7 +17568,7 @@
             "type": "string"
           },
           "Likes": {
-            "description": "Gets or sets a value indicating whether this Reefin.Model.Dto.UserItemDataDto is likes.",
+            "description": "Gets or sets a value indicating whether this Tesserafin.Model.Dto.UserItemDataDto is likes.",
             "nullable": true,
             "type": "boolean"
           },
@@ -17583,7 +17583,7 @@
             "type": "integer"
           },
           "Played": {
-            "description": "Gets or sets a value indicating whether this Reefin.Model.Dto.UserItemDataDto is played.",
+            "description": "Gets or sets a value indicating whether this Tesserafin.Model.Dto.UserItemDataDto is played.",
             "type": "boolean"
           },
           "PlayedPercentage": {
@@ -17813,7 +17813,7 @@
                 "$ref": "#/components/schemas/SyncPlayUserAccessType"
               }
             ],
-            "description": "Gets or sets a value indicating what SyncPlay features the user can access.",
+            "description": "Enum SyncPlayUserAccessType.",
             "enum": [
               "CreateAndJoinGroups",
               "JoinGroups",
@@ -17837,7 +17837,7 @@
                 "$ref": "#/components/schemas/UserDto"
               }
             ],
-            "description": "Gets or sets the data.",
+            "description": "Class UserDto.",
             "nullable": true
           },
           "MessageId": {
@@ -17934,7 +17934,7 @@
       },
       "VersionInfo": {
         "additionalProperties": false,
-        "description": "Defines the Reefin.Model.Updates.VersionInfo class.",
+        "description": "Defines the Tesserafin.Model.Updates.VersionInfo class.",
         "properties": {
           "VersionNumber": {
             "description": "Gets the version as a System.Version.",
@@ -21038,7 +21038,7 @@
             }
           },
           {
-            "description": "Optional. The Reefin.Model.Dlna.EncodingContext.",
+            "description": "Optional. The Tesserafin.Model.Dlna.EncodingContext.",
             "in": "query",
             "name": "context",
             "schema": {
@@ -21530,7 +21530,7 @@
             }
           },
           {
-            "description": "Optional. The Reefin.Model.Dlna.EncodingContext.",
+            "description": "Optional. The Tesserafin.Model.Dlna.EncodingContext.",
             "in": "query",
             "name": "context",
             "schema": {
@@ -22025,7 +22025,7 @@
             }
           },
           {
-            "description": "Optional. The Reefin.Model.Dlna.EncodingContext.",
+            "description": "Optional. The Tesserafin.Model.Dlna.EncodingContext.",
             "in": "query",
             "name": "context",
             "schema": {
@@ -22518,7 +22518,7 @@
             }
           },
           {
-            "description": "Optional. The Reefin.Model.Dlna.EncodingContext.",
+            "description": "Optional. The Tesserafin.Model.Dlna.EncodingContext.",
             "in": "query",
             "name": "context",
             "schema": {
@@ -32042,7 +32042,7 @@
             }
           },
           {
-            "description": "Optional. The Reefin.Model.Drawing.ImageFormat of the returned image.",
+            "description": "Optional. The Tesserafin.Model.Drawing.ImageFormat of the returned image.",
             "in": "query",
             "name": "format",
             "schema": {
@@ -32290,7 +32290,7 @@
             }
           },
           {
-            "description": "Optional. The Reefin.Model.Drawing.ImageFormat of the returned image.",
+            "description": "Optional. The Tesserafin.Model.Drawing.ImageFormat of the returned image.",
             "in": "query",
             "name": "format",
             "schema": {
@@ -32810,7 +32810,7 @@
             }
           },
           {
-            "description": "Optional. The Reefin.Model.Drawing.ImageFormat of the returned image.",
+            "description": "Optional. The Tesserafin.Model.Drawing.ImageFormat of the returned image.",
             "in": "query",
             "name": "format",
             "schema": {
@@ -33059,7 +33059,7 @@
             }
           },
           {
-            "description": "Optional. The Reefin.Model.Drawing.ImageFormat of the returned image.",
+            "description": "Optional. The Tesserafin.Model.Drawing.ImageFormat of the returned image.",
             "in": "query",
             "name": "format",
             "schema": {
@@ -45694,7 +45694,7 @@
                     "$ref": "#/components/schemas/CreatePlaybackSessionRequest"
                   }
                 ],
-                "description": "Request body for creating (or replacing, when Reefin.Api.Models.PlaybackSessionDtos.CreatePlaybackSessionRequest.PlaySessionId matches an existing\nsession) a playback session via the point-1 v2 protocol."
+                "description": "Request body for creating (or replacing, when Tesserafin.Api.Models.PlaybackSessionDtos.CreatePlaybackSessionRequest.PlaySessionId matches an existing\nsession) a playback session via the point-1 v2 protocol."
               }
             },
             "application/json": {
@@ -45704,7 +45704,7 @@
                     "$ref": "#/components/schemas/CreatePlaybackSessionRequest"
                   }
                 ],
-                "description": "Request body for creating (or replacing, when Reefin.Api.Models.PlaybackSessionDtos.CreatePlaybackSessionRequest.PlaySessionId matches an existing\nsession) a playback session via the point-1 v2 protocol."
+                "description": "Request body for creating (or replacing, when Tesserafin.Api.Models.PlaybackSessionDtos.CreatePlaybackSessionRequest.PlaySessionId matches an existing\nsession) a playback session via the point-1 v2 protocol."
               }
             },
             "text/json": {
@@ -45714,7 +45714,7 @@
                     "$ref": "#/components/schemas/CreatePlaybackSessionRequest"
                   }
                 ],
-                "description": "Request body for creating (or replacing, when Reefin.Api.Models.PlaybackSessionDtos.CreatePlaybackSessionRequest.PlaySessionId matches an existing\nsession) a playback session via the point-1 v2 protocol."
+                "description": "Request body for creating (or replacing, when Tesserafin.Api.Models.PlaybackSessionDtos.CreatePlaybackSessionRequest.PlaySessionId matches an existing\nsession) a playback session via the point-1 v2 protocol."
               }
             }
           },
@@ -45839,7 +45839,7 @@
             ]
           }
         ],
-        "summary": "Creates (or, if Reefin.Api.Models.PlaybackSessionDtos.CreatePlaybackSessionRequest.PlaySessionId matches an\nexisting session, replaces) a playback session.",
+        "summary": "Creates (or, if Tesserafin.Api.Models.PlaybackSessionDtos.CreatePlaybackSessionRequest.PlaySessionId matches an\nexisting session, replaces) a playback session.",
         "tags": [
           "Playback"
         ]
@@ -45860,7 +45860,7 @@
                   "$ref": "#/components/schemas/PlaybackSessionId"
                 }
               ],
-              "description": "Opaque identifier for a Reefin.Controller.MediaEncoding.PlaybackSession."
+              "description": "Opaque identifier for a Tesserafin.Controller.MediaEncoding.PlaybackSession."
             }
           }
         ],
@@ -45962,7 +45962,7 @@
                   "$ref": "#/components/schemas/PlaybackSessionId"
                 }
               ],
-              "description": "Opaque identifier for a Reefin.Controller.MediaEncoding.PlaybackSession."
+              "description": "Opaque identifier for a Tesserafin.Controller.MediaEncoding.PlaybackSession."
             }
           }
         ],
@@ -45975,7 +45975,7 @@
                     "$ref": "#/components/schemas/ReplacePlaybackSessionRequest"
                   }
                 ],
-                "description": "Request body for fully re-planning an existing playback session (PR92 \u00A73\u0027s \u0060PUT\u0060 decision\nv1). Distinct from Reefin.Api.Models.PlaybackSessionDtos.CreatePlaybackSessionRequest: a replace targets the session named\nin the route, so there is no \u0060PlaySessionId\u0060 field to (mis)use for that purpose."
+                "description": "Request body for fully re-planning an existing playback session (PR92 \u00A73\u0027s \u0060PUT\u0060 decision\nv1). Distinct from Tesserafin.Api.Models.PlaybackSessionDtos.CreatePlaybackSessionRequest: a replace targets the session named\nin the route, so there is no \u0060PlaySessionId\u0060 field to (mis)use for that purpose."
               }
             },
             "application/json": {
@@ -45985,7 +45985,7 @@
                     "$ref": "#/components/schemas/ReplacePlaybackSessionRequest"
                   }
                 ],
-                "description": "Request body for fully re-planning an existing playback session (PR92 \u00A73\u0027s \u0060PUT\u0060 decision\nv1). Distinct from Reefin.Api.Models.PlaybackSessionDtos.CreatePlaybackSessionRequest: a replace targets the session named\nin the route, so there is no \u0060PlaySessionId\u0060 field to (mis)use for that purpose."
+                "description": "Request body for fully re-planning an existing playback session (PR92 \u00A73\u0027s \u0060PUT\u0060 decision\nv1). Distinct from Tesserafin.Api.Models.PlaybackSessionDtos.CreatePlaybackSessionRequest: a replace targets the session named\nin the route, so there is no \u0060PlaySessionId\u0060 field to (mis)use for that purpose."
               }
             },
             "text/json": {
@@ -45995,7 +45995,7 @@
                     "$ref": "#/components/schemas/ReplacePlaybackSessionRequest"
                   }
                 ],
-                "description": "Request body for fully re-planning an existing playback session (PR92 \u00A73\u0027s \u0060PUT\u0060 decision\nv1). Distinct from Reefin.Api.Models.PlaybackSessionDtos.CreatePlaybackSessionRequest: a replace targets the session named\nin the route, so there is no \u0060PlaySessionId\u0060 field to (mis)use for that purpose."
+                "description": "Request body for fully re-planning an existing playback session (PR92 \u00A73\u0027s \u0060PUT\u0060 decision\nv1). Distinct from Tesserafin.Api.Models.PlaybackSessionDtos.CreatePlaybackSessionRequest: a replace targets the session named\nin the route, so there is no \u0060PlaySessionId\u0060 field to (mis)use for that purpose."
               }
             }
           },
@@ -46158,7 +46158,7 @@
                   "$ref": "#/components/schemas/PlaybackSessionId"
                 }
               ],
-              "description": "Opaque identifier for a Reefin.Controller.MediaEncoding.PlaybackSession."
+              "description": "Opaque identifier for a Tesserafin.Controller.MediaEncoding.PlaybackSession."
             }
           },
           {
@@ -46274,7 +46274,7 @@
                 }
               }
             },
-            "description": "The session has no \u0060PlaySessionId\u0060 - re-request via M:Reefin.Api.Controllers.PlaybackSessionsController.ReplacePlaybackSession(Reefin.Controller.MediaEncoding.PlaybackSessionId,Reefin.Api.Models.PlaybackSessionDtos.ReplacePlaybackSessionRequest) supplying one."
+            "description": "The session has no \u0060PlaySessionId\u0060 - re-request via M:Tesserafin.Api.Controllers.PlaybackSessionsController.ReplacePlaybackSession(Tesserafin.Controller.MediaEncoding.PlaybackSessionId,Tesserafin.Api.Models.PlaybackSessionDtos.ReplacePlaybackSessionRequest) supplying one."
           },
           "422": {
             "content": {
@@ -46328,7 +46328,7 @@
             ]
           }
         ],
-        "summary": "PR117 (docs/pr116d-url-contract-design.md \u00A72): resolves the executable URL for a session\nalready planned via M:Reefin.Api.Controllers.PlaybackSessionsController.CreatePlaybackSession(Reefin.Api.Models.PlaybackSessionDtos.CreatePlaybackSessionRequest)/M:Reefin.Api.Controllers.PlaybackSessionsController.ReplacePlaybackSession(Reefin.Controller.MediaEncoding.PlaybackSessionId,Reefin.Api.Models.PlaybackSessionDtos.ReplacePlaybackSessionRequest).\nA read, not a decision (\u00A72.2): re-projects \u0060session.Plan\u0060/\u0060session.Request\u0060 that\nalready exist, re-evaluating the kill switch/stop-threshold guard/plan resolution at THIS\ncall (\u00A73.1) - the same live-wiring decision the legacy \u0060PlaybackInfo\u0060 path makes on\nevery request, never cached from the original \u0060POST\u0060/\u0060PUT\u0060.",
+        "summary": "PR117 (docs/pr116d-url-contract-design.md \u00A72): resolves the executable URL for a session\nalready planned via M:Tesserafin.Api.Controllers.PlaybackSessionsController.CreatePlaybackSession(Tesserafin.Api.Models.PlaybackSessionDtos.CreatePlaybackSessionRequest)/M:Tesserafin.Api.Controllers.PlaybackSessionsController.ReplacePlaybackSession(Tesserafin.Controller.MediaEncoding.PlaybackSessionId,Tesserafin.Api.Models.PlaybackSessionDtos.ReplacePlaybackSessionRequest).\nA read, not a decision (\u00A72.2): re-projects \u0060session.Plan\u0060/\u0060session.Request\u0060 that\nalready exist, re-evaluating the kill switch/stop-threshold guard/plan resolution at THIS\ncall (\u00A73.1) - the same live-wiring decision the legacy \u0060PlaybackInfo\u0060 path makes on\nevery request, never cached from the original \u0060POST\u0060/\u0060PUT\u0060.",
         "tags": [
           "Playback"
         ]
@@ -46803,7 +46803,7 @@
               }
             }
           },
-          "description": "The Reefin.Api.Models.PlaylistDtos.UpdatePlaylistDto id.",
+          "description": "The Tesserafin.Api.Models.PlaylistDtos.UpdatePlaylistDto id.",
           "required": true
         },
         "responses": {
@@ -47853,7 +47853,7 @@
               }
             }
           },
-          "description": "The Reefin.Api.Models.PlaylistDtos.UpdatePlaylistUserDto.",
+          "description": "The Tesserafin.Api.Models.PlaylistDtos.UpdatePlaylistUserDto.",
           "required": true
         },
         "responses": {
@@ -50343,7 +50343,7 @@
               }
             }
           },
-          "description": "The Reefin.Model.Session.ClientCapabilities.",
+          "description": "The Tesserafin.Model.Session.ClientCapabilities.",
           "required": true
         },
         "responses": {
@@ -50879,7 +50879,7 @@
               }
             }
           },
-          "description": "The Reefin.Model.Session.GeneralCommand.",
+          "description": "The Tesserafin.Model.Session.GeneralCommand.",
           "required": true
         },
         "responses": {
@@ -51095,7 +51095,7 @@
               }
             }
           },
-          "description": "The Reefin.Model.Session.MessageCommand object containing Header, Message Text, and TimeoutMs.",
+          "description": "The Tesserafin.Model.Session.MessageCommand object containing Header, Message Text, and TimeoutMs.",
           "required": true
         },
         "responses": {
@@ -51300,7 +51300,7 @@
             }
           },
           {
-            "description": "The Reefin.Model.Session.PlaystateCommand.",
+            "description": "The Tesserafin.Model.Session.PlaystateCommand.",
             "in": "path",
             "name": "command",
             "required": true,
@@ -57975,7 +57975,7 @@
                   "$ref": "#/components/schemas/PlaybackSessionId"
                 }
               ],
-              "description": "Opaque identifier for a Reefin.Controller.MediaEncoding.PlaybackSession."
+              "description": "Opaque identifier for a Tesserafin.Controller.MediaEncoding.PlaybackSession."
             }
           }
         ],
@@ -58079,7 +58079,7 @@
                   "$ref": "#/components/schemas/PlaybackSessionId"
                 }
               ],
-              "description": "Opaque identifier for a Reefin.Controller.MediaEncoding.PlaybackSession."
+              "description": "Opaque identifier for a Tesserafin.Controller.MediaEncoding.PlaybackSession."
             }
           }
         ],
@@ -58165,7 +58165,7 @@
             ]
           }
         ],
-        "summary": "PR113b: exports a session\u0027s retained shadow diagnostic as a playback-compatibility-lab\nfixture (docs/pr92-design-playback-api-and-diagnostics.md \u00A75, \u0022Exporter le cas de test\u0022),\nconforming to tests/PlaybackCompat/schema/fixture.schema.json, so a real case observed in\nproduction can be dropped into tests/PlaybackCompat/fixtures/ and replayed by the lab.\nSerialized with Reefin.Api.Models.PlaybackSessionDtos.PlaybackCompatFixtureExporter.Options (camelCase property\nnames) directly, bypassing this API\u0027s normal PascalCase-by-default content negotiation\n(see Reefin.Api.Models.PlaybackSessionDtos.PlaybackCompatFixtureExporter remarks) - the schema requires camelCase\nregardless of what an admin client\u0027s Accept header might otherwise negotiate.",
+        "summary": "PR113b: exports a session\u0027s retained shadow diagnostic as a playback-compatibility-lab\nfixture (docs/pr92-design-playback-api-and-diagnostics.md \u00A75, \u0022Exporter le cas de test\u0022),\nconforming to tests/PlaybackCompat/schema/fixture.schema.json, so a real case observed in\nproduction can be dropped into tests/PlaybackCompat/fixtures/ and replayed by the lab.\nSerialized with Tesserafin.Api.Models.PlaybackSessionDtos.PlaybackCompatFixtureExporter.Options (camelCase property\nnames) directly, bypassing this API\u0027s normal PascalCase-by-default content negotiation\n(see Tesserafin.Api.Models.PlaybackSessionDtos.PlaybackCompatFixtureExporter remarks) - the schema requires camelCase\nregardless of what an admin client\u0027s Accept header might otherwise negotiate.",
         "tags": [
           "System"
         ]
@@ -60265,7 +60265,7 @@
             }
           },
           {
-            "description": "Whether this M:Reefin.Api.Controllers.UserLibraryController.UpdateUserItemRating(System.Nullable{System.Guid},System.Guid,System.Nullable{System.Boolean}) is likes.",
+            "description": "Whether this M:Tesserafin.Api.Controllers.UserLibraryController.UpdateUserItemRating(System.Nullable{System.Guid},System.Guid,System.Nullable{System.Boolean}) is likes.",
             "in": "query",
             "name": "likes",
             "schema": {
@@ -61294,7 +61294,7 @@
               }
             }
           },
-          "description": "The M:Reefin.Api.Controllers.UserController.AuthenticateUserByName(Reefin.Api.Models.UserDtos.AuthenticateUserByName) request.",
+          "description": "The M:Tesserafin.Api.Controllers.UserController.AuthenticateUserByName(Tesserafin.Api.Models.UserDtos.AuthenticateUserByName) request.",
           "required": true
         },
         "responses": {
@@ -61385,7 +61385,7 @@
               }
             }
           },
-          "description": "The Reefin.Api.Models.UserDtos.QuickConnectDto request.",
+          "description": "The Tesserafin.Api.Models.UserDtos.QuickConnectDto request.",
           "required": true
         },
         "responses": {
@@ -61979,7 +61979,7 @@
               }
             }
           },
-          "description": "The M:Reefin.Api.Controllers.UserController.UpdateUserPassword(System.Nullable{System.Guid},Reefin.Api.Models.UserDtos.UpdateUserPassword) request.",
+          "description": "The M:Tesserafin.Api.Controllers.UserController.UpdateUserPassword(System.Nullable{System.Guid},Tesserafin.Api.Models.UserDtos.UpdateUserPassword) request.",
           "required": true
         },
         "responses": {
@@ -63578,7 +63578,7 @@
             }
           },
           {
-            "description": "Optional. The Reefin.Model.Dlna.EncodingContext.",
+            "description": "Optional. The Tesserafin.Model.Dlna.EncodingContext.",
             "in": "query",
             "name": "context",
             "schema": {
@@ -64088,7 +64088,7 @@
             }
           },
           {
-            "description": "Optional. The Reefin.Model.Dlna.EncodingContext.",
+            "description": "Optional. The Tesserafin.Model.Dlna.EncodingContext.",
             "in": "query",
             "name": "context",
             "schema": {
@@ -64600,7 +64600,7 @@
             }
           },
           {
-            "description": "Optional. The Reefin.Model.Dlna.EncodingContext.",
+            "description": "Optional. The Tesserafin.Model.Dlna.EncodingContext.",
             "in": "query",
             "name": "context",
             "schema": {
@@ -65110,7 +65110,7 @@
             }
           },
           {
-            "description": "Optional. The Reefin.Model.Dlna.EncodingContext.",
+            "description": "Optional. The Tesserafin.Model.Dlna.EncodingContext.",
             "in": "query",
             "name": "context",
             "schema": {

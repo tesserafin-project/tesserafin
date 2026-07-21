@@ -4,13 +4,13 @@
 # WHY THIS EXISTS — the gap it closes:
 #
 #   ci/run.sh (the merge gate) and ci/smoke-e2e.sh (PR #32) both exercise the server through
-#   Reefin.Server.Integration.Tests' WebApplicationFactory, i.e. an IN-PROCESS TestServer. That
+#   Tesserafin.Server.Integration.Tests' WebApplicationFactory, i.e. an IN-PROCESS TestServer. That
 #   factory's ConfigureWebHostBuilder never actually binds Kestrel: there is NO listening socket, so
 #   no real browser can reach it. reefin-web's playwright.config.ts says as much in its own header
 #   and deliberately ships no `webServer` block — which is why
 #   `npx playwright test tests/e2e/theme-glass.spec.ts` fails with `connect ECONNREFUSED ::1:8096`.
 #
-#   This script is the missing link: it boots the REAL Reefin.Server executable, bound to a real TCP
+#   This script is the missing link: it boots the REAL Tesserafin.Server executable, bound to a real TCP
 #   port, serving a real reefin-web build, with a real admin user and a real movie library — against
 #   a throwaway data directory that never touches a developer's actual Reefin installation.
 #
@@ -19,15 +19,15 @@
 #   1. Picks a free TCP port (never assumes 8096 is free — override with --port).
 #   2. Creates a throwaway data/config/cache/log tree under a mktemp -d directory.
 #   3. Synthesizes real, decodable media fixtures with ffmpeg from the testsrc/sine lavfi sources
-#      tests/Reefin.Server.Integration.Tests/EndToEnd/EndToEndMediaFixtures.cs (PR #32) and
+#      tests/Tesserafin.Server.Integration.Tests/EndToEnd/EndToEndMediaFixtures.cs (PR #32) and
 #      HlsSmokeTests already use, so this depends on no committed binary test assets — but with
 #      FOUR technically distinct playback scenarios rather than one recipe repeated (see the
 #      "MEDIA FIXTURES" section below), each one ffprobe-asserted immediately after it is written.
 #   4. Writes network.xml with the chosen port. This is the ONLY way to set the listen port:
-#      Reefin.Server/Extensions/WebHostBuilderExtensions.cs calls `options.Listen(addr, httpPort)`
+#      Tesserafin.Server/Extensions/WebHostBuilderExtensions.cs calls `options.Listen(addr, httpPort)`
 #      explicitly from `appHost.HttpPort`, which ApplicationHost reads from
 #      NetworkConfiguration.InternalHttpPort. ASPNETCORE_URLS / --urls are IGNORED — don't try.
-#   5. Boots Reefin.Server with --datadir/--webdir pointed at the throwaway tree and the web bundle.
+#   5. Boots Tesserafin.Server with --datadir/--webdir pointed at the throwaway tree and the web bundle.
 #   6. Waits for readiness by POLLING /System/Info/Public — never a fixed `sleep`.
 #   7. Seeds through the REAL public API, no database surgery and no invented endpoints:
 #        GET  /Startup/User          -> initializes the user manager, creates the default user
@@ -112,7 +112,7 @@
 #   --user NAME       admin username to create   (default: $REEFIN_E2E_USER or smokeadmin)
 #   --password PW     admin password to set      (default: $REEFIN_E2E_PASSWORD or smokepass123)
 #   --datadir PATH    use PATH instead of a mktemp -d tree (implies --keep)
-#   --no-build        skip `dotnet build`, reuse the existing Reefin.Server binary
+#   --no-build        skip `dotnet build`, reuse the existing Tesserafin.Server binary
 #   --keep            do not delete the temp tree on exit (prints its path)
 #   --timeout N       readiness timeout in seconds (default: 180)
 #   -h, --help        show this header
@@ -121,10 +121,10 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-SERVER_PROJECT="Reefin.Server/Reefin.Server.csproj"
-# Reefin.Server.csproj sets <AssemblyName>reefin</AssemblyName>, so the built entry
-# point is reefin.dll — NOT Reefin.Server.dll.
-SERVER_DLL="Reefin.Server/bin/Debug/net10.0/reefin.dll"
+SERVER_PROJECT="Tesserafin.Server/Tesserafin.Server.csproj"
+# Tesserafin.Server.csproj sets <AssemblyName>reefin</AssemblyName>, so the built entry
+# point is reefin.dll — NOT Tesserafin.Server.dll.
+SERVER_DLL="Tesserafin.Server/bin/Debug/net10.0/reefin.dll"
 
 # The Authorization header shape Reefin requires on every request. Mirrors the one
 # reefin-web's tests/e2e specs send, so seeding and the specs authenticate identically.
@@ -256,7 +256,7 @@ trap cleanup EXIT INT TERM
 # Build
 # ---------------------------------------------------------------------------
 if [ "$DO_BUILD" -eq 1 ]; then
-    banner "Building Reefin.Server (host dotnet SDK)"
+    banner "Building Tesserafin.Server (host dotnet SDK)"
     dotnet build "$SERVER_PROJECT" -c Debug --nologo -clp:ErrorsOnly
 fi
 [ -f "$SERVER_DLL" ] || fail_usage "server binary not found at $SERVER_DLL (drop --no-build, or run: dotnet build $SERVER_PROJECT)"
@@ -342,9 +342,9 @@ assert_under_1mib() {
 # specs above are unaffected.
 DIRECTPLAY_DIR="$MEDIA_DIR/Smoke Test Movie (2020)"
 DIRECTPLAY_FILE="$DIRECTPLAY_DIR/Smoke Test Movie (2020).mp4"
-# Prefix + a MediaFlagDelimiter + language, which is what Reefin.Providers.MediaInfo's
+# Prefix + a MediaFlagDelimiter + language, which is what Tesserafin.Providers.MediaInfo's
 # MediaInfoResolver.GetExternalFiles matches on: same directory, filename starting with the
-# video's own filename-without-extension, remainder parsed by Reefin.Naming's ExternalPathParser.
+# video's own filename-without-extension, remainder parsed by Tesserafin.Naming's ExternalPathParser.
 SUBTITLE_FILE="$DIRECTPLAY_DIR/Smoke Test Movie (2020).en.srt"
 TRANSCODE_DIR="$MEDIA_DIR/Transcode Probe (2021)"
 TRANSCODE_FILE="$TRANSCODE_DIR/Transcode Probe (2021).mp4"
@@ -476,7 +476,7 @@ XML
 # ---------------------------------------------------------------------------
 # Boot
 # ---------------------------------------------------------------------------
-banner "Starting Reefin.Server on ${BASE_URL}"
+banner "Starting Tesserafin.Server on ${BASE_URL}"
 log "data directory: $DATADIR"
 log "web bundle:     $WEBDIR_ABS"
 log "server log:     $LOG_FILE"
@@ -494,7 +494,7 @@ SERVER_PID=$!
 # ---------------------------------------------------------------------------
 # Readiness — polling, never a fixed sleep. Also fails fast if the process dies.
 # ---------------------------------------------------------------------------
-# CAREFUL — /System/Info/Public is NOT a valid readiness probe. Reefin.Server binds the
+# CAREFUL — /System/Info/Public is NOT a valid readiness probe. Tesserafin.Server binds the
 # configured port TWICE in sequence: first with ServerSetupApp/SetupServer.cs (a placeholder
 # host shown while the real app boots), then with the real application. SetupServer explicitly
 # maps /System/Info/Public and answers it 200 with StartupWizardCompleted=false, while 503-ing

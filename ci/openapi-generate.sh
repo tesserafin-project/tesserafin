@@ -14,7 +14,7 @@
 #
 # Determinism: the document is canonicalised before being written (object keys
 # sorted, host-dependent `servers` dropped, LF, 2-space indent, trailing
-# newline) — see tests/Reefin.Server.Integration.Tests/OpenApiContract.cs. Two
+# newline) — see tests/Tesserafin.Server.Integration.Tests/OpenApiContract.cs. Two
 # runs of this script from a clean tree produce byte-identical files. Verify
 # with:
 #   ./ci/openapi-generate.sh && sha256sum openapi/openapi.json
@@ -29,7 +29,7 @@ cd "$REPO_ROOT"
 
 IMAGE_TAG="reefin-ci"
 NUGET_VOLUME="reefin-nuget"
-TEST_PROJECT="tests/Reefin.Server.Integration.Tests/Reefin.Server.Integration.Tests.csproj"
+TEST_PROJECT="tests/Tesserafin.Server.Integration.Tests/Tesserafin.Server.Integration.Tests.csproj"
 SPEC_PATH="openapi/openapi.json"
 LOCK_PATH="openapi/contract.lock.json"
 

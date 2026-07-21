@@ -82,7 +82,7 @@ To run the server from the command line you can use the `dotnet run` command. Th
 
 ```bash
 cd reefin                          # Move into the repository directory
-dotnet run --project Reefin.Server --webdir /absolute/path/to/jellyfin-web/dist # Run the server startup project
+dotnet run --project Tesserafin.Server --webdir /absolute/path/to/jellyfin-web/dist # Run the server startup project
 ```
 
 A second option is to build the project and then run the resulting executable file directly. When running the executable directly you can easily add command line options. Add the `--help` flag to list details on all the supported command line options.
@@ -91,7 +91,7 @@ A second option is to build the project and then run the resulting executable fi
 
 ```bash
 dotnet build                       # Build the project
-cd Reefin.Server/bin/Debug/net10.0 # Change into the build output directory
+cd Tesserafin.Server/bin/Debug/net10.0 # Change into the build output directory
 ```
 
 2. Execute the build output. On Linux, Mac, etc. use `./reefin` and on Windows use `reefin.exe`.
@@ -120,6 +120,6 @@ It is not necessary to host the frontend web client as part of the backend serve
 
 To instruct the server not to host the web content, there is a `nowebclient` configuration flag that must be set. This can be specified using the command line switch `--nowebclient` or the environment variable `REEFIN_NOWEBCONTENT=true`.
 
-Since this is a common scenario, there is also a separate launch profile defined for Visual Studio called `Reefin.Server (nowebcontent)` that can be selected from the 'Start Debugging' dropdown in the main toolbar.
+Since this is a common scenario, there is also a separate launch profile defined for Visual Studio called `Tesserafin.Server (nowebcontent)` that can be selected from the 'Start Debugging' dropdown in the main toolbar.
 
 **NOTE:** The setup wizard cannot be run if the web client is hosted separately.
