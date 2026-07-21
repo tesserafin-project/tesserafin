@@ -5,14 +5,14 @@
 #
 # WHAT THIS PROVES, PRECISELY — read this before trusting a green run:
 #
-#   A REAL, booted Reefin server (Reefin.Server.Integration.Tests/EndToEnd/E2eApplicationFactory.cs -
-#   a real ffmpeg/ffprobe binary wired in, unlike the rest of that project's ReefinApplicationFactory,
+#   A REAL, booted Reefin server (Tesserafin.Server.Integration.Tests/EndToEnd/E2eApplicationFactory.cs -
+#   a real ffmpeg/ffprobe binary wired in, unlike the rest of that project's TesserafinApplicationFactory,
 #   which explicitly skips ffmpeg validation), driven only through its public HTTP surface:
 #     POST Playback/Sessions -> GET Playback/Sessions/{id}/Stream -> a real HTTP GET of the URL the
 #   descriptor names, asserting it actually serves bytes (or a manifest + segment, for HLS) - not just
 #   that the descriptor LOOKS right. This is exactly the gap ci/smoke.sh's own header (and
 #   HlsSmokeTests' remarks) named as real and unclosed after PR115d/PR117: "no existing test harness in
-#   this repo provisions a library/media item/auth token." tests/Reefin.Server.Integration.Tests/EndToEnd/.
+#   this repo provisions a library/media item/auth token." tests/Tesserafin.Server.Integration.Tests/EndToEnd/.
 #
 #   Five scenarios, one real ffmpeg-synthesized H.264/AAC MP4 fixture (the play METHOD is what these
 #   tests control via PlaybackConstraints, not the codec - see EndToEndCapabilityPresets' remarks for
@@ -45,7 +45,7 @@ cd "$REPO_ROOT"
 
 IMAGE_TAG="reefin-ci"
 NUGET_VOLUME="reefin-nuget"
-SOLUTION="Reefin.sln"
+SOLUTION="Tesserafin.sln"
 E2E_FILTER="FullyQualifiedName~PlaybackUrlContractEndToEndTests"
 
 banner() {

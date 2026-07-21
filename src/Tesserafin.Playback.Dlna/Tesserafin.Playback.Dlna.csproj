@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Tesserafin.Playback.Decision/Tesserafin.Playback.Decision.csproj" />
+    <ProjectReference Include="../../Tesserafin.Model/Tesserafin.Model.csproj" />
+    <!-- PR114a: PlaybackExecutionPlanAdapter needs both PlaybackExecutionPlan (this reference) and
+         the legacy Tesserafin.Model.Dlna.StreamInfo it adapts into (already referenced above) - this
+         project already straddles both worlds for the request-side adapters
+         (DlnaPlaybackAdapter/ReverseDlnaAdapter), so it is the natural home for the decision-side one
+         too. No cycle: Tesserafin.Playback.Execution references only Tesserafin.Playback.Decision. -->
+    <ProjectReference Include="../Tesserafin.Playback.Execution/Tesserafin.Playback.Execution.csproj" />
+  </ItemGroup>
+
+</Project>

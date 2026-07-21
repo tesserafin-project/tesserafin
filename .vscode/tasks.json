@@ -7,7 +7,7 @@
             "type": "process",
             "args": [
                 "build",
-                "${workspaceFolder}/Reefin.Server/Reefin.Server.csproj"
+                "${workspaceFolder}/Tesserafin.Server/Tesserafin.Server.csproj"
             ],
             "problemMatcher": "$msCompile"
         },
@@ -17,7 +17,7 @@
             "type": "process",
             "args": [
                 "test",
-                "${workspaceFolder}/tests/Reefin.Api.Tests/Reefin.Api.Tests.csproj"
+                "${workspaceFolder}/tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj"
             ],
             "problemMatcher": "$msCompile"
         }

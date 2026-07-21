@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- ProjectGuid is only included as a requirement for SonarQube analysis -->
+  <PropertyGroup>
+    <ProjectGuid>{A2FD0A10-8F62-4F9D-B171-FFDF9F0AFA9D}</ProjectGuid>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AutoFixture" />
+    <PackageReference Include="AutoFixture.AutoMoq" />
+    <PackageReference Include="AutoFixture.Xunit3" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Moq" />
+    <PackageReference Include="JsonSchema.Net" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../Tesserafin.Api/Tesserafin.Api.csproj" />
+    <ProjectReference Include="../../Tesserafin.Server.Implementations/Tesserafin.Server.Implementations.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- PR113b: so PlaybackCompatFixtureExporterTests can validate its output against the same
+         schema the compatibility lab itself enforces (tests/Tesserafin.Playback.Engine.Tests uses the
+         identical pattern for the lab's own fixtures). -->
+    <None Include="..\PlaybackCompat\schema\fixture.schema.json">
+      <Link>schema\fixture.schema.json</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

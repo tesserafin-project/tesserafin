@@ -6,7 +6,7 @@
 #
 # The test suite is NOT unguarded meanwhile: the mandatory merge gate during
 # the outage is the local Docker CI (purge bin/ + obj/, then ./ci/run.sh),
-# which runs the same `dotnet build` + `dotnet test` over Reefin.sln.
+# which runs the same `dotnet build` + `dotnet test` over Tesserafin.sln.
 # See docs/local-ci.md.
 #
 # Previous trigger: on: push (master) + pull_request
@@ -56,7 +56,7 @@ jobs:
 
       - name: Run DotNet CLI Tests
         run: >
-          dotnet test Reefin.sln
+          dotnet test Tesserafin.sln
           --configuration Release
           --collect:"XPlat Code Coverage"
           --settings tests/coverletArgs.runsettings

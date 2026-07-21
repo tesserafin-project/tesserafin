@@ -2,10 +2,10 @@
 bump_version                                            @tesserafin
 .github/ISSUE_TEMPLATE                                  @tesserafin
 MediaBrowser.Common/MediaBrowser.Common.csproj          @tesserafin
-Reefin.Data/Reefin.Data.csproj                      @tesserafin
+Tesserafin.Data/Tesserafin.Data.csproj                      @tesserafin
 MediaBrowser.Controller/MediaBrowser.Controller.csproj  @tesserafin
 MediaBrowser.Model/MediaBrowser.Model.csproj            @tesserafin
 Emby.Naming/Emby.Naming.csproj                          @tesserafin
-src/Reefin.Extensions/Reefin.Extensions.csproj      @tesserafin
+src/Tesserafin.Extensions/Tesserafin.Extensions.csproj      @tesserafin
 # Core must approve all changes within the repo config
 .github/                                                @tesserafin
