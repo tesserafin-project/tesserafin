@@ -18,7 +18,7 @@ public class JsonWriter : SubtitleFormat
     public override string Extension => ".json";
 
     /// <inheritdoc />
-    public override string Name => "JSON Reefin";
+    public override string Name => "JSON Tesserafin";
 
     /// <inheritdoc />
     public override string ToText(Subtitle subtitle, string title)

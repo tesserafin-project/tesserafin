@@ -44,14 +44,14 @@ namespace Tesserafin.Server.Extensions
                 })
                 .UseSwaggerUI(c =>
                 {
-                    c.DocumentTitle = "Reefin API";
-                    c.SwaggerEndpoint($"/{baseUrl}api-docs/openapi.json", "Reefin API");
+                    c.DocumentTitle = "Tesserafin API";
+                    c.SwaggerEndpoint($"/{baseUrl}api-docs/openapi.json", "Tesserafin API");
                     c.InjectStylesheet($"/{baseUrl}api-docs/swagger/custom.css");
                     c.RoutePrefix = "api-docs/swagger";
                 })
                 .UseReDoc(c =>
                 {
-                    c.DocumentTitle = "Reefin API";
+                    c.DocumentTitle = "Tesserafin API";
                     c.SpecUrl($"/{baseUrl}api-docs/openapi.json");
                     c.InjectStylesheet($"/{baseUrl}api-docs/redoc/custom.css");
                     c.RoutePrefix = "api-docs/redoc";

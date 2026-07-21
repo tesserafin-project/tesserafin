@@ -40,7 +40,7 @@ internal class MigrateLibraryUserData : IAsyncMigrationRoutine
 
     public async Task PerformAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Migrating the userdata from library.db.old may take a while, do not stop Reefin.");
+        _logger.LogInformation("Migrating the userdata from library.db.old may take a while, do not stop Tesserafin.");
 
         var dataPath = _paths.DataPath;
         var libraryDbPath = Path.Combine(dataPath, DbFilename);

@@ -38,7 +38,7 @@ namespace Tesserafin.Providers.Tests.ExternalId
                 .Returns(new PluginConfiguration());
 
             var appHostMock = new Mock<IApplicationHost>();
-            appHostMock.Setup(h => h.Name).Returns("Reefin");
+            appHostMock.Setup(h => h.Name).Returns("Tesserafin");
             appHostMock.Setup(h => h.ApplicationVersionString).Returns("1.0.0");
             appHostMock.Setup(h => h.ApplicationUserAgentAddress).Returns("localhost");
 

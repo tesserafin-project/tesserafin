@@ -1,4 +1,4 @@
-# Reefin Contributors
+# Tesserafin Contributors
 
  - [0x25CBFC4F](https://github.com/0x25CBFC4F)
  - [1337joe](https://github.com/1337joe)

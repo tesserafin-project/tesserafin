@@ -23,7 +23,7 @@ using Tesserafin.Server.ServerSetupApp;
 namespace Tesserafin.Server.Integration.Tests
 {
     /// <summary>
-    /// Factory for bootstrapping the Reefin application in memory for functional end to end tests.
+    /// Factory for bootstrapping the Tesserafin application in memory for functional end to end tests.
     /// </summary>
     public class TesserafinApplicationFactory : WebApplicationFactory<Startup>
     {

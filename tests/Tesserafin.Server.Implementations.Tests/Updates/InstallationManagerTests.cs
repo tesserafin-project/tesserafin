@@ -49,7 +49,7 @@ namespace Tesserafin.Server.Implementations.Tests.Updates
         public async Task GetPackages_Valid_Success()
         {
             PackageInfo[] packages = await _installationManager.GetPackages(
-                "Reefin Stable",
+                "Tesserafin Stable",
                 "https://repo.jellyfin.org/files/plugin/manifest.json",
                 false,
                 TestContext.Current.CancellationToken);
@@ -61,7 +61,7 @@ namespace Tesserafin.Server.Implementations.Tests.Updates
         public async Task FilterPackages_NameOnly_Success()
         {
             PackageInfo[] packages = await _installationManager.GetPackages(
-                "Reefin Stable",
+                "Tesserafin Stable",
                 "https://repo.jellyfin.org/files/plugin/manifest.json",
                 false,
                 TestContext.Current.CancellationToken);
@@ -74,7 +74,7 @@ namespace Tesserafin.Server.Implementations.Tests.Updates
         public async Task FilterPackages_GuidOnly_Success()
         {
             PackageInfo[] packages = await _installationManager.GetPackages(
-                "Reefin Stable",
+                "Tesserafin Stable",
                 "https://repo.jellyfin.org/files/plugin/manifest.json",
                 false,
                 TestContext.Current.CancellationToken);

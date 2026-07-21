@@ -18,7 +18,7 @@ namespace Tesserafin.Database.Providers.Sqlite;
 /// <summary>
 /// Configures reefin to use an SQLite database.
 /// </summary>
-[TesserafinDatabaseProviderKey("Reefin-SQLite")]
+[TesserafinDatabaseProviderKey("Tesserafin-SQLite")]
 public sealed class SqliteDatabaseProvider : ITesserafinDatabaseProvider
 {
     private const string BackupFolderName = "SQLiteBackups";

@@ -96,7 +96,7 @@ public static class ServiceCollectionExtensions
                 // when nothing is setup via new Database configuration, fallback to SQLite with default settings.
                 efCoreConfiguration = new DatabaseConfigurationOptions()
                 {
-                    DatabaseType = "Reefin-SQLite",
+                    DatabaseType = "Tesserafin-SQLite",
                     LockingBehavior = DatabaseLockingBehaviorTypes.NoLock
                 };
                 configurationManager.SaveConfiguration("database", efCoreConfiguration);
@@ -117,7 +117,7 @@ public static class ServiceCollectionExtensions
             var providers = GetSupportedDbProviders();
             if (!providers.TryGetValue(efCoreConfiguration.DatabaseType.ToUpperInvariant(), out providerFactory!))
             {
-                throw new InvalidOperationException($"Reefin cannot find the database provider of type '{efCoreConfiguration.DatabaseType}'. Supported types are {string.Join(", ", providers.Keys)}");
+                throw new InvalidOperationException($"Tesserafin cannot find the database provider of type '{efCoreConfiguration.DatabaseType}'. Supported types are {string.Join(", ", providers.Keys)}");
             }
         }
 

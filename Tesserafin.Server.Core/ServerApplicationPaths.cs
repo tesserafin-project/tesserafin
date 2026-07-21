@@ -12,11 +12,11 @@ namespace Tesserafin.Server.Core
         /// <summary>
         /// Initializes a new instance of the <see cref="ServerApplicationPaths" /> class.
         /// </summary>
-        /// <param name="programDataPath">The path for Reefin's data.</param>
-        /// <param name="logDirectoryPath">The path for Reefin's logging directory.</param>
-        /// <param name="configurationDirectoryPath">The path for Reefin's configuration directory.</param>
-        /// <param name="cacheDirectoryPath">The path for Reefin's cache directory.</param>
-        /// <param name="webDirectoryPath">The path for Reefin's web UI.</param>
+        /// <param name="programDataPath">The path for Tesserafin's data.</param>
+        /// <param name="logDirectoryPath">The path for Tesserafin's logging directory.</param>
+        /// <param name="configurationDirectoryPath">The path for Tesserafin's configuration directory.</param>
+        /// <param name="cacheDirectoryPath">The path for Tesserafin's cache directory.</param>
+        /// <param name="webDirectoryPath">The path for Tesserafin's web UI.</param>
         public ServerApplicationPaths(
             string programDataPath,
             string logDirectoryPath,

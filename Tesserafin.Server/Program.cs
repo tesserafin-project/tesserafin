@@ -110,7 +110,7 @@ namespace Tesserafin.Server
                 => _logger.LogCritical((Exception)e.ExceptionObject, "Unhandled Exception");
 
             _logger.LogInformation(
-                "Reefin version: {Version}",
+                "Tesserafin version: {Version}",
                 Assembly.GetEntryAssembly()!.GetName().Version!.ToString(3));
 
             StartupHelpers.LogEnvironmentInfo(_logger, appPaths);
@@ -174,7 +174,7 @@ namespace Tesserafin.Server
                         webHostBuilder.ConfigureWebHostBuilder(appHost, startupConfig, appPaths, _logger);
                         if (bool.TryParse(Environment.GetEnvironmentVariable("REEFIN_ENABLE_IIS"), out var iisEnabled) && iisEnabled)
                         {
-                            _logger.LogCritical("UNSUPPORTED HOSTING ENVIRONMENT Microsoft Internet Information Services. The option to run Reefin on IIS is an unsupported and untested feature. Only use at your own discretion.");
+                            _logger.LogCritical("UNSUPPORTED HOSTING ENVIRONMENT Microsoft Internet Information Services. The option to run Tesserafin on IIS is an unsupported and untested feature. Only use at your own discretion.");
                             webHostBuilder.UseIIS();
                         }
                     })
@@ -186,7 +186,7 @@ namespace Tesserafin.Server
                     .Build();
 
                 /*
-                 * Initialize the transcode path marker so we avoid starting Reefin in a broken state.
+                 * Initialize the transcode path marker so we avoid starting Tesserafin in a broken state.
                  * This should really be a part of IApplicationPaths but this path is configured differently.
                  */
                 _ = appHost.ConfigurationManager.GetTranscodePath();
@@ -318,7 +318,7 @@ namespace Tesserafin.Server
         }
 
         /// <summary>
-        /// [Internal]Runs the Reefin migrator service with the Core stage.
+        /// [Internal]Runs the Tesserafin migrator service with the Core stage.
         /// </summary>
         /// <remarks>
         /// Not intended to be used other then by reefin and its tests.

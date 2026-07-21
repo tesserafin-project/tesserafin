@@ -30,7 +30,7 @@ public static class ComicInfoReader
         var book = new Book();
         var hasFoundMetadata = false;
 
-        // this value is only used internally since Reefin has no manga flag
+        // this value is only used internally since Tesserafin has no manga flag
         var isManga = false;
 
         hasFoundMetadata |= ReadStringInto(xml, "ComicInfo/Title", title => book.Name = title);

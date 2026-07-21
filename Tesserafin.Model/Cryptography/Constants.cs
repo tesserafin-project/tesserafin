@@ -1,7 +1,7 @@
 namespace Tesserafin.Model.Cryptography
 {
     /// <summary>
-    /// Class containing global constants for Reefin Cryptography.
+    /// Class containing global constants for Tesserafin Cryptography.
     /// </summary>
     public static class Constants
     {

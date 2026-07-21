@@ -25,7 +25,7 @@ namespace Tesserafin.Common.Tests.Providers
         [Theory]
         [InlineData("tt123456")]
         [InlineData("https://www.imdb.com/title/tt123456")]
-        [InlineData("Reefin")]
+        [InlineData("Tesserafin")]
         public void FindImdbId_Invalid_Success(string text)
         {
             Assert.False(ProviderIdParsers.TryFindImdbId(text, out _));
@@ -75,7 +75,7 @@ namespace Tesserafin.Common.Tests.Providers
         }
 
         [Theory]
-        [InlineData("thetvdb.com/?tab=series&id=Reefin121361")]
+        [InlineData("thetvdb.com/?tab=series&id=Tesserafin121361")]
         [InlineData("https://www.themoviedb.org/tv/1668-friends")]
         public void FindTvdbId_Invalid_Success(string text)
         {

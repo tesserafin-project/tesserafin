@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Real, TCP-bound Reefin server for browser-driven end-to-end tests.
+# Real, TCP-bound Tesserafin server for browser-driven end-to-end tests.
 #
 # WHY THIS EXISTS — the gap it closes:
 #
@@ -12,7 +12,7 @@
 #
 #   This script is the missing link: it boots the REAL Tesserafin.Server executable, bound to a real TCP
 #   port, serving a real reefin-web build, with a real admin user and a real movie library — against
-#   a throwaway data directory that never touches a developer's actual Reefin installation.
+#   a throwaway data directory that never touches a developer's actual Tesserafin installation.
 #
 # WHAT IT DOES, IN ORDER:
 #
@@ -126,9 +126,9 @@ SERVER_PROJECT="Tesserafin.Server/Tesserafin.Server.csproj"
 # point is reefin.dll — NOT Tesserafin.Server.dll.
 SERVER_DLL="Tesserafin.Server/bin/Debug/net10.0/reefin.dll"
 
-# The Authorization header shape Reefin requires on every request. Mirrors the one
+# The Authorization header shape Tesserafin requires on every request. Mirrors the one
 # reefin-web's tests/e2e specs send, so seeding and the specs authenticate identically.
-AUTH_CLIENT='MediaBrowser Client="Reefin E2E Harness", Device="ci/serve-e2e.sh", DeviceId="reefin-ci-serve-e2e", Version="0.0.0"'
+AUTH_CLIENT='MediaBrowser Client="Tesserafin E2E Harness", Device="ci/serve-e2e.sh", DeviceId="reefin-ci-serve-e2e", Version="0.0.0"'
 
 PORT=""
 WEBDIR=""
@@ -197,7 +197,7 @@ fi
 BASE_URL="http://127.0.0.1:${PORT}"
 
 # ---------------------------------------------------------------------------
-# Throwaway data tree. Never the user's real Reefin installation.
+# Throwaway data tree. Never the user's real Tesserafin installation.
 # ---------------------------------------------------------------------------
 CREATED_TMP=0
 if [ -z "$DATADIR" ]; then
@@ -265,7 +265,7 @@ fi
 # Media fixtures — real, decodable files, synthesized on the fly, each one a
 # TECHNICALLY DISTINCT playback scenario (see the MEDIA FIXTURES section in the
 # header for the full rationale). Named "<Title> (<Year>).<ext>" inside a
-# matching folder so Reefin's resolvers actually register them.
+# matching folder so Tesserafin's resolvers actually register them.
 #
 # EVERY fixture is ffprobe-asserted immediately after it is written. This is not
 # ceremony: until 2026-07 this script built BOTH fixtures with one identical
@@ -329,12 +329,12 @@ assert_under_1mib() {
 
 # CROSS-REPO CONTRACT — these two TITLES are consumed by name in reefin-web:
 #   tests/e2e/library.spec.ts:31-32  MOVIE_TITLE / OTHER_MOVIE_TITLE
-# The specs assert on the displayed title (Reefin strips the parenthesised year), and
+# The specs assert on the displayed title (Tesserafin strips the parenthesised year), and
 # library.spec.ts:108-109 additionally relies on "Smoke Test Movie" sorting BEFORE
 # "Transcode Probe" under SortName ascending. Renaming either side in isolation silently
 # breaks those specs — the harness still boots, seeds and serves, so the failure looks like
 # an application bug rather than a fixture mismatch. That is exactly what happened with the
-# previous names ("Reefin E2E Fixture" / "Reefin E2E Second Fixture"): 2 of 7 specs failed
+# previous names ("Tesserafin E2E Fixture" / "Tesserafin E2E Second Fixture"): 2 of 7 specs failed
 # on a fully healthy rig. Change both repos together, or neither.
 #
 # The contract is over the TITLES only. "Transcode Probe"'s codecs are deliberately NOT
@@ -374,11 +374,11 @@ log "fixture: $SUBTITLE_FILE (external subtitle — SubRip sidecar)"
 cat > "$SUBTITLE_FILE" <<'SRT'
 1
 00:00:00,200 --> 00:00:01,000
-Reefin E2E external subtitle, cue one.
+Tesserafin E2E external subtitle, cue one.
 
 2
 00:00:01,000 --> 00:00:01,900
-Reefin E2E external subtitle, cue two.
+Tesserafin E2E external subtitle, cue two.
 SRT
 assert_container "$SUBTITLE_FILE" srt
 assert_codec     "$SUBTITLE_FILE" s:0 subrip
@@ -446,7 +446,7 @@ XML
 # Without this file the server AUTO-DETECTS hardware acceleration at startup and
 # persists the result: on a host with /dev/dri it writes
 # <HardwareAccelerationType>vaapi</HardwareAccelerationType> and every transcode
-# then runs through h264_vaapi. The transcode arguments Reefin builds include
+# then runs through h264_vaapi. The transcode arguments Tesserafin builds include
 # `-rc_mode VBR -b:v 0 -maxrate 0 -bufsize 0`; libx264 accepts a zero bitrate,
 # but VAAPI rejects it outright:
 #
@@ -533,7 +533,7 @@ log "real application is serving on ${BASE_URL}"
 # ---------------------------------------------------------------------------
 banner "Seeding admin user '${E2E_USER}' and the two fixture libraries"
 
-# Reefin authenticates via the Authorization header, with the access token folded into
+# Tesserafin authenticates via the Authorization header, with the access token folded into
 # it as a Token="..." field — the exact shape reefin-web's specs send. A bare
 # `X-Emby-Token` alongside a tokenless Authorization header is rejected with 401, so
 # once TOKEN is known every call must carry it *inside* Authorization.

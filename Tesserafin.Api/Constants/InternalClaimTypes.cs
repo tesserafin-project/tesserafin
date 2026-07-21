@@ -8,35 +8,35 @@ public static class InternalClaimTypes
     /// <summary>
     /// User Id.
     /// </summary>
-    public const string UserId = "Reefin-UserId";
+    public const string UserId = "Tesserafin-UserId";
 
     /// <summary>
     /// Device Id.
     /// </summary>
-    public const string DeviceId = "Reefin-DeviceId";
+    public const string DeviceId = "Tesserafin-DeviceId";
 
     /// <summary>
     /// Device.
     /// </summary>
-    public const string Device = "Reefin-Device";
+    public const string Device = "Tesserafin-Device";
 
     /// <summary>
     /// Client.
     /// </summary>
-    public const string Client = "Reefin-Client";
+    public const string Client = "Tesserafin-Client";
 
     /// <summary>
     /// Version.
     /// </summary>
-    public const string Version = "Reefin-Version";
+    public const string Version = "Tesserafin-Version";
 
     /// <summary>
     /// Token.
     /// </summary>
-    public const string Token = "Reefin-Token";
+    public const string Token = "Tesserafin-Token";
 
     /// <summary>
     /// Is Api Key.
     /// </summary>
-    public const string IsApiKey = "Reefin-IsApiKey";
+    public const string IsApiKey = "Tesserafin-IsApiKey";
 }

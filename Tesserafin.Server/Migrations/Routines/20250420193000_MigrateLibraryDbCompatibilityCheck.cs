@@ -12,7 +12,7 @@ using Tesserafin.Server.ServerSetupApp;
 namespace Tesserafin.Server.Migrations.Routines;
 
 /// <summary>
-/// The migration routine for checking if the current instance of Reefin is compatiable to be upgraded.
+/// The migration routine for checking if the current instance of Tesserafin is compatiable to be upgraded.
 /// </summary>
 [TesserafinMigration("2025-04-20T19:30:00", nameof(MigrateLibraryDbCompatibilityCheck))]
 public class MigrateLibraryDbCompatibilityCheck : IAsyncMigrationRoutine

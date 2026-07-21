@@ -58,7 +58,7 @@ Note that it is recommended for development to [host the web client separately](
 There are two options to get the files for the web client.
 
 1. Build them from source following the instructions on the [tesserafin-web repository](https://github.com/tesserafin/tesserafin-web)
-2. Get the pre-built files from an existing installation of the server. For example, with a Windows server installation the client files are located at `C:\Program Files\Reefin\Server\jellyfin-web`
+2. Get the pre-built files from an existing installation of the server. For example, with a Windows server installation the client files are located at `C:\Program Files\Tesserafin\Server\jellyfin-web`
 
 ### Running The Server
 

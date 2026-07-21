@@ -28,7 +28,7 @@ namespace Tesserafin.Server
         /// Gets or sets the path to the web directory.
         /// </summary>
         /// <value>The path to the web directory.</value>
-        [Option('w', "webdir", Required = false, HelpText = "Path to the Reefin web UI resources.")]
+        [Option('w', "webdir", Required = false, HelpText = "Path to the Tesserafin web UI resources.")]
         public string? WebDir { get; set; }
 
         /// <summary>
@@ -61,11 +61,11 @@ namespace Tesserafin.Server
         public bool IsService { get; set; }
 
         /// <inheritdoc />
-        [Option("package-name", Required = false, HelpText = "Used when packaging Reefin (example, synology).")]
+        [Option("package-name", Required = false, HelpText = "Used when packaging Tesserafin (example, synology).")]
         public string? PackageName { get; set; }
 
         /// <inheritdoc />
-        [Option("published-server-url", Required = false, HelpText = "Reefin Server URL to publish via auto discover process")]
+        [Option("published-server-url", Required = false, HelpText = "Tesserafin Server URL to publish via auto discover process")]
         public string? PublishedServerUrl { get; set; }
 
         /// <summary>
@@ -77,7 +77,7 @@ namespace Tesserafin.Server
         /// <summary>
         /// Gets or sets the path to an reefin backup archive to restore the application to.
         /// </summary>
-        [Option("restore-archive", Required = false, HelpText = "Path to a Reefin backup archive to restore from")]
+        [Option("restore-archive", Required = false, HelpText = "Path to a Tesserafin backup archive to restore from")]
         public string? RestoreArchive { get; set; }
 
         /// <summary>

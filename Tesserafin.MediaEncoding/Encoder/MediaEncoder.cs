@@ -907,7 +907,7 @@ namespace Tesserafin.MediaEncoding.Encoder
                 }
             }
 
-            // A new EncodingOptions instance must be used as to not disable HW acceleration for all of Reefin.
+            // A new EncodingOptions instance must be used as to not disable HW acceleration for all of Tesserafin.
             // Additionally, we must set a few fields without defaults to prevent null pointer exceptions.
             if (!allowHwAccel)
             {

@@ -1,5 +1,5 @@
 {
-    "Name": "Reefin Media Player",
+    "Name": "Tesserafin Media Player",
     "SupportedMediaTypes": "Audio,Photo,Video",
     "MaxStreamingBitrate": 8000000,
     "MaxStaticBitrate": 8000000,

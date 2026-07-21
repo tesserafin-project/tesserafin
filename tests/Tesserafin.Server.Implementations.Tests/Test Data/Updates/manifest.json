@@ -2,8 +2,8 @@
     {
         "guid": "a4df60c5-6ab4-412a-8f79-2cab93fb2bc5",
         "name": "Anime",
-        "description": "Manage your anime in Reefin. This plugin supports several different metadata providers and options for organizing your collection.\n",
-        "overview": "Manage your anime from Reefin",
+        "description": "Manage your anime in Tesserafin. This plugin supports several different metadata providers and options for organizing your collection.\n",
+        "overview": "Manage your anime from Tesserafin",
         "owner": "reefin",
         "category": "Metadata",
         "versions": [
@@ -150,8 +150,8 @@
     {
         "guid": "a59b5c4b-05a8-488f-bfa8-7a63fffc7639",
         "name": "IPTV",
-        "description": "Enable IPTV support in Reefin",
-        "overview": "Enable IPTV support in Reefin",
+        "description": "Enable IPTV support in Tesserafin",
+        "overview": "Enable IPTV support in Tesserafin",
         "owner": "reefin",
         "category": "Channel",
         "versions": [
@@ -168,8 +168,8 @@
     {
         "guid": "4682DD4C-A675-4F1B-8E7C-79ADF137A8F8",
         "name": "ISO Mounter",
-        "description": "Mount your ISO files for Reefin.\n",
-        "overview": "Mount your ISO files for Reefin",
+        "description": "Mount your ISO files for Tesserafin.\n",
+        "overview": "Mount your ISO files for Tesserafin",
         "owner": "reefin",
         "category": "Metadata",
         "versions": [
@@ -212,7 +212,7 @@
     {
         "guid": "958aad66-3784-4d2a-b89a-a7b6fab6e25c",
         "name": "LDAP Authentication",
-        "description": "Authenticate your Reefin users against an LDAP database, and optionally create users who do not yet exist automatically.\nAllows the administrator to customize most aspects of the LDAP authentication process, including customizable search attributes, username attribute, and a search filter for administrative users (set on user creation). The user, via the \"Manual Login\" process, can enter any valid attribute value, which will be mapped back to the specified username attribute automatically as well.\n",
+        "description": "Authenticate your Tesserafin users against an LDAP database, and optionally create users who do not yet exist automatically.\nAllows the administrator to customize most aspects of the LDAP authentication process, including customizable search attributes, username attribute, and a search filter for administrative users (set on user creation). The user, via the \"Manual Login\" process, can enter any valid attribute value, which will be mapped back to the specified username attribute automatically as well.\n",
         "overview": "Authenticate users against an LDAP database",
         "owner": "reefin",
         "category": "Authentication",
@@ -411,7 +411,7 @@
         "guid": "1fc322a1-af2e-49a5-b2eb-a89b4240f700",
         "name": "ServerWMC",
         "description": "Provides access to Live TV, Program Guide and Recordings from your Windows MediaCenter Server running ServerWMC. Requires ServerWMC to be installed and running on your Windows MediaCenter machine.\n",
-        "overview": "Reefin Live TV plugin for Windows MediaCenter with ServerWMC",
+        "overview": "Tesserafin Live TV plugin for Windows MediaCenter with ServerWMC",
         "owner": "reefin",
         "category": "LiveTV",
         "versions": [
@@ -514,8 +514,8 @@
     {
         "guid": "3fd018e5-5e78-4e58-b280-a0c068febee0",
         "name": "TVHeadend",
-        "description": "Manage TVHeadend from Reefin",
-        "overview": "Manage TVHeadend from Reefin",
+        "description": "Manage TVHeadend from Tesserafin",
+        "overview": "Manage TVHeadend from Tesserafin",
         "owner": "reefin",
         "category": "LiveTV",
         "versions": [
@@ -665,7 +665,7 @@
         "versions": [
             {
                 "version": "2.0.0.0",
-                "changelog": "Remove from Reefin core.\n",
+                "changelog": "Remove from Tesserafin core.\n",
                 "targetAbi": "10.7.0.0",
                 "sourceUrl": "https://repo.jellyfin.org/releases/plugin/thetvdb/thetvdb_2.0.0.0.zip",
                 "checksum": "e46cee334476a1b475e5c553171c4cb6",
@@ -673,7 +673,7 @@
             },
             {
                 "version": "1.0.0.0",
-                "changelog": "Remove from Reefin core.\n",
+                "changelog": "Remove from Tesserafin core.\n",
                 "targetAbi": "10.7.0.0",
                 "sourceUrl": "https://repo.jellyfin.org/releases/plugin/thetvdb/thetvdb_1.0.0.0.zip",
                 "checksum": "5a3dca5c0db4824d83bfd4e7e2b7bf11",

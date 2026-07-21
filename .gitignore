@@ -281,7 +281,7 @@ mono_crash.*.json
 .devcontainer/devcontainer-lock.json
 dotnet/
 
-# Personal tooling (not part of Reefin)
+# Personal tooling (not part of Tesserafin)
 graphify-out/
 .agents/
 .forge/

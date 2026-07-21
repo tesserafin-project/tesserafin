@@ -16,7 +16,7 @@ public class ReaddDefaultPluginRepository : IMigrationRoutine
 
     private readonly RepositoryInfo _defaultRepositoryInfo = new RepositoryInfo
     {
-        Name = "Reefin Stable",
+        Name = "Tesserafin Stable",
         Url = "https://repo.jellyfin.org/releases/plugin/manifest-stable.json"
     };
 

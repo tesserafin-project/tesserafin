@@ -50,7 +50,7 @@ public class BackupService : IBackupService
     /// <param name="dbProvider">A Database Factory.</param>
     /// <param name="applicationHost">The Application host.</param>
     /// <param name="applicationPaths">The application paths.</param>
-    /// <param name="reefinDatabaseProvider">The Reefin database Provider in use.</param>
+    /// <param name="reefinDatabaseProvider">The Tesserafin database Provider in use.</param>
     /// <param name="applicationLifetime">The SystemManager.</param>
     /// <param name="libraryManager">Instance of the <see cref="ILibraryManager"/> interface.</param>
     public BackupService(
@@ -103,7 +103,7 @@ public class BackupService : IBackupService
 
             if (zipArchiveEntry is null)
             {
-                throw new NotSupportedException($"The loaded archive '{archivePath}' does not appear to be a Reefin backup as its missing the '{ManifestEntryName}'.");
+                throw new NotSupportedException($"The loaded archive '{archivePath}' does not appear to be a Tesserafin backup as its missing the '{ManifestEntryName}'.");
             }
 
             BackupManifest? manifest;
@@ -113,14 +113,14 @@ public class BackupService : IBackupService
                 manifest = await JsonSerializer.DeserializeAsync<BackupManifest>(manifestStream, _serializerSettings).ConfigureAwait(false);
             }
 
-            if (manifest!.ServerVersion > _applicationHost.ApplicationVersion) // newer versions of Reefin should be able to load older versions as we have migrations.
+            if (manifest!.ServerVersion > _applicationHost.ApplicationVersion) // newer versions of Tesserafin should be able to load older versions as we have migrations.
             {
-                throw new NotSupportedException($"The loaded archive '{archivePath}' is made for a newer version of Reefin ({manifest.ServerVersion}) and cannot be loaded in this version.");
+                throw new NotSupportedException($"The loaded archive '{archivePath}' is made for a newer version of Tesserafin ({manifest.ServerVersion}) and cannot be loaded in this version.");
             }
 
             if (!TestBackupVersionCompatibility(manifest.BackupEngineVersion))
             {
-                throw new NotSupportedException($"The loaded archive '{archivePath}' is made for a newer version of Reefin ({manifest.ServerVersion}) and cannot be loaded in this version.");
+                throw new NotSupportedException($"The loaded archive '{archivePath}' is made for a newer version of Tesserafin ({manifest.ServerVersion}) and cannot be loaded in this version.");
             }
 
             void CopyDirectory(string source, string target, string[]? exclude = null)
@@ -168,7 +168,7 @@ public class BackupService : IBackupService
                     var historyEntry = zipArchive.GetEntry(NormalizePathSeparator(Path.Combine("Database", $"{nameof(HistoryRow)}.json")));
                     if (historyEntry is null)
                     {
-                        _logger.LogInformation("No backup of the history table in archive. This is required for Reefin operation");
+                        _logger.LogInformation("No backup of the history table in archive. This is required for Tesserafin operation");
                         throw new InvalidOperationException("Cannot restore backup that has no History data.");
                     }
 
@@ -251,7 +251,7 @@ public class BackupService : IBackupService
                 }
             }
 
-            _logger.LogInformation("Restored Reefin system from {Date}", manifest.DateCreated);
+            _logger.LogInformation("Restored Tesserafin system from {Date}", manifest.DateCreated);
         }
     }
 

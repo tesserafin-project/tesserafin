@@ -4,7 +4,7 @@ using Tesserafin.Controller.Configuration;
 namespace Tesserafin.Server.Migrations.Routines;
 
 /// <summary>
-/// Migration to update the default Reefin plugin repository.
+/// Migration to update the default Tesserafin plugin repository.
 /// </summary>
 #pragma warning disable CS0618 // Type or member is obsolete
 [TesserafinMigration("2025-04-20T17:00:00", nameof(UpdateDefaultPluginRepository), "852816E0-2712-49A9-9240-C6FC5FCAD1A8", RunMigrationOnSetup = true)]
