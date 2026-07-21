@@ -3095,7 +3095,7 @@
             "type": "array"
           },
           "WrongTypes": {
-            "description": "Closed-vocabulary Reefin.Playback.Contract.Diagnostics.ContractIssueCode.WrongType issues for KNOWN members only: a\nmember the contract declares as numeric that arrived as a JSON string. The scan sees only the\nJSON token kind, never the string\u0027s content; the lenient binder still coerces it (which is why\nthe request reaches the shadow publication point at all), and the operator learns \u0022a known\nnumeric member arrived string-typed under this path\u0022, never which value.",
+            "description": "Closed-vocabulary Reefin.Playback.Contract.Diagnostics.ContractIssueCode.WrongType issues for KNOWN members only: a\nmember the contract declares as numeric that arrived as a JSON string. The scan judges by JSON\ntoken kind alone and never reads the string\u0027s content. Which of these actually SURVIVES to a\nretained diagnostic is bounded by the binder: only a numeric-looking string (e.g. \u0060\u002264000\u0022\u0060)\nbinds under \u0060NumberHandling.AllowReadingFromString\u0060 and lets the request reach the shadow\npublication point; a non-numeric string 400s at the binder, so its (leak-free) WrongType is\nobserved by the scan but never retained. Either way the operator learns only \u0022a known numeric\nmember arrived string-typed under this path\u0022, never which value.",
             "items": {
               "$ref": "#/components/schemas/ContractFieldIssue"
             },
