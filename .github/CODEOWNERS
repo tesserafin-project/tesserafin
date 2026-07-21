@@ -1,11 +1,11 @@
-# Joshua must review all changes to bump_version and any files it touches
-bump_version                                            @joshuaboniface
-.github/ISSUE_TEMPLATE                                  @joshuaboniface
-MediaBrowser.Common/MediaBrowser.Common.csproj          @joshuaboniface
-Reefin.Data/Reefin.Data.csproj                      @joshuaboniface
-MediaBrowser.Controller/MediaBrowser.Controller.csproj  @joshuaboniface
-MediaBrowser.Model/MediaBrowser.Model.csproj            @joshuaboniface
-Emby.Naming/Emby.Naming.csproj                          @joshuaboniface
-src/Reefin.Extensions/Reefin.Extensions.csproj      @joshuaboniface
+# The repo owner must review all changes to bump_version and any files it touches
+bump_version                                            @tesserafin
+.github/ISSUE_TEMPLATE                                  @tesserafin
+MediaBrowser.Common/MediaBrowser.Common.csproj          @tesserafin
+Reefin.Data/Reefin.Data.csproj                      @tesserafin
+MediaBrowser.Controller/MediaBrowser.Controller.csproj  @tesserafin
+MediaBrowser.Model/MediaBrowser.Model.csproj            @tesserafin
+Emby.Naming/Emby.Naming.csproj                          @tesserafin
+src/Reefin.Extensions/Reefin.Extensions.csproj      @tesserafin
 # Core must approve all changes within the repo config
-.github/                                                @reefin/core
+.github/                                                @tesserafin
