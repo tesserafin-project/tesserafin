@@ -1,11 +1,52 @@
+# Build context pruning for the reproducible production image (Dockerfile).
+# Goal: a clean checkout is the only build input. Everything required for
+# `dotnet restore/publish Tesserafin.Server` is retained; everything else,
+# and anything that would make the build non-deterministic, is excluded.
+
+# --- Version control ---
 .git
+.gitattributes
+.gitignore
+
+# --- Build outputs: MUST be excluded (reproducibility + size) ---
+**/bin
+**/obj
+**/out
+artifacts/
+**/TestResults
+
+# --- Container definition & its tooling (not a build input) ---
 .dockerignore
 Dockerfile
 Dockerfile.arm
 Dockerfile.arm64
-CONTRIBUTORS.md
-README.md
-deployment/*/dist
-deployment/*/pkg-dist
-deployment/collect-dist/
+Dockerfile.ci
+docker-bake.hcl
+docker/
+
+# --- CI harnesses (hosted + local); not needed to publish the server ---
+.github/
 ci/
+.devcontainer/
+
+# --- IDE / editor cruft ---
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.DotSettings.user
+
+# --- Docs, packaging templates, meta (not build inputs) ---
+CONTRIBUTORS.md
+CONTRIBUTING.md
+README.md
+SECURITY.md
+docs/
+deployment/
+
+# --- Local data / secrets (never ship) ---
+.env
+*.env
+*.pfx
+*.key
