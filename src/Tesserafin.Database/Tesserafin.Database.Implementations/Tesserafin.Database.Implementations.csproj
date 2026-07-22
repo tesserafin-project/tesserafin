@@ -15,7 +15,7 @@
     <PackageId>Tesserafin.Database.Implementations</PackageId>
     <VersionPrefix>10.11.0</VersionPrefix>
     <RepositoryUrl>https://github.com/tesserafin/tesserafin</RepositoryUrl>
-    <PackageLicenseExpression>GPL-3.0-only</PackageLicenseExpression>
+    <PackageLicenseExpression>GPL-2.0-or-later</PackageLicenseExpression>
   </PropertyGroup>
 
   <PropertyGroup Condition=" '$(Stability)'=='Unstable'">

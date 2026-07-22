@@ -48,8 +48,8 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-IMAGE_TAG="reefin-ci"
-NUGET_VOLUME="reefin-nuget"
+IMAGE_TAG="tesserafin-ci"
+NUGET_VOLUME="tesserafin-nuget"
 SOLUTION="Tesserafin.sln"
 # PR119: PlaybackUrlContractEndToEndTests is Category=Smoke too (so ci/run.sh still excludes it) but is
 # deliberately carved out of this filter - it runs via ci/smoke-e2e.sh below instead, as its own

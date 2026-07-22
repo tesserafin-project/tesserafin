@@ -15,7 +15,7 @@
 # See docs/local-ci.md ("Porte de référence") for why. This script takes no
 # arguments.
 #
-# What it does: builds the reefin-ci image from Dockerfile.ci (repo root),
+# What it does: builds the tesserafin-ci image from Dockerfile.ci (repo root),
 # then runs `dotnet build` + `dotnet test` for the full solution inside a
 # container. The repository is bind-mounted (not copied) so the container
 # always tests the CURRENT checkout on disk — whatever branch is out,
@@ -42,8 +42,8 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-IMAGE_TAG="reefin-ci"
-NUGET_VOLUME="reefin-nuget"
+IMAGE_TAG="tesserafin-ci"
+NUGET_VOLUME="tesserafin-nuget"
 SOLUTION="Tesserafin.sln"
 
 banner() {

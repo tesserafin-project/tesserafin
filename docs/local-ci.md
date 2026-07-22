@@ -169,7 +169,7 @@ Ne conclure « porte verte » qu'après les **trois** exit 0.
 
 C'est le seul point d'entrée. Il :
 
-1. build l'image `reefin-ci` depuis `Dockerfile.ci` (racine du dépôt),
+1. build l'image `tesserafin-ci` depuis `Dockerfile.ci` (racine du dépôt),
 2. lance un conteneur qui exécute, dans l'ordre et en échouant vite au
    premier problème :
    - `dotnet restore Reefin.sln`
@@ -183,7 +183,7 @@ sortie, y compris les modifications non commitées. C'est ce qui permet au
 même script de servir de porte pour n'importe quelle branche.
 
 Le restore NuGet est mis en cache dans un volume Docker nommé
-(`reefin-nuget`), donc les exécutions suivantes sont nettement plus rapides
+(`tesserafin-nuget`), donc les exécutions suivantes sont nettement plus rapides
 que la première (qui télécharge tout).
 
 ### Ce que ça couvre
@@ -227,7 +227,7 @@ contexte plus général sur cette classe de statics partagés).
 Sur certaines machines hôtes (résolution `localhost` sans mapping IPv6
 `::1`), 2 tests de `Reefin.Server.Tests.ParseNetworkTests.TestNetworks`
 échouent en dehors de Docker — c'est un problème d'environnement hôte, pas
-une régression de code. Dans le conteneur `reefin-ci`, la résolution réseau
+une régression de code. Dans le conteneur `tesserafin-ci`, la résolution réseau
 par défaut de Docker inclut `::1 localhost`, donc ces 2 tests passent sans
 configuration supplémentaire. Si jamais ils réapparaissaient en échec dans
 le conteneur, la correction attendue est d'assurer le mapping `::1

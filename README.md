@@ -78,7 +78,7 @@ After the required extensions are installed, you can run the server by pressing 
 
 #### Running From the Command Line
 
-To run the server from the command line you can use the `dotnet run` command. The example below shows how to do this if you have cloned the repository into a directory named `reefin` (the default directory name) and should work on all operating systems.
+To run the server from the command line you can use the `dotnet run` command. The example below shows how to do this if you have cloned the repository into a directory named `tesserafin` (the default directory name) and should work on all operating systems.
 
 ```bash
 cd tesserafin                          # Move into the repository directory

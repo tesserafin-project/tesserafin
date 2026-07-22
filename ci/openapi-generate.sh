@@ -27,8 +27,8 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-IMAGE_TAG="reefin-ci"
-NUGET_VOLUME="reefin-nuget"
+IMAGE_TAG="tesserafin-ci"
+NUGET_VOLUME="tesserafin-nuget"
 TEST_PROJECT="tests/Tesserafin.Server.Integration.Tests/Tesserafin.Server.Integration.Tests.csproj"
 SPEC_PATH="openapi/openapi.json"
 LOCK_PATH="openapi/contract.lock.json"

@@ -128,7 +128,7 @@ SERVER_DLL="Tesserafin.Server/bin/Debug/net10.0/tesserafin.dll"
 
 # The Authorization header shape Tesserafin requires on every request. Mirrors the one
 # reefin-web's tests/e2e specs send, so seeding and the specs authenticate identically.
-AUTH_CLIENT='MediaBrowser Client="Tesserafin E2E Harness", Device="ci/serve-e2e.sh", DeviceId="reefin-ci-serve-e2e", Version="0.0.0"'
+AUTH_CLIENT='MediaBrowser Client="Tesserafin E2E Harness", Device="ci/serve-e2e.sh", DeviceId="tesserafin-ci-serve-e2e", Version="0.0.0"'
 
 PORT=""
 WEBDIR=""

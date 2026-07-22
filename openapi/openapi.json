@@ -18142,7 +18142,7 @@
   "info": {
     "title": "Tesserafin API",
     "version": "12.0.0",
-    "x-reefin-version": "12.0.0"
+    "x-tesserafin-version": "12.0.0"
   },
   "openapi": "3.0.4",
   "paths": {
