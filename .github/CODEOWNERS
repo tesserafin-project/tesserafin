@@ -1,11 +1,11 @@
 # The repo owner must review all changes to bump_version and any files it touches
-bump_version                                            @tesserafin
-.github/ISSUE_TEMPLATE                                  @tesserafin
-MediaBrowser.Common/MediaBrowser.Common.csproj          @tesserafin
-Tesserafin.Data/Tesserafin.Data.csproj                      @tesserafin
-MediaBrowser.Controller/MediaBrowser.Controller.csproj  @tesserafin
-MediaBrowser.Model/MediaBrowser.Model.csproj            @tesserafin
-Emby.Naming/Emby.Naming.csproj                          @tesserafin
-src/Tesserafin.Extensions/Tesserafin.Extensions.csproj      @tesserafin
+bump_version                                            @tesserafin-project/core
+.github/ISSUE_TEMPLATE                                  @tesserafin-project/core
+Tesserafin.Common/Tesserafin.Common.csproj              @tesserafin-project/core
+Tesserafin.Data/Tesserafin.Data.csproj                  @tesserafin-project/core
+Tesserafin.Controller/Tesserafin.Controller.csproj      @tesserafin-project/core
+Tesserafin.Model/Tesserafin.Model.csproj                @tesserafin-project/core
+Tesserafin.Naming/Tesserafin.Naming.csproj              @tesserafin-project/core
+src/Tesserafin.Extensions/Tesserafin.Extensions.csproj  @tesserafin-project/core
 # Core must approve all changes within the repo config
-.github/                                                @tesserafin
+.github/                                                @tesserafin-project/core
