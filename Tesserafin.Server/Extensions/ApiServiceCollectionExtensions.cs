@@ -212,7 +212,7 @@ namespace Tesserafin.Server.Extensions
                     Extensions = new Dictionary<string, IOpenApiExtension>
                     {
                         {
-                            "x-reefin-version",
+                            "x-tesserafin-version",
                             new JsonNodeExtension(JsonValue.Create(version))
                         }
                     }

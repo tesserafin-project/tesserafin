@@ -39,6 +39,6 @@ RUN apt-get update \
 WORKDIR /repo
 
 # Backed by a named Docker volume at runtime (see ci/run.sh: -v
-# reefin-nuget:/nuget) so package restores are cached across CI runs
+# tesserafin-nuget:/nuget) so package restores are cached across CI runs
 # instead of being re-downloaded every time.
 RUN mkdir -p /nuget

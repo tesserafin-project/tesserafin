@@ -139,7 +139,7 @@ namespace Tesserafin.Server.Integration.Tests
         /// regeneration even when the contract is byte-identical, which is precisely the
         /// drift signal this file exists to carry — it would make the drift gate fire on
         /// no change at all. Nothing consumes such a field: the only pin consumer is
-        /// <c>reefin-web/src/lib/reefin-sdk/spec/version.json</c>, which pins on version
+        /// <c>tesserafin-web/src/lib/tesserafin-sdk/spec/version.json</c>, which pins on version
         /// and hash. See <c>docs/openapi-contract.md</c>.
         /// </para>
         /// </summary>

@@ -43,8 +43,8 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-IMAGE_TAG="reefin-ci"
-NUGET_VOLUME="reefin-nuget"
+IMAGE_TAG="tesserafin-ci"
+NUGET_VOLUME="tesserafin-nuget"
 SOLUTION="Tesserafin.sln"
 E2E_FILTER="FullyQualifiedName~PlaybackUrlContractEndToEndTests"
 
