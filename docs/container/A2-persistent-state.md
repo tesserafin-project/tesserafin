@@ -87,9 +87,56 @@ docker/restore.sh --archive /backups/tesserafin-2026-07-23.tgz \
 ```
 
 `backup.sh` writes the archive plus two sidecars: `<archive>.sha256` (integrity) and
-`<archive>.manifest.json` (contents, expected uid/gid, source volumes). `restore.sh`
-verifies the `.sha256` when present, refuses to overwrite non-empty target volumes
-without `--force`, and re-asserts `10000:10000` ownership after extraction.
+`<archive>.manifest.json` (contents, expected uid/gid, source volumes, helper image).
+`restore.sh` verifies the `.sha256` when present, validates the archive structure,
+refuses to overwrite non-empty target volumes without `--force`, and re-asserts
+`10000:10000` ownership after extraction.
+
+### Safety contract
+
+The backup contains databases, users and access tokens; the scripts enforce the
+following, each backed by an automated assertion in `state-roundtrip.sh`:
+
+- **Confidentiality / ownership.** The archive is streamed from the helper container to
+  a host file created by the invoking user under `umask 077`; the archive and both
+  sidecars are owned by that user and are mode `0600` (not group/world-readable). The
+  helper never writes into the host output directory as root.
+- **Atomic, non-deceptive output.** The archive is streamed to a `*.partial.<pid>` name
+  and only renamed into place after the whole snapshot + sidecars succeed. A failed
+  archive step leaves no valid-looking backup.
+- **Restart is fatal on failure.** With `--container`, if the server was running,
+  `backup.sh` restarts it after the snapshot; if the restart fails the command exits
+  non-zero and states that the archive exists but the server remains stopped. It never
+  silently reports success with the server down.
+- **Forced restore removes hidden entries.** Under `--force`, every child entry of the
+  target volumes (dotfiles included) is removed via bounded `find` before extraction,
+  while the mount roots are preserved. `rm -rf /v/config/*` would leave dotfiles behind.
+- **Archive-structure validation.** Before extraction, `restore.sh` rejects any archive
+  containing an absolute path, a `..` traversal, or a top-level entry other than
+  `config/` or `data/`. The checksum only proves the bytes match a *trusted* sidecar; it
+  is not sufficient structure validation.
+- **Valid JSON manifest.** The manifest is emitted with a real JSON encoder (`python3
+  json.dumps`), so free-form host paths / container names cannot corrupt it.
+
+### Backup helper image (supply-chain)
+
+Both scripts read/write the volumes through a throwaway helper container. The default
+helper is pinned to an **immutable multi-architecture manifest digest**, not a floating
+tag, so the tooling cannot silently change under it:
+
+```
+busybox:stable@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
+```
+
+- **Trust:** the official Docker `busybox` image; the digest is the `stable`
+  manifest-list resolved with `docker buildx imagetools inspect` and covers
+  `linux/amd64` and `linux/arm64/v8` (the two supported server architectures).
+- **Override:** `--helper-image IMG` or the `TF_HELPER_IMAGE` environment variable, for
+  air-gapped mirrors or a different pinned tool image. Any image providing POSIX
+  `tar`/`find`/`chown` works.
+
+`backup.sh` and `restore.sh` support docker **named volumes** and host **bind mounts**,
+including bind paths that contain spaces (both are exercised by the round-trip test).
 
 ## Verifying the contract
 
@@ -105,7 +152,10 @@ docker/state-roundtrip.sh                       # uses the locally built dev ima
 docker/state-roundtrip.sh <image-ref> <port>    # or an explicit image/port
 ```
 
-Expected final line: `ROUNDTRIP: all gates passed`.
+In addition to the two gates it asserts the full safety contract above (confidentiality
++ ownership, forced-restore hidden-entry cleanup, restart-failure handling,
+archive-structure rejection, JSON manifest validity, bind-mount incl. spaces, pinned
+helper). Expected final line: `ROUNDTRIP: all gates + safety assertions passed`.
 
 ## Scope and limitations
 
