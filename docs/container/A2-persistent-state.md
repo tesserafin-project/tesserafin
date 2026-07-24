@@ -169,3 +169,7 @@ helper). Expected final line: `ROUNDTRIP: all gates + safety assertions passed`.
   instance). A synthetic *cross-version* schema upgrade (old schema → newer migration) is
   not fabricated here; the applies-on-boot mechanism is the server's own and is documented
   above.
+- Archive-structure validation: the top-level allowlist (`config/` | `data/`) is the
+  effective check, because `tar tzf` strips a leading `/` and normalises `..` when listing;
+  the explicit absolute-path and `..` matchers are backstops for non-normalising tar
+  implementations. All three malformed fixtures are rejected regardless.

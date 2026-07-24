@@ -65,6 +65,11 @@ fi
 # The checksum only proves the bytes match a trusted sidecar; it says nothing
 # about WHERE those bytes would extract to. Reject a hostile/corrupt layout so a
 # tampered archive cannot escape the config/ + data/ roots.
+#
+# The top-level allowlist (config/ | data/) is the effective gate: GNU/busybox
+# `tar tzf` strips a leading "/" and normalises ".." when LISTING, so a rogue
+# path surfaces as an unexpected top-level entry. The absolute-path and ".."
+# checks below are backstops for tar implementations that do not normalise.
 echo "== validating archive structure =="
 docker run --rm -v "${ARCHIVE_DIR}:/in:ro" "${HELPER}" \
   sh -eu -c '
