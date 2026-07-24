@@ -3,6 +3,9 @@
 Issue: tesserafin-project/tesserafin #87. Foundational production server image.
 Deliberately excludes #88–#92 (see Deferred).
 
+For installing this image, see the guided-install guide
+[`A3-guided-install.md`](./A3-guided-install.md) (#89).
+
 ## Supported platforms
 - `linux/amd64` and `linux/arm64`, from the same commit, via `docker buildx`
   (`docker-bake.hcl`, targets `server`/`amd64`/`arm64`).

@@ -6,6 +6,9 @@ that verify and protect it. It changes no server code and no image layer: the to
 here (`docker/backup.sh`, `docker/restore.sh`, `docker/state-roundtrip.sh`) drives the
 image that #87 already produces.
 
+For a first-time install that applies this contract, see the guided-install guide
+[`A3-guided-install.md`](./A3-guided-install.md) (#89).
+
 ## Volume layout
 
 The server runs with three writable volumes and one read-only media mount. The paths
