@@ -69,10 +69,19 @@ start_container() {
 # the startup server still owns the route it answers 503 with status=starting, so
 # this is a readiness wait and not a race.
 wait_for_healthy() {
-  local deadline=$(( SECONDS + BOOT_TIMEOUT ))
+  local deadline=$(( SECONDS + BOOT_TIMEOUT )) body
+  : > "${WORK}/health-observed.txt"
   while (( SECONDS < deadline )); do
-    if [[ "$(curl -s "http://127.0.0.1:${PORT}/health" 2>/dev/null \
-             | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status",""))' 2>/dev/null)" == "healthy" ]]; then
+    # EVERY observed body is recorded, not just the final one. The contract is that
+    # /health answers the same JSON shape from its first response onwards; a body that
+    # is only JSON once the server is ready is a broken contract, because a probe hits
+    # this endpoint precisely while the server is NOT ready. Regression guard: the
+    # startup-message middleware used to swallow /health and answer plain-text HTML.
+    body="$(curl -s "http://127.0.0.1:${PORT}/health" 2>/dev/null || true)"
+    if [[ -n "${body}" ]]; then
+      printf '%s\n' "${body}" >> "${WORK}/health-observed.txt"
+    fi
+    if [[ "$(printf '%s' "${body}" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status",""))' 2>/dev/null)" == "healthy" ]]; then
       return 0
     fi
     if ! docker ps -q --filter "name=${CNAME}" | grep -q .; then
@@ -149,6 +158,38 @@ start_container
 if ! wait_for_healthy; then
   fail "server never reported status=healthy within ${BOOT_TIMEOUT}s"
   echo "SMOKE: FAILURES present"; exit 1
+fi
+
+# Every /health body seen from boot onwards, including the not-ready ones.
+if python3 - "${WORK}/health-observed.txt" <<'PY'
+import json, sys
+allowed = {"healthy", "starting", "unhealthy"}
+seen = 0
+with open(sys.argv[1], encoding="utf-8", errors="replace") as handle:
+    for number, line in enumerate(handle, 1):
+        line = line.strip()
+        if not line:
+            continue
+        seen += 1
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            print(f"    line {number} is not JSON: {line[:160]}")
+            sys.exit(1)
+        if not isinstance(event, dict) or event.get("status") not in allowed:
+            print(f"    line {number} is not the health contract: {line[:160]}")
+            sys.exit(1)
+        for field in ("status", "version", "database"):
+            if field not in event:
+                print(f"    line {number} is missing '{field}': {line[:160]}")
+                sys.exit(1)
+print(f"    {seen} observed /health bodies, all on contract")
+sys.exit(0 if seen else 1)
+PY
+then
+  pass "every /health body from boot onwards is the same JSON contract"
+else
+  fail "/health answered something other than its JSON contract before becoming ready"
 fi
 
 HEALTH_HEADERS="$(curl -s -D - -o "${WORK}/health.json" -w '%{http_code}' "http://127.0.0.1:${PORT}/health")"

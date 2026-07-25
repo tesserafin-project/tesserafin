@@ -37,16 +37,19 @@ Cache-Control: no-store
 | `version`  | string | the running server's version, e.g. `12.0.0` |
 | `database` | string | `healthy`, `unhealthy`, `unknown`          |
 
-| Situation                                          | HTTP | `status`    | `database`  |
-|----------------------------------------------------|------|-------------|-------------|
-| Server up, database answered                        | 200  | `healthy`   | `healthy`   |
-| Server still starting (startup screen still owns it) | 503  | `starting`  | `unknown`   |
-| Database did not answer                             | 503  | `unhealthy` | `unhealthy` |
-| Startup failed                                      | 503  | `unhealthy` | `unknown`   |
+| Situation                                            | HTTP | `status`    | `database`             |
+|------------------------------------------------------|------|-------------|------------------------|
+| Server up, database answered                          | 200  | `healthy`   | `healthy`              |
+| Server still starting (startup screen still owns it)  | 503  | `starting`  | `unknown`              |
+| Server serving, core startup not finished             | 503  | `starting`  | `healthy` or `unhealthy` |
+| Database did not answer                               | 503  | `unhealthy` | `unhealthy`            |
+| Startup failed                                        | 503  | `unhealthy` | `unknown`              |
 
-The three fields are always present, in every case, so a probe only ever has to
-parse one shape. **200 means ready**, not merely "the process is alive" — this
-endpoint is safe to use as a readiness gate in front of a reverse proxy.
+The three fields are always present, in every case — **from the very first response
+the server gives, not only once it is ready** — so a probe only ever has to parse
+one shape. **200 means ready**, not merely "the process is alive": it is emitted
+only when the host reports core startup complete *and* the database answered, so
+this endpoint is safe to use as a readiness gate in front of a reverse proxy.
 
 ### What the database check actually does
 
