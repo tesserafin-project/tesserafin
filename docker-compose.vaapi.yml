@@ -1,0 +1,46 @@
+# Tesserafin — opt-in Linux VAAPI hardware acceleration (#90 / [A4])
+#
+# This file is an OVERRIDE, never a replacement. It is layered on top of the
+# default stack and changes exactly one thing: it gives the container access to
+# one GPU render node.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.vaapi.yml up -d
+#
+# You do NOT need this file. With the default `docker compose up -d`, the server
+# probes for hardware at every start, finds none, and transcodes in software with
+# no configuration at all. Use this only when you have a Linux host with a
+# VAAPI-capable GPU and want to offload transcoding onto it.
+#
+# Before using it, set TESSERAFIN_RENDER_GID in your .env to the numeric group id
+# that owns /dev/dri/renderD128 on the HOST — see docs/container/A4-hardware-acceleration.md.
+# The default below is 993, which is Debian/Ubuntu's usual `render` gid, but it
+# genuinely varies between distributions and even between installs. Getting it
+# wrong does not corrupt anything: the container simply cannot open the device,
+# the startup probe fails, and the server transcodes in software.
+#
+# Security posture is unchanged from the default stack: still non-root
+# 10000:10000, still no-new-privileges, still no privileged mode, no Docker
+# socket, no host networking, and the media mount stays read-only. Exposing a
+# render node is the ONLY additional capability granted, and `devices:` grants
+# just that node — not /dev/dri as a whole, and not the privileged-container
+# blanket access that many hardware-acceleration guides reach for.
+services:
+  tesserafin:
+    devices:
+      # Only the render node. The `cardN` node is deliberately NOT mapped: it is
+      # the display/KMS interface and hardware transcoding does not need it.
+      # Permissions are `rw`, not the `rwm` default — VAAPI needs to read and
+      # write the node but never to mknod through it.
+      #
+      # If the named device does not exist on the host, `docker compose up` fails
+      # immediately and says so ("error gathering device information while adding
+      # custom device ... no such file or directory"). That is deliberate: asking
+      # for hardware you do not have should be an error you see, not a container
+      # that silently transcodes in software while you believe otherwise.
+      - ${TESSERAFIN_RENDER_DEVICE:-/dev/dri/renderD128}:${TESSERAFIN_RENDER_DEVICE:-/dev/dri/renderD128}:rw
+    group_add:
+      # The container user is 10000:10000 and is not a member of the host's
+      # render group, so without this it cannot open the 0660 root:render device
+      # node. Adding the supplementary gid is what avoids needing either root or
+      # a world-writable device.
+      - "${TESSERAFIN_RENDER_GID:-993}"
