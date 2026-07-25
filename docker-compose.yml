@@ -32,8 +32,17 @@ services:
       # created empty on first run so the stack starts before you have media.
       - ${TESSERAFIN_MEDIA:-./media}:/media:ro
     # No privileged mode, no Docker socket, no host networking, no GPU devices and
-    # no healthcheck: those belong to later roadmap items (#90 GPU, #91 health,
+    # no healthcheck: the remaining two belong to later roadmap items (#91 health,
     # #92 upgrades) and are intentionally excluded here.
+    #
+    # No GPU is mapped here ON PURPOSE, and nothing is missing as a result: the
+    # server probes for hardware at every start and transcodes in software when
+    # it finds none, with no configuration at all. If you have a Linux host with
+    # a VAAPI-capable GPU and want to use it, layer the opt-in override on top:
+    #
+    #   docker compose -f docker-compose.yml -f docker-compose.vaapi.yml up -d
+    #
+    # See docs/container/A4-hardware-acceleration.md (#90).
     security_opt:
       - no-new-privileges:true
 

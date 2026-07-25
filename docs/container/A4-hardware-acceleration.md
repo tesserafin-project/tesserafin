@@ -40,10 +40,13 @@ actual media bytes come back.
 
 Every start logs exactly one conclusive decision event:
 
+This is a real line from a container started with no GPU:
+
 ```
 [INF] Tesserafin.MediaEncoding.Encoder.MediaEncoder: Hardware acceleration decision:
-      Mode=software Backend=none Reason=NoApplicableBackend ConfiguredBackend=none
-      CandidatesConsidered=[] CandidatesProbed=[] ProbeFailureCategories=[]
+      Mode=software Backend=none Reason=AllProbesFailed ConfiguredBackend=none
+      CandidatesConsidered=["nvenc", "v4l2m2m"] CandidatesProbed=["nvenc", "v4l2m2m"]
+      ProbeFailureCategories=["DeviceInitializationFailed", "Unknown"]
 ```
 
 Find it with:
@@ -72,13 +75,30 @@ machine-readable. (Rendering the whole log as JSON is [#91], not this change.)
 | `HardwareDisabled` | Hardware encoding is switched off. Nothing was probed. |
 | `PreferredBackendVerified` | Your configured backend was probed and works. |
 | `AutoSelectedBackendVerified` | A backend was picked automatically and works. |
-| `NoApplicableBackend` | Nothing was even worth probing. **This is the normal no-GPU container result.** |
-| `AllProbesFailed` | A device was present but nothing could actually encode with it. Worth investigating — see the failure categories. |
+| `NoApplicableBackend` | Nothing was even worth probing — no backend passed even the cheap platform/build/device checks. |
+| `AllProbesFailed` | Something was worth probing, and every probe failed. |
 
-The distinction between the last two matters when troubleshooting.
-`NoApplicableBackend` usually means you did not pass a device through.
-`AllProbesFailed` means you did, and it did not work — wrong group id, a driver
-the image cannot use, or a GPU without an encode engine.
+**On a no-GPU container, `AllProbesFailed` is the normal, healthy result** — it is
+what the example above shows. That is not as alarming as it sounds. Two backends
+in the catalog are applicable without any device file: NVENC (which initialises
+CUDA internally) and V4L2M2M (which has a device-less path). Both are compiled
+into the pinned ffmpeg build, so both get probed and both fail in about a second,
+and the server settles on software. What matters is the `Mode` and `Backend`
+fields, not the reason.
+
+The reason is only worth acting on when it does not match your setup:
+
+- `AllProbesFailed` **with `vaapi` in `CandidatesProbed`** means you did pass a
+  render node through and it could not encode. That is the case worth
+  investigating — usually a wrong `TESSERAFIN_RENDER_GID`, a driver the image
+  cannot use, or a GPU with no encode engine.
+- `AllProbesFailed` **without `vaapi` in `CandidatesProbed`**, on a host where you
+  expected VAAPI, means the device never reached the container at all. Check the
+  override is actually layered in.
+
+`ProbeFailureCategories` is a coarse hint, not a diagnosis. `Unknown` simply means
+the failure did not match a recognised pattern — V4L2M2M's failure lands there
+today — and does not indicate anything worse than the other categories.
 
 ---
 
@@ -152,9 +172,9 @@ Mode=hardware Backend=vaapi Reason=AutoSelectedBackendVerified ConfiguredBackend
 CandidatesConsidered=[vaapi] CandidatesProbed=[vaapi] ProbeFailureCategories=[]
 ```
 
-If it instead says `Mode=software Backend=none Reason=AllProbesFailed`, the
-device was mapped but could not encode. The usual cause is a wrong
-`TESSERAFIN_RENDER_GID`. Check with:
+If it instead says `Mode=software Backend=none` **with `vaapi` listed in
+`CandidatesProbed`**, the device was mapped but could not encode. The usual cause
+is a wrong `TESSERAFIN_RENDER_GID`. Check with:
 
 ```bash
 docker exec tesserafin sh -c 'ls -l /dev/dri/renderD128 && test -w /dev/dri/renderD128 && echo writable'
