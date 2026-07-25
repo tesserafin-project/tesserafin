@@ -31,9 +31,22 @@ services:
       # library root (an absolute host path, or a NAS share). Default ./media is
       # created empty on first run so the stack starts before you have media.
       - ${TESSERAFIN_MEDIA:-./media}:/media:ro
-    # No privileged mode, no Docker socket, no host networking, no GPU devices and
-    # no healthcheck: the remaining two belong to later roadmap items (#91 health,
-    # #92 upgrades) and are intentionally excluded here.
+    environment:
+      # Minimum log level for the container's JSON logs (#91 / [A5]). Valid values:
+      # Verbose, Debug, Information, Warning, Error, Fatal. Change it and re-run
+      # `docker compose up -d` — no rebuild, no file to edit inside the volume.
+      # An unrecognised value is ignored with a structured warning, not a crash.
+      TESSERAFIN_LOG_LEVEL: ${TESSERAFIN_LOG_LEVEL:-Information}
+      # Console rendering: `json` (the image default, one JSON object per line) or
+      # `text`. Leave it alone unless you are reading the logs by eye.
+      TESSERAFIN_LOG_FORMAT: ${TESSERAFIN_LOG_FORMAT:-json}
+    # The container reports its own health: the image declares a HEALTHCHECK that
+    # polls /health, which answers 200 only when the server is up AND its database
+    # answered a real query. `docker compose ps` shows it as (healthy).
+    #
+    # No privileged mode, no Docker socket, no host networking and no GPU devices.
+    # Metrics are intentionally not part of this image yet — see #91 (deferred to
+    # Phase F). Versioning/upgrades are #92.
     #
     # No GPU is mapped here ON PURPOSE, and nothing is missing as a result: the
     # server probes for hardware at every start and transcodes in software when

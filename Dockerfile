@@ -134,6 +134,8 @@ ARG WEB_VERSION
 # Runtime native dependencies:
 #   - the pinned jellyfin-ffmpeg .deb (pulls its own libs)
 #   - libfontconfig1 + a base font: SkiaSharp image rendering
+#   - curl: the HEALTHCHECK below runs INSIDE the container, so the image has to
+#     carry one HTTP client of its own (#91 / [A5]). Nothing else uses it.
 #   - ICU is already present in the .NET runtime image (globalization on)
 COPY --from=ffmpeg-fetch /tmp/ffmpeg.deb /tmp/ffmpeg.deb
 RUN apt-get update \
@@ -141,6 +143,7 @@ RUN apt-get update \
         /tmp/ffmpeg.deb \
         libfontconfig1 \
         fonts-dejavu-core \
+        curl \
  && rm -f /tmp/ffmpeg.deb \
  # Strip apt/dpkg artefacts that embed wall-clock timestamps, so the layer
  # content is reproducible across builds (mtimes are separately clamped by
@@ -178,9 +181,17 @@ COPY --from=webassets /metadata/web-revision.json /opt/tesserafin-web.revision.j
 # Neutralise misleading inherited base-image env: the Tesserafin server binds its
 # own port (8096) via NetworkConfiguration and ignores ASPNETCORE_HTTP_PORTS; the
 # runtime identity is the fixed USER below, not the base image's APP_UID.
+#
+# TESSERAFIN_LOG_FORMAT=json is the container default (#91 / [A5]): in a container
+# stdout IS the log transport, so every application log line is emitted as one JSON
+# object. Running the server outside a container leaves this unset and keeps the
+# human-readable console format. TESSERAFIN_LOG_LEVEL is deliberately NOT set here,
+# so the level stays whatever logging.json says (Information) and an operator can
+# override it per-run without rebuilding the image.
 ENV TESSERAFIN_DATA_DIR=/data \
     TESSERAFIN_CONFIG_DIR=/config \
     TESSERAFIN_CACHE_DIR=/cache \
+    TESSERAFIN_LOG_FORMAT=json \
     DOTNET_CLI_TELEMETRY_OPTOUT=1 \
     DOTNET_NOLOGO=1 \
     ASPNETCORE_HTTP_PORTS="" \
@@ -209,6 +220,13 @@ LABEL org.tesserafin.web.revision="${WEB_VCS_REF}" \
 
 USER ${UID}:${GID}
 WORKDIR /opt/tesserafin
+
+# #91 / [A5]. /health answers 200 only once the real pipeline is up AND a real
+# `SELECT 1` against the embedded SQLite database succeeded; while the startup
+# server still owns the route it answers 503, which is what start-period covers.
+# `-f` makes curl exit non-zero on that 503 without needing to parse the body.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
+    CMD curl -fsS http://127.0.0.1:8096/health >/dev/null || exit 1
 
 # The apphost runs as PID 1 so .NET's ConsoleLifetime receives SIGTERM directly
 # and shuts the server down gracefully. ffmpeg is pinned by absolute path.

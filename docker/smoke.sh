@@ -163,6 +163,18 @@ if [[ "${API_OK}" == 1 ]]; then
   fi
 fi
 
+echo "== health endpoint (#91 / [A5]) =="
+# Minimal guard only. The full A5 gate — schema, version agreement, JSON-lines
+# logs, log-level switching — lives in docker/observability.sh.
+HEALTH_CODE="$(curl -s -o "${WORK}/health.json" -w '%{http_code}' "http://127.0.0.1:${PORT}/health")"
+echo "  /health -> ${HEALTH_CODE}: $(head -c 200 "${WORK}/health.json")"
+if [[ "${HEALTH_CODE}" == "200" ]] \
+   && python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get("status")=="healthy" and d.get("database")=="healthy" and d.get("version") else 1)' "${WORK}/health.json"; then
+  pass "/health returns 200 with a healthy database and a version"
+else
+  fail "/health did not return the healthy contract (status ${HEALTH_CODE})"
+fi
+
 echo "== runtime identity & tooling (inside container) =="
 UID_IN="$(docker exec "${CNAME}" id -u)"
 [[ "${UID_IN}" == "10000" ]] && pass "runs as non-root uid 10000" || fail "uid is ${UID_IN}"

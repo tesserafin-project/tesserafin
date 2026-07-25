@@ -8,6 +8,7 @@ using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
@@ -25,6 +26,7 @@ using Tesserafin.Networking.Manager;
 using Tesserafin.Server.Core.Configuration;
 using Tesserafin.Server.Core.Serialization;
 using Tesserafin.Server.Extensions;
+using Tesserafin.Server.HealthChecks;
 using ILogger = Microsoft.Extensions.Logging.ILogger;
 
 namespace Tesserafin.Server.ServerSetupApp;
@@ -132,7 +134,22 @@ public sealed class SetupServer : IDisposable
                                 })
                                 .Configure(app =>
                                 {
-                                    app.UseHealthChecks("/health");
+                                    // #91 / [A5]: the startup server owns `/health` until the real
+                                    // pipeline takes over, so it must answer the SAME JSON
+                                    // contract — a probe cannot be asked to parse two shapes.
+                                    // While starting there is no database to probe yet, hence
+                                    // `"database":"unknown"` and a 503: the server is up but not
+                                    // ready, and a container runtime must not be told otherwise.
+                                    app.UseHealthChecks("/health", new HealthCheckOptions
+                                    {
+                                        ResponseWriter = HealthResponseWriter.WriteAsync,
+                                        ResultStatusCodes =
+                                        {
+                                            [HealthStatus.Healthy] = StatusCodes.Status200OK,
+                                            [HealthStatus.Degraded] = StatusCodes.Status503ServiceUnavailable,
+                                            [HealthStatus.Unhealthy] = StatusCodes.Status503ServiceUnavailable
+                                        }
+                                    });
                                     app.UseForwardedHeaders();
                                     app.Map("/startup/logger", loggerRoute =>
                                     {
