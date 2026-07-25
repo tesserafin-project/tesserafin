@@ -8,6 +8,10 @@ building anything from source**.
 Related docs:
 - Image (build + contents): [`A1-implementation-note.md`](./A1-implementation-note.md)
 - Volumes, permissions, backup/restore: [`A2-persistent-state.md`](./A2-persistent-state.md)
+- Hardware acceleration and the software fallback:
+  [`A4-hardware-acceleration.md`](./A4-hardware-acceleration.md) — optional; this
+  guide needs none of it, since the server transcodes in software with no
+  configuration when it finds no GPU
 - Image publication tracker: #113
 
 ## The image
@@ -15,11 +19,13 @@ Related docs:
 All paths here use the immutable pre-release image published to GHCR:
 
 ```
-ghcr.io/tesserafin-project/tesserafin:12.0.0-dev.e22b4e9f3ce4
+ghcr.io/tesserafin-project/tesserafin:12.0.0-dev.9de87471b44f
 ```
 
-- Multi-arch manifest digest: `sha256:bff0d135295f2e1e5a9da057ddacb849f391bcf939a7b08b9014e8fc1778b8e5`
-  (`linux/amd64` + `linux/arm64`).
+- Multi-arch manifest digest: `sha256:2616132aec3386f9368655bad7fbde768954da7f3c502e1e806387db321d3163`
+  (`linux/amd64` `sha256:ff8f745e2c7c930b609d21a073f460188c61ac9a31f187b7b037cb6faf267af9`,
+  `linux/arm64` `sha256:97f00831d33effb2e03e6b35d6746a3fd2f8cb8d3c6831f431e95b3cd50837d3`).
+  Built from `9de87471b44fe6fa221dc84cad35c4e6d2a7bc34`.
 - Bundled Tesserafin Web `13.0.0` at commit `fa47bab7f09d635f0b79b0814ddff2a1a1108400`
   (`ghcr.io/tesserafin-project/tesserafin-web-assets@sha256:357afd28932481f6c02a521c6482dcace58b5102190e896f79c6f515fd440a5b`),
   recorded in the image's `org.tesserafin.web.revision` label and in
@@ -159,7 +165,7 @@ DSM 7.2+ with **Container Manager** installed.
 
 1. **Download the image.** Container Manager → *Registry*. If your DSM registry is
    not configured for GHCR, the reliable path is SSH + `docker login ghcr.io` then
-   `docker pull ghcr.io/tesserafin-project/tesserafin:12.0.0-dev.e22b4e9f3ce4`.
+   `docker pull ghcr.io/tesserafin-project/tesserafin:12.0.0-dev.9de87471b44f`.
 2. **Create folders.** In *File Station*, under a `docker` shared folder create
    `tesserafin/config`, `tesserafin/data`, `tesserafin/cache`, and note your media
    share.

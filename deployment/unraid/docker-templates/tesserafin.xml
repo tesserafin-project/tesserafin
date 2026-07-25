@@ -24,7 +24,7 @@
   <Project>https://github.com/tesserafin-project/tesserafin</Project>
   <GitHub>https://github.com/tesserafin-project/tesserafin</GitHub>
   <Registry>https://github.com/tesserafin-project/tesserafin/pkgs/container/tesserafin</Registry>
-  <Repository>ghcr.io/tesserafin-project/tesserafin:12.0.0-dev.e22b4e9f3ce4</Repository>
+  <Repository>ghcr.io/tesserafin-project/tesserafin:12.0.0-dev.9de87471b44f</Repository>
   <BindTime>true</BindTime>
   <Privileged>false</Privileged>
   <Networking>

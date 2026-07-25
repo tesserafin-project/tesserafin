@@ -38,9 +38,8 @@ actual media bytes come back.
 
 ## 2. Reading the startup decision
 
-Every start logs exactly one conclusive decision event:
-
-This is a real line from a container started with no GPU:
+Every start logs exactly one conclusive decision event. This is a real line from a
+container started with no GPU:
 
 ```
 [INF] Tesserafin.MediaEncoding.Encoder.MediaEncoder: Hardware acceleration decision:
@@ -167,10 +166,18 @@ needed, in that order.
 docker logs tesserafin 2>&1 | grep 'Hardware acceleration decision'
 ```
 
+A real line from a first start with the render node mapped:
+
 ```
 Mode=hardware Backend=vaapi Reason=AutoSelectedBackendVerified ConfiguredBackend=none
-CandidatesConsidered=[vaapi] CandidatesProbed=[vaapi] ProbeFailureCategories=[]
+CandidatesConsidered=["nvenc", "qsv", "vaapi"] CandidatesProbed=["nvenc", "qsv", "vaapi"]
+ProbeFailureCategories=["DeviceInitializationFailed"]
 ```
+
+NVENC and QSV are probed first and fail — expected on an AMD host — and VAAPI is
+selected. On the *next* start `ConfiguredBackend` reads `vaapi`, so it is tried
+first and the line shortens to `CandidatesProbed=["vaapi"]` with
+`Reason=PreferredBackendVerified`. Both are healthy.
 
 If it instead says `Mode=software Backend=none` **with `vaapi` listed in
 `CandidatesProbed`**, the device was mapped but could not encode. The usual cause
