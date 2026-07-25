@@ -13,6 +13,13 @@ namespace Tesserafin.Controller.MediaEncoding;
 /// wrong guess about a backend's applicability or trial-encode syntax can only ever produce
 /// "not selected", never "selected and broken" - the same rule PR8 established for VAAPI alone.
 /// </summary>
+/// <remarks>
+/// This is the narrow "which backend" view of the startup decision. Production uses
+/// <see cref="HardwareSelectionPlanner"/> directly, because it also needs the reason, the
+/// candidates considered and the per-candidate failure categories for the structured startup log.
+/// This type delegates to the planner rather than reimplementing the walk, so the two can never
+/// disagree about which candidate wins.
+/// </remarks>
 public static class HardwareBackendSelector
 {
     /// <summary>
@@ -34,25 +41,16 @@ public static class HardwareBackendSelector
         FfmpegBuildCapabilities ffmpegCapabilities,
         Func<HardwareBackendCandidate, string, bool> probe)
     {
-        foreach (var candidate in candidatesInPriorityOrder)
-        {
-            if (!candidate.IsApplicable(options, ffmpegCapabilities))
-            {
-                continue;
-            }
+        ArgumentNullException.ThrowIfNull(probe);
 
-            var arguments = candidate.BuildTrialEncodeArguments(options);
-            if (arguments is null)
-            {
-                continue;
-            }
+        var decision = HardwareSelectionPlanner.Decide(
+            candidatesInPriorityOrder,
+            options,
+            ffmpegCapabilities,
+            (candidate, arguments) => probe(candidate, arguments)
+                ? HardwareProbeOutcome.Success
+                : HardwareProbeOutcome.Failure(FfmpegErrorCategory.Unknown));
 
-            if (probe(candidate, arguments))
-            {
-                return candidate.Type;
-            }
-        }
-
-        return null;
+        return decision.Mode == HardwareSelectionMode.Hardware ? decision.Backend : null;
     }
 }

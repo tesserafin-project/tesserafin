@@ -39,6 +39,19 @@ public sealed class HardwareBackendProbe
     /// <param name="cancellationToken">Cancellation token for the probe process.</param>
     /// <returns><c>true</c> if the trial encode completed successfully; <c>false</c> otherwise.</returns>
     public async Task<bool> ProbeAsync(string ffmpegPath, string trialEncodeArguments, CancellationToken cancellationToken)
+        => (await ProbeDetailedAsync(ffmpegPath, trialEncodeArguments, cancellationToken).ConfigureAwait(false)).Succeeded;
+
+    /// <summary>
+    /// Runs <paramref name="trialEncodeArguments"/> and reports the full outcome, including why it
+    /// failed. This is what <see cref="HardwareSelectionPlanner"/> consumes: the startup decision
+    /// records the failure category per candidate, so "no accelerator was selected" can be told
+    /// apart from "the accelerator is there but its device would not initialize".
+    /// </summary>
+    /// <param name="ffmpegPath">Path to the ffmpeg executable.</param>
+    /// <param name="trialEncodeArguments">The full ffmpeg argument line for the trial encode.</param>
+    /// <param name="cancellationToken">Cancellation token for the probe process.</param>
+    /// <returns>The trial encode's outcome.</returns>
+    public async Task<HardwareProbeOutcome> ProbeDetailedAsync(string ffmpegPath, string trialEncodeArguments, CancellationToken cancellationToken)
     {
         var command = FfmpegCommand.FromArgumentLine(ffmpegPath, trialEncodeArguments);
 
@@ -47,7 +60,7 @@ public sealed class HardwareBackendProbe
         if (!result.TimedOut && result.ExitCode == 0)
         {
             _logger.LogInformation("Hardware backend probe succeeded: {Arguments}", trialEncodeArguments);
-            return true;
+            return HardwareProbeOutcome.Success;
         }
 
         var category = ClassifyFailure(result.StandardError);
@@ -57,7 +70,7 @@ public sealed class HardwareBackendProbe
             result.ExitCode,
             category,
             trialEncodeArguments);
-        return false;
+        return result.TimedOut ? HardwareProbeOutcome.Timeout() : HardwareProbeOutcome.Failure(category);
     }
 
     private static FfmpegErrorCategory ClassifyFailure(string standardError)

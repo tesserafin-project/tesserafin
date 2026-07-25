@@ -70,6 +70,11 @@ namespace Tesserafin.MediaEncoding.Encoder
 
         private HardwareCapabilitySnapshot _capabilities = HardwareCapabilitySnapshot.Empty;
 
+        // This start's hardware selection. Null until SetFFmpegPath has run; after that it is the
+        // authoritative record of what was decided and why, and it always agrees with the backend
+        // the command-assembly path will use.
+        private HardwareSelectionDecision _hardwareSelection;
+
         private bool _isPkeyPauseSupported = false;
         private bool _isLowPriorityHwDecodeSupported = false;
         private bool _proberSupportsFirstVideoFrame = false;
@@ -156,6 +161,12 @@ namespace Tesserafin.MediaEncoding.Encoder
 
         public bool IsVideoToolboxAv1DecodeAvailable => _isVideoToolboxAv1DecodeAvailable;
 
+        /// <summary>
+        /// Gets this start's hardware selection decision, or <c>null</c> if
+        /// <see cref="SetFFmpegPath"/> has not run yet.
+        /// </summary>
+        internal HardwareSelectionDecision HardwareSelection => _hardwareSelection;
+
         [GeneratedRegex(@"[^\/\\]+?(\.[^\/\\\n.]+)?$")]
         private static partial Regex FfprobePathRegex();
 
@@ -225,31 +236,13 @@ namespace Tesserafin.MediaEncoding.Encoder
                 _isLowPriorityHwDecodeSupported = validator.CheckSupportedHwaccelFlag("low_priority");
                 _proberSupportsFirstVideoFrame = validator.CheckSupportedProberOption("only_first_vframe", _ffprobePath);
 
-                // Auto-select a hardware acceleration backend if hardware encoding is enabled but
-                // none has been chosen, trying candidates in priority order and only ever
-                // accepting one that passes a real trial encode. This is the runtime,
-                // hardware-verifying probing in the auto-detection plan - it costs startup latency
-                // and spins the GPU once per candidate tried, which is why it is gated this
-                // narrowly: it never runs, and never overrides anything, once a backend is
-                // explicitly set (see MediaEncoder.ShouldAutoSelectHardwareAcceleration).
-                if (ShouldAutoSelectHardwareAcceleration(options))
-                {
-                    var probe = new HardwareBackendProbe(new FfmpegProcessRunner(), _logger);
-                    var autoSelected = HardwareBackendSelector.SelectFirstVerified(
-                        HardwareBackendCatalog.CandidatesInPriorityOrder,
-                        options,
-                        _capabilities.Ffmpeg,
-                        (candidate, arguments) => probe.ProbeAsync(_ffmpegPath, arguments, CancellationToken.None).GetAwaiter().GetResult());
-
-                    if (autoSelected is not null)
-                    {
-                        options.HardwareAccelerationType = autoSelected.Value;
-                        _configurationManager.SaveConfiguration("encoding", options);
-                        _logger.LogInformation(
-                            "Auto-selected {HardwareAccelerationType} hardware acceleration after a successful startup probe",
-                            autoSelected);
-                    }
-                }
+                // Decide, on every start, whether this run encodes in hardware or software. A
+                // configured backend is treated as a preference and re-verified here rather than
+                // trusted: that is what stops a config directory carried over from a GPU host from
+                // producing an unprobed hardware command on a host that has no device. Probing
+                // costs startup latency and spins the GPU once per applicable candidate, which is
+                // the price of the guarantee. See HardwareSelectionPlanner for the full contract.
+                SelectHardwareAcceleration(options);
 
                 // Check the Vaapi device vendor
                 if (OperatingSystem.IsLinux()
@@ -309,21 +302,71 @@ namespace Tesserafin.MediaEncoding.Encoder
         }
 
         /// <summary>
-        /// Decides whether auto-selection should run at all: only when hardware encoding is
-        /// enabled but no backend has been explicitly chosen yet. Never true once a backend is
-        /// explicitly set - including an explicit <see cref="HardwareAccelerationType.none"/> with
-        /// hardware encoding left enabled, which is indistinguishable here from "not yet
-        /// configured" and is deliberately treated the same way, since
-        /// <see cref="EncodingOptions.EnableHardwareEncoding"/> defaults to <c>true</c> while
-        /// <see cref="EncodingOptions.HardwareAccelerationType"/> defaults to
-        /// <see cref="HardwareAccelerationType.none"/> on every fresh install. Which backend (if
-        /// any) gets selected once this gate passes is <see cref="HardwareBackendSelector"/>'s
-        /// decision, not this method's.
+        /// Runs this start's hardware selection and makes its result the effective one.
         /// </summary>
-        /// <param name="options">The current encoding options.</param>
-        /// <returns><c>true</c> if auto-selection should be attempted.</returns>
-        internal static bool ShouldAutoSelectHardwareAcceleration(EncodingOptions options)
-            => options.EnableHardwareEncoding && options.HardwareAccelerationType == HardwareAccelerationType.none;
+        /// <remarks>
+        /// <para>
+        /// The decision is written back into <see cref="EncodingOptions.HardwareAccelerationType"/>
+        /// because that property is what the whole command-assembly path
+        /// (<see cref="EncodingHelper"/> and its callers) reads to choose an encoder. Making it the
+        /// <em>effective, just-verified</em> backend rather than an unverified stored intention is
+        /// the point: there is exactly one source of truth, so the structured decision log and the
+        /// ffmpeg command line cannot disagree.
+        /// </para>
+        /// <para>
+        /// Because the value is re-derived from a real trial encode on every start, persisting it
+        /// cannot create a stale unverified backend later. Its meaning is stable in both
+        /// directions: <see cref="HardwareAccelerationType.none"/> means "select automatically"
+        /// (the fresh-install default), and any other value means "prefer this backend, subject to
+        /// re-verification". Forcing software is a separate, explicit switch -
+        /// <c>EnableHardwareEncoding=false</c> - which is preserved untouched here.
+        /// </para>
+        /// </remarks>
+        /// <param name="options">The current encoding options. Mutated to carry the effective backend.</param>
+        private void SelectHardwareAcceleration(EncodingOptions options)
+        {
+            var probe = new HardwareBackendProbe(new FfmpegProcessRunner(), _logger);
+
+            var decision = HardwareSelectionPlanner.Decide(
+                HardwareBackendCatalog.CandidatesInPriorityOrder,
+                options,
+                _capabilities.Ffmpeg,
+                (candidate, arguments) =>
+                {
+                    try
+                    {
+                        return probe.ProbeDetailedAsync(_ffmpegPath, arguments, CancellationToken.None).GetAwaiter().GetResult();
+                    }
+                    catch (Exception ex)
+                    {
+                        // Logged here rather than swallowed silently in the planner, which only
+                        // sees "not verified". A probe that cannot even run must never be able to
+                        // fail startup or leave a backend selected unverified.
+                        _logger.LogWarning(ex, "Hardware backend probe for {Backend} could not be run", candidate.Type);
+                        return HardwareProbeOutcome.Failure(FfmpegErrorCategory.Unknown);
+                    }
+                });
+
+            _hardwareSelection = decision;
+
+            if (options.HardwareAccelerationType != decision.Backend)
+            {
+                options.HardwareAccelerationType = decision.Backend;
+                _configurationManager.SaveConfiguration("encoding", options);
+            }
+
+            // One conclusive Information-level event per start, with named structured fields so it
+            // can be asserted on and, later, rendered as JSON (#91) without reparsing prose.
+            _logger.LogInformation(
+                "Hardware acceleration decision: Mode={Mode} Backend={Backend} Reason={Reason} ConfiguredBackend={ConfiguredBackend} CandidatesConsidered={CandidatesConsidered} CandidatesProbed={CandidatesProbed} ProbeFailureCategories={ProbeFailureCategories}",
+                decision.ModeName,
+                decision.Backend,
+                decision.Reason,
+                decision.ConfiguredBackend,
+                decision.CandidatesConsidered,
+                decision.CandidatesProbed,
+                decision.ProbeFailureCategories);
+        }
 
         /// <summary>
         /// Validates the supplied FQPN to ensure it is a ffmpeg utility.
