@@ -112,7 +112,12 @@ else
 fi
 
 echo "== 3. the startup trial encode selected VAAPI =="
-docker logs "${CNAME}" 2>&1 | grep -F 'Hardware backend probe succeeded' | grep -q 'h264_vaapi' \
+# Captured first, then matched from a herestring: `docker logs ... | grep -q` reports
+# failure even on a match under `set -o pipefail`, because grep exits on the match and
+# the writer takes SIGPIPE (141). Latent since always, reachable now that JSON-lines
+# logging (#91 / [A5]) makes the log outgrow the pipe buffer.
+PROBE_LOG="$(docker logs "${CNAME}" 2>&1)"
+grep -F 'Hardware backend probe succeeded' <<<"${PROBE_LOG}" | grep -q 'h264_vaapi' \
   && pass "the real VAAPI startup trial encode succeeded" \
   || fail "no successful h264_vaapi trial encode in the startup log"
 hwa_assert_decision "${CNAME}" "hardware" "vaapi" "PreferredBackendVerified|AutoSelectedBackendVerified"
@@ -168,7 +173,8 @@ docker rm -f "${CNAME}" >/dev/null
 run_with_device
 wait_ready "${PORT}" || { fail "restart never became ready"; exit 1; }
 # The selection persisted as vaapi. A restart that trusted it would show no probe.
-docker logs "${CNAME}" 2>&1 | grep -F 'Hardware backend probe succeeded' | grep -q 'h264_vaapi' \
+RESTART_LOG="$(docker logs "${CNAME}" 2>&1)"
+grep -F 'Hardware backend probe succeeded' <<<"${RESTART_LOG}" | grep -q 'h264_vaapi' \
   && pass "restart ran the VAAPI trial encode again rather than trusting stored state" \
   || fail "restart did not re-probe VAAPI"
 hwa_assert_decision "${CNAME}" "hardware" "vaapi" "PreferredBackendVerified|AutoSelectedBackendVerified"

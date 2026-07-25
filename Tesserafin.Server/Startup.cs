@@ -7,11 +7,14 @@ using System.Net.Http.Headers;
 using System.Net.Mime;
 using System.Text;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Localization;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Primitives;
@@ -131,8 +134,12 @@ namespace Tesserafin.Server
                 })
                 .ConfigurePrimaryHttpMessageHandler(defaultHttpClientHandlerDelegate);
 
+            // #91 / [A5]: the database check is a real bounded `SELECT 1` behind a one-method
+            // interface. The interface is what makes the endpoint's 503 branch testable over HTTP
+            // without a production failpoint — see IDatabaseHealthProbe.
+            services.AddSingleton<IDatabaseHealthProbe, DatabaseHealthProbe>();
             services.AddHealthChecks()
-                .AddCheck<DbContextFactoryHealthCheck<TesserafinDbContext>>(nameof(TesserafinDbContext));
+                .AddCheck<DatabaseHealthCheck>(DatabaseHealthCheck.Name);
 
             services.AddHlsPlaylistGenerator();
             services.AddLiveTvServices();
@@ -264,7 +271,19 @@ namespace Tesserafin.Server
                         endpoints.MapMetrics();
                     }
 
-                    endpoints.MapHealthChecks("/health");
+                    // #91 / [A5]. Anonymous on purpose: a container runtime, an orchestrator probe
+                    // or a reverse proxy has no credentials. The body carries no server detail
+                    // beyond the version already published by /System/Info/Public.
+                    endpoints.MapHealthChecks("/health", new HealthCheckOptions
+                    {
+                        ResponseWriter = HealthResponseWriter.WriteAsync,
+                        ResultStatusCodes =
+                        {
+                            [HealthStatus.Healthy] = StatusCodes.Status200OK,
+                            [HealthStatus.Degraded] = StatusCodes.Status503ServiceUnavailable,
+                            [HealthStatus.Unhealthy] = StatusCodes.Status503ServiceUnavailable
+                        }
+                    }).AllowAnonymous();
                 });
             });
         }

@@ -209,6 +209,7 @@ removed rather than reworded.
 ## Scope / exclusions
 
 This guide is deliberately bounded to A3. It does **not** cover: GPU / hardware
-acceleration (#90), a container healthcheck (#91), upgrade-channel orchestration
+acceleration (#90), the health endpoint and structured logs (#91 — now shipped, see
+[`A5-observability.md`](./A5-observability.md)), upgrade-channel orchestration
 (#92), TLS/reverse-proxy, or `latest`/release channels. Those are separate roadmap
 items.

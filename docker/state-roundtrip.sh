@@ -151,10 +151,15 @@ wait_api "${PORT_A}" || { echo "server A never answered"; docker logs "${C_A}" |
 wait_ready "${PORT_A}" || { echo "server A never left the 503 startup phase"; docker logs "${C_A}" | tail -40; exit 1; }
 
 LOGA="$(docker logs "${C_A}" 2>&1)"
-echo "${LOGA}" | grep -q "Initialise Migration service" \
+# Herestrings, NOT `echo "${LOGA}" | grep -q`. Under `set -o pipefail` that pipeline
+# reports failure even on a match: `grep -q` exits the instant it matches, `echo` is
+# still writing, gets SIGPIPE (141), and pipefail propagates the 141. It only shows
+# up once the log outgrows the pipe buffer, which JSON-lines logging (#91 / [A5])
+# made it do — the assertions below were passing on luck, not on correctness.
+grep -q "Initialise Migration service" <<<"${LOGA}" \
   && pass "migration service ran on first boot" \
   || fail "no migration-service log line on first boot"
-echo "${LOGA}" | grep -qi "Migration.*completed\|Seed migration\|Seed data" \
+grep -qi "Migration.*completed\|Seed migration\|Seed data" <<<"${LOGA}" \
   && pass "migrations/seed applied on first boot" \
   || fail "no migration/seed completion log on first boot"
 DBFILES="$(docker run --rm -v "${V_DATA}:/data:ro" "${HELPER}" \

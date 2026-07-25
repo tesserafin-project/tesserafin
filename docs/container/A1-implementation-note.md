@@ -78,15 +78,17 @@ Set explicitly so the container never depends on `$HOME`/XDG:
 ## Image shape
 - Multi-stage: SDK/build → ffmpeg-fetch → aspnet/runtime. The final image
   contains only the published app payload + ffmpeg + minimal native libs
-  (`libfontconfig1`, `fonts-dejavu-core`; ICU already in the runtime base). No
-  SDK, compiler, source tree, or NuGet cache.
+  (`libfontconfig1`, `fonts-dejavu-core`, and since #91 `curl` for the container
+  `HEALTHCHECK`; ICU already in the runtime base). No SDK, compiler, source tree,
+  or NuGet cache.
 
 ## Deferred (out of #87 scope)
 - #88 volume/permission migration policy, backup/restore (only the minimal
   boot directories are created here; that is **not** #88).
 - #89 Docker Compose / NAS templates.
 - #90 GPU discovery / device passthrough.
-- #91 `/health` surface and logging contract.
+- #91 `/health` surface and logging contract — **shipped**, see
+  [`A5-observability.md`](./A5-observability.md).
 - #92 upgrade orchestration.
 - #94 hosted CI/CodeQL restoration.
 

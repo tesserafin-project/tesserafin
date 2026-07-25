@@ -256,13 +256,45 @@ public static class StartupHelpers
     /// <param name="appPaths">The application paths.</param>
     public static void InitializeLoggingFramework(IConfiguration configuration, IApplicationPaths appPaths)
     {
+        // #91 / [A5]. Resolved before the try so an invalid value can be reported through whichever
+        // logger ends up being installed, including the fallback one below.
+        var loggingOptions = LoggingEnvironmentOptions.Read(configuration);
+
         try
         {
             var startupLogger = new LoggerProviderCollection();
             startupLogger.AddProvider(new SetupServer.SetupLoggerFactory());
-            // Serilog.Log is used by SerilogLoggerFactory when no logger is specified
-            Log.Logger = new LoggerConfiguration()
-                .ReadFrom.Configuration(configuration)
+
+            var loggerConfiguration = new LoggerConfiguration();
+            if (loggingOptions.UseJsonConsole)
+            {
+                // Container mode: stdout IS the log transport, so it has to be machine readable and
+                // every line has to be JSON. The sinks are therefore installed here instead of
+                // being read from logging.json; everything else about the pipeline (minimum level,
+                // per-source overrides, enrichers) still comes from the operator's file.
+                var jsonFormatter = StructuredLogging.CreateJsonFormatter();
+                loggerConfiguration
+                    .ReadFrom.Configuration(StructuredLogging.BuildSerilogConfiguration(configuration, loggingOptions, dropConfiguredSinks: true))
+                    .WriteTo.Console(jsonFormatter)
+                    .WriteTo.Async(x => x.File(
+                        StructuredLogging.CreateJsonFormatter(),
+                        Path.Combine(appPaths.LogDirectoryPath, "log_.log"),
+                        rollingInterval: RollingInterval.Day,
+                        retainedFileCountLimit: 3,
+                        rollOnFileSizeLimit: true,
+                        fileSizeLimitBytes: 100000000,
+                        encoding: Encoding.UTF8));
+            }
+            else
+            {
+                loggerConfiguration
+                    .ReadFrom.Configuration(StructuredLogging.BuildSerilogConfiguration(configuration, loggingOptions, dropConfiguredSinks: false));
+            }
+
+            // Serilog.Log is used by SerilogLoggerFactory when no logger is specified.
+            // The provider sink below feeds the startup wizard's /startup/logger route and must
+            // stay wired in BOTH branches.
+            Log.Logger = loggerConfiguration
                 .Enrich.FromLogContext()
                 .Enrich.WithThreadId()
                 .WriteTo.Async(e => e.Providers(startupLogger))
@@ -285,6 +317,27 @@ public static class StartupHelpers
                 .CreateLogger();
 
             Log.Logger.Fatal(ex, "Failed to create/read logger configuration");
+        }
+
+        // A typo in an operator-supplied value must never take the server down, and must never be
+        // silent either. Emitted through the logger that was actually installed, so in the
+        // container it is itself a valid JSON line.
+        if (loggingOptions.RejectedLevel is not null)
+        {
+            Log.Logger.Warning(
+                "Ignoring invalid {ConfigurationKey} value {RejectedLogLevel}; keeping the configured minimum level. Valid values: {ValidLogLevels}",
+                LoggingEnvironmentOptions.LogLevelKey,
+                loggingOptions.RejectedLevel,
+                LoggingEnvironmentOptions.ValidLevels);
+        }
+
+        if (loggingOptions.RejectedFormat is not null)
+        {
+            Log.Logger.Warning(
+                "Ignoring invalid {ConfigurationKey} value {RejectedLogFormat}; falling back to {EffectiveLogFormat}",
+                LoggingEnvironmentOptions.LogFormatKey,
+                loggingOptions.RejectedFormat,
+                LoggingEnvironmentOptions.FormatText);
         }
     }
 
