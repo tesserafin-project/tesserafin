@@ -15,16 +15,29 @@ Related docs:
 All paths here use the immutable pre-release image published to GHCR:
 
 ```
-ghcr.io/tesserafin-project/tesserafin:12.0.0-dev.e2999e4e2feb
+ghcr.io/tesserafin-project/tesserafin:12.0.0-dev.e22b4e9f3ce4
 ```
 
-- Multi-arch manifest digest: `sha256:0eaf26788bfb9e64213b7cc3d826c7613d71853d7276c6698ab5f49e01156182`
+- Multi-arch manifest digest: `sha256:bff0d135295f2e1e5a9da057ddacb849f391bcf939a7b08b9014e8fc1778b8e5`
   (`linux/amd64` + `linux/arm64`).
+- Bundled Tesserafin Web `13.0.0` at commit `fa47bab7f09d635f0b79b0814ddff2a1a1108400`
+  (`ghcr.io/tesserafin-project/tesserafin-web-assets@sha256:357afd28932481f6c02a521c6482dcace58b5102190e896f79c6f515fd440a5b`),
+  recorded in the image's `org.tesserafin.web.revision` label and in
+  `/opt/tesserafin-web.revision.json` inside the image.
+
 - **This is a development pre-release tag. It does NOT auto-update.** To move to a
   newer build you change the tag yourself (and take a backup first — see A2).
 - The GHCR package is currently **private**: run `docker login ghcr.io` once with a
   GitHub token that can read packages before pulling. (A public, login-free pull is
   a project-owner decision tracked in #113.)
+
+> **Do not use `12.0.0-dev.e2999e4e2feb` for this guide.** That earlier image is
+> API-only: it runs with `--nowebclient` and bundles no web client, so
+> `http://<host>:8096/` shows the Swagger API documentation and **there is no
+> onboarding wizard**. It is still published and is not deleted, but it is
+> **superseded for [A3]** because it cannot satisfy a browser install. See #115
+> and the "Bundled web client" section of
+> [`A1-implementation-note.md`](./A1-implementation-note.md).
 
 ## Prerequisites
 
@@ -65,7 +78,10 @@ This pulls the image and boots. Fresh named volumes for `/config`, `/data` and
 manual `chown`.
 
 **4. Open the web UI.** Browse to `http://<host-ip>:8096/` (or
-`http://localhost:8096/` on the same machine).
+`http://localhost:8096/` on the same machine). The server redirects `/` to
+`/web/` and serves the Tesserafin Web client from the same origin and the same
+port as the API. If you land on API documentation instead, you are running the
+superseded API-only image — check the tag against the one above.
 
 **5. Complete first-run onboarding.** In the browser wizard: pick your language →
 create your admin username + password → add a media library (type *Movies*, folder
@@ -143,7 +159,7 @@ DSM 7.2+ with **Container Manager** installed.
 
 1. **Download the image.** Container Manager → *Registry*. If your DSM registry is
    not configured for GHCR, the reliable path is SSH + `docker login ghcr.io` then
-   `docker pull ghcr.io/tesserafin-project/tesserafin:12.0.0-dev.e2999e4e2feb`.
+   `docker pull ghcr.io/tesserafin-project/tesserafin:12.0.0-dev.e22b4e9f3ce4`.
 2. **Create folders.** In *File Station*, under a `docker` shared folder create
    `tesserafin/config`, `tesserafin/data`, `tesserafin/cache`, and note your media
    share.
@@ -163,6 +179,26 @@ Notes:
 - Back up `/config` + `/data` per [`A2-persistent-state.md`](./A2-persistent-state.md).
 - Only DSM steps that are standard Container Manager operations are described here;
   no untested DSM-specific integrations are claimed.
+
+## History: why this guide was rewritten (#115)
+
+The first version of this guide pointed at `12.0.0-dev.e2999e4e2feb` and claimed
+that step 4 opens a web UI and step 5 completes onboarding in the browser. That
+claim was **not true of that image**, and the validation that accepted it was
+false-green:
+
+- the image ran with `--nowebclient` and bundled no web client;
+- `Tesserafin.Server/Program.cs` therefore redirected `/` to `/api-docs/swagger`;
+- opening port 8096 showed API endpoint documentation, not a wizard;
+- `docker/compose-smoke.sh` asserted only that `/System/Info/Public` answered —
+  API reachability, which is not browser-installability.
+
+A tester started the published container and reported exactly that. The repair is
+tracked by #115: the distributable image now bundles a pinned Tesserafin Web
+production build and starts with `--webdir`, and the A3 smoke was rewritten to
+fail unless a real browser reaches the first-run wizard on pristine volumes and
+completes onboarding. Every validation claim tied only to the API-only image was
+removed rather than reworded.
 
 ## Scope / exclusions
 
