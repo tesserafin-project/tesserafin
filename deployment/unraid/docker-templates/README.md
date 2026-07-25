@@ -8,8 +8,9 @@ Click on the Docker tab
 
 Add the following line under "Template Repositories" 
 
-https://github.com/jellyfin/jellyfin/tree/master/deployment/unraid/docker-templates
+https://github.com/tesserafin-project/tesserafin/tree/master/deployment/unraid/docker-templates
 
-Click save than click on Add Container and select reefin.
+Click save then click on Add Container and select Tesserafin.
 
-Adjust to your paths to your liking and off you go!
+Adjust the paths to your liking and off you go! See
+`docs/container/A3-guided-install.md` for the volume/permission model and backups.

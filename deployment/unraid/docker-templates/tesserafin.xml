@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Containers>
+  <Beta>False</Beta>
+  <Category>MediaApp:Video MediaApp:Music MediaApp:Photos MediaServer:Video MediaServer:Music MediaServer:Photos</Category>
+  <Name>Tesserafin</Name>
+  <Description>
+    Tesserafin is a free-software media server (a fork of Jellyfin). It manages and
+    streams your own movies, shows, music and photos from your Unraid box to any
+    device.[br][br]
+    This template runs the prebuilt Tesserafin image from GHCR — no building from
+    source. The server runs as the non-root user 10000:10000; the paths below are
+    created and owned accordingly on first start.[br][br]
+    [b]/config[/b] : server + network configuration, plugins, SSL, logs. [b]Back up.[/b][br]
+    [b]/data[/b] : SQLite databases, metadata, collections, playlists, watch state. [b]Back up.[/b][br]
+    [b]/cache[/b] : regenerable transcode/image cache. Disposable.[br]
+    [b]/media[/b] : your library, mounted [b]READ-ONLY[/b]. Add more read-only media mappings as needed.[br][br]
+    See the A3 guided-install guide and the A2 backup/restore note in the repository docs.
+  </Description>
+  <Overview>
+    Tesserafin media server (Jellyfin fork). Streams your personal media library.
+    Immutable pre-release image; dev tags do not auto-update.
+  </Overview>
+  <Support>https://github.com/tesserafin-project/tesserafin/issues</Support>
+  <Project>https://github.com/tesserafin-project/tesserafin</Project>
+  <GitHub>https://github.com/tesserafin-project/tesserafin</GitHub>
+  <Registry>https://github.com/tesserafin-project/tesserafin/pkgs/container/tesserafin</Registry>
+  <Repository>ghcr.io/tesserafin-project/tesserafin:12.0.0-dev.e22b4e9f3ce4</Repository>
+  <BindTime>true</BindTime>
+  <Privileged>false</Privileged>
+  <Networking>
+    <Mode>bridge</Mode>
+    <Publish>
+      <Port>
+        <HostPort>8096</HostPort>
+        <ContainerPort>8096</ContainerPort>
+        <Protocol>tcp</Protocol>
+      </Port>
+    </Publish>
+  </Networking>
+  <Data>
+    <Volume>
+      <HostDir>/mnt/user/appdata/tesserafin/config</HostDir>
+      <ContainerDir>/config</ContainerDir>
+      <Mode>rw</Mode>
+    </Volume>
+    <Volume>
+      <HostDir>/mnt/user/appdata/tesserafin/data</HostDir>
+      <ContainerDir>/data</ContainerDir>
+      <Mode>rw</Mode>
+    </Volume>
+    <Volume>
+      <HostDir>/mnt/user/appdata/tesserafin/cache</HostDir>
+      <ContainerDir>/cache</ContainerDir>
+      <Mode>rw</Mode>
+    </Volume>
+    <Volume>
+      <HostDir>/mnt/user/media</HostDir>
+      <ContainerDir>/media</ContainerDir>
+      <Mode>ro</Mode>
+    </Volume>
+  </Data>
+  <Environment>
+    <Variable>
+      <Name>TZ</Name>
+      <Value>Etc/UTC</Value>
+      <Mode/>
+    </Variable>
+  </Environment>
+  <Config Name="WebUI Port" Target="8096" Default="8096" Mode="tcp" Description="HTTP port for the Tesserafin web UI" Type="Port" Display="always" Required="true" Mask="false">8096</Config>
+  <Config Name="Config" Target="/config" Default="/mnt/user/appdata/tesserafin/config" Mode="rw" Description="Server configuration + logs (back up)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/tesserafin/config</Config>
+  <Config Name="Data" Target="/data" Default="/mnt/user/appdata/tesserafin/data" Mode="rw" Description="Databases + library metadata (back up)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/tesserafin/data</Config>
+  <Config Name="Cache" Target="/cache" Default="/mnt/user/appdata/tesserafin/cache" Mode="rw" Description="Regenerable cache (disposable)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/tesserafin/cache</Config>
+  <Config Name="Media" Target="/media" Default="/mnt/user/media" Mode="ro" Description="Your media library, mounted READ-ONLY" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/media</Config>
+  <WebUI>http://[IP]:[PORT:8096]/</WebUI>
+  <ExtraParams>--user 10000:10000 --security-opt no-new-privileges:true</ExtraParams>
+</Containers>

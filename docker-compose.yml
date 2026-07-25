@@ -1,0 +1,43 @@
+# Tesserafin — guided container install (#89 / [A3])
+#
+# Zero-friction self-hosting path: pull a prebuilt image and start. No source
+# checkout, no build, no compiler. See docs/container/A3-guided-install.md.
+#
+#   docker compose up -d      # start (first run creates all state)
+#   docker compose down       # stop + remove the container (named volumes are KEPT)
+#
+# Defaults use Docker NAMED VOLUMES for /config, /data and /cache. A fresh named
+# volume is initialised by Docker with the image's own 10000:10000 ownership, so
+# the non-root server can write to it with no manual chown. NAS users who prefer
+# host folders should use the documented bind-mount example instead (see the guide).
+services:
+  tesserafin:
+    # Immutable, pullable pre-release image built from merged master (A1 + A2).
+    # Override with `TESSERAFIN_IMAGE=... docker compose up -d` or a .env file.
+    image: ${TESSERAFIN_IMAGE:-ghcr.io/tesserafin-project/tesserafin:12.0.0-dev.e22b4e9f3ce4}
+    container_name: tesserafin
+    # The image already runs as the fixed non-root identity 10000:10000; stated
+    # here so the security posture is visible in the compose file itself.
+    user: "10000:10000"
+    restart: unless-stopped
+    ports:
+      # host:container — the server listens on 8096 inside the container.
+      - "8096:8096"
+    volumes:
+      - tesserafin_config:/config
+      - tesserafin_data:/data
+      - tesserafin_cache:/cache
+      # Your media library, mounted READ-ONLY. Point TESSERAFIN_MEDIA at your
+      # library root (an absolute host path, or a NAS share). Default ./media is
+      # created empty on first run so the stack starts before you have media.
+      - ${TESSERAFIN_MEDIA:-./media}:/media:ro
+    # No privileged mode, no Docker socket, no host networking, no GPU devices and
+    # no healthcheck: those belong to later roadmap items (#90 GPU, #91 health,
+    # #92 upgrades) and are intentionally excluded here.
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  tesserafin_config:
+  tesserafin_data:
+  tesserafin_cache:
