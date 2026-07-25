@@ -249,6 +249,23 @@ public class HardwareSelectionPlannerTests
         }
     }
 
+    [Theory]
+    [InlineData(true, "hardware")]
+    [InlineData(false, "software")]
+    public void ModeNameIsTheLowerCaseTokenTheStartupLogEmits(bool verifies, string expected)
+    {
+        // The container acceptance gates match Mode=hardware / Mode=software literally, and the
+        // operator documentation tells people to grep for exactly that. Enum ToString() would
+        // render "Hardware"/"Software" and quietly break both.
+        var decision = HardwareSelectionPlanner.Decide(
+            [Candidate(HardwareAccelerationType.vaapi)],
+            Options(),
+            _capabilities,
+            (candidate, args) => verifies ? HardwareProbeOutcome.Success : HardwareProbeOutcome.Failure(FfmpegErrorCategory.Unknown));
+
+        Assert.Equal(expected, decision.ModeName);
+    }
+
     [Fact]
     public void ASelectedBackendAlwaysHasASuccessfulProbeOnThisStart()
     {

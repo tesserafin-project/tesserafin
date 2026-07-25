@@ -22,7 +22,13 @@ source "${REPO_ROOT}/docker/hwa-lib.sh"
 
 IMAGE="${1:?usage: hwa-smoke.sh <image-ref> [host-port]}"
 PORT="${2:-18196}"
-STOP_TIMEOUT="${STOP_TIMEOUT:-30}"
+# Deliberately larger than docker/smoke.sh's 30s. That budget is measured on a
+# server that only ever booted; this one has just run a transcode, and tearing
+# the finished transcode job down adds around half a minute before the process
+# exits. Measured against untouched master: exit 0 after ~56s, i.e. genuinely
+# graceful, merely slower. A 30s budget here would report a forced kill (137)
+# that says nothing about this change. Raise it further for emulated arm64 runs.
+STOP_TIMEOUT="${STOP_TIMEOUT:-120}"
 
 WORK="$(mktemp -d)"
 CNAME="tesserafin-hwa-nodev-$$"

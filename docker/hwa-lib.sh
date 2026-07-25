@@ -7,6 +7,7 @@
 # that real media bytes come back out of a real ffmpeg the image actually shipped.
 #
 # shellcheck shell=bash
+# shellcheck disable=SC2034  # every definition here is consumed by the sourcing gate
 
 # Immutable multi-arch busybox, matching docker/state-roundtrip.sh.
 HWA_HELPER="busybox:stable@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662"
@@ -117,13 +118,16 @@ hwa_transcode() { # $1=port $2=token $3=itemId $4=outfile -> prints "http=<code>
 # The concrete ffmpeg command the server assembled, straight from its own log.
 # This is the authority for which encoder actually ran — not the requested codec,
 # not the configuration, and not any unit test's opinion of what would be chosen.
+# The `|| true` matters: the callers run under `set -o pipefail`, where a grep
+# that simply finds nothing would abort the whole gate instead of letting the
+# caller report a clean, specific failure.
 hwa_ffmpeg_command() { # $1=container
-  docker logs "${1}" 2>&1 | grep -F 'jellyfin-ffmpeg/ffmpeg' | grep -E '\-codec:v:0|\-c:v:0' | tail -1
+  docker logs "${1}" 2>&1 | grep -F 'jellyfin-ffmpeg/ffmpeg' | grep -E '\-codec:v:0|\-c:v:0' | tail -1 || true
 }
 
 # The one conclusive startup decision event.
 hwa_decision_line() { # $1=container
-  docker logs "${1}" 2>&1 | grep -F 'Hardware acceleration decision:' | tail -1
+  docker logs "${1}" 2>&1 | grep -F 'Hardware acceleration decision:' | tail -1 || true
 }
 
 # Asserts the structured decision fields. Every field is matched as a whole word
@@ -131,8 +135,11 @@ hwa_decision_line() { # $1=container
 hwa_assert_decision() { # $1=container $2=expected Mode $3=expected Backend $4=regex of acceptable Reason
   local line; line="$(hwa_decision_line "${1}")"
   if [[ -z "${line}" ]]; then
+    # Recorded as a failure, not raised: under `set -e` a non-zero return here
+    # would abort the run and hide every later gate, including the ones that
+    # would say whether the transcode itself still worked.
     fail "no conclusive hardware acceleration decision was logged"
-    return 1
+    return 0
   fi
   info "decision: ${line#*Hardware acceleration decision: }"
   grep -qE "Mode=${2}( |$)" <<<"${line}" && pass "decision Mode=${2}" || fail "decision Mode is not ${2}"

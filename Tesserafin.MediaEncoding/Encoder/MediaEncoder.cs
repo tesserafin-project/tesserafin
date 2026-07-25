@@ -359,7 +359,7 @@ namespace Tesserafin.MediaEncoding.Encoder
             // can be asserted on and, later, rendered as JSON (#91) without reparsing prose.
             _logger.LogInformation(
                 "Hardware acceleration decision: Mode={Mode} Backend={Backend} Reason={Reason} ConfiguredBackend={ConfiguredBackend} CandidatesConsidered={CandidatesConsidered} CandidatesProbed={CandidatesProbed} ProbeFailureCategories={ProbeFailureCategories}",
-                decision.Mode,
+                decision.ModeName,
                 decision.Backend,
                 decision.Reason,
                 decision.ConfiguredBackend,

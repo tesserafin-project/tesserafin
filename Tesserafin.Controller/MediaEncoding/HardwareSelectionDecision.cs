@@ -25,6 +25,14 @@ public sealed record HardwareSelectionDecision(
     ImmutableArray<HardwareProbeAttempt> ProbeAttempts)
 {
     /// <summary>
+    /// Gets the mode as the lower-case token used in the structured startup log
+    /// (<c>hardware</c> / <c>software</c>). Kept deliberately lower-case to match
+    /// <see cref="Backend"/>, whose enum members are already lower-case, so the two fields read
+    /// consistently and can be matched with one convention.
+    /// </summary>
+    public string ModeName => Mode == HardwareSelectionMode.Hardware ? "hardware" : "software";
+
+    /// <summary>
     /// Gets the backends that were actually probed on this start, in order.
     /// </summary>
     public ImmutableArray<HardwareAccelerationType> CandidatesProbed
