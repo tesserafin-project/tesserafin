@@ -42,7 +42,9 @@ Set explicitly so the container never depends on `$HOME`/XDG:
 - `TESSERAFIN_CONFIG_DIR=/config` — config, `encoding.xml`, `network.xml`
 - `TESSERAFIN_DATA_DIR=/data` — db, metadata, plugins, logs, backups
 - `TESSERAFIN_CACHE_DIR=/cache` — image cache and `<cache>/transcodes`
-- Temp: system temp (`/tmp/tesserafin`). Web client dir unused (`--nowebclient`).
+- Temp: system temp (`/tmp/tesserafin`).
+- Web client: `/opt/tesserafin-web`, read-only application content, selected with
+  `--webdir` (see "Bundled web client" below). No longer `--nowebclient`.
 - Writable volumes limited to `/config`, `/cache`, `/data` (chowned to
   10000:10000). `/media` is expected to be a read-only mount.
 
@@ -84,5 +86,65 @@ Set explicitly so the container never depends on `$HOME`/XDG:
 - #91 `/health` surface and logging contract.
 - #92 upgrade orchestration.
 - #94 hosted CI/CodeQL restoration.
-- Web client: not bundled; the image boots `--nowebclient`. No paired
-  tesserafin-web artifact is embedded.
+
+## Bundled web client (#115 / [A1.2]) — supersedes the API-only image
+
+The first published image (`12.0.0-dev.e2999e4e2feb`,
+`sha256:0eaf26788bfb9e64213b7cc3d826c7613d71853d7276c6698ab5f49e01156182`) ran
+with `--nowebclient` and bundled no web client. Because
+`Tesserafin.Server/Program.cs` overrides `DefaultRedirectPath` to
+`api-docs/swagger` whenever the web client is not hosted, `http://host:8096/`
+served the Swagger API documentation and **no first-run onboarding wizard
+existed**. That made the A3 install validation false-green: `/System/Info/Public`
+answered, so the smoke passed, while the product was not installable in a
+browser. Those tags are **not** deleted or overwritten; they are recorded here as
+**superseded for A3**, because they cannot satisfy onboarding.
+
+The distributable image is therefore **no longer API-only**.
+
+- **Build input.** `ghcr.io/tesserafin-project/tesserafin-web-assets`, produced by
+  `Dockerfile.web-assets` in `tesserafin-project/tesserafin-web`: a `FROM
+  scratch` image containing only the production `dist` tree (`/web`), the licence
+  and attribution (`/licenses`) and a deterministic revision manifest
+  (`/metadata/web-revision.json`). No Node.js, no source, no build tools, no
+  entrypoint. It is a build input, never a service — the user-facing deployment
+  stays a single runtime container.
+- **Pinned by digest, not by tag.** `ARG WEB_ASSETS_IMAGE` in the `Dockerfile`
+  carries the full manifest digest; `WEB_ASSETS_TAG` is recorded for provenance
+  only. The paired web commit is in `ARG WEB_VCS_REF`, in the
+  `org.tesserafin.web.revision` OCI label, and in
+  `/opt/tesserafin-web.revision.json` inside the image — so the pairing is
+  auditable from a pulled image with no registry or label lookup.
+- **Identical bytes on every architecture.** The stage is declared
+  `FROM --platform=linux/amd64 ${WEB_ASSETS_IMAGE}`. Without the platform pin,
+  `COPY --from=` would resolve per target platform and the amd64 and arm64 server
+  images could carry different web revisions. The payload is architecture-neutral
+  static content and the stage is never executed, so the pin costs no emulation.
+- **Serving.** `CMD ["--webdir", "/opt/tesserafin-web", "--ffmpeg", ...]`. With
+  the web client hosted, `DefaultRedirectPath` keeps its `web/` default, so `/`
+  is a **302 to `/web/`** which serves `index.html` — the server's own serving
+  model (`Tesserafin.Server/Startup.cs` mounts the static files at
+  `RequestPath = "/web"`). The Swagger UI remains available on its own
+  `/api-docs/swagger` route and no longer captures `/`.
+- **Reproducibility of the pairing.** Same commit + same pinned web digest =>
+  same server image digest. `docker/repro-check.sh` is unchanged and still gates
+  it; the web digest is one more immutable input, like the base images and the
+  ffmpeg checksums.
+
+### Gates that replaced the false-green smoke
+
+- `docker/smoke.sh` now fails if the final command contains `--nowebclient`, if
+  it does not pass `--webdir`, if `/opt/tesserafin-web/index.html` is absent, if
+  the paired-web label and the in-image manifest disagree, if a Node.js runtime
+  is present, or if `/` does not resolve to an HTML web document.
+- `docker/browser-onboarding.sh` + `docker/browser-gate/` drive a **real
+  browser** (Playwright) against the candidate container on pristine volumes: it
+  asserts the wizard is presented, creates the initial admin account through the
+  UI, adds `/media` as a library, completes onboarding, and re-checks the state
+  after a restart and after container recreation. Onboarding is never driven
+  through the `/Startup/*` API — doing so would re-create exactly the class of
+  false-green this gate exists to kill, since those calls also succeed against an
+  image with no web client at all. The script begins with a negative guard that
+  the previously published API-only image fails.
+- `docker/browser-gate/` is a repository CI harness. It is excluded from the
+  build context and is never required by an installer.
