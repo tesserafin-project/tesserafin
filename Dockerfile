@@ -1,4 +1,9 @@
 # syntax=docker/dockerfile:1
+# check=skip=FromPlatformFlagConstDisallowed
+#
+# The skipped check fires on the deliberate `FROM --platform=linux/amd64` of the
+# web-assets stage below. The constant is the point: it is what guarantees the
+# amd64 and arm64 server images copy byte-identical web bytes. See stage 2b.
 #
 # Tesserafin server — reproducible production image (issue #87 / [A1]).
 #
@@ -16,6 +21,16 @@
 # mcr.microsoft.com/dotnet/aspnet:10.0  -> Ubuntu 24.04 (noble), amd64+arm64
 ARG SDK_IMAGE=mcr.microsoft.com/dotnet/sdk@sha256:ed034a8bf0b24ded0cbbac07e17825d8e9ebfe21e308191d0f7421eaf5ad4664
 ARG RUNTIME_IMAGE=mcr.microsoft.com/dotnet/aspnet@sha256:1fa23fc4872d95fd71c2833ebe65d7e84a43b2d51a31d119516852f13d9505a7
+
+# ---- Pinned Tesserafin Web production bundle (issue #115 / [A1.2]) ----
+# Static-only build input produced by tesserafin-web's Dockerfile.web-assets.
+# Pinned BY MANIFEST DIGEST, never by tag: the tag is recorded for provenance
+# only. WEB_VCS_REF is the exact tesserafin-web commit the digest was built from
+# and must be kept in step with it.
+ARG WEB_ASSETS_IMAGE=ghcr.io/tesserafin-project/tesserafin-web-assets@sha256:7e6372de179f15172eb173e52846c2f1171443306aef862c2f956c0fd18abef1
+ARG WEB_ASSETS_TAG=ghcr.io/tesserafin-project/tesserafin-web-assets:13.0.0-dev.4ce100121c0c
+ARG WEB_VCS_REF=4ce100121c0c3437757995d2be75a1b3a16272ca
+ARG WEB_VERSION=13.0.0
 
 # ---- Pinned jellyfin-ffmpeg (the genuine upstream media encoder) ----
 # GPL build; not renamed for branding. github.com/jellyfin/jellyfin-ffmpeg
@@ -90,6 +105,16 @@ RUN set -eux; \
     echo "${sha}  /tmp/ffmpeg.deb" | sha256sum -c -
 
 # =====================================================================
+# Stage 2b — the pinned Tesserafin Web production bundle (#115 / [A1.2])
+# =====================================================================
+# `--platform=linux/amd64` is deliberate and load-bearing. Without it,
+# `COPY --from=` resolves the source image per TARGET platform, so the amd64 and
+# arm64 server builds could copy different web bytes — one of the explicit hard
+# stops for this work. The payload is architecture-neutral static content and
+# this stage is never executed, so pinning the platform costs no emulation.
+FROM --platform=linux/amd64 ${WEB_ASSETS_IMAGE} AS webassets
+
+# =====================================================================
 # Stage 3 — minimal runtime image
 # =====================================================================
 FROM ${RUNTIME_IMAGE} AS runtime
@@ -99,6 +124,12 @@ ARG VCS_REF=unknown
 ARG SOURCE_DATE_EPOCH=0
 ARG UID=10000
 ARG GID=10000
+# Re-declared so the paired-web provenance labels below can interpolate them
+# (pre-FROM ARGs are only in scope for FROM lines).
+ARG WEB_ASSETS_IMAGE
+ARG WEB_ASSETS_TAG
+ARG WEB_VCS_REF
+ARG WEB_VERSION
 
 # Runtime native dependencies:
 #   - the pinned jellyfin-ffmpeg .deb (pulls its own libs)
@@ -133,6 +164,17 @@ RUN groupadd --gid ${GID} tesserafin \
 COPY --from=build /app /opt/tesserafin
 COPY LICENSE /opt/tesserafin/LICENSE
 
+# The pinned Tesserafin Web production bundle (#115 / [A1.2]). Read-only for the
+# runtime user: it is application content, never writable state. The server is
+# pointed at it with `--webdir` (see CMD), which makes `/` serve the web client
+# and the first-run onboarding wizard instead of redirecting to the API docs.
+# `/opt/tesserafin-web.revision.json` records the exact paired tesserafin-web
+# commit in the image content itself, so the pairing is auditable from a pulled
+# image with no registry or label lookup.
+COPY --from=webassets /web /opt/tesserafin-web
+COPY --from=webassets /licenses /opt/tesserafin-web-licenses
+COPY --from=webassets /metadata/web-revision.json /opt/tesserafin-web.revision.json
+
 # Neutralise misleading inherited base-image env: the Tesserafin server binds its
 # own port (8096) via NetworkConfiguration and ignores ASPNETCORE_HTTP_PORTS; the
 # runtime identity is the fixed USER below, not the base image's APP_UID.
@@ -158,10 +200,23 @@ LABEL org.opencontainers.image.title="Tesserafin Server" \
       org.opencontainers.image.licenses="GPL-2.0-or-later" \
       org.opencontainers.image.vendor="Tesserafin"
 
+# Paired Tesserafin Web provenance (#115 / [A1.2]).
+LABEL org.tesserafin.web.revision="${WEB_VCS_REF}" \
+      org.tesserafin.web.version="${WEB_VERSION}" \
+      org.tesserafin.web.assets.image="${WEB_ASSETS_IMAGE}" \
+      org.tesserafin.web.assets.tag="${WEB_ASSETS_TAG}" \
+      org.tesserafin.web.path="/opt/tesserafin-web"
+
 USER ${UID}:${GID}
 WORKDIR /opt/tesserafin
 
 # The apphost runs as PID 1 so .NET's ConsoleLifetime receives SIGTERM directly
 # and shuts the server down gracefully. ffmpeg is pinned by absolute path.
+#
+# `--webdir` (NOT `--nowebclient`, see #115) hosts the bundled web client. With
+# the web client hosted, Program.cs leaves DefaultRedirectPath at its `web/`
+# default, so `/` redirects to `/web/` and serves the first-run wizard; the
+# Swagger UI stays on its own `/api-docs/swagger` route and no longer captures
+# `/`. docker/smoke.sh asserts both halves of that.
 ENTRYPOINT ["/opt/tesserafin/tesserafin"]
-CMD ["--nowebclient", "--ffmpeg", "/usr/lib/jellyfin-ffmpeg/ffmpeg"]
+CMD ["--webdir", "/opt/tesserafin-web", "--ffmpeg", "/usr/lib/jellyfin-ffmpeg/ffmpeg"]

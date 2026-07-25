@@ -1,0 +1,13 @@
+{
+    "name": "tesserafin-browser-gate",
+    "version": "0.0.0",
+    "private": true,
+    "description": "Playwright browser/onboarding gate for the distributable Tesserafin image (issue #115 / [A1.2]). Repository CI harness only - never part of the image, never required by an installer.",
+    "license": "GPL-2.0-or-later",
+    "scripts": {
+        "test": "playwright test"
+    },
+    "devDependencies": {
+        "@playwright/test": "1.61.1"
+    }
+}
