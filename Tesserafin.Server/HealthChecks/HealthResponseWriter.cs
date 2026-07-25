@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Tesserafin.Common;
+using Tesserafin.Controller;
 
 namespace Tesserafin.Server.HealthChecks;
 
@@ -79,14 +80,26 @@ public static class HealthResponseWriter
             database = databaseEntry.Status == HealthStatus.Healthy ? StatusHealthy : StatusUnhealthy;
         }
 
-        var status = report.Status switch
+        // The real pipeline can be serving requests before the host has finished its core
+        // startup. Answering 200 in that window would be a false ready signal even when the
+        // database happens to answer, so the report is held at Degraded until the host says
+        // startup is done. Absent (the startup server has no IServerApplicationHost), the
+        // report stands on its own.
+        var effectiveStatus = report.Status;
+        var applicationHost = httpContext.RequestServices?.GetService<IServerApplicationHost>();
+        if (applicationHost is not null && !applicationHost.CoreStartupHasCompleted && effectiveStatus == HealthStatus.Healthy)
+        {
+            effectiveStatus = HealthStatus.Degraded;
+        }
+
+        var status = effectiveStatus switch
         {
             HealthStatus.Healthy => StatusHealthy,
             HealthStatus.Degraded => StatusStarting,
             _ => StatusUnhealthy
         };
 
-        httpContext.Response.StatusCode = ToStatusCode(report.Status);
+        httpContext.Response.StatusCode = ToStatusCode(effectiveStatus);
         httpContext.Response.ContentType = MediaTypeNames.Application.Json;
         // A cached health answer is a wrong health answer.
         httpContext.Response.Headers.CacheControl = "no-store";
@@ -99,7 +112,12 @@ public static class HealthResponseWriter
             writer.WriteString("version", version);
             writer.WriteString(DatabaseHealthCheck.Name, database);
             writer.WriteEndObject();
-            await writer.FlushAsync().ConfigureAwait(false);
+            await writer.FlushAsync(httpContext.RequestAborted).ConfigureAwait(false);
         }
+
+        // Utf8JsonWriter.FlushAsync only advances the PipeWriter; the pipe itself still has to be
+        // flushed. Kestrel happens to do that when it completes the response, so omitting this
+        // works over real HTTP and produces an empty body anywhere else.
+        await httpContext.Response.BodyWriter.FlushAsync(httpContext.RequestAborted).ConfigureAwait(false);
     }
 }

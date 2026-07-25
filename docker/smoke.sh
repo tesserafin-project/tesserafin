@@ -131,7 +131,11 @@ for _ in $(seq 1 60); do
 done
 [[ "${API_OK}" == 1 ]] && pass "API answers on :8096 (/System/Info/Public)" || fail "API did not answer within 120s"
 if [[ "${API_OK}" == 1 ]]; then
-  curl -fsS "http://127.0.0.1:${PORT}/System/Info/Public" | head -c 300; echo
+  # Captured then truncated, NOT `curl ... | head -c 300`. `head` closes the pipe
+  # after 300 bytes, curl reports "Recv failure" (56), and under `set -euo pipefail`
+  # that aborts the whole smoke run — on a purely cosmetic line.
+  INFO_BODY="$(curl -fsS "http://127.0.0.1:${PORT}/System/Info/Public")"
+  printf '%s\n' "${INFO_BODY:0:300}"
 
   # READINESS, not a race. `/System/Info/Public` is answered by the startup
   # SetupServer while the main application is still coming up, so the API
