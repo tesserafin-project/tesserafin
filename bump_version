@@ -1,65 +1,114 @@
 #!/usr/bin/env bash
-
-# bump_version - increase the shared version and generate changelogs
+# bump_version — move the canonical product version to a new MAJOR.MINOR.PATCH.
+#
+# Rewritten for #92 / [A6]. The inherited Jellyfin script hard-coded six
+# `MediaBrowser.*` / `Emby.*` csproj paths, four of which no longer exist after
+# the Tesserafin rename, and used unanchored `sed s|old|new|g` over whole files —
+# so it silently skipped the real projects, and would have rewritten any
+# unrelated occurrence of the old version string in the files it did touch.
+#
+# What it does now:
+#   1. Validates the requested version as a MAJOR.MINOR.PATCH SemVer core, using
+#      the same rule as docker/version-contract.sh.
+#   2. Rewrites the AssemblyVersion/AssemblyFileVersion in SharedVersion.cs.
+#   3. Rewrites <VersionPrefix> in EVERY csproj that declares one — discovered,
+#      never listed — with an anchored replacement inside the element only.
+#   4. Re-reads the tree through docker/version-contract.sh and verifies every
+#      declaration now agrees.
+#
+# It does NOT commit, tag, push or publish anything. Version mutation and image
+# publication are deliberately separate steps so they cannot race.
+#
+# Usage: ./bump_version <new_version>            e.g. ./bump_version 12.1.0
+#        ./bump_version --check                  verify agreement, change nothing
 
 set -o errexit
 set -o pipefail
-set -o xtrace
+set -o nounset
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "${REPO_ROOT}"
+
+SHARED_VERSION_FILE="./SharedVersion.cs"
+CONTRACT="./docker/version-contract.sh"
 
 usage() {
-    echo -e "bump_version - increase the shared version"
-    echo -e ""
-    echo -e "Usage:"
-    echo -e " $ bump_version <new_version>"
+    echo "bump_version - set the canonical product version"
+    echo ""
+    echo "Usage:"
+    echo " $ ./bump_version <new_version>   # e.g. 12.1.0"
+    echo " $ ./bump_version --check         # verify every declaration agrees"
 }
 
-if [[ -z $1 ]]; then
+# Same SemVer core rule as docker/version-contract.sh. A pre-release qualifier is
+# rejected here on purpose: an assembly version is numeric-only, and pre-releases
+# are expressed by the git release tag instead.
+is_core_version() {
+    [[ "$1" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+}
+
+# Every csproj that actually declares a package version. Discovered so a new or
+# renamed project cannot silently keep a stale version.
+version_prefix_projects() {
+    grep -rl --include='*.csproj' '<VersionPrefix>' . | sort
+}
+
+canonical_version() {
+    sed -nE 's/^\[assembly: ?AssemblyVersion\("([^"]*)"\)\].*/\1/p' "${SHARED_VERSION_FILE}" | head -1
+}
+
+check_agreement() {
+    local canonical rc=0 file declared
+    canonical="$(canonical_version)"
+    if ! is_core_version "${canonical}"; then
+        echo "FAIL  SharedVersion.cs declares '${canonical}', which is not a MAJOR.MINOR.PATCH SemVer core"
+        return 1
+    fi
+    echo "canonical version (SharedVersion.cs): ${canonical}"
+    while IFS= read -r file; do
+        declared="$(sed -nE 's;.*<VersionPrefix>([^<]*)</VersionPrefix>.*;\1;p' "${file}" | head -1)"
+        if [[ "${declared}" == "${canonical}" ]]; then
+            echo "  OK    ${file} (${declared})"
+        else
+            echo "  FAIL  ${file} declares ${declared}, expected ${canonical}"
+            rc=1
+        fi
+    done < <(version_prefix_projects)
+    if [[ -x "${CONTRACT}" ]]; then
+        "${CONTRACT}" version >/dev/null || rc=1
+    fi
+    return "${rc}"
+}
+
+if [[ $# -lt 1 ]]; then
     usage
     exit 1
 fi
 
-shared_version_file="./SharedVersion.cs"
-# csproj files for nuget packages
-reefin_subprojects=(
-  MediaBrowser.Common/MediaBrowser.Common.csproj
-  Tesserafin.Data/Tesserafin.Data.csproj
-  MediaBrowser.Controller/MediaBrowser.Controller.csproj
-  MediaBrowser.Model/MediaBrowser.Model.csproj
-  Emby.Naming/Emby.Naming.csproj
-  src/Tesserafin.Extensions/Tesserafin.Extensions.csproj
-)
-issue_template_file="./.github/ISSUE_TEMPLATE/issue report.yml"
+if [[ "$1" == "--check" ]]; then
+    check_agreement
+    exit $?
+fi
 
 new_version="$1"
-new_version_sed="$( cut -f1 -d'-' <<<"${new_version}" )"
+if ! is_core_version "${new_version}"; then
+    echo "bump_version: '${new_version}' is not a MAJOR.MINOR.PATCH SemVer core" >&2
+    exit 1
+fi
 
-old_version="$(
-    grep "AssemblyVersion" ${shared_version_file} \
-        | sed -E 's/\[assembly: ?AssemblyVersion\("([0-9\.]+)"\)\]/\1/'
-)"
-echo old assembly version: $old_version
+old_version="$(canonical_version)"
+echo "old canonical version: ${old_version}"
+echo "new canonical version: ${new_version}"
 
-# Set the assembly version to the specified new_version
-sed -i "s|${old_version}|${new_version_sed}|g" ${shared_version_file}
+# Anchored on the attribute, so only the version literal inside it moves.
+sed -i -E "s/(\[assembly: ?AssemblyVersion\(\")[^\"]*(\"\)\])/\1${new_version}\2/" "${SHARED_VERSION_FILE}"
+sed -i -E "s/(\[assembly: ?AssemblyFileVersion\(\")[^\"]*(\"\)\])/\1${new_version}\2/" "${SHARED_VERSION_FILE}"
 
-# update nuget package version
-for subproject in ${reefin_subprojects[@]}; do
-    echo ${subproject}
-    # Parse the version from the *.csproj file
-    old_version="$(
-        grep "VersionPrefix" ${subproject} \
-            | awk '{$1=$1};1' \
-            | sed -E 's/<VersionPrefix>([0-9\.]+[-a-z0-9]*)<\/VersionPrefix>/\1/'
-    )"
-    echo old nuget version: $old_version
+while IFS= read -r subproject; do
+    echo "  ${subproject}"
+    sed -i -E "s;(<VersionPrefix>)[^<]*(</VersionPrefix>);\1${new_version}\2;" "${subproject}"
+done < <(version_prefix_projects)
 
-    # Set the nuget version to the specified new_version
-    sed -i "s|${old_version}|${new_version_sed}|g" ${subproject}
-done
-
-# Set the version in the GitHub issue template file
-sed -i "s|${old_version}|${new_version_sed}|g" "${issue_template_file}"
-
-# Stage the changed files for commit
-git add .
-git status -v
+echo
+echo "== verifying every declaration agrees =="
+check_agreement

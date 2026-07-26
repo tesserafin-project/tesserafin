@@ -19,20 +19,25 @@ Related docs:
 All paths here use the immutable pre-release image published to GHCR:
 
 ```
-ghcr.io/tesserafin-project/tesserafin:12.0.0-dev.700c499f3e19
+ghcr.io/tesserafin-project/tesserafin:12.0.0-dev.a8a18bb7c07b
 ```
 
-- Multi-arch manifest digest: `sha256:6e3dbaab6eeaef163e81f9cc5ffb03f5a05bb9d8165e3f6487b2bb3003bc7608`
-  (`linux/amd64` `sha256:75826213611bb6ac58205ead6365436418831fd7ea115cbf5cb5e3710d7215cb`,
-  `linux/arm64` `sha256:7e2f5eb7fa8873fcc7bd882b6742fbe4524e6b014eaf4cb0c3c30a01045c8ff5`).
-  Built from `700c499f3e1936460728fa6c21965ec814f4c818`.
+- Multi-arch manifest digest: `sha256:29493c0ecf956a61f06c2b801e7c867d560fb95ab184c09d05fdb6db508a7722`
+  (`linux/amd64` `sha256:c0b6af488905270fb18a33577e753d2a9662e9bf591fc68dd729c10f697b200d`,
+  `linux/arm64` `sha256:02b836e8d799ec3a8c4d8d332d574809415a0095216f75f26c936a2214d1e5f5`).
+  Built from `a8a18bb7c07b3d629ecab019aea9668a145eb5bc`. This is what the
+  checked-in `docker-compose.yml` pins, by digest — so following this guide and
+  running the shipped Compose file give you the same image.
 - Bundled Tesserafin Web `13.0.0` at commit `fa47bab7f09d635f0b79b0814ddff2a1a1108400`
   (`ghcr.io/tesserafin-project/tesserafin-web-assets@sha256:357afd28932481f6c02a521c6482dcace58b5102190e896f79c6f515fd440a5b`),
   recorded in the image's `org.tesserafin.web.revision` label and in
   `/opt/tesserafin-web.revision.json` inside the image.
 
 - **This is a development pre-release tag. It does NOT auto-update.** To move to a
-  newer build you change the tag yourself (and take a backup first — see A2).
+  newer build you change the tag yourself (and take a backup first — see A2). The
+  tag policy, the digest-pinning procedure and the full upgrade contract are in
+  [`A6-versioning-and-upgrades.md`](./A6-versioning-and-upgrades.md); this guide
+  covers installation only and does not restate them.
 - The GHCR package is currently **private**: run `docker login ghcr.io` once with a
   GitHub token that can read packages before pulling. (A public, login-free pull is
   a project-owner decision tracked in #113.)
@@ -165,7 +170,7 @@ DSM 7.2+ with **Container Manager** installed.
 
 1. **Download the image.** Container Manager → *Registry*. If your DSM registry is
    not configured for GHCR, the reliable path is SSH + `docker login ghcr.io` then
-   `docker pull ghcr.io/tesserafin-project/tesserafin:12.0.0-dev.700c499f3e19`.
+   `docker pull ghcr.io/tesserafin-project/tesserafin:12.0.0-dev.a8a18bb7c07b`.
 2. **Create folders.** In *File Station*, under a `docker` shared folder create
    `tesserafin/config`, `tesserafin/data`, `tesserafin/cache`, and note your media
    share.
@@ -181,7 +186,7 @@ DSM 7.2+ with **Container Manager** installed.
 
 Notes:
 - The immutable dev tag does **not** auto-update; pull a new tag deliberately and
-  back up first.
+  back up first — see [`A6-versioning-and-upgrades.md`](./A6-versioning-and-upgrades.md).
 - Back up `/config` + `/data` per [`A2-persistent-state.md`](./A2-persistent-state.md).
 - Only DSM steps that are standard Container Manager operations are described here;
   no untested DSM-specific integrations are claimed.
@@ -210,6 +215,7 @@ removed rather than reworded.
 
 This guide is deliberately bounded to A3. It does **not** cover: GPU / hardware
 acceleration (#90), the health endpoint and structured logs (#91 — now shipped, see
-[`A5-observability.md`](./A5-observability.md)), upgrade-channel orchestration
-(#92), TLS/reverse-proxy, or `latest`/release channels. Those are separate roadmap
-items.
+[`A5-observability.md`](./A5-observability.md)), the tag/channel policy and upgrade
+contract (#92 — now shipped, see
+[`A6-versioning-and-upgrades.md`](./A6-versioning-and-upgrades.md)), or
+TLS/reverse-proxy. Those are separate roadmap items.

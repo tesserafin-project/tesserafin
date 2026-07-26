@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC2015,SC2317
+# shellcheck disable=SC2015,SC2317,SC2329
 # SC2015: `<cond> && pass || fail` is intended — pass()/fail() both return 0, so the
 #         `|| fail` branch never fires on a true condition.
 # SC2317: cleanup() is invoked indirectly via the EXIT trap.
@@ -35,11 +35,11 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# Default image: the dev tag for THIS working tree (version source of truth +
-# short commit), matching docker/build-clean.sh. No stale/hardcoded commit.
-VERSION="$(grep -oP 'AssemblyVersion\("\K[0-9]+\.[0-9]+\.[0-9]+' "${REPO_ROOT}/SharedVersion.cs" | head -1)"
-SHORT="$(git -C "${REPO_ROOT}" rev-parse --short=12 HEAD 2>/dev/null || echo unknown)"
-IMAGE="${1:-ghcr.io/tesserafin-project/tesserafin:${VERSION}-dev.${SHORT}}"
+# Default image: the dev tag for THIS working tree, asked of the one place that
+# owns tag derivation (#92 / [A6]). This script no longer reads SharedVersion.cs
+# itself — a second copy of that logic is exactly how a gate ends up testing a
+# different image than the build produced.
+IMAGE="${1:-$("${REPO_ROOT}/docker/version-contract.sh" tags --channel dev | head -1)}"
 PORT_A="${2:-19096}"
 PORT_B="$((PORT_A + 1))"
 # Immutable multi-arch busybox (matches backup.sh/restore.sh DEFAULT_HELPER).

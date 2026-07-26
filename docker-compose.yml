@@ -12,9 +12,18 @@
 # host folders should use the documented bind-mount example instead (see the guide).
 services:
   tesserafin:
-    # Immutable, pullable pre-release image built from merged master (A1 + A2).
+    # IMMUTABLE by default, and deliberately a DIGEST (#92 / [A6]). Never
+    # `latest`, `preview`, or a moving major/minor tag: with one of those a
+    # `docker compose pull` could change your version — possibly across a schema
+    # migration — at a moment you did not choose. A digest cannot be re-pointed.
+    #
+    # This is the A6-validated image, tag `12.0.0-dev.a8a18bb7c07b`,
+    # built from commit `a8a18bb7c07b3d629ecab019aea9668a145eb5bc`.
+    #
     # Override with `TESSERAFIN_IMAGE=... docker compose up -d` or a .env file.
-    image: ${TESSERAFIN_IMAGE:-ghcr.io/tesserafin-project/tesserafin:12.0.0-dev.700c499f3e19}
+    # Moving channels are an explicit opt-in; the risks and the upgrade procedure
+    # are in docs/container/A6-versioning-and-upgrades.md.
+    image: ${TESSERAFIN_IMAGE:-ghcr.io/tesserafin-project/tesserafin@sha256:29493c0ecf956a61f06c2b801e7c867d560fb95ab184c09d05fdb6db508a7722}
     container_name: tesserafin
     # The image already runs as the fixed non-root identity 10000:10000; stated
     # here so the security posture is visible in the compose file itself.

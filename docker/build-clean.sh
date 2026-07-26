@@ -1,16 +1,23 @@
 #!/usr/bin/env bash
 # Clean, deterministic build of the Tesserafin production image (#87 / [A1]).
 #
-# Derives every build-affecting value from git + the canonical version source so
-# the same commit always produces the same inputs, then drives docker-bake.hcl.
+# Every build-affecting value — version, tags, commit, timestamps — comes from
+# docker/version-contract.sh (#92 / [A6]), never from logic duplicated here or in
+# docker-bake.hcl. The same commit therefore always produces the same inputs.
 # No dependency on hosted GitHub Actions.
 #
 # Usage:
 #   docker/build-clean.sh [--target server|amd64|arm64] [--output MODE] [--builder NAME]
+#                         [--channel dev|prerelease|stable] [--release-tag TAG] [--allow-dirty]
 #
 #   --output load          load a single-arch image into the local docker (default)
 #   --output oci:PATH      write a reproducible OCI layout tarball to PATH
 #   --output push          push the multi-arch image to $REGISTRY
+#
+# The default channel is `dev`, which only ever produces the two immutable tags
+# `<version>-dev.<short commit>` and `sha-<commit>`. Moving channels (`preview`,
+# `latest`, major/minor) are reachable only through an explicit --release-tag on
+# the prerelease/stable channels; the contract refuses every other route.
 #
 # Reproducibility: provenance and SBOM attestations are disabled (they embed
 # wall-clock timestamps); layer/file mtimes are clamped to the commit time.
@@ -22,33 +29,39 @@ cd "${REPO_ROOT}"
 TARGET="amd64"
 OUTPUT="load"
 BUILDER="${BUILDX_BUILDER:-tf-builder}"
+CONTRACT_ARGS=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --target)  TARGET="$2"; shift 2 ;;
     --output)  OUTPUT="$2"; shift 2 ;;
     --builder) BUILDER="$2"; shift 2 ;;
+    --channel|--release-tag|--registry) CONTRACT_ARGS+=("$1" "$2"); shift 2 ;;
+    --allow-dirty) CONTRACT_ARGS+=("$1"); shift ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
 
-# --- Derive deterministic inputs -------------------------------------------
-VERSION="$(grep -oP 'AssemblyVersion\("\K[0-9]+\.[0-9]+\.[0-9]+' SharedVersion.cs | head -1)"
-[[ -n "${VERSION}" ]] || { echo "could not read VERSION from SharedVersion.cs" >&2; exit 1; }
-VCS_REF="$(git rev-parse HEAD)"
-SOURCE_DATE_EPOCH="$(git log -1 --format=%ct HEAD)"
-BUILD_DATE="$(date -u -d "@${SOURCE_DATE_EPOCH}" +%Y-%m-%dT%H:%M:%SZ)"
-REGISTRY="${REGISTRY:-ghcr.io/tesserafin-project/tesserafin}"
-export VERSION VCS_REF SOURCE_DATE_EPOCH BUILD_DATE REGISTRY
+# --- Derive deterministic inputs from the version contract -------------------
+# A contract violation (malformed version, tag/source mismatch, dirty release,
+# missing provenance) exits non-zero here and no image is built.
+CONTRACT_ENV="$(docker/version-contract.sh env "${CONTRACT_ARGS[@]+"${CONTRACT_ARGS[@]}"}")"
+while IFS='=' read -r key value; do
+  [[ -n "${key}" ]] || continue
+  printf -v "${key}" '%s' "${value}"
+  export "${key?}"
+done <<<"${CONTRACT_ENV}"
 
-if [[ -n "$(git status --porcelain)" ]]; then
-  echo "WARNING: working tree is dirty — build is not from a clean commit." >&2
+if [[ "${CHANNEL}" == "dev" && -n "$(git status --porcelain)" ]]; then
+  echo "WARNING: working tree is dirty — this dev build is not from a clean commit." >&2
 fi
 
 echo "== Tesserafin production image build =="
 echo "  version           : ${VERSION}"
 echo "  commit            : ${VCS_REF}"
 echo "  source_date_epoch : ${SOURCE_DATE_EPOCH} (${BUILD_DATE})"
+echo "  channel           : ${CHANNEL}"
+echo "  tags              : ${TAGS}"
 echo "  target            : ${TARGET}"
 echo "  output            : ${OUTPUT}"
 echo "  builder           : ${BUILDER}"
