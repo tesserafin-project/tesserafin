@@ -14,7 +14,7 @@ services:
   tesserafin:
     # Immutable, pullable pre-release image built from merged master (A1 + A2).
     # Override with `TESSERAFIN_IMAGE=... docker compose up -d` or a .env file.
-    image: ${TESSERAFIN_IMAGE:-ghcr.io/tesserafin-project/tesserafin:12.0.0-dev.9de87471b44f}
+    image: ${TESSERAFIN_IMAGE:-ghcr.io/tesserafin-project/tesserafin:12.0.0-dev.700c499f3e19}
     container_name: tesserafin
     # The image already runs as the fixed non-root identity 10000:10000; stated
     # here so the security posture is visible in the compose file itself.

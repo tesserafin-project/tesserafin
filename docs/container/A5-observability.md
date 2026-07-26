@@ -177,3 +177,47 @@ One footnote for completeness: the server inherits a Prometheus surface from its
 upstream lineage, gated behind the `EnableMetrics` server setting, which is **off by
 default**. A5 neither enables, extends, documents nor validates it; treat it as not
 part of the supported surface until Phase F says otherwise.
+
+---
+
+## 4. The validated image
+
+Everything above was verified against one immutable artifact, pulled by digest into
+a clean environment after the local copies were removed. This is the image the
+canonical `docker-compose.yml`, `.env.example`, Unraid template and
+[`A3-guided-install.md`](./A3-guided-install.md) point at.
+
+```
+ghcr.io/tesserafin-project/tesserafin:12.0.0-dev.700c499f3e19
+```
+
+| | Digest |
+|---|---|
+| Multi-arch manifest | `sha256:6e3dbaab6eeaef163e81f9cc5ffb03f5a05bb9d8165e3f6487b2bb3003bc7608` |
+| `linux/amd64` | `sha256:75826213611bb6ac58205ead6365436418831fd7ea115cbf5cb5e3710d7215cb` |
+| `linux/arm64` | `sha256:7e2f5eb7fa8873fcc7bd882b6742fbe4524e6b014eaf4cb0c3c30a01045c8ff5` |
+
+Built from `700c499f3e1936460728fa6c21965ec814f4c818`, which is #121 plus the
+startup-contract fix in #122. The equally immutable `sha-700c499f3e1936…` tag names
+the same manifest.
+
+> **Do not use `12.0.0-dev.98442bd884eb`.** It is #121 without #122, so its `/health`
+> answers a plain-text HTML 503 while the server is starting instead of the JSON
+> contract documented above. It stays published and is not deleted, but it is
+> superseded for A5.
+
+Pull it by digest rather than by tag if you want the guarantee in writing:
+
+```console
+$ docker pull ghcr.io/tesserafin-project/tesserafin@sha256:6e3dbaab6eeaef163e81f9cc5ffb03f5a05bb9d8165e3f6487b2bb3003bc7608
+```
+
+Gates run against that digest, on `linux/amd64`: `docker/smoke.sh`,
+`docker/observability.sh` (all 28 checks, including "every `/health` body from boot
+onwards is the same JSON contract"), `docker/state-roundtrip.sh` and
+`docker/browser-onboarding.sh`. `/health` reaches `200 {"status":"healthy",…}` about
+11 seconds after container start; before that it answers `503` with
+`status=starting` on the same schema, which is the readiness contract, not a fault.
+
+No hardware-acceleration backend received new validation in this loop: QSV, NVENC,
+AMF, VideoToolbox, RKMPP and V4L2M2M are exactly where [A4] left them.
