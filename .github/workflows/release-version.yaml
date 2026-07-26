@@ -1,0 +1,144 @@
+name: '🏷️ Release version contract'
+
+# Replaces the inherited `release-bump-version.yaml` (#92 / [A6]).
+#
+# What the old workflow did and why none of it survived:
+#   * read the version from `build.yaml` — a file that does not exist in this
+#     repository, so every run died at the first step;
+#   * committed as `jellyfin-bot <team@jellyfin.org>` — an identity that belongs
+#     to another project;
+#   * pushed a patch bump straight onto the release branch the moment a release
+#     was published, i.e. it MUTATED the source version while the images for
+#     that very release were still being built. Tag, source tree and image could
+#     legitimately disagree, which is precisely the failure #92 exists to remove;
+#   * waited on a deploy check-suite that no longer exists in this fork.
+#
+# What replaces it:
+#   verify   — on every published release, assert that the git tag agrees with
+#              SharedVersion.cs and that the tag policy itself still holds.
+#              Read-only. It publishes nothing and mutates nothing.
+#   propose-bump — a MANUAL job that prepares the next development version on a
+#              branch and opens a pull request. It never pushes to a protected
+#              branch and never runs automatically after a release, so it cannot
+#              race image publication.
+#
+# HOSTED-CI STATUS: hosted GitHub Actions are parked for this repository (#62,
+# tracked for restoration under #94). This workflow is correctly wired but has
+# NOT been executed on hosted infrastructure. The equivalent assertions are run
+# locally by `docker/version-contract.test.sh` and `bump_version --check`.
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      next_version:
+        required: true
+        description: 'Next development version, MAJOR.MINOR.PATCH (e.g. 12.1.0)'
+        type: string
+
+# Least privilege: the default token gets read-only access, and each job asks
+# for exactly the extra scope it needs.
+permissions:
+  contents: read
+
+# One release-contract run at a time per ref. A second published release (or a
+# re-publish) must not interleave with an in-flight verification.
+concurrency:
+  group: release-version-${{ github.event.release.tag_name || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify release tag against SharedVersion.cs
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout the released tag
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          persist-credentials: false
+
+      - name: Tag must equal the canonical source version
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: ./docker/version-contract.sh verify-tag "${RELEASE_TAG}"
+
+      - name: Derive the tags this release is allowed to publish
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          IS_PRERELEASE: ${{ github.event.release.prerelease }}
+        run: |
+          if [ "${IS_PRERELEASE}" = "true" ]; then channel=prerelease; else channel=stable; fi
+          echo "channel: ${channel}"
+          ./docker/version-contract.sh check \
+            --channel "${channel}" \
+            --release-tag "${RELEASE_TAG}" \
+            --commit "${GITHUB_SHA}"
+
+      - name: A GitHub pre-release must never be able to move 'latest'
+        if: github.event.release.prerelease
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          if ./docker/version-contract.sh tags --channel prerelease \
+               --release-tag "${RELEASE_TAG}" --commit "${GITHUB_SHA}" | grep -qE ':latest$'; then
+            echo "::error::a pre-release derived a 'latest' tag" >&2
+            exit 1
+          fi
+          echo "confirmed: no 'latest' tag is derivable from this pre-release"
+
+      - name: Version-contract test suite
+        run: ./docker/version-contract.test.sh
+
+      - name: Every package version declaration agrees
+        run: ./bump_version --check
+
+  propose-bump:
+    name: Propose the next development version
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # push the proposal branch
+      pull-requests: write   # open the proposal PR
+    steps:
+      - name: Checkout the default branch
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Apply the bump
+        env:
+          NEXT_VERSION: ${{ inputs.next_version }}
+        run: ./bump_version "${NEXT_VERSION}"
+
+      - name: Open a pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEXT_VERSION: ${{ inputs.next_version }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          branch="chore/bump-version-${NEXT_VERSION}"
+          # The workflow's own identity, not a borrowed one from another project.
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "${branch}"
+          git commit -am "chore(version): bump the canonical version to ${NEXT_VERSION}"
+          git push origin "${branch}"
+          # --body-file, not --body: the body contains backticks, and a
+          # double-quoted --body would have the shell execute them.
+          {
+            printf 'Moves `SharedVersion.cs` and every `<VersionPrefix>` to `%s`.\n\n' "${NEXT_VERSION}"
+            printf 'Opened as a pull request rather than pushed directly so the source\n'
+            printf 'version never changes underneath an in-flight image publication.\n\n'
+            printf 'Refs #92.\n'
+          } > /tmp/bump-pr-body.md
+          gh pr create \
+            --base "${DEFAULT_BRANCH}" \
+            --head "${branch}" \
+            --title "chore(version): bump the canonical version to ${NEXT_VERSION}" \
+            --body-file /tmp/bump-pr-body.md
