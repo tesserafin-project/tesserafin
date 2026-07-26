@@ -32,7 +32,10 @@ ghcr.io/tesserafin-project/tesserafin:12.0.0-dev.700c499f3e19
   `/opt/tesserafin-web.revision.json` inside the image.
 
 - **This is a development pre-release tag. It does NOT auto-update.** To move to a
-  newer build you change the tag yourself (and take a backup first — see A2).
+  newer build you change the tag yourself (and take a backup first — see A2). The
+  tag policy, the digest-pinning procedure and the full upgrade contract are in
+  [`A6-versioning-and-upgrades.md`](./A6-versioning-and-upgrades.md); this guide
+  covers installation only and does not restate them.
 - The GHCR package is currently **private**: run `docker login ghcr.io` once with a
   GitHub token that can read packages before pulling. (A public, login-free pull is
   a project-owner decision tracked in #113.)
@@ -181,7 +184,7 @@ DSM 7.2+ with **Container Manager** installed.
 
 Notes:
 - The immutable dev tag does **not** auto-update; pull a new tag deliberately and
-  back up first.
+  back up first — see [`A6-versioning-and-upgrades.md`](./A6-versioning-and-upgrades.md).
 - Back up `/config` + `/data` per [`A2-persistent-state.md`](./A2-persistent-state.md).
 - Only DSM steps that are standard Container Manager operations are described here;
   no untested DSM-specific integrations are claimed.
@@ -210,6 +213,7 @@ removed rather than reworded.
 
 This guide is deliberately bounded to A3. It does **not** cover: GPU / hardware
 acceleration (#90), the health endpoint and structured logs (#91 — now shipped, see
-[`A5-observability.md`](./A5-observability.md)), upgrade-channel orchestration
-(#92), TLS/reverse-proxy, or `latest`/release channels. Those are separate roadmap
-items.
+[`A5-observability.md`](./A5-observability.md)), the tag/channel policy and upgrade
+contract (#92 — now shipped, see
+[`A6-versioning-and-upgrades.md`](./A6-versioning-and-upgrades.md)), or
+TLS/reverse-proxy. Those are separate roadmap items.
