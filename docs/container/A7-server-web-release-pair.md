@@ -271,6 +271,11 @@ ci/verify-release-pair.sh \
 RESULT: PASS — the release pair is proven
 ```
 
+`--keep` preserves the containers, volumes, server logs and Playwright traces
+**only on failure**; a passing run cleans up. The retained record of this passing
+run is therefore its transcript, quoted below, not an on-disk work tree. To keep
+the artefacts of a green run, re-run and stop the cleanup deliberately.
+
 Layer results: `ARGUMENTS` PASS · `IMAGE PROVENANCE` PASS ·
 `BUNDLED WEB PROVENANCE` PASS · `OPENAPI` PASS · `GENERATED SDK` PASS ·
 `BROWSER E2E` PASS · `LIFECYCLE CONTRACT` PASS.
