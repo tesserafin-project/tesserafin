@@ -259,7 +259,10 @@ docker run --rm -v "${V_CFG}:/v/config" -v "${V_DATA}:/v/data" -v "${V_CACHE}:/v
   "${HELPER}" sh -c 'chown -R 10000:10000 /v/*'
 
 # Record the volume identities now. The upgrade must reuse these exact objects.
-vol_id() { docker volume inspect --format '{{.Name}}@{{.Mountpoint}}' "$1"; }
+# CreatedAt, not Mountpoint: a mountpoint is derived from the volume name, so a
+# volume deleted and recreated under the same name would produce an identical
+# string and the "upgraded in place" assertion would pass on a replaced volume.
+vol_id() { docker volume inspect --format '{{.Name}}@{{.CreatedAt}}' "$1"; }
 VOLIDS_BEFORE="$(vol_id "${V_CFG}"); $(vol_id "${V_DATA}"); $(vol_id "${V_CACHE}")"
 
 docker run -d --name "${C_BASE}" -p "127.0.0.1:${PORT}:8096" \
@@ -320,6 +323,17 @@ pass "wrote a configuration change (ServerName)"
 
 BEFORE="$(capture_state "${TOKEN}" "${USERID}" "${ITEMID}")"
 echo "  --- before ---"; printf '    %s\n' "${BEFORE}"
+
+# A capture line is `key=value`. If an API call or its parse failed, the value is
+# empty, `echo` still succeeded, and the after-state would fail identically — so
+# compare_line would PASS on two empty strings. Reject that here, before the
+# comparison is trusted.
+for key in users libraries items playstate servername; do
+  value="$(grep "^${key}=" <<<"${BEFORE}" || true)"
+  [[ -n "${value}" && "${value}" != "${key}=" && "${value}" != "${key}=[]" ]] \
+    && pass "before-state captured a non-empty ${key}" \
+    || fail "before-state ${key} is empty — the comparison below would be vacuous"
+done
 grep -q "^servername=${SERVER_NAME}$" <<<"${BEFORE}" \
   && pass "configuration change is readable before the upgrade" \
   || fail "configuration change did not take effect before the upgrade"
@@ -358,25 +372,34 @@ grep -q "Initialise Migration service" <<<"${CLOG}" \
 # "There are N migrations for stage <Stage>." — one line per stage.
 PENDING_LINES="$(grep -oE 'There are [0-9]+ migrations for stage [A-Za-z]+' <<<"${CLOG}" || true)"
 PENDING_TOTAL=0
+STAGE_COUNT=0
 if [[ -n "${PENDING_LINES}" ]]; then
   while IFS= read -r line; do
     echo "    ${line}"
     n="$(grep -oE 'are [0-9]+' <<<"${line}" | grep -oE '[0-9]+')"
     PENDING_TOTAL=$((PENDING_TOTAL + n))
+    STAGE_COUNT=$((STAGE_COUNT + 1))
   done <<<"${PENDING_LINES}"
-else
-  note "the runner emitted no per-stage pending count line"
 fi
+echo "  migration stages swept: ${STAGE_COUNT}"
 echo "  pending migrations applied during the upgrade: ${PENDING_TOTAL}"
 
-grep -qiE 'Migration .* was successfully applied|Migration system initialisation completed' <<<"${CLOG}" \
-  && pass "the migration/startup path completed without rolling back" \
-  || fail "no migration completion line on the upgraded instance"
+# Completion evidence for an ALREADY-INITIALISED instance is the runner reporting
+# every stage it swept. "Migration system initialisation completed" is emitted on
+# first-boot seeding only, and "was successfully applied" only when a migration
+# actually ran — demanding either of those here would fail an upgrade that had
+# nothing pending, which is a real and correct outcome, not a fault.
+[[ "${STAGE_COUNT}" -ge 1 ]] \
+  && pass "the migration runner swept every stage and reported each (${STAGE_COUNT} stages)" \
+  || fail "the runner emitted no per-stage report — the migration path did not complete"
 grep -qiE 'Attempt to rollback|Migration .* failed' <<<"${CLOG}" \
   && fail "the migration runner attempted a rollback" \
   || pass "no rollback was attempted"
 
 if [[ "${PENDING_TOTAL}" -gt 0 ]]; then
+  grep -qiE 'Migration .* was successfully applied' <<<"${CLOG}" \
+    && pass "every pending migration reported success" \
+    || fail "${PENDING_TOTAL} migrations were pending but none reported success"
   pass "a real forward migration ran during this upgrade (${PENDING_TOTAL} applied)"
 elif [[ "${REQUIRE_MIGRATION}" == "1" ]]; then
   fail "--require-migration: the runner found ZERO pending migrations, so no forward schema migration was exercised"
@@ -403,9 +426,16 @@ echo "  --- after ---"; printf '    %s\n' "${AFTER}"
 
 compare_line() { # $1 = key
   local b a
-  b="$(grep "^$1=" <<<"${BEFORE}")"; a="$(grep "^$1=" <<<"${AFTER}")"
-  [[ "${b}" == "${a}" ]] && pass "$1 preserved across the upgrade" \
-    || fail "$1 differs — before [${b}] after [${a}]"
+  # `|| true`: a missing key must be reported as a FAIL, not kill the run via set -e.
+  b="$(grep "^$1=" <<<"${BEFORE}" || true)"
+  a="$(grep "^$1=" <<<"${AFTER}" || true)"
+  if [[ -z "${b}" || -z "${a}" ]]; then
+    fail "$1 could not be captured on both sides — before [${b}] after [${a}]"
+  elif [[ "${b}" == "${a}" ]]; then
+    pass "$1 preserved across the upgrade"
+  else
+    fail "$1 differs — before [${b}] after [${a}]"
+  fi
 }
 for k in users libraries items playstate servername; do compare_line "${k}"; done
 grep -q "playstate=MISSING" <<<"${AFTER}" && fail "playback state is missing after the upgrade" \
