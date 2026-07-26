@@ -170,6 +170,17 @@ fi
 echo "== health endpoint (#91 / [A5]) =="
 # Minimal guard only. The full A5 gate — schema, version agreement, JSON-lines
 # logs, log-level switching — lives in docker/observability.sh.
+#
+# READINESS, not a race — the same reason as `/` above, one step later. Until the
+# application has finished starting, /health deliberately answers 503 with
+# status=starting (#122): that is the contract being honoured, not a failure.
+# Readiness lands slightly after `/` begins redirecting, so probing once right
+# after the root check catches status=starting and fails a healthy image. Wait
+# for the ready state first, exactly as docker/observability.sh does.
+for _ in $(seq 1 60); do
+  [[ "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PORT}/health")" == "200" ]] && break
+  sleep 2
+done
 HEALTH_CODE="$(curl -s -o "${WORK}/health.json" -w '%{http_code}' "http://127.0.0.1:${PORT}/health")"
 echo "  /health -> ${HEALTH_CODE}: $(head -c 200 "${WORK}/health.json")"
 if [[ "${HEALTH_CODE}" == "200" ]] \
