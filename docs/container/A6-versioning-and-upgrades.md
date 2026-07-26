@@ -151,10 +151,10 @@ $ docker/version-verify.sh ghcr.io/tesserafin-project/tesserafin:<tag> --require
 
 ```dotenv
 # .env — exact immutable version tag
-TESSERAFIN_IMAGE=ghcr.io/tesserafin-project/tesserafin:12.0.0-dev.700c499f3e19
+TESSERAFIN_IMAGE=ghcr.io/tesserafin-project/tesserafin:12.0.0-dev.a8a18bb7c07b
 
 # .env — digest pin, the strongest form; survives a tag being re-pointed
-TESSERAFIN_IMAGE=ghcr.io/tesserafin-project/tesserafin@sha256:6e3dbaab6eeaef163e81f9cc5ffb03f5a05bb9d8165e3f6487b2bb3003bc7608
+TESSERAFIN_IMAGE=ghcr.io/tesserafin-project/tesserafin@sha256:29493c0ecf956a61f06c2b801e7c867d560fb95ab184c09d05fdb6db508a7722
 ```
 
 Resolve a tag to its digest before pinning:
@@ -284,6 +284,38 @@ release and, separately, can propose the next development version as a pull
 request. **Hosted GitHub Actions are parked for this repository** (#62;
 restoration is tracked as #94). That workflow is correctly wired but has not been
 executed on hosted infrastructure; the assertions are currently run locally.
+
+---
+
+## 5b. The validated A6 image
+
+```
+ghcr.io/tesserafin-project/tesserafin:12.0.0-dev.a8a18bb7c07b
+```
+
+| | Digest |
+|---|---|
+| Multi-arch manifest | `sha256:29493c0ecf956a61f06c2b801e7c867d560fb95ab184c09d05fdb6db508a7722` |
+| `linux/amd64` | `sha256:c0b6af488905270fb18a33577e753d2a9662e9bf591fc68dd729c10f697b200d` |
+| `linux/arm64` | `sha256:02b836e8d799ec3a8c4d8d332d574809415a0095216f75f26c936a2214d1e5f5` |
+
+Built from `a8a18bb7c07b3d629ecab019aea9668a145eb5bc`. The equally immutable
+`sha-a8a18bb7c07b3d629ecab019aea9668a145eb5bc` tag names the same manifest, and
+`docker-compose.yml` pins the manifest digest.
+
+Gates were run against that digest on `linux/amd64`: `docker/smoke.sh`,
+`docker/observability.sh`, `docker/state-roundtrip.sh`,
+`docker/browser-onboarding.sh`, `docker/version-verify.sh --require-digest`, and
+`docker/upgrade-roundtrip.sh` from the A5 image
+`sha256:6e3dbaab6eeaef163e81f9cc5ffb03f5a05bb9d8165e3f6487b2bb3003bc7608`.
+The upgrade run reported **0 pending migrations** — see §6 for why that is the
+honest outcome today.
+
+Pull it by digest rather than by tag if you want the guarantee in writing:
+
+```console
+$ docker pull ghcr.io/tesserafin-project/tesserafin@sha256:29493c0ecf956a61f06c2b801e7c867d560fb95ab184c09d05fdb6db508a7722
+```
 
 ---
 
