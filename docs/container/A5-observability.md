@@ -213,8 +213,8 @@ $ docker pull ghcr.io/tesserafin-project/tesserafin@sha256:6e3dbaab6eeaef163e81f
 ```
 
 Gates run against that digest, on `linux/amd64`: `docker/smoke.sh`,
-`docker/observability.sh` (all 28 checks, including "every `/health` body from boot
-onwards is the same JSON contract"), `docker/state-roundtrip.sh` and
+`docker/observability.sh` (16 assertions, 0 failures, including "every `/health` body
+from boot onwards is the same JSON contract"), `docker/state-roundtrip.sh` and
 `docker/browser-onboarding.sh`. `/health` reaches `200 {"status":"healthy",…}` about
 11 seconds after container start; before that it answers `503` with
 `status=starting` on the same schema, which is the readiness contract, not a fault.
