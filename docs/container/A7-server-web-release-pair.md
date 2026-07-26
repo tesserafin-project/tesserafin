@@ -14,17 +14,29 @@ enforced, off-laptop CI is #94 / [C1], and the hosted contract gate is
 
 ## 1. The pair
 
+**This is the pair A7 closes on.** The first pair proved every clause but one
+(the client teardown was racy under navigation) and is recorded as superseded in
+§8 — it is kept because the diagnosis that came out of it is the evidence that
+`tesserafin-web#60` was a real client defect and not a server one.
+
 | | |
 |---|---|
-| `SERVER_SOURCE_SHA` | `99783b2a743ee62617c77ffb12046f788c229e1c` |
-| `SERVER_IMAGE` | `ghcr.io/tesserafin-project/tesserafin@sha256:e7551ac881bab01c10f290103ca3905e2779fbc1da5110aa11a26b0364a9f1f8` |
-| `SERVER_IMAGE_ARCH_DIGEST` (`linux/amd64`, the one executed) | `sha256:0d31dadff3bbef76385157292f4a0aa3e44786ef448a599decba1fa5a529ef04` |
-| `linux/arm64` child (built and label-checked, **never booted**) | `sha256:7b73b5225d2e77d88c0e9e9394d296ddc1e6cc14ad1d1898ff0b6305226b61f9` |
-| readable tags for the same manifest | `12.0.0-dev.99783b2a743e`, `sha-99783b2a743ee62617c77ffb12046f788c229e1c` |
-| `WEB_SOURCE_SHA` | `fa47bab7f09d635f0b79b0814ddff2a1a1108400` |
-| `WEB_ASSETS_IMAGE` | `ghcr.io/tesserafin-project/tesserafin-web-assets@sha256:357afd28932481f6c02a521c6482dcace58b5102190e896f79c6f515fd440a5b` |
+| `SERVER_SOURCE_SHA` | `a39f28c6406ab4e444ad5bd1837f447faeafdb96` |
+| `SERVER_IMAGE` | `ghcr.io/tesserafin-project/tesserafin@sha256:032afb13a54b50823a2acbf30465f4e1f63efa26dacd041cbf50ba11df44994a` |
+| `SERVER_IMAGE_ARCH_DIGEST` (`linux/amd64`, the one executed) | `sha256:6ec5eb211b6cb24ef4a6853deaec0f5f69b1d8aa1e6c25c3ef81c355e4a177d9` |
+| `linux/arm64` child (built and label-checked, **never booted**) | `sha256:21e2bb908138e4d4a1a794413084716ed14ad6906baabbee84aa4f10a0b9fed9` |
+| readable tags for the same manifest | `12.0.0-dev.a39f28c6406a`, `sha-a39f28c6406ab4e444ad5bd1837f447faeafdb96` |
+| `WEB_SOURCE_SHA` | `855e2e3c25de42cec292192149947309678f5250` |
+| `WEB_ASSETS_IMAGE` | `ghcr.io/tesserafin-project/tesserafin-web-assets@sha256:8ff18f389ab1d0f8fbc3a311a080c377fda9bad766167becbd4855a75207b5dd` |
 | `OPENAPI_HASH` (generated == committed) | `0700633b3c12ff04df694ea3d5e81be72cc07dc66b70a8e3048cae8363fabf66` |
 | `WEB_PINNED_OPENAPI_HASH` | `49e4eb87735f9c69791d1962823b29f49cc6ec500ca71f8898cf4255e85d7482` |
+
+The web-assets image is **single-platform `linux/amd64` by design** — the payload
+is architecture-neutral static content, and the server `Dockerfile` consumes it
+through a `FROM --platform=linux/amd64` stage pin so both server architectures
+copy byte-identical web bytes. The validator asserts that claim against the
+published manifest: **both** server children declare
+`org.tesserafin.web.revision = 855e2e3c25de…`.
 
 The two OpenAPI hashes differ **by construction and not by content**: the web
 repository pins the contract after the SDK generator's normalisation pass
@@ -352,10 +364,21 @@ release image, and the `Dockerfile` is byte-identical between the two commits �
 this is evidence about the same client code, not about a different subject. The
 server behaved correctly throughout (it retained the client-owned session across
 `TranscodingJobEnded` and waited for an explicit `DELETE`, exactly as #72/#74
-require); the request was never sent. `playbackSessionTeardown.ts` issues it as a
-`keepalive` `fetch` from an unload path, dispatched ~37 ms after the last stream
-read — best-effort by specification. Filed as
+require); the request was never sent. Filed as
 `tesserafin-project/tesserafin-web#60`.
+
+> **Correction, established when #60 was fixed.** This paragraph originally read
+> that `playbackSessionTeardown.ts` issued the request "as a `keepalive` `fetch`
+> from an unload path". **Both halves were wrong.** The primary issuer is the
+> explicit stop path (`releasePlaybackSessionOnStop()`), not the unload path, and
+> it was **not** `keepalive` — only the `pagehide`/`visibilitychange` flush asked
+> for that transport. An ordinary `fetch` belongs to its document's fetch group
+> and is aborted when the document is destroyed, and because `release()` marks
+> the record released *before* dispatching, the keepalive `pagehide` backstop
+> that fired moments later found nothing owed and issued nothing. That pair of
+> facts is what produced a session the server never received a single request
+> about. The server-side reading above is unaffected. Fixed by
+> `tesserafin-web` PR #61, `855e2e3c25de…`; see §8.
 
 Observed rate: **1 failure in 8** runs of that spec against this web artifact
 (rehearsal 0 FAIL, rehearsal 1 PASS, gate attempt 1 rounds 1–3 PASS, gate attempt 2
@@ -396,11 +419,14 @@ that quietly seeds a subset is a gate that quietly tests a subset.
    gate. It is not a required status check, it cannot block a merge, and it must
    not be described as CI.
 
-2. **The teardown `DELETE` is racy** (`tesserafin-project/tesserafin-web#60`).
-   One failure in eight runs, diagnosed above. The server-side lifecycle contract
-   from #43/#70/#71 is proven; the client's unload-time delivery of the final
-   `DELETE` is not reliable. This is why the A7 PR uses `Refs #93` and not
-   `Closes #93`.
+2. ~~**The teardown `DELETE` is racy**~~ — **RESOLVED.**
+   `tesserafin-project/tesserafin-web#60` is closed by `tesserafin-web` PR #61,
+   merged as `855e2e3c25de42cec292192149947309678f5250`. Every teardown now uses
+   the unload-survivable transport and a dispatch that never happened no longer
+   consumes the session's one release. 25 consecutive targeted teardown runs and
+   three container-fresh lifecycle rounds inside this validator are green; see
+   §8. This limit is kept in place, struck through, because the `Refs #93` on the
+   PR that introduced this document was justified by it.
 
 3. **`linux/amd64` only.** The arm64 child image was built, published and had its
    OCI labels verified. It was not booted and no browser ran against it. Same
@@ -429,3 +455,123 @@ that quietly seeds a subset is a gate that quietly tests a subset.
    Both mark the run DEGRADED and force a non-zero exit, so neither can produce a
    green run — but a reader of a transcript should still check which flags were
    passed.
+
+---
+
+## 8. The reliable pair — how #93 closes
+
+The pair in §1 supersedes the first one. Nothing about the server changed: the
+only difference between the two server source commits is the bundled web pin.
+
+| | superseded | closing pair |
+|---|---|---|
+| server source | `99783b2a743ee62617c77ffb12046f788c229e1c` | `a39f28c6406ab4e444ad5bd1837f447faeafdb96` |
+| server manifest | `sha256:e7551ac881bab01c10f290103ca3905e2779fbc1da5110aa11a26b0364a9f1f8` | `sha256:032afb13a54b50823a2acbf30465f4e1f63efa26dacd041cbf50ba11df44994a` |
+| `linux/amd64` | `sha256:0d31dadff3bbef76385157292f4a0aa3e44786ef448a599decba1fa5a529ef04` | `sha256:6ec5eb211b6cb24ef4a6853deaec0f5f69b1d8aa1e6c25c3ef81c355e4a177d9` |
+| `linux/arm64` | `sha256:7b73b5225d2e77d88c0e9e9394d296ddc1e6cc14ad1d1898ff0b6305226b61f9` | `sha256:21e2bb908138e4d4a1a794413084716ed14ad6906baabbee84aa4f10a0b9fed9` |
+| web source | `fa47bab7f09d635f0b79b0814ddff2a1a1108400` | `855e2e3c25de42cec292192149947309678f5250` |
+| web assets | `sha256:357afd28932481f6c02a521c6482dcace58b5102190e896f79c6f515fd440a5b` | `sha256:8ff18f389ab1d0f8fbc3a311a080c377fda9bad766167becbd4855a75207b5dd` |
+
+### What the client actually did wrong
+
+`PlaybackSessionTracker.release()` dispatched the teardown over the ordinary
+`fetch` transport unless the caller asked for `keepalive`, and only the
+`pagehide`/`visibilitychange` flush asked. So the **primary** route — the stop
+path — used a request that belongs to its document's fetch group and is cancelled
+when that document is destroyed. And because `release()` marks the record released
+*before* issuing (correctly: that is what makes a second trigger a no-op rather
+than a duplicate), the keepalive backstop that fired moments later found nothing
+owed. **Both** had to be true to produce the observed symptom: the server received
+no request at all on the session path and held the client-owned session to its
+TTL.
+
+`tesserafin-web` PR #61 makes every teardown use the unload-survivable transport,
+whichever trigger issues it, and makes `release()` report whether the request was
+actually handed to the transport. A dispatch that never happened — an absent or
+synchronously throwing `fetch` — no longer consumes the session's one release, so
+the backstop stays armed; a request that *left* and then failed is deliberately
+not re-armed, because re-issuing later is the stale-teardown hazard the design
+forbids and the TTL sweep is the last-resort recovery reserved for it.
+
+No server change was required, and none was made. The TTL is unchanged,
+`TranscodingJobEnded` still does not reap a client-owned session, and the
+client-owned-session rule from #72/#74 is untouched.
+
+### Evidence
+
+**25 consecutive targeted teardown/navigation runs — PASS=25, FAIL=0.**
+The oracle's first test only: `POST` → DirectPlay → real product error → `PUT`
+re-plan to Transcode → `ffprobe`-proven transcoded bytes → liveness probe from
+outside the browser → user stop with immediate navigation → server-logged
+`deleted` → genuine `404`. One real server (`ci/serve-e2e.sh`, newly synthesised
+fixtures) with a fresh playback session and a fresh browser context per run —
+**not** a fresh container per run; the container-fresh rounds are the three below.
+The run is 6–8 s and each one added exactly one `deleted` line to the server log.
+Across all 25: `deleted` 25, `already gone` 0, `PlanNotExecutable` 0,
+`served from legacy` 0.
+
+That stress ran against a `dist/` built from the web source that became
+`855e2e3c25de…`, served by `ci/serve-e2e.sh` — source-identical to the merge
+commit but a *different artifact* from the published web-assets image. The
+published pair is proven by the validator rounds below, not by the stress.
+
+**`ci/verify-release-pair.sh`, full run, no skip flags — RESULT: PASS.**
+
+```
+ci/verify-release-pair.sh \
+    --server-image ghcr.io/tesserafin-project/tesserafin@sha256:032afb13a54b… \
+    --server-source a39f28c6406ab4e444ad5bd1837f447faeafdb96 \
+    --web-repo <tesserafin-web checkout> \
+    --web-source 855e2e3c25de42cec292192149947309678f5250 \
+    --lifecycle-runs 3
+```
+
+| Layer | Result |
+|---|---|
+| ARGUMENTS | PASS — both checkouts *are* the named commits |
+| IMAGE PROVENANCE | PASS — `docker/version-verify.sh --require-digest --expect-commit` |
+| BUNDLED WEB PROVENANCE | PASS — label, in-image `/opt/tesserafin-web.revision.json`, `Dockerfile` `WEB_VCS_REF` and both arch children all name `855e2e3c25de…`; assets pinned by digest; 2 runnable architectures |
+| OPENAPI | PASS — regenerated `sha256 0700633b3c12…` == committed |
+| GENERATED SDK | PASS — zero regeneration drift; the contract at the SDK's provenance commit `8c358f930c2b…` is byte-identical to the release contract and an ancestor of it |
+| BROWSER E2E | PASS — `docker/browser-onboarding.sh` against the release image on pristine volumes |
+| LIFECYCLE CONTRACT | PASS — 3 consecutive rounds |
+
+| Round | Container | Result |
+|---|---|---|
+| 1 | new container, new volumes, newly synthesised fixtures | PASS — 16 passed (35.7 s) |
+| 2 | new container, new volumes, newly synthesised fixtures | PASS — 16 passed (35.6 s) |
+| 3 | new container, new volumes, newly synthesised fixtures | PASS — 16 passed (35.7 s) |
+
+**Other gates.**
+
+| Command | Result |
+|---|---|
+| `ci/run.sh` (server, `bin/`/`obj/` purged first) | PASS — build succeeded, full test suite green (263 s wall time) |
+| `npm run validate:full` (web, at `855e2e3c25de…`) | PASS — 76 files / 896 tests, bundle 373.5 KiB of 450.0 KiB, tree clean |
+| web SDK drift with a real server checkout | none |
+| `docker/verify-assets-image.sh` on the new assets image | ASSETS-AUDIT: all gates passed |
+
+### Runs that failed, kept on the record
+
+**Teardown stress attempt 1 — 24/25, run 1 red.** Not a lost `DELETE`: that
+session was deleted and 404 afterwards. It failed a *new* assertion that was too
+strong — it required the teardown to be dispatched by the trigger named `stopped`
+in every run, and run 1 dispatched from `pagehide`. That is a property of the
+harness, not of the contract: `stopPlayback()` presses Escape and navigates
+immediately, and in that flow the navigation is what ends playback
+(`beforeunload` → `onAppClose()` → the stop path, then `pagehide` → the
+backstop). When the manager no longer considers itself playing at `beforeunload`,
+the backstop is legitimately the only route left. The assertion was corrected to
+the property the contract does guarantee — exactly one dispatch, from a
+recognised trigger — which still fails loudly at zero and at two. The
+deterministic stop-before-navigation ordering is proven by unit tests, which is
+where it can be made deterministic.
+
+**A stress-rig bug, before any product run.** The script defaulted a `grep -c`
+with `|| echo 0`, which emits two lines when nothing matches and aborted the loop
+on an arithmetic error. No product conclusion was drawn from it.
+
+### Still true
+
+Hosted GitHub Actions were **not** executed for any of this. Limits 1 and 3–8 of
+§7 stand unchanged; only limit 2 is resolved.
