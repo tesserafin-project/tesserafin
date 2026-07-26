@@ -35,6 +35,13 @@
 # boot the suite already pays for, and leaves this script unchanged in structure and runtime.
 # See docs/openapi-contract.md.
 #
+# Issue #93 / [A7]: the server<->web RELEASE PAIR is deliberately NOT checked here.
+# ci/verify-release-pair.sh needs a published image, a tesserafin-web checkout and a
+# real browser; requiring all three would make ordinary server-only development
+# depend on a neighbouring web checkout. It is a separate, explicitly invoked
+# gate — see the note printed in SUMMARY below and
+# docs/container/A7-server-web-release-pair.md.
+#
 # Usage:
 #   ./ci/run.sh
 set -euo pipefail
@@ -106,6 +113,15 @@ ELAPSED=$((END_TS - START_TS))
 banner "SUMMARY"
 if [ "$STATUS" -eq 0 ]; then
     echo "RESULT: PASS — build succeeded, full test suite green (${ELAPSED}s wall time)"
+    echo ""
+    echo "This gate covers the SERVER ONLY. It says nothing about whether a published"
+    echo "image and a tesserafin-web commit are the same release. That is #93 / [A7]:"
+    echo ""
+    echo "  ci/verify-release-pair.sh --server-image <ref>@sha256:<digest> \\"
+    echo "      --server-source <40-char commit> \\"
+    echo "      --web-repo <path to tesserafin-web> --web-source <40-char commit>"
+    echo ""
+    echo "Run it explicitly before a release. Neither gate is hosted CI (#62, #94)."
 else
     echo "RESULT: FAIL — see the first failing stage above (dotnet restore/build/test) (${ELAPSED}s wall time)" >&2
 fi
