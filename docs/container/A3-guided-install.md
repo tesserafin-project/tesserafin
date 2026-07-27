@@ -16,28 +16,30 @@ Related docs:
 
 ## The image
 
-> **Epoch note.** The image named below is a **pre-v1 development artifact** in
-> the frozen archive package `ghcr.io/tesserafin-project/tesserafin`. Tesserafin
-> public SemVer begins at `1.0.0`, published to the canonical package
-> `ghcr.io/tesserafin-project/tesserafin-server` — see
-> [`../versioning-policy.md`](../versioning-policy.md). This guide is repointed
-> to the first `1.0.0` development baseline once that baseline has been published
-> from a merged commit; until then it keeps naming an image that actually exists.
+> **Epoch note.** Tesserafin public SemVer begins at `1.0.0`, published to the
+> canonical package `ghcr.io/tesserafin-project/tesserafin-server` — see
+> [`../versioning-policy.md`](../versioning-policy.md).
+> `ghcr.io/tesserafin-project/tesserafin` is the frozen pre-v1 archive and never
+> receives another tag. This guide names the validated `1.0.0` development
+> baseline; `1.0.0` itself is unpublished, and no moving channel (`latest`,
+> `preview`, `1`, `1.0`) exists.
 
-All paths here use the immutable pre-release image published to GHCR:
+All paths here use the immutable image published to GHCR:
 
 ```
-ghcr.io/tesserafin-project/tesserafin:12.0.0-dev.a8a18bb7c07b
+ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.44f5ab62b522
 ```
 
-- Multi-arch manifest digest: `sha256:29493c0ecf956a61f06c2b801e7c867d560fb95ab184c09d05fdb6db508a7722`
-  (`linux/amd64` `sha256:c0b6af488905270fb18a33577e753d2a9662e9bf591fc68dd729c10f697b200d`,
-  `linux/arm64` `sha256:02b836e8d799ec3a8c4d8d332d574809415a0095216f75f26c936a2214d1e5f5`).
-  Built from `a8a18bb7c07b3d629ecab019aea9668a145eb5bc`. This is what the
-  checked-in `docker-compose.yml` pins, by digest — so following this guide and
-  running the shipped Compose file give you the same image.
-- Bundled Tesserafin Web `13.0.0` at commit `fa47bab7f09d635f0b79b0814ddff2a1a1108400`
-  (`ghcr.io/tesserafin-project/tesserafin-web-assets@sha256:357afd28932481f6c02a521c6482dcace58b5102190e896f79c6f515fd440a5b`),
+- Multi-arch manifest digest: `sha256:fd1fa9e0f5a28a07e5872cc5ff13257a92d988717a33519f62c4b26c6ab36249`
+  (`linux/amd64` `sha256:508c5459b505d5cffb2fd8192a205d37cdf5573dab8b4e39df8c16bd59f5f51b`,
+  `linux/arm64` `sha256:bd55fa7e3e34f451fb9b3788964fe858fa4b351f82e9e43b1b988816f0566f71`).
+  Built from `44f5ab62b522684b4fa58ed10de80b8c6a7bb392`. It reports version
+  `1.0.0`. This is what the checked-in `docker-compose.yml` pins, by digest — so
+  following this guide and running the shipped Compose file give you the same
+  image. The dev tag above is immutable too; it is provenance and an alternative
+  spelling of the same manifest, not a moving channel.
+- Bundled Tesserafin Web `1.0.0` at commit `489a90be0dbe80aede3dbbc028b140756211d43c`
+  (`ghcr.io/tesserafin-project/tesserafin-web-assets@sha256:ef817dec29f8fd08cee9910954b576d05a947936f93a8a9e3309031b8d656104`),
   recorded in the image's `org.tesserafin.web.revision` label and in
   `/opt/tesserafin-web.revision.json` inside the image.
 
@@ -57,6 +59,15 @@ ghcr.io/tesserafin-project/tesserafin:12.0.0-dev.a8a18bb7c07b
 > **superseded for [A3]** because it cannot satisfy a browser install. See #115
 > and the "Bundled web client" section of
 > [`A1-implementation-note.md`](./A1-implementation-note.md).
+
+> **Do not use `1.0.0-dev.965fadf37e20`
+> (`sha256:fffb46a41919dfedf0d5bacc68b9c37ebbca0400df74b487ba5858b395440e5c`)
+> either.** Published immutable candidate; failed A3/A7 browser acceptance because
+> it bundled the upstream Jellyfin `10.10.0` minimum-version boundary, so the
+> browser rendered `Update Required` instead of the onboarding wizard; never
+> pinned as an installation default; superseded by the validated replacement named
+> above. It remains published, immutable and private, and is not deleted, retagged,
+> moved or overwritten. See tesserafin-project/tesserafin-web#65.
 
 ## Prerequisites
 
@@ -178,7 +189,7 @@ DSM 7.2+ with **Container Manager** installed.
 
 1. **Download the image.** Container Manager → *Registry*. If your DSM registry is
    not configured for GHCR, the reliable path is SSH + `docker login ghcr.io` then
-   `docker pull ghcr.io/tesserafin-project/tesserafin:12.0.0-dev.a8a18bb7c07b`.
+   `docker pull ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.44f5ab62b522`.
 2. **Create folders.** In *File Station*, under a `docker` shared folder create
    `tesserafin/config`, `tesserafin/data`, `tesserafin/cache`, and note your media
    share.

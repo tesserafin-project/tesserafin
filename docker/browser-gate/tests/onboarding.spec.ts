@@ -146,6 +146,37 @@ test.describe.serial('first-run onboarding through the browser', () => {
         await expect(page.locator('#selectLocalizationLanguage')).toBeVisible();
     });
 
+    test('the onboarding path is reached and no Update Required surface is rendered', async ({ page, baseURL }) => {
+        // Regression guard for tesserafin-project/tesserafin-web#65. The web client used to take
+        // its minimum server version from `@jellyfin/sdk/lib/versions` ('10.10.0'), so a Tesserafin
+        // server reporting 1.0.0 resolved to `ConnectionState.ServerUpdateNeeded` and
+        // `ConnectionErrorPage` rendered `#connectionErrorPage` with the `Update Required` heading
+        // instead of the wizard. The candidate image 1.0.0-dev.965fadf37e20 failed A3 and A7 that
+        // way. The wizard assertions above would also have caught it, but only implicitly; this
+        // test names both halves of the contract explicitly.
+        const info = await publicSystemInfo(baseURL!);
+        expect(info.wizardCompleted, 'the server was already onboarded before this test ran')
+            .toBeFalsy();
+        expect(info.version, 'the server did not report a version').toBeTruthy();
+
+        await page.goto('/');
+
+        // Half 1 — the onboarding path was reached.
+        await page.waitForURL(/\/wizard\/start/, { timeout: 60_000 });
+        await expect(page.locator('#wizardStartPage')).toBeVisible();
+
+        // Half 2 — the ServerUpdateNeeded surface was not rendered.
+        await expect(
+            page.locator('#connectionErrorPage'),
+            `the connection error page was rendered against a server reporting ${info.version}`
+        ).toHaveCount(0);
+        const body = (await page.locator('body').innerText()).toLowerCase();
+        expect(body, 'the browser rendered the "Update Required" surface')
+            .not.toContain('update required');
+        expect(body, 'the browser rendered the ServerUpdateNeeded message')
+            .not.toContain('this server needs to be updated');
+    });
+
     test('the browser can complete onboarding end to end', async ({ page, baseURL }) => {
         await page.goto('/');
         await page.waitForURL(/\/wizard\/start/, { timeout: 60_000 });

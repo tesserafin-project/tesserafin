@@ -410,6 +410,119 @@ that quietly seeds a subset is a gate that quietly tests a subset.
 
 ---
 
+## 6b. Evidence — the Tesserafin Server 1.0 replacement pair
+
+The candidate published from server `965fadf37e2010b44bfe408525176c7fab59358b`
+failed this gate. It is recorded here rather than dropped.
+
+### The failed candidate
+
+```
+ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.965fadf37e20
+sha256:fffb46a41919dfedf0d5bacc68b9c37ebbca0400df74b487ba5858b395440e5c
+web source 0ac33356d1325fc7c38952798d416f79cb0c8722
+```
+
+| Layer | Result |
+|---|---|
+| BROWSER E2E | **FAIL** — the browser rendered `Update Required`, not the wizard |
+| LIFECYCLE CONTRACT | **FAIL** — three rounds, each 8 passed / 8 failed |
+
+`docker/browser-onboarding.sh` (A3) failed against it for the same reason. The
+image is internally consistent: every version label, revision label and embedded
+provenance record agrees. The defect was in the bundled web bundle, which took its
+minimum server version from `@jellyfin/sdk/lib/versions` (`10.10.0`), so a
+Tesserafin server reporting `1.0.0` resolved to `ConnectionState.ServerUpdateNeeded`.
+See tesserafin-project/tesserafin-web#65 and its fix
+tesserafin-project/tesserafin-web#66.
+
+That image remains published, immutable and private. It is not deleted, retagged,
+moved or overwritten, and it is never an installation default. It is **not** the v1
+baseline.
+
+### The replacement pair — RESULT: PASS
+
+```
+ci/verify-release-pair.sh \
+    --server-image ghcr.io/tesserafin-project/tesserafin-server@sha256:fd1fa9e0f5a2… \
+    --server-source 44f5ab62b522684b4fa58ed10de80b8c6a7bb392 \
+    --web-repo <tesserafin-web checkout> \
+    --web-source 489a90be0dbe80aede3dbbc028b140756211d43c \
+    --lifecycle-runs 3
+```
+
+| Layer | Result |
+|---|---|
+| ARGUMENTS | PASS — both checkouts *are* the named commits |
+| IMAGE PROVENANCE | PASS — `docker/version-verify.sh` agrees on revision, version surfaces and `/health` readiness |
+| BUNDLED WEB PROVENANCE | PASS — label, in-image revision file, `Dockerfile` `WEB_VCS_REF` and both arch children all name `489a90be0dbe…`; assets pinned by digest; 2 runnable architectures |
+| OPENAPI | PASS — regenerated `sha256 cb760bc1df7f…` == committed |
+| GENERATED SDK | PASS — zero regeneration drift; the contract at the SDK's provenance commit `498e1f348aa2…` is byte-identical to the release contract and an ancestor of it |
+| BROWSER E2E | PASS — `docker/browser-onboarding.sh` against the release image on pristine volumes |
+| LIFECYCLE CONTRACT | PASS — 3 consecutive rounds |
+
+| Round | Container | Result |
+|---|---|---|
+| 1 | new container, new volumes, newly synthesised fixtures | PASS — 16 passed (33.1 s) |
+| 2 | new container, new volumes, newly synthesised fixtures | PASS — 16 passed (33.4 s) |
+| 3 | new container, new volumes, newly synthesised fixtures | PASS — 16 passed (34.5 s) |
+
+**Other gates against the replacement digest.**
+
+| Command | Result |
+|---|---|
+| `docker/version-verify.sh --require-digest --expect-commit 44f5ab62b522… --expect-version 1.0.0` | PASS |
+| `docker/version-contract.test.sh` | PASS — 53 passed, 0 failed, 0 skipped |
+| `docker/smoke.sh` (A1) | PASS — all gates |
+| `docker/state-roundtrip.sh` (A2) | PASS — all gates + safety assertions |
+| `docker/browser-onboarding.sh` (A3) | PASS — 5 Playwright tests, restart and recreation persistence |
+| `docker/hwa-smoke.sh` (A4, no device) | PASS — `libx264`, H.264 output |
+| `docker/hwa-vaapi.sh` (A4, real `/dev/dri/renderD128`) | PASS — `h264_vaapi`, re-probe on restart, software fallback after device removal |
+| `docker/observability.sh` (A5) | PASS — all gates |
+| `ci/run.sh` (server, `bin/`/`obj/` purged first) | PASS — 227 s wall; 4198 passed, 0 failed, 11 skipped |
+| `npm run validate:full` (web, at `489a90be0dbe…`) | PASS — 77 files / 901 tests, bundle 373.6 KiB of 450.0 KiB, tree clean |
+| web SDK drift with a real server checkout | none |
+| `docker/verify-assets-image.sh` on the new assets image | ASSETS-AUDIT: all gates passed |
+| `docker/repro-check.sh` (server, `linux/amd64`) | PASS — one manifest digest across two clean builds |
+
+### The explicit regression assertion
+
+`docker/browser-gate/tests/onboarding.spec.ts` gained
+`the onboarding path is reached and no Update Required surface is rendered`. It
+asserts both halves by name: the browser reaches `/wizard/start` with
+`#wizardStartPage` visible, and no `#connectionErrorPage` / `Update Required` /
+`This server needs to be updated` surface is rendered.
+
+It discriminates. Run against the failed candidate
+`sha256:fffb46a41919…` it fails, and the captured page context contains
+
+```
+- heading "Update Required" [level=1]
+- text: This server needs to be updated. To download the latest version, please visit
+```
+
+Run against `sha256:fd1fa9e0f5a2…` it passes.
+
+### Runs that failed, kept on the record
+
+**Web assets reproducibility, first run — MISMATCH.** `docker/repro-check.sh` at
+web `489a90be0dbe…` produced
+`sha256:38ddb01fad0a…` and `sha256:3ab04b986d8c…` (layer sizes 34485486 B and
+34485520 B). That run's second build overlapped `./ci/run.sh` on the same host.
+Two clean builds run **serially** agree exactly on
+`sha256:38ddb01fad0a…`, whose layer `sha256:1500143f04ca…` is the same layer the
+published assets image carries, with all 2321 extracted files byte-identical.
+The divergent build's OCI layout was destroyed by the script's own cleanup trap
+before it could be diffed, so the diverging file was never named. Standing
+observation: the web assets build is not reproducible under heavy concurrent CPU
+load on the same host.
+
+**A diagnostic re-run aborted on `RUN npm ci`** with an npm network error, again
+while another build was running. It succeeded when run serially. No product
+conclusion was drawn from it.
+
+---
+
 ## 7. Known limits
 
 1. **Hosted CI was NOT restored and did not run.** Every result here was produced
