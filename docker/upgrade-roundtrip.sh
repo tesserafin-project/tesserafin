@@ -48,6 +48,14 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONTRACT="${REPO_ROOT}/docker/version-contract.sh"
 
 # The A5 image, pinned by its multi-arch manifest digest (docs/container/A5-observability.md).
+#
+# EPOCH NOTE (docs/versioning-policy.md): this default is a PRE-v1 development
+# image from the frozen `tesserafin` archive. It is retained because the recorded
+# A6 evidence was produced against it and that evidence is not rewritten. It is
+# NOT a member of the supported 1.x upgrade graph, so it is not a valid baseline
+# for the #127 forward-migration gate — that gate must be driven with an explicit
+# `--baseline <1.x digest>`. The default is a convenience for re-running the
+# historical rehearsal, nothing more.
 BASELINE_DEFAULT="ghcr.io/tesserafin-project/tesserafin@sha256:6e3dbaab6eeaef163e81f9cc5ffb03f5a05bb9d8165e3f6487b2bb3003bc7608"
 HELPER="busybox:stable@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662"
 

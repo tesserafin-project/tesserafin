@@ -35,7 +35,15 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SHARED_VERSION_FILE="${REPO_ROOT}/SharedVersion.cs"
-DEFAULT_REGISTRY="ghcr.io/tesserafin-project/tesserafin"
+# The CANONICAL v1+ server package. The inherited pre-v1 development images live
+# in ghcr.io/tesserafin-project/tesserafin, which is a frozen archive: it never
+# receives another tag. See docs/versioning-policy.md §2.
+#
+# Note that the archive reference is a strict PREFIX of this one. Anything that
+# has to tell the two apart compares the full repository reference or stops at
+# the `:`/`@` boundary; a substring test for "tesserafin" matches both.
+DEFAULT_REGISTRY="ghcr.io/tesserafin-project/tesserafin-server"
+ARCHIVE_REGISTRY="ghcr.io/tesserafin-project/tesserafin"
 
 die() { echo "version-contract: $*" >&2; exit 1; }
 usage_die() { echo "version-contract: $*" >&2; exit 2; }
@@ -146,6 +154,23 @@ derive_tags() { # $1=channel $2=canonical core $3=commit $4=release tag ("" for 
   printf '%s\n' "${tags[@]}"
 }
 
+# The pre-v1 archive is frozen: it receives no further tag of any class, and in
+# particular no public-release alias. Because ARCHIVE_REGISTRY is a strict prefix
+# of DEFAULT_REGISTRY, the comparison is on the repository reference alone — the
+# part before the tag separator — and never a substring test.
+assert_not_archive() { # $1..$n = tags
+  local t repo
+  for t in "$@"; do
+    # Strip a digest suffix FIRST: `%:*` alone would leave `…/tesserafin@sha256`
+    # for a digest reference, which compares unequal and would let the guard pass.
+    repo="${t%%@*}"
+    repo="${repo%:*}"
+    if [[ "${repo}" == "${ARCHIVE_REGISTRY}" ]]; then
+      die "refusing to derive '${t}': ${ARCHIVE_REGISTRY} is the frozen pre-v1 archive and never receives another tag (docs/versioning-policy.md §2)"
+    fi
+  done
+}
+
 # `latest` is only ever reachable through the stable branch above. This is the
 # belt-and-braces assertion that keeps that true if derive_tags is ever edited.
 assert_no_latest() { # $1=channel, remaining = tags
@@ -208,6 +233,7 @@ cmd_tags() {
   tags_raw="$(derive_tags "${CHANNEL}" "${core}" "${commit}" "${RELEASE_TAG}" "${REGISTRY_ARG}")" || exit $?
   local -a tags
   mapfile -t tags <<<"${tags_raw}"
+  assert_not_archive "${tags[@]}"
   assert_no_latest "${CHANNEL}" "${tags[@]}"
   printf '%s\n' "${tags[@]}"
 }
@@ -227,6 +253,7 @@ cmd_env() {
   tags_raw="$(derive_tags "${CHANNEL}" "${core}" "${commit}" "${RELEASE_TAG}" "${REGISTRY_ARG}")" || exit $?
   local -a tags
   mapfile -t tags <<<"${tags_raw}"
+  assert_not_archive "${tags[@]}"
   assert_no_latest "${CHANNEL}" "${tags[@]}"
 
   local joined
@@ -272,6 +299,7 @@ cmd_check() {
   tags_raw="$(derive_tags "${CHANNEL}" "${core}" "${commit}" "${RELEASE_TAG}" "${REGISTRY_ARG}")" || exit $?
   local -a tags
   mapfile -t tags <<<"${tags_raw}"
+  assert_not_archive "${tags[@]}"
   assert_no_latest "${CHANNEL}" "${tags[@]}"
   echo "channel           : ${CHANNEL}"
   echo "tags              :"

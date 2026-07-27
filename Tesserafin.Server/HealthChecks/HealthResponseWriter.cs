@@ -17,7 +17,7 @@ namespace Tesserafin.Server.HealthChecks;
 /// <para>
 /// The schema is stable and identical for every outcome, so a probe can parse one shape:
 /// <code>
-/// {"status":"healthy","version":"12.0.0","database":"healthy"}
+/// {"status":"healthy","version":"1.0.0","database":"healthy"}
 /// </code>
 /// </para>
 /// <para>

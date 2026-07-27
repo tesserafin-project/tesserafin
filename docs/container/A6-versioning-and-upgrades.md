@@ -8,6 +8,21 @@ Prerequisites: [A1](./A1-implementation-note.md) (the image),
 [A2](./A2-persistent-state.md) (volumes, migrations, backup/restore),
 [A3](./A3-guided-install.md) (installation).
 
+> **Epoch note (added after the fact; nothing below is rewritten).** Every image
+> reference, tag and digest recorded in this document is a **pre-v1 development
+> artifact** in the frozen archive package
+> `ghcr.io/tesserafin-project/tesserafin`. Tesserafin public SemVer begins at
+> `1.0.0` and the canonical v1+ server package is
+> `ghcr.io/tesserafin-project/tesserafin-server` — see
+> [docs/versioning-policy.md](../versioning-policy.md).
+>
+> The evidence recorded here remains valid **as evidence**: it proves the upgrade
+> harness preserves users, libraries, configuration and playback state across two
+> immutable builds. It does **not** establish a forward-migration boundary inside
+> the `1.x` epoch, and none of these `12.x` images is a member of the supported
+> `1.x` upgrade graph. [#127](https://github.com/tesserafin-project/tesserafin/issues/127)
+> remains open for that reason.
+
 ---
 
 ## 1. Where the version comes from

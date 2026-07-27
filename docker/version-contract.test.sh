@@ -17,7 +17,8 @@ set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONTRACT="${REPO_ROOT}/docker/version-contract.sh"
-REG="ghcr.io/tesserafin-project/tesserafin"
+REG="ghcr.io/tesserafin-project/tesserafin-server"
+ARCHIVE="ghcr.io/tesserafin-project/tesserafin"
 COMMIT="1111111111111111111111111111111111111111"
 
 PASSED=0; FAILED=0; SKIPPED=0
@@ -87,10 +88,10 @@ expect_fail() { # $1=label $2=repo $3=expected stderr substring, rest = args
 }
 
 echo "== 1. canonical version =="
-GOOD="$(mk_sandbox 12.0.0)"
-expect_ok "reads MAJOR.MINOR.PATCH from SharedVersion.cs" "${GOOD}" "12.0.0" version
+GOOD="$(mk_sandbox 1.0.0)"
+expect_ok "reads MAJOR.MINOR.PATCH from SharedVersion.cs" "${GOOD}" "1.0.0" version
 
-for bad in "12.0" "12.0.0.0" "12.0.0-rc.1" "1.2.x" "01.0.0"; do
+for bad in "1.0" "1.0.0.0" "1.0.0-rc.1" "1.2.x" "01.0.0"; do
   BAD="$(mk_sandbox "${bad}")"
   expect_fail "rejects malformed canonical version '${bad}'" "${BAD}" \
     "is not a MAJOR.MINOR.PATCH SemVer core" version
@@ -98,49 +99,49 @@ done
 
 echo "== 2. dev channel tags =="
 expect_ok "dev derives the two immutable tags" "${GOOD}" \
-  "${REG}:12.0.0-dev.111111111111
+  "${REG}:1.0.0-dev.111111111111
 ${REG}:sha-${COMMIT}" \
   tags --channel dev --commit "${COMMIT}"
 expect_fail "dev refuses a --release-tag" "${GOOD}" \
   "--release-tag is not valid for the dev channel" \
-  tags --channel dev --release-tag v12.0.0 --commit "${COMMIT}"
+  tags --channel dev --release-tag v1.0.0 --commit "${COMMIT}"
 
 echo "== 3. prerelease channel tags =="
-PRE="$(mk_sandbox 12.1.0)"
+PRE="$(mk_sandbox 1.1.0)"
 expect_ok "prerelease derives version + preview + sha, never latest" "${PRE}" \
-  "${REG}:12.1.0-rc.1
+  "${REG}:1.1.0-rc.1
 ${REG}:preview
 ${REG}:sha-${COMMIT}" \
-  tags --channel prerelease --release-tag v12.1.0-rc.1 --commit "${COMMIT}"
+  tags --channel prerelease --release-tag v1.1.0-rc.1 --commit "${COMMIT}"
 expect_ok "prerelease accepts a tag without the v prefix" "${PRE}" \
-  "${REG}:12.1.0-rc.1
+  "${REG}:1.1.0-rc.1
 ${REG}:preview
 ${REG}:sha-${COMMIT}" \
-  tags --channel prerelease --release-tag 12.1.0-rc.1 --commit "${COMMIT}"
+  tags --channel prerelease --release-tag 1.1.0-rc.1 --commit "${COMMIT}"
 expect_fail "prerelease refuses a stable tag" "${PRE}" \
   "has no pre-release identifier" \
-  tags --channel prerelease --release-tag v12.1.0 --commit "${COMMIT}"
+  tags --channel prerelease --release-tag v1.1.0 --commit "${COMMIT}"
 expect_fail "prerelease refuses a core that differs from the source" "${PRE}" \
-  "!= canonical version '12.1.0'" \
-  tags --channel prerelease --release-tag v13.0.0-rc.1 --commit "${COMMIT}"
+  "!= canonical version '1.1.0'" \
+  tags --channel prerelease --release-tag v2.0.0-rc.1 --commit "${COMMIT}"
 
 echo "== 4. stable channel tags =="
 expect_ok "stable derives version + minor + major + latest + sha" "${PRE}" \
-  "${REG}:12.1.0
-${REG}:12.1
-${REG}:12
+  "${REG}:1.1.0
+${REG}:1.1
+${REG}:1
 ${REG}:latest
 ${REG}:sha-${COMMIT}" \
-  tags --channel stable --release-tag v12.1.0 --commit "${COMMIT}"
+  tags --channel stable --release-tag v1.1.0 --commit "${COMMIT}"
 expect_fail "stable refuses a pre-release tag (no latest from a pre-release)" "${PRE}" \
   "a pre-release must never publish stable or 'latest' tags" \
-  tags --channel stable --release-tag v12.1.0-rc.1 --commit "${COMMIT}"
+  tags --channel stable --release-tag v1.1.0-rc.1 --commit "${COMMIT}"
 expect_fail "stable refuses a tag/source mismatch" "${PRE}" \
-  "!= canonical version '12.1.0'" \
-  tags --channel stable --release-tag v12.2.0 --commit "${COMMIT}"
+  "!= canonical version '1.1.0'" \
+  tags --channel stable --release-tag v1.2.0 --commit "${COMMIT}"
 expect_fail "stable refuses build metadata" "${PRE}" \
   "build metadata is not allowed" \
-  tags --channel stable --release-tag v12.1.0+build.5 --commit "${COMMIT}"
+  tags --channel stable --release-tag v1.1.0+build.5 --commit "${COMMIT}"
 
 echo "== 5. commit provenance =="
 expect_fail "refuses a short commit" "${GOOD}" \
@@ -155,16 +156,16 @@ expect_fail "refuses to invent provenance outside a git checkout" "${NOGIT}" \
   "missing commit provenance" tags
 
 echo "== 6. dirty-tree release publication =="
-DIRTY="$(mk_sandbox 12.1.0)"
+DIRTY="$(mk_sandbox 1.1.0)"
 echo "// local edit" >>"${DIRTY}/SharedVersion.cs"
 expect_fail "refuses a stable release from a dirty tree" "${DIRTY}" \
   "refusing to derive stable tags from a dirty working tree" \
-  tags --channel stable --release-tag v12.1.0 --commit "${COMMIT}"
+  tags --channel stable --release-tag v1.1.0 --commit "${COMMIT}"
 expect_ok "--allow-dirty overrides, and dev builds are never blocked" "${DIRTY}" \
-  "${REG}:12.1.0-dev.111111111111
+  "${REG}:1.1.0-dev.111111111111
 ${REG}:sha-${COMMIT}" \
   tags --channel dev --commit "${COMMIT}"
-if run_sb "${DIRTY}" env --channel stable --release-tag v12.1.0 --allow-dirty \
+if run_sb "${DIRTY}" env --channel stable --release-tag v1.1.0 --allow-dirty \
      | grep -q '^TESSERAFIN_DIRTY_RELEASE=1$'; then
   pass "--allow-dirty records the override in the emitted environment"
 else
@@ -178,12 +179,12 @@ fi
 
 echo "== 7. verify-tag =="
 expect_ok "verify-tag accepts the matching stable tag" "${PRE}" \
-  "OK: git tag 'v12.1.0' matches canonical version 12.1.0 (stable)" verify-tag v12.1.0
+  "OK: git tag 'v1.1.0' matches canonical version 1.1.0 (stable)" verify-tag v1.1.0
 expect_ok "verify-tag accepts a matching pre-release tag" "${PRE}" \
-  "OK: git tag 'v12.1.0-rc.2' is a PRE-RELEASE of canonical version 12.1.0 (must not move 'latest')" \
-  verify-tag v12.1.0-rc.2
+  "OK: git tag 'v1.1.0-rc.2' is a PRE-RELEASE of canonical version 1.1.0 (must not move 'latest')" \
+  verify-tag v1.1.0-rc.2
 expect_fail "verify-tag rejects a tag that disagrees with SharedVersion.cs" "${PRE}" \
-  "but SharedVersion.cs says '12.1.0'" verify-tag v12.9.9
+  "but SharedVersion.cs says '1.1.0'" verify-tag v1.9.9
 
 echo "== 8. env output is deterministic and complete =="
 # No --commit here: `env` reads the commit TIME, so provenance must be a commit
@@ -248,6 +249,87 @@ else
   else
     fail "bake without TAGS produced ${UNSET_TAGS}"
   fi
+fi
+
+echo "== 10. version-epoch negative controls (docs/versioning-policy.md) =="
+#
+# The property under test is NOT "the contract picks the right tag out of a
+# registry" — it never reads a registry at all. It is the stronger property that
+# makes the 1.0.0 epoch safe next to a 12.x archive: the release identity comes
+# from the SOURCE TREE, so the existence of numerically larger legacy tags cannot
+# influence it, and the archive can never be published into.
+
+# (a) the canonical package is the v1+ one, matched on the FULL repository
+#     reference. The archive reference is a strict prefix of it, so a substring
+#     test would accept both and prove nothing.
+DEFAULT_REG_LINE="$(sed -nE 's/^DEFAULT_REGISTRY="(.*)"$/\1/p' "${CONTRACT}")"
+[[ "${DEFAULT_REG_LINE}" == "ghcr.io/tesserafin-project/tesserafin-server" ]] \
+  && pass "the default registry is exactly the canonical v1+ package" \
+  || fail "the default registry is '${DEFAULT_REG_LINE}', not the canonical v1+ package"
+[[ "${DEFAULT_REG_LINE}" != "${ARCHIVE}" ]] \
+  && pass "the default registry is not the pre-v1 archive" \
+  || fail "the default registry is the pre-v1 archive"
+[[ "${DEFAULT_REG_LINE}" == "${ARCHIVE}"* ]] \
+  && pass "the archive reference is a strict prefix of the canonical one (a substring match WOULD be ambiguous — this is why the checks above are exact)" \
+  || skip "the archive reference is no longer a prefix of the canonical one"
+
+# (b) the emitted version core comes from SharedVersion.cs and from nowhere else.
+#     Pointing --registry at the archive-adjacent namespace, at a registry whose
+#     largest existing tag is 12.0.0-dev.*, changes the REPOSITORY and never the
+#     VERSION.
+EPOCH="$(mk_sandbox 1.0.0)"
+expect_ok "an explicit --registry cannot change the derived version core" "${EPOCH}" \
+  "ghcr.io/tesserafin-project/tesserafin-legacy-mirror:1.0.0-dev.111111111111
+ghcr.io/tesserafin-project/tesserafin-legacy-mirror:sha-${COMMIT}" \
+  tags --channel dev --commit "${COMMIT}" \
+  --registry ghcr.io/tesserafin-project/tesserafin-legacy-mirror
+expect_ok "REGISTRY from the environment likewise moves the repository only" "${EPOCH}" \
+  "${REG}:1.0.0-dev.111111111111
+${REG}:sha-${COMMIT}" \
+  tags --channel dev --commit "${COMMIT}"
+EPOCH_TAGS="$(run_sb "${EPOCH}" tags --channel dev --commit "${COMMIT}")"
+grep -q ':12\.' <<<"${EPOCH_TAGS}" \
+  && fail "a derived tag carried a legacy 12.x version core" \
+  || pass "no derived tag carries a legacy 12.x version core"
+
+# (c) the frozen archive is refused as a publication target on every channel,
+#     including — especially — the stable channel that would move `latest`.
+expect_fail "dev refuses to publish into the pre-v1 archive" "${EPOCH}" \
+  "is the frozen pre-v1 archive and never receives another tag" \
+  tags --channel dev --commit "${COMMIT}" --registry "${ARCHIVE}"
+expect_fail "stable refuses to move a public alias in the pre-v1 archive" "${EPOCH}" \
+  "is the frozen pre-v1 archive and never receives another tag" \
+  tags --channel stable --release-tag v1.0.0 --commit "${COMMIT}" --registry "${ARCHIVE}"
+expect_fail "env refuses the pre-v1 archive too (not only tags)" "${EPOCH}" \
+  "is the frozen pre-v1 archive and never receives another tag" \
+  env --channel dev --registry "${ARCHIVE}"
+# A digest-shaped registry argument must not slip past the guard: stripping only
+# at the last `:` would leave `…/tesserafin@sha256`, which compares unequal.
+expect_fail "the archive guard sees through a digest-shaped registry argument" "${EPOCH}" \
+  "is the frozen pre-v1 archive and never receives another tag" \
+  tags --channel dev --commit "${COMMIT}" \
+  --registry "${ARCHIVE}@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+# The guard must key on the repository, not on a prefix: the canonical package
+# starts with the archive reference and must still be allowed.
+expect_ok "the guard does not reject the canonical package by prefix" "${EPOCH}" \
+  "${REG}:1.0.0-dev.111111111111
+${REG}:sha-${COMMIT}" \
+  tags --channel dev --commit "${COMMIT}" --registry "${REG}"
+
+# (d) no code path anywhere in the repository resolves a release by enumerating
+#     registry tags and taking the greatest. Under this policy the greatest tag
+#     in the organisation is a 12.x development artifact, so such a selector
+#     would be guaranteed wrong, not merely risky.
+#     This file is excluded: it necessarily contains the forbidden patterns in
+#     order to search for them.
+SELECTOR_HITS="$(grep -rInE 'sort -V|sort --version-sort|imagetools ls|tags/list|skopeo list-tags|crane ls|packages/container/[^ ]*/versions' \
+  --exclude-dir=.git --exclude-dir=docs --exclude-dir=node_modules --exclude-dir=bin --exclude-dir=obj \
+  --exclude="$(basename "${BASH_SOURCE[0]}")" \
+  "${REPO_ROOT}" || true)"
+if [[ -z "${SELECTOR_HITS}" ]]; then
+  pass "no script selects a release by listing or version-sorting registry tags"
+else
+  fail "a registry-tag selector exists: ${SELECTOR_HITS//$'\n'/ | }"
 fi
 
 echo

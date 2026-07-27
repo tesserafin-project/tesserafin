@@ -44,7 +44,7 @@
 # USAGE
 #
 #   ci/verify-release-pair.sh \
-#       --server-image ghcr.io/tesserafin-project/tesserafin@sha256:<64 hex> \
+#       --server-image ghcr.io/tesserafin-project/tesserafin-server@sha256:<64 hex> \
 #       --server-source <40-char commit> \
 #       --web-repo /path/to/tesserafin-web \
 #       --web-source <40-char commit> \
