@@ -27,10 +27,10 @@ ARG RUNTIME_IMAGE=mcr.microsoft.com/dotnet/aspnet@sha256:1fa23fc4872d95fd71c2833
 # Pinned BY MANIFEST DIGEST, never by tag: the tag is recorded for provenance
 # only. WEB_VCS_REF is the exact tesserafin-web commit the digest was built from
 # and must be kept in step with it.
-ARG WEB_ASSETS_IMAGE=ghcr.io/tesserafin-project/tesserafin-web-assets@sha256:8ff18f389ab1d0f8fbc3a311a080c377fda9bad766167becbd4855a75207b5dd
-ARG WEB_ASSETS_TAG=ghcr.io/tesserafin-project/tesserafin-web-assets:13.0.0-dev.855e2e3c25de
-ARG WEB_VCS_REF=855e2e3c25de42cec292192149947309678f5250
-ARG WEB_VERSION=13.0.0
+ARG WEB_ASSETS_IMAGE=ghcr.io/tesserafin-project/tesserafin-web-assets@sha256:5baa14fe0b6509d7013f7dab6c0f662b24ba2fd55f2435c3c677cbf986d98037
+ARG WEB_ASSETS_TAG=ghcr.io/tesserafin-project/tesserafin-web-assets:1.0.0-dev.0ac33356d132
+ARG WEB_VCS_REF=0ac33356d1325fc7c38952798d416f79cb0c8722
+ARG WEB_VERSION=1.0.0
 
 # ---- Pinned jellyfin-ffmpeg (the genuine upstream media encoder) ----
 # GPL build; not renamed for branding. github.com/jellyfin/jellyfin-ffmpeg
