@@ -23,12 +23,14 @@
   <Support>https://github.com/tesserafin-project/tesserafin/issues</Support>
   <Project>https://github.com/tesserafin-project/tesserafin</Project>
   <GitHub>https://github.com/tesserafin-project/tesserafin</GitHub>
-  <!-- TRANSITIONAL (docs/versioning-policy.md): this is a pre-v1 development image
-       in the frozen archive package `tesserafin`. The canonical v1+ package is
-       `tesserafin-server`; this template is repointed to it once the first 1.0.0
-       development baseline has been published from a merged commit. -->
-  <Registry>https://github.com/tesserafin-project/tesserafin/pkgs/container/tesserafin</Registry>
-  <Repository>ghcr.io/tesserafin-project/tesserafin:12.0.0-dev.700c499f3e19</Repository>
+  <!-- The validated Tesserafin Server 1.0 development baseline, built from commit
+       44f5ab62b522684b4fa58ed10de80b8c6a7bb392 and bundling Tesserafin Web
+       489a90be0dbe80aede3dbbc028b140756211d43c. Pinned by manifest digest so the
+       reference cannot be re-pointed; the equivalent immutable tag is
+       `1.0.0-dev.44f5ab62b522`. `tesserafin` is the frozen pre-v1 archive package
+       and never receives another tag (docs/versioning-policy.md §2). -->
+  <Registry>https://github.com/tesserafin-project/tesserafin/pkgs/container/tesserafin-server</Registry>
+  <Repository>ghcr.io/tesserafin-project/tesserafin-server@sha256:fd1fa9e0f5a28a07e5872cc5ff13257a92d988717a33519f62c4b26c6ab36249</Repository>
   <BindTime>true</BindTime>
   <Privileged>false</Privileged>
   <Networking>

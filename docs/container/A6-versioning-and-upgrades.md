@@ -166,10 +166,10 @@ $ docker/version-verify.sh ghcr.io/tesserafin-project/tesserafin:<tag> --require
 
 ```dotenv
 # .env — exact immutable version tag
-TESSERAFIN_IMAGE=ghcr.io/tesserafin-project/tesserafin:12.0.0-dev.a8a18bb7c07b
+TESSERAFIN_IMAGE=ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.44f5ab62b522
 
 # .env — digest pin, the strongest form; survives a tag being re-pointed
-TESSERAFIN_IMAGE=ghcr.io/tesserafin-project/tesserafin@sha256:29493c0ecf956a61f06c2b801e7c867d560fb95ab184c09d05fdb6db508a7722
+TESSERAFIN_IMAGE=ghcr.io/tesserafin-project/tesserafin-server@sha256:fd1fa9e0f5a28a07e5872cc5ff13257a92d988717a33519f62c4b26c6ab36249
 ```
 
 Resolve a tag to its digest before pinning:
@@ -302,7 +302,12 @@ executed on hosted infrastructure; the assertions are currently run locally.
 
 ---
 
-## 5b. The validated A6 image
+## 5b. The validated A6 image (historical, pre-v1 archive)
+
+Retained with its original names and digests as the A6 evidence record. It is a
+pre-v1 development artifact in the frozen `tesserafin` archive package and is **not**
+the installation default; see §5c for the current baseline.
+
 
 ```
 ghcr.io/tesserafin-project/tesserafin:12.0.0-dev.a8a18bb7c07b
@@ -331,6 +336,59 @@ Pull it by digest rather than by tag if you want the guarantee in writing:
 ```console
 $ docker pull ghcr.io/tesserafin-project/tesserafin@sha256:29493c0ecf956a61f06c2b801e7c867d560fb95ab184c09d05fdb6db508a7722
 ```
+
+---
+
+## 5c. The validated Tesserafin Server 1.0 baseline
+
+This is what `docker-compose.yml`, `.env.example`, the Unraid template and
+[`A3-guided-install.md`](./A3-guided-install.md) name today.
+
+```
+ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.44f5ab62b522
+```
+
+| | Digest |
+|---|---|
+| Multi-arch manifest | `sha256:fd1fa9e0f5a28a07e5872cc5ff13257a92d988717a33519f62c4b26c6ab36249` |
+| `linux/amd64` | `sha256:508c5459b505d5cffb2fd8192a205d37cdf5573dab8b4e39df8c16bd59f5f51b` |
+| `linux/arm64` | `sha256:bd55fa7e3e34f451fb9b3788964fe858fa4b351f82e9e43b1b988816f0566f71` |
+
+Built from `44f5ab62b522684b4fa58ed10de80b8c6a7bb392`; reports version `1.0.0`.
+The equally immutable `sha-44f5ab62b522684b4fa58ed10de80b8c6a7bb392` tag names the
+same manifest. `docker-compose.yml` pins the manifest digest; the dev tag is
+provenance and an alternative spelling, never a moving channel. `1.0.0`, `1.0`,
+`1`, `latest`, `stable` and `preview` are **not** published.
+
+Bundled Tesserafin Web `1.0.0` at commit
+`489a90be0dbe80aede3dbbc028b140756211d43c`
+(`ghcr.io/tesserafin-project/tesserafin-web-assets@sha256:ef817dec29f8fd08cee9910954b576d05a947936f93a8a9e3309031b8d656104`).
+
+Gates run against that digest: `docker/version-verify.sh --require-digest`,
+`docker/version-contract.test.sh` (53 passed), `docker/smoke.sh`,
+`docker/state-roundtrip.sh`, `docker/browser-onboarding.sh` (including restart and
+container-recreation persistence), `docker/hwa-smoke.sh`, `docker/hwa-vaapi.sh` on
+a real `/dev/dri/renderD128`, `docker/observability.sh`, and
+`ci/verify-release-pair.sh --lifecycle-runs 3` — all seven A7 layers PASS, three
+consecutive lifecycle rounds green. `docker/repro-check.sh` reproduced one
+`linux/amd64` manifest digest across two clean builds.
+
+No forward migration is claimed. The upgrade contract in §6 is unchanged: there is
+still no real schema migration proving a `12.x` → `1.x` upgrade, which is why #127
+remains open and A6 remains unchecked in #104.
+
+### The superseded candidate
+
+```
+ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.965fadf37e20
+sha256:fffb46a41919dfedf0d5bacc68b9c37ebbca0400df74b487ba5858b395440e5c
+```
+
+Published immutable candidate; failed A3/A7 browser acceptance because it bundled
+the upstream Jellyfin `10.10.0` minimum-version boundary; never pinned as an
+installation default; superseded by the validated replacement above. It remains
+published, immutable and private, and is not deleted, retagged, moved or
+overwritten. Do not install it.
 
 ---
 
