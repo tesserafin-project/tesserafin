@@ -1,46 +1,34 @@
-# STILL PARKED — manual trigger only (#94). Hosted allocation is fixed, but
-# this workflow cannot be armed yet: one test fails on a hosted runner that
-# passes on every local configuration tried.
+# ARMED on 2026-07-27 (#94). Both blockers are gone.
 #
-# What was fixed here, and works:
-#   Run 30230606313 failed 2 MediaEncoding and 12 PlaybackUrlContract
-#   end-to-end tests on a bare runner purely for want of native dependencies.
-#   Installing ffmpeg and libfontconfig1 — the same packages Dockerfile.ci
-#   installs — plus filtering Category!=Smoke to match ./ci/run.sh exactly,
-#   cleared 13 of those 14 failures (run 30231076754).
+# 1. Allocation. Run 30229812748 — job "ABI - HEAD" completed/SUCCESS with 8
+#    executed steps on runner "GitHub Actions 1000000000" — the exact opposite
+#    of the parked signature (failure in 3-4 s, zero steps, no runner).
 #
-# What still fails, and why this stays parked:
-#   Tesserafin.Server.Integration.Tests.OpenApiContractTests
-#     .CommittedContract_MatchesRunningServer
+# 2. Native dependencies. Run 30230606313 failed 2 MediaEncoding and 12
+#    PlaybackUrlContract end-to-end tests on a bare runner. Installing ffmpeg
+#    and libfontconfig1 — the same packages Dockerfile.ci installs — plus
+#    filtering Category!=Smoke to match ./ci/run.sh exactly cleared 13 of
+#    those 14 (run 30231076754).
 #
-#     The committed OpenAPI contract is out of date.
-#     committed openapi/openapi.json : sha256 0700633b3c12ff04df694ea3d5e81be72cc07dc66b70a8e3048cae8363fabf66
-#     server produces                : sha256 fea08c38738ed6f502599f3b438fe4a05077e00200be447e0a1f9444807d5d16
+# 3. The last one, OpenApiContractTests.CommittedContract_MatchesRunningServer,
+#    was a real reproducibility defect in the server and is fixed in this same
+#    commit: the XML documentation files were fed to Swashbuckle in
+#    filesystem order, so the generated contract differed between machines.
+#    Local and hosted now agree byte for byte on
+#    sha256 ab2fa4fbb2d420e75205837c4fd7be2d80799149fa4e34c33e94713c78746744.
 #
-#   The committed contract is NOT stale: the same test passes locally against
-#   the same commit. The server running on a hosted runner emits a different
-#   document from the server running in the tesserafin-ci container. Two
-#   obvious explanations were tested and BOTH excluded:
-#     * SDK drift — the runner resolved 10.0.302 from `10.0.x`, exactly the
-#       version baked into Dockerfile.ci's pinned SDK image;
-#     * build configuration — the local gate builds Debug, this workflow
-#       builds Release; re-running OpenApiContractTests in Release inside the
-#       container passes (3/3).
-#   The remaining difference is environmental and has not been isolated. It is
-#   tracked as a repository-local follow-up on #94, NOT as an external
-#   blocker.
+# This job is the CROSS-MACHINE half of the contract guard.
+# OpenApiContractTests.Contract_IsByteIdentical_AcrossColdGenerations only
+# reboots the application on one filesystem, where the enumeration order is
+# stable; it cannot catch an order that differs between hosts. Running the
+# same test on a hosted runner can, and that is what caught this one.
 #
-#   Arming this workflow before that is understood would put every pull
-#   request permanently red — exactly what #62 was about. Everything else in
-#   this file (native dependencies, Smoke filter, minute economy) is kept, so
-#   arming it afterwards is a trigger change and nothing more.
-#
-# The suite is NOT unguarded meanwhile: ./ci/run.sh runs the same
-# `dotnet build` + `dotnet test` over Tesserafin.sln and, since #94, purges
-# bin/ and obj/ itself before compiling. See docs/local-ci.md.
-#
-# Previous trigger: on: push (master, paths-ignore '**/*.md', 'docs/**')
-#                     + pull_request (same paths-ignore)
+# NOT restored by this: required status checks. GET .../branches/master/protection
+# and GET .../rulesets both return 403 "Upgrade to GitHub Pro or make this
+# repository public to enable this feature" (private repository, free
+# organisation plan). This workflow reports a status automatically; nothing can
+# make that status mandatory. #94 stays open for that reason, and ./ci/run.sh
+# remains the authoritative merge gate.
 #
 # ── Parking stamp (historical, 2026-07-19 allocation outage) ───────────────
 # PARKED — manual trigger only (issue #62). GitHub refuses to allocate a
@@ -81,6 +69,18 @@
 name: Tests
 
 on:
+  push:
+    branches: [master]
+    # Minute economy: a documentation-only change cannot break the build or
+    # the test suite. This is safe HERE because this workflow contains no
+    # security analysis — CodeQL must never carry a documentation exclusion.
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+  pull_request:
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
   workflow_dispatch:
 
 permissions:

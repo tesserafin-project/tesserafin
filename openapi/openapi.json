@@ -3640,7 +3640,7 @@
                 "$ref": "#/components/schemas/DivergenceClass"
               }
             ],
-            "description": "The heuristic classification of the legacy/v2 divergence.",
+            "description": "The classification Tesserafin.Playback.Shadow.ShadowComparer assigns to a divergence between a legacy and a\nv2 Tesserafin.Playback.Shadow.DecisionVector, per docs/pr93-compatibility-lab.md \u00A74.2. This is a heuristic,\nnot a formal proof: it triages divergences for human review rather than certifying correctness.",
             "enum": [
               "Equivalent",
               "ExpectedImprovement",
@@ -3820,7 +3820,7 @@
                 "$ref": "#/components/schemas/ScrollDirection"
               }
             ],
-            "description": "An enum representing the axis that should be scrolled.",
+            "description": "Gets or sets the scroll direction.",
             "enum": [
               "Horizontal",
               "Vertical"
@@ -3845,7 +3845,7 @@
                 "$ref": "#/components/schemas/SortOrder"
               }
             ],
-            "description": "An enum representing the sorting order.",
+            "description": "Gets or sets the sort order.",
             "enum": [
               "Ascending",
               "Descending"
@@ -6817,7 +6817,7 @@
               }
             ],
             "default": "Unknown",
-            "description": "Defines the types of content an individual Tesserafin.Database.Implementations.Entities.MediaSegment represents.",
+            "description": "Gets or sets the type of content this segment defines.",
             "enum": [
               "Unknown",
               "Commercial",
@@ -8233,7 +8233,7 @@
                 "$ref": "#/components/schemas/DeviceProfile"
               }
             ],
-            "description": "Gets or sets the device profile.",
+            "description": "A Tesserafin.Model.Dlna.DeviceProfile represents a set of metadata which determines which content a certain device is able to play.\n\n\nSpecifically, it defines the supported \u003Csee cref=\u0022P:Tesserafin.Model.Dlna.DeviceProfile.ContainerProfiles\u0022\u003Econtainers\u003C/see\u003E and\n\u003Csee cref=\u0022P:Tesserafin.Model.Dlna.DeviceProfile.CodecProfiles\u0022\u003Ecodecs\u003C/see\u003E (video and/or audio, including codec profiles and levels)\nthe device is able to direct play (without transcoding or remuxing),\nas well as which \u003Csee cref=\u0022P:Tesserafin.Model.Dlna.DeviceProfile.TranscodingProfiles\u0022\u003Econtainers/codecs to transcode to\u003C/see\u003E in case it isn\u0027t.",
             "nullable": true
           },
           "DirectPlayProtocols": {
@@ -10122,7 +10122,7 @@
                 "$ref": "#/components/schemas/ContractMappingDiagnostic"
               }
             ],
-            "description": "Issue #75 (Option 1): what the client\u0027s DECLARED capabilities lost on their way through the\nrequest mapping, in a strictly closed server-owned vocabulary - or null when no\nshadow diagnostic was retained (shadow mode is off by default), or when the session was planned\nby a caller that declares no domain capabilities (the legacy path). Additive and nullable: a\nclient that ignores this member sees no change.\n\nThis member, unlike Tesserafin.Api.Models.PlaybackSessionDtos.PlaybackDiagnosticDetail.Capabilities and Tesserafin.Api.Models.PlaybackSessionDtos.PlaybackDiagnosticDetail.PlaybackAttemptId (both of which\nintentionally echo client-supplied data and are catalogued as such in issue #80), cannot carry a\nclient-supplied value at all: its entire transitive type closure is enums, booleans and integers.\nSee Tesserafin.Playback.Contract.Diagnostics.ContractMappingDiagnostic for the closure guarantee and for an explicit account\nof what Option 1 does NOT observe - unknown members above all.",
+            "description": "Issue #75, Option 1: what the server can honestly say about ONE playback request\u0027s journey\nthrough the capability mapping, using a strictly closed, server-owned vocabulary.",
             "nullable": true
           },
           "CreatedAt": {
@@ -10158,7 +10158,7 @@
                 "$ref": "#/components/schemas/PlaybackLiveWiringOutcome"
               }
             ],
-            "description": "PR115c: whether the live streaming path (\u0060MediaInfoHelper.SetDeviceSpecificData\u0060) actually\nserved this session from the v2 execution plan, or why it fell back to legacy - or\nnull when no live-wiring decision has been retained for this session yet\n(request not yet made, or the session predates PR115c\u0027s diagnostics store). Independent of\nTesserafin.Api.Models.PlaybackSessionDtos.PlaybackDiagnosticDetail.Comparison: a session can have a shadow comparison retained without ever having\nbeen through the live-wiring decision, and vice versa.",
+            "description": "PR115c: the observable outcome of the live-wiring decision \u0060MediaInfoHelper.SetDeviceSpecificData\u0060\nmakes for one request - whether the response was actually served from the v2\nTesserafin.Playback.Execution.PlaybackExecutionPlan, or why it fell back to the legacy\n\u0060StreamInfo\u0060 instead. Retained per session (last decision wins, mirroring\nTesserafin.MediaEncoding.Playback.V2PlanRecord\u0027s own per-session retention) so the admin diagnostics surface can show\nit - see Tesserafin.MediaEncoding.Playback.IPlaybackLiveWiringDiagnosticsStore.",
             "nullable": true
           },
           "Method": {
@@ -10304,7 +10304,7 @@
                 "$ref": "#/components/schemas/DeviceProfile"
               }
             ],
-            "description": "Gets or sets the device profile.",
+            "description": "A Tesserafin.Model.Dlna.DeviceProfile represents a set of metadata which determines which content a certain device is able to play.\n\n\nSpecifically, it defines the supported \u003Csee cref=\u0022P:Tesserafin.Model.Dlna.DeviceProfile.ContainerProfiles\u0022\u003Econtainers\u003C/see\u003E and\n\u003Csee cref=\u0022P:Tesserafin.Model.Dlna.DeviceProfile.CodecProfiles\u0022\u003Ecodecs\u003C/see\u003E (video and/or audio, including codec profiles and levels)\nthe device is able to direct play (without transcoding or remuxing),\nas well as which \u003Csee cref=\u0022P:Tesserafin.Model.Dlna.DeviceProfile.TranscodingProfiles\u0022\u003Econtainers/codecs to transcode to\u003C/see\u003E in case it isn\u0027t.",
             "nullable": true
           },
           "EnableDirectPlay": {
@@ -12133,7 +12133,7 @@
                 "$ref": "#/components/schemas/GroupQueueMode"
               }
             ],
-            "description": "Gets or sets the mode in which to add the new items.",
+            "description": "Enum GroupQueueMode.",
             "enum": [
               "Queue",
               "QueueNext"
@@ -14708,7 +14708,7 @@
                 "$ref": "#/components/schemas/GroupRepeatMode"
               }
             ],
-            "description": "Gets or sets the repeat mode.",
+            "description": "Enum GroupRepeatMode.",
             "enum": [
               "RepeatOne",
               "RepeatAll",
@@ -14728,7 +14728,7 @@
                 "$ref": "#/components/schemas/GroupShuffleMode"
               }
             ],
-            "description": "Gets or sets the shuffle mode.",
+            "description": "Enum GroupShuffleMode.",
             "enum": [
               "Sorted",
               "Shuffle"
@@ -17813,7 +17813,7 @@
                 "$ref": "#/components/schemas/SyncPlayUserAccessType"
               }
             ],
-            "description": "Enum SyncPlayUserAccessType.",
+            "description": "Gets or sets a value indicating what SyncPlay features the user can access.",
             "enum": [
               "CreateAndJoinGroups",
               "JoinGroups",

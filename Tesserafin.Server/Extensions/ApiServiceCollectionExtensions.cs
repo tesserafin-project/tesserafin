@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
@@ -227,10 +228,31 @@ namespace Tesserafin.Server.Extensions
                 });
 
                 // Add all xml doc files to swagger generator.
+                //
+                // The ordinal sort is load-bearing, not tidiness. Directory.EnumerateFiles
+                // returns entries in filesystem order, which is unspecified and differs
+                // between machines. Swashbuckle registers one comment filter per file, and
+                // for a property whose type is a $ref, the LAST registered file carrying a
+                // comment for that member wins — so an unsorted enumeration lets the
+                // property's own summary or the referenced type's summary win depending on
+                // which host generated the document.
+                //
+                // That is not hypothetical. It is the whole of the divergence recorded on
+                // #94: the same commit produced sha256 0700633b… inside the tesserafin-ci
+                // container and fea08c38… on a GitHub-hosted runner. The documents were
+                // structurally identical — same paths, same schemas, same enums — and
+                // differed in exactly 21 `description` strings, 13 flipping one way and 8
+                // the other.
+                //
+                // OpenApiContractTests.Contract_IsByteIdentical_AcrossColdGenerations cannot
+                // catch this: it reboots the application on the same filesystem, where the
+                // enumeration order is stable. Only sorting makes the contract reproducible
+                // across machines, which is what lets a hosted job verify it at all.
                 var xmlFiles = Directory.EnumerateFiles(
                     AppContext.BaseDirectory,
                     "*.xml",
-                    SearchOption.TopDirectoryOnly);
+                    SearchOption.TopDirectoryOnly)
+                    .OrderBy(static xmlFile => xmlFile, StringComparer.Ordinal);
 
                 foreach (var xmlFile in xmlFiles)
                 {
