@@ -1,3 +1,34 @@
+# STILL PARKED — manual trigger only (#94). Hosted allocation is fixed (see
+# ci-tests.yml), but re-arming this one recreates a permanent red for a reason
+# that has nothing to do with allocation.
+#
+# Proven on 2026-07-27 by run 30230606255, triggered by pull request #132.
+# The job received a hosted runner and executed its steps — allocation is
+# genuinely fine — and then `dotnet format --verify-no-changes` failed with
+# 75 StyleCop violations across 22 files, all of them XML documentation
+# comments in tests/:
+#
+#   47 x SA1615 (Element return value should be documented)
+#   26 x SA1611 (The documentation for parameter '...' is missing)
+#    1 x SA1629, 1 x SA1618
+#
+# e.g. tests/Tesserafin.Api.Tests/Models/PlaybackSessionDtos/
+#      PlaybackSessionStreamDescriptorMapperTests.cs(179,79):
+#      error SA1611: The documentation for parameter 'container' is missing
+#
+# This is pre-existing debt accumulated while hosted CI was down, not a
+# regression introduced by restoring the trigger. Re-arming this workflow
+# before that debt is cleared would put every pull request permanently red —
+# exactly what #62 was about. Clearing it is a separate, mechanical change.
+#
+# Format is not entirely unguarded meanwhile: the build runs with
+# warnings-as-errors via Directory.Build.props, and the local gate
+# (./ci/run.sh) fails on those. It is a weaker check than `dotnet format`
+# and that gap is stated, not hidden.
+#
+# Previous trigger: on: push (master) + pull_request
+#
+# ── Parking stamp (historical, 2026-07-19 allocation outage) ───────────────
 # PARKED — manual trigger only (issue #62). Same allocation refusal as the
 # other hosted workflows (account-wide free Actions allowance exhausted,
 # spending limit $0): red on every pull request before the first step.
@@ -30,8 +61,16 @@
 # ───────────────────────────────────────────────────────────────────────────
 
 name: Format
+
 on:
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 env:
   SDK_VERSION: "10.0.x"

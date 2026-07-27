@@ -1,3 +1,41 @@
+# STILL PARKED — manual trigger only (#94). Hosted allocation is fixed (see
+# ci-tests.yml), but CodeQL cannot complete on this repository for a reason
+# that has nothing to do with allocation: **code scanning requires GitHub
+# Advanced Security, which a private repository on a free organisation plan
+# does not have.**
+#
+# The analysis itself runs fine. It is the upload that is refused:
+#
+#   $ gh api repos/tesserafin-project/tesserafin/code-scanning/alerts
+#   {"message":"Advanced Security must be enabled for this repository to use
+#    code scanning.","status":"403"}
+#
+# and, in a real run of the sibling web repository (tesserafin-web run
+# 30230774481), after "Initialize CodeQL" and "Autobuild" both succeeded:
+#
+#   ##[error]Please verify that the necessary features are enabled: Advanced
+#   Security must be enabled for this repository to use code scanning.
+#
+# Arming the triggers would therefore burn a full analysis on every pull
+# request and then go red at the last step, every time — the exact permanent
+# red #62 was about, at the highest per-run cost of any workflow here.
+#
+# LOSS OF COVERAGE IS REAL AND UNMITIGATED: no static security analysis runs
+# on this repository. The local gate does NOT replace CodeQL. This is not
+# fixed by anything in the repository and cannot be — it needs an owner
+# decision (Advanced Security, or making the repository public).
+#
+# The autobuild fix below IS kept, so that arming this workflow is a one-line
+# change the day the plan allows it. Autobuild could not build this solution
+# (run 30230125535): it installed its own SDK, could not find 10.0.0, then
+# built projects out of order and died on CS0234 in Tesserafin.Model, ending
+# on "Could not auto-detect a suitable build method". It now builds
+# Tesserafin.sln explicitly. The query suite is UNCHANGED: +security-extended.
+#
+# Previous trigger: on: push (master) + pull_request (master) + schedule
+# ('24 2 * * 4')
+#
+# ── Parking stamp (historical, 2026-07-19 allocation outage) ───────────────
 # PARKED — manual trigger only (issue #62). Same allocation refusal as the
 # other hosted workflows: red on every pull request and every push to master
 # before the first step, plus a weekly cron that failed the same way and kept
@@ -37,6 +75,14 @@ on:
 permissions:
   contents: read
   security-events: write
+  # Read-only; the CodeQL action needs it for its own run metadata. Without
+  # it every step logs "Failed to gather information for telemetry: Resource
+  # not accessible by integration".
+  actions: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   analyze:
@@ -63,8 +109,13 @@ jobs:
         languages: ${{ matrix.language }}
         queries: +security-extended
 
-    - name: Autobuild
-      uses: github/codeql-action/autobuild@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+    # NOT autobuild. Autobuild fails on this solution (run 30230125535): it
+    # installs its own SDK, then builds projects out of order and dies on
+    # CS0234 in Tesserafin.Model. Building the solution explicitly with the
+    # SDK set up above is what GitHub's own error message prescribes, and it
+    # is the same build the local gate runs.
+    - name: Build solution for CodeQL
+      run: dotnet build Tesserafin.sln --configuration Release -clp:ErrorsOnly
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2

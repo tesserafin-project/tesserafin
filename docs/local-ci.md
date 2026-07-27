@@ -1,5 +1,56 @@
 # CI locale (Docker) — porte de merge obligatoire
 
+> ## ⚠ Mise à jour du 2026-07-27 — la CI hébergée est revenue (#94)
+>
+> **Ce qui a changé.** GitHub réalloue des runners hébergés pour ce dépôt. La
+> cause 1 décrite ci-dessous (refus d'allocation avant le premier step) est
+> **révolue**. Preuve : run `30229812748` (« ABI Compatibility », dispatch
+> manuel sur `master`), job `ABI - HEAD` **completed/success**, **8 steps
+> exécutés**, runner `GitHub Actions 1000000000`, label `ubuntu-latest` —
+> l'exact opposé de la signature de panne (échec en 3-4 s, zéro step, aucun
+> runner). Le dépôt appartient désormais à l'organisation
+> `tesserafin-project` ; l'allocation personnelle `all3f0r1` citée plus bas
+> n'est plus le pool facturé. **Tout le diagnostic de juillet ci-dessous est
+> conservé comme archive, il ne décrit plus l'état courant.**
+>
+> **Ce qui a été ré-armé côté serveur : rien.** Chaque workflow a été
+> *réellement exécuté* sur la PR #132 avant d'être re-garé ; les preuves sont
+> dans son en-tête. Côté web en revanche, `pull_request.yml` et `push.yml`
+> sont armés et **verts** (run `30231042125` sur PR, run `30231202773` sur
+> `main`).
+>
+> | Workflow | Preuve | Cause du maintien en garage |
+> | --- | --- | --- |
+> | `ci-tests.yml` | run `30231076754` | l'ajout de `ffmpeg`/`libfontconfig1` et du filtre `Category!=Smoke` corrige 13 des 14 échecs. Reste `OpenApiContractTests.CommittedContract_MatchesRunningServer` : le serveur hébergé produit `fea08c38…` là où le contrat commité vaut `0700633b…`. Le contrat n'est pas périmé — le même test passe en local. SDK identique (10.0.302) et `Release` rejoué en conteneur (3/3) : les deux explications évidentes sont **exclues**. Divergence d'environnement non isolée. |
+> | `ci-codeql-analysis.yml` | run `30230774481` (web, même échec) | code scanning exige **GitHub Advanced Security**, absent en dépôt privé sur plan `free`. L'analyse tourne, l'upload est refusé. **Perte de couverture réelle et non compensée.** |
+> | `ci-format.yml` | run `30230606255` | `dotnet format --verify-no-changes` : 75 violations StyleCop sur 22 fichiers (47 SA1615, 26 SA1611, 1 SA1629, 1 SA1618), toutes des commentaires XML sous `tests/`. Dette pré-existante. |
+> | `ci-compat.yml` | run `30230606251` | `ABI - Difference` cherche `MediaBrowser.Common.dll`, `Emby.Naming.dll`… — noms d'assemblages d'avant le renommage ; et le step de rapport exige `secrets.JF_BOT_TOKEN`, absent. |
+> | `openapi-pull-request.yml` | run `30230606338` | `openapi-diff:2.1.6` lève `java.lang.StackOverflowError` sur cette spec. |
+> | `openapi-workflow-run.yml` | — | poste un commentaire avec le même `secrets.JF_BOT_TOKEN` absent. |
+> | `openapi-merge.yml` | — | publie la spec ; C1 ne doit rien publier. |
+> | `local-ci.yml` | `total_count: 0` | aucun runner self-hosted ; ré-armer créerait un check `queued` éternel. |
+>
+> **Économie de minutes** déjà écrite dans `ci-tests.yml` pour le jour où il
+> sera armé : `ubuntu-latest` uniquement en automatique (macOS ×10 et Windows
+> ×2 restent sur `workflow_dispatch`), `timeout-minutes: 30`,
+> `fail-fast: true`, PR en brouillon ignorées, `paths-ignore` sur `**/*.md` et
+> `docs/**` (sûr **uniquement** parce que ce workflow ne porte aucune analyse
+> de sécurité), cache NuGet, couverture de code sur les push `master`
+> seulement, et `concurrency` qui annule les runs supplantés.
+>
+> **Ce qui n'est TOUJOURS pas résolu — et c'est pour ça que #94 reste
+> ouverte.** Les *required status checks* restent indisponibles :
+> `GET .../branches/master/protection` et `GET .../rulesets` renvoient
+> toujours `403 "Upgrade to GitHub Pro or make this repository public to
+> enable this feature"` (dépôt privé, organisation sur le plan `free`). Les
+> checks s'exécutent et rapportent un statut, mais **aucun ne peut être rendu
+> obligatoire**. La porte locale garde donc une autorité conventionnelle, pas
+> mécanique.
+>
+> **La porte locale reste obligatoire** tant que ce point n'est pas levé, et
+> depuis #94 elle purge `bin/`/`obj/` elle-même (voir « Porte de référence »).
+
+
 ## Pourquoi — cause exacte (issue #62)
 
 Ce n'est **pas** un défaut de configuration du dépôt. Deux causes distinctes,

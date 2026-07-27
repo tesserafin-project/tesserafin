@@ -1,3 +1,48 @@
+# STILL PARKED — manual trigger only (#94). Hosted allocation is fixed, but
+# this workflow cannot be armed yet: one test fails on a hosted runner that
+# passes on every local configuration tried.
+#
+# What was fixed here, and works:
+#   Run 30230606313 failed 2 MediaEncoding and 12 PlaybackUrlContract
+#   end-to-end tests on a bare runner purely for want of native dependencies.
+#   Installing ffmpeg and libfontconfig1 — the same packages Dockerfile.ci
+#   installs — plus filtering Category!=Smoke to match ./ci/run.sh exactly,
+#   cleared 13 of those 14 failures (run 30231076754).
+#
+# What still fails, and why this stays parked:
+#   Tesserafin.Server.Integration.Tests.OpenApiContractTests
+#     .CommittedContract_MatchesRunningServer
+#
+#     The committed OpenAPI contract is out of date.
+#     committed openapi/openapi.json : sha256 0700633b3c12ff04df694ea3d5e81be72cc07dc66b70a8e3048cae8363fabf66
+#     server produces                : sha256 fea08c38738ed6f502599f3b438fe4a05077e00200be447e0a1f9444807d5d16
+#
+#   The committed contract is NOT stale: the same test passes locally against
+#   the same commit. The server running on a hosted runner emits a different
+#   document from the server running in the tesserafin-ci container. Two
+#   obvious explanations were tested and BOTH excluded:
+#     * SDK drift — the runner resolved 10.0.302 from `10.0.x`, exactly the
+#       version baked into Dockerfile.ci's pinned SDK image;
+#     * build configuration — the local gate builds Debug, this workflow
+#       builds Release; re-running OpenApiContractTests in Release inside the
+#       container passes (3/3).
+#   The remaining difference is environmental and has not been isolated. It is
+#   tracked as a repository-local follow-up on #94, NOT as an external
+#   blocker.
+#
+#   Arming this workflow before that is understood would put every pull
+#   request permanently red — exactly what #62 was about. Everything else in
+#   this file (native dependencies, Smoke filter, minute economy) is kept, so
+#   arming it afterwards is a trigger change and nothing more.
+#
+# The suite is NOT unguarded meanwhile: ./ci/run.sh runs the same
+# `dotnet build` + `dotnet test` over Tesserafin.sln and, since #94, purges
+# bin/ and obj/ itself before compiling. See docs/local-ci.md.
+#
+# Previous trigger: on: push (master, paths-ignore '**/*.md', 'docs/**')
+#                     + pull_request (same paths-ignore)
+#
+# ── Parking stamp (historical, 2026-07-19 allocation outage) ───────────────
 # PARKED — manual trigger only (issue #62). GitHub refuses to allocate a
 # hosted runner for this PRIVATE repo BEFORE the first step (account-wide
 # 2000 free minutes/month exhausted, spending limit $0), so this went red on
@@ -34,18 +79,43 @@
 # ───────────────────────────────────────────────────────────────────────────
 
 name: Tests
+
 on:
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 env:
   SDK_VERSION: "10.0.x"
 
 jobs:
   run-tests:
+    # Minute economy: draft pull requests do not spend runner time. Marking a
+    # pull request ready for review triggers a fresh run.
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+
+    # Minute economy: a hard ceiling. Without it a hung test run bills up to
+    # the 6-hour default. The local gate finishes the same work in ~5 min.
+    timeout-minutes: 30
+
     strategy:
+      # See the OS matrix note in the restoration stamp: automatic runs are
+      # ubuntu-latest only, because macOS (x10) and Windows (x2) minute
+      # multipliers are what exhausted the free allowance in July 2026. The
+      # full matrix stays reachable by hand through workflow_dispatch.
       matrix:
-        os: ["ubuntu-latest", "macos-latest", "windows-latest"]
-      fail-fast: false
+        os: >-
+          ${{ github.event_name == 'workflow_dispatch'
+              && fromJSON('["ubuntu-latest", "macos-latest", "windows-latest"]')
+              || fromJSON('["ubuntu-latest"]') }}
+      # Minute economy: stop the remaining OS legs as soon as one fails.
+      # Nothing here needs the full failure matrix to be actionable.
+      fail-fast: true
 
     runs-on: "${{ matrix.os }}"
     steps:
@@ -55,15 +125,45 @@ jobs:
         with:
           dotnet-version: ${{ env.SDK_VERSION }}
 
+      # Minute economy: NuGet restore is the single most repetitive cost in
+      # this job. The local gate caches it in a named Docker volume; this is
+      # the hosted equivalent.
+      - name: Cache NuGet packages
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/Directory.Packages.props') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      # Same native dependencies Dockerfile.ci installs for the local gate.
+      # Without ffmpeg the MediaEncoding and PlaybackUrlContract end-to-end
+      # tests fail on a bare hosted runner even though the tree is sound —
+      # proven by run 30230606313, which failed 2 MediaEncoding and 12
+      # Integration tests for exactly that reason. libfontconfig1 is what
+      # SkiaSharp.NativeAssets.Linux needs. This is what makes the hosted job
+      # equivalent to ./ci/run.sh rather than a weaker approximation of it.
+      - name: Install native test dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg libfontconfig1
+
       - name: Run DotNet CLI Tests
+        # --filter matches ci/run.sh exactly: Category=Smoke is the optional,
+        # explicitly non-blocking stage (PR115d), invoked by ./ci/smoke.sh.
+        # Minute economy: coverage instrumentation and the ReportGenerator step
+        # below run on master pushes only. On a pull request the question is
+        # "does it build and pass", and coverage roughly doubles the test
+        # stage for an answer nobody reads on the pull request itself.
         run: >
           dotnet test Tesserafin.sln
           --configuration Release
-          --collect:"XPlat Code Coverage"
-          --settings tests/coverletArgs.runsettings
+          --filter 'Category!=Smoke'
+          ${{ github.event_name == 'push' && '--collect:"XPlat Code Coverage" --settings tests/coverletArgs.runsettings' || '' }}
           --verbosity minimal
 
       - name: Merge code coverage results
+        if: ${{ github.event_name == 'push' }}
         uses: danielpalme/ReportGenerator-GitHub-Action@049f7ec958c672fd31d5cc1cb01622dc8d2e23ab # v5.5.10
         with:
           reports: "**/coverage.cobertura.xml"
