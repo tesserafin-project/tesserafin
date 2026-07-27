@@ -1,30 +1,42 @@
-# Automatic triggers RESTORED on 2026-07-27 (#94). The July 2026 allocation
-# refusal described in the parking stamp below is over: GitHub allocates
-# hosted runners for this repository again. Evidence: run 30229812748, job
-# "ABI - HEAD" completed/SUCCESS with 8 executed steps on runner "GitHub
-# Actions 1000000000" (ubuntu-latest).
+# STILL PARKED — manual trigger only (#94). Hosted allocation is fixed (see
+# ci-tests.yml), but CodeQL cannot complete on this repository for a reason
+# that has nothing to do with allocation: **code scanning requires GitHub
+# Advanced Security, which a private repository on a free organisation plan
+# does not have.**
 #
-# The first CodeQL dispatch after that (run 30230125535) still failed, but for
-# a DIFFERENT and repository-local reason: `autobuild` could not work out how
-# to build this solution. It installed its own SDK ("dotnet_install: Error:
-# Could not find `.NET Core SDK` with version = 10.0.0"), then tried building
-# individual projects out of order and hit
-# `error CS0234: The type or namespace name 'MimeTypes' does not exist in the
-# namespace 'Tesserafin.Model'`, ending on "Could not auto-detect a suitable
-# build method". `Perform CodeQL Analysis` was skipped as a result.
+# The analysis itself runs fine. It is the upload that is refused:
 #
-# The fix is the one GitHub's own error message prescribes: replace autobuild
-# with the explicit build this repository actually uses. The query suite is
-# UNCHANGED — `+security-extended` is retained.
+#   $ gh api repos/tesserafin-project/tesserafin/code-scanning/alerts
+#   {"message":"Advanced Security must be enabled for this repository to use
+#    code scanning.","status":"403"}
 #
-# Still open: required status checks. GET .../branches/master/protection and
-# GET .../rulesets both return 403 "Upgrade to GitHub Pro or make this
-# repository public to enable this feature" (private repo, free organisation
-# plan). This workflow reports a status automatically; nothing can make that
-# status mandatory. #94 stays open for that reason.
+# and, in a real run of the sibling web repository (tesserafin-web run
+# 30230774481), after "Initialize CodeQL" and "Autobuild" both succeeded:
 #
-# ── Parking stamp (historical, superseded by the restoration above) ────────
-# (was) PARKED — manual trigger only (issue #62). Same allocation refusal as the
+#   ##[error]Please verify that the necessary features are enabled: Advanced
+#   Security must be enabled for this repository to use code scanning.
+#
+# Arming the triggers would therefore burn a full analysis on every pull
+# request and then go red at the last step, every time — the exact permanent
+# red #62 was about, at the highest per-run cost of any workflow here.
+#
+# LOSS OF COVERAGE IS REAL AND UNMITIGATED: no static security analysis runs
+# on this repository. The local gate does NOT replace CodeQL. This is not
+# fixed by anything in the repository and cannot be — it needs an owner
+# decision (Advanced Security, or making the repository public).
+#
+# The autobuild fix below IS kept, so that arming this workflow is a one-line
+# change the day the plan allows it. Autobuild could not build this solution
+# (run 30230125535): it installed its own SDK, could not find 10.0.0, then
+# built projects out of order and died on CS0234 in Tesserafin.Model, ending
+# on "Could not auto-detect a suitable build method". It now builds
+# Tesserafin.sln explicitly. The query suite is UNCHANGED: +security-extended.
+#
+# Previous trigger: on: push (master) + pull_request (master) + schedule
+# ('24 2 * * 4')
+#
+# ── Parking stamp (historical, 2026-07-19 allocation outage) ───────────────
+# PARKED — manual trigger only (issue #62). Same allocation refusal as the
 # other hosted workflows: red on every pull request and every push to master
 # before the first step, plus a weekly cron that failed the same way and kept
 # burning allocation attempts for nothing. Nothing is fixed here — the trigger
@@ -58,12 +70,6 @@
 name: "CodeQL"
 
 on:
-  push:
-    branches: [master]
-  pull_request:
-    branches: [master]
-  schedule:
-    - cron: '24 2 * * 4'
   workflow_dispatch:
 
 permissions:

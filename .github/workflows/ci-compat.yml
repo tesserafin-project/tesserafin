@@ -1,20 +1,37 @@
-# Automatic triggers RESTORED on 2026-07-27 (#94). The July 2026 allocation
-# refusal described in the parking stamp below is over: GitHub allocates
-# hosted runners for this repository again. Evidence: run 30229812748,
-# job "ABI - HEAD" completed/SUCCESS with 8 executed steps on runner
-# "GitHub Actions 1000000000" (ubuntu-latest) — the exact opposite of the
-# parked signature (failure in 3-4 s, zero steps, no runner). The repository
-# is now owned by the organisation tesserafin-project, so the personal
-# all3f0r1 allowance named below is no longer the metered pool.
+# STILL PARKED — manual trigger only (#94). Hosted allocation is fixed (see
+# ci-tests.yml), but re-arming this one recreates a permanent red for two
+# reasons that have nothing to do with allocation.
 #
-# NOT restored by this: required status checks. GET .../branches/master/protection
-# and GET .../rulesets both return 403 "Upgrade to GitHub Pro or make this
-# repository public to enable this feature" (private repo, free organisation
-# plan). This workflow reports a status automatically; nothing can make that
-# status mandatory. #94 stays open for that reason.
+# Proven on 2026-07-27 by run 30230606251, triggered by pull request #132.
+# "ABI - BASE" and "ABI - HEAD" both completed with SUCCESS on hosted runners
+# — allocation is genuinely fine — and then "ABI - Difference" failed:
 #
-# ── Parking stamp (historical, superseded by the restoration above) ────────
-# (was) PARKED — manual trigger only (issue #62). GitHub refuses to allocate a
+# 1. ApiCompat is pointed at assembly names this project no longer produces:
+#
+#      Unhandled exception: System.IO.FileNotFoundException: Could not find
+#      the provided path './abi-base/MediaBrowser.Common.dll' to load
+#      binaries from.
+#
+#    same for MediaBrowser.Controller.dll, MediaBrowser.Model.dll and
+#    Emby.Naming.dll. These are pre-rename Jellyfin assembly names; the
+#    workflow was never updated for the current assembly set.
+#
+# 2. The report step authenticates with `secrets.JF_BOT_TOKEN`, a Jellyfin bot
+#    credential this organisation does not have (verified 2026-07-27: the only
+#    repository Actions secret is ADD_TO_PROJECT_PAT, the organisation has
+#    none), and dies with "Error: Parameter token or opts.auth is required".
+#
+# Both are repository-local defects that must be fixed before this workflow
+# can be armed. Re-arming it first would put every pull request permanently
+# red — exactly what #62 was about.
+#
+# NOTE: the jobs below read github.event.pull_request.*, so a manual
+# workflow_dispatch run cannot produce a meaningful ABI diff.
+#
+# Previous trigger: on: pull_request
+#
+# ── Parking stamp (historical, 2026-07-19 allocation outage) ───────────────
+# PARKED — manual trigger only (issue #62). GitHub refuses to allocate a
 # hosted runner for this PRIVATE repo BEFORE the first step: the account's
 # 2000 free Actions minutes/month (account-wide, not per-repo) are exhausted
 # and the spending limit is $0, so the overage is refused rather than billed.
@@ -51,7 +68,6 @@
 name: ABI Compatibility
 
 on:
-  pull_request:
   workflow_dispatch:
 
 permissions: {}

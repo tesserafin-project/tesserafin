@@ -1,20 +1,35 @@
-# Automatic triggers RESTORED on 2026-07-27 (#94). The July 2026 allocation
-# refusal described in the parking stamp below is over: GitHub allocates
-# hosted runners for this repository again. Evidence: run 30229812748,
-# job "ABI - HEAD" completed/SUCCESS with 8 executed steps on runner
-# "GitHub Actions 1000000000" (ubuntu-latest) — the exact opposite of the
-# parked signature (failure in 3-4 s, zero steps, no runner). The repository
-# is now owned by the organisation tesserafin-project, so the personal
-# all3f0r1 allowance named below is no longer the metered pool.
+# STILL PARKED — manual trigger only (#94). Hosted allocation is fixed (see
+# ci-tests.yml), but re-arming this one recreates a permanent red for a reason
+# that has nothing to do with allocation.
 #
-# NOT restored by this: required status checks. GET .../branches/master/protection
-# and GET .../rulesets both return 403 "Upgrade to GitHub Pro or make this
-# repository public to enable this feature" (private repo, free organisation
-# plan). This workflow reports a status automatically; nothing can make that
-# status mandatory. #94 stays open for that reason.
+# Proven on 2026-07-27 by run 30230606255, triggered by pull request #132.
+# The job received a hosted runner and executed its steps — allocation is
+# genuinely fine — and then `dotnet format --verify-no-changes` failed with
+# 75 StyleCop violations across 22 files, all of them XML documentation
+# comments in tests/:
 #
-# ── Parking stamp (historical, superseded by the restoration above) ────────
-# (was) PARKED — manual trigger only (issue #62). Same allocation refusal as the
+#   47 x SA1615 (Element return value should be documented)
+#   26 x SA1611 (The documentation for parameter '...' is missing)
+#    1 x SA1629, 1 x SA1618
+#
+# e.g. tests/Tesserafin.Api.Tests/Models/PlaybackSessionDtos/
+#      PlaybackSessionStreamDescriptorMapperTests.cs(179,79):
+#      error SA1611: The documentation for parameter 'container' is missing
+#
+# This is pre-existing debt accumulated while hosted CI was down, not a
+# regression introduced by restoring the trigger. Re-arming this workflow
+# before that debt is cleared would put every pull request permanently red —
+# exactly what #62 was about. Clearing it is a separate, mechanical change.
+#
+# Format is not entirely unguarded meanwhile: the build runs with
+# warnings-as-errors via Directory.Build.props, and the local gate
+# (./ci/run.sh) fails on those. It is a weaker check than `dotnet format`
+# and that gap is stated, not hidden.
+#
+# Previous trigger: on: push (master) + pull_request
+#
+# ── Parking stamp (historical, 2026-07-19 allocation outage) ───────────────
+# PARKED — manual trigger only (issue #62). Same allocation refusal as the
 # other hosted workflows (account-wide free Actions allowance exhausted,
 # spending limit $0): red on every pull request before the first step.
 # Nothing is fixed here — the trigger is disarmed to stop the noise.
@@ -48,9 +63,6 @@
 name: Format
 
 on:
-  push:
-    branches: [master]
-  pull_request:
   workflow_dispatch:
 
 permissions:
