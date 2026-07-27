@@ -13,18 +13,32 @@
 > n'est plus le pool facturé. **Tout le diagnostic de juillet ci-dessous est
 > conservé comme archive, il ne décrit plus l'état courant.**
 >
-> **Ce qui a été ré-armé** : `ci-tests.yml`, `ci-format.yml`, `ci-compat.yml`,
-> `ci-codeql-analysis.yml` et `openapi-pull-request.yml` se déclenchent à
-> nouveau automatiquement (pull request, et push sur `master` là où c'est
-> pertinent).
+> **Ce qui a été ré-armé** : `ci-tests.yml` seulement (pull request + push
+> sur `master`). Le job installe désormais `ffmpeg` et `libfontconfig1` — les
+> mêmes dépendances natives que `Dockerfile.ci` — et filtre `Category!=Smoke`,
+> pour être équivalent à `./ci/run.sh` et non une approximation plus faible.
 >
-> **Ce qui reste garé, et pourquoi** :
+> **Ce qui reste garé, et pourquoi.** Chaque workflow a été *réellement
+> exécuté* sur la PR #132 avant d'être re-garé ; les preuves sont dans son
+> en-tête.
 >
-> | Workflow | Raison |
-> | --- | --- |
-> | `local-ci.yml` | aucun runner self-hosted enregistré (`total_count: 0`) ; ré-armer créerait un check `queued` éternel |
-> | `openapi-merge.yml` | publie la spec ; hors périmètre C1, qui ne doit rien publier |
-> | `openapi-workflow-run.yml` | poste un commentaire avec `secrets.JF_BOT_TOKEN`, absent de cette organisation |
+> | Workflow | Preuve | Cause |
+> | --- | --- | --- |
+> | `ci-codeql-analysis.yml` | run `30230774481` (web, même échec) | code scanning exige **GitHub Advanced Security**, absent en dépôt privé sur plan `free`. L'analyse tourne, l'upload est refusé. **Perte de couverture réelle et non compensée.** |
+> | `ci-format.yml` | run `30230606255` | `dotnet format --verify-no-changes` : 75 violations StyleCop sur 22 fichiers (47 SA1615, 26 SA1611, 1 SA1629, 1 SA1618), toutes des commentaires XML sous `tests/`. Dette pré-existante. |
+> | `ci-compat.yml` | run `30230606251` | `ABI - Difference` cherche `MediaBrowser.Common.dll`, `Emby.Naming.dll`… — noms d'assemblages d'avant le renommage ; et le step de rapport exige `secrets.JF_BOT_TOKEN`, absent. |
+> | `openapi-pull-request.yml` | run `30230606338` | `openapi-diff:2.1.6` lève `java.lang.StackOverflowError` sur cette spec. |
+> | `openapi-workflow-run.yml` | — | poste un commentaire avec le même `secrets.JF_BOT_TOKEN` absent. |
+> | `openapi-merge.yml` | — | publie la spec ; C1 ne doit rien publier. |
+> | `local-ci.yml` | `total_count: 0` | aucun runner self-hosted ; ré-armer créerait un check `queued` éternel. |
+>
+> **Économie de minutes** appliquée à `ci-tests.yml` : `ubuntu-latest`
+> uniquement en automatique (macOS ×10 et Windows ×2 restent sur
+> `workflow_dispatch`), `timeout-minutes: 30`, `fail-fast: true`, PR en
+> brouillon ignorées, `paths-ignore` sur `**/*.md` et `docs/**` (sûr ici
+> **uniquement** parce que ce workflow ne porte aucune analyse de sécurité),
+> cache NuGet, couverture de code sur les push `master` seulement, et
+> `concurrency` qui annule les runs supplantés.
 >
 > **Ce qui n'est TOUJOURS pas résolu — et c'est pour ça que #94 reste
 > ouverte.** Les *required status checks* restent indisponibles :
