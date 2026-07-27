@@ -5,7 +5,8 @@
 # Nothing is fixed here — the trigger is disarmed to stop the noise.
 #
 # The test suite is NOT unguarded meanwhile: the mandatory merge gate during
-# the outage is the local Docker CI (purge bin/ + obj/, then ./ci/run.sh),
+# the outage is the local Docker CI (./ci/run.sh, which purges bin/ + obj/
+# itself before compiling anything — see #94),
 # which runs the same `dotnet build` + `dotnet test` over Tesserafin.sln.
 # See docs/local-ci.md.
 #

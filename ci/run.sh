@@ -10,10 +10,12 @@
 # makes the repo public, or registers a runner with the labels
 # self-hosted,linux,x64,reefin, this script IS the mandatory merge gate.
 #
-# IMPORTANT: purge every bin/ and obj/ before running this as a merge gate:
-#   find . -type d \( -name bin -o -name obj \) -prune -exec rm -rf {} +
-# See docs/local-ci.md ("Porte de référence") for why. This script takes no
-# arguments.
+# This script purges every bin/ and obj/ in the checkout ITSELF, before the
+# first compilation, and refuses to build if that purge did not complete
+# (#94). The caller has no prerequisite to remember and no way to skip it:
+# there is no flag for that. See ci/lib/clean-artifacts.sh for the contract
+# and docs/local-ci.md ("Porte de référence") for why it matters.
+# This script takes no arguments.
 #
 # What it does: builds the tesserafin-ci image from Dockerfile.ci (repo root),
 # then runs `dotnet build` + `dotnet test` for the full solution inside a
@@ -49,6 +51,10 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=lib/clean-artifacts.sh
+source "$REPO_ROOT/ci/lib/clean-artifacts.sh"
+
 IMAGE_TAG="tesserafin-ci"
 NUGET_VOLUME="tesserafin-nuget"
 SOLUTION="Tesserafin.sln"
@@ -70,6 +76,18 @@ BUILD_CTX="$(mktemp -d)"
 trap 'rm -rf "$BUILD_CTX"' EXIT
 docker build -f Dockerfile.ci -t "$IMAGE_TAG" "$BUILD_CTX"
 
+banner "Purging every bin/ and obj/ before the first compilation"
+# Deliberately OUTSIDE the `set +e` region below: a cleanup failure must abort
+# the gate before anything is compiled, not be folded into $STATUS and
+# reported alongside build output. `set -e` is still in force here, and
+# ci_clean_artifacts asserts from the host that nothing survived, so a purge
+# that reports success without emptying the bind mount is still fatal.
+# This is why the gate no longer depends on the caller purging by hand: a
+# warm obj/ makes MSBuild skip projects, and a skipped project skips its
+# Roslyn analyzers.
+ci_clean_artifacts "$REPO_ROOT" "$IMAGE_TAG"
+echo "No bin/ or obj/ directory remains under $REPO_ROOT."
+
 banner "dotnet build + dotnet test (${SOLUTION}, full suite) inside container"
 set +e
 docker run --rm \
@@ -82,13 +100,15 @@ docker run --rm \
         echo '-- dotnet restore --'
         dotnet restore '${SOLUTION}'
         echo '-- dotnet build (fail fast on errors, non-incremental) --'
-        # --no-incremental is what makes this script an honest gate. The repo is bind-mounted, so
+        # --no-incremental is the second belt here, not the first. The repo is bind-mounted, so
         # obj/ survives between runs and across host-side builds - including ./ci/openapi-generate.sh,
         # which every PR touching a serialized surface is required to run FIRST. With a warm obj/,
         # MSBuild considers a project up to date and skips it, and skipping a project skips its
         # Roslyn analyzers: the gate then prints PASS for a tree that fails from a cold build.
         # That is not hypothetical - PRs #46 and #45 were both merged on a PASS obtained this way,
         # and the resulting master failed CA1034 on the first clean checkout.
+        # The artifact purge above is what actually guarantees the cold state (#94); this flag
+        # keeps the build honest even if a stage between the purge and here writes into obj/.
         dotnet build '${SOLUTION}' --no-restore --no-incremental -clp:ErrorsOnly
         echo '-- dotnet test (full suite, excluding the optional PR115d smoke stage) --'
         dotnet test '${SOLUTION}' --no-build --nologo --filter 'Category!=Smoke'
