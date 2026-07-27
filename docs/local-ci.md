@@ -81,12 +81,17 @@ fasse autorité est la CI locale Docker**. Avant de merger quoi que ce soit,
 sur le serveur :
 
 ```bash
-# 1. purger TOUS les bin/ et obj/ — obligatoire
-find . -type d \( -name bin -o -name obj \) -prune -exec rm -rf {} +
-
-# 2. lancer la porte
 ./ci/run.sh
 ```
+
+**Une seule commande, et aucun prérequis à ne pas oublier.** Depuis #94, la
+purge de tous les `bin/`/`obj/` est intrinsèque à `ci/run.sh` : elle a lieu
+après le build de l'image et *avant* la première compilation, elle couvre les
+artefacts root-owned laissés par une exécution précédente (elle s'exécute dans
+le conteneur, en root, sur le bind-mount), et elle est suivie d'une assertion
+côté hôte qui échoue la porte si le moindre répertoire a survécu. Il n'existe
+pas d'option pour la désactiver. Contrat et tests :
+`ci/lib/clean-artifacts.sh` et `ci/tests/clean-artifacts.test.sh`.
 
 La purge n'est pas décorative. Le dépôt est bind-monté dans le conteneur,
 donc `obj/` survit d'une exécution à l'autre *et* aux builds côté hôte
@@ -95,9 +100,12 @@ considère un projet à jour et le saute — et sauter un projet saute ses
 analyseurs Roslyn : la porte affiche alors **PASS pour un arbre qui échoue
 depuis un checkout propre**. Ce n'est pas hypothétique (PR #46 et #45 ont été
 mergées sur un PASS obtenu ainsi, et master a ensuite échoué CA1034 au premier
-checkout propre). `ci/run.sh` passe déjà `--no-incremental` pour cette raison ;
-la purge explicite est la ceinture qui va avec les bretelles, et elle couvre
-aussi les artefacts root-owned laissés par une exécution précédente.
+checkout propre). `ci/run.sh` passe aussi `--no-incremental` pour la même
+raison ; c'est la ceinture qui accompagne les bretelles, pas l'inverse.
+
+Historique : jusqu'à #94, cette purge était une commande à lancer *à la main*
+avant la porte. Une porte dont la validité dépend de la mémoire de
+l'appelant n'est pas une porte — d'où le déplacement dans le script.
 
 > Note : `ci/run.sh` ne prend **aucun argument**. Un éventuel
 > `./ci/run.sh local` serait silencieusement ignoré — la commande exacte est
@@ -112,7 +120,7 @@ Exécution probante sur `master` non modifié, au moment du parking :
 | Date | 2026-07-19 |
 | cwd | `/home/alex/Repos/.wt/it13-rig` (worktree propre) |
 | SHA | `756cea19519e8c395ad763e117abb0602c087108` |
-| Commande | purge `bin/`+`obj/`, puis `./ci/run.sh` |
+| Commande | purge `bin/`+`obj/` manuelle, puis `./ci/run.sh` (avant #94 ; la purge est désormais intégrée) |
 | Exit code | **0** |
 | Durée | 5 min 53 s (354 s de build+test) |
 | Résultat | `RESULT: PASS` — 21 assemblies, **4020 passés, 0 échec, 11 skipped** |
@@ -137,16 +145,13 @@ peut passer un `run.sh` vert. Le cas a été rencontré sur l'issue #59, dont la
 reproduction — un ré-encodage réellement servi malgré `AllowTranscoding:false`
 — n'est visible que côté E2E.
 
-La porte de merge complète est donc **trois commandes**, pas une :
+La porte de merge complète est donc **trois scripts**, pas un :
 
 ```bash
-# 1. purger TOUS les bin/ et obj/ — obligatoire
-find . -type d \( -name bin -o -name obj \) -prune -exec rm -rf {} +
-
-# 2. build + suite unitaire (exclut Category=Smoke)
+# 1. build + suite unitaire (exclut Category=Smoke) — purge bin/+obj/ incluse
 ./ci/run.sh
 
-# 3. les suites que run.sh a délibérément écartées
+# 2. les suites que run.sh a délibérément écartées
 ./ci/smoke.sh
 ./ci/smoke-e2e.sh
 ```
@@ -170,12 +175,15 @@ Ne conclure « porte verte » qu'après les **trois** exit 0.
 C'est le seul point d'entrée. Il :
 
 1. build l'image `tesserafin-ci` depuis `Dockerfile.ci` (racine du dépôt),
-2. lance un conteneur qui exécute, dans l'ordre et en échouant vite au
+2. **purge tous les `bin/`/`obj/` du checkout** via cette image (donc y compris
+   les artefacts root-owned), puis vérifie côté hôte qu'il n'en reste aucun ;
+   un échec ici arrête la porte **avant** toute compilation,
+3. lance un conteneur qui exécute, dans l'ordre et en échouant vite au
    premier problème :
-   - `dotnet restore Reefin.sln`
-   - `dotnet build Reefin.sln` (0 erreur exigée)
-   - `dotnet test Reefin.sln` (suite complète)
-3. affiche un résumé PASS/FAIL avec le temps total en fin d'exécution.
+   - `dotnet restore Tesserafin.sln`
+   - `dotnet build Tesserafin.sln` (0 erreur exigée)
+   - `dotnet test Tesserafin.sln` (suite complète)
+4. affiche un résumé PASS/FAIL avec le temps total en fin d'exécution.
 
 Le dépôt est monté en bind-mount (pas copié) dans le conteneur : le script
 teste donc toujours l'état **actuel** du répertoire de travail — la branche
@@ -188,8 +196,8 @@ que la première (qui télécharge tout).
 
 ### Ce que ça couvre
 
-- Build complet de `Reefin.sln` (tous les projets).
-- Suite de tests complète de `Reefin.sln` (tous les projets `tests/*`), y
+- Build complet de `Tesserafin.sln` (tous les projets).
+- Suite de tests complète de `Tesserafin.sln` (tous les projets `tests/*`), y
   compris `Reefin.Server.Integration.Tests`.
 - **Contrat OpenAPI** (issue #36) : `OpenApiContractTests` fait partie de cette
   suite et vérifie que `openapi/openapi.json` commité correspond bien à ce que
@@ -371,7 +379,8 @@ exactement le check `queued` éternel décrit plus haut.
 
 Le workflow appelle `./ci/run.sh` — exactement le même script que celui
 documenté ci-dessus, donc pas de divergence entre CI locale manuelle et CI
-self-hosted automatique. Attention toutefois : le workflow ne fait pas la
-purge `bin/`/`obj/` documentée dans « Porte de référence ». Sur un runner
-self-hosted au workspace persistant, ajouter cette purge en step préalable,
-sinon la porte hébergée peut afficher PASS là où un checkout propre échoue.
+self-hosted automatique. Depuis #94 la purge `bin/`/`obj/` est faite par
+`ci/run.sh` lui-même, donc un runner self-hosted au workspace persistant est
+couvert sans step préalable : le script nettoie l'espace de travail hérité de
+la run précédente avant de compiler, et refuse de compiler s'il n'y arrive
+pas.
