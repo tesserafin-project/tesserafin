@@ -13,17 +13,15 @@
 > n'est plus le pool facturé. **Tout le diagnostic de juillet ci-dessous est
 > conservé comme archive, il ne décrit plus l'état courant.**
 >
-> **Ce qui a été ré-armé** : `ci-tests.yml` seulement (pull request + push
-> sur `master`). Le job installe désormais `ffmpeg` et `libfontconfig1` — les
-> mêmes dépendances natives que `Dockerfile.ci` — et filtre `Category!=Smoke`,
-> pour être équivalent à `./ci/run.sh` et non une approximation plus faible.
+> **Ce qui a été ré-armé côté serveur : rien.** Chaque workflow a été
+> *réellement exécuté* sur la PR #132 avant d'être re-garé ; les preuves sont
+> dans son en-tête. Côté web en revanche, `pull_request.yml` et `push.yml`
+> sont armés et **verts** (run `30231042125` sur PR, run `30231202773` sur
+> `main`).
 >
-> **Ce qui reste garé, et pourquoi.** Chaque workflow a été *réellement
-> exécuté* sur la PR #132 avant d'être re-garé ; les preuves sont dans son
-> en-tête.
->
-> | Workflow | Preuve | Cause |
+> | Workflow | Preuve | Cause du maintien en garage |
 > | --- | --- | --- |
+> | `ci-tests.yml` | run `30231076754` | l'ajout de `ffmpeg`/`libfontconfig1` et du filtre `Category!=Smoke` corrige 13 des 14 échecs. Reste `OpenApiContractTests.CommittedContract_MatchesRunningServer` : le serveur hébergé produit `fea08c38…` là où le contrat commité vaut `0700633b…`. Le contrat n'est pas périmé — le même test passe en local. SDK identique (10.0.302) et `Release` rejoué en conteneur (3/3) : les deux explications évidentes sont **exclues**. Divergence d'environnement non isolée. |
 > | `ci-codeql-analysis.yml` | run `30230774481` (web, même échec) | code scanning exige **GitHub Advanced Security**, absent en dépôt privé sur plan `free`. L'analyse tourne, l'upload est refusé. **Perte de couverture réelle et non compensée.** |
 > | `ci-format.yml` | run `30230606255` | `dotnet format --verify-no-changes` : 75 violations StyleCop sur 22 fichiers (47 SA1615, 26 SA1611, 1 SA1629, 1 SA1618), toutes des commentaires XML sous `tests/`. Dette pré-existante. |
 > | `ci-compat.yml` | run `30230606251` | `ABI - Difference` cherche `MediaBrowser.Common.dll`, `Emby.Naming.dll`… — noms d'assemblages d'avant le renommage ; et le step de rapport exige `secrets.JF_BOT_TOKEN`, absent. |
@@ -32,13 +30,13 @@
 > | `openapi-merge.yml` | — | publie la spec ; C1 ne doit rien publier. |
 > | `local-ci.yml` | `total_count: 0` | aucun runner self-hosted ; ré-armer créerait un check `queued` éternel. |
 >
-> **Économie de minutes** appliquée à `ci-tests.yml` : `ubuntu-latest`
-> uniquement en automatique (macOS ×10 et Windows ×2 restent sur
-> `workflow_dispatch`), `timeout-minutes: 30`, `fail-fast: true`, PR en
-> brouillon ignorées, `paths-ignore` sur `**/*.md` et `docs/**` (sûr ici
-> **uniquement** parce que ce workflow ne porte aucune analyse de sécurité),
-> cache NuGet, couverture de code sur les push `master` seulement, et
-> `concurrency` qui annule les runs supplantés.
+> **Économie de minutes** déjà écrite dans `ci-tests.yml` pour le jour où il
+> sera armé : `ubuntu-latest` uniquement en automatique (macOS ×10 et Windows
+> ×2 restent sur `workflow_dispatch`), `timeout-minutes: 30`,
+> `fail-fast: true`, PR en brouillon ignorées, `paths-ignore` sur `**/*.md` et
+> `docs/**` (sûr **uniquement** parce que ce workflow ne porte aucune analyse
+> de sécurité), cache NuGet, couverture de code sur les push `master`
+> seulement, et `concurrency` qui annule les runs supplantés.
 >
 > **Ce qui n'est TOUJOURS pas résolu — et c'est pour ça que #94 reste
 > ouverte.** Les *required status checks* restent indisponibles :
