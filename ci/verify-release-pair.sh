@@ -196,9 +196,50 @@ SERVER_HEAD="$(git -C "${SERVER_REPO}" rev-parse HEAD)"
 [[ "${SERVER_HEAD}" == "${SERVER_SOURCE}" ]] \
   || die "server checkout ${SERVER_REPO} is at ${SERVER_HEAD}, not the named --server-source ${SERVER_SOURCE}"
 WEB_HEAD="$(git -C "${WEB_REPO}" rev-parse HEAD)"
-[[ "${WEB_HEAD}" == "${WEB_SOURCE}" ]] \
-  || die "web checkout ${WEB_REPO} is at ${WEB_HEAD}, not the named --web-source ${WEB_SOURCE}"
-pass "both checkouts are at the named commits (no reliance on the current branch)"
+if [[ "${WEB_HEAD}" != "${WEB_SOURCE}" ]]; then
+  # A TEST-ONLY DESCENDANT IS ALLOWED, AND NOTHING ELSE IS.
+  #
+  # The claim this gate makes about the web repository is "the image bundles web
+  # commit ${WEB_SOURCE}", and the BUNDLED WEB PROVENANCE layer proves it against
+  # the image's own labels — not against whatever is checked out. What the
+  # checkout supplies is the Playwright suite that DRIVES the image.
+  #
+  # Requiring HEAD == --web-source made those two things inseparable, so a
+  # commit that adds a spec and changes no shipped byte could not be run against
+  # the image it was written for without republishing the image first. That is
+  # the opposite of what the release process wants: tesserafin-web #54's
+  # publication rule says a test-only change needs no new image.
+  #
+  # So HEAD may move ahead of --web-source on one condition, checked below and
+  # printed in full: every path that differs must be outside the production
+  # build's inputs. `src/`, the webpack configs, the lockfile, the Node pin and
+  # `config.json` are hard-excluded. `package.json` is compared key by key with
+  # only `scripts` ignored — a version bump or a dependency change there DOES
+  # alter shipped bytes and still fails.
+  git -C "${WEB_REPO}" merge-base --is-ancestor "${WEB_SOURCE}" "${WEB_HEAD}" 2>/dev/null \
+    || die "web checkout ${WEB_REPO} is at ${WEB_HEAD}, which is not the named --web-source ${WEB_SOURCE} nor a descendant of it"
+  WEB_DIFF="$(git -C "${WEB_REPO}" diff --name-only "${WEB_SOURCE}" "${WEB_HEAD}")"
+  echo "  web checkout is ${WEB_HEAD}, ahead of the bundled ${WEB_SOURCE}; changed paths:"
+  echo "${WEB_DIFF}" | sed 's/^/    /'
+  PRODUCTION_TOUCHED="$(printf '%s\n' "${WEB_DIFF}" | grep -E '^(src/|webpack\.|package-lock\.json$|\.nvmrc$|config\.json$)' || true)"
+  [[ -z "${PRODUCTION_TOUCHED}" ]] \
+    || die "the web checkout is ahead of --web-source and changes production build inputs, so the image no longer bundles it: ${PRODUCTION_TOUCHED//$'\n'/, }"
+  if printf '%s\n' "${WEB_DIFF}" | grep -qx 'package.json'; then
+    git -C "${WEB_REPO}" show "${WEB_SOURCE}:package.json" > "${TMPDIR:-/tmp}/pair-pkg-base.$$.json"
+    git -C "${WEB_REPO}" show "${WEB_HEAD}:package.json"   > "${TMPDIR:-/tmp}/pair-pkg-head.$$.json"
+    python3 - "${TMPDIR:-/tmp}/pair-pkg-base.$$.json" "${TMPDIR:-/tmp}/pair-pkg-head.$$.json" <<'PY' \
+      || die "package.json differs outside its \"scripts\" block between ${WEB_SOURCE} and ${WEB_HEAD}; that can change shipped bytes"
+import json, sys
+a = json.load(open(sys.argv[1])); b = json.load(open(sys.argv[2]))
+a.pop("scripts", None); b.pop("scripts", None)
+sys.exit(0 if a == b else 1)
+PY
+    rm -f "${TMPDIR:-/tmp}/pair-pkg-base.$$.json" "${TMPDIR:-/tmp}/pair-pkg-head.$$.json"
+  fi
+  pass "the web checkout is a TEST-ONLY descendant of the bundled web commit (no production build input differs)"
+else
+  pass "both checkouts are at the named commits (no reliance on the current branch)"
+fi
 
 for tool in docker curl python3 ffmpeg ffprobe npm git; do
   command -v "${tool}" >/dev/null 2>&1 || die "${tool} is required but is not on PATH"
@@ -431,6 +472,14 @@ fi
 
 E2E_USER="tfpair"
 E2E_PASSWORD="tfpairpass123"
+# The restricted (non-admin, Movies-only) fixture user. tesserafin-web's
+# library.spec.ts defaults to exactly these two values, and ci/serve-e2e.sh
+# seeds them under the same names; keeping all three in step is what lets the
+# same suite run against the source rig and against the release image.
+RESTRICTED_USER="smokerestricted"
+RESTRICTED_PASSWORD="restrictedpass123"
+# Resolved by seed_instance(), consumed by run_lifecycle_round().
+RESTRICTED_LIBRARY_ID=""
 AUTH_HEADER='MediaBrowser Client="Tesserafin Release Pair", Device="ci/verify-release-pair.sh", DeviceId="tesserafin-release-pair", Version="0.0.0"'
 
 # The four fixtures ci/serve-e2e.sh synthesizes, with the SAME titles and the
@@ -513,6 +562,101 @@ wait_for_web() { # $1 = base url, $2 = container name
   return 1
 }
 
+# ---------------------------------------------------------------------------
+# The restricted-user fixture (tesserafin-web #54 / B1).
+#
+# WHY IT IS HERE NOW. This script's seeder was written for the three
+# contract-critical playback specs, which need an admin and two libraries and
+# nothing else. Running the FULL tesserafin-web suite against the release image
+# — which is what B1 asks for — brought in library.spec.ts's
+# "library access restriction (restricted user)" describe, and it needs a
+# second, NON-admin user who can see Movies and cannot see Codec Probes, plus
+# the withheld library's id. Without them the whole describe fails on a 401 and
+# 1 further test never runs, on a perfectly healthy image. Observed on the B1
+# image-backed run of 2026-07-27.
+#
+# This is a faithful port of ci/serve-e2e.sh's own restricted-user block, and
+# deliberately so: the two rigs must agree, or the same spec means two different
+# things depending on which one ran it. See that file for the long-form
+# rationale on each call. Everything goes through the real public API.
+#
+# The fixture's contract is asserted here, not merely set up: through the
+# restricted user's own /UserViews, movies must be present and homevideos must
+# be absent. A half-applied policy otherwise surfaces as a confusing failure in
+# the browser spec instead of a clear one here.
+# ---------------------------------------------------------------------------
+seed_restricted_user() { # $1 = base url, $2 = admin token -> 0 ok / 1 fail
+  local base="$1" admin="$2"
+  local auth_admin="${AUTH_HEADER}, Token=\"${admin}\""
+  local views movies_view probes_view rid rtoken rviews
+
+  views="$(curl -fsS "${base}/UserViews" -H "Authorization: ${auth_admin}")" || {
+    echo "  restricted fixture: /UserViews (admin) failed" >&2; return 1; }
+  movies_view="$(printf '%s' "${views}" | python3 -c '
+import json,sys
+items = json.load(sys.stdin).get("Items", [])
+print(next((i["Id"] for i in items if i.get("CollectionType") == "movies"), ""))')"
+  probes_view="$(printf '%s' "${views}" | python3 -c '
+import json,sys
+items = json.load(sys.stdin).get("Items", [])
+print(next((i["Id"] for i in items if i.get("CollectionType") == "homevideos"), ""))')"
+  [[ -n "${movies_view}" && -n "${probes_view}" ]] || {
+    echo "  restricted fixture: could not resolve both view ids (movies='${movies_view}' homevideos='${probes_view}')" >&2
+    return 1; }
+
+  rid="$(curl -fsS -X POST "${base}/Users/New" -H 'Content-Type: application/json' \
+    -H "Authorization: ${auth_admin}" \
+    -d "{\"Name\":\"${RESTRICTED_USER}\",\"Password\":\"${RESTRICTED_PASSWORD}\"}" \
+    | python3 -c 'import json,sys; print(json.load(sys.stdin)["Id"])')" || {
+    echo "  restricted fixture: POST /Users/New failed" >&2; return 1; }
+
+  # The user's REAL current policy, mutated only where the restriction lives.
+  # Posting a hand-built partial policy would reset every unmentioned field to
+  # its serializer default.
+  local policy
+  policy="$(curl -fsS "${base}/Users/${rid}" -H "Authorization: ${auth_admin}" \
+    | TESSERAFIN_MOVIES_VIEW_ID="${movies_view}" python3 -c '
+import json, os, sys
+policy = json.load(sys.stdin)["Policy"]
+policy["IsAdministrator"] = False
+policy["EnableAllFolders"] = False
+policy["EnabledFolders"] = [os.environ["TESSERAFIN_MOVIES_VIEW_ID"]]
+print(json.dumps(policy))')" || { echo "  restricted fixture: GET /Users/{id} failed" >&2; return 1; }
+  curl -fsS -X POST "${base}/Users/${rid}/Policy" -H 'Content-Type: application/json' \
+    -H "Authorization: ${auth_admin}" -d "${policy}" >/dev/null || {
+    echo "  restricted fixture: POST /Users/{id}/Policy failed" >&2; return 1; }
+
+  rtoken="$(curl -fsS -X POST "${base}/Users/AuthenticateByName" -H 'Content-Type: application/json' \
+    -H "Authorization: ${AUTH_HEADER}" \
+    -d "{\"Username\":\"${RESTRICTED_USER}\",\"Pw\":\"${RESTRICTED_PASSWORD}\"}" \
+    | python3 -c 'import json,sys; print(json.load(sys.stdin)["AccessToken"])')" || {
+    echo "  restricted fixture: the credentials the specs use do not authenticate" >&2; return 1; }
+
+  # The contract, through the restricted user's own eyes. Polled briefly: the
+  # policy write is synchronous but the view endpoint shares the same caches as
+  # everything else.
+  local ok=0
+  for _ in $(seq 1 30); do
+    rviews="$(curl -fsS "${base}/UserViews?userId=${rid}" \
+      -H "Authorization: ${AUTH_HEADER}, Token=\"${rtoken}\"" 2>/dev/null || echo '{}')"
+    if printf '%s' "${rviews}" | python3 -c '
+import json,sys
+types = [i.get("CollectionType") for i in json.load(sys.stdin).get("Items", [])]
+sys.exit(0 if "movies" in types and "homevideos" not in types else 1)' 2>/dev/null; then
+      ok=1
+      break
+    fi
+    sleep 1
+  done
+  [[ "${ok}" -eq 1 ]] || {
+    echo "  restricted fixture: the policy never took — the restricted user must see movies and not homevideos" >&2
+    return 1; }
+
+  RESTRICTED_LIBRARY_ID="${probes_view}"
+  echo "  seeded: restricted user '${RESTRICTED_USER}' (Movies only; withheld library ${RESTRICTED_LIBRARY_ID})"
+  return 0
+}
+
 seed_instance() { # $1 = base url, $2 = scratch dir
   local base="$1" scratch="$2" token
   curl -fsS "${base}/Startup/User" -H "Authorization: ${AUTH_HEADER}" >/dev/null
@@ -552,6 +696,7 @@ seed_instance() { # $1 = base url, $2 = scratch dir
     if [[ "${movies}" == "2" && "${remux}" -ge 1 ]]; then
       echo "  seeded: 2 movies + the Matroska remux probe"
       echo "${token}" > "${scratch}/token"
+      seed_restricted_user "${base}" "${token}" || return 1
       return 0
     fi
     sleep 2
@@ -598,6 +743,9 @@ run_lifecycle_round() { # $1 = round number -> 0 pass / 1 fail
       && TESSERAFIN_E2E_BASE_URL="${base}" \
          TESSERAFIN_E2E_USER="${E2E_USER}" \
          TESSERAFIN_E2E_PASSWORD="${E2E_PASSWORD}" \
+         TESSERAFIN_E2E_RESTRICTED_USER="${RESTRICTED_USER}" \
+         TESSERAFIN_E2E_RESTRICTED_PASSWORD="${RESTRICTED_PASSWORD}" \
+         TESSERAFIN_E2E_RESTRICTED_LIBRARY_ID="${RESTRICTED_LIBRARY_ID}" \
          PLAYWRIGHT_HTML_REPORT="${scratch}/playwright-report" \
          npx --no-install playwright test --output="${scratch}/test-results" "${E2E_SPECS[@]}" \
     ) > "${scratch}/e2e.log" 2>&1 || rc=$?
