@@ -110,7 +110,7 @@ namespace Tesserafin.Server.Tests
             {
                 var host = new Mock<IServerApplicationHost>();
                 host.SetupGet(h => h.CoreStartupHasCompleted).Returns(coreStartupHasCompleted.Value);
-                host.SetupGet(h => h.ApplicationVersionString).Returns("12.0.0");
+                host.SetupGet(h => h.ApplicationVersionString).Returns("1.0.0");
                 services.AddSingleton(host.Object);
                 services.AddSingleton<Tesserafin.Common.IApplicationHost>(host.Object);
             }

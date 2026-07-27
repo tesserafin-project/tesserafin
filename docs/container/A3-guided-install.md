@@ -16,6 +16,14 @@ Related docs:
 
 ## The image
 
+> **Epoch note.** The image named below is a **pre-v1 development artifact** in
+> the frozen archive package `ghcr.io/tesserafin-project/tesserafin`. Tesserafin
+> public SemVer begins at `1.0.0`, published to the canonical package
+> `ghcr.io/tesserafin-project/tesserafin-server` — see
+> [`../versioning-policy.md`](../versioning-policy.md). This guide is repointed
+> to the first `1.0.0` development baseline once that baseline has been published
+> from a merged commit; until then it keeps naming an image that actually exists.
+
 All paths here use the immutable pre-release image published to GHCR:
 
 ```

@@ -81,7 +81,18 @@ echo "== docker compose config (renders + validates) =="
 dc config >/dev/null && pass "compose config valid" || fail "compose config invalid"
 IMG_REF="$(dc config | awk '/image:/{print $2; exit}')"
 echo "  image: ${IMG_REF}"
-case "${IMG_REF}" in *@sha256:*|*:12.0.0-dev.*) pass "compose uses an immutable pre-release tag" ;; *) fail "compose image is not the immutable dev tag: ${IMG_REF}" ;; esac
+# Immutability is a SHAPE, not a specific version: hard-coding `12.0.0-dev.` made
+# this assertion silently version-locked and it would have had to be edited again
+# at every epoch. A digest, or any `<core>-dev.<12-char commit>` tag, is
+# immutable; `latest`, `preview`, `1`, `1.0` and bare `1.0.0` are not.
+case "${IMG_REF}" in
+  *@sha256:*)
+    pass "compose pins the image by manifest digest (immutable)" ;;
+  *:[0-9]*.[0-9]*.[0-9]*-dev.[0-9a-f]*)
+    pass "compose uses an immutable development tag (${IMG_REF##*:})" ;;
+  *)
+    fail "compose image is not an immutable digest or -dev tag: ${IMG_REF}" ;;
+esac
 
 echo "== docker compose pull (from GHCR, no build) =="
 dc pull >/dev/null 2>&1 && pass "image pulled via compose" || fail "compose pull failed"

@@ -119,7 +119,7 @@ FROM --platform=linux/amd64 ${WEB_ASSETS_IMAGE} AS webassets
 # =====================================================================
 FROM ${RUNTIME_IMAGE} AS runtime
 
-ARG VERSION=12.0.0
+ARG VERSION=1.0.0
 ARG VCS_REF=unknown
 ARG SOURCE_DATE_EPOCH=0
 ARG UID=10000

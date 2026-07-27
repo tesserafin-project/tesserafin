@@ -20,6 +20,13 @@ services:
     # This is the A6-validated image, tag `12.0.0-dev.a8a18bb7c07b`,
     # built from commit `a8a18bb7c07b3d629ecab019aea9668a145eb5bc`.
     #
+    # TRANSITIONAL (docs/versioning-policy.md): this digest belongs to the frozen
+    # pre-v1 archive `ghcr.io/tesserafin-project/tesserafin`. The canonical v1+
+    # package is `ghcr.io/tesserafin-project/tesserafin-server`, and this default
+    # is repointed to it — as a digest — as soon as the first 1.0.0 development
+    # baseline has been published from a merged commit. It is left pointing at a
+    # real, pullable image until then rather than at an image that does not exist.
+    #
     # Override with `TESSERAFIN_IMAGE=... docker compose up -d` or a .env file.
     # Moving channels are an explicit opt-in; the risks and the upgrade procedure
     # are in docs/container/A6-versioning-and-upgrades.md.

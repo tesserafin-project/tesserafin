@@ -91,8 +91,8 @@ Reefin.Server/Extensions/ApiServiceCollectionExtensions.cs
   c.SwaggerDoc("api-docs", new OpenApiInfo { Title = "Reefin API", Version = version, ... })
 ```
 
-qui remonte à `SharedVersion.cs` (`[assembly: AssemblyVersion("12.0.0")]`).
-Aujourd'hui : **`12.0.0`**. Ni constante littérale, ni horodatage de build.
+qui remonte à `SharedVersion.cs` (`[assembly: AssemblyVersion("1.0.0")]`).
+Aujourd'hui : **`1.0.0`**. Ni constante littérale, ni horodatage de build.
 
 `OpenApiContractTests.InfoVersion_ComesFromServerAssemblyVersion` verrouille
 cette provenance : si quelqu'un remplace la valeur par un littéral, le test
@@ -108,10 +108,10 @@ permanent et inutile — l'inverse de ce qu'on cherche.
 
 L'identité d'un contrat, c'est donc le couple :
 
-- **version** = version serveur (`12.0.0`) — *quel serveur*,
+- **version** = version serveur (`1.0.0`) — *quel serveur*,
 - **sha256** = empreinte du contenu canonique — *quel contrat exactement*.
 
-Deux serveurs `12.0.0` avec des surfaces d'API différentes ont des `sha256`
+Deux serveurs `1.0.0` avec des surfaces d'API différentes ont des `sha256`
 différents. C'est ce couple qui sert de pin.
 
 ## 3. Déterminisme — comment il est obtenu
@@ -232,7 +232,7 @@ Un contrat publié est identifié par le couple `(version, sha256)` de
   "algorithm": "sha256",
   "sha256": "46b7e041ee55ef96aef52154835e7581365e170a543bc0290f74411298ce29de",
   "spec": "openapi/openapi.json",
-  "version": "12.0.0"
+  "version": "1.0.0"
 }
 ```
 
@@ -244,8 +244,9 @@ Un contrat publié est identifié par le couple `(version, sha256)` de
 (cf. `docs/pr116-client-migration-design.md` §4.1). Ce fichier doit désormais
 reprendre **les deux** champs `version` et `sha256` publiés ici : la version
 seule ne suffit pas à identifier un contrat, puisque la surface d'API évolue
-entre deux bumps de `SharedVersion.cs` (le serveur est en `12.0.0` depuis
-plusieurs tranches).
+entre deux bumps de `SharedVersion.cs` (le serveur est resté en `12.0.0` pendant
+plusieurs tranches, puis est passé à `1.0.0` à l'ouverture de l'époque de
+versions publiques — voir `docs/versioning-policy.md`).
 
 Procédure de mise à jour du SDK client :
 
