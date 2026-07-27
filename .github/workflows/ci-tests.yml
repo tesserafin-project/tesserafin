@@ -1,4 +1,33 @@
-# PARKED — manual trigger only (issue #62). GitHub refuses to allocate a
+# Automatic triggers RESTORED on 2026-07-27 (#94). The July 2026 allocation
+# refusal described in the parking stamp below is over: GitHub now allocates
+# hosted runners for this repository again.
+#
+# ── Restoration stamp ──────────────────────────────────────────────────────
+# Restored on : 2026-07-27
+# Evidence    : run 30229812748 ("ABI Compatibility", manual dispatch on
+#               master) -> job "ABI - HEAD" completed/SUCCESS with 8 executed
+#               steps on runner "GitHub Actions 1000000000", label
+#               ubuntu-latest. That is the exact opposite of the parked
+#               signature (failure in 3-4 s, zero steps, no runner).
+#               Repository owner is now the organisation tesserafin-project;
+#               the personal all3f0r1 allowance named in the stamp below is
+#               no longer the metered pool.
+# Still open  : required status checks remain UNAVAILABLE. Both
+#               GET /repos/tesserafin-project/tesserafin/branches/master/protection
+#               and GET .../rulesets return 403 "Upgrade to GitHub Pro or make
+#               this repository public to enable this feature" (private repo,
+#               free organisation plan). This workflow runs automatically and
+#               reports a status; nothing can make that status *mandatory*.
+#               #94 stays open for that reason.
+# OS matrix   : automatic runs are ubuntu-latest ONLY. macOS is billed x10 and
+#               Windows x2 against the free Actions allowance, and that
+#               multiplier is precisely what drained the pool and caused the
+#               July outage. The full three-OS matrix is still available on
+#               demand through workflow_dispatch.
+# ───────────────────────────────────────────────────────────────────────────
+#
+# ── Parking stamp (historical, superseded by the restoration above) ────────
+# (was) PARKED — manual trigger only (issue #62). GitHub refuses to allocate a
 # hosted runner for this PRIVATE repo BEFORE the first step (account-wide
 # 2000 free minutes/month exhausted, spending limit $0), so this went red on
 # every pull request and every push to master without running a single step.
@@ -34,8 +63,19 @@
 # ───────────────────────────────────────────────────────────────────────────
 
 name: Tests
+
 on:
+  push:
+    branches: [master]
+  pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 env:
   SDK_VERSION: "10.0.x"
@@ -43,8 +83,15 @@ env:
 jobs:
   run-tests:
     strategy:
+      # See the OS matrix note in the restoration stamp: automatic runs are
+      # ubuntu-latest only, because macOS (x10) and Windows (x2) minute
+      # multipliers are what exhausted the free allowance in July 2026. The
+      # full matrix stays reachable by hand through workflow_dispatch.
       matrix:
-        os: ["ubuntu-latest", "macos-latest", "windows-latest"]
+        os: >-
+          ${{ github.event_name == 'workflow_dispatch'
+              && fromJSON('["ubuntu-latest", "macos-latest", "windows-latest"]')
+              || fromJSON('["ubuntu-latest"]') }}
       fail-fast: false
 
     runs-on: "${{ matrix.os }}"

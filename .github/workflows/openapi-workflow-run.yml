@@ -1,11 +1,27 @@
+# PARKED — manual trigger only (#94). This workflow does not check anything:
+# it downloads the report produced by "OpenAPI Check" and posts it as a pull
+# request comment. The posting step authenticates with `secrets.JF_BOT_TOKEN`,
+# a Jellyfin bot credential this organisation does not have — verified on
+# 2026-07-27, the only Actions secret on this repository is
+# ADD_TO_PROJECT_PAT and the organisation has none. Left armed, it would fail
+# on every successful OpenAPI Check and reintroduce exactly the permanent red
+# that #62 was about.
+#
+# The check itself is unaffected: openapi-pull-request.yml runs automatically
+# and reports pass/fail. Only the cosmetic comment is unavailable. Re-arm by
+# restoring the trigger below once a bot token exists.
+#
+# Previous trigger:
+#   on:
+#     workflow_run:
+#       workflows: [OpenAPI Check]
+#       types: [completed]
+# ───────────────────────────────────────────────────────────────────────────
+
 name: OpenAPI Report
 
 on:
-  workflow_run:
-    workflows:
-    - OpenAPI Check
-    types:
-    - completed
+  workflow_dispatch:
 
 jobs:
   metadata:

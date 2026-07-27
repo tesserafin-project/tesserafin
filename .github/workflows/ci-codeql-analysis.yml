@@ -1,4 +1,30 @@
-# PARKED — manual trigger only (issue #62). Same allocation refusal as the
+# Automatic triggers RESTORED on 2026-07-27 (#94). The July 2026 allocation
+# refusal described in the parking stamp below is over: GitHub allocates
+# hosted runners for this repository again. Evidence: run 30229812748, job
+# "ABI - HEAD" completed/SUCCESS with 8 executed steps on runner "GitHub
+# Actions 1000000000" (ubuntu-latest).
+#
+# The first CodeQL dispatch after that (run 30230125535) still failed, but for
+# a DIFFERENT and repository-local reason: `autobuild` could not work out how
+# to build this solution. It installed its own SDK ("dotnet_install: Error:
+# Could not find `.NET Core SDK` with version = 10.0.0"), then tried building
+# individual projects out of order and hit
+# `error CS0234: The type or namespace name 'MimeTypes' does not exist in the
+# namespace 'Tesserafin.Model'`, ending on "Could not auto-detect a suitable
+# build method". `Perform CodeQL Analysis` was skipped as a result.
+#
+# The fix is the one GitHub's own error message prescribes: replace autobuild
+# with the explicit build this repository actually uses. The query suite is
+# UNCHANGED — `+security-extended` is retained.
+#
+# Still open: required status checks. GET .../branches/master/protection and
+# GET .../rulesets both return 403 "Upgrade to GitHub Pro or make this
+# repository public to enable this feature" (private repo, free organisation
+# plan). This workflow reports a status automatically; nothing can make that
+# status mandatory. #94 stays open for that reason.
+#
+# ── Parking stamp (historical, superseded by the restoration above) ────────
+# (was) PARKED — manual trigger only (issue #62). Same allocation refusal as the
 # other hosted workflows: red on every pull request and every push to master
 # before the first step, plus a weekly cron that failed the same way and kept
 # burning allocation attempts for nothing. Nothing is fixed here — the trigger
@@ -32,11 +58,25 @@
 name: "CodeQL"
 
 on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  schedule:
+    - cron: '24 2 * * 4'
   workflow_dispatch:
 
 permissions:
   contents: read
   security-events: write
+  # Read-only; the CodeQL action needs it for its own run metadata. Without
+  # it every step logs "Failed to gather information for telemetry: Resource
+  # not accessible by integration".
+  actions: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   analyze:
@@ -63,8 +103,13 @@ jobs:
         languages: ${{ matrix.language }}
         queries: +security-extended
 
-    - name: Autobuild
-      uses: github/codeql-action/autobuild@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+    # NOT autobuild. Autobuild fails on this solution (run 30230125535): it
+    # installs its own SDK, then builds projects out of order and dies on
+    # CS0234 in Tesserafin.Model. Building the solution explicitly with the
+    # SDK set up above is what GitHub's own error message prescribes, and it
+    # is the same build the local gate runs.
+    - name: Build solution for CodeQL
+      run: dotnet build Tesserafin.sln --configuration Release -clp:ErrorsOnly
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2

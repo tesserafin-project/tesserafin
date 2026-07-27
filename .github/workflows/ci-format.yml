@@ -1,4 +1,20 @@
-# PARKED — manual trigger only (issue #62). Same allocation refusal as the
+# Automatic triggers RESTORED on 2026-07-27 (#94). The July 2026 allocation
+# refusal described in the parking stamp below is over: GitHub allocates
+# hosted runners for this repository again. Evidence: run 30229812748,
+# job "ABI - HEAD" completed/SUCCESS with 8 executed steps on runner
+# "GitHub Actions 1000000000" (ubuntu-latest) — the exact opposite of the
+# parked signature (failure in 3-4 s, zero steps, no runner). The repository
+# is now owned by the organisation tesserafin-project, so the personal
+# all3f0r1 allowance named below is no longer the metered pool.
+#
+# NOT restored by this: required status checks. GET .../branches/master/protection
+# and GET .../rulesets both return 403 "Upgrade to GitHub Pro or make this
+# repository public to enable this feature" (private repo, free organisation
+# plan). This workflow reports a status automatically; nothing can make that
+# status mandatory. #94 stays open for that reason.
+#
+# ── Parking stamp (historical, superseded by the restoration above) ────────
+# (was) PARKED — manual trigger only (issue #62). Same allocation refusal as the
 # other hosted workflows (account-wide free Actions allowance exhausted,
 # spending limit $0): red on every pull request before the first step.
 # Nothing is fixed here — the trigger is disarmed to stop the noise.
@@ -30,8 +46,19 @@
 # ───────────────────────────────────────────────────────────────────────────
 
 name: Format
+
 on:
+  push:
+    branches: [master]
+  pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 env:
   SDK_VERSION: "10.0.x"

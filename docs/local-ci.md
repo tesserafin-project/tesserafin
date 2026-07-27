@@ -1,5 +1,44 @@
 # CI locale (Docker) — porte de merge obligatoire
 
+> ## ⚠ Mise à jour du 2026-07-27 — la CI hébergée est revenue (#94)
+>
+> **Ce qui a changé.** GitHub réalloue des runners hébergés pour ce dépôt. La
+> cause 1 décrite ci-dessous (refus d'allocation avant le premier step) est
+> **révolue**. Preuve : run `30229812748` (« ABI Compatibility », dispatch
+> manuel sur `master`), job `ABI - HEAD` **completed/success**, **8 steps
+> exécutés**, runner `GitHub Actions 1000000000`, label `ubuntu-latest` —
+> l'exact opposé de la signature de panne (échec en 3-4 s, zéro step, aucun
+> runner). Le dépôt appartient désormais à l'organisation
+> `tesserafin-project` ; l'allocation personnelle `all3f0r1` citée plus bas
+> n'est plus le pool facturé. **Tout le diagnostic de juillet ci-dessous est
+> conservé comme archive, il ne décrit plus l'état courant.**
+>
+> **Ce qui a été ré-armé** : `ci-tests.yml`, `ci-format.yml`, `ci-compat.yml`,
+> `ci-codeql-analysis.yml` et `openapi-pull-request.yml` se déclenchent à
+> nouveau automatiquement (pull request, et push sur `master` là où c'est
+> pertinent).
+>
+> **Ce qui reste garé, et pourquoi** :
+>
+> | Workflow | Raison |
+> | --- | --- |
+> | `local-ci.yml` | aucun runner self-hosted enregistré (`total_count: 0`) ; ré-armer créerait un check `queued` éternel |
+> | `openapi-merge.yml` | publie la spec ; hors périmètre C1, qui ne doit rien publier |
+> | `openapi-workflow-run.yml` | poste un commentaire avec `secrets.JF_BOT_TOKEN`, absent de cette organisation |
+>
+> **Ce qui n'est TOUJOURS pas résolu — et c'est pour ça que #94 reste
+> ouverte.** Les *required status checks* restent indisponibles :
+> `GET .../branches/master/protection` et `GET .../rulesets` renvoient
+> toujours `403 "Upgrade to GitHub Pro or make this repository public to
+> enable this feature"` (dépôt privé, organisation sur le plan `free`). Les
+> checks s'exécutent et rapportent un statut, mais **aucun ne peut être rendu
+> obligatoire**. La porte locale garde donc une autorité conventionnelle, pas
+> mécanique.
+>
+> **La porte locale reste obligatoire** tant que ce point n'est pas levé, et
+> depuis #94 elle purge `bin/`/`obj/` elle-même (voir « Porte de référence »).
+
+
 ## Pourquoi — cause exacte (issue #62)
 
 Ce n'est **pas** un défaut de configuration du dépôt. Deux causes distinctes,
