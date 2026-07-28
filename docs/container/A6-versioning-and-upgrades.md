@@ -166,10 +166,10 @@ $ docker/version-verify.sh ghcr.io/tesserafin-project/tesserafin:<tag> --require
 
 ```dotenv
 # .env — exact immutable version tag
-TESSERAFIN_IMAGE=ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.44f5ab62b522
+TESSERAFIN_IMAGE=ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.a8ac09f3ff5a
 
 # .env — digest pin, the strongest form; survives a tag being re-pointed
-TESSERAFIN_IMAGE=ghcr.io/tesserafin-project/tesserafin-server@sha256:fd1fa9e0f5a28a07e5872cc5ff13257a92d988717a33519f62c4b26c6ab36249
+TESSERAFIN_IMAGE=ghcr.io/tesserafin-project/tesserafin-server@sha256:89dd01add7cbe7fd1d1529979f6aa4e6537c9b4b31e2ebec1836a583548a1bf9
 ```
 
 Resolve a tag to its digest before pinning:
@@ -345,33 +345,46 @@ This is what `docker-compose.yml`, `.env.example`, the Unraid template and
 [`A3-guided-install.md`](./A3-guided-install.md) name today.
 
 ```
-ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.44f5ab62b522
+ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.a8ac09f3ff5a
 ```
 
 | | Digest |
 |---|---|
-| Multi-arch manifest | `sha256:fd1fa9e0f5a28a07e5872cc5ff13257a92d988717a33519f62c4b26c6ab36249` |
-| `linux/amd64` | `sha256:508c5459b505d5cffb2fd8192a205d37cdf5573dab8b4e39df8c16bd59f5f51b` |
-| `linux/arm64` | `sha256:bd55fa7e3e34f451fb9b3788964fe858fa4b351f82e9e43b1b988816f0566f71` |
+| Multi-arch manifest | `sha256:89dd01add7cbe7fd1d1529979f6aa4e6537c9b4b31e2ebec1836a583548a1bf9` |
+| `linux/amd64` | `sha256:a1adba4d0e65667e41e25dc38f0364e3f3507f208513a026984496f986c75b08` |
+| `linux/arm64` | `sha256:c2b0688c890042e923c1335a6833b298844441862b45683fa0a6ee965c927c42` |
 
-Built from `44f5ab62b522684b4fa58ed10de80b8c6a7bb392`; reports version `1.0.0`.
-The equally immutable `sha-44f5ab62b522684b4fa58ed10de80b8c6a7bb392` tag names the
+Built from `a8ac09f3ff5a715b35b9dc31d1b23c5865a6d34e`; reports version `1.0.0`.
+The equally immutable `sha-a8ac09f3ff5a715b35b9dc31d1b23c5865a6d34e` tag names the
 same manifest. `docker-compose.yml` pins the manifest digest; the dev tag is
 provenance and an alternative spelling, never a moving channel. `1.0.0`, `1.0`,
 `1`, `latest`, `stable` and `preview` are **not** published.
 
 Bundled Tesserafin Web `1.0.0` at commit
-`489a90be0dbe80aede3dbbc028b140756211d43c`
-(`ghcr.io/tesserafin-project/tesserafin-web-assets@sha256:ef817dec29f8fd08cee9910954b576d05a947936f93a8a9e3309031b8d656104`).
+`a63cb11e8e9cfa137b6c3f739e8881a6dfb39dfb`
+(`ghcr.io/tesserafin-project/tesserafin-web-assets@sha256:2585fc7e1e06cee0be1bb0bcac735ed783b6e8c3ea2ff346561e7f62c0a75daf`).
 
 Gates run against that digest: `docker/version-verify.sh --require-digest`,
 `docker/version-contract.test.sh` (53 passed), `docker/smoke.sh`,
 `docker/state-roundtrip.sh`, `docker/browser-onboarding.sh` (including restart and
 container-recreation persistence), `docker/hwa-smoke.sh`, `docker/hwa-vaapi.sh` on
 a real `/dev/dri/renderD128`, `docker/observability.sh`, and
-`ci/verify-release-pair.sh --lifecycle-runs 3` — all seven A7 layers PASS, three
-consecutive lifecycle rounds green. `docker/repro-check.sh` reproduced one
-`linux/amd64` manifest digest across two clean builds.
+`ci/verify-release-pair.sh --e2e-spec tests/e2e --lifecycle-runs 3` — all seven A7
+layers PASS, three consecutive rounds of the complete 108-test tesserafin-web
+browser suite green. `docker/repro-check.sh` reproduced one `linux/amd64` manifest
+digest across two clean builds. The full record is
+[`A7-server-web-release-pair.md`](./A7-server-web-release-pair.md) §6c.
+
+### The candidate this one replaced
+
+`sha256:fd1fa9e0f5a28a07e5872cc5ff13257a92d988717a33519f62c4b26c6ab36249`
+(tag `1.0.0-dev.44f5ab62b522`, server `44f5ab62b522684b4fa58ed10de80b8c6a7bb392`,
+bundled web `489a90be0dbe80aede3dbbc028b140756211d43c`) was the baseline named here
+before. It is **not** deleted, retagged or moved, and it did **not** pass
+tesserafin-project/tesserafin-web#67: it shipped the web client in which a
+terminal playback failure was silent. Its own record, including that failure, is
+[`A7-server-web-release-pair.md`](./A7-server-web-release-pair.md) §6b. It is no
+longer an installation default.
 
 No forward migration is claimed. The upgrade contract in §6 is unchanged: there is
 still no real schema migration proving a `12.x` → `1.x` upgrade, which is why #127
