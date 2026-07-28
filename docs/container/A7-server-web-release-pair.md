@@ -523,6 +523,161 @@ conclusion was drawn from it.
 
 ---
 
+## 6c. Evidence — the B1 replacement pair, and what it is the default for
+
+The pair in §6b was superseded because the web client it bundles fails
+tesserafin-project/tesserafin-web#67: a terminal playback failure was silent. The
+fix (tesserafin-web#69) changes shipped runtime bytes, so it forced a new
+web-assets publication, a `Dockerfile` re-pin and a new server candidate. This is
+that candidate, and it is what `docker-compose.yml`, `.env.example`, the Unraid
+template and A3 name from now on.
+
+```
+ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.a8ac09f3ff5a
+ghcr.io/tesserafin-project/tesserafin-server:sha-a8ac09f3ff5a715b35b9dc31d1b23c5865a6d34e
+```
+
+Both immutable tags resolve to the same manifest index. The image was published
+before this validation and was **reused**, not rebuilt: nothing here republished,
+retagged, moved or deleted an artifact.
+
+| | Digest |
+|---|---|
+| Multi-arch manifest | `sha256:89dd01add7cbe7fd1d1529979f6aa4e6537c9b4b31e2ebec1836a583548a1bf9` |
+| `linux/amd64` | `sha256:a1adba4d0e65667e41e25dc38f0364e3f3507f208513a026984496f986c75b08` |
+| `linux/arm64` | `sha256:c2b0688c890042e923c1335a6833b298844441862b45683fa0a6ee965c927c42` |
+
+| | |
+|---|---|
+| server source | `a8ac09f3ff5a715b35b9dc31d1b23c5865a6d34e` |
+| bundled web source | `a63cb11e8e9cfa137b6c3f739e8881a6dfb39dfb` |
+| bundled web assets | `ghcr.io/tesserafin-project/tesserafin-web-assets@sha256:2585fc7e1e06cee0be1bb0bcac735ed783b6e8c3ea2ff346561e7f62c0a75daf` |
+| web test checkout | `9b7debbf33c92e05f40aa06a091de91faebf44ea` |
+| package visibility | private, unchanged |
+
+Both platform manifests carry the same provenance labels: `image.revision`
+`a8ac09f3…`, `image.version` `1.0.0`, `web.revision` `a63cb11e…`, `web.version`
+`1.0.0`, `web.assets.image` `sha256:2585fc7e…`, `web.assets.tag`
+`1.0.0-dev.a63cb11e8e9c`, `web.path` `/opt/tesserafin-web`.
+
+### The gate run — RESULT: PASS
+
+```
+ci/verify-release-pair.sh \
+    --server-image ghcr.io/tesserafin-project/tesserafin-server@sha256:89dd01add7cb… \
+    --server-source a8ac09f3ff5a715b35b9dc31d1b23c5865a6d34e \
+    --web-repo <tesserafin-web checkout at 9b7debbf33c9…> \
+    --web-source a63cb11e8e9cfa137b6c3f739e8881a6dfb39dfb \
+    --e2e-spec tests/e2e --lifecycle-runs 3 --keep
+```
+
+The browser suite runs from a web checkout **ahead of** the bundled commit, which
+the gate permits only because it proves the difference is validation-only:
+`PASS the web checkout is a TEST-ONLY descendant of the bundled web commit (no
+production build input differs)`. That is what makes running the current suite
+against an older bundled client legitimate rather than a category error.
+
+| Layer | Result |
+|---|---|
+| ARGUMENTS | PASS — both checkouts *are* the named commits; the web checkout is a test-only descendant |
+| IMAGE PROVENANCE | PASS — `docker/version-verify.sh` agrees on revision, version surfaces and `/health` readiness |
+| BUNDLED WEB PROVENANCE | PASS — label, in-image revision file, `Dockerfile` `WEB_VCS_REF` and both arch children all name `a63cb11e…`; assets pinned by digest; 2 runnable architectures |
+| OPENAPI | PASS — regenerated `sha256 cb760bc1df7f…` == committed |
+| GENERATED SDK | PASS — zero regeneration drift; the contract at the SDK's provenance commit `498e1f348aa2…` is byte-identical to the release contract and an ancestor of it |
+| BROWSER E2E | PASS — `docker/browser-onboarding.sh` against the release image on pristine volumes |
+| LIFECYCLE CONTRACT | PASS — 3 consecutive rounds of the complete suite |
+
+| Round | Container | Result |
+|---|---|---|
+| 1 | new container, new volumes, newly synthesised fixtures | PASS — 108 passed (4.1 m) |
+| 2 | new container, new volumes, newly synthesised fixtures | PASS — 108 passed (4.1 m) |
+| 3 | new container, new volumes, newly synthesised fixtures | PASS — 108 passed (4.3 m) |
+
+108 tests in 18 files is the whole tesserafin-web browser suite, not the
+contract-critical subset §5 defaults to. It covers onboarding, invalid login and
+recovery, logout and fresh login, restricted-user access, library browse and
+detail, Search including the no-result and restricted-library boundaries, Direct
+Play, a real probeable transcode, remux, the visible terminal playback failure,
+dismissal and recovery without a document reload, playback-session teardown, the
+absence of unintended legacy fallback, and the runtime-origin inventory.
+
+**Other gates against this digest.**
+
+| Command | Result |
+|---|---|
+| `docker/version-verify.sh --require-digest --expect-commit a8ac09f3ff5a… --expect-version 1.0.0` | PASS |
+| `docker/version-contract.test.sh` | PASS — 53 passed, 0 failed, 0 skipped |
+| `docker/smoke.sh` (A1) | PASS — all gates |
+| `docker/state-roundtrip.sh` (A2) | PASS — all gates + safety assertions |
+| `docker/browser-onboarding.sh` (A3) | PASS — all gates, including restart and container-recreation persistence |
+| `docker/hwa-smoke.sh` (A4, no device) | PASS — all gates |
+| `docker/hwa-vaapi.sh` (A4, real `/dev/dri/renderD128`) | PASS — all gates, including no hardware encoder after the device was removed |
+| `docker/observability.sh` (A5) | PASS — all gates |
+| `ci/run.sh` (server, `bin/`/`obj/` purged first) | PASS — 252 s wall; 4198 passed, 0 failed, 11 skipped |
+| `npm run validate:full` (web, at `9b7debbf33c9…`) | PASS — 77 files / 901 tests, bundle 382 574 B of 460 800 B, tree clean |
+| `npm run verify:tesserafin-sdk-fresh` against a real server checkout | PASS — zero drift; pinned contract byte-identical to the contract at `498e1f348aa2…` |
+| `docker/verify-assets-image.sh` on `sha256:2585fc7e…` | ASSETS-AUDIT: all gates passed; `/metadata/web-revision.json` = 1.0.0 @ `a63cb11e…` |
+| `docker/repro-check.sh --platform linux/amd64` (server, run serially) | PASS — `sha256:e6db6e7ab379…` across two clean builds |
+
+### The runtime-origin inventory
+
+`scripts/verify-runtime-origins.mjs` over the three rounds: **PASS**, 2112
+observations across 14 spec files, all 18 spec files instrumented. The four that
+observed nothing — `glass-interaction-profiles`, `glass-light-and-sidebar`,
+`playback-v2-server-contract`, `video-codec-profiles-browser` — are instrumented
+but open no page or drive the API only, which the gate reports as a NOTE rather
+than accepting silently.
+
+Every observed destination is the candidate container itself (loopback
+`127.0.0.1`, its private `172.17.0.0/16` address, and local WebSockets) except
+one declared external origin:
+
+```
+DECLARED (inherited-optional-feature, jellyfinInfrastructure=false)
+  https://www.gstatic.com  https://www.gstatic.com/cv/js/sender/v1/cast_sender.js
+  http://www.gstatic.com   http://www.gstatic.com/eureka/clank/149/cast_sender.js
+```
+
+That is the Google Cast sender SDK, loaded by the inherited `chromecastPlayer`
+plugin. It is Google infrastructure, not Jellyfin infrastructure; it is not
+required by any B1 flow; and it is declared in
+`tests/e2e/support/runtime-origin-allowlist.json` with a reviewed reason, so it
+is surfaced rather than hidden. Public origins otherwise fail closed at the
+moment they are observed. **No Jellyfin-controlled runtime infrastructure was
+reached.** Loading the SDK only when casting is requested is a non-blocking
+follow-up, not a B1 blocker.
+
+### Runs that failed, kept on the record
+
+**The first three-round run failed at round 3 — 107 passed, 1 failed (4.6 m)**,
+on `tests/e2e/error-playback.spec.ts:193` (`a media failure leaves the
+application usable, exposes no secret, and starts no transcode that outlives
+it`). Rounds 1 and 2 were 108 passed (4.0 m each). That run was made without
+`--keep`, so the gate's cleanup trap destroyed the traces before the assertion
+could be read; only the test name survived. Every gate run afterwards carries
+`--keep`.
+
+**A diagnostic re-run reproduced it at round 1** — 107 passed, 1 failed — and
+preserved the evidence. The assertion was
+`the user must be able to leave a failed playback and reach the app again`:
+`getByRole('tab', { name: /accueil|home/i })` was never found. The captured page
+snapshot shows the item page with the terminal dialog over it —
+`heading "Playback Error"`, `Playback failed due to a fatal player error.`,
+`button "Got It"`. The route never changed because that dialog is modal.
+
+The cause was in the test, not the product. The assertion was written against the
+pre-#67 client, where the exhausted ladder ended in silence and there was no
+dialog, so an unconditional hash change always took effect. Once #69 made the
+terminal failure reach a real dialog — which arrives asynchronously — the test
+raced it. Fixed test-only in tesserafin-web#72: wait for the terminal surface,
+assert no secret is on screen with the dialog up, press the dialog's own button,
+require it to close, and only then perform the client-side route change. The gate
+re-confirmed that no production build input changed, so the candidate was neither
+rebuilt nor republished. All three accepted rounds above were then run from round
+1 against the merged web head.
+
+---
+
 ## 7. Known limits
 
 1. **Hosted CI was NOT restored and did not run.** Every result here was produced

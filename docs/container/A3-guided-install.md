@@ -27,19 +27,19 @@ Related docs:
 All paths here use the immutable image published to GHCR:
 
 ```
-ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.44f5ab62b522
+ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.a8ac09f3ff5a
 ```
 
-- Multi-arch manifest digest: `sha256:fd1fa9e0f5a28a07e5872cc5ff13257a92d988717a33519f62c4b26c6ab36249`
-  (`linux/amd64` `sha256:508c5459b505d5cffb2fd8192a205d37cdf5573dab8b4e39df8c16bd59f5f51b`,
-  `linux/arm64` `sha256:bd55fa7e3e34f451fb9b3788964fe858fa4b351f82e9e43b1b988816f0566f71`).
-  Built from `44f5ab62b522684b4fa58ed10de80b8c6a7bb392`. It reports version
+- Multi-arch manifest digest: `sha256:89dd01add7cbe7fd1d1529979f6aa4e6537c9b4b31e2ebec1836a583548a1bf9`
+  (`linux/amd64` `sha256:a1adba4d0e65667e41e25dc38f0364e3f3507f208513a026984496f986c75b08`,
+  `linux/arm64` `sha256:c2b0688c890042e923c1335a6833b298844441862b45683fa0a6ee965c927c42`).
+  Built from `a8ac09f3ff5a715b35b9dc31d1b23c5865a6d34e`. It reports version
   `1.0.0`. This is what the checked-in `docker-compose.yml` pins, by digest — so
   following this guide and running the shipped Compose file give you the same
   image. The dev tag above is immutable too; it is provenance and an alternative
   spelling of the same manifest, not a moving channel.
-- Bundled Tesserafin Web `1.0.0` at commit `489a90be0dbe80aede3dbbc028b140756211d43c`
-  (`ghcr.io/tesserafin-project/tesserafin-web-assets@sha256:ef817dec29f8fd08cee9910954b576d05a947936f93a8a9e3309031b8d656104`),
+- Bundled Tesserafin Web `1.0.0` at commit `a63cb11e8e9cfa137b6c3f739e8881a6dfb39dfb`
+  (`ghcr.io/tesserafin-project/tesserafin-web-assets@sha256:2585fc7e1e06cee0be1bb0bcac735ed783b6e8c3ea2ff346561e7f62c0a75daf`),
   recorded in the image's `org.tesserafin.web.revision` label and in
   `/opt/tesserafin-web.revision.json` inside the image.
 
@@ -189,7 +189,7 @@ DSM 7.2+ with **Container Manager** installed.
 
 1. **Download the image.** Container Manager → *Registry*. If your DSM registry is
    not configured for GHCR, the reliable path is SSH + `docker login ghcr.io` then
-   `docker pull ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.44f5ab62b522`.
+   `docker pull ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.a8ac09f3ff5a`.
 2. **Create folders.** In *File Station*, under a `docker` shared folder create
    `tesserafin/config`, `tesserafin/data`, `tesserafin/cache`, and note your media
    share.
