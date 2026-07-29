@@ -18,11 +18,15 @@ services:
     # migration — at a moment you did not choose. A digest cannot be re-pointed.
     #
     # This is the validated Tesserafin Server 1.0 development baseline, tag
-    # `1.0.0-dev.a8ac09f3ff5a`, built from commit
-    # `a8ac09f3ff5a715b35b9dc31d1b23c5865a6d34e`, bundling Tesserafin Web
-    # `a63cb11e8e9cfa137b6c3f739e8881a6dfb39dfb`. It reports version `1.0.0`.
-    # It passed A1-A5, every A7 layer and three complete B1 rounds of the full
-    # 108-test tesserafin-web browser suite, including real browser onboarding.
+    # `1.0.0-dev.28ace1b74f42`, built from commit
+    # `28ace1b74f42ae3c5e86c9dbb54f7977e34d541b`, bundling Tesserafin Web
+    # `c4d323d6bf397067869a755972bd21df3dc39315`. It reports version `1.0.0`.
+    # It is the accepted B2 presentation/responsive/a11y release candidate
+    # (tesserafin-project/tesserafin-web#55): three complete rounds of the full
+    # 127-test tesserafin-web browser suite, three separate pristine-instance
+    # onboarding rounds, and maintainer visual acceptance across desktop,
+    # mobile and TV. It replaces `1.0.0-dev.a8ac09f3ff5a`
+    # (`sha256:89dd01add7cb…`), which stays published and immutable.
     #
     # The canonical v1+ package is `ghcr.io/tesserafin-project/tesserafin-server`.
     # `ghcr.io/tesserafin-project/tesserafin` is the frozen pre-v1 archive and
@@ -31,7 +35,7 @@ services:
     # Override with `TESSERAFIN_IMAGE=... docker compose up -d` or a .env file.
     # Moving channels are an explicit opt-in; the risks and the upgrade procedure
     # are in docs/container/A6-versioning-and-upgrades.md.
-    image: ${TESSERAFIN_IMAGE:-ghcr.io/tesserafin-project/tesserafin-server@sha256:89dd01add7cbe7fd1d1529979f6aa4e6537c9b4b31e2ebec1836a583548a1bf9}
+    image: ${TESSERAFIN_IMAGE:-ghcr.io/tesserafin-project/tesserafin-server@sha256:636c3038a7eb34c5749c938a725f81998f85610d53b8d8598e4ca251eddb15d9}
     container_name: tesserafin
     # The image already runs as the fixed non-root identity 10000:10000; stated
     # here so the security posture is visible in the compose file itself.

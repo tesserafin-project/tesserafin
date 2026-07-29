@@ -166,10 +166,10 @@ $ docker/version-verify.sh ghcr.io/tesserafin-project/tesserafin:<tag> --require
 
 ```dotenv
 # .env — exact immutable version tag
-TESSERAFIN_IMAGE=ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.a8ac09f3ff5a
+TESSERAFIN_IMAGE=ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.28ace1b74f42
 
 # .env — digest pin, the strongest form; survives a tag being re-pointed
-TESSERAFIN_IMAGE=ghcr.io/tesserafin-project/tesserafin-server@sha256:89dd01add7cbe7fd1d1529979f6aa4e6537c9b4b31e2ebec1836a583548a1bf9
+TESSERAFIN_IMAGE=ghcr.io/tesserafin-project/tesserafin-server@sha256:636c3038a7eb34c5749c938a725f81998f85610d53b8d8598e4ca251eddb15d9
 ```
 
 Resolve a tag to its digest before pinning:
@@ -345,37 +345,65 @@ This is what `docker-compose.yml`, `.env.example`, the Unraid template and
 [`A3-guided-install.md`](./A3-guided-install.md) name today.
 
 ```
-ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.a8ac09f3ff5a
+ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.28ace1b74f42
 ```
 
 | | Digest |
 |---|---|
-| Multi-arch manifest | `sha256:89dd01add7cbe7fd1d1529979f6aa4e6537c9b4b31e2ebec1836a583548a1bf9` |
-| `linux/amd64` | `sha256:a1adba4d0e65667e41e25dc38f0364e3f3507f208513a026984496f986c75b08` |
-| `linux/arm64` | `sha256:c2b0688c890042e923c1335a6833b298844441862b45683fa0a6ee965c927c42` |
+| Multi-arch manifest | `sha256:636c3038a7eb34c5749c938a725f81998f85610d53b8d8598e4ca251eddb15d9` |
+| `linux/amd64` | `sha256:db1201535094b768716bb136508b0229ad28a8f447968e98f2afb84f618a9651` |
+| `linux/arm64` | `sha256:1d0cf9351f9ff1b71fe4339de9bffa0f59da999e160c6958c1fa7d4effea20fb` |
 
-Built from `a8ac09f3ff5a715b35b9dc31d1b23c5865a6d34e`; reports version `1.0.0`.
-The equally immutable `sha-a8ac09f3ff5a715b35b9dc31d1b23c5865a6d34e` tag names the
+Built from `28ace1b74f42ae3c5e86c9dbb54f7977e34d541b`; reports version `1.0.0`.
+The equally immutable `sha-28ace1b74f42ae3c5e86c9dbb54f7977e34d541b` tag names the
 same manifest. `docker-compose.yml` pins the manifest digest; the dev tag is
 provenance and an alternative spelling, never a moving channel. `1.0.0`, `1.0`,
 `1`, `latest`, `stable` and `preview` are **not** published.
 
 Bundled Tesserafin Web `1.0.0` at commit
-`a63cb11e8e9cfa137b6c3f739e8881a6dfb39dfb`
-(`ghcr.io/tesserafin-project/tesserafin-web-assets@sha256:2585fc7e1e06cee0be1bb0bcac735ed783b6e8c3ea2ff346561e7f62c0a75daf`).
+`c4d323d6bf397067869a755972bd21df3dc39315`
+(`ghcr.io/tesserafin-project/tesserafin-web-assets@sha256:6a0fb6347f56a021f6c9928f29f72d78092a0085bb0404b7e594dd475f3f5038`,
+tag `1.0.0-dev.c4d323d6bf39`).
 
-Gates run against that digest: `docker/version-verify.sh --require-digest`,
-`docker/version-contract.test.sh` (53 passed), `docker/smoke.sh`,
-`docker/state-roundtrip.sh`, `docker/browser-onboarding.sh` (including restart and
-container-recreation persistence), `docker/hwa-smoke.sh`, `docker/hwa-vaapi.sh` on
-a real `/dev/dri/renderD128`, `docker/observability.sh`, and
-`ci/verify-release-pair.sh --e2e-spec tests/e2e --lifecycle-runs 3` — all seven A7
-layers PASS, three consecutive rounds of the complete 108-test tesserafin-web
-browser suite green. `docker/repro-check.sh` reproduced one `linux/amd64` manifest
-digest across two clean builds. The full record is
-[`A7-server-web-release-pair.md`](./A7-server-web-release-pair.md) §6c.
+This is the accepted **B2** presentation/responsive/a11y release candidate
+([tesserafin-web#55](https://github.com/tesserafin-project/tesserafin-web/issues/55),
+closed as completed). Its B2 evidence — three consecutive rounds of the complete
+127-test tesserafin-web browser suite, three separate pristine-instance onboarding
+rounds, `npm run validate:full` (901 tests) and the bundle budget — is
+[on that issue](https://github.com/tesserafin-project/tesserafin-web/issues/55#issuecomment-5119431103),
+with [maintainer visual acceptance](https://github.com/tesserafin-project/tesserafin-web/issues/55#issuecomment-5122635858)
+across desktop, mobile and TV.
+
+Gates re-run against that digest when it was promoted to the installation
+default: `docker/version-verify.sh --require-digest --expect-commit 28ace1b74f42…
+--expect-version 1.0.0`, `docker/compose-smoke.sh` (which runs the real browser
+onboarding suite through the shipped Compose file, so it exercises the new
+default reference itself), and `ci/verify-release-pair.sh --lifecycle-runs 3`
+with no skip flag — all seven A7 layers PASS, three consecutive lifecycle rounds
+from a new container, new volumes and newly synthesised fixtures.
+`ci/verify-release-pair.sh` ran on its **default** spec list — the
+contract-critical playback set. It is deliberately not pointed at the whole
+`tests/e2e` tree: the Section B specs (`b2-onboarding.spec.ts` in particular)
+assert their own precondition of an *un-onboarded* container, and the A7 rig
+seeds an administrator before the suite starts, so passing `--e2e-spec tests/e2e`
+makes that spec abort on its guard rather than test the image. The full 127-test
+Section B suite is B2's gate and its evidence is on tesserafin-web#55.
+Promoting this digest rebuilt, retagged and republished nothing: the image was
+already published and immutable, and only the references in this repository
+moved.
 
 ### The candidate this one replaced
+
+`sha256:89dd01add7cbe7fd1d1529979f6aa4e6537c9b4b31e2ebec1836a583548a1bf9`
+(tag `1.0.0-dev.a8ac09f3ff5a`, server `a8ac09f3ff5a715b35b9dc31d1b23c5865a6d34e`,
+bundled web `a63cb11e8e9cfa137b6c3f739e8881a6dfb39dfb`) was the baseline named here
+before. It is **not** deleted, retagged or moved. It passed its own gates — its
+record is [`A7-server-web-release-pair.md`](./A7-server-web-release-pair.md) §6c —
+and was superseded only because the B2 presentation/responsive/a11y work landed a
+newer web client, which forced a new web-assets publication and a new server
+candidate. It is no longer an installation default.
+
+### The candidate that one replaced
 
 `sha256:fd1fa9e0f5a28a07e5872cc5ff13257a92d988717a33519f62c4b26c6ab36249`
 (tag `1.0.0-dev.44f5ab62b522`, server `44f5ab62b522684b4fa58ed10de80b8c6a7bb392`,
