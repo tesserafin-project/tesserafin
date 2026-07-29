@@ -60,6 +60,20 @@ namespace Tesserafin.Server.Integration.Tests
         public const string WriteEnvironmentVariable = "TESSERAFIN_OPENAPI_WRITE";
 
         /// <summary>
+        /// Repo-relative directory the drift evidence is written to when, and only when, the
+        /// committed contract and the running server disagree.
+        ///
+        /// <para>
+        /// A failing run used to print two hashes and throw both documents away, so every
+        /// diagnosis of a cross-machine divergence started from scratch — which is exactly the
+        /// position #94 was in. The hosted job uploads this directory as a short-retention
+        /// artifact on failure. It holds nothing but the two canonical contracts and their
+        /// hashes: no secrets, no environment, no host paths.
+        /// </para>
+        /// </summary>
+        public const string DriftEvidenceRelativePath = "artifacts/openapi-drift";
+
+        /// <summary>
         /// The exact command a developer must run to refresh the committed contract.
         /// </summary>
         public const string RegenerateCommand = "./ci/openapi-generate.sh";

@@ -17,6 +17,13 @@
 #    Local and hosted now agree byte for byte on
 #    sha256 ab2fa4fbb2d420e75205837c4fd7be2d80799149fa4e34c33e94713c78746744.
 #
+# 4. Since [C1.1] (#151) that ordering is also guarded repository-locally by
+#    OpenApiXmlDocumentationOrderTests, which drives the canonical order with
+#    explicit permutations and fails on ANY machine if it is weakened — the
+#    hosted job is no longer the only thing standing between the contract and
+#    a silent cross-machine divergence. On failure this job now retains both
+#    documents as a short-retention artifact.
+#
 # This job is the CROSS-MACHINE half of the contract guard.
 # OpenApiContractTests.Contract_IsByteIdentical_AcrossColdGenerations only
 # reboots the application on one filesystem, where the enumeration order is
@@ -161,6 +168,22 @@ jobs:
           --filter 'Category!=Smoke'
           ${{ github.event_name == 'push' && '--collect:"XPlat Code Coverage" --settings tests/coverletArgs.runsettings' || '' }}
           --verbosity minimal
+
+      # Diagnosis, not enforcement. The OpenAPI equality assertion is unchanged and still
+      # fails the job; this only stops a cross-machine divergence from being unreproducible.
+      # A run that disagrees used to print two hashes and discard both documents, and the
+      # machine that reports the difference is by definition not the machine you can
+      # reproduce it on. The test writes the pair only on mismatch, so on a green run there
+      # is nothing to upload and this step no-ops. Contents are the two canonical contracts
+      # and their hashes — no secrets, no environment, no absolute paths.
+      - name: Retain OpenAPI drift evidence
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: openapi-drift-${{ matrix.os }}-${{ github.run_id }}
+          path: artifacts/openapi-drift/
+          if-no-files-found: ignore
+          retention-days: 3
 
       - name: Merge code coverage results
         if: ${{ github.event_name == 'push' }}

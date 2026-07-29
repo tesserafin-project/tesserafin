@@ -227,34 +227,9 @@ namespace Tesserafin.Server.Extensions
                     Description = "API key header parameter"
                 });
 
-                // Add all xml doc files to swagger generator.
-                //
-                // The ordinal sort is load-bearing, not tidiness. Directory.EnumerateFiles
-                // returns entries in filesystem order, which is unspecified and differs
-                // between machines. Swashbuckle registers one comment filter per file, and
-                // for a property whose type is a $ref, the LAST registered file carrying a
-                // comment for that member wins — so an unsorted enumeration lets the
-                // property's own summary or the referenced type's summary win depending on
-                // which host generated the document.
-                //
-                // That is not hypothetical. It is the whole of the divergence recorded on
-                // #94: the same commit produced sha256 0700633b… inside the tesserafin-ci
-                // container and fea08c38… on a GitHub-hosted runner. The documents were
-                // structurally identical — same paths, same schemas, same enums — and
-                // differed in exactly 21 `description` strings, 13 flipping one way and 8
-                // the other.
-                //
-                // OpenApiContractTests.Contract_IsByteIdentical_AcrossColdGenerations cannot
-                // catch this: it reboots the application on the same filesystem, where the
-                // enumeration order is stable. Only sorting makes the contract reproducible
-                // across machines, which is what lets a hosted job verify it at all.
-                var xmlFiles = Directory.EnumerateFiles(
-                    AppContext.BaseDirectory,
-                    "*.xml",
-                    SearchOption.TopDirectoryOnly)
-                    .OrderBy(static xmlFile => xmlFile, StringComparer.Ordinal);
-
-                foreach (var xmlFile in xmlFiles)
+                // Add all xml doc files to swagger generator, in one canonical order.
+                // See XmlDocumentationFiles for why the order is load-bearing.
+                foreach (var xmlFile in XmlDocumentationFiles(AppContext.BaseDirectory))
                 {
                     c.IncludeXmlComments(xmlFile);
                 }
@@ -316,6 +291,51 @@ namespace Tesserafin.Server.Extensions
             })
             .Replace(ServiceDescriptor.Transient<ISwaggerProvider, CachingOpenApiProvider>());
         }
+
+        /// <summary>
+        /// The XML documentation files Swashbuckle must be given, in the one order that makes the
+        /// generated contract reproducible across machines.
+        ///
+        /// <para>
+        /// The order is load-bearing, not tidiness. <see cref="Directory.EnumerateFiles(string, string, SearchOption)"/>
+        /// returns entries in filesystem order, which is unspecified and differs between hosts.
+        /// Swashbuckle registers one comment filter per file and, for a property whose type is a
+        /// <c>$ref</c>, the LAST registered file carrying a comment for that member wins — so an
+        /// unsorted enumeration lets the property's own summary or the referenced type's summary
+        /// win depending on which machine generated the document.
+        /// </para>
+        ///
+        /// <para>
+        /// That is not hypothetical. It is the whole of the divergence recorded on #94: the same
+        /// commit produced one document inside the tesserafin-ci container and a different one on a
+        /// GitHub-hosted runner. The documents were structurally identical — same paths, same
+        /// schemas, same enums, same <c>required</c> arrays — and differed only in
+        /// <c>description</c> strings, each flipping between a property's own summary and its
+        /// referenced type's summary.
+        /// </para>
+        ///
+        /// <para>
+        /// <c>OpenApiContractTests.Contract_IsByteIdentical_AcrossColdGenerations</c> cannot catch
+        /// this: it reboots the application on one filesystem, where the enumeration order is
+        /// stable. The guard that can is <c>OpenApiXmlDocumentationOrderTests</c>, which drives
+        /// <see cref="CanonicaliseXmlDocumentationOrder"/> with explicit permutations, plus the
+        /// hosted <c>ci-tests.yml</c> job running the equality assertion on a different machine.
+        /// </para>
+        /// </summary>
+        /// <param name="baseDirectory">The directory the server's XML documentation is emitted to.</param>
+        /// <returns>The documentation files, ordinally ordered.</returns>
+        internal static IReadOnlyList<string> XmlDocumentationFiles(string baseDirectory)
+            => CanonicaliseXmlDocumentationOrder(
+                Directory.EnumerateFiles(baseDirectory, "*.xml", SearchOption.TopDirectoryOnly));
+
+        /// <summary>
+        /// Puts an arbitrary enumeration of XML documentation files into the canonical registration
+        /// order. Ordinal, so the result cannot depend on the ambient culture either.
+        /// </summary>
+        /// <param name="xmlFiles">The files as the filesystem happened to enumerate them.</param>
+        /// <returns>The same files, ordinally ordered.</returns>
+        internal static IReadOnlyList<string> CanonicaliseXmlDocumentationOrder(IEnumerable<string> xmlFiles)
+            => xmlFiles.OrderBy(static xmlFile => xmlFile, StringComparer.Ordinal).ToArray();
 
         private static void AddPolicy(this AuthorizationOptions authorizationOptions, string policyName, IAuthorizationRequirement authorizationRequirement)
         {
