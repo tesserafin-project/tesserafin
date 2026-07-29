@@ -68,6 +68,14 @@ banner() {
 
 START_TS=$(date +%s)
 
+banner "Namespace guard (#147)"
+# Deliberately FIRST and outside the `set +e` region below: it needs no image,
+# no container and no compilation, it runs in well under a second, and a tree
+# that has reintroduced the old GitHub organisation must not reach the point
+# where a green build would report PASS. `set -e` is in force, so a violation
+# aborts the gate here.
+./ci/verify-namespace.sh
+
 banner "Building ${IMAGE_TAG} from Dockerfile.ci"
 # Build against an empty context: the image needs no repo files baked in
 # (the repo is bind-mounted below), so building with the repo root as

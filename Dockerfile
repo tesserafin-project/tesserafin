@@ -27,8 +27,8 @@ ARG RUNTIME_IMAGE=mcr.microsoft.com/dotnet/aspnet@sha256:1fa23fc4872d95fd71c2833
 # Pinned BY MANIFEST DIGEST, never by tag: the tag is recorded for provenance
 # only. WEB_VCS_REF is the exact tesserafin-web commit the digest was built from
 # and must be kept in step with it.
-ARG WEB_ASSETS_IMAGE=ghcr.io/tesserafin-project/tesserafin-web-assets@sha256:6a0fb6347f56a021f6c9928f29f72d78092a0085bb0404b7e594dd475f3f5038
-ARG WEB_ASSETS_TAG=ghcr.io/tesserafin-project/tesserafin-web-assets:1.0.0-dev.c4d323d6bf39
+ARG WEB_ASSETS_IMAGE=ghcr.io/tesserafin/tesserafin-web-assets@sha256:6a0fb6347f56a021f6c9928f29f72d78092a0085bb0404b7e594dd475f3f5038
+ARG WEB_ASSETS_TAG=ghcr.io/tesserafin/tesserafin-web-assets:1.0.0-dev.c4d323d6bf39
 ARG WEB_VCS_REF=c4d323d6bf397067869a755972bd21df3dc39315
 ARG WEB_VERSION=1.0.0
 
@@ -204,8 +204,8 @@ VOLUME ["/config", "/cache", "/data"]
 # OCI provenance labels (all inputs deterministic per commit).
 LABEL org.opencontainers.image.title="Tesserafin Server" \
       org.opencontainers.image.description="Reproducible distributable Tesserafin media server" \
-      org.opencontainers.image.source="https://github.com/tesserafin-project/tesserafin" \
-      org.opencontainers.image.url="https://github.com/tesserafin-project/tesserafin" \
+      org.opencontainers.image.source="https://github.com/tesserafin/tesserafin" \
+      org.opencontainers.image.url="https://github.com/tesserafin/tesserafin" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${VCS_REF}" \
       org.opencontainers.image.licenses="GPL-2.0-or-later" \

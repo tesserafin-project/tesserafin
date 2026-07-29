@@ -1,6 +1,6 @@
 # A6 — Image versioning, channels and the upgrade contract
 
-Issue [#92](https://github.com/tesserafin-project/tesserafin/issues/92). This is
+Issue [#92](https://github.com/tesserafin/tesserafin/issues/92). This is
 both the operator-facing upgrade contract and the A6 implementation note: the
 audit that preceded the change is recorded in the last section.
 
@@ -11,16 +11,16 @@ Prerequisites: [A1](./A1-implementation-note.md) (the image),
 > **Epoch note (added after the fact; nothing below is rewritten).** Every image
 > reference, tag and digest recorded in this document is a **pre-v1 development
 > artifact** in the frozen archive package
-> `ghcr.io/tesserafin-project/tesserafin`. Tesserafin public SemVer begins at
+> `ghcr.io/tesserafin/tesserafin`. Tesserafin public SemVer begins at
 > `1.0.0` and the canonical v1+ server package is
-> `ghcr.io/tesserafin-project/tesserafin-server` — see
+> `ghcr.io/tesserafin/tesserafin-server` — see
 > [docs/versioning-policy.md](../versioning-policy.md).
 >
 > The evidence recorded here remains valid **as evidence**: it proves the upgrade
 > harness preserves users, libraries, configuration and playback state across two
 > immutable builds. It does **not** establish a forward-migration boundary inside
 > the `1.x` epoch, and none of these `12.x` images is a member of the supported
-> `1.x` upgrade graph. [#127](https://github.com/tesserafin-project/tesserafin/issues/127)
+> `1.x` upgrade graph. [#127](https://github.com/tesserafin/tesserafin/issues/127)
 > remains open for that reason.
 
 ---
@@ -65,8 +65,8 @@ $ docker/version-contract.sh version
 12.0.0
 
 $ docker/version-contract.sh tags --channel dev
-ghcr.io/tesserafin-project/tesserafin:12.0.0-dev.<12-char commit>
-ghcr.io/tesserafin-project/tesserafin:sha-<40-char commit>
+ghcr.io/tesserafin/tesserafin:12.0.0-dev.<12-char commit>
+ghcr.io/tesserafin/tesserafin:sha-<40-char commit>
 
 $ docker/version-contract.sh check --channel stable --release-tag v12.1.0
 ```
@@ -121,7 +121,7 @@ Opting into a moving channel is a deliberate, documented act:
 
 ```dotenv
 # .env — opt in explicitly, and understand what you are accepting
-TESSERAFIN_IMAGE=ghcr.io/tesserafin-project/tesserafin:12
+TESSERAFIN_IMAGE=ghcr.io/tesserafin/tesserafin:12
 ```
 
 **Channel-tag risks.** With a moving tag, `docker compose pull && docker compose
@@ -140,7 +140,7 @@ was not produced by the contract and should not be trusted.
 ```console
 # What the image claims
 $ docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}} {{index .Config.Labels "org.opencontainers.image.revision"}}' \
-    ghcr.io/tesserafin-project/tesserafin:<tag>
+    ghcr.io/tesserafin/tesserafin:<tag>
 
 # Which exact image is running, by digest
 $ docker inspect --format '{{.Image}} {{.Config.Image}}' tesserafin
@@ -159,24 +159,24 @@ the readiness contract, not a fault. Readiness is `200` **and**
 To check everything at once against a real container:
 
 ```console
-$ docker/version-verify.sh ghcr.io/tesserafin-project/tesserafin:<tag> --require-digest
+$ docker/version-verify.sh ghcr.io/tesserafin/tesserafin:<tag> --require-digest
 ```
 
 ### Pinning to an exact version or digest
 
 ```dotenv
 # .env — exact immutable version tag
-TESSERAFIN_IMAGE=ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.a8ac09f3ff5a
+TESSERAFIN_IMAGE=ghcr.io/tesserafin/tesserafin-server:1.0.0-dev.a8ac09f3ff5a
 
 # .env — digest pin, the strongest form; survives a tag being re-pointed
-TESSERAFIN_IMAGE=ghcr.io/tesserafin-project/tesserafin-server@sha256:89dd01add7cbe7fd1d1529979f6aa4e6537c9b4b31e2ebec1836a583548a1bf9
+TESSERAFIN_IMAGE=ghcr.io/tesserafin/tesserafin-server@sha256:89dd01add7cbe7fd1d1529979f6aa4e6537c9b4b31e2ebec1836a583548a1bf9
 ```
 
 Resolve a tag to its digest before pinning:
 
 ```console
-$ docker pull ghcr.io/tesserafin-project/tesserafin:<tag>
-$ docker image inspect --format '{{index .RepoDigests 0}}' ghcr.io/tesserafin-project/tesserafin:<tag>
+$ docker pull ghcr.io/tesserafin/tesserafin:<tag>
+$ docker image inspect --format '{{index .RepoDigests 0}}' ghcr.io/tesserafin/tesserafin:<tag>
 ```
 
 ---
@@ -248,8 +248,8 @@ part of the backup archive.
 
 ```console
 $ docker/upgrade-roundtrip.sh \
-    --baseline  ghcr.io/tesserafin-project/tesserafin@sha256:<baseline digest> \
-    --candidate ghcr.io/tesserafin-project/tesserafin@sha256:<candidate digest>
+    --baseline  ghcr.io/tesserafin/tesserafin@sha256:<baseline digest> \
+    --candidate ghcr.io/tesserafin/tesserafin@sha256:<candidate digest>
 ```
 
 It boots the baseline by digest on fresh volumes, onboards it, creates two user
@@ -301,6 +301,15 @@ restoration is tracked as #94). That workflow is correctly wired but has not bee
 executed on hosted infrastructure; the assertions are currently run locally.
 
 ---
+
+
+> **Namespace note.** The references below name `tesserafin-project`, the
+> organisation login in force when this record was written. The canonical
+> organisation is now `tesserafin` and the same artifacts are served from
+> `ghcr.io/tesserafin/…`. The recorded identities are preserved verbatim so this
+> record keeps stating where each artifact was originally published. See the
+> namespace cutover tracker, `tesserafin/tesserafin#147`.
+
 
 ## 5b. The validated A6 image (historical, pre-v1 archive)
 

@@ -1,8 +1,8 @@
 # Tesserafin versioning policy
 
-Issues [#92](https://github.com/tesserafin-project/tesserafin/issues/92) ([A6]),
-[#101](https://github.com/tesserafin-project/tesserafin/issues/101) ([E1]),
-[#127](https://github.com/tesserafin-project/tesserafin/issues/127).
+Issues [#92](https://github.com/tesserafin/tesserafin/issues/92) ([A6]),
+[#101](https://github.com/tesserafin/tesserafin/issues/101) ([E1]),
+[#127](https://github.com/tesserafin/tesserafin/issues/127).
 
 This document is authoritative for **which numbers Tesserafin publishes, where it
 publishes them, and how a consumer is allowed to resolve a release**. It sits
@@ -28,8 +28,8 @@ server and the web client share that number.
 
 ### 1.1 What the inherited artifacts are
 
-Every `ghcr.io/tesserafin-project/tesserafin:12.0.0-dev.*` server image and every
-`ghcr.io/tesserafin-project/tesserafin-web-assets:13.0.0-dev.*` web-assets image
+Every `ghcr.io/tesserafin/tesserafin:12.0.0-dev.*` server image and every
+`ghcr.io/tesserafin/tesserafin-web-assets:13.0.0-dev.*` web-assets image
 that already exists:
 
 * **is retained.** None is deleted, retagged, moved or rewritten. They are the
@@ -78,9 +78,9 @@ claim over upstream plugin binaries, and it does not silently accept them either
 
 | Package | Role | Visibility |
 |---|---|---|
-| `ghcr.io/tesserafin-project/tesserafin` | **pre-v1 server archive** — every inherited `12.0.0-dev.*` image | private |
-| `ghcr.io/tesserafin-project/tesserafin-server` | **canonical v1+ server package** | private until [E3] ratifies publication |
-| `ghcr.io/tesserafin-project/tesserafin-web-assets` | web-assets package, spanning both epochs | private until [E3] ratifies publication |
+| `ghcr.io/tesserafin/tesserafin` | **pre-v1 server archive** — every inherited `12.0.0-dev.*` image | private |
+| `ghcr.io/tesserafin/tesserafin-server` | **canonical v1+ server package** | private until [E3] ratifies publication |
+| `ghcr.io/tesserafin/tesserafin-web-assets` | web-assets package, spanning both epochs | private until [E3] ratifies publication |
 
 Rules:
 
@@ -151,7 +151,7 @@ at the time of writing.
 `stable` channel, and `docker/version-contract.test.sh` asserts it.
 
 No mutable tag has been published in either package. The first public release is
-gated on [#103](https://github.com/tesserafin-project/tesserafin/issues/103) [E3].
+gated on [#103](https://github.com/tesserafin/tesserafin/issues/103) [E3].
 
 ---
 
@@ -160,7 +160,7 @@ gated on [#103](https://github.com/tesserafin-project/tesserafin/issues/103) [E3
 Two promises are deliberately distinct.
 
 **Before v1 — prove one real forward migration inside the `1.x` epoch.**
-[#127](https://github.com/tesserafin-project/tesserafin/issues/127) is satisfied
+[#127](https://github.com/tesserafin/tesserafin/issues/127) is satisfied
 only by a run of
 
 ```

@@ -56,7 +56,7 @@ CONTRACT="${REPO_ROOT}/docker/version-contract.sh"
 # for the #127 forward-migration gate — that gate must be driven with an explicit
 # `--baseline <1.x digest>`. The default is a convenience for re-running the
 # historical rehearsal, nothing more.
-BASELINE_DEFAULT="ghcr.io/tesserafin-project/tesserafin@sha256:6e3dbaab6eeaef163e81f9cc5ffb03f5a05bb9d8165e3f6487b2bb3003bc7608"
+BASELINE_DEFAULT="ghcr.io/tesserafin/tesserafin@sha256:6e3dbaab6eeaef163e81f9cc5ffb03f5a05bb9d8165e3f6487b2bb3003bc7608"
 HELPER="busybox:stable@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662"
 
 BASELINE="${BASELINE_DEFAULT}"

@@ -1,6 +1,6 @@
 # [A3] Guided NAS / Docker install — operator guide
 
-Issue: tesserafin-project/tesserafin #89. Depends on #87 [A1] (the prebuilt image)
+Issue: tesserafin/tesserafin #89. Depends on #87 [A1] (the prebuilt image)
 and #88 [A2] (the persistent-state contract). This guide gets a first-time
 self-hoster from nothing to a running, onboarded Tesserafin server **without
 building anything from source**.
@@ -17,9 +17,9 @@ Related docs:
 ## The image
 
 > **Epoch note.** Tesserafin public SemVer begins at `1.0.0`, published to the
-> canonical package `ghcr.io/tesserafin-project/tesserafin-server` — see
+> canonical package `ghcr.io/tesserafin/tesserafin-server` — see
 > [`../versioning-policy.md`](../versioning-policy.md).
-> `ghcr.io/tesserafin-project/tesserafin` is the frozen pre-v1 archive and never
+> `ghcr.io/tesserafin/tesserafin` is the frozen pre-v1 archive and never
 > receives another tag. This guide names the validated `1.0.0` development
 > baseline; `1.0.0` itself is unpublished, and no moving channel (`latest`,
 > `preview`, `1`, `1.0`) exists.
@@ -27,7 +27,7 @@ Related docs:
 All paths here use the immutable image published to GHCR:
 
 ```
-ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.a8ac09f3ff5a
+ghcr.io/tesserafin/tesserafin-server:1.0.0-dev.a8ac09f3ff5a
 ```
 
 - Multi-arch manifest digest: `sha256:89dd01add7cbe7fd1d1529979f6aa4e6537c9b4b31e2ebec1836a583548a1bf9`
@@ -39,7 +39,7 @@ ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.a8ac09f3ff5a
   image. The dev tag above is immutable too; it is provenance and an alternative
   spelling of the same manifest, not a moving channel.
 - Bundled Tesserafin Web `1.0.0` at commit `a63cb11e8e9cfa137b6c3f739e8881a6dfb39dfb`
-  (`ghcr.io/tesserafin-project/tesserafin-web-assets@sha256:2585fc7e1e06cee0be1bb0bcac735ed783b6e8c3ea2ff346561e7f62c0a75daf`),
+  (`ghcr.io/tesserafin/tesserafin-web-assets@sha256:2585fc7e1e06cee0be1bb0bcac735ed783b6e8c3ea2ff346561e7f62c0a75daf`),
   recorded in the image's `org.tesserafin.web.revision` label and in
   `/opt/tesserafin-web.revision.json` inside the image.
 
@@ -67,7 +67,7 @@ ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.a8ac09f3ff5a
 > browser rendered `Update Required` instead of the onboarding wizard; never
 > pinned as an installation default; superseded by the validated replacement named
 > above. It remains published, immutable and private, and is not deleted, retagged,
-> moved or overwritten. See tesserafin-project/tesserafin-web#65.
+> moved or overwritten. See tesserafin/tesserafin-web#65.
 
 ## Prerequisites
 
@@ -174,7 +174,7 @@ spaces are supported (quote them). See A2 for the full permission model.
 Add the template repository and install from Community Applications:
 
 1. Docker tab → Template Repositories →
-   `https://github.com/tesserafin-project/tesserafin/tree/master/deployment/unraid/docker-templates`
+   `https://github.com/tesserafin/tesserafin/tree/master/deployment/unraid/docker-templates`
 2. Add Container → select **Tesserafin**.
 3. Confirm the mappings: WebUI port `8096`; `/config`, `/data`, `/cache` under
    `/mnt/user/appdata/tesserafin/…`; `/media` set to your library and **read-only**.
@@ -189,7 +189,7 @@ DSM 7.2+ with **Container Manager** installed.
 
 1. **Download the image.** Container Manager → *Registry*. If your DSM registry is
    not configured for GHCR, the reliable path is SSH + `docker login ghcr.io` then
-   `docker pull ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.a8ac09f3ff5a`.
+   `docker pull ghcr.io/tesserafin/tesserafin-server:1.0.0-dev.a8ac09f3ff5a`.
 2. **Create folders.** In *File Station*, under a `docker` shared folder create
    `tesserafin/config`, `tesserafin/data`, `tesserafin/cache`, and note your media
    share.

@@ -1,5 +1,13 @@
 # [A1] Reproducible distributable server image — implementation note
 
+> **Namespace note.** The references below name `tesserafin-project`, the
+> organisation login in force when this record was written. The canonical
+> organisation is now `tesserafin` and the same artifacts are served from
+> `ghcr.io/tesserafin/…`. The recorded identities are preserved verbatim so this
+> record keeps stating where each artifact was originally published. See the
+> namespace cutover tracker, `tesserafin/tesserafin#147`.
+
+
 Issue: tesserafin-project/tesserafin #87. Foundational production server image.
 Deliberately excludes #88–#92 (see Deferred).
 

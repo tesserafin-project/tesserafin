@@ -36,14 +36,14 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SHARED_VERSION_FILE="${REPO_ROOT}/SharedVersion.cs"
 # The CANONICAL v1+ server package. The inherited pre-v1 development images live
-# in ghcr.io/tesserafin-project/tesserafin, which is a frozen archive: it never
+# in ghcr.io/tesserafin/tesserafin, which is a frozen archive: it never
 # receives another tag. See docs/versioning-policy.md §2.
 #
 # Note that the archive reference is a strict PREFIX of this one. Anything that
 # has to tell the two apart compares the full repository reference or stops at
 # the `:`/`@` boundary; a substring test for "tesserafin" matches both.
-DEFAULT_REGISTRY="ghcr.io/tesserafin-project/tesserafin-server"
-ARCHIVE_REGISTRY="ghcr.io/tesserafin-project/tesserafin"
+DEFAULT_REGISTRY="ghcr.io/tesserafin/tesserafin-server"
+ARCHIVE_REGISTRY="ghcr.io/tesserafin/tesserafin"
 
 die() { echo "version-contract: $*" >&2; exit 1; }
 usage_die() { echo "version-contract: $*" >&2; exit 2; }

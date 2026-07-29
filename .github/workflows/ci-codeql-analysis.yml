@@ -6,7 +6,7 @@
 #
 # The analysis itself runs fine. It is the upload that is refused:
 #
-#   $ gh api repos/tesserafin-project/tesserafin/code-scanning/alerts
+#   $ gh api repos/tesserafin/tesserafin/code-scanning/alerts
 #   {"message":"Advanced Security must be enabled for this repository to use
 #    code scanning.","status":"403"}
 #

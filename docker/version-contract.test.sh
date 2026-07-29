@@ -17,8 +17,8 @@ set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONTRACT="${REPO_ROOT}/docker/version-contract.sh"
-REG="ghcr.io/tesserafin-project/tesserafin-server"
-ARCHIVE="ghcr.io/tesserafin-project/tesserafin"
+REG="ghcr.io/tesserafin/tesserafin-server"
+ARCHIVE="ghcr.io/tesserafin/tesserafin"
 COMMIT="1111111111111111111111111111111111111111"
 
 PASSED=0; FAILED=0; SKIPPED=0
@@ -263,7 +263,7 @@ echo "== 10. version-epoch negative controls (docs/versioning-policy.md) =="
 #     reference. The archive reference is a strict prefix of it, so a substring
 #     test would accept both and prove nothing.
 DEFAULT_REG_LINE="$(sed -nE 's/^DEFAULT_REGISTRY="(.*)"$/\1/p' "${CONTRACT}")"
-[[ "${DEFAULT_REG_LINE}" == "ghcr.io/tesserafin-project/tesserafin-server" ]] \
+[[ "${DEFAULT_REG_LINE}" == "ghcr.io/tesserafin/tesserafin-server" ]] \
   && pass "the default registry is exactly the canonical v1+ package" \
   || fail "the default registry is '${DEFAULT_REG_LINE}', not the canonical v1+ package"
 [[ "${DEFAULT_REG_LINE}" != "${ARCHIVE}" ]] \
@@ -279,10 +279,10 @@ DEFAULT_REG_LINE="$(sed -nE 's/^DEFAULT_REGISTRY="(.*)"$/\1/p' "${CONTRACT}")"
 #     VERSION.
 EPOCH="$(mk_sandbox 1.0.0)"
 expect_ok "an explicit --registry cannot change the derived version core" "${EPOCH}" \
-  "ghcr.io/tesserafin-project/tesserafin-legacy-mirror:1.0.0-dev.111111111111
-ghcr.io/tesserafin-project/tesserafin-legacy-mirror:sha-${COMMIT}" \
+  "ghcr.io/tesserafin/tesserafin-legacy-mirror:1.0.0-dev.111111111111
+ghcr.io/tesserafin/tesserafin-legacy-mirror:sha-${COMMIT}" \
   tags --channel dev --commit "${COMMIT}" \
-  --registry ghcr.io/tesserafin-project/tesserafin-legacy-mirror
+  --registry ghcr.io/tesserafin/tesserafin-legacy-mirror
 expect_ok "REGISTRY from the environment likewise moves the repository only" "${EPOCH}" \
   "${REG}:1.0.0-dev.111111111111
 ${REG}:sha-${COMMIT}" \

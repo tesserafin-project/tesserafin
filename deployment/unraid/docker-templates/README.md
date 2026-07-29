@@ -8,7 +8,7 @@ Click on the Docker tab
 
 Add the following line under "Template Repositories" 
 
-https://github.com/tesserafin-project/tesserafin/tree/master/deployment/unraid/docker-templates
+https://github.com/tesserafin/tesserafin/tree/master/deployment/unraid/docker-templates
 
 Click save then click on Add Container and select Tesserafin.
 

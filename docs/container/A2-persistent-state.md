@@ -1,5 +1,13 @@
 # [A2] Volumes, permissions, migrations & backup/restore — operator note
 
+> **Namespace note.** The references below name `tesserafin-project`, the
+> organisation login in force when this record was written. The canonical
+> organisation is now `tesserafin` and the same artifacts are served from
+> `ghcr.io/tesserafin/…`. The recorded identities are preserved verbatim so this
+> record keeps stating where each artifact was originally published. See the
+> namespace cutover tracker, `tesserafin/tesserafin#147`.
+
+
 Issue: tesserafin-project/tesserafin #88. Builds on the production image from #87
 ([A1]). This note defines the container's persistent-state contract and the scripts
 that verify and protect it. It changes no server code and no image layer: the tooling

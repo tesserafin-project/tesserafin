@@ -1,5 +1,13 @@
 # [A5] Health endpoint and structured logs — operator guide
 
+> **Namespace note.** The references below name `tesserafin-project`, the
+> organisation login in force when this record was written. The canonical
+> organisation is now `tesserafin` and the same artifacts are served from
+> `ghcr.io/tesserafin/…`. The recorded identities are preserved verbatim so this
+> record keeps stating where each artifact was originally published. See the
+> namespace cutover tracker, `tesserafin/tesserafin#147`.
+
+
 Issue: tesserafin-project/tesserafin #91. Depends on #87 [A1] (the prebuilt image).
 Consumed by [A4]'s startup decision logging and by the release go/no-go checks.
 

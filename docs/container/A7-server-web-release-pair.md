@@ -1,5 +1,13 @@
 # A7 — the server↔web release pair
 
+> **Namespace note.** The references below name `tesserafin-project`, the
+> organisation login in force when this record was written. The canonical
+> organisation is now `tesserafin` and the same artifacts are served from
+> `ghcr.io/tesserafin/…`. The recorded identities are preserved verbatim so this
+> record keeps stating where each artifact was originally published. See the
+> namespace cutover tracker, `tesserafin/tesserafin#147`.
+
+
 Issue #93 / **[A7] Reconcile server/web contract pairing for release**.
 
 This document records the immutable identities of one server↔web release pair,

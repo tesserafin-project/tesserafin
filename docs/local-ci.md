@@ -1,5 +1,13 @@
 # CI locale (Docker) — porte de merge obligatoire
 
+> **Namespace note.** The references below name `tesserafin-project`, the
+> organisation login in force when this record was written. The canonical
+> organisation is now `tesserafin` and the same artifacts are served from
+> `ghcr.io/tesserafin/…`. The recorded identities are preserved verbatim so this
+> record keeps stating where each artifact was originally published. See the
+> namespace cutover tracker, `tesserafin/tesserafin#147`.
+
+
 > ## ⚠ Mise à jour du 2026-07-27 — la CI hébergée est revenue (#94)
 >
 > **Ce qui a changé.** GitHub réalloue des runners hébergés pour ce dépôt. La

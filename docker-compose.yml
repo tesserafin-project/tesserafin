@@ -24,14 +24,14 @@ services:
     # It passed A1-A5, every A7 layer and three complete B1 rounds of the full
     # 108-test tesserafin-web browser suite, including real browser onboarding.
     #
-    # The canonical v1+ package is `ghcr.io/tesserafin-project/tesserafin-server`.
-    # `ghcr.io/tesserafin-project/tesserafin` is the frozen pre-v1 archive and
+    # The canonical v1+ package is `ghcr.io/tesserafin/tesserafin-server`.
+    # `ghcr.io/tesserafin/tesserafin` is the frozen pre-v1 archive and
     # never receives another tag (docs/versioning-policy.md §2).
     #
     # Override with `TESSERAFIN_IMAGE=... docker compose up -d` or a .env file.
     # Moving channels are an explicit opt-in; the risks and the upgrade procedure
     # are in docs/container/A6-versioning-and-upgrades.md.
-    image: ${TESSERAFIN_IMAGE:-ghcr.io/tesserafin-project/tesserafin-server@sha256:89dd01add7cbe7fd1d1529979f6aa4e6537c9b4b31e2ebec1836a583548a1bf9}
+    image: ${TESSERAFIN_IMAGE:-ghcr.io/tesserafin/tesserafin-server@sha256:89dd01add7cbe7fd1d1529979f6aa4e6537c9b4b31e2ebec1836a583548a1bf9}
     container_name: tesserafin
     # The image already runs as the fixed non-root identity 10000:10000; stated
     # here so the security posture is visible in the compose file itself.
