@@ -286,3 +286,8 @@ graphify-out/
 .agents/
 .forge/
 skills-lock.json
+
+# OpenAPI drift evidence, written only when the committed contract and the running
+# server disagree (tests/Tesserafin.Server.Integration.Tests/OpenApiContractTests.cs).
+# The hosted job uploads it as a short-retention artifact; it is never committed.
+artifacts/openapi-drift/

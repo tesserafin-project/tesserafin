@@ -128,6 +128,14 @@ namespace Tesserafin.Server.Integration.Tests
             _outputHelper.WriteLine("committed sha256 = {0}", committedFingerprint);
             _outputHelper.WriteLine("server    sha256 = {0}", fingerprint);
 
+            if (committedFingerprint != fingerprint)
+            {
+                // Keep both documents. Two hashes say the contract moved; only the documents say
+                // HOW, and a cross-machine divergence cannot be reproduced on the machine that
+                // reports it. The hosted job uploads this directory on failure.
+                await WriteDriftEvidenceAsync(repoRoot, committed, committedFingerprint, canonical, fingerprint);
+            }
+
             Assert.True(
                 committedFingerprint == fingerprint,
                 OpenApiContract.BuildDriftMessage(committedFingerprint, fingerprint));
@@ -139,6 +147,36 @@ namespace Tesserafin.Server.Integration.Tests
                 committedLock.AsSpan().SequenceEqual(lockBytes),
                 FormattableString.Invariant(
                     $"{OpenApiContract.LockRelativePath} does not match {OpenApiContract.SpecRelativePath}. Regenerate both with: {OpenApiContract.RegenerateCommand}"));
+        }
+
+        private async Task WriteDriftEvidenceAsync(
+            string repoRoot,
+            byte[] committed,
+            string committedFingerprint,
+            byte[] generated,
+            string generatedFingerprint)
+        {
+            var evidenceDirectory = Path.Combine(repoRoot, OpenApiContract.DriftEvidenceRelativePath);
+            Directory.CreateDirectory(evidenceDirectory);
+
+            var committedPath = Path.Combine(evidenceDirectory, "committed.json");
+            var generatedPath = Path.Combine(evidenceDirectory, "generated.json");
+            var hashesPath = Path.Combine(evidenceDirectory, "hashes.txt");
+
+            await File.WriteAllBytesAsync(committedPath, committed, TestContext.Current.CancellationToken);
+            await File.WriteAllBytesAsync(generatedPath, generated, TestContext.Current.CancellationToken);
+
+            // Repo-relative names only: an absolute path would name a private working directory
+            // on whichever machine produced the evidence, and the artifact is meant to travel.
+            await File.WriteAllTextAsync(
+                hashesPath,
+                FormattableString.Invariant(
+                    $"{committedFingerprint}  committed.json{Environment.NewLine}{generatedFingerprint}  generated.json{Environment.NewLine}"),
+                TestContext.Current.CancellationToken);
+
+            _outputHelper.WriteLine(
+                "drift evidence written to {0}/ (committed.json, generated.json, hashes.txt)",
+                OpenApiContract.DriftEvidenceRelativePath);
         }
 
         private static async Task<byte[]> GenerateCanonicalAsync(TesserafinApplicationFactory factory)
