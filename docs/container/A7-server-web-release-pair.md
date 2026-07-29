@@ -523,14 +523,29 @@ conclusion was drawn from it.
 
 ---
 
-## 6c. Evidence — the B1 replacement pair, and what it is the default for
+## 6c. Evidence — the B1 replacement pair
+
+> **Historical record. No longer the installation default.** This section is the
+> evidence for the B1 replacement pair exactly as it was run; nothing in it has
+> been rewritten. It stopped being what `docker-compose.yml`, `.env.example`, the
+> Unraid template and A3 name when the accepted **B2** candidate
+> `sha256:636c3038a7eb34c5749c938a725f81998f85610d53b8d8598e4ca251eddb15d9`
+> (server `28ace1b74f42ae3c5e86c9dbb54f7977e34d541b`, bundled web
+> `c4d323d6bf397067869a755972bd21df3dc39315`) was promoted — the live default and
+> its promotion gates are
+> [`A6-versioning-and-upgrades.md`](./A6-versioning-and-upgrades.md) §5c, and the
+> B2 acceptance evidence is on
+> [tesserafin-web#55](https://github.com/tesserafin-project/tesserafin-web/issues/55).
+> The image
+> below remains published and immutable; it was not deleted, retagged or moved.
 
 The pair in §6b was superseded because the web client it bundles fails
 tesserafin-project/tesserafin-web#67: a terminal playback failure was silent. The
 fix (tesserafin-web#69) changes shipped runtime bytes, so it forced a new
 web-assets publication, a `Dockerfile` re-pin and a new server candidate. This is
-that candidate, and it is what `docker-compose.yml`, `.env.example`, the Unraid
-template and A3 name from now on.
+that candidate, and it was what `docker-compose.yml`, `.env.example`, the Unraid
+template and A3 named until the B2 candidate was promoted — see
+[`A6-versioning-and-upgrades.md`](./A6-versioning-and-upgrades.md) §5c.
 
 ```
 ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.a8ac09f3ff5a
