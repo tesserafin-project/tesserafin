@@ -1,5 +1,56 @@
 # CI locale (Docker) — porte de merge obligatoire
 
+> ## ⚠ Update 2026-07-30 — `OpenAPI Check` is armed (#162, C1/C4 slice)
+>
+> **`openapi-pull-request.yml` is no longer parked.** It runs automatically on
+> `pull_request` towards `master`; its `workflow_dispatch` trigger is gone,
+> because every job is relative to a pull request and a dispatch could not
+> produce a verdict. The `openapi-pull-request.yml`, `openapi-workflow-run.yml`
+> and `openapi-merge.yml` rows of the 2026-07-27 table below, like the ones in
+> the "Workflows mis en pause" table, no longer describe the current state.
+>
+> **Two checks, two different questions.** They do not overlap:
+>
+> * `Tests` runs `OpenApiContractTests.CommittedContract_MatchesRunningServer`
+>   and proves the committed `openapi/openapi.json` is byte-for-byte what the
+>   **HEAD server** generates. Regeneration drift.
+> * `OpenAPI Check` compares the **merge-base** contract with the
+>   **pull-request head** contract and classifies the change as compatible,
+>   breaking or indeterminate. Semantic compatibility. It never regenerates or
+>   rewrites either document.
+>
+> **The engine changed.** `openapitools/openapi-diff:2.1.6` could not parse
+> this contract at all — run `30230606338` died with
+> `java.lang.StackOverflowError`, and 2.1.7 still does. The engine is now
+> oasdiff, pinned by version *and* immutable digest in `ci/openapi-compat.sh`,
+> which processes the full 2 MB document in about two seconds.
+>
+> **Fail-closed.** Breaking changes are red, and so is every "we do not know":
+> missing or malformed contract, missing or invalid lock file, SHA-256
+> mismatch against `contract.lock.json`, engine crash, engine timeout,
+> unparsable engine output, missing report. There is no pre-1.0 waiver; an
+> intentional breaking change stays red and is argued for in review. The
+> deterministic controls (`./ci/tests/openapi-compat.test.sh`, 34 assertions)
+> run inside the workflow on every pull request, including against the real
+> committed contract, so a green verdict is a claim the same run has tested.
+>
+> **Reports** live in the job summary and in a 7-day artifact. There is no
+> pull-request comment: `openapi-workflow-run.yml` existed only to repost the
+> report with `secrets.JF_BOT_TOKEN`, a Jellyfin bot credential this
+> organisation does not have, and it is **deleted**, not parked.
+>
+> **`openapi-merge.yml` stays parked and is not a Tesserafin publication
+> channel.** It targets an inherited Reefin repository server over SCP/SSH,
+> needs `REPO_HOST`/`REPO_USER`/`REPO_KEY` secrets that do not exist, and its
+> jobs are guarded by `contains(github.repository_owner, 'reefin')`. Nothing
+> publishes an OpenAPI document today. That decision belongs to a later
+> release slice.
+>
+> **None of this makes a check mandatory.** Required status checks and CodeQL
+> remain unavailable for the same external reason described below, and
+> cross-repository SDK regeneration is still not hosted here. #94 and #97 stay
+> open.
+
 > ## ⚠ Mise à jour du 2026-07-30 — `ci-compat.yml` est armé (#94, tranche ABI)
 >
 > **`ci-compat.yml` n'est plus en garage.** Il s'exécute automatiquement sur
@@ -392,9 +443,10 @@ Workflows **laissés intacts**, et pourquoi :
 
 - `openapi-generate.yml` — `workflow_call` seul, aucun déclencheur propre ;
   il ne part que si un appelant (désormais manuel) l'invoque.
-- `openapi-workflow-run.yml` — `workflow_run` en aval d'« OpenAPI Check » ;
-  ce n'est pas un check de PR, il ne partira plus tant qu'« OpenAPI Check »
-  n'est pas dispatché.
+- ~~`openapi-workflow-run.yml`~~ — deleted on 2026-07-30 (#162). It only
+  reposted the semantic report as a pull-request comment using
+  `secrets.JF_BOT_TOKEN`, which this organisation does not have. The report
+  now lives in the `OpenAPI Check` job summary and artifact, with no secret.
 - `commands.yml`, `project-automation.yml`, `pull-request-conflict.yml` —
   déclenchés sur PR, mais leurs jobs sont gardés par
   `if: github.repository == 'jellyfin/jellyfin'` ou par une condition sur un

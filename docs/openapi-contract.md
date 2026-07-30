@@ -3,6 +3,44 @@
 Issue #36. Ce document décrit comment le contrat OpenAPI de `reefin` est
 généré, identifié, vérifié et consommé.
 
+> ## ⚠ Update 2026-07-30 — hosted status (#162)
+>
+> Sections below written while hosted Actions were parked describe
+> `openapi-pull-request.yml` and `openapi-generate.yml` as inert. They are not,
+> and the statements marked *« Non vérifié ici »* about `openapi-diff` are
+> superseded. Current state:
+>
+> | Control | Trigger | What it proves |
+> | --- | --- | --- |
+> | `Tests` (`ci-tests.yml`) | automatic, `push`/`pull_request` | the committed `openapi/openapi.json` is byte-for-byte what the **HEAD server** generates — the drift check of §7, now also enforced off-laptop |
+> | `OpenAPI Check` (`openapi-pull-request.yml`) | automatic, `pull_request` | the **merge-base** contract compared with the **pull-request head** contract is compatible, breaking or indeterminate |
+> | `./ci/run.sh` | local, mandatory | still the authoritative merge gate |
+>
+> `OpenAPI Check` reads both contract/lock pairs straight out of git, validates
+> each `sha256` against its `contract.lock.json`, and runs `ci/openapi-compat.sh`.
+> It never regenerates or canonicalises anything: `./ci/openapi-generate.sh`
+> remains the single authoritative generator (§1).
+>
+> The engine is no longer `openapi-diff`. 2.1.6 died with
+> `java.lang.StackOverflowError` on this exact document (run `30230606338`) and
+> 2.1.7 still does; the `sed 's:allOf:oneOf:g'` workaround removed by #48 is
+> therefore moot. The engine is oasdiff, pinned by version and immutable digest
+> in `ci/openapi-compat.sh`, with the project's severity policy in
+> `ci/openapi-severity-levels.txt` and 34 deterministic controls in
+> `ci/tests/openapi-compat.test.sh`.
+>
+> Reports live in the Actions job summary and in a 7-day artifact. The
+> pull-request comment workflow (`openapi-workflow-run.yml`) is **deleted**: it
+> needed `secrets.JF_BOT_TOKEN`, which does not exist here.
+>
+> Two things §6 says are still true and still gaps: **nothing publishes a
+> Tesserafin OpenAPI document** — `openapi-merge.yml` remains parked, targets
+> an inherited Reefin SCP/SSH server, and is not a release channel — and
+> **nothing automatically detects a mismatch between the two repositories**;
+> cross-repository SDK regeneration is not hosted here. #97 stays open for
+> that, and #94 stays open because required status checks and CodeQL remain
+> unavailable on a private repository under a free organisation plan.
+
 ## TL;DR
 
 ```bash
@@ -358,6 +396,9 @@ ne justifient pas de bump de `SharedVersion.cs` par eux-mêmes : c'est le
 | Fichier | Rôle |
 | --- | --- |
 | `ci/openapi-generate.sh` | régénération Docker, locale, sans Actions hébergées |
+| `ci/openapi-compat.sh` | comparaison sémantique base ↔ head, fail-closed (#162) |
+| `ci/openapi-severity-levels.txt` | politique de compatibilité — les règles élevées au niveau `err` |
+| `ci/tests/openapi-compat.test.sh` | 34 contrôles déterministes de cette porte |
 | `openapi/openapi.json` | contrat canonique commité |
 | `openapi/contract.lock.json` | empreinte `{version, sha256}` |
 | `tests/.../OpenApiContract.cs` | canonicalisation, empreinte, message de dérive |
@@ -366,5 +407,5 @@ ne justifient pas de bump de `SharedVersion.cs` par eux-mêmes : c'est le
 | `ci/run.sh` | commentaire pointant ici (aucun changement fonctionnel) |
 | `.gitattributes` | `eol=lf` explicite sur les deux fichiers générés |
 | `.github/workflows/openapi-generate.yml` | téléverse le `openapi/openapi.json` commité (ne génère pas) |
-| `.github/workflows/openapi-pull-request.yml` | diff `openapi-diff` base ↔ head sur le contrat canonique |
-| `.github/workflows/openapi-merge.yml` | publication SCP/SSH — **non modifié** par #48 |
+| `.github/workflows/openapi-pull-request.yml` | « OpenAPI Check » — comparaison sémantique base ↔ head, automatique sur `pull_request` (#162) |
+| `.github/workflows/openapi-merge.yml` | publication SCP/SSH héritée de Reefin — **garée**, ce n'est pas un canal de publication Tesserafin |
