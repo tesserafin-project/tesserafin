@@ -43,6 +43,17 @@ namespace Tesserafin.Playback.Shadow.Tests;
 /// logs their values on a budget overrun); this test mirrors that exact phase split without touching
 /// that method or any other production type.
 /// </para>
+/// <para>
+/// WHAT IS ASSERTED vs WHAT IS REPORTED. Hard, failing assertions: deterministic divergence
+/// classification per case, no unapproved regression or unexplained divergence, the pooled hot p95
+/// total inside <see cref="BudgetMarginFraction"/> of <c>PlaybackShadowOptions.MaxExecutionMs</c>,
+/// no more than <see cref="MaxOverrunFraction"/> of iterations over that budget, and (by having no
+/// try/catch anywhere) zero exceptions. Reported but NOT asserted: per-case/per-phase p50/p95/p99,
+/// the JIT warm-up comparison, and the round-A-vs-round-B drift ratio. The drift ratio was a hard
+/// assertion until issue #145; the pass/fail rules now live in <see cref="ShadowPerformancePolicy"/>
+/// as a pure function, so they are proven by synthetic timing samples in
+/// <see cref="ShadowPerformancePolicyTests"/> instead of only by this benchmark's wall clock.
+/// </para>
 /// </remarks>
 public sealed class ShadowPerformanceGateTests
 {
@@ -59,19 +70,12 @@ public sealed class ShadowPerformanceGateTests
     private const int HotIterationsPerCaseRound = 120;
 
     /// <summary>
-    /// Round-A-vs-round-B stability bound, expressed as a RATIO (max/min) rather than an absolute
-    /// millisecond delta - an absolute threshold would be machine-dependent (a loaded CI runner or a
-    /// throttled laptop would flake) and this gate must survive `dotnet test` on ordinary dev
-    /// hardware under ordinary background load. 4x is generous: it tolerates GC pauses, OS
-    /// scheduling noise, and thermal throttling while still catching an order-of-magnitude
-    /// regression (the actual failure mode this gate exists to prevent).
-    /// </summary>
-    private const double RoundStabilityMaxRatio = 4.0;
-
-    /// <summary>
-    /// Added to both round's p95 (in ms) before taking their ratio, so a phase whose real timing is
-    /// a handful of microseconds (e.g. mapping) does not turn ordinary sub-microsecond timer jitter
-    /// into a huge, meaningless ratio (0.001ms vs 0.004ms is "4x" but is noise, not a regression).
+    /// Added to both rounds' p95 (in ms) before taking their ratio in the DIAGNOSTIC round-stability
+    /// line, so a phase whose real timing is a handful of microseconds (e.g. mapping) does not turn
+    /// ordinary sub-microsecond timer jitter into a huge, meaningless ratio (0.001ms vs 0.004ms is
+    /// "4x" but is noise, not a regression). Nothing asserts on this ratio - see
+    /// <see cref="ShadowPerformancePolicy"/> and issue #145 for why a round-versus-round comparison
+    /// measures the RUNNER's scheduling stability rather than the product's cost.
     /// </summary>
     private const double RoundStabilityFloorMs = 0.05;
 
@@ -180,47 +184,35 @@ public sealed class ShadowPerformanceGateTests
         }
 
         // ==== Gate 3: budget not systemically exceeded ====
-        var pooledHotTotalsMs = roundA.PooledTotalsMs.Concat(roundB.PooledTotalsMs).OrderBy(x => x).ToArray();
-        var pooledP95TotalMs = Percentile(pooledHotTotalsMs, 0.95);
-        var overrunFraction = pooledHotTotalsMs.Count(ms => ms > maxExecutionMs) / (double)pooledHotTotalsMs.Length;
+        // The whole pass/fail decision lives in ShadowPerformancePolicy, a pure function of the
+        // collected samples, so it is also exercised directly with synthetic timings in
+        // ShadowPerformancePolicyTests rather than being provable only by running this benchmark.
+        var verdict = ShadowPerformancePolicy.EvaluateBudget(
+            roundA.PooledTotalsMs,
+            roundB.PooledTotalsMs,
+            maxExecutionMs,
+            BudgetMarginFraction,
+            MaxOverrunFraction);
 
-        Assert.True(
-            pooledP95TotalMs <= maxExecutionMs * BudgetMarginFraction,
-            $"Pooled hot p95 total ({pooledP95TotalMs:F4}ms) exceeds {BudgetMarginFraction:P0} of the configured " +
-            $"budget ({maxExecutionMs}ms -> {maxExecutionMs * BudgetMarginFraction:F2}ms margin). This is the " +
-            "actual budget check: the shadow run must stay comfortably inside PlaybackShadowOptions.MaxExecutionMs.");
-
-        Assert.True(
-            overrunFraction <= MaxOverrunFraction,
-            $"{overrunFraction:P1} of hot iterations exceeded the {maxExecutionMs}ms budget - more than the " +
-            $"{MaxOverrunFraction:P0} tolerance for rare noise. This looks like a SYSTEMIC overrun, not noise.");
-
-        // ==== Gate 4: stable hot p95 across rounds A and B, per phase, via relative tolerance ====
-        AssertPhaseStable("mapping", roundA.PooledMappingMs, roundB.PooledMappingMs);
-        AssertPhaseStable("engine", roundA.PooledEngineMs, roundB.PooledEngineMs);
-        AssertPhaseStable("comparison", roundA.PooledComparisonMs, roundB.PooledComparisonMs);
+        // ==== Round-to-round drift: MEASURED AND REPORTED, NEVER ASSERTED (issue #145) ====
+        // A round-versus-round p95 ratio is a RELATIVE statistic, so on shared hardware it tracks the
+        // runner's scheduling stability, not the hot path's cost. It false-failed four times on
+        // master-equivalent assemblies with every budget clause passing - and, being a ratio, it sat
+        // at ~1.0x for a sustained slowdown affecting both rounds, i.e. it was blind to the very
+        // regression it claimed to catch. The absolute budget rules above cover that case; these
+        // numbers stay in the report because they remain useful when investigating a real failure.
+        var stability = new[]
+        {
+            ("mapping", ShadowPerformancePolicy.MeasureRoundStability(roundA.PooledMappingMs, roundB.PooledMappingMs, RoundStabilityFloorMs)),
+            ("engine", ShadowPerformancePolicy.MeasureRoundStability(roundA.PooledEngineMs, roundB.PooledEngineMs, RoundStabilityFloorMs)),
+            ("comparison", ShadowPerformancePolicy.MeasureRoundStability(roundA.PooledComparisonMs, roundB.PooledComparisonMs, RoundStabilityFloorMs)),
+        };
 
         // ==== Report (pasteable for the PR111d journal entry) ====
-        var report = BuildReport(caseSetups, roundA, roundB, maxExecutionMs, pooledP95TotalMs, overrunFraction, firstWarmupTotalMsByCase);
+        var report = BuildReport(caseSetups, roundA, roundB, verdict, stability, firstWarmupTotalMsByCase);
         _output.WriteLine(report);
-    }
 
-    private static void AssertPhaseStable(string phaseName, IReadOnlyList<double> roundAMs, IReadOnlyList<double> roundBMs)
-    {
-        var sortedA = roundAMs.OrderBy(x => x).ToArray();
-        var sortedB = roundBMs.OrderBy(x => x).ToArray();
-
-        var p95A = Percentile(sortedA, 0.95) + RoundStabilityFloorMs;
-        var p95B = Percentile(sortedB, 0.95) + RoundStabilityFloorMs;
-
-        var ratio = Math.Max(p95A, p95B) / Math.Min(p95A, p95B);
-
-        Assert.True(
-            ratio <= RoundStabilityMaxRatio,
-            $"Phase '{phaseName}' hot p95 drifted between rounds beyond the {RoundStabilityMaxRatio}x tolerance: " +
-            $"round A p95={Percentile(sortedA, 0.95):F4}ms, round B p95={Percentile(sortedB, 0.95):F4}ms " +
-            $"(floored ratio={ratio:F2}x). This is an order-of-magnitude drift check, not a tight budget - a " +
-            "failure here means something changed the hot path's cost, not ordinary machine noise.");
+        Assert.True(verdict.IsWithinBudget, verdict.Describe() + Environment.NewLine + Environment.NewLine + report);
     }
 
     private static HotRoundResult RunHotRound(PlaybackEngine engine, IReadOnlyList<CaseSetup> caseSetups)
@@ -294,36 +286,28 @@ public sealed class ShadowPerformanceGateTests
 
     private static string CaseKey(CaseSetup setup) => setup.DeviceProfile + "|" + setup.Source;
 
-    /// <summary>
-    /// Exact percentile on an ASCENDING-sorted sample: <c>p95 = sorted[ceil(0.95*n) - 1]</c>. No
-    /// interpolation, no bucket approximation (unlike <see cref="ShadowMetrics"/>'s coarse
-    /// histogram) - this is the whole point of measuring raw timings in this test.
-    /// </summary>
-    private static double Percentile(IReadOnlyList<double> sortedAscending, double p)
-    {
-        if (sortedAscending.Count == 0)
-        {
-            return 0;
-        }
-
-        var rank = (int)Math.Ceiling(p * sortedAscending.Count) - 1;
-        rank = Math.Clamp(rank, 0, sortedAscending.Count - 1);
-        return sortedAscending[rank];
-    }
-
     private static string BuildReport(
         IReadOnlyList<CaseSetup> caseSetups,
         HotRoundResult roundA,
         HotRoundResult roundB,
-        int maxExecutionMs,
-        double pooledP95TotalMs,
-        double overrunFraction,
+        ShadowBudgetVerdict verdict,
+        IReadOnlyList<(string Phase, RoundStabilityMeasurement Measurement)> stability,
         IReadOnlyDictionary<string, double> firstWarmupTotalMsByCase)
     {
         var report = new StringBuilder();
         report.AppendLine("PR111d shadow hot-path performance gate:");
         report.AppendLine(FormattableString.Invariant(
-            $"  budget (PlaybackShadowOptions.MaxExecutionMs)={maxExecutionMs}ms, pooled hot p95 total={pooledP95TotalMs:F4}ms, overrun fraction={overrunFraction:P2}"));
+            $"  budget (PlaybackShadowOptions.MaxExecutionMs)={verdict.MaxExecutionMs}ms, margin={verdict.BudgetMarginMs:F2}ms, pooled hot p95 total={verdict.PooledP95TotalMs:F4}ms over {verdict.SampleCount} iterations, overrun fraction={verdict.OverrunFraction:P2}"));
+        report.AppendLine();
+
+        // Diagnostic only - no assertion reads these (issue #145).
+        report.AppendLine("  round-to-round drift (DIAGNOSTIC ONLY - not asserted; reflects runner scheduling as much as product cost):");
+        foreach (var (phase, measurement) in stability)
+        {
+            report.AppendLine(FormattableString.Invariant(
+                $"    {phase,-10} round A p95={measurement.RoundAP95Ms:F4}ms, round B p95={measurement.RoundBP95Ms:F4}ms, floored ratio={measurement.FlooredRatio:F2}x"));
+        }
+
         report.AppendLine();
 
         foreach (var setup in caseSetups)
@@ -342,9 +326,9 @@ public sealed class ShadowPerformanceGateTests
 
             if (firstWarmupTotalMsByCase.TryGetValue(key, out var firstWarmupMs))
             {
-                var hotP95TotalMs = Percentile(roundA.MappingByCase[key].Concat(roundB.MappingByCase[key]).OrderBy(x => x).ToArray(), 0.95)
-                    + Percentile(roundA.EngineByCase[key].Concat(roundB.EngineByCase[key]).OrderBy(x => x).ToArray(), 0.95)
-                    + Percentile(roundA.ComparisonByCase[key].Concat(roundB.ComparisonByCase[key]).OrderBy(x => x).ToArray(), 0.95);
+                var hotP95TotalMs = ShadowPerformancePolicy.Percentile(roundA.MappingByCase[key].Concat(roundB.MappingByCase[key]).ToArray(), 0.95)
+                    + ShadowPerformancePolicy.Percentile(roundA.EngineByCase[key].Concat(roundB.EngineByCase[key]).ToArray(), 0.95)
+                    + ShadowPerformancePolicy.Percentile(roundA.ComparisonByCase[key].Concat(roundB.ComparisonByCase[key]).ToArray(), 0.95);
 
                 // Informational only (JIT warm-up evidence) - NOT asserted, since a cold first-call
                 // duration is expected to be (often dramatically) higher than steady-state hot p95
@@ -359,11 +343,8 @@ public sealed class ShadowPerformanceGateTests
 
     private static void AppendPhaseLine(StringBuilder report, string phaseName, IReadOnlyList<double> roundAMs, IReadOnlyList<double> roundBMs)
     {
-        var sortedA = roundAMs.OrderBy(x => x).ToArray();
-        var sortedB = roundBMs.OrderBy(x => x).ToArray();
-
         report.AppendLine(FormattableString.Invariant(
-            $"    {phaseName,-10} A: p50={Percentile(sortedA, 0.50):F4}ms p95={Percentile(sortedA, 0.95):F4}ms p99={Percentile(sortedA, 0.99):F4}ms | B: p50={Percentile(sortedB, 0.50):F4}ms p95={Percentile(sortedB, 0.95):F4}ms p99={Percentile(sortedB, 0.99):F4}ms"));
+            $"    {phaseName,-10} A: p50={ShadowPerformancePolicy.Percentile(roundAMs, 0.50):F4}ms p95={ShadowPerformancePolicy.Percentile(roundAMs, 0.95):F4}ms p99={ShadowPerformancePolicy.Percentile(roundAMs, 0.99):F4}ms | B: p50={ShadowPerformancePolicy.Percentile(roundBMs, 0.50):F4}ms p95={ShadowPerformancePolicy.Percentile(roundBMs, 0.95):F4}ms p99={ShadowPerformancePolicy.Percentile(roundBMs, 0.99):F4}ms"));
     }
 
     private readonly record struct IterationResult(double MappingMs, double EngineMs, double ComparisonMs, DivergenceClass DivergenceClass);
