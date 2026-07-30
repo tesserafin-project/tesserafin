@@ -90,6 +90,7 @@ public class PlaybackAttemptCorrelationTests
     /// the <c>PlaybackInfo</c> request, echoed on its response, and still identical on the session
     /// created by the next request — whose <c>RequestId</c> is a different value.
     /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
     [Fact]
     public async Task AttemptIdSpansPlaybackInfoAndTheSessionCreatedAfterIt()
     {

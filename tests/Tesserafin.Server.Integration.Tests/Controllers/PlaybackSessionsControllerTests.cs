@@ -112,6 +112,7 @@ namespace Tesserafin.Server.Integration.Tests.Controllers
         /// decided to serve, so it fell remux and non-HLS transcode back to legacy. Asserted on the
         /// raw JSON, not on a deserialized record, so a rename cannot pass silently.
         /// </summary>
+        /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
         [Fact]
         public async Task GetStream_Planned_DescriptorCarriesContainerAndMimeType()
         {
@@ -155,6 +156,7 @@ namespace Tesserafin.Server.Integration.Tests.Controllers
         /// transcoding job lifecycle. 409 - and it stays 409, because the client can REPAIR it by
         /// re-requesting with a <c>PlaySessionId</c>.
         /// </summary>
+        /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
         [Fact]
         public async Task GetStream_NoPlaySessionId_Conflict()
         {
@@ -173,6 +175,7 @@ namespace Tesserafin.Server.Integration.Tests.Controllers
         /// through <c>Track</c>, the production entry point that records a plan decided elsewhere and
         /// therefore stores no request options.
         /// </summary>
+        /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
         [Fact]
         public async Task GetStream_NoPlannableStream_UnprocessableEntity()
         {
@@ -192,6 +195,7 @@ namespace Tesserafin.Server.Integration.Tests.Controllers
         /// 404 stays what it always was - an id nobody has ever seen - so the 422 above is a genuinely
         /// new signal rather than a relabelling.
         /// </summary>
+        /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
         [Fact]
         public async Task GetStream_UnknownSession_NotFound()
         {
@@ -207,6 +211,7 @@ namespace Tesserafin.Server.Integration.Tests.Controllers
         /// not "unknown id" - it is "these options are unsatisfiable". That distinction is exactly
         /// what a client needs on a track change, and a 404 destroyed it.
         /// </summary>
+        /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
         [Fact]
         public async Task Put_ExistingSessionNoViablePlan_UnprocessableEntity()
         {
@@ -228,6 +233,7 @@ namespace Tesserafin.Server.Integration.Tests.Controllers
         /// The companion to the test above: 404 is still reserved for the unknown session id, and is
         /// still decided BEFORE any planning happens.
         /// </summary>
+        /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
         [Fact]
         public async Task Put_UnknownSession_NotFound()
         {

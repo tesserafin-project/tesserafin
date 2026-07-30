@@ -139,6 +139,7 @@ public sealed class PlaybackUrlContractEndToEndTests : IClassFixture<E2eApplicat
     }
 
     /// <summary>Scenario 1: DirectPlay.</summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
     [Fact]
     public async Task DirectPlay_PostThenGetStream_ServesRealBytes()
     {
@@ -155,6 +156,7 @@ public sealed class PlaybackUrlContractEndToEndTests : IClassFixture<E2eApplicat
     }
 
     /// <summary>Scenario 2: Remux / DirectStream.</summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
     [Fact]
     public async Task Remux_PostThenGetStream_ServesRealBytes()
     {
@@ -195,6 +197,7 @@ public sealed class PlaybackUrlContractEndToEndTests : IClassFixture<E2eApplicat
     /// still fail this test fast rather than hang the run), not because it is still needed to survive
     /// this particular bug.
     /// </remarks>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
     [Fact(Timeout = 90_000)]
     public async Task Transcode_Hls_PostThenGetStream_ServesManifestAndSegment()
     {
@@ -223,6 +226,7 @@ public sealed class PlaybackUrlContractEndToEndTests : IClassFixture<E2eApplicat
     }
 
     /// <summary>Scenario 4: an external subtitle sidecar is named on the descriptor and itself servable.</summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
     [Fact]
     public async Task ExternalSubtitle_IsNamedOnDescriptorAndServable()
     {
@@ -264,6 +268,7 @@ public sealed class PlaybackUrlContractEndToEndTests : IClassFixture<E2eApplicat
     /// the very next request, with no restart - and the URL that request resolves to must still be
     /// servable.
     /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
     [Fact]
     public async Task KillSwitch_ForcesLegacyOnNextRequest_UrlStillServable()
     {
@@ -317,6 +322,7 @@ public sealed class PlaybackUrlContractEndToEndTests : IClassFixture<E2eApplicat
     /// positively ISOBMFF (<c>ftyp</c> at offset 4), then real ffprobe identification.
     /// </para>
     /// </remarks>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
     [Fact(Timeout = 90_000)]
     public async Task Remux_MatroskaSourceAnnouncedAsMp4_ServesRealMp4Bytes()
     {
@@ -389,6 +395,7 @@ public sealed class PlaybackUrlContractEndToEndTests : IClassFixture<E2eApplicat
     /// <see cref="Remux_MatroskaSourceAnnouncedAsMp4_ServesRealMp4Bytes"/>: a 200 proves the request
     /// was not refused, but only the bytes prove a REAL remux still happened under the constraint.
     /// </remarks>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
     [Fact(Timeout = 90_000)]
     public async Task Remux_TranscodingForbidden_StillServesRealRemuxedMp4Bytes()
     {
@@ -434,6 +441,7 @@ public sealed class PlaybackUrlContractEndToEndTests : IClassFixture<E2eApplicat
     /// the only plan that could serve this session is a real re-encode, and transcoding is forbidden.
     /// The contractual answer is 422 ("no viable plan") - never a session that goes on to transcode.
     /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
     [Fact]
     public async Task IncompatibleCodecs_TranscodingForbidden_YieldsNoViablePlan()
     {
@@ -452,6 +460,7 @@ public sealed class PlaybackUrlContractEndToEndTests : IClassFixture<E2eApplicat
     /// legacy engine - the branch that used to ignore the constraint and re-encode anyway. Legacy
     /// must now reach the same conclusion as v2.
     /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
     [Fact]
     public async Task IncompatibleCodecs_TranscodingForbidden_LegacyBranchAlsoYieldsNoViablePlan()
     {
@@ -471,6 +480,7 @@ public sealed class PlaybackUrlContractEndToEndTests : IClassFixture<E2eApplicat
     /// validator rejects it with 400 before any planning happens. Asserting 400 here and 422 above is
     /// the point: "invalid request" and "valid request, no viable plan" must stay formally distinct.
     /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
     [Fact]
     public async Task AllMethodsForbidden_IsRejectedByValidatorAsBadRequest()
     {
@@ -488,6 +498,7 @@ public sealed class PlaybackUrlContractEndToEndTests : IClassFixture<E2eApplicat
     /// be quietly converted into a transcode. POST and GET Stream are covered by the rows above;
     /// this closes the third verb, which re-enters planning by a different path.
     /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
     [Fact]
     public async Task Replan_ToIncompatibleCodecsWithTranscodingForbidden_YieldsNoViablePlan()
     {

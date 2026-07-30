@@ -117,6 +117,7 @@ public sealed class PlaybackSessionRequestValidatorLeakTests
     /// the body is the anti-vacuity anchor here: it must carry all seven contract paths, and none
     /// of the sentinels.
     /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
     [Fact]
     public async Task Invoke_Development_LeaksNoSentinelIntoAnySink()
     {
@@ -134,6 +135,7 @@ public sealed class PlaybackSessionRequestValidatorLeakTests
     /// Production returns a fixed body, so the exception handed to the logging provider is the only
     /// sink that can carry the message - and therefore the anti-vacuity anchor.
     /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
     [Fact]
     public async Task Invoke_Production_LeaksNoSentinelIntoAnySink()
     {
@@ -154,6 +156,8 @@ public sealed class PlaybackSessionRequestValidatorLeakTests
     /// by design must still be found by the very same assertion machinery. Otherwise
     /// <see cref="AssertNoSentinelAnywhere"/> could be passing because it inspects nothing.
     /// </summary>
+    /// <param name="environmentName">Hosting environment the middleware runs under.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
     [Theory]
     [InlineData("Development")]
     [InlineData("Production")]

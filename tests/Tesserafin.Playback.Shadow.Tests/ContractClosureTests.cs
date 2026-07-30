@@ -10,7 +10,7 @@ namespace Tesserafin.Playback.Shadow.Tests;
 
 /// <summary>
 /// Issue #75's structural acceptance criterion, mechanised: "Type de sortie ne permettant
-/// structurellement pas de transporter une chaîne d'origine cliente (enums et entiers uniquement)."
+/// structurellement pas de transporter une chaîne d'origine cliente (enums et entiers uniquement)".
 /// </summary>
 /// <remarks>
 /// <para>

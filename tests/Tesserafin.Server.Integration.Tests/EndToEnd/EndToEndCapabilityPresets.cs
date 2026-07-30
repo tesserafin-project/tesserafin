@@ -78,6 +78,7 @@ public static class EndToEndCapabilityPresets
     /// <c>Reasons=[MethodChosen, ContainerNotSupported, StreamCopyable]</c>, i.e. Remux was CHOSEN on
     /// its merits, not forced by a constraint that forbade the alternatives.
     /// </remarks>
+    /// <returns>Capabilities declaring mp4-only H.264/AAC direct play, with every delivery method allowed.</returns>
     public static (ClientCapabilities Capabilities, PlaybackConstraints Constraints) RemuxMatroskaToMp4()
     {
         var decode = new DecodeCapabilities(
@@ -100,6 +101,7 @@ public static class EndToEndCapabilityPresets
     /// remux - which <see cref="PlaybackConstraints.AllowDirectStream"/>=true must keep permitting.
     /// Nothing here may be re-encoded, so <c>AllowTranscoding:false</c> must not block it.
     /// </summary>
+    /// <returns>The <see cref="RemuxMatroskaToMp4"/> capabilities, with constraints that forbid transcoding.</returns>
     public static (ClientCapabilities Capabilities, PlaybackConstraints Constraints) RemuxMatroskaToMp4TranscodingForbidden()
     {
         var (capabilities, _) = RemuxMatroskaToMp4();
@@ -122,6 +124,7 @@ public static class EndToEndCapabilityPresets
     /// "declared nothing decodable" rule - so this request is VALID, and its rejection is a 422
     /// ("no viable plan"), formally distinct from a 400 ("contradictory request").
     /// </remarks>
+    /// <returns>Capabilities declaring only undecodable vp9/opus plus a reachable HLS output profile, with constraints that forbid transcoding.</returns>
     public static (ClientCapabilities Capabilities, PlaybackConstraints Constraints) IncompatibleCodecsTranscodingForbidden()
     {
         const string UndecodableVideoCodec = "vp9";
@@ -154,6 +157,7 @@ public static class EndToEndCapabilityPresets
     /// <see cref="IncompatibleCodecsTranscodingForbidden"/> this request is self-contradictory
     /// (it permits no method at all), which the validator rejects with 400 before any planning runs.
     /// </summary>
+    /// <returns>The <see cref="DirectPlay"/> capabilities, with constraints that forbid direct play, direct streaming and transcoding.</returns>
     public static (ClientCapabilities Capabilities, PlaybackConstraints Constraints) AllMethodsForbidden()
     {
         var (capabilities, _) = DirectPlay();
@@ -209,6 +213,8 @@ public static class EndToEndCapabilityPresets
     /// a real client that already knows which track it wants, rather than relying on
     /// auto-selection/scoring).
     /// </summary>
+    /// <param name="subtitleStreamIndex">Index of the subtitle stream the client explicitly prefers.</param>
+    /// <returns>The <see cref="DirectPlay"/> preset augmented with external <c>srt</c> delivery and that preferred subtitle index.</returns>
     public static (ClientCapabilities Capabilities, PlaybackConstraints Constraints) DirectPlayWithExternalSubtitle(int subtitleStreamIndex)
     {
         var (baseCapabilities, baseConstraints) = DirectPlay();

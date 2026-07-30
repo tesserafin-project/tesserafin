@@ -172,6 +172,8 @@ public class PlaybackSessionStreamDescriptorMapperTests
     /// <c>/stream.{container}</c>. Reading it off anything but the served <c>StreamInfo</c> (the
     /// legacy <c>TranscodingContainer</c>, say) would be able to disagree with the URL; this cannot.
     /// </summary>
+    /// <param name="container">Effective output container carried by the served <c>StreamInfo</c>.</param>
+    /// <param name="expectedMimeType">MIME type the descriptor must report for that container.</param>
     [Theory]
     [InlineData("mkv", "video/x-matroska")]
     [InlineData("mp4", "video/mp4")]
@@ -201,6 +203,7 @@ public class PlaybackSessionStreamDescriptorMapperTests
     /// a client that muxes or reasons about segments needs it - but the MIME type must be the
     /// playlist's, since that is what dereferencing <c>Url</c> actually returns.
     /// </summary>
+    /// <param name="segmentContainer">Segment container carried by the served <c>StreamInfo</c>.</param>
     [Theory]
     [InlineData("ts")]
     [InlineData("mp4")]

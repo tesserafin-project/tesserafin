@@ -75,6 +75,9 @@ public sealed class PlaybackShadowOptionsTests
     /// at its <see cref="PlaybackEngineMode.Legacy"/> default, so existing configurations keep
     /// their behavior; an explicit non-default <c>Mode</c> always wins over <c>Enabled</c>.
     /// </summary>
+    /// <param name="mode">Configured <see cref="PlaybackEngineMode"/>.</param>
+    /// <param name="enabled">Configured pre-PR115a <c>Enabled</c> flag.</param>
+    /// <param name="expected">Effective mode the two of them must combine into.</param>
     [Theory]
     [InlineData(PlaybackEngineMode.Legacy, false, PlaybackEngineMode.Legacy)]
     [InlineData(PlaybackEngineMode.Legacy, true, PlaybackEngineMode.Shadow)]

@@ -1,68 +1,41 @@
-# STILL PARKED — manual trigger only (#94). Hosted allocation is fixed (see
-# ci-tests.yml), but re-arming this one recreates a permanent red for a reason
-# that has nothing to do with allocation.
+# ARMED on 2026-07-30 (#94, slice #156). Both reasons this workflow was held
+# back are gone.
 #
-# Proven on 2026-07-27 by run 30230606255, triggered by pull request #132.
-# The job received a hosted runner and executed its steps — allocation is
-# genuinely fine — and then `dotnet format --verify-no-changes` failed with
-# 75 StyleCop violations across 22 files, all of them XML documentation
-# comments in tests/:
+# 1. Allocation. Fixed since 2026-07-27 — run 30229812748 executed 8 steps on
+#    a real hosted runner, the exact opposite of the parked signature (failure
+#    in 3-4 s, zero steps, no runner).
 #
-#   47 x SA1615 (Element return value should be documented)
-#   26 x SA1611 (The documentation for parameter '...' is missing)
-#    1 x SA1629, 1 x SA1618
+# 2. Format debt. Run 30230606255 reported 75 StyleCop XML-documentation
+#    diagnostics (47 SA1615, 26 SA1611, 1 SA1629, 1 SA1618) across 16 test
+#    files — pre-existing debt accumulated while hosted CI was down, which
+#    would have made every pull request permanently red. It is cleared by
+#    writing the missing documentation in this same change. No rule was
+#    suppressed, disabled or downgraded to get there, and the gate was proven
+#    to still be active by deleting one `<param>` line and watching
+#    `dotnet format` fail with SA1611 again.
+#    (The parking narrative said "22 files". That figure was wrong at the
+#    source: re-reading run 30230606255's own log yields 16.)
 #
-# e.g. tests/Tesserafin.Api.Tests/Models/PlaybackSessionDtos/
-#      PlaybackSessionStreamDescriptorMapperTests.cs(179,79):
-#      error SA1611: The documentation for parameter 'container' is missing
+# NOT restored by this: required status checks. GET
+# .../branches/master/protection and GET .../rulesets both return 403
+# "Upgrade to GitHub Pro or make this repository public to enable this
+# feature" (private repository, free organisation plan). This workflow
+# reports a status automatically; nothing can make that status mandatory.
+# #94 stays open for that reason, and ./ci/run.sh remains the authoritative
+# merge gate.
 #
-# This is pre-existing debt accumulated while hosted CI was down, not a
-# regression introduced by restoring the trigger. Re-arming this workflow
-# before that debt is cleared would put every pull request permanently red —
-# exactly what #62 was about. Clearing it is a separate, mechanical change.
-#
-# Format is not entirely unguarded meanwhile: the build runs with
-# warnings-as-errors via Directory.Build.props, and the local gate
-# (./ci/run.sh) fails on those. It is a weaker check than `dotnet format`
-# and that gap is stated, not hidden.
-#
-# Previous trigger: on: push (master) + pull_request
-#
-# ── Parking stamp (historical, 2026-07-19 allocation outage) ───────────────
-# PARKED — manual trigger only (issue #62). Same allocation refusal as the
-# other hosted workflows (account-wide free Actions allowance exhausted,
-# spending limit $0): red on every pull request before the first step.
-# Nothing is fixed here — the trigger is disarmed to stop the noise.
-# See docs/local-ci.md.
-#
-# Format/style is not left entirely unguarded: the build runs with
-# warnings-as-errors via Directory.Build.props, and the local gate
-# (./ci/run.sh) fails on those. It is a weaker check than `dotnet format`
-# and that gap is accepted, not hidden, for the duration of the outage.
-#
-# Previous trigger: on: push (master) + pull_request
-#
-# ── Parking stamp ──────────────────────────────────────────────────────────
-# Parked on : 2026-07-19
-# Cause     : external, account-wide. GitHub refuses runner allocation before
-#             the first step. all3f0r1 = free plan, all3f0r1/reefin = PRIVATE,
-#             so Actions minutes are metered against a 2000 min/month
-#             ACCOUNT-WIDE allowance. July 2026 weighted usage ~2646 min
-#             (Linux 634 x1 + Windows 266 x2 + macOS 148 x10), drained mostly
-#             by another repo. Spending limit is $0, so the overage is refused
-#             rather than billed.
-# Evidence  : run 29695198403 (ABI Compatibility) and run 29695198446
-#             (OpenAPI Check), both `failure` in 3-4s with ZERO steps and no
-#             annotations, while actions/permissions = {enabled: true,
-#             allowed_actions: all} and every runs-on label is valid.
-#             GET /actions/runners -> total_count: 0.
-# Restore   : see the checklist in docs/local-ci.md (section 'Retour a la
-#             normale'). The original trigger is recorded above verbatim.
-# ───────────────────────────────────────────────────────────────────────────
+# No path filter and no draft-pull-request skip, deliberately. Format is
+# cheap (one restore, one analyzer pass, no test execution), and any file
+# this gate can read is a file it must be allowed to fail on — a documentation
+# exclusion here would let the very debt above accumulate again unseen.
 
 name: Format
 
 on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
   workflow_dispatch:
 
 permissions:
@@ -78,6 +51,11 @@ env:
 jobs:
   format-check:
     runs-on: ubuntu-latest
+
+    # Minute economy: a hard ceiling. Without it a hung run bills up to the
+    # 6-hour default. The same command finishes locally in ~1 min.
+    timeout-minutes: 20
+
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 

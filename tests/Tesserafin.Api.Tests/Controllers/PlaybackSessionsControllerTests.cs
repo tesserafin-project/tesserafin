@@ -180,6 +180,7 @@ public class PlaybackSessionsControllerTests
     /// session, and the client-side teardown of #43 could never complete. An administrator was
     /// unaffected, which is what made the endpoint read as "admin only".
     /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
     [Fact]
     public async Task DeletePlaybackSession_OwnerAfterSegmentFetchTrackedSession_StillSucceeds()
     {
@@ -244,6 +245,7 @@ public class PlaybackSessionsControllerTests
     /// reaches <c>ShadowPlaybackSessionPlanner</c> - previously left at its default
     /// <see cref="Guid.Empty"/>.
     /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
     [Fact]
     public async Task CreatePlaybackSession_ResolvesOptions_CarriesRequestingUserId()
     {
@@ -334,6 +336,7 @@ public class PlaybackSessionsControllerTests
     /// <c>GetPlaybackSessionStream</c> (§4.2 of the PR117 design doc flagged this as a pre-existing,
     /// separately tracked gap).
     /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
     [Fact]
     public async Task ReplacePlaybackSession_OtherUser_ReturnsForbidden()
     {
@@ -352,6 +355,7 @@ public class PlaybackSessionsControllerTests
     /// PR118: an administrator may replace a session it does not own - same elevated allowance
     /// <c>GetPlaybackSessionStream</c> already grants.
     /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
     [Fact]
     public async Task ReplacePlaybackSession_Admin_ReturnsMappedResponseForOtherUsersSession()
     {
@@ -438,6 +442,7 @@ public class PlaybackSessionsControllerTests
     /// #71 is that this sequence was NOT observable: an ffmpeg job ending in between reaped the
     /// session, so the happy path answered 404 and the <c>deleted</c> line never appeared.
     /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
     [Fact]
     public async Task DeletePlaybackSession_RealManagerAfterCreate_IsStillPresentAndLogsDeleted()
     {
@@ -469,6 +474,7 @@ public class PlaybackSessionsControllerTests
     /// <c>docs/issue43-design-playback-session-lifecycle.md</c> §4 calls a client-side success; what
     /// #71 changes is only that an ffmpeg job ending no longer produces it.
     /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
     [Fact]
     public async Task DeletePlaybackSession_AfterServerSideReap_ReturnsNotFoundAndLogsAlreadyGone()
     {
@@ -639,6 +645,7 @@ public class PlaybackSessionsControllerTests
     /// own per-request controller lifetime - racing on the single shared mocked session/StreamInfo,
     /// the actual source of the bug.
     /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
     [Fact]
     public async Task GetPlaybackSessionStream_ConcurrentCallsWithDifferentTicks_DoNotMutateSharedStreamInfo()
     {
@@ -744,6 +751,9 @@ public class PlaybackSessionsControllerTests
     /// repairable by a <c>PUT</c> supplying a <c>PlaySessionId</c>, this one is structurally
     /// unservable - so this one is <c>422</c>. Asserted for each of the three shapes that reach it.
     /// </summary>
+    /// <param name="noOptions">When true the session carries no request, so no playback options can be resolved.</param>
+    /// <param name="noStreamInfo">When true the plan carries no <c>StreamInfo</c>.</param>
+    /// <param name="noMediaSource">When true the plan's <c>StreamInfo</c> carries no media source.</param>
     [Theory]
     [InlineData(true, false, false)]
     [InlineData(false, true, false)]
@@ -795,6 +805,7 @@ public class PlaybackSessionsControllerTests
     /// a track change. <c>404</c> stays reserved for the unknown id
     /// (<see cref="ReplacePlaybackSession_UnknownSession_ReturnsNotFound"/>).
     /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
     [Fact]
     public async Task ReplacePlaybackSession_ExistingSessionNoViablePlan_ReturnsUnprocessableEntity()
     {
@@ -906,6 +917,7 @@ public class PlaybackSessionsControllerTests
     /// itself recorded for THIS call, and <c>ServedBy</c> must fall back to the legacy sentinel -
     /// never a stale engine version left over from an earlier <c>POST</c>/<c>PUT</c>.
     /// </summary>
+    /// <param name="reason">Typed fallback reason the resolver recorded for this call.</param>
     [Theory]
     [InlineData(PlaybackLiveFallbackReason.KillSwitch)]
     [InlineData(PlaybackLiveFallbackReason.SourceIdMismatch)]
@@ -1382,6 +1394,7 @@ public class PlaybackSessionsControllerTests
     /// properties a log query correlates on - the session id, the attempt id, and the decided
     /// method - and emits it inside the attempt scope the action opened.
     /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
     [Fact]
     public async Task CreatePlaybackSession_ViablePlan_LogsCreatedWithAttemptIdAndMethod()
     {
@@ -1409,6 +1422,7 @@ public class PlaybackSessionsControllerTests
     /// that omitted the field still logs the attempt recorded at creation ("not sent" is not
     /// "forget it").
     /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
     [Fact]
     public async Task ReplacePlaybackSession_ViablePlan_LogsReplacedWithOldAndNewMethod()
     {

@@ -143,6 +143,7 @@ public sealed class ExecutionPlanParityTests
     /// the Dolby Vision fallback case's <c>CanStreamCopyVideo</c> risk (see the <c>VideoCodec</c> branch)
     /// must be resolved or explicitly excluded from the canary before that PR opens the live switch.
     /// </remarks>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
     [Fact]
     public async Task ExecutionPlan_ToUrl_MatchesLegacyQueryStringCompletely()
     {

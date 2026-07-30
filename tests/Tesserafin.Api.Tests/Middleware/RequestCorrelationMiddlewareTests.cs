@@ -23,6 +23,7 @@ public sealed class RequestCorrelationMiddlewareTests
     /// followed by a <c>PUT Playback/Sessions/{id}</c> for the SAME session produce two DIFFERENT
     /// request ids, while the session-scoped identifier they carry stays identical.
     /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
     [Fact]
     public async Task TwoRequestsOnSameSession_ProduceDifferentRequestIds_ButSamePlaySessionId()
     {
