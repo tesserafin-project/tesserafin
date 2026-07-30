@@ -1,125 +1,219 @@
-<h1 align="center">Tesserafin</h1>
-<h3 align="center">The Free Software Media System</h3>
+# Tesserafin
 
----
+[![License: GPL-2.0-or-later](https://img.shields.io/badge/license-GPL--2.0--or--later-blue.svg)](LICENSE)
 
-<p align="center">
-<a href="LICENSE">
-<img alt="GPL-2.0-or-later License" src="https://img.shields.io/badge/license-GPL--2.0--or--later-blue.svg"/>
-</a>
-</p>
+Tesserafin is a self-hosted media system. You run the server on hardware you
+control, it organises your own media library, and it streams that library to
+your own devices over your own network.
 
----
+Tesserafin is a fork of [Jellyfin](https://github.com/jellyfin/jellyfin), which
+is itself descended from Emby's 3.5.2 release. Tesserafin is an independent
+project: it does **not** claim product or protocol compatibility with Jellyfin,
+it is not compatible with Jellyfin clients or plugins, and it is neither endorsed
+by nor affiliated with the Jellyfin project. See [NOTICE](NOTICE) for the full
+fork attribution.
 
-Tesserafin is a Free Software Media System that puts you in control of managing and streaming your media. It is an alternative to the proprietary Emby and Plex, to provide media from a dedicated server to end-user devices via multiple apps.
+## Project status
 
-Tesserafin is a fork of [Jellyfin](https://github.com/jellyfin/jellyfin), which is itself descended from Emby's 3.5.2 release and ported to the .NET platform to enable full cross-platform support. Tesserafin does **not** claim product or protocol compatibility with Jellyfin; it is an independent project that keeps the "fin" in its name in recognition of that lineage. See [NOTICE](NOTICE) for the full fork attribution.
+**Tesserafin has not shipped a public release yet.** Read this section before
+deciding whether to install anything.
 
-There are no strings attached, no premium licenses or features, and no hidden agendas: just a team that wants to build something better and work together to achieve it. We welcome anyone who is interested in joining us in our quest!
+- No public Stable release exists. There is no GitHub Release in either
+  repository.
+- The container images that exist today are **private development and
+  release-candidate artefacts**, published to GHCR for reproducibility and gate
+  evidence. They are not a supported product.
+- `1.0.0` is the first public version epoch. The server and the web client share
+  that number.
+- The inherited `12.x` server images and `13.x` web-assets images describe
+  upstream lineage, not a Tesserafin release history. They are retained as
+  development evidence and are **unsupported**.
+- Only **Stable** is planned as a public channel. No beta, preview or nightly
+  public channel is promised, and no mutable tag (`latest`, `stable`, `preview`,
+  `1`, `1.0`) has been published.
 
-<strong>Something not working right?</strong><br/>
-Open an [issue](https://github.com/tesserafin/tesserafin/issues) on GitHub.<br/>
+The authoritative rules for which numbers exist, where they are published and how
+a release may be resolved are in
+[`docs/versioning-policy.md`](docs/versioning-policy.md).
 
-<strong>Want to contribute?</strong><br/>
-See the open issues on [tesserafin/tesserafin](https://github.com/tesserafin/tesserafin/issues) to find where you can help.<br/>
+## What Tesserafin is
 
----
+- A **media server** that indexes your library, fetches metadata, and transcodes
+  on demand — in software on any host, with hardware acceleration when a
+  supported GPU is present.
+- A **browser client**, Tesserafin Web, served by the same server on the same
+  origin and port as the API.
+- Designed for **local and private infrastructure**: a NAS, a home server, or any
+  machine you administer.
 
-## Tesserafin Server
+Server plus browser client is the whole product today. Native mobile and TV
+clients are roadmap items, not shipped software.
 
-This repository contains the code for Tesserafin's backend server. The web client lives in the companion repository [tesserafin/tesserafin-web](https://github.com/tesserafin/tesserafin-web).
+## Install and run
 
-## Server Development
+The supported way to install Tesserafin is the prebuilt container image. Nothing
+needs to be built from source.
 
-These instructions will help you get set up with a local development environment in order to contribute to this repository. Note that this project is supported on all major operating systems except FreeBSD, which is still incompatible.
+**Start here: [`docs/container/A3-guided-install.md`](docs/container/A3-guided-install.md)**
+— the guided NAS / Docker operator guide, five steps from nothing to an onboarded
+server.
 
-### Prerequisites
+That guide covers:
 
-Before the project can be built, you must first install the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet) on your system.
+- **Docker Compose** as the canonical path, using the repository's
+  [`docker-compose.yml`](docker-compose.yml) and [`.env.example`](.env.example).
+  The Compose file pins its image by immutable digest, so the shipped file and the
+  guide bring up the same build.
+- **Persistent volumes** for `/config`, `/data` and `/cache`, created with the
+  correct ownership on first boot. The volume, permission, backup and restore
+  contract is [`docs/container/A2-persistent-state.md`](docs/container/A2-persistent-state.md).
+- **NAS guidance**, including a host bind-mount variant, an
+  [Unraid template](deployment/unraid/docker-templates/tesserafin.xml) and
+  Synology DSM Container Manager steps.
+- **Browser onboarding** at `http://<host-ip>:8096/`, where the server redirects
+  `/` to `/web/` and serves the wizard: language, admin account, first library.
+- **Hardware acceleration** is optional — see
+  [`docs/container/A4-hardware-acceleration.md`](docs/container/A4-hardware-acceleration.md).
+  A host with no GPU transcodes in software with zero configuration.
 
-Instructions to run this project from the command line are included here, but you will also need to install an IDE if you want to debug the server while it is running. Two options are recent versions of [Visual Studio](https://visualstudio.microsoft.com/downloads/) (at least 2022) and [Visual Studio Code](https://code.visualstudio.com/Download).
+The canonical image package is
+`ghcr.io/tesserafin-project/tesserafin-server`.
 
-[ffmpeg](https://github.com/jellyfin/jellyfin-ffmpeg) will also need to be installed. (Tesserafin uses the `jellyfin-ffmpeg` build; the dependency link is intentional.)
+> **The GHCR packages are private.** Anonymous pulls do not work. Run
+> `docker login ghcr.io` once with a GitHub token that can read packages before
+> pulling. Making the packages publicly pullable is an owner decision that has not
+> been taken.
 
-### Cloning the Repository
+Upgrades and the tag contract are documented separately in
+[`docs/container/A6-versioning-and-upgrades.md`](docs/container/A6-versioning-and-upgrades.md).
+Building from source is a development activity — see [Development](#development).
 
-After dependencies have been installed you will need to clone a local copy of this repository. If you just want to run the server from source you can clone this repository directly, but if you are intending to contribute code changes to the project, you should set up your own fork of the repository. The following example shows how you can clone the repository directly over HTTPS.
+## Product principles
+
+- **The essential self-hosted server core is Free Software**, licensed
+  GPL-2.0-or-later.
+- **Essential server functions are not designed to sit behind a cloud
+  subscription.** Indexing, browsing, transcoding and streaming your own library
+  are server functions, and they stay in the server.
+- **No mandatory Tesserafin-hosted service is required** to organise or stream
+  your own local library. A Tesserafin install works on a network with no route
+  to us.
+- **Separately distributed official clients may follow their own commercial
+  model.** Official mobile and TV applications, if and when they ship, are
+  distributed separately from this server and are not covered by the statements
+  above.
+
+## Repository architecture
+
+| Repository | Contents |
+| --- | --- |
+| [tesserafin-project/tesserafin](https://github.com/tesserafin-project/tesserafin) | This repository: the server, its container packaging, and the server-owned contracts (OpenAPI document, version contract, release-pair gate). |
+| [tesserafin-project/tesserafin-web](https://github.com/tesserafin-project/tesserafin-web) | Tesserafin Web — the browser and desktop reference client, bundled into the server image. |
+
+Native mobile and TV clients have no repository yet; they are roadmap items.
+
+## Development
+
+This section is for building the server from source. It is not the installation
+path.
+
+**Prerequisites**
+
+- The [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet).
+  [`global.json`](global.json) pins SDK `10.0.0` with `rollForward: latestMinor`.
+- `ffmpeg` on `PATH` for the media-encoding and playback tests. The container
+  image instead pins a specific
+  [jellyfin-ffmpeg](https://github.com/jellyfin/jellyfin-ffmpeg) build by version
+  and per-architecture checksum, and points the server at it with `--ffmpeg`. That
+  upstream dependency name is deliberate and accurate — it is the genuine
+  encoder Tesserafin ships.
+- Optionally an IDE for debugging: Visual Studio 2022 or later, or Visual Studio
+  Code with the workspace-recommended extensions.
+
+Supported on all major operating systems except FreeBSD.
+
+**Clone, build, test**
 
 ```bash
-git clone https://github.com/tesserafin/tesserafin.git
+git clone https://github.com/tesserafin-project/tesserafin.git
+cd tesserafin
+dotnet build Tesserafin.sln
+dotnet test Tesserafin.sln
 ```
 
-### Installing the Web Client
+`./ci/run.sh` is the authoritative local merge gate — it runs the full suite with
+the analyzers armed. Purge `bin/` and `obj/` before trusting a pass; stale build
+output can skip analyzers.
 
-The server is configured to host the static files required for the [web client](https://github.com/tesserafin/tesserafin-web) in addition to serving the backend by default. Before you can run the server, you will need to get a copy of the web client since it is not included in this repository directly.
+**Running the server**
 
-Note that it is recommended for development to [host the web client separately](#hosting-the-web-client-separately) from the web server with some additional configuration, in which case you can skip this step.
-
-There are two options to get the files for the web client.
-
-1. Build them from source following the instructions on the [tesserafin-web repository](https://github.com/tesserafin/tesserafin-web)
-2. Get the pre-built files from an existing installation of the server. For example, with a Windows server installation the client files are located at `C:\Program Files\Tesserafin\Server\jellyfin-web`
-
-### Running The Server
-
-The following instructions will help you get the project up and running via the command line, or your preferred IDE.
-
-#### Running With Visual Studio
-
-To run the project with Visual Studio you can open the Solution (`.sln`) file and then press `F5` to run the server.
-
-#### Running With Visual Studio Code
-
-To run the project with Visual Studio Code you will first need to open the repository directory with Visual Studio Code using the `Open Folder...` option.
-
-Second, you need to [install the recommended extensions for the workspace](https://code.visualstudio.com/docs/editor/extension-gallery#_recommended-extensions). Note that extension recommendations are classified as either "Workspace Recommendations" or "Other Recommendations", but only the "Workspace Recommendations" are required.
-
-After the required extensions are installed, you can run the server by pressing `F5`.
-
-#### Running From the Command Line
-
-To run the server from the command line you can use the `dotnet run` command. The example below shows how to do this if you have cloned the repository into a directory named `tesserafin` (the default directory name) and should work on all operating systems.
+The server hosts the web client's static files as well as the API. Get those
+files by building
+[tesserafin-web](https://github.com/tesserafin-project/tesserafin-web) (`npm
+install`, then `npm run build:development`), then point the server at its `dist`
+directory:
 
 ```bash
-cd tesserafin                          # Move into the repository directory
-dotnet run --project Tesserafin.Server --webdir /absolute/path/to/jellyfin-web/dist # Run the server startup project
+dotnet run --project Tesserafin.Server --webdir /absolute/path/to/tesserafin-web/dist
 ```
 
-A second option is to build the project and then run the resulting executable file directly. When running the executable directly you can easily add command line options. Add the `--help` flag to list details on all the supported command line options.
+With no `--webdir` and no `TESSERAFIN_WEB_DIR`, the server falls back to a
+`jellyfin-web` directory next to the built assembly. That inherited default path
+is still live in the code and is not a branding leftover in the build.
 
-1. Build the project
+To build once and run the executable directly:
 
 ```bash
-dotnet build                       # Build the project
-cd Tesserafin.Server/bin/Debug/net10.0 # Change into the build output directory
+dotnet build
+cd Tesserafin.Server/bin/Debug/net10.0
+./tesserafin --help          # tesserafin.exe on Windows
 ```
 
-2. Execute the build output. On Linux, Mac, etc. use `./tesserafin` and on Windows use `tesserafin.exe`.
+With the web client hosted, it is served at `http://localhost:8096`, and the API
+documentation at `http://localhost:8096/api-docs/swagger/index.html`.
 
-#### Accessing the Hosted Web Client
+**Hosting the web client separately**
 
-If the Server is configured to host the Web Client, and the Server is running, the Web Client can be accessed at `http://localhost:8096` by default.
+For frontend work it is usually better to run the web client from its own dev
+server (`npm start` in tesserafin-web) and tell the server not to host any web
+content, with the `--nowebclient` switch. A `Tesserafin.Server (nowebclient)`
+launch profile is defined for that. Note that the setup wizard cannot run when
+the web client is hosted separately.
 
-API documentation can be viewed at `http://localhost:8096/api-docs/swagger/index.html`
+**Continuous integration**
 
-### Running The Tests
+The [Tests workflow](.github/workflows/ci-tests.yml) runs automatically on
+`master` and on pull requests, and ignores documentation-only changes. It is not
+an enforced required check — required status checks are unavailable on this plan
+and visibility, and `./ci/run.sh` remains the authoritative gate.
 
-This repository also includes unit tests that are used to validate functionality. There are several ways to run these tests.
+## Contributing and reporting problems
 
-1. Run tests from the command line using `dotnet test`
-2. Run tests in Visual Studio using the [Test Explorer](https://docs.microsoft.com/en-us/visualstudio/test/run-unit-tests-with-test-explorer)
-3. Run individual tests in Visual Studio Code using the associated [CodeLens annotation](https://github.com/OmniSharp/omnisharp-vscode/wiki/How-to-run-and-debug-unit-tests)
+There is no contribution guide in this repository yet.
 
-### Advanced Configuration
+**Ordinary bugs and feature requests** —
+[open an issue](https://github.com/tesserafin-project/tesserafin/issues) in this
+repository. Browser and UI problems belong in
+[tesserafin-project/tesserafin-web](https://github.com/tesserafin-project/tesserafin-web/issues).
 
-The following sections describe some more advanced scenarios for running the server from source that build upon the standard instructions above.
+**Suspected security vulnerabilities — do not open a public issue or
+discussion, and do not post details in a pull request.** Tesserafin has no
+published security policy yet: the confidential reporting channel is still being
+established, and it is tracked in the open issue
+[tesserafin-project/tesserafin#153](https://github.com/tesserafin-project/tesserafin/issues/153).
+Until that channel exists and is named here, please hold the report rather than
+disclosing it publicly. Vulnerability reports must not be sent to upstream
+Jellyfin channels — they are not Tesserafin's.
 
-#### Hosting The Web Client Separately
+## Licence and lineage
 
-It is not necessary to host the frontend web client as part of the backend server. Hosting these two components separately may be useful for frontend developers who would prefer to host the client in a separate webpack development server for a tighter development loop. See the [tesserafin-web](https://github.com/tesserafin/tesserafin-web) repo for instructions on how to do this.
+Tesserafin is licensed **GPL-2.0-or-later**. The bundled [LICENSE](LICENSE) file
+contains the GNU General Public License version 2 text, and the same
+`GPL-2.0-or-later` SPDX expression is declared by every Tesserafin-owned packable
+project.
 
-To instruct the server not to host the web content, there is a `nowebclient` configuration flag that must be set. This can be specified using the command line switch `--nowebclient` or the environment variable `TESSERAFIN_NOWEBCONTENT=true`.
-
-Since this is a common scenario, there is also a separate launch profile defined for Visual Studio called `Tesserafin.Server (nowebcontent)` that can be selected from the 'Start Debugging' dropdown in the main toolbar.
-
-**NOTE:** The setup wizard cannot be run if the web client is hosted separately.
+Tesserafin is a fork of Jellyfin and inherits that licensing. All prior copyright
+of the Jellyfin project and its contributors is retained; this fork does not
+revoke or replace any upstream attribution. Third-party components retain their
+own copyright and licence notices in the source tree. Full attribution is in
+[NOTICE](NOTICE).
