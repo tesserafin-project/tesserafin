@@ -1,0 +1,48 @@
+# Protected ABI surface — Tesserafin server assemblies whose PUBLIC API is
+# compared between a pull request's merge base and its head by
+# ci/abi-compat.sh (workflow: .github/workflows/ci-compat.yml).
+#
+# THIS FILE IS CONTRACT DATA, NOT A CONVENIENCE LIST.
+# Removing an entry does not silently shrink the checked surface: the script
+# asserts the entry count against ABI_EXPECTED_ASSEMBLY_COUNT_DEFAULT, which
+# lives in ci/abi-compat.sh. Any change here must be made in both places and
+# is therefore visible in review.
+#
+# Selection policy — an assembly belongs here when it is (a) first-party,
+# (b) produced by a clean `dotnet build Tesserafin.Server -c Release`, and
+# (c) a shared or plugin-facing contract: something a plugin or another
+# assembly compiles against rather than an internal implementation detail or
+# a host executable. Third-party dependencies, test assemblies, analyzer
+# assemblies and the host executable are deliberately excluded.
+#
+# History: this list replaces the inherited pre-rename Jellyfin names that
+# made the check fail-open and then permanently red (run 30230606251):
+#   MediaBrowser.Common.dll     -> Tesserafin.Common.dll
+#   MediaBrowser.Controller.dll -> Tesserafin.Controller.dll
+#   MediaBrowser.Model.dll      -> Tesserafin.Model.dll
+#   Emby.Naming.dll             -> Tesserafin.Naming.dll
+#
+# Format: one output DLL file name per line, sorted (LC_ALL=C), no
+# duplicates, '#' comments and blank lines ignored.
+#
+# entry                                producing project
+# ------------------------------------ -----------------------------------------------------------
+# Tesserafin.Common.dll                Tesserafin.Common/Tesserafin.Common.csproj
+# Tesserafin.Controller.dll            Tesserafin.Controller/Tesserafin.Controller.csproj
+# Tesserafin.Data.dll                  Tesserafin.Data/Tesserafin.Data.csproj
+# Tesserafin.Database.Implementations.dll
+#                                      src/Tesserafin.Database/Tesserafin.Database.Implementations/…
+# Tesserafin.Extensions.dll            src/Tesserafin.Extensions/Tesserafin.Extensions.csproj
+# Tesserafin.MediaEncoding.Keyframes.dll
+#                                      src/Tesserafin.MediaEncoding.Keyframes/…
+# Tesserafin.Model.dll                 Tesserafin.Model/Tesserafin.Model.csproj
+# Tesserafin.Naming.dll                Tesserafin.Naming/Tesserafin.Naming.csproj
+
+Tesserafin.Common.dll
+Tesserafin.Controller.dll
+Tesserafin.Data.dll
+Tesserafin.Database.Implementations.dll
+Tesserafin.Extensions.dll
+Tesserafin.MediaEncoding.Keyframes.dll
+Tesserafin.Model.dll
+Tesserafin.Naming.dll

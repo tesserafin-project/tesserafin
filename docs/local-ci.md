@@ -1,5 +1,47 @@
 # CI locale (Docker) — porte de merge obligatoire
 
+> ## ⚠ Mise à jour du 2026-07-30 — `ci-compat.yml` est armé (#94, tranche ABI)
+>
+> **`ci-compat.yml` n'est plus en garage.** Il s'exécute automatiquement sur
+> `pull_request` vers `master` ; son `workflow_dispatch` a été retiré, car
+> chaque job est relatif à une pull request et un dispatch ne pouvait
+> produire aucun verdict. La ligne `ci-compat.yml` du tableau 2026-07-27
+> ci-dessous, comme celle du tableau « Workflows mis en pause », ne décrit
+> plus l'état courant. Trois workflows serveur sont désormais armés :
+> `ci-tests.yml`, `ci-format.yml` et `ci-compat.yml`.
+>
+> Les deux défauts cités dans ce tableau sont corrigés, et trois autres, qui
+> auraient laissé la porte verte sans rien prouver, avec eux :
+>
+> * les quatre assemblages d'avant le renommage (`MediaBrowser.Common.dll`,
+>   `MediaBrowser.Controller.dll`, `MediaBrowser.Model.dll`,
+>   `Emby.Naming.dll`) sont remplacés par `Tesserafin.Common.dll`,
+>   `Tesserafin.Controller.dll`, `Tesserafin.Model.dll` et
+>   `Tesserafin.Naming.dll` ;
+> * `secrets.JF_BOT_TOKEN` a disparu : le commentaire de PR est supprimé, le
+>   rapport vit dans le résumé de job et dans un artefact ;
+> * la boucle `apicompat … || true` — qui transformait fichier manquant,
+>   plantage de l'outil et vraie rupture d'ABI en simple texte de rapport
+>   dans un step qui sortait `0` — est remplacée par `ci/abi-compat.sh`,
+>   fail-closed de bout en bout ;
+> * `Microsoft.DotNet.ApiCompat.Tool` est épinglé à `10.0.302` dans
+>   `.config/dotnet-tools.json` au lieu d'être installé en `latest` ;
+> * le périmètre ABI est `ci/abi-assemblies.txt` (8 assemblages), donnée de
+>   contrat dont le nombre d'entrées est vérifié contre une constante de
+>   `ci/abi-compat.sh` : le réduire exige deux modifications visibles.
+>
+> Les contrôles déterministes (`./ci/tests/abi-compat.test.sh`, 33
+> assertions) tournent dans le workflow lui-même sur des bibliothèques
+> synthétiques jetables : ils prouvent à chaque run que la porte rougit sur
+> un membre public supprimé, une signature incompatible, un assemblage
+> manquant d'un côté ou de l'autre, un manifeste vide, dupliqué, non trié ou
+> rétréci, et un échec d'ApiCompat.
+>
+> **Rien de tout cela ne rend un check obligatoire.** Les *required status
+> checks* et CodeQL restent indisponibles pour la même raison externe
+> qu'en dessous, et la porte locale (`./ci/run.sh`) reste la porte de merge
+> faisant autorité. #94 reste ouverte.
+
 > ## ⚠ Mise à jour du 2026-07-30 — `ci-format.yml` est armé (#94, tranche #156)
 >
 > Deux workflows serveur sont désormais armés et s'exécutent
