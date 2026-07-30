@@ -102,6 +102,7 @@ internal static class OracleCaseFixtures
     /// Builds a real (non-mocked, other than <see cref="ITranscoderSupport"/>) legacy
     /// <see cref="StreamBuilder"/>, same as the original oracle test used.
     /// </summary>
+    /// <returns>A legacy <see cref="StreamBuilder"/> backed by a mocked <see cref="ITranscoderSupport"/> and a null logger.</returns>
     public static StreamBuilder GetStreamBuilder()
     {
         var transcodeSupport = new Mock<ITranscoderSupport>();
@@ -113,6 +114,9 @@ internal static class OracleCaseFixtures
     /// Loads the named device profile and media source(s) fixtures and assembles them into a
     /// <see cref="MediaOptions"/>, identical to the original oracle test's assembly.
     /// </summary>
+    /// <param name="deviceProfile">Name of the <c>DeviceProfile</c> fixture to load.</param>
+    /// <param name="sources">Names of the <c>MediaSourceInfo</c> fixtures to load; the first one supplies the selected media source id.</param>
+    /// <returns>The assembled <see cref="MediaOptions"/> for the loaded profile and media sources.</returns>
     public static async ValueTask<MediaOptions> GetMediaOptions(string deviceProfile, params string[] sources)
     {
         var mediaSources = sources.Select(src => TestData<MediaSourceInfo>(src))
@@ -138,6 +142,9 @@ internal static class OracleCaseFixtures
     /// <summary>
     /// Deserializes a Test Data fixture JSON file named "{typeof(T).Name}-{name}.json".
     /// </summary>
+    /// <typeparam name="T">Type the fixture is deserialized into; its name forms the first half of the file name.</typeparam>
+    /// <param name="name">Fixture name forming the second half of the file name.</param>
+    /// <returns>The deserialized fixture.</returns>
     public static async ValueTask<T> TestData<T>(string name)
     {
         var path = Path.Join("Test Data", typeof(T).Name + "-" + name + ".json");

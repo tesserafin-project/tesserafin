@@ -385,6 +385,9 @@ namespace Tesserafin.Model.Tests
         /// This is the #59 regression: before the fix these cases returned PlayMethod.Transcode
         /// (the enum's default is Transcode = 0) and the server went on to actually re-encode.
         /// </summary>
+        /// <param name="deviceName">Name of the device-profile fixture to plan against.</param>
+        /// <param name="mediaSource">Name of the media-source fixture to plan.</param>
+        /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
         [Theory]
         // Full transcode in the baseline suite above (video codec is re-encoded):
         [InlineData("AndroidTVExoPlayer", "mkv-vp9-vorbis-vtt-2600k")]
@@ -411,6 +414,9 @@ namespace Tesserafin.Model.Tests
         /// Matrix row 4 - non-regression: the very same sources still transcode normally when
         /// AllowTranscoding is true. Guards against the fix degenerating into a blanket refusal.
         /// </summary>
+        /// <param name="deviceName">Name of the device-profile fixture to plan against.</param>
+        /// <param name="mediaSource">Name of the media-source fixture to plan.</param>
+        /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
         [Theory]
         [InlineData("AndroidTVExoPlayer", "mkv-vp9-vorbis-vtt-2600k")]
         [InlineData("AndroidTVExoPlayer-NoHevcRotation", "mp4-hevc-aac-4000k-r180")]
@@ -441,6 +447,9 @@ namespace Tesserafin.Model.Tests
         /// though AllowTranscoding is false: the fix keys on the method actually required, so a
         /// plan that copies every stream is never treated as a transcode.
         /// </summary>
+        /// <param name="deviceName">Name of the device-profile fixture to plan against.</param>
+        /// <param name="mediaSource">Name of the media-source fixture to plan.</param>
+        /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
         [Theory]
         // Baseline suite classifies these as PlayMethod.Transcode in "Remux" mode: video and audio
         // are both stream-copied, only the container changes.
@@ -473,6 +482,9 @@ namespace Tesserafin.Model.Tests
         /// Matrix row 1 - a directly playable source is untouched by the constraint: DirectPlay does
         /// not re-encode, so AllowTranscoding:false is irrelevant to it.
         /// </summary>
+        /// <param name="deviceName">Name of the device-profile fixture to plan against.</param>
+        /// <param name="mediaSource">Name of the media-source fixture to plan.</param>
+        /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
         [Theory]
         [InlineData("AndroidTVExoPlayer", "mp4-h264-aac-vtt-2600k")]
         [InlineData("AndroidTVExoPlayer", "mkv-vp9-aac-srt-2600k")]
@@ -494,6 +506,7 @@ namespace Tesserafin.Model.Tests
         /// Matrix row 5 - every method forbidden. The pre-existing "neither transcoding nor direct
         /// streaming is permitted" guard still applies and no plan is produced.
         /// </summary>
+        /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
         [Fact]
         public async Task BuildVideoItem_AllMethodsForbidden_YieldsNoPlan()
         {

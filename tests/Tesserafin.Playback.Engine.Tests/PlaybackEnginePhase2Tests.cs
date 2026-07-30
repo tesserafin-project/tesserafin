@@ -613,6 +613,8 @@ public static class PlaybackEnginePhase2Tests
     /// at all (<c>SupportsTranscoding:false</c>) cannot be rescued by demotion either. Demotion is
     /// never promotion, and never a licence to ignore a transcode veto.
     /// </summary>
+    /// <param name="allowTranscoding">Whether the constraints permit transcoding.</param>
+    /// <param name="supportsTranscoding">Whether the source itself can be transcoded.</param>
     [Theory]
     [InlineData(false, true)]
     [InlineData(true, false)]

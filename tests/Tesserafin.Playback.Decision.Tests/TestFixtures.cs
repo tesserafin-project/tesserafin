@@ -101,6 +101,7 @@ internal static class TestFixtures
     /// container is unsupported, video is copyable, audio is not, so the decision remuxes with
     /// audio transcoded.
     /// </summary>
+    /// <returns>The normative RFC PR91 §5 reasoning tree.</returns>
     public static ReasonNode SampleReasoningTree() => new(
         Code: ReasonCode.DirectPlayError,
         Outcome: ReasonOutcome.Rejected,

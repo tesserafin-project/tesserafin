@@ -23,6 +23,7 @@ public class PlaybackAttemptIdValidatorTests
     /// Opacity, stated as a test: the server imposes no structure at all. Every one of these is a
     /// legitimate client scheme and none may be rejected for its shape.
     /// </summary>
+    /// <param name="value">Client-supplied attempt id whose shape the validator must not constrain.</param>
     [Theory]
     [InlineData("a")]
     [InlineData("3f2504e0-4f89-11d3-9a0c-0305e82c3301")]
