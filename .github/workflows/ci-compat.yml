@@ -1,74 +1,68 @@
-# STILL PARKED — manual trigger only (#94). Hosted allocation is fixed (see
-# ci-tests.yml), but re-arming this one recreates a permanent red for two
-# reasons that have nothing to do with allocation.
+# RESTORED on 2026-07-30 (#94). Automatic on every pull request again.
 #
-# Proven on 2026-07-27 by run 30230606251, triggered by pull request #132.
-# "ABI - BASE" and "ABI - HEAD" both completed with SUCCESS on hosted runners
-# — allocation is genuinely fine — and then "ABI - Difference" failed:
+# What was wrong. Run 30230606251 (pull request #132) is the record: the two
+# build jobs succeeded on hosted runners — allocation was never the problem
+# here — and "ABI - Difference" then failed for two repository-local defects,
+# on top of three more that would have kept the check meaningless even after
+# it went green:
 #
-# 1. ApiCompat is pointed at assembly names this project no longer produces:
+#  1. It compared four pre-rename Jellyfin assemblies this project has not
+#     produced since the rename, and ApiCompat aborted on each:
+#       "Could not find the provided path './abi-base/MediaBrowser.Common.dll'"
+#     Mapping now recorded in ci/abi-assemblies.txt:
+#       MediaBrowser.Common.dll     -> Tesserafin.Common.dll
+#       MediaBrowser.Controller.dll -> Tesserafin.Controller.dll
+#       MediaBrowser.Model.dll      -> Tesserafin.Model.dll
+#       Emby.Naming.dll             -> Tesserafin.Naming.dll
+#  2. The report step authenticated with `secrets.JF_BOT_TOKEN`, a Jellyfin
+#     bot credential this organisation does not have, and died with
+#     "Error: Parameter token or opts.auth is required". The comment is gone;
+#     the report now lives in the job summary and a retained artifact, so no
+#     token beyond the default GITHUB_TOKEN is involved at all.
+#  3. FAIL-OPEN. The comparison loop ran `apicompat ... || true` and then
+#     compared stdout to one exact English sentence. A missing file, a
+#     crashed tool and a genuine breaking change were all turned into report
+#     text in a step that exited 0. Every path is now fail-closed in
+#     ci/abi-compat.sh, whose exit status the job propagates.
+#  4. `Microsoft.DotNet.ApiCompat.Tool` was installed unpinned, so the gate
+#     could change verdict without a commit. It is pinned to 10.0.302 in
+#     .config/dotnet-tools.json — the exact version run 30230606251 resolved
+#     on a hosted runner under this repository's .NET 10 SDK.
+#  5. The ABI scope was an unexplained inline list in YAML. It is now
+#     ci/abi-assemblies.txt, contract data whose entry count is asserted
+#     against a constant in ci/abi-compat.sh, so a scope reduction needs two
+#     visible edits and cannot pass as a one-line data change.
 #
-#      Unhandled exception: System.IO.FileNotFoundException: Could not find
-#      the provided path './abi-base/MediaBrowser.Common.dll' to load
-#      binaries from.
+# The former `workflow_dispatch` trigger is removed rather than kept: every
+# job here is PR-relative (there is no base to compare a dispatch against),
+# and a trigger that cannot produce a verdict is worse than no trigger.
 #
-#    same for MediaBrowser.Controller.dll, MediaBrowser.Model.dll and
-#    Emby.Naming.dll. These are pre-rename Jellyfin assembly names; the
-#    workflow was never updated for the current assembly set.
+# NOT restored by this, and #94 stays open for it: required status checks.
+# GET .../branches/master/protection and GET .../rulesets both return 403
+# "Upgrade to GitHub Pro or make this repository public to enable this
+# feature" (private repository, free organisation plan), and CodeQL still
+# needs GitHub Advanced Security. This workflow reports a status
+# automatically; nothing available on this plan can make that status
+# mandatory. ./ci/run.sh remains the authoritative merge gate.
 #
-# 2. The report step authenticates with `secrets.JF_BOT_TOKEN`, a Jellyfin bot
-#    credential this organisation does not have (verified 2026-07-27: the only
-#    repository Actions secret is ADD_TO_PROJECT_PAT, the organisation has
-#    none), and dies with "Error: Parameter token or opts.auth is required".
-#
-# Both are repository-local defects that must be fixed before this workflow
-# can be armed. Re-arming it first would put every pull request permanently
-# red — exactly what #62 was about.
-#
-# NOTE: the jobs below read github.event.pull_request.*, so a manual
-# workflow_dispatch run cannot produce a meaningful ABI diff.
-#
-# Previous trigger: on: pull_request
-#
-# ── Parking stamp (historical, 2026-07-19 allocation outage) ───────────────
-# PARKED — manual trigger only (issue #62). GitHub refuses to allocate a
-# hosted runner for this PRIVATE repo BEFORE the first step: the account's
-# 2000 free Actions minutes/month (account-wide, not per-repo) are exhausted
-# and the spending limit is $0, so the overage is refused rather than billed.
-# Every job here failed in 3-4 s with zero steps executed and no annotation.
-# Nothing is fixed or worked around here — the trigger is disarmed so this
-# stops reddening every pull request. Cause, figures and restore conditions:
-# docs/local-ci.md.
-#
-# NOTE: the jobs below read github.event.pull_request.*, so a manual
-# workflow_dispatch run cannot produce a meaningful ABI diff. The dispatch
-# trigger keeps the workflow listed and syntactically live; the real
-# re-enable is restoring `pull_request:` once allocation works again.
-#
-# Previous trigger: on: pull_request
-#
-# ── Parking stamp ──────────────────────────────────────────────────────────
-# Parked on : 2026-07-19
-# Cause     : external, account-wide. GitHub refuses runner allocation before
-#             the first step. all3f0r1 = free plan, all3f0r1/reefin = PRIVATE,
-#             so Actions minutes are metered against a 2000 min/month
-#             ACCOUNT-WIDE allowance. July 2026 weighted usage ~2646 min
-#             (Linux 634 x1 + Windows 266 x2 + macOS 148 x10), drained mostly
-#             by another repo. Spending limit is $0, so the overage is refused
-#             rather than billed.
-# Evidence  : run 29695198403 (ABI Compatibility) and run 29695198446
-#             (OpenAPI Check), both `failure` in 3-4s with ZERO steps and no
-#             annotations, while actions/permissions = {enabled: true,
-#             allowed_actions: all} and every runs-on label is valid.
-#             GET /actions/runners -> total_count: 0.
-# Restore   : see the checklist in docs/local-ci.md (section 'Retour a la
-#             normale'). The original trigger is recorded above verbatim.
+# ── Parking stamps (historical) ────────────────────────────────────────────
+# Parked 2026-07-19 (#62): GitHub refused to allocate a hosted runner for
+# this PRIVATE repository before the first step — the account's 2000 free
+# Actions minutes/month were exhausted and the spending limit was $0. Runs
+# 29695198403 and 29695198446 failed in 3-4 s with zero steps executed.
+# Re-parked 2026-07-27 (#94) for defects 1 and 2 above, once allocation was
+# proven fixed by run 30229812748. Both stamps are superseded by this file.
 # ───────────────────────────────────────────────────────────────────────────
 
 name: ABI Compatibility
 
 on:
-  workflow_dispatch:
+  pull_request:
+    branches:
+      - master
+    # Deliberately NO paths-ignore. ci-tests.yml carries one for minute
+    # economy; applying the same filter here would let a code-only pull
+    # request skip ABI checking whenever its file list happened to match.
 
 permissions: {}
 
@@ -76,156 +70,223 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+env:
+  SDK_VERSION: "10.0.x"
+
 jobs:
-  abi-head:
-    name: ABI - HEAD
+  # The self-test. It proves, on the same runner image that judges the pull
+  # request, that the gate turns red for a removed public member, an
+  # incompatible signature, a missing assembly on either side, a shrunken or
+  # malformed manifest, and an ApiCompat process failure — and stays green
+  # for identical and additive APIs. A red verdict inside these controls is
+  # the EXPECTED result and is what makes this job pass; the fixtures are
+  # synthetic class libraries built under the runner's temporary directory
+  # and are never part of the server or its public ABI.
+  abi-controls:
+    name: ABI - Controls
+    if: ${{ github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
-    permissions: read-all
+    timeout-minutes: 20
+    permissions:
+      contents: read
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: ${{ env.SDK_VERSION }}
 
-      - name: Build
-        run: |
-          dotnet build Tesserafin.Server -o ./out
+      - name: Restore pinned tools
+        run: dotnet tool restore
 
-      - name: Upload Head
+      - name: Run the deterministic ABI controls
+        run: ./ci/tests/abi-compat.test.sh
+
+  abi-head:
+    name: ABI - HEAD
+    if: ${{ github.event.pull_request.draft == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: ${{ env.SDK_VERSION }}
+
+      - name: Cache NuGet packages
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/Directory.Packages.props') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      - name: Build head
+        run: dotnet build Tesserafin.Server -c Release -o ./abi-build
+
+      # Fails the job BEFORE the upload if a protected assembly is absent, so
+      # a truncated artifact can never reach the comparison and be mistaken
+      # for "nothing to compare".
+      - name: Stage the protected assemblies
+        run: ./ci/abi-stage.sh ./abi-build ./abi-stage head
+
+      - name: Upload head
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: abi-head
-          retention-days: 14
+          name: abi-head-${{ github.run_id }}-${{ github.run_attempt }}
+          retention-days: 3
           if-no-files-found: error
-          path: out/
+          path: abi-stage/
 
   abi-base:
     name: ABI - BASE
-    if: ${{ github.base_ref != '' }}
+    if: ${{ github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
-    permissions: read-all
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      base_sha: ${{ steps.resolve.outputs.base_sha }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      # fetch-depth: 0 so the merge base of this pull request is present in
+      # the clone. Everything below stays inside the BASE repository: the
+      # head commit of a fork pull request is reachable here as
+      # refs/pull/<n>/head, so no fork remote is ever added.
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
           fetch-depth: 0
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: ${{ env.SDK_VERSION }}
 
-      - name: Checkout common ancestor
+      - name: Cache NuGet packages
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/Directory.Packages.props') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      # The comparison base is the merge base, not the base branch tip: a
+      # pull request must be judged against what it actually branched from,
+      # otherwise unrelated master commits show up as ABI changes.
+      - name: Resolve the comparison base
+        id: resolve
         env:
-          HEAD_REF: ${{ github.head_ref }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          git remote add upstream https://github.com/${{ github.event.pull_request.base.repo.full_name }}
-          git -c protocol.version=2 fetch --prune --progress --no-recurse-submodules upstream +refs/heads/*:refs/remotes/upstream/* +refs/tags/*:refs/tags/*
-          ANCESTOR_REF=$(git merge-base upstream/${{ github.base_ref }} origin/$HEAD_REF)
-          git checkout --progress --force $ANCESTOR_REF
+          set -euo pipefail
+          git cat-file -e "$PR_BASE_SHA^{commit}"
+          git cat-file -e "$PR_HEAD_SHA^{commit}"
+          BASE_SHA="$(git merge-base "$PR_BASE_SHA" "$PR_HEAD_SHA")"
+          echo "base_sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
+          {
+            echo "### ABI comparison base"
+            echo ""
+            echo "| | commit |"
+            echo "| --- | --- |"
+            echo "| pull request base | \`$PR_BASE_SHA\` |"
+            echo "| pull request head | \`$PR_HEAD_SHA\` |"
+            echo "| merge base (compared against) | \`$BASE_SHA\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Build
+      # A separate worktree, so the checkout keeps this pull request's ci/
+      # scripts and ci/abi-assemblies.txt while the base sources are built.
+      # The pull request declares the protected scope; the count assertion in
+      # ci/abi-compat.sh and review are what police it.
+      - name: Build the comparison base
+        env:
+          BASE_SHA: ${{ steps.resolve.outputs.base_sha }}
         run: |
-          dotnet build Tesserafin.Server -o ./out
+          set -euo pipefail
+          git worktree add --detach "$RUNNER_TEMP/abi-base-tree" "$BASE_SHA"
+          dotnet build "$RUNNER_TEMP/abi-base-tree/Tesserafin.Server" -c Release -o ./abi-build
 
-      - name: Upload Head
+      - name: Stage the protected assemblies
+        run: ./ci/abi-stage.sh ./abi-build ./abi-stage base
+
+      - name: Upload base
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: abi-base
-          retention-days: 14
+          name: abi-base-${{ github.run_id }}-${{ github.run_attempt }}
+          retention-days: 3
           if-no-files-found: error
-          path: out/
+          path: abi-stage/
 
   abi-diff:
-    permissions:
-      pull-requests: write  #  to create or update comment (peter-evans/create-or-update-comment)
-
     name: ABI - Difference
-    if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
     needs:
+      - abi-controls
       - abi-head
       - abi-base
-
     steps:
-      - name: Download abi-head
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: ${{ env.SDK_VERSION }}
+
+      - name: Download head
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: abi-head
+          name: abi-head-${{ github.run_id }}-${{ github.run_attempt }}
           path: abi-head
 
-      - name: Download abi-base
+      - name: Download base
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: abi-base
+          name: abi-base-${{ github.run_id }}-${{ github.run_attempt }}
           path: abi-base
 
-      - name: Setup ApiCompat
+      - name: Restore pinned tools
+        run: dotnet tool restore
+
+      # The verdict. ci/abi-compat.sh exits non-zero for a breaking change,
+      # for a protected assembly missing on either side, for a manifest it
+      # cannot fully validate, for an ApiCompat failure and for a run that
+      # compared zero assemblies. Nothing downstream can turn that green.
+      - name: Compare the protected assemblies
+        env:
+          ABI_REPORT_FILE: abi-report.md
+          BASE_SHA: ${{ needs.abi-base.outputs.base_sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          dotnet tool install --global Microsoft.DotNet.ApiCompat.Tool
+          echo "Comparing head $HEAD_SHA against merge base $BASE_SHA"
+          ./ci/abi-compat.sh ./abi-base ./abi-head
 
-      - name: Run ApiCompat
-        id: diff
+      # Always, including on a failing verdict — a report that only exists
+      # when the gate is green is useless. The job summary and the artifact
+      # below are the only copies; there is no pull request comment and
+      # therefore no token, no write permission and no publication step whose
+      # failure could hide or alter the verdict above.
+      - name: Publish the report
+        if: ${{ always() }}
         run: |
-          {
-            echo 'body<<EOF'
-            for file in Tesserafin.Data.dll MediaBrowser.Common.dll MediaBrowser.Controller.dll MediaBrowser.Model.dll Emby.Naming.dll Tesserafin.Extensions.dll Tesserafin.MediaEncoding.Keyframes.dll Tesserafin.Database.Implementations.dll; do
-              COMPAT_OUTPUT="$( { apicompat --left ./abi-base/${file} --right ./abi-head/${file}; } 2>&1 || true )"
-              if [ "APICompat ran successfully without finding any breaking changes." != "${COMPAT_OUTPUT}" ]; then
-                printf "\n${file}\n${COMPAT_OUTPUT}\n"
-              fi
-            done
-            echo EOF
-          } >> $GITHUB_OUTPUT
+          if [ -f abi-report.md ]; then
+            cat abi-report.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "ABI comparison produced no report — see the step log." >> "$GITHUB_STEP_SUMMARY"
+          fi
 
-      - name: Find difference comment
-        uses: peter-evans/find-comment@b30e6a3c0ed37e7c023ccd3f1db5c6c0b0c23aad # v4.0.0
-        id: find-comment
+      - name: Retain the report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          issue-number: ${{ github.event.pull_request.number }}
-          direction: last
-          body-includes: abi-diff-workflow-comment
-
-      - name: Reply or edit difference comment (changed)
-        uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # v5.0.0
-        if: ${{ steps.diff.outputs.body != '' }}
-        with:
-          issue-number: ${{ github.event.pull_request.number }}
-          comment-id: ${{ steps.find-comment.outputs.comment-id }}
-          edit-mode: replace
-          token: ${{ secrets.JF_BOT_TOKEN }}
-          body: |
-            <!--abi-diff-workflow-comment-->
-            <details>
-            <summary>ABI Difference</summary>
-
-            ```
-            ${{ steps.diff.outputs.body }}
-            ```
-
-            </details>
-
-      - name: Reply or edit difference comment (unchanged)
-        uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # v5.0.0
-        if: ${{ steps.diff.outputs.body == '' && steps.find-comment.outputs.comment-id != '' }}
-        with:
-          issue-number: ${{ github.event.pull_request.number }}
-          comment-id: ${{ steps.find-comment.outputs.comment-id }}
-          edit-mode: replace
-          token: ${{ secrets.JF_BOT_TOKEN }}
-          body: |
-            <!--abi-diff-workflow-comment-->
-            <details>
-            <summary>ABI Difference</summary>
-
-            No changes to the ABI found. See history of this comment for previous changes.
-
-            </details>
+          name: abi-report-${{ github.run_id }}-${{ github.run_attempt }}
+          path: abi-report.md
+          if-no-files-found: warn
+          retention-days: 3

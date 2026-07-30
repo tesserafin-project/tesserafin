@@ -1,0 +1,17 @@
+# Newly introduced ABI assemblies — the ONLY escape hatch for "a protected
+# assembly is missing from the comparison base".
+#
+# A pull request that adds a brand new first-party contract assembly adds it
+# to ci/abi-assemblies.txt, where it cannot exist in the merge base yet. That
+# case, and only that case, is legitimate: list the DLL name here in the same
+# pull request and ci/abi-compat.sh will record it as NEW instead of failing.
+#
+# This is not a suppression mechanism. It never applies to the head side, it
+# never silences a breaking change, and an entry left here after the assembly
+# has landed on master is dead weight that must be removed in a follow-up.
+# Every entry must also appear in ci/abi-assemblies.txt.
+#
+# Same format as ci/abi-assemblies.txt: one DLL file name per line, sorted
+# (LC_ALL=C), no duplicates, '#' comments and blank lines ignored.
+#
+# Normally empty.
