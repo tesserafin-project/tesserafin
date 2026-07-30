@@ -1,3 +1,23 @@
+# STILL PARKED after #162, and deliberately so. Audited on 2026-07-30 while
+# "OpenAPI Check" was re-armed; nothing here was run, re-armed or rewritten.
+#
+# This is NOT a Tesserafin publication channel. It targets an inherited Reefin
+# repository server over SCP/SSH, needs `REPO_HOST`, `REPO_USER` and `REPO_KEY`
+# secrets that do not exist on this repository or organisation, and both jobs
+# are guarded by `contains(github.repository_owner, 'reefin')` — so even
+# dispatched by hand under `tesserafin-project` they would be skipped. There is
+# no verified Tesserafin publication destination, and inventing one would mean
+# creating infrastructure and secrets, which is out of scope for #162.
+#
+# Nothing publishes an OpenAPI document today. `openapi/openapi.json` committed
+# in this repository, pinned by `openapi/contract.lock.json`, is the only
+# authoritative contract. Publishing a Stable artifact is a later release
+# decision. Do not treat this file as evidence that one exists.
+#
+# It still consumes `openapi-generate.yml`, which is why that reusable workflow
+# is kept rather than deleted.
+#
+# ── Parking stamp (historical) ─────────────────────────────────────────────
 # PARKED — manual trigger only (issue #62). Not a pull-request check, but it
 # is part of the openapi-* chain and hits the same allocation refusal: it went
 # red on every push to master before its first step. Nothing is fixed here —

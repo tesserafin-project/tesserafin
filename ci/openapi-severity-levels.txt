@@ -1,0 +1,35 @@
+# Tesserafin OpenAPI compatibility policy — severity overrides for oasdiff.
+# Consumed by ci/openapi-compat.sh (issue #162). Format: `<check-id> <level>`.
+#
+# oasdiff's own parser rejects comments and blank lines, so ci/openapi-compat.sh
+# strips them before handing the file to the engine. Keep the rationale here
+# anyway: a severity policy nobody can read is a severity policy nobody audits.
+#
+# Everything not listed here keeps the engine's own default severity, and the
+# verdict is "breaking" if and only if at least one finding lands at `err`
+# (level 3). The four overrides below exist because the project's stated
+# compatibility policy classifies these as breaking while oasdiff ships them
+# as `info` or `warning`.
+#
+# There is deliberately NO override in the other direction. Nothing here
+# lowers a check, and there is no pre-1.0 waiver: an intentional breaking
+# change is supposed to show up red and be argued for in review, not muted by
+# a config file.
+
+# A response the contract used to declare, gone. A generated client that
+# switches on the status code loses a branch it was written against — that is
+# a contract removal whether or not the status is in the 2xx range.
+response-non-success-status-removed err
+
+# A property disappearing from a response body. oasdiff calls it a warning
+# because the property was not in `required`; for a typed SDK generated from
+# this contract it is still a field that stops existing.
+response-optional-property-removed err
+
+# An enum narrowed on the response side. Existing clients may hold code paths
+# — or exhaustive switches in a generated SDK — for the value that vanished.
+response-property-enum-value-removed err
+
+# A request property removed from the contract. Callers that still send it are
+# now sending something the contract no longer describes.
+request-property-removed err
