@@ -1,5 +1,26 @@
 # CI locale (Docker) — porte de merge obligatoire
 
+> ## ⚠ Mise à jour du 2026-07-30 — `ci-format.yml` est armé (#94, tranche #156)
+>
+> Deux workflows serveur sont désormais armés et s'exécutent
+> **automatiquement** sur les pull requests et les push `master` :
+> `ci-tests.yml` (armé le 2026-07-27, tranche C1.1 / #151) et
+> `ci-format.yml` (cette tranche). La phrase « ce qui a été ré-armé côté
+> serveur : rien » du bloc 2026-07-27 ci-dessous ne décrit donc plus l'état
+> courant, pas plus que la ligne `ci-format.yml` de son tableau.
+>
+> La dette qui retenait `ci-format.yml` est purgée : les 75 diagnostics
+> StyleCop de documentation XML (47 `SA1615`, 26 `SA1611`, 1 `SA1629`,
+> 1 `SA1618`) répartis sur **16** fichiers de `tests/` — et non 22, chiffre
+> erroné à la source, relu dans le log du run `30230606255` lui-même — ont été
+> corrigés en écrivant la documentation manquante. Aucune règle n'a été
+> supprimée, désactivée ni rétrogradée.
+>
+> **Rien de tout cela ne rend un check obligatoire.** Les *required status
+> checks* et CodeQL restent indisponibles pour la même raison externe qu'en
+> dessous, et la porte locale (`./ci/run.sh`) reste la porte de merge
+> faisant autorité. #94 reste ouverte.
+
 > ## ⚠ Mise à jour du 2026-07-27 — la CI hébergée est revenue (#94)
 >
 > **Ce qui a changé.** GitHub réalloue des runners hébergés pour ce dépôt. La
