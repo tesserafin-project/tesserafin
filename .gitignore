@@ -296,3 +296,26 @@ artifacts/openapi-drift/
 # their Markdown summary (ci/dependency-audit.sh). The hosted job uploads these
 # as a short-retention artifact; they are never committed.
 artifacts/dependency-audit/
+
+# Local environment overrides for `docker compose`. `.env` is local-only even
+# though it currently holds nothing secret — the value of the rule is that it is
+# already in place on the day someone puts a GHCR token or a provider key there,
+# not that it is needed today. `.env.example` is the committed placeholder file
+# and is explicitly kept tracked.
+.env
+.env.*
+!.env.example
+
+# Private key material. There is no tracked .pem/.key/.p12/.pfx/.crt in this
+# repository (verified with `git ls-files`), so these patterns hide nothing that
+# exists; they exist so an operator's TLS key or a locally generated test key
+# cannot be committed by accident. Note what is deliberately NOT here: no
+# fixture directory and no certificate directory is excluded wholesale. Hiding a
+# whole directory to make a scan green would remove real files from review.
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ecdsa
+id_ed25519

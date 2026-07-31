@@ -1,0 +1,44 @@
+# Exact historical Gitleaks fingerprints accepted for tesserafin.
+#
+# Every line is one `<commit>:<path>:<rule>:<line>` fingerprint for one observed
+# historical finding. There is no glob, no path prefix, no rule name on its own
+# and no regular expression, because each of those would suppress findings that
+# have not happened yet.
+#
+# ci/secret-history-baseline.json carries the provenance, classification and
+# disposition of every fingerprint below. ci/secret-scan.sh refuses to reach a
+# verdict unless the two files describe exactly the same set, sorted and unique,
+# and unless every entry still matches an observed finding.
+#
+# This file is NOT applied to the current-tree scan. A historical fingerprint
+# must never excuse a secret committed today, and a control proves it cannot.
+036dfc416878b401b379446add505ea47df2096a:MediaBrowser.Providers/Movies/MovieDbProvider.cs:generic-api-key:171
+036dfc416878b401b379446add505ea47df2096a:MediaBrowser.Providers/Movies/MovieDbSearch.cs:generic-api-key:23
+05b79fd2e0e519f1fa5d67ed70a574b80736cb06:MediaBrowser.Controller/Providers/Movies/RottenTomatoesMovieProvider.cs:generic-api-key:26
+098de6b0501eaa0375fc5bfd7cff369815b57718:Emby.Server.Implementations/Data/SqliteUserRepository.cs:generic-api-key:83
+256bda66f28c8cd726ce6ccaed4443dc454113f6:MediaBrowser.Controller/Providers/Movies/RottenTomatoesMovieProvider.cs:generic-api-key:26
+2d5f8a3edf2a4ba1c88e12f0b980f4aa223a27b5:MediaBrowser.Controller/Providers/Movies/RottenTomatoesMovieProvider.cs:generic-api-key:23
+2e17667593a6fa1fdcd076b6b6b2829810d431d7:MediaBrowser.Controller/Providers/Music/LastfmBaseProvider.cs:generic-api-key:103
+48facb797ed912e4ea6b04b17d1ff190ac2daac4:SocketHttpListener/Net/WebSockets/HttpWebSocket.cs:generic-api-key:12
+5c5ec6e644921b8f31f0fce74aadb59bf0fef99a:MediaBrowser.Controller/Providers/FanartBaseProvider.cs:generic-api-key:53
+7603b8d0fe73bd6d0ac3d90e3abb117ce3141832:MediaBrowser.Controller/Library/TVUtils.cs:generic-api-key:14
+767cdc1f6f6a63ce997fc9476911e2c361f9d402:MediaBrowser.Controller/Providers/FanartBaseProvider.cs:generic-api-key:35
+767cdc1f6f6a63ce997fc9476911e2c361f9d402:MediaBrowser.Plugins.DefaultTheme/Resources/AppResources.xaml:generic-api-key:43
+767cdc1f6f6a63ce997fc9476911e2c361f9d402:MediaBrowser.Plugins.DefaultTheme/Resources/AppResources.xaml:generic-api-key:46
+767cdc1f6f6a63ce997fc9476911e2c361f9d402:MediaBrowser.UI/Resources/AppResources.xaml:generic-api-key:24
+767cdc1f6f6a63ce997fc9476911e2c361f9d402:MediaBrowser.UI/Resources/AppResources.xaml:generic-api-key:30
+76e6c220d6281f84f2098b92e2d115f7c0e8dd38:MediaBrowser.Server.Mono/Security/PKCS12.cs:generic-api-key:1457
+77602aff889e605f8178ecf95592c0d75102e59f:Emby.Server.Implementations/Data/SqliteUserRepository.cs:generic-api-key:82
+817d9b3389a4a15584e322e88793596468c8028a:MediaBrowser.Providers/Tmdb/TmdbUtils.cs:generic-api-key:11
+909409bb6d3bf90711e981c2340a8710a3675520:MediaBrowser.Providers/Movies/MovieDbProvider.cs:generic-api-key:171
+909409bb6d3bf90711e981c2340a8710a3675520:MediaBrowser.Providers/Movies/MovieDbSearch.cs:generic-api-key:23
+9685b81db5b975f57739a9dcc6c2cdb6c4c4dbcf:MediaBrowser.Providers/Music/FanArtArtistProvider.cs:generic-api-key:26
+9685b81db5b975f57739a9dcc6c2cdb6c4c4dbcf:MediaBrowser.Providers/Music/LastfmArtistProvider.cs:generic-api-key:30
+9f3aa2cead95ec0a66a518919c179eea4cad5d9c:Emby.Server.Implementations/Data/SqliteUserRepository.cs:generic-api-key:82
+a8683132a77771bf764a20827ac9a8d73fea56da:MediaBrowser.Controller/Providers/Music/LastfmBaseProvider.cs:generic-api-key:112
+a90a85c3066e85263cb63b800cc6b61a005516cf:MediaBrowser.Controller/Library/TVUtils.cs:generic-api-key:14
+aac392f4cd7da4fc40a4cf948783249365bc8e0c:MediaBrowser.Providers/Music/AudioDbArtistProvider.cs:generic-api-key:27
+b2b85d20a53216b48115ccbb9e3ff3d9b2d80f91:MediaBrowser.Controller/Providers/FanartBaseProvider.cs:generic-api-key:63
+b9efcace7918d520576ad73e8aab4107091519b9:MediaBrowser.Providers/TV/TheTVDB/TvdbUtils.cs:generic-api-key:16
+c2202be0f86f52decc926bb7d14405c23a5f6c33:MediaBrowser.Controller/Library/TVUtils.cs:generic-api-key:13
+c597f0de35f64f5886ebe717742897aaf63e9560:MediaBrowser.Providers/TV/TheTVDB/TvdbUtils.cs:generic-api-key:8

@@ -1,0 +1,39 @@
+# Gitleaks configuration for fail-closed secret scanning.
+#
+# THE COMPLETE BUILT-IN RULESET, UNMODIFIED.
+#
+# `useDefault = true` extends every upstream rule. Nothing below disables one,
+# narrows one, or adds a path-, rule- or regex-wide allowlist. That is a
+# deliberate constraint rather than an oversight: every suppression this
+# repository needs is an exact `<commit>:<path>:<rule>:<line>` fingerprint in
+# .gitleaksignore, mirrored entry-for-entry in ci/secret-history-baseline.json
+# with its provenance and disposition, and validated on every run. A blanket
+# allowlist here would be invisible in a diff and unbounded in effect; a
+# fingerprint is neither.
+#
+# NO PROJECT-SPECIFIC RULE IS ADDED, and the reason is worth recording.
+#
+# This project removed three inherited third-party provider credentials. Two of
+# them were six and eight characters long. That is a real missed class, and it
+# is genuinely unreachable by any additive Gitleaks rule: no entropy floor or
+# length pattern matches a six-character string without firing on thousands of
+# innocuous ones per scan. The third was a C# `const string`, which the compiler
+# inlines into the .NET #US user-string heap as UTF-16LE — Gitleaks decodes
+# neither the heap nor that encoding.
+#
+# So the missed class is covered by a different instrument rather than by a rule
+# invented here: the provider-authentication structural audit, which identifies
+# a credential by where it is used rather than by what it looks like, and reads
+# the COMPILED assembly. See docs/provider-auth-audit.md. Adding a
+# high-false-positive rule here to give the appearance of coverage would have
+# made this gate noisier without making it see any further.
+#
+# A future project-specific rule is permitted, but only additively, only with a
+# concrete missed class named, and only with red/green controls in
+# ci/tests/secret-scan.test.sh proving it fires on the class and stays quiet on
+# the near-misses.
+
+title = "Tesserafin secret scanning"
+
+[extend]
+useDefault = true
