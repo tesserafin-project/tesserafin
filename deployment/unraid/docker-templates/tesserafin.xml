@@ -23,17 +23,25 @@
   <Support>https://github.com/tesserafin-project/tesserafin/issues</Support>
   <Project>https://github.com/tesserafin-project/tesserafin</Project>
   <GitHub>https://github.com/tesserafin-project/tesserafin</GitHub>
-  <!-- The validated Tesserafin Server 1.0 development baseline — the accepted B2
-       release candidate — built from commit
-       28ace1b74f42ae3c5e86c9dbb54f7977e34d541b and bundling Tesserafin Web
+  <!-- The Tesserafin Server 1.0 development baseline, built from commit
+       fe2bd88fc02f5e9fadf2e5d25ee80c6b0495585d and bundling Tesserafin Web
        c4d323d6bf397067869a755972bd21df3dc39315. Pinned by manifest digest so the
        reference cannot be re-pointed; the equivalent immutable tag is
-       `1.0.0-dev.28ace1b74f42`. It replaces `1.0.0-dev.a8ac09f3ff5a`
-       (sha256:89dd01add7cb...), which stays published and immutable.
+       `1.0.0-dev.fe2bd88fc02f`.
+
+       It supersedes `1.0.0-dev.28ace1b74f42` (sha256:636c3038a7eb...), the
+       accepted B2 release candidate, which carried three third-party metadata
+       provider credentials inherited from upstream:
+       SUPERSEDED - contains inherited upstream provider credentials; do not use.
+       That digest stays published and immutable and is not deleted, but it must
+       not be an installation default. This image is the same tree with those
+       credentials removed; TheMovieDb, TheAudioDB and OMDb are operator-supplied
+       only (docs/metadata-provider-keys.md). See tesserafin#174.
+
        `tesserafin` is the frozen pre-v1 archive package
        and never receives another tag (docs/versioning-policy.md §2). -->
   <Registry>https://github.com/tesserafin-project/tesserafin/pkgs/container/tesserafin-server</Registry>
-  <Repository>ghcr.io/tesserafin-project/tesserafin-server@sha256:636c3038a7eb34c5749c938a725f81998f85610d53b8d8598e4ca251eddb15d9</Repository>
+  <Repository>ghcr.io/tesserafin-project/tesserafin-server@sha256:133e5e3a6afb877641a2519a96f94a71e08db43361d992bc92ffd0224b86a950</Repository>
   <BindTime>true</BindTime>
   <Privileged>false</Privileged>
   <Networking>
