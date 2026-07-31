@@ -27,6 +27,8 @@
     <PackageReference Include="BitFaster.Caching" />
     <PackageReference Include="DiscUtils.Udf" />
     <PackageReference Include="Microsoft.Data.Sqlite" />
+    <!-- Security pin, not a wanted dependency — see Directory.Packages.props. -->
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />

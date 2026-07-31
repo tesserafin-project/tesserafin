@@ -1,0 +1,152 @@
+# Automatic NuGet dependency vulnerability audit — repository-local slice of
+# #95 (C2). New workflow, not a restoration: nothing has ever audited this
+# repository's dependency graph on a hosted runner.
+#
+# WHY A SCHEDULE MATTERS HERE. Unlike a test suite, this gate's verdict changes
+# without a commit: an advisory published tomorrow makes today's green run wrong.
+# The weekly run is what turns "master was clean when we last touched it" into
+# "master is clean", and it is the only trigger that can catch a newly disclosed
+# vulnerability in a repository that is not being actively pushed to.
+#
+# WHAT THIS DOES NOT DO, and why.
+#
+#   * No SARIF upload and no code-scanning API call. Both need GitHub Advanced
+#     Security, which a private repository on a free organisation plan does not
+#     have — the failure mode is proven in tesserafin-web run 30230774481 and is
+#     tracked by #94 (C1), not here.
+#   * No `actions/dependency-review-action`. The dependency graph itself IS
+#     available and is now enabled, but the dependency-review API it calls needs
+#     Advanced Security on a private repository. It would also be the wrong tool
+#     here: with no NuGet lockfile the graph resolves only the 99 packages named
+#     in Directory.Packages.props, and reported zero alerts while this gate
+#     reported a High advisory on a transitive package.
+#   * This status is NOT a required check. GET .../branches/master/protection
+#     and GET .../rulesets both return 403 "Upgrade to GitHub Pro or make this
+#     repository public to enable this feature". This workflow reports
+#     automatically; nothing available on this plan can make it mandatory.
+#     #94 stays open for that.
+#
+# Deliberately NO paths-ignore. A dependency advisory has nothing to do with
+# which files a pull request touched, and a filter here would let a
+# documentation-only pull request merge without the graph ever being audited.
+
+name: Dependency Audit
+
+on:
+  pull_request:
+    branches:
+      - master
+  push:
+    branches:
+      - master
+  schedule:
+    # Mondays 06:17 UTC. Off the hour on purpose: GitHub delays scheduled runs
+    # that pile up on common cron boundaries.
+    - cron: "17 6 * * 1"
+  # Diagnostics only. It cannot produce evidence that the automatic triggers
+  # work, and a manual run is never accepted as proof of an automatic one.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  # Superseded pull-request runs are cancelled; push and scheduled runs are not.
+  # A cancelled push run would destroy exactly the post-merge evidence this
+  # workflow exists to produce.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  SDK_VERSION: "10.0.x"
+
+jobs:
+  dependency-audit:
+    name: NuGet - Dependency Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          # Audit the pull request's own head, not the merge commit GitHub
+          # synthesises: the merge commit is not what gets merged, and a report
+          # produced from it cannot be attributed to a reviewable SHA.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: ${{ env.SDK_VERSION }}
+
+      # Keyed on the actual dependency inputs: the central manifest plus every
+      # project file. A key that ignored them would serve a stale graph to the
+      # very check that is supposed to notice the graph changed.
+      - name: Cache NuGet packages
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/Directory.Packages.props', '**/*.csproj', 'nuget.config') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      - name: Record the scanner versions
+        run: |
+          set -euo pipefail
+          {
+            echo "### Scanner"
+            echo ""
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| .NET SDK | \`$(dotnet --version)\` |"
+            echo "| jq | \`$(jq --version)\` |"
+            echo "| report schema | \`dotnet list package --format json --output-version 1\` |"
+            echo "| commit audited | \`${{ github.event.pull_request.head.sha || github.sha }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # The controls run BEFORE the live audit, on the same runner image that
+      # judges the change. A red verdict inside them is the EXPECTED result and
+      # is what makes this step pass; they assert the evaluator's own exit
+      # status, so this step going green means the evaluator refuses every way
+      # it is supposed to refuse. `--no-live` because the live half of the
+      # suite is the next step, run once rather than twice.
+      - name: Run the deterministic dependency-audit controls
+        run: ./ci/tests/dependency-audit.test.sh --no-live
+
+      # The verdict. ci/dependency-audit.sh exits 1 for an unresolved
+      # High/Critical finding and 2 for anything that means the question was not
+      # answered — an unreachable advisory feed, a malformed report, an empty
+      # project graph. Nothing downstream can turn either of those green.
+      - name: Audit the NuGet dependency graph
+        run: |
+          mkdir -p artifacts/dependency-audit
+          ./ci/dependency-audit.sh --scan \
+            --work artifacts/dependency-audit \
+            --summary artifacts/dependency-audit/summary.md \
+            --expected-projects 53
+
+      # Always, including on a failing verdict — a report that only exists when
+      # the gate is green is useless. There is no pull-request comment and
+      # therefore no token, no write permission and no publication step whose
+      # failure could hide or alter the verdict above.
+      - name: Publish the summary
+        if: ${{ always() }}
+        run: |
+          if [ -f artifacts/dependency-audit/summary.md ]; then
+            cat artifacts/dependency-audit/summary.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "## NuGet dependency audit — INDETERMINATE"
+              echo ""
+              echo "The audit produced no summary; it failed before it could reach a verdict."
+              echo "See the step log."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Retain the full reports
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dependency-audit-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/dependency-audit/
+          if-no-files-found: warn
+          retention-days: 7

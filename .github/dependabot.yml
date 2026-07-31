@@ -1,0 +1,54 @@
+# Dependabot version updates for the NuGet graph — repository-local slice of
+# #95 (C2).
+#
+# This file is the *proposal* half of dependency hygiene. The *enforcement* half
+# is `.github/workflows/dependency-audit.yml`, which fails closed on any
+# unresolved High or Critical advisory whether or not Dependabot ever opens a
+# pull request. Neither depends on the other.
+#
+# Dependabot vulnerability alerts and automated security fixes are repository
+# settings rather than configuration, and both were OFF until this slice turned
+# them on (PUT /repos/.../vulnerability-alerts and .../automated-security-fixes,
+# both 204, both re-read as enabled). Committing this file does not turn them
+# on and turning them on does not configure version updates — the two halves are
+# independent, which is why both are part of the same change.
+#
+# WHAT GITHUB'S OWN ALERTS CANNOT SEE HERE, and why the workflow is not
+# redundant. NuGet has no lockfile in this repository, so GitHub's dependency
+# graph resolves the 99 packages named in Directory.Packages.props and stops
+# there. It cannot see the transitive closure, and at the time this file landed
+# it reported zero alerts while `dotnet list package --vulnerable
+# --include-transitive` reported a High advisory on a transitive package
+# (SQLitePCLRaw.lib.e_sqlite3, GHSA-2m69-gcr7-jv3q). The workflow resolves the
+# real graph — 197 distinct packages — and is the gate that fails closed.
+#
+# CodeQL and GitHub's dependency-review action remain unavailable: both need
+# GitHub Advanced Security, which a private repository on a free organisation
+# plan does not have. That is tracked separately by #94 (C1).
+#
+# `.github/renovate.json` is inherited from the upstream Jellyfin tree and is
+# inert: it extends a preset from a `tesserafin` org that is not this one, and
+# the Renovate app is not installed on `tesserafin-project`. It is left
+# untouched here rather than deleted, which is a separate decision.
+version: 2
+
+updates:
+  - package-ecosystem: nuget
+    # Versions are centrally managed in Directory.Packages.props at the root, so
+    # a single root directory covers every project in Tesserafin.sln.
+    directory: /
+    target-branch: master
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Etc/UTC
+    # Bounded on purpose: an unbounded bot on a 83-package central manifest can
+    # bury the review queue faster than a solo maintainer can drain it.
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: build
+      include: scope
+    # No auto-merge, no reviewers, no assignees and no labels. Every proposal is
+    # reviewed by a human, and this repository has no verified label set or
+    # reviewer group to point at.

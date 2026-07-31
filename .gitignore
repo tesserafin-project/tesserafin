@@ -291,3 +291,8 @@ skills-lock.json
 # server disagree (tests/Tesserafin.Server.Integration.Tests/OpenApiContractTests.cs).
 # The hosted job uploads it as a short-retention artifact; it is never committed.
 artifacts/openapi-drift/
+
+# dependency-audit evidence: the NuGet vulnerability and inventory reports and
+# their Markdown summary (ci/dependency-audit.sh). The hosted job uploads these
+# as a short-retention artifact; they are never committed.
+artifacts/dependency-audit/
