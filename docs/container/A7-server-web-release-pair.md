@@ -538,6 +538,18 @@ conclusion was drawn from it.
 > [tesserafin-web#55](https://github.com/tesserafin-project/tesserafin-web/issues/55).
 > The image
 > below remains published and immutable; it was not deleted, retagged or moved.
+>
+> **Update.** That B2 candidate has itself since been superseded as the
+> installation default by
+> `sha256:133e5e3a6afb877641a2519a96f94a71e08db43361d992bc92ffd0224b86a950`
+> (server `fe2bd88fc02f5e9fadf2e5d25ee80c6b0495585d`, same bundled web
+> `c4d323d6bf397067869a755972bd21df3dc39315`), because it carried three inherited
+> upstream metadata provider credentials —
+> **SUPERSEDED — contains inherited upstream provider credentials; do not use**.
+> Both digests stay published and immutable. This section keeps its own digests
+> deliberately: it is a historical record of a pair as it was run, and rewriting
+> it would falsify the evidence. See A6 §5c for the live default and
+> [tesserafin#174](https://github.com/tesserafin-project/tesserafin/issues/174).
 
 The pair in §6b was superseded because the web client it bundles fails
 tesserafin-project/tesserafin-web#67: a terminal playback failure was silent. The
