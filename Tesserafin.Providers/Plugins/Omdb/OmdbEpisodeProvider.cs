@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using Tesserafin.Controller.Configuration;
 using Tesserafin.Controller.Entities.TV;
 using Tesserafin.Controller.Library;
@@ -23,10 +24,11 @@ namespace Tesserafin.Providers.Plugins.Omdb
             IHttpClientFactory httpClientFactory,
             IItemNamingService itemNamingService,
             IFileSystem fileSystem,
-            IServerConfigurationManager configurationManager)
+            IServerConfigurationManager configurationManager,
+            ILoggerFactory loggerFactory)
         {
-            _itemProvider = new OmdbItemProvider(httpClientFactory, itemNamingService, fileSystem, configurationManager);
-            _omdbProvider = new OmdbProvider(httpClientFactory, fileSystem, configurationManager);
+            _itemProvider = new OmdbItemProvider(httpClientFactory, itemNamingService, fileSystem, configurationManager, loggerFactory.CreateLogger<OmdbItemProvider>());
+            _omdbProvider = new OmdbProvider(httpClientFactory, fileSystem, configurationManager, loggerFactory.CreateLogger<OmdbEpisodeProvider>());
         }
 
         // After TheTvDb

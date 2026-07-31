@@ -13,6 +13,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using Tesserafin.Common.Net;
 using Tesserafin.Controller.Configuration;
 using Tesserafin.Controller.Entities;
@@ -32,6 +33,7 @@ namespace Tesserafin.Providers.Plugins.Omdb
     {
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IItemNamingService _itemNamingService;
+        private readonly ILogger<OmdbItemProvider> _logger;
         private readonly JsonSerializerOptions _jsonOptions;
         private readonly OmdbProvider _omdbProvider;
 
@@ -39,11 +41,13 @@ namespace Tesserafin.Providers.Plugins.Omdb
             IHttpClientFactory httpClientFactory,
             IItemNamingService itemNamingService,
             IFileSystem fileSystem,
-            IServerConfigurationManager configurationManager)
+            IServerConfigurationManager configurationManager,
+            ILogger<OmdbItemProvider> logger)
         {
             _httpClientFactory = httpClientFactory;
             _itemNamingService = itemNamingService;
-            _omdbProvider = new OmdbProvider(_httpClientFactory, fileSystem, configurationManager);
+            _logger = logger;
+            _omdbProvider = new OmdbProvider(_httpClientFactory, fileSystem, configurationManager, logger);
 
             _jsonOptions = new JsonSerializerOptions(JsonDefaults.Options);
             _jsonOptions.Converters.Add(new JsonOmdbNotAvailableStringConverter());
@@ -135,7 +139,12 @@ namespace Tesserafin.Providers.Plugins.Omdb
                 isSearch = false;
             }
 
-            var url = OmdbProvider.GetOmdbUrl(urlQuery.ToString());
+            // No operator-supplied OMDb key means no request and no results. OMDb has no anonymous
+            // tier, so an empty search result is the correct answer rather than a failed call.
+            if (!OmdbApi.TryGetRequestUrl(urlQuery.ToString(), _logger, out var url))
+            {
+                return [];
+            }
 
             using var response = await _httpClientFactory.CreateClient(NamedClient.Default).GetAsync(url, cancellationToken).ConfigureAwait(false);
             if (isSearch)
