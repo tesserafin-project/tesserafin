@@ -87,4 +87,26 @@
     <PackageVersion Include="xunit.v3" Version="3.2.2" />
     <PackageVersion Include="Xunit.v3.Priority" Version="1.1.18" />
   </ItemGroup>
+  <!--
+    Security pins. Packages listed here are NOT dependencies this project wants;
+    they are transitive packages whose resolved version carries an unresolved
+    High or Critical advisory, floored to the nearest release that does not.
+    Each one is referenced explicitly from the project that pulls it in, because
+    a PackageVersion alone does not move a transitive resolution. Remove a pin
+    once the parent package floors it on its own — `ci/dependency-audit.sh` is
+    what proves the pin is still doing work.
+  -->
+  <ItemGroup Label="Security Pins">
+    <!--
+      GHSA-2m69-gcr7-jv3q / CVE-2025-6965: SQLitePCLRaw.lib.e_sqlite3 <= 2.1.11
+      bundles a SQLite with a memory-corruption defect fixed upstream in SQLite
+      3.50.2. The advisory records no patched version, so this is floored by
+      inspection of the shipped native library rather than by advisory metadata:
+      2.1.11 embeds SQLite 3.49.1, 2.1.12 embeds 3.53.3. Microsoft.Data.Sqlite
+      and Microsoft.EntityFrameworkCore.Sqlite 10.0.9 both resolve the 2.1.11
+      family through SQLitePCLRaw.bundle_e_sqlite3, whose dependency is a
+      floor rather than an exact pin, so raising this one package is enough.
+    -->
+    <PackageVersion Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.12" />
+  </ItemGroup>
 </Project>
