@@ -123,6 +123,11 @@ create your admin username + password → add a media library (type *Movies*, fo
 
 That is the whole path: **5 numbered steps** after the one-time prerequisites.
 
+**Online metadata is opt-in.** Tesserafin ships no third-party provider credential,
+so TMDb fetches nothing until you supply your own free API key — see
+[`metadata-provider-keys.md`](../metadata-provider-keys.md). Everything above works
+without one.
+
 ### What just happened / where state lives
 
 | Volume | Holds | Backed up? |

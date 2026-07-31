@@ -24,11 +24,6 @@ namespace Tesserafin.Providers.Plugins.Tmdb
         public const string ProviderName = "TheMovieDb";
 
         /// <summary>
-        /// API key to use when performing an API call.
-        /// </summary>
-        public const string ApiKey = "4219e299c89411838049ab0dab19ebd5";
-
-        /// <summary>
         /// The crew types to keep.
         /// </summary>
         public static readonly string[] WantedCrewTypes =
