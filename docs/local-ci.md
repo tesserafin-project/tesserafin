@@ -636,3 +636,5 @@ l'affirmer.
 
 Modifier le contenu de ces deux fichiers pour faire passer la CI n'est pas une correction.
 Une nouvelle trouvaille demande une disposition du propriétaire.
+
+Stale-branch enforcement control (disposable, never merged). See tesserafin-project/tesserafin#180.
