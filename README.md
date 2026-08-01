@@ -182,14 +182,22 @@ the web client is hosted separately.
 
 **Continuous integration**
 
-The [Tests workflow](.github/workflows/ci-tests.yml) runs automatically on
-`master` and on pull requests, and ignores documentation-only changes. It is not
-an enforced required check — required status checks are unavailable on this plan
-and visibility, and `./ci/run.sh` remains the authoritative gate.
+Build, test, and lint run automatically on `master` and on every pull request.
+The [Tests](.github/workflows/ci-tests.yml) (build + full test suite) and
+[Format](.github/workflows/ci-format.yml) (`dotnet format`) workflows, together
+with the ABI, OpenAPI, dependency-audit, secret-scan, SDK-provenance, and CodeQL
+workflows, are **required status checks** on `master`: a pull request cannot
+merge until they are green. `./ci/run.sh` reproduces the build and test stages
+locally in Docker. See [BUILDING.md](BUILDING.md) for the full contributor build
+setup and the list of required checks.
 
 ## Contributing and reporting problems
 
-There is no contribution guide in this repository yet.
+For building, testing, and linting the server from source, see
+[BUILDING.md](BUILDING.md) — it documents the reproducible build, the local
+merge gate (`./ci/run.sh`), and the checks that must pass before a pull request
+can merge. A broader contribution guide (coding conventions, review process) is
+not written yet.
 
 **Ordinary bugs and feature requests** —
 [open an issue](https://github.com/tesserafin-project/tesserafin/issues) in this
