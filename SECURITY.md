@@ -156,7 +156,14 @@ What that means in practice:
 * missing hardening with no demonstrated impact, and automated scanner output with no
   reproduction.
 
-Enforced CI, including static security analysis, is **not** yet restored on this
-repository — that gap is tracked separately in
-[#94](https://github.com/tesserafin-project/tesserafin/issues/94) and is not a
-substitute for this policy, nor is this policy a substitute for it.
+Automated analysis is not a substitute for this policy, and this policy is not a
+substitute for it. Since 2026-08-01, CodeQL runs the `security-extended` suite on this
+repository automatically — on every pull request, on every push to `master`, and
+weekly — and `master` is a protected branch whose required status checks include it.
+
+What is **not** finished is the finding inventory those analyses produced. Alerts
+remain open, they are classified by owner rather than dismissed, and some of them need
+a product-level security decision this project has not yet taken. That work is tracked
+in [#94](https://github.com/tesserafin-project/tesserafin/issues/94) and
+[#185](https://github.com/tesserafin-project/tesserafin/issues/185). Do not read a
+green pipeline as "no known issues".
