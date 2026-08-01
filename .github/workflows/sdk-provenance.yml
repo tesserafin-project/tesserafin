@@ -160,14 +160,28 @@ jobs:
           run_control contract-lock-mismatch 1 "openapi/contract.lock.json records" "$REAL_LOCK"
           cp "$CONTROLS_DIR/contract.lock.orig" openapi/contract.lock.json
 
-          # 8. Missing tool — the "question was not answered" verdict must be
-          #    distinguishable from "a property failed".
+          # 8. Missing tool — the "question was not answered" verdict (2) must be
+          #    distinguishable from "a property failed" (1). A completely empty
+          #    PATH is the wrong control: the `#!/usr/bin/env bash` shebang then
+          #    cannot resolve `bash` and the shell returns 127 before a single
+          #    line of the script runs, which proves nothing about the script.
+          #    Build a PATH that satisfies every requirement EXCEPT `jq`.
           PATH_BACKUP="$PATH"
-          mkdir -p "$CONTROLS_DIR/emptybin"
-          out=$(PATH="$CONTROLS_DIR/emptybin" ./ci/verify-sdk-provenance.sh \
+          mkdir -p "$CONTROLS_DIR/minbin"
+          for t in bash env git node npm sha256sum sed grep cut find head tail wc tr rm mkdir ls cat; do
+            p=$(command -v "$t" 2>/dev/null)
+            case "$p" in /*) ln -sf "$p" "$CONTROLS_DIR/minbin/$t" ;; esac
+          done
+          # `jq` is deliberately absent from minbin.
+          out=$(PATH="$CONTROLS_DIR/minbin" ./ci/verify-sdk-provenance.sh \
                   --server-repo "$PWD" --workdir "$CONTROLS_DIR/wd-notool" 2>&1)
           rc=$?
           PATH="$PATH_BACKUP"
+          if ! printf '%s' "$out" | grep -qF "required tool 'jq' is not on PATH"; then
+            echo "::error::negative control 'missing-tool' did not report the missing tool"
+            printf '%s\n' "$out" | tail -3
+            failures=$((failures + 1))
+          fi
           if [ "$rc" -ne 2 ]; then
             echo "::error::negative control 'missing-tool' exited $rc, expected 2 (INDETERMINATE)"
             failures=$((failures + 1))
