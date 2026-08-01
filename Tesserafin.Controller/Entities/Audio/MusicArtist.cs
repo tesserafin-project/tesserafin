@@ -9,6 +9,7 @@ using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Tesserafin.Common.IO;
 using Tesserafin.Controller.Library;
 using Tesserafin.Controller.Providers;
 using Tesserafin.Data;
@@ -179,7 +180,7 @@ namespace Tesserafin.Controller.Entities.Audio
                 FileSystem.GetValidFilename(name).Trim().TrimEnd('.') :
                 name;
 
-            return System.IO.Path.Combine(ConfigurationManager.ApplicationPaths.ArtistsPath, validName);
+            return SafeDirectoryLeafName.CombineWithRoot(ConfigurationManager.ApplicationPaths.ArtistsPath, validName, nameof(name));
         }
 
         private string GetRebasedPath()
