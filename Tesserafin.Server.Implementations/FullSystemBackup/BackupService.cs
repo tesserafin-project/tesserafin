@@ -13,6 +13,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Tesserafin.Common.IO;
 using Tesserafin.Controller;
 using Tesserafin.Controller.Library;
 using Tesserafin.Controller.SystemBackupService;
@@ -88,6 +89,10 @@ public class BackupService : IBackupService
     public async Task RestoreBackupAsync(string archivePath)
     {
         _logger.LogWarning("Begin restoring system to {BackupArchive}", archivePath); // Info isn't cutting it
+        // The archive itself is not constrained to the managed backup directory: --restore-archive
+        // lets an operator restore from any path they can name, and an operator who controls the
+        // process command line is already process-equivalent. What is constrained is where the
+        // archive's contents are allowed to land, which is enforced per entry below.
         if (!File.Exists(archivePath))
         {
             throw new FileNotFoundException($"Requested backup file '{archivePath}' does not exist.");
@@ -145,10 +150,18 @@ public class BackupService : IBackupService
                         continue;
                     }
 
-                    _logger.LogInformation("Restore and override {File}", targetPath);
+                    // Containment above is lexical. Proving that no component of the destination is a
+                    // link is what stops an entry that is spelled inside a managed root from being
+                    // written outside every root the server owns.
+                    if (!ManagedPathBoundary.TryPrepareWriteTarget(target, targetPath, out var writeTarget))
+                    {
+                        _logger.LogWarning("Skipped restoring an archive entry whose destination does not resolve inside the managed root without traversing a link");
+                        continue;
+                    }
 
-                    Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
-                    item.ExtractToFile(targetPath, overwrite: true);
+                    _logger.LogInformation("Restore and override {File}", writeTarget);
+
+                    item.ExtractToFile(writeTarget, overwrite: true);
                 }
             }
 
@@ -468,7 +481,7 @@ public class BackupService : IBackupService
     /// <inheritdoc/>
     public async Task<BackupManifestDto?> GetBackupManifest(string archivePath)
     {
-        if (!File.Exists(archivePath))
+        if (!ManagedPathBoundary.TryResolveContainedFile(_applicationPaths.BackupPath, archivePath, out var resolvedArchivePath))
         {
             return null;
         }
@@ -476,11 +489,11 @@ public class BackupService : IBackupService
         BackupManifest? manifest;
         try
         {
-            manifest = await GetManifest(archivePath).ConfigureAwait(false);
+            manifest = await GetManifest(resolvedArchivePath).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Tried to load manifest from archive {Path} but failed", archivePath);
+            _logger.LogWarning(ex, "Tried to load manifest from archive {Path} but failed", resolvedArchivePath);
             return null;
         }
 
@@ -489,7 +502,7 @@ public class BackupService : IBackupService
             return null;
         }
 
-        return Map(manifest, archivePath);
+        return Map(manifest, resolvedArchivePath);
     }
 
     /// <inheritdoc/>
@@ -504,16 +517,25 @@ public class BackupService : IBackupService
         var manifests = new List<BackupManifestDto>();
         foreach (var item in archives)
         {
+            // Enumeration is a second entry into the same read sink and never passes through the
+            // controller, so it is gated separately: a link planted in the backup directory is
+            // listed by EnumerateFiles but must not be opened.
+            if (!ManagedPathBoundary.TryResolveContainedFile(_applicationPaths.BackupPath, item, out var resolvedItem))
+            {
+                _logger.LogWarning("Skipped a backup directory entry that does not resolve to an ordinary file inside the managed root");
+                continue;
+            }
+
             try
             {
-                var manifest = await GetManifest(item).ConfigureAwait(false);
+                var manifest = await GetManifest(resolvedItem).ConfigureAwait(false);
 
                 if (manifest is null)
                 {
                     continue;
                 }
 
-                manifests.Add(Map(manifest, item));
+                manifests.Add(Map(manifest, resolvedItem));
             }
             catch (Exception ex)
             {
