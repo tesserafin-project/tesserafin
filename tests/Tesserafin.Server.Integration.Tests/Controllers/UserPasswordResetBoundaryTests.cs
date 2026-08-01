@@ -144,10 +144,11 @@ namespace Tesserafin.Server.Integration.Tests.Controllers
                 await AssertPasswordIntactAsync(victim);
             }
 
-            // Duplicate scalar query values bind to the first occurrence, so naming the victim first
-            // is authorized against the victim and rejected; naming the caller first stays self-scoped.
+            // Duplicate scalar query values bind to the first occurrence. Naming the victim first is
+            // authorized against the victim and rejected; naming the caller first stays self-scoped and
+            // is then rejected for lack of credential proof.
             Assert.Equal(HttpStatusCode.Forbidden, statuses[0]);
-            Assert.Equal(HttpStatusCode.NoContent, statuses[1]);
+            Assert.Equal(HttpStatusCode.Forbidden, statuses[1]);
         }
 
         [Fact]
@@ -222,7 +223,7 @@ namespace Tesserafin.Server.Integration.Tests.Controllers
         }
 
         [Fact]
-        public async Task Reset_OrdinaryUserOwnAccount_ClearsOnlyThatAccount()
+        public async Task Reset_OrdinaryUserOwnAccountWithoutCredentialProof_Forbidden()
         {
             var user = await CreateUserAsync();
             var bystander = await CreateUserAsync();
@@ -234,13 +235,87 @@ namespace Tesserafin.Server.Integration.Tests.Controllers
                 _jsonOptions,
                 TestContext.Current.CancellationToken);
 
-            // The accepted self-service operation, unchanged.
+            // A valid access token alone must not be enough to void the account credential.
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+            await AssertPasswordIntactAsync(user);
+            await AssertPasswordIntactAsync(bystander);
+        }
+
+        [Fact]
+        public async Task Reset_OrdinaryUserOwnAccountWithWrongCredentialProof_Forbidden()
+        {
+            var user = await CreateUserAsync();
+            var client = await AuthenticatedClientAsync(user);
+
+            using var response = await client.PostAsJsonAsync(
+                "Users/Password",
+                new UpdateUserPassword { ResetPassword = true, CurrentPw = user.Password + "-wrong" },
+                _jsonOptions,
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+            await AssertPasswordIntactAsync(user);
+        }
+
+        [Fact]
+        public async Task Reset_OrdinaryUserOwnAccountWithCredentialProof_SucceedsAndRevokesOtherSessions()
+        {
+            var user = await CreateUserAsync();
+            var bystander = await CreateUserAsync();
+
+            var tokenA = await AuthenticateAsync(user.Username, user.Password, "device-a");
+            var tokenB = await AuthenticateAsync(user.Username, user.Password, "device-b");
+            Assert.NotNull(tokenA);
+            Assert.NotNull(tokenB);
+
+            var clientA = _factory.CreateClient();
+            clientA.DefaultRequestHeaders.AddAuthHeader(tokenA!);
+
+            using var response = await clientA.PostAsJsonAsync(
+                "Users/Password",
+                new UpdateUserPassword { ResetPassword = true, CurrentPw = user.Password },
+                _jsonOptions,
+                TestContext.Current.CancellationToken);
+
+            // The self-service operation still succeeds once the caller proves the credential.
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
             Assert.True(await CanAuthenticateAsync(user.Username, string.Empty));
-            Assert.False(await CanAuthenticateAsync(user.Username, user.Password));
+
+            // The credential change must not leave other sessions live.
+            var clientB = _factory.CreateClient();
+            clientB.DefaultRequestHeaders.AddAuthHeader(tokenB!);
+            using var otherSession = await clientB.GetAsync("Users/Me", TestContext.Current.CancellationToken);
+            Assert.Equal(HttpStatusCode.Unauthorized, otherSession.StatusCode);
 
             // No other account is affected.
             await AssertPasswordIntactAsync(bystander);
+        }
+
+        [Fact]
+        public async Task Reset_OrdinaryUserWithNoConfiguredCredential_Succeeds()
+        {
+            var user = await CreateUserAsync();
+            var client = await AuthenticatedClientAsync(user);
+
+            using var first = await client.PostAsJsonAsync(
+                "Users/Password",
+                new UpdateUserPassword { ResetPassword = true, CurrentPw = user.Password },
+                _jsonOptions,
+                TestContext.Current.CancellationToken);
+            Assert.Equal(HttpStatusCode.NoContent, first.StatusCode);
+
+            // There is nothing left to prove, so a further reset stays available.
+            var emptyToken = await AuthenticateAsync(user.Username, string.Empty);
+            Assert.NotNull(emptyToken);
+            var clientAfter = _factory.CreateClient();
+            clientAfter.DefaultRequestHeaders.AddAuthHeader(emptyToken!);
+
+            using var second = await clientAfter.PostAsJsonAsync(
+                "Users/Password",
+                new UpdateUserPassword { ResetPassword = true },
+                _jsonOptions,
+                TestContext.Current.CancellationToken);
+            Assert.Equal(HttpStatusCode.NoContent, second.StatusCode);
         }
 
         private async Task<TestUser> CreateUserAsync()
@@ -311,12 +386,16 @@ namespace Tesserafin.Server.Integration.Tests.Controllers
         private async Task<bool> CanAuthenticateAsync(string username, string password)
             => await AuthenticateAsync(username, password) is not null;
 
-        private async Task<string?> AuthenticateAsync(string username, string password)
+        private async Task<string?> AuthenticateAsync(string username, string password, string? deviceId = null)
         {
             var client = _factory.CreateClient();
 
+            var authHeader = deviceId is null
+                ? AuthHelper.DummyAuthHeader
+                : AuthHelper.DummyAuthHeader.Replace("DeviceId=\"69420\"", "DeviceId=\"" + deviceId + "\"", StringComparison.Ordinal);
+
             using var request = new HttpRequestMessage(HttpMethod.Post, "Users/AuthenticateByName");
-            request.Headers.TryAddWithoutValidation(AuthHelper.AuthHeaderName, AuthHelper.DummyAuthHeader);
+            request.Headers.TryAddWithoutValidation(AuthHelper.AuthHeaderName, authHeader);
             request.Content = JsonContent.Create(
                 new AuthenticateUserByName { Username = username, Pw = password },
                 options: _jsonOptions);
