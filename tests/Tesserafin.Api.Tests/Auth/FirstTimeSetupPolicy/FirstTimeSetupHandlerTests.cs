@@ -59,10 +59,8 @@ namespace Tesserafin.Api.Tests.Auth.FirstTimeSetupPolicy
             _authorizationService = services.BuildServiceProvider().GetRequiredService<IAuthorizationService>();
         }
 
-        /// <summary>
-        /// A clean pre-onboarding server must still permit the real wizard flow: the shipped wizard
-        /// presents no token at all and calls endpoints on the onboarding surface.
-        /// </summary>
+        // A clean pre-onboarding server must still permit the real wizard flow: the shipped wizard
+        // presents no token at all and calls endpoints on the onboarding surface.
         [Fact]
         public async Task PreOnboarding_OnboardingEndpoint_NoToken_Succeeds()
         {
@@ -74,10 +72,8 @@ namespace Tesserafin.Api.Tests.Auth.FirstTimeSetupPolicy
             Assert.True(allowed.Succeeded);
         }
 
-        /// <summary>
-        /// An endpoint that carries a first-time-setup policy for the sake of its "or elevated" half
-        /// must not inherit anonymous pre-onboarding access.
-        /// </summary>
+        // An endpoint that carries a first-time-setup policy for the sake of its "or elevated" half
+        // must not inherit anonymous pre-onboarding access.
         [Fact]
         public async Task PreOnboarding_UnmarkedEndpoint_NoToken_IsRejected()
         {
@@ -89,11 +85,9 @@ namespace Tesserafin.Api.Tests.Auth.FirstTimeSetupPolicy
             Assert.False(allowed.Succeeded);
         }
 
-        /// <summary>
-        /// A caller that presents a token is judged on that token, never on the setup window. A
-        /// malformed or invalid token leaves an unauthenticated principal, which must not be
-        /// promoted to administrator by the pre-onboarding branch.
-        /// </summary>
+        // A caller that presents a token is judged on that token, never on the setup window. A
+        // malformed or invalid token leaves an unauthenticated principal, which must not be
+        // promoted to administrator by the pre-onboarding branch.
         [Theory]
         [InlineData("not-a-real-token")]
         [InlineData("MediaBrowser Token=\"garbage\"")]
@@ -107,10 +101,8 @@ namespace Tesserafin.Api.Tests.Auth.FirstTimeSetupPolicy
             Assert.False(allowed.Succeeded);
         }
 
-        /// <summary>
-        /// An ordinary authenticated user is denied a privileged operation during the pre-onboarding
-        /// window, exactly as after onboarding.
-        /// </summary>
+        // An ordinary authenticated user is denied a privileged operation during the pre-onboarding
+        // window, exactly as after onboarding.
         [Fact]
         public async Task PreOnboarding_OrdinaryUserToken_IsRejected()
         {
@@ -123,9 +115,7 @@ namespace Tesserafin.Api.Tests.Auth.FirstTimeSetupPolicy
             Assert.False(allowed.Succeeded);
         }
 
-        /// <summary>
-        /// An administrator keeps access through the role branch, with or without the setup window.
-        /// </summary>
+        // An administrator keeps access through the role branch, with or without the setup window.
         [Fact]
         public async Task PreOnboarding_AdministratorToken_Succeeds()
         {
@@ -138,10 +128,8 @@ namespace Tesserafin.Api.Tests.Auth.FirstTimeSetupPolicy
             Assert.True(allowed.Succeeded);
         }
 
-        /// <summary>
-        /// The setup window is derived from configuration that is read per request, so a restart
-        /// while onboarding is incomplete preserves exactly the same restricted surface.
-        /// </summary>
+        // The setup window is derived from configuration that is read per request, so a restart
+        // while onboarding is incomplete preserves exactly the same restricted surface.
         [Fact]
         public async Task RestartBeforeCompletion_PreservesRestrictedSurface()
         {
@@ -158,10 +146,8 @@ namespace Tesserafin.Api.Tests.Auth.FirstTimeSetupPolicy
             Assert.True((await _authorizationService.AuthorizeAsync(new ClaimsPrincipal(new ClaimsIdentity()), "FirstTime")).Succeeded);
         }
 
-        /// <summary>
-        /// Once onboarding is complete the setup grant is gone, including on the onboarding surface
-        /// itself, and it does not come back on restart.
-        /// </summary>
+        // Once onboarding is complete the setup grant is gone, including on the onboarding surface
+        // itself, and it does not come back on restart.
         [Fact]
         public async Task RestartAfterCompletion_DoesNotReopenSetupAuthorization()
         {
@@ -224,10 +210,8 @@ namespace Tesserafin.Api.Tests.Auth.FirstTimeSetupPolicy
             Assert.False(allowed.Succeeded);
         }
 
-        /// <summary>
-        /// Points the handler at a request with, or without, the onboarding marker, and with or
-        /// without a presented token.
-        /// </summary>
+        // Points the handler at a request with, or without, the onboarding marker, and with or
+        // without a presented token.
         private void SetupRequest(bool isOnboardingEndpoint, string? token)
         {
             var httpContext = new DefaultHttpContext();

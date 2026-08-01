@@ -125,11 +125,9 @@ public sealed class LibraryStructureControllerTests : IClassFixture<TesserafinAp
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
     }
 
-    /// <summary>
-    /// A caller-supplied virtual folder name that selects a location rather than naming one is
-    /// refused with an explicit client error, on create as on every other operation, even for an
-    /// administrator.
-    /// </summary>
+    // A caller-supplied virtual folder name that selects a location rather than naming one is
+    // refused with an explicit client error, on create as on every other operation, even for an
+    // administrator.
     [Theory]
     [Priority(2)]
     [InlineData("../escape")]
@@ -185,10 +183,8 @@ public sealed class LibraryStructureControllerTests : IClassFixture<TesserafinAp
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
-    /// <summary>
-    /// After onboarding, the privileged virtual-folder surface answers no caller that lacks a valid
-    /// administrator credential — neither a tokenless one nor one presenting a malformed token.
-    /// </summary>
+    // After onboarding, the privileged virtual-folder surface answers no caller that lacks a valid
+    // administrator credential — neither a tokenless one nor one presenting a malformed token.
     [Fact]
     [Priority(2)]
     public async Task Get_AfterOnboarding_NoToken_IsRejected()
@@ -214,9 +210,7 @@ public sealed class LibraryStructureControllerTests : IClassFixture<TesserafinAp
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
-    /// <summary>
-    /// A legitimate name, including Unicode and spaces, still works end to end.
-    /// </summary>
+    // A legitimate name, including Unicode and spaces, still works end to end.
     [Fact]
     [Priority(2)]
     public async Task Post_LegitimateUnicodeName_Succeeds()
