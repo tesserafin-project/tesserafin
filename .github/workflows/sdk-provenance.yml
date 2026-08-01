@@ -83,7 +83,12 @@ jobs:
         env:
           SERVER_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          set -uo pipefail
+          # GitHub runs a `run:` block as `bash -e {0}`. Every control here is
+          # EXPECTED to exit non-zero, so `-e` would kill the step at the first
+          # one before `rc=$?` is ever read. Turn it off explicitly and check
+          # every status by hand.
+          set +e
+          set -u
           CONTROLS_DIR="$RUNNER_TEMP/controls"
           rm -rf "$CONTROLS_DIR"; mkdir -p "$CONTROLS_DIR"
           failures=0
