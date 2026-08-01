@@ -115,7 +115,7 @@ namespace Tesserafin.Server.Integration.Tests.Controllers
         }
 
         [Fact]
-        public async Task Reset_OrdinaryUserWithConflictingDuplicateUserId_NeverSucceeds()
+        public async Task Reset_OrdinaryUserWithConflictingDuplicateUserId_Forbidden()
         {
             var attacker = await CreateUserAsync();
             var victim = await CreateUserAsync();
