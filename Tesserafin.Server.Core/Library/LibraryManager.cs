@@ -3082,18 +3082,23 @@ namespace Tesserafin.Server.Core.Library
                 throw new ArgumentNullException(nameof(name));
             }
 
-            name = _fileSystem.GetValidFilename(name.Trim());
-
             var rootFolderPath = _configurationManager.ApplicationPaths.DefaultUserViewsPath;
 
+            // Check the caller's name before GetValidFilename, which replaces invalid characters
+            // rather than refusing them and would otherwise turn a hostile name into a different
+            // valid target.
+            VirtualFolderPath.Resolve(rootFolderPath, name.Trim());
+
+            name = _fileSystem.GetValidFilename(name.Trim());
+
             var existingNameCount = 1; // first numbered name will be 2
-            var virtualFolderPath = Path.Combine(rootFolderPath, name);
+            var virtualFolderPath = VirtualFolderPath.Resolve(rootFolderPath, name);
             var originalName = name;
             while (Directory.Exists(virtualFolderPath))
             {
                 existingNameCount++;
                 name = originalName + existingNameCount;
-                virtualFolderPath = Path.Combine(rootFolderPath, name);
+                virtualFolderPath = VirtualFolderPath.Resolve(rootFolderPath, name);
             }
 
             var mediaPathInfos = options.PathInfos;
@@ -3252,7 +3257,7 @@ namespace Tesserafin.Server.Core.Library
             }
 
             var rootFolderPath = _configurationManager.ApplicationPaths.DefaultUserViewsPath;
-            var virtualFolderPath = Path.Combine(rootFolderPath, virtualFolderName);
+            var virtualFolderPath = VirtualFolderPath.Resolve(rootFolderPath, virtualFolderName);
 
             CreateShortcut(virtualFolderPath, pathInfo);
 
@@ -3273,7 +3278,7 @@ namespace Tesserafin.Server.Core.Library
             ArgumentNullException.ThrowIfNull(mediaPath);
 
             var rootFolderPath = _configurationManager.ApplicationPaths.DefaultUserViewsPath;
-            var virtualFolderPath = Path.Combine(rootFolderPath, virtualFolderName);
+            var virtualFolderPath = VirtualFolderPath.Resolve(rootFolderPath, virtualFolderName);
 
             var libraryOptions = CollectionFolder.GetLibraryOptions(virtualFolderPath);
 
@@ -3312,7 +3317,7 @@ namespace Tesserafin.Server.Core.Library
 
             var rootFolderPath = _configurationManager.ApplicationPaths.DefaultUserViewsPath;
 
-            var path = Path.Combine(rootFolderPath, name);
+            var path = VirtualFolderPath.Resolve(rootFolderPath, name);
 
             if (!Directory.Exists(path))
             {
@@ -3378,7 +3383,7 @@ namespace Tesserafin.Server.Core.Library
             ArgumentException.ThrowIfNullOrEmpty(mediaPath);
 
             var rootFolderPath = _configurationManager.ApplicationPaths.DefaultUserViewsPath;
-            var virtualFolderPath = Path.Combine(rootFolderPath, virtualFolderName);
+            var virtualFolderPath = VirtualFolderPath.Resolve(rootFolderPath, virtualFolderName);
 
             if (!Directory.Exists(virtualFolderPath))
             {

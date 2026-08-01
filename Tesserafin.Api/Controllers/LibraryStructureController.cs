@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Tesserafin.Api.Auth.FirstTimeSetupPolicy;
 using Tesserafin.Api.Extensions;
 using Tesserafin.Api.Helpers;
 using Tesserafin.Api.ModelBinders;
@@ -28,6 +29,7 @@ namespace Tesserafin.Api.Controllers;
 /// </summary>
 [Route("Library/VirtualFolders")]
 [Authorize(Policy = Policies.FirstTimeSetupOrElevated)]
+[FirstTimeSetupEndpoint]
 public class LibraryStructureController : BaseTesserafinApiController
 {
     private readonly IServerApplicationPaths _appPaths;
@@ -147,8 +149,10 @@ public class LibraryStructureController : BaseTesserafinApiController
 
         var rootFolderPath = _appPaths.DefaultUserViewsPath;
 
-        var currentPath = Path.Combine(rootFolderPath, name);
-        var newPath = Path.Combine(rootFolderPath, newName);
+        // Rename resolves two caller-supplied names, so it is held to the same containment rule
+        // as create, read, update and delete even though it does its own path work here.
+        var currentPath = VirtualFolderPath.Resolve(rootFolderPath, name);
+        var newPath = VirtualFolderPath.Resolve(rootFolderPath, newName);
 
         if (!Directory.Exists(currentPath))
         {
@@ -157,7 +161,8 @@ public class LibraryStructureController : BaseTesserafinApiController
 
         if (!string.Equals(currentPath, newPath, StringComparison.OrdinalIgnoreCase) && Directory.Exists(newPath))
         {
-            return Conflict($"The media library already exists at {newPath}.");
+            // Reported by name, never by host path.
+            return Conflict($"The media library {newName} already exists.");
         }
 
         _libraryMonitor.Stop();
@@ -167,7 +172,7 @@ public class LibraryStructureController : BaseTesserafinApiController
             // Changing capitalization. Handle windows case insensitivity
             if (string.Equals(currentPath, newPath, StringComparison.OrdinalIgnoreCase))
             {
-                var tempPath = Path.Combine(
+                var tempPath = VirtualFolderPath.Resolve(
                     rootFolderPath,
                     Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture));
                 Directory.Move(currentPath, tempPath);
