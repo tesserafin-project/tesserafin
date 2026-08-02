@@ -210,15 +210,16 @@ not written yet.
 [open an issue](https://github.com/tesserafin-project/tesserafin/issues) in this
 repository. Browser and UI problems belong in
 [tesserafin-project/tesserafin-web](https://github.com/tesserafin-project/tesserafin-web/issues).
+[`docs/support.md`](docs/support.md) covers where a problem goes, what to include,
+and what this project does and does not promise in return.
 
 **Suspected security vulnerabilities — do not open a public issue or
-discussion, and do not post details in a pull request.** Tesserafin has no
-published security policy yet: the confidential reporting channel is still being
-established, and it is tracked in the open issue
-[tesserafin-project/tesserafin#153](https://github.com/tesserafin-project/tesserafin/issues/153).
-Until that channel exists and is named here, please hold the report rather than
-disclosing it publicly. Vulnerability reports must not be sent to upstream
-Jellyfin channels — they are not Tesserafin's.
+discussion, and do not post details in a pull request.** Use the repository's
+**Security** tab and select *Report a vulnerability*: that form opens a private
+advisory readable only by you and the maintainers. The full policy — supported
+versions, response targets, coordinated disclosure and the diagnostics posture —
+is in [SECURITY.md](SECURITY.md). Vulnerability reports must not be sent to
+upstream Jellyfin channels — they are not Tesserafin's.
 
 ## Licence and lineage
 
