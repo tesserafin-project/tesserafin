@@ -772,7 +772,7 @@ namespace Tesserafin.LiveTv.Listings
             ArgumentException.ThrowIfNullOrEmpty(token);
             ArgumentException.ThrowIfNullOrEmpty(info.ListingsId);
 
-            _logger.LogInformation("Adding new lineup {Id}", info.ListingsId);
+            _logger.LogInformation("Adding new lineup {Id}", info.ListingsId.ToSingleLogLine());
 
             using var message = new HttpRequestMessage(HttpMethod.Put, ApiUrl + "/lineups/" + info.ListingsId);
             message.Headers.TryAddWithoutValidation("token", token);

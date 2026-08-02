@@ -570,7 +570,7 @@ namespace Tesserafin.Server.Implementations.Users
                 {
                     _logger.LogInformation(
                         "Authentication request for {UserName} has been denied (IP: {IP}).",
-                        username,
+                        username.ToSingleLogLine(),
                         remoteEndPoint);
                     throw new AuthenticationException("Invalid username or password entered.");
                 }
