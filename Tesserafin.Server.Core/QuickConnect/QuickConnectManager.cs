@@ -11,6 +11,7 @@ using Tesserafin.Controller.Configuration;
 using Tesserafin.Controller.Net;
 using Tesserafin.Controller.QuickConnect;
 using Tesserafin.Controller.Session;
+using Tesserafin.Extensions;
 using Tesserafin.Model.QuickConnect;
 
 namespace Tesserafin.Server.Core.QuickConnect
@@ -164,7 +165,7 @@ namespace Tesserafin.Server.Core.QuickConnect
             result.Authenticated = true;
             _currentRequests[code] = result;
 
-            _logger.LogDebug("Authorizing device with code {Code} to login as user {UserId}", code, userId);
+            _logger.LogDebug("Authorizing device with code {Code} to login as user {UserId}", code.ToSingleLogLine(), userId);
 
             return true;
         }

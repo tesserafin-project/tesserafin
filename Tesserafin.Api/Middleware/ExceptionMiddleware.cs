@@ -11,6 +11,7 @@ using Tesserafin.Common.Extensions;
 using Tesserafin.Controller.Authentication;
 using Tesserafin.Controller.Configuration;
 using Tesserafin.Controller.Net;
+using Tesserafin.Extensions;
 
 namespace Tesserafin.Api.Middleware;
 
@@ -78,7 +79,7 @@ public class ExceptionMiddleware
                     "Error processing request: {ExceptionMessage}. URL {Method} {Url}.",
                     ex.Message.TrimEnd('.'),
                     context.Request.Method,
-                    context.Request.Path);
+                    context.Request.Path.ToString().ToSingleLogLine());
             }
             else
             {

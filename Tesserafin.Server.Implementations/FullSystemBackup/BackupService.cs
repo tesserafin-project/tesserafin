@@ -18,6 +18,7 @@ using Tesserafin.Controller;
 using Tesserafin.Controller.Library;
 using Tesserafin.Controller.SystemBackupService;
 using Tesserafin.Database.Implementations;
+using Tesserafin.Extensions;
 using Tesserafin.Server.Implementations.StorageHelpers;
 using Tesserafin.Server.Implementations.SystemBackupService;
 
@@ -493,7 +494,7 @@ public class BackupService : IBackupService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Tried to load manifest from archive {Path} but failed", resolvedArchivePath);
+            _logger.LogWarning(ex, "Tried to load manifest from archive {Path} but failed", resolvedArchivePath.ToSingleLogLine());
             return null;
         }
 

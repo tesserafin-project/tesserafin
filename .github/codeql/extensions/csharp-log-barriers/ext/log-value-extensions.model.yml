@@ -1,0 +1,39 @@
+# One row. No wildcard, no subtype matching, no sink, no source, no summary,
+# no neutral model, no threat-model change.
+#
+# Column order is the declaration in
+# csharp/ql/lib/semmle/code/csharp/dataflow/internal/ExternalFlowExtensions.qll
+# at codeql-cli/v2.26.0:
+#
+#   barrierModel(namespace, type, subtypes, name, signature, ext, output, kind,
+#                provenance)
+#
+#   namespace   Tesserafin.Extensions   exact, no wildcard
+#   type        LogValueExtensions      exact, no wildcard
+#   subtypes    false                   overrides are NOT covered
+#   name        ToSingleLogLine         exact, no wildcard
+#   signature   (System.String)         obtained from the CodeQL database, not guessed
+#                                       (utils/modeleditor/FrameworkModeEndpoints.ql)
+#   ext         ""                      3344 of the 3346 rows shipped in
+#                                       codeql/csharp-all 7.0.0 use "" here; the only
+#                                       other value in the whole C# corpus is
+#                                       "Attribute.Getter"
+#   output      ReturnValue             the SANITISED value that comes back, never the
+#                                       argument that goes in
+#   kind        log-injection           the only kind consumed by cs/log-forging's
+#                                       ExternalLogForgingSanitizer; it reaches no
+#                                       other query
+#   provenance  manual                  written by hand, reviewed by hand
+#
+# The shape mirrors the single barrierModel row shipped in codeql/csharp-all 7.0.0
+# itself (System.Web.HttpRequest.get_RawUrl -> ReturnValue, url-redirection).
+#
+# This declaration is only sound because the runtime contract is separately
+# proven: 21 contract tests and 6 real-Serilog-formatter tests fail the required
+# Tests job if ToSingleLogLine ever stops neutralising CR and LF.
+extensions:
+  - addsTo:
+      pack: codeql/csharp-all
+      extensible: barrierModel
+    data:
+      - ["Tesserafin.Extensions", "LogValueExtensions", false, "ToSingleLogLine", "(System.String)", "", "ReturnValue", "log-injection", "manual"]
