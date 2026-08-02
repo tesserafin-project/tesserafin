@@ -127,34 +127,45 @@ jobs:
       # configuration file, so this writes one, scoped to the two subcommands
       # that need it and to nothing else.
       #
-      # The three lines are not interchangeable, each measured against this CLI:
+      # Two different CodeQL processes have to find this pack and they do not look
+      # in the same places. Both halves below are measured against this CLI, and
+      # neither is redundant:
       #
-      #   database init                 finds a model pack through --search-path
-      #   database run-queries          does not; it needs --additional-packs
-      #   resolve extensions-by-pack    run-queries resolves model packs by
-      #                                 spawning this as a SEPARATE process, which
-      #                                 reads this file under its own command
-      #                                 scope, so it needs its own line
+      #   `codeql database init` resolves the names in `packs:` itself. It finds a
+      #   local pack only through --search-path, which the CLI's own per-user
+      #   configuration file supplies. The package cache alone is not enough: init
+      #   goes to the registry and dies with a 403.
       #
-      # Omitting either of the last two produces a green init followed by
+      #   `codeql database run-queries` re-resolves the packs recorded in the
+      #   database by spawning `codeql resolve extensions-by-pack` as a SEPARATE
+      #   process. That process ignores this repository's checkout, and it ignores
+      #   per-user configuration written under any other command scope. It does
+      #   read the package cache, so the pack is staged there — a local file copy
+      #   on an ephemeral runner, not a publication.
+      #
+      # Getting only the first half right produces a green init followed by
       #   ERROR: Could not find extension pack 'tesserafin/csharp-log-barriers'
       #   A fatal error occurred: A 'codeql resolve extensions-by-pack' operation failed
-      # at query time. Repeated --additional-packs values accumulate rather than
-      # replace, so this does not displace the action's own pr-diff-range pack.
+      # at query time. That is fatal, not a warning, which is what makes the whole
+      # arrangement fail-closed: a pack that cannot be located stops the analysis
+      # instead of quietly dropping the barrier.
       #
-      # Deleting the pack does NOT make this silently green: `packs:` below still
-      # names it, so init fails with the registry 403 and the job is red.
+      # Deleting the pack does NOT make this silently green either: `packs:` below
+      # still names it, so init fails with the registry 403 and the job is red.
       - name: Point CodeQL at the repository-local model pack
         if: matrix.language == 'csharp'
         run: |
-          mkdir -p "$HOME/.config/codeql"
           EXTENSIONS="$GITHUB_WORKSPACE/.github/codeql/extensions"
-          {
-            printf 'database init --search-path %s\n' "$EXTENSIONS"
-            printf 'database run-queries --additional-packs %s\n' "$EXTENSIONS"
-            printf 'resolve extensions-by-pack --additional-packs %s\n' "$EXTENSIONS"
-          } > "$HOME/.config/codeql/config"
+          mkdir -p "$HOME/.config/codeql"
+          printf 'database init --search-path %s\n' "$EXTENSIONS" \
+            > "$HOME/.config/codeql/config"
           cat "$HOME/.config/codeql/config"
+
+          CACHED="$HOME/.codeql/packages/tesserafin/csharp-log-barriers/0.0.1"
+          rm -rf "$CACHED"
+          mkdir -p "$(dirname "$CACHED")"
+          cp -r "$EXTENSIONS/csharp-log-barriers" "$CACHED"
+          find "$CACHED" -type f | sort
 
       - name: Initialize CodeQL
         id: init

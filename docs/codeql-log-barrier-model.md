@@ -157,32 +157,35 @@ CLI's own answer is a per-user configuration file, so
 
 ```
 database init --search-path $GITHUB_WORKSPACE/.github/codeql/extensions
-database run-queries --additional-packs $GITHUB_WORKSPACE/.github/codeql/extensions
-resolve extensions-by-pack --additional-packs $GITHUB_WORKSPACE/.github/codeql/extensions
 ```
 
-All three lines are necessary and none is interchangeable with another:
+`init` then resolves the pack from the checkout, records it in the database's own
+`temp/analysisConfig.json` as `{"extensionPacks":["tesserafin/csharp-log-barriers@0.0.1"]}`,
+and materialises its rows into `temp/extension-pack/`.
 
-* `database init` resolves a model pack through `--search-path`;
-* `database run-queries` does not, and needs `--additional-packs`;
-* `run-queries` resolves the model packs recorded in the database by spawning
-  **`resolve extensions-by-pack` as a separate process**, which reads this file
-  under its own command scope and therefore needs its own line.
+That is only half of it. **`codeql database run-queries` re-resolves those packs
+by spawning `codeql resolve extensions-by-pack` as a separate process**, and that
+process looks in neither the checkout nor the per-user configuration written
+under another command scope. It does read the CodeQL package cache, so the
+workflow also stages the pack into
+`$HOME/.codeql/packages/tesserafin/csharp-log-barriers/0.0.1`. That is a local
+file copy on an ephemeral runner; nothing is uploaded and the pack stays
+unpublished.
 
-Omitting either of the last two initialises green and then dies at query time
-with
+Neither half is redundant, and both were established the expensive way — three
+hosted runs, each failing at query time with
 
 ```
 ERROR: Could not find extension pack 'tesserafin/csharp-log-barriers@0.0.1'.
 A fatal error occurred: A 'codeql resolve extensions-by-pack' operation failed
 ```
 
-Repeated `--additional-packs` values accumulate rather than replace, so this does
-not displace the action's own `pr-diff-range` extension pack.
+The package cache alone does not satisfy `init`, which goes to the registry and
+returns `403`. `--search-path` alone does not satisfy the spawned resolver.
 
-`init` then resolves the pack from the checkout, records it in the database's own
-`temp/analysisConfig.json`, and materialises its rows into
-`temp/extension-pack/`.
+That error is **fatal, not a warning**, and it is what makes the arrangement
+fail-closed: a pack that cannot be located stops the analysis rather than
+quietly dropping the barrier and reporting a green scan.
 
 The pack is never published. It has no dependency, no registry reference and
 needs no token or secret.

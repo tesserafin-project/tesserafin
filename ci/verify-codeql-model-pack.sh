@@ -138,8 +138,9 @@ QUERY_PACK="$("$CODEQL" resolve qlpacks --format=json \
     | jq -r '.["codeql/csharp-queries"][0] // empty')"
 [ -n "$QUERY_PACK" ] || fail "could not locate the codeql/csharp-queries pack root"
 
+# Deliberately WITHOUT --additional-packs: this is the resolution `database
+# run-queries` performs, so it must be asked the same question the analysis asks.
 "$CODEQL" resolve extensions-by-pack \
-    --additional-packs="$EXT_DIR" \
     --model-packs="$PACK_NAME@$PACK_VERSION" \
     -- "$QUERY_PACK" >"$WORK/extensions.json" 2>"$WORK/extensions.err" \
     || { cat "$WORK/extensions.err" >&2; fail "'codeql resolve extensions-by-pack' exited non-zero"; }
@@ -149,22 +150,26 @@ if grep -q "is unused" "$WORK/extensions.err"; then
     fail "the CLI reports the extension pack as unused; the barrier is NOT applied"
 fi
 
-LOCAL_ENTRIES="$(jq --arg d "$EXT_DIR/" \
-    '[.data[][] | select(.file | startswith($d))]' "$WORK/extensions.json")"
+LOCAL_ENTRIES="$(jq '[.data[][] | select(.file | contains("/csharp-log-barriers/"))]' \
+    "$WORK/extensions.json")"
 LOCAL_COUNT="$(jq 'length' <<<"$LOCAL_ENTRIES")"
 [ "$LOCAL_COUNT" = "1" ] \
-    || fail "expected exactly 1 resolved data extension from $EXT_DIR, got $LOCAL_COUNT"
+    || fail "expected exactly 1 resolved data extension from this pack, got $LOCAL_COUNT"
 
 RESOLVED_FILE="$(jq -r '.[0].file' <<<"$LOCAL_ENTRIES")"
 RESOLVED_PREDICATE="$(jq -r '.[0].predicate' <<<"$LOCAL_ENTRIES")"
 RESOLVED_ROWS="$(jq -r '.[0].rowCount' <<<"$LOCAL_ENTRIES")"
-[ "$RESOLVED_FILE" = "$MODEL_FILE" ] \
-    || fail "resolved extension came from $RESOLVED_FILE, expected $MODEL_FILE"
 [ "$RESOLVED_PREDICATE" = "barrierModel" ] \
     || fail "resolved extensible predicate is '$RESOLVED_PREDICATE', expected 'barrierModel'"
 [ "$RESOLVED_ROWS" = "1" ] \
     || fail "resolved $RESOLVED_ROWS rows, expected exactly 1"
-echo "ok   CLI resolves exactly 1 barrierModel row from the committed model file"
+
+# The copy the analysis actually reads must be the committed one, byte for byte.
+diff -u "$MODEL_FILE" "$RESOLVED_FILE" >/dev/null \
+    || fail "the model file the analysis resolved ($RESOLVED_FILE) differs from the
+         committed $MODEL_FILE"
+echo "ok   CLI resolves exactly 1 barrierModel row, from a copy identical to the committed file"
+echo "     ($RESOLVED_FILE)"
 
 # ---------------------------------------------------------------------------
 # 4. That single row is byte-for-byte the tuple this repository reviewed, and
