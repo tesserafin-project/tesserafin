@@ -85,9 +85,15 @@ on:
       - '**/*.md'
       - 'docs/**'
   pull_request:
-    paths-ignore:
-      - '**/*.md'
-      - 'docs/**'
+    # NO paths-ignore, deliberately. `Tests` is about to become a REQUIRED status
+    # check on the protected `master`. A path-filtered `pull_request` trigger does
+    # not start the workflow at all, so no check run is ever created, so a required
+    # check sits at "Expected — waiting for status to be reported" forever and the
+    # pull request can never merge. A documentation-only pull request would be
+    # permanently unmergeable. The extra minutes are the deliberate price of a
+    # required check that can actually report.
+    #
+    # The `push` trigger above keeps its exclusion: nothing gates on it.
   workflow_dispatch:
 
 permissions:

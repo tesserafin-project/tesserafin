@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Tesserafin.Common.Configuration;
+using Tesserafin.Common.IO;
 using Tesserafin.Controller.Collections;
 using Tesserafin.Controller.Entities;
 using Tesserafin.Controller.Entities.Movies;
@@ -174,7 +175,7 @@ namespace Tesserafin.Server.Core.Collections
                 throw new ArgumentException(nameof(parentFolder));
             }
 
-            var path = Path.Combine(parentFolder.Path, folderName);
+            var path = SafeDirectoryLeafName.CombineWithRoot(parentFolder.Path, folderName, nameof(options));
 
             _iLibraryMonitor.ReportFileSystemChangeBeginning(path);
 

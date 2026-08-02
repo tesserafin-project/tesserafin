@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
+using Tesserafin.Common.IO;
 using Tesserafin.Controller.Library;
 using Tesserafin.Data.Enums;
 using Tesserafin.Extensions;
@@ -89,7 +90,7 @@ namespace Tesserafin.Controller.Entities
                 FileSystem.GetValidFilename(name).Trim().TrimEnd('.') :
                 name;
 
-            return System.IO.Path.Combine(ConfigurationManager.ApplicationPaths.GenrePath, validName);
+            return SafeDirectoryLeafName.CombineWithRoot(ConfigurationManager.ApplicationPaths.GenrePath, validName, nameof(name));
         }
 
         private string GetRebasedPath()

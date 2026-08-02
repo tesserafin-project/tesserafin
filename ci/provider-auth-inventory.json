@@ -1,0 +1,182 @@
+{
+  "$schema": "provider-auth-inventory.schema.md",
+  "$comment": [
+    "CONTRACT DATA, NOT A CONVENIENCE LIST.",
+    "",
+    "Every production provider under Tesserafin.Providers that issues an outbound request is",
+    "declared here, whether or not it authenticates. The provider-authentication audit",
+    "(tests/Tesserafin.Providers.Tests/ProviderAuth) reads this file and the COMPILED",
+    "Tesserafin.Providers.dll and fails ./ci/run.sh when the two disagree.",
+    "",
+    "This file contains NO credential values and must never contain one. Everything here is a",
+    "host, a parameter name, a type name or a behavioural statement.",
+    "",
+    "Adding a provider, an outbound host, a string constant in provider code, or a reader of a",
+    "credential property REQUIRES an edit here. That is the point: the gate turns an invisible",
+    "change into a reviewable one."
+  ],
+  "version": 1,
+  "assembly": "Tesserafin.Providers.dll",
+  "authMarkers": [
+    "apikey=",
+    "api_key=",
+    "apiKey=",
+    "access_token=",
+    "client_secret=",
+    "client_id=",
+    "&key=",
+    "?key=",
+    "&token=",
+    "?token=",
+    "Authorization:",
+    "Bearer ",
+    "Basic "
+  ],
+  "providers": [
+    {
+      "name": "TheMovieDb",
+      "host": "api.themoviedb.org",
+      "hostOwner": "TMDbLib",
+      "authentication": "api-key handed to the TMDbLib client constructor",
+      "parameterName": "api_key",
+      "configurationSource": "plugin-configuration (/config/plugins/configurations/Tesserafin.Plugin.Tmdb.xml)",
+      "classification": "configured",
+      "configurationType": "Tesserafin.Providers.Plugins.Tmdb.PluginConfiguration",
+      "configurationProperty": "TmdbApiKey",
+      "authType": "Tesserafin.Providers.Plugins.Tmdb.TmdbClientManager",
+      "authBoundary": null,
+      "authBoundaryNote": "The request URL is composed inside TMDbLib, not in this assembly, so there is no auth boundary literal to pin here. The credential never becomes a constant in Tesserafin.Providers.dll.",
+      "credentialReaders": [
+        "Tesserafin.Providers.Plugins.Tmdb.TmdbClientManager..ctor"
+      ],
+      "missingKeyBehaviour": "No TMDbClient is constructed; IsConfigured is false; every read path returns null or an empty result; no request is issued; one warning names the setting."
+    },
+    {
+      "name": "TheAudioDB",
+      "host": "www.theaudiodb.com",
+      "hostOwner": "Tesserafin.Providers",
+      "authentication": "api-key as a URL path segment",
+      "parameterName": "(path segment following /api/v1/json/)",
+      "configurationSource": "plugin-configuration (/config/plugins/configurations/Tesserafin.Plugin.AudioDb.xml)",
+      "classification": "configured",
+      "configurationType": "Tesserafin.Providers.Plugins.AudioDb.PluginConfiguration",
+      "configurationProperty": "AudioDbApiKey",
+      "authType": "Tesserafin.Providers.Plugins.AudioDb.AudioDbApi",
+      "authBoundary": "https://www.theaudiodb.com/api/v1/json/",
+      "authBoundaryNote": "The compiler folds ApiRoot + \"/\" into one literal. Nothing may follow the trailing slash in any string constant: the key is appended at run time from configuration.",
+      "credentialReaders": [
+        "Tesserafin.Providers.Plugins.AudioDb.AudioDbApi.TryGetBaseUrl",
+        "Tesserafin.Providers.Plugins.AudioDb.AudioDbApi.get_IsConfigured"
+      ],
+      "allowedHostStrings": [
+        "https://www.theaudiodb.com/",
+        "https://www.theaudiodb.com/api/v1/json",
+        "https://www.theaudiodb.com/api/v1/json/"
+      ],
+      "missingKeyBehaviour": "No request is issued at all; artist and album lookups return an empty MetadataResult; image lookups return an empty list; one warning names the setting."
+    },
+    {
+      "name": "OMDb",
+      "host": "www.omdbapi.com",
+      "hostOwner": "Tesserafin.Providers",
+      "authentication": "api-key as a query parameter",
+      "parameterName": "apikey",
+      "configurationSource": "plugin-configuration (/config/plugins/configurations/Tesserafin.Plugin.Omdb.xml)",
+      "classification": "configured",
+      "configurationType": "Tesserafin.Providers.Plugins.Omdb.PluginConfiguration",
+      "configurationProperty": "OmdbApiKey",
+      "authType": "Tesserafin.Providers.Plugins.Omdb.OmdbApi",
+      "authBoundary": "https://www.omdbapi.com?apikey=",
+      "authBoundaryNote": "The compiler folds ApiRoot + \"?apikey=\" into one literal. Nothing may follow the '=' in any string constant: the key is appended at run time from configuration.",
+      "credentialReaders": [
+        "Tesserafin.Providers.Plugins.Omdb.OmdbApi.TryGetRequestUrl",
+        "Tesserafin.Providers.Plugins.Omdb.OmdbApi.get_IsConfigured"
+      ],
+      "allowedHostStrings": [
+        "https://www.omdbapi.com",
+        "https://www.omdbapi.com?apikey="
+      ],
+      "missingKeyBehaviour": "No request is issued at all; searches return an empty result set; metadata lookups return HasMetadata=false; image lookups return an empty list; one warning names the setting."
+    },
+    {
+      "name": "MusicBrainz",
+      "host": "musicbrainz.org",
+      "hostOwner": "Tesserafin.Providers",
+      "authentication": "none — anonymous, identified only by a User-Agent",
+      "parameterName": null,
+      "configurationSource": "plugin-configuration (server URL only, no credential)",
+      "classification": "anonymous",
+      "configurationType": "Tesserafin.Providers.Plugins.MusicBrainz.PluginConfiguration",
+      "configurationProperty": null,
+      "authType": null,
+      "authBoundary": null,
+      "credentialReaders": [],
+      "allowedHostStrings": [
+        "https://musicbrainz.org",
+        "musicbrainz.org"
+      ],
+      "missingKeyBehaviour": "Not applicable — no credential exists. The provider works out of the box."
+    },
+    {
+      "name": "ListenBrainz Labs",
+      "host": "labs.api.listenbrainz.org",
+      "hostOwner": "Tesserafin.Providers",
+      "authentication": "none — anonymous public labs endpoint",
+      "parameterName": null,
+      "configurationSource": "plugin-configuration (base URL and rate limit only, no credential)",
+      "classification": "anonymous",
+      "configurationType": "Tesserafin.Providers.Plugins.ListenBrainz.PluginConfiguration",
+      "configurationProperty": null,
+      "authType": null,
+      "authBoundary": null,
+      "credentialReaders": [],
+      "allowedHostStrings": [
+        "https://labs.api.listenbrainz.org"
+      ],
+      "missingKeyBehaviour": "Not applicable — no credential exists. The provider works out of the box."
+    },
+    {
+      "name": "Studio images",
+      "host": "raw.githubusercontent.com",
+      "hostOwner": "Tesserafin.Providers",
+      "authentication": "none — anonymous raw file fetch",
+      "parameterName": null,
+      "configurationSource": "plugin-configuration (repository URL only, no credential)",
+      "classification": "anonymous",
+      "configurationType": "Tesserafin.Providers.Plugins.StudioImages.PluginConfiguration",
+      "configurationProperty": null,
+      "authType": null,
+      "authBoundary": null,
+      "credentialReaders": [],
+      "allowedHostStrings": [
+        "https://raw.githubusercontent.com/jellyfin/emby-artwork/master/studios"
+      ],
+      "missingKeyBehaviour": "Not applicable — no credential exists. The provider works out of the box."
+    }
+  ],
+  "constantAllowlist": {
+    "$comment": [
+      "Every `const string` declared by a type in a provider plugin namespace, by declaring type",
+      "and field name. The audit fails on any const string not listed here — with no entropy and",
+      "no length threshold, because a six-character credential is indistinguishable from any other",
+      "six-character string by inspection. Adding a constant means adding a line here, in review.",
+      "",
+      "Namespaces covered are listed under `namespaces`."
+    ],
+    "namespaces": [
+      "Tesserafin.Providers.Plugins.AudioDb",
+      "Tesserafin.Providers.Plugins.Omdb",
+      "Tesserafin.Providers.Plugins.Tmdb",
+      "Tesserafin.Providers.Plugins.MusicBrainz",
+      "Tesserafin.Providers.Plugins.ListenBrainz",
+      "Tesserafin.Providers.Plugins.StudioImages"
+    ],
+    "allowed": [
+      "Tesserafin.Providers.Plugins.AudioDb.AudioDbApi.ApiRoot",
+      "Tesserafin.Providers.Plugins.Omdb.OmdbApi.ApiRoot",
+      "Tesserafin.Providers.Plugins.StudioImages.Plugin.DefaultServer",
+      "Tesserafin.Providers.Plugins.Tmdb.TmdbUtils.BaseTmdbUrl",
+      "Tesserafin.Providers.Plugins.Tmdb.TmdbUtils.ProviderName"
+    ]
+  }
+}

@@ -7,6 +7,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using Tesserafin.Common.Net;
 using Tesserafin.Controller.Configuration;
 using Tesserafin.Controller.Entities;
@@ -24,10 +25,10 @@ namespace Tesserafin.Providers.Plugins.Omdb
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly OmdbProvider _omdbProvider;
 
-        public OmdbImageProvider(IHttpClientFactory httpClientFactory, IFileSystem fileSystem, IServerConfigurationManager configurationManager)
+        public OmdbImageProvider(IHttpClientFactory httpClientFactory, IFileSystem fileSystem, IServerConfigurationManager configurationManager, ILogger<OmdbImageProvider> logger)
         {
             _httpClientFactory = httpClientFactory;
-            _omdbProvider = new OmdbProvider(_httpClientFactory, fileSystem, configurationManager);
+            _omdbProvider = new OmdbProvider(_httpClientFactory, fileSystem, configurationManager, logger);
         }
 
         public string Name => "The Open Movie Database";
@@ -50,6 +51,13 @@ namespace Tesserafin.Providers.Plugins.Omdb
             }
 
             var rootObject = await _omdbProvider.GetRootObject(imdbId, cancellationToken).ConfigureAwait(false);
+
+            // Null means no operator-supplied OMDb key, so no request was issued and there is
+            // nothing to offer. Dereferencing here would turn "not configured" into a crash.
+            if (rootObject is null)
+            {
+                return Enumerable.Empty<RemoteImageInfo>();
+            }
 
             if (string.IsNullOrEmpty(rootObject.Poster))
             {

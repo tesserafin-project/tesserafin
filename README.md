@@ -34,7 +34,9 @@ deciding whether to install anything.
 
 The authoritative rules for which numbers exist, where they are published and how
 a release may be resolved are in
-[`docs/versioning-policy.md`](docs/versioning-policy.md).
+[`docs/versioning-policy.md`](docs/versioning-policy.md). What the first public
+release will contain, and what it will not, is in
+[CHANGELOG.md](CHANGELOG.md).
 
 ## What Tesserafin is
 
@@ -84,7 +86,10 @@ The canonical image package is
 > pulling. Making the packages publicly pullable is an owner decision that has not
 > been taken.
 
-Upgrades and the tag contract are documented separately in
+Once it is installed, [`docs/admin-guide.md`](docs/admin-guide.md) is the entry
+point for running it: what you are running, health and logs, backup and restore,
+upgrades, transcoding, and the limits worth knowing. Upgrades and the tag
+contract are documented in full in
 [`docs/container/A6-versioning-and-upgrades.md`](docs/container/A6-versioning-and-upgrades.md).
 Building from source is a development activity — see [Development](#development).
 
@@ -182,14 +187,22 @@ the web client is hosted separately.
 
 **Continuous integration**
 
-The [Tests workflow](.github/workflows/ci-tests.yml) runs automatically on
-`master` and on pull requests, and ignores documentation-only changes. It is not
-an enforced required check — required status checks are unavailable on this plan
-and visibility, and `./ci/run.sh` remains the authoritative gate.
+Build, test, and lint run automatically on `master` and on every pull request.
+The [Tests](.github/workflows/ci-tests.yml) (build + full test suite) and
+[Format](.github/workflows/ci-format.yml) (`dotnet format`) workflows, together
+with the ABI, OpenAPI, dependency-audit, secret-scan, SDK-provenance, and CodeQL
+workflows, are **required status checks** on `master`: a pull request cannot
+merge until they are green. `./ci/run.sh` reproduces the build and test stages
+locally in Docker. See [BUILDING.md](BUILDING.md) for the full contributor build
+setup and the list of required checks.
 
 ## Contributing and reporting problems
 
-There is no contribution guide in this repository yet.
+For building, testing, and linting the server from source, see
+[BUILDING.md](BUILDING.md) — it documents the reproducible build, the local
+merge gate (`./ci/run.sh`), and the checks that must pass before a pull request
+can merge. A broader contribution guide (coding conventions, review process) is
+not written yet.
 
 **Ordinary bugs and feature requests** —
 [open an issue](https://github.com/tesserafin-project/tesserafin/issues) in this
