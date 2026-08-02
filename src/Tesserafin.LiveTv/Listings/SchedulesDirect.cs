@@ -11,7 +11,6 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
-using System.Net.Mime;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -749,7 +748,12 @@ namespace Tesserafin.LiveTv.Listings
             var hashedPasswordBytes = SHA1.HashData(Encoding.ASCII.GetBytes(password));
 #pragma warning restore CA5350
             string hashedPassword = Convert.ToHexStringLower(hashedPasswordBytes);
-            options.Content = new StringContent("{\"username\":\"" + username + "\",\"password\":\"" + hashedPassword + "\"}", Encoding.UTF8, MediaTypeNames.Application.Json);
+
+            // Serialize the credentials instead of concatenating them, so that a username
+            // containing JSON metacharacters cannot restructure the request body.
+            options.Content = JsonContent.Create(
+                new TokenRequestDto { Username = username, Password = hashedPassword },
+                options: _jsonOptions);
 
             var root = await Request<TokenDto>(options, false, null, cancellationToken).ConfigureAwait(false);
             if (string.Equals(root?.Message, "OK", StringComparison.Ordinal))

@@ -10,6 +10,7 @@ using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using Tesserafin.Common.Configuration;
 using Tesserafin.Common.Extensions;
 using Tesserafin.Common.Net;
@@ -26,19 +27,18 @@ namespace Tesserafin.Providers.Plugins.AudioDb
 {
     public class AudioDbArtistProvider : IRemoteMetadataProvider<MusicArtist, ArtistInfo>, IHasOrder
     {
-        private const string ApiKey = "195003";
-        public const string BaseUrl = "https://www.theaudiodb.com/api/v1/json/" + ApiKey;
-
         private readonly IServerConfigurationManager _config;
         private readonly IFileSystem _fileSystem;
         private readonly IHttpClientFactory _httpClientFactory;
+        private readonly ILogger<AudioDbArtistProvider> _logger;
         private readonly JsonSerializerOptions _jsonOptions = JsonDefaults.Options;
 
-        public AudioDbArtistProvider(IServerConfigurationManager config, IFileSystem fileSystem, IHttpClientFactory httpClientFactory)
+        public AudioDbArtistProvider(IServerConfigurationManager config, IFileSystem fileSystem, IHttpClientFactory httpClientFactory, ILogger<AudioDbArtistProvider> logger)
         {
             _config = config;
             _fileSystem = fileSystem;
             _httpClientFactory = httpClientFactory;
+            _logger = logger;
             Current = this;
         }
 
@@ -66,6 +66,13 @@ namespace Tesserafin.Providers.Plugins.AudioDb
                 await EnsureArtistInfo(id, cancellationToken).ConfigureAwait(false);
 
                 var path = GetArtistInfoPath(_config.ApplicationPaths, id);
+
+                // With no operator key configured nothing was downloaded and nothing may have been
+                // cached, so the normal answer is an empty result rather than a FileNotFoundException.
+                if (!_fileSystem.GetFileSystemInfo(path).Exists)
+                {
+                    return result;
+                }
 
                 FileStream jsonStream = AsyncFile.OpenRead(path);
                 await using (jsonStream.ConfigureAwait(false))
@@ -152,7 +159,14 @@ namespace Tesserafin.Providers.Plugins.AudioDb
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var url = BaseUrl + "/artist-mb.php?i=" + musicBrainzId;
+            // No key, no request. TheAudioDB carries its credential as a path segment, so there is no
+            // anonymous form of this call to fall back to, and no built-in key to fall back on.
+            if (!AudioDbApi.TryGetBaseUrl(_logger, out var baseUrl))
+            {
+                return;
+            }
+
+            var url = baseUrl + "/artist-mb.php?i=" + musicBrainzId;
 
             using var response = await _httpClientFactory.CreateClient(NamedClient.Default).GetAsync(url, cancellationToken).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();

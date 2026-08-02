@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
+using Tesserafin.Common.IO;
 using Tesserafin.Controller.Library;
 using Tesserafin.Controller.Providers;
 using Tesserafin.Extensions;
@@ -106,9 +107,12 @@ namespace Tesserafin.Controller.Entities
 
             var path = ConfigurationManager.ApplicationPaths.PeoplePath;
 
-            return string.IsNullOrEmpty(subFolderPrefix) ?
-                System.IO.Path.Combine(path, validFilename) :
-                System.IO.Path.Combine(path, subFolderPrefix, validFilename);
+            if (!string.IsNullOrEmpty(subFolderPrefix))
+            {
+                path = SafeDirectoryLeafName.CombineWithRoot(path, subFolderPrefix, nameof(name));
+            }
+
+            return SafeDirectoryLeafName.CombineWithRoot(path, validFilename, nameof(name));
         }
 
         private string GetRebasedPath()

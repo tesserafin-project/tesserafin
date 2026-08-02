@@ -1,83 +1,91 @@
-# STILL PARKED — manual trigger only (#94). Hosted allocation is fixed (see
-# ci-tests.yml), but CodeQL cannot complete on this repository for a reason
-# that has nothing to do with allocation: **code scanning requires GitHub
-# Advanced Security, which a private repository on a free organisation plan
-# does not have.**
+# RESTORED on 2026-08-01 (#94, #180). The blocker recorded in the parking stamp
+# below was never allocation and never code: code scanning requires GitHub
+# Advanced Security, which a PRIVATE repository on a free organisation plan does
+# not have. This repository is now PUBLIC, and code scanning is free on public
+# repositories.
 #
-# The analysis itself runs fine. It is the upload that is refused:
+#   $ gh api repos/tesserafin-project/tesserafin -q '{visibility,private}'
+#   {"visibility":"public","private":false}
 #
+# ADVANCED SETUP, NOT DEFAULT SETUP. Default setup runs the `default` query
+# suite and offers no way to pin `security-extended`. #94's gate names
+# `security-extended` explicitly, so the workflow stays advanced setup and the
+# suite is declared here, in a file, at the exact commit that is analysed.
+#
+# LANGUAGE COVERAGE, and why it is what it is.
+#
+#   csharp   — the production language. 2473 tracked `.cs` files; GitHub's own
+#              linguist reports 12.2 MB of C#. Built explicitly (see below).
+#   actions  — the workflow definitions themselves. This repository is now
+#              public, so any stranger can open a pull request that touches
+#              `.github/`. Scanning that surface is not optional here: an
+#              inherited upstream workflow that interpolated
+#              `github.event.issue.comments_url` straight into a `run:` block
+#              was removed in the pre-public hardening pass precisely because
+#              nothing automatic was looking at it.
+#
+# NOT covered, stated rather than silently omitted:
+#
+#   javascript-typescript — the only two tracked `.ts` files in this repository
+#              are `docker/browser-gate/playwright.config.ts` and
+#              `docker/browser-gate/tests/onboarding.spec.ts`: the container
+#              browser gate's Playwright config and its single spec. They are
+#              test tooling, they ship in no artifact, and they are not a
+#              production language "actually present" in the sense #94 means.
+#              The browser client is a separate repository with its own CodeQL
+#              workflow covering javascript-typescript.
+#   Shell, HTML, Dockerfile, HCL, CSS — not CodeQL-supported languages.
+#
+# NOT autobuild. Autobuild fails on this solution (run 30230125535): it installs
+# its own SDK, cannot find 10.0.0, then builds projects out of order and dies on
+# CS0234 in Tesserafin.Model, ending on "Could not auto-detect a suitable build
+# method". Building the solution explicitly with the SDK set up above is what
+# GitHub's own error message prescribes, and it is the same build the local gate
+# runs.
+#
+# NO `continue-on-error`, anywhere. A CodeQL job that cannot initialise, cannot
+# build or cannot upload must be red. A green tick that means "the analysis did
+# not happen" is the failure mode this workflow exists to prevent.
+#
+# ── Parking stamp (historical) ────────────────────────────────────────────
+# PARKED 2026-07-19 — manual trigger only (#62, then #94). First cause: an
+# account-wide GitHub Actions allocation refusal (free plan + private repo,
+# 2000 min/month drained, $0 spending limit). That cause cleared on 2026-07-27.
+# Second cause, which outlived it: Advanced Security is unavailable on a private
+# repository under a free organisation plan, so the analysis ran and the upload
+# was refused —
 #   $ gh api repos/tesserafin-project/tesserafin/code-scanning/alerts
 #   {"message":"Advanced Security must be enabled for this repository to use
 #    code scanning.","status":"403"}
-#
-# and, in a real run of the sibling web repository (tesserafin-web run
-# 30230774481), after "Initialize CodeQL" and "Autobuild" both succeeded:
-#
+# and, in the sibling web repository (run 30230774481), after "Initialize
+# CodeQL" and "Autobuild" both succeeded:
 #   ##[error]Please verify that the necessary features are enabled: Advanced
 #   Security must be enabled for this repository to use code scanning.
-#
-# Arming the triggers would therefore burn a full analysis on every pull
-# request and then go red at the last step, every time — the exact permanent
-# red #62 was about, at the highest per-run cost of any workflow here.
-#
-# LOSS OF COVERAGE IS REAL AND UNMITIGATED: no static security analysis runs
-# on this repository. The local gate does NOT replace CodeQL. This is not
-# fixed by anything in the repository and cannot be — it needs an owner
-# decision (Advanced Security, or making the repository public).
-#
-# The autobuild fix below IS kept, so that arming this workflow is a one-line
-# change the day the plan allows it. Autobuild could not build this solution
-# (run 30230125535): it installed its own SDK, could not find 10.0.0, then
-# built projects out of order and died on CS0234 in Tesserafin.Model, ending
-# on "Could not auto-detect a suitable build method". It now builds
-# Tesserafin.sln explicitly. The query suite is UNCHANGED: +security-extended.
-#
-# Previous trigger: on: push (master) + pull_request (master) + schedule
-# ('24 2 * * 4')
-#
-# ── Parking stamp (historical, 2026-07-19 allocation outage) ───────────────
-# PARKED — manual trigger only (issue #62). Same allocation refusal as the
-# other hosted workflows: red on every pull request and every push to master
-# before the first step, plus a weekly cron that failed the same way and kept
-# burning allocation attempts for nothing. Nothing is fixed here — the trigger
-# is disarmed to stop the noise. See docs/local-ci.md.
-#
-# Loss of coverage is real and accepted for the duration of the outage: no
-# static security analysis runs while this is parked. The local gate does NOT
-# replace CodeQL. Restoring this is part of the return-to-normal checklist.
-#
-# Previous trigger: on: push (master) + pull_request (master) + schedule
-# ('24 2 * * 4')
-#
-# ── Parking stamp ──────────────────────────────────────────────────────────
-# Parked on : 2026-07-19
-# Cause     : external, account-wide. GitHub refuses runner allocation before
-#             the first step. all3f0r1 = free plan, all3f0r1/reefin = PRIVATE,
-#             so Actions minutes are metered against a 2000 min/month
-#             ACCOUNT-WIDE allowance. July 2026 weighted usage ~2646 min
-#             (Linux 634 x1 + Windows 266 x2 + macOS 148 x10), drained mostly
-#             by another repo. Spending limit is $0, so the overage is refused
-#             rather than billed.
-# Evidence  : run 29695198403 (ABI Compatibility) and run 29695198446
-#             (OpenAPI Check), both `failure` in 3-4s with ZERO steps and no
-#             annotations, while actions/permissions = {enabled: true,
-#             allowed_actions: all} and every runs-on label is valid.
-#             GET /actions/runners -> total_count: 0.
-# Restore   : see the checklist in docs/local-ci.md (section 'Retour a la
-#             normale'). The original trigger is recorded above verbatim.
+# Both causes are now gone.
 # ───────────────────────────────────────────────────────────────────────────
 
 name: "CodeQL"
 
 on:
+  push:
+    branches: [master]
+    # NO paths-ignore. A documentation-only exclusion on a security analysis is
+    # a blind spot with a schedule attached.
+  pull_request:
+    branches: [master]
+  schedule:
+    # Thursdays 02:24 UTC — the trigger this workflow carried before it was
+    # parked, restored verbatim.
+    - cron: '24 2 * * 4'
   workflow_dispatch:
 
+# Minimal and explicit. `actions: read` is the only permission beyond the two
+# the analysis strictly needs: the CodeQL action reads its own run metadata
+# through it, and without it every step logs "Failed to gather information for
+# telemetry: Resource not accessible by integration".
 permissions:
   contents: read
   security-events: write
-  # Read-only; the CodeQL action needs it for its own run metadata. Without
-  # it every step logs "Failed to gather information for telemetry: Resource
-  # not accessible by integration".
   actions: read
 
 concurrency:
@@ -86,36 +94,41 @@ concurrency:
 
 jobs:
   analyze:
-    name: Analyze
+    name: Analyze ${{ matrix.language }}
     runs-on: ubuntu-latest
+    timeout-minutes: 60
 
     strategy:
       fail-fast: false
       matrix:
-        language: [ 'csharp' ]
+        include:
+          - language: csharp
+            build-mode: manual
+          - language: actions
+            build-mode: none
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-    - name: Setup .NET
-      uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
-      with:
-        dotnet-version: '10.0.x'
+      - name: Setup .NET
+        if: matrix.language == 'csharp'
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: '10.0.x'
 
-    - name: Initialize CodeQL
-      uses: github/codeql-action/init@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
-      with:
-        languages: ${{ matrix.language }}
-        queries: +security-extended
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          queries: security-extended
 
-    # NOT autobuild. Autobuild fails on this solution (run 30230125535): it
-    # installs its own SDK, then builds projects out of order and dies on
-    # CS0234 in Tesserafin.Model. Building the solution explicitly with the
-    # SDK set up above is what GitHub's own error message prescribes, and it
-    # is the same build the local gate runs.
-    - name: Build solution for CodeQL
-      run: dotnet build Tesserafin.sln --configuration Release -clp:ErrorsOnly
+      - name: Build solution for CodeQL
+        if: matrix.language == 'csharp'
+        run: dotnet build Tesserafin.sln --configuration Release -clp:ErrorsOnly
 
-    - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
+        with:
+          category: "/language:${{ matrix.language }}"

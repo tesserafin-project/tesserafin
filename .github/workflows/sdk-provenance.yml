@@ -1,0 +1,89 @@
+# Cross-repository SDK provenance — the hosted half of C4 (#97, #164).
+#
+# #164 lists five properties. Three were already satisfied inside tesserafin-web
+# and two were not: hosted execution, and equality between the contract the web
+# pin NAMES and the contract of the server commit being analysed. This workflow
+# is those two.
+#
+# NO CROSS-REPOSITORY CREDENTIAL. `ci/verify-sdk-provenance.sh` clones the web
+# repository over anonymous HTTPS with `credential.helper=` and
+# `GIT_TERMINAL_PROMPT=0`: no PAT, no deploy key, no GitHub App, no custom
+# secret, and not even $GITHUB_TOKEN. That was impossible while both
+# repositories were private and is what #164 property 4 was blocked on.
+#
+# FAIL-CLOSED, INCLUDING ON ACCESS. A repository that is missing, renamed or no
+# longer public makes the clone fail and this job red. It is never skipped and
+# never degraded to a warning.
+#
+# NEGATIVE CONTROLS RUN IN THE SAME JOB. A gate that has never been observed
+# failing is not evidence that it can fail. Each control mutates a throwaway
+# lock, a throwaway server worktree or an argument, and requires the verifier to
+# reject it for the right reason. A control that unexpectedly PASSES fails this
+# job. They live in `ci/tests/sdk-provenance.test.sh` rather than inline here, so
+# that a maintainer runs exactly what CI runs without a hosted runner; that file
+# also states which failure modes it deliberately does not cover, and why.
+
+name: SDK Provenance
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+  schedule:
+    # Wednesdays 04:37 UTC. Off the hour, and offset from this repository's other
+    # scheduled gates so they do not contend for the same free-plan minutes.
+    - cron: '37 4 * * 3'
+  # Diagnostics only. A manual run is never accepted as proof of an automatic one.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  provenance:
+    name: SDK Provenance
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout the server repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          # Full history: the gate resolves the web pin's `sourceCommit` inside
+          # this checkout and asks whether it is an ancestor of the commit under
+          # test. A shallow clone cannot answer that and would silently degrade
+          # the strongest assertion here into an error.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node.js
+        # Must satisfy tesserafin-web's own `engines` floor
+        # ({"node":">=24.0.0","npm":">=11.0.0"}) and its `.nvmrc`. Node 22 makes
+        # `npm ci` fail EBADENGINE inside the web clone, which this gate reports
+        # as INDETERMINATE rather than as a pass — correct, but not the answer
+        # the gate exists to give.
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '24'
+
+      - name: Verify cross-repository SDK provenance
+        env:
+          SERVER_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          ./ci/verify-sdk-provenance.sh \
+            --server-repo "$PWD" \
+            --workdir "$RUNNER_TEMP/sdk-provenance" \
+            --server-commit "$SERVER_COMMIT"
+
+      - name: Deterministic negative controls
+        env:
+          SERVER_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+          CONTROLS_DIR: ${{ runner.temp }}/sdk-provenance-controls
+        run: ./ci/tests/sdk-provenance.test.sh

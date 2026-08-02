@@ -13,6 +13,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using Tesserafin.Common.Net;
 using Tesserafin.Controller.Configuration;
 using Tesserafin.Controller.Entities;
@@ -30,17 +31,20 @@ namespace Tesserafin.Providers.Plugins.Omdb
         private readonly IFileSystem _fileSystem;
         private readonly IServerConfigurationManager _configurationManager;
         private readonly IHttpClientFactory _httpClientFactory;
+        private readonly ILogger _logger;
         private readonly JsonSerializerOptions _jsonOptions;
 
         /// <summary>Initializes a new instance of the <see cref="OmdbProvider"/> class.</summary>
         /// <param name="httpClientFactory">HttpClientFactory to use for calls to OMDB service.</param>
         /// <param name="fileSystem">IFileSystem to use for store OMDB data.</param>
         /// <param name="configurationManager">IServerConfigurationManager to use.</param>
-        public OmdbProvider(IHttpClientFactory httpClientFactory, IFileSystem fileSystem, IServerConfigurationManager configurationManager)
+        /// <param name="logger">Logger used for the one-time unconfigured-credential diagnostic.</param>
+        public OmdbProvider(IHttpClientFactory httpClientFactory, IFileSystem fileSystem, IServerConfigurationManager configurationManager, ILogger logger)
         {
             _httpClientFactory = httpClientFactory;
             _fileSystem = fileSystem;
             _configurationManager = configurationManager;
+            _logger = logger;
 
             _jsonOptions = new JsonSerializerOptions(JsonDefaults.Options);
             // These converters need to take priority
@@ -67,6 +71,13 @@ namespace Tesserafin.Providers.Plugins.Omdb
             var item = itemResult.Item;
 
             var result = await GetRootObject(imdbId, cancellationToken).ConfigureAwait(false);
+
+            if (result is null)
+            {
+                // No operator-supplied OMDb key, so no request was issued and there is nothing to
+                // apply. The item keeps whatever other providers gave it.
+                return;
+            }
 
             var isEnglishRequested = IsConfiguredForEnglish(item, language);
             // Only take the name and rating if the user's language is set to English, since Omdb has no localization
@@ -232,6 +243,11 @@ namespace Tesserafin.Providers.Plugins.Omdb
         internal async Task<RootObject> GetRootObject(string imdbId, CancellationToken cancellationToken)
         {
             var path = await EnsureItemInfo(imdbId, cancellationToken).ConfigureAwait(false);
+            if (path is null)
+            {
+                return null;
+            }
+
             var stream = AsyncFile.OpenRead(path);
             await using (stream.ConfigureAwait(false))
             {
@@ -242,26 +258,16 @@ namespace Tesserafin.Providers.Plugins.Omdb
         internal async Task<SeasonRootObject> GetSeasonRootObject(string imdbId, int seasonId, CancellationToken cancellationToken)
         {
             var path = await EnsureSeasonInfo(imdbId, seasonId, cancellationToken).ConfigureAwait(false);
+            if (path is null)
+            {
+                return null;
+            }
+
             var stream = AsyncFile.OpenRead(path);
             await using (stream.ConfigureAwait(false))
             {
                 return await JsonSerializer.DeserializeAsync<SeasonRootObject>(stream, _jsonOptions, cancellationToken).ConfigureAwait(false);
             }
-        }
-
-        /// <summary>Gets OMDB URL.</summary>
-        /// <param name="query">Appends query string to URL.</param>
-        /// <returns>OMDB URL with optional query string.</returns>
-        public static string GetOmdbUrl(string query)
-        {
-            const string Url = "https://www.omdbapi.com?apikey=2c9d9507";
-
-            if (string.IsNullOrWhiteSpace(query))
-            {
-                return Url;
-            }
-
-            return Url + "&" + query;
         }
 
         /// <summary>
@@ -309,16 +315,21 @@ namespace Tesserafin.Providers.Plugins.Omdb
                     return path;
                 }
             }
-            else
+
+            // No key, no request — and no directory created for a download that will not happen.
+            // OMDb rejects an unauthenticated call, so there is no anonymous form of this request.
+            if (!OmdbApi.TryGetRequestUrl(
+                    string.Format(
+                        CultureInfo.InvariantCulture,
+                        "i={0}&plot=short&tomatoes=true&r=json",
+                        imdbParam),
+                    _logger,
+                    out var url))
             {
-                Directory.CreateDirectory(Path.GetDirectoryName(path));
+                return null;
             }
 
-            var url = GetOmdbUrl(
-                string.Format(
-                    CultureInfo.InvariantCulture,
-                    "i={0}&plot=short&tomatoes=true&r=json",
-                    imdbParam));
+            Directory.CreateDirectory(Path.GetDirectoryName(path));
 
             var rootObject = await _httpClientFactory.CreateClient(NamedClient.Default).GetFromJsonAsync<RootObject>(url, _jsonOptions, cancellationToken).ConfigureAwait(false);
             FileStream jsonFileStream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, IODefaults.FileStreamBufferSize, FileOptions.Asynchronous);
@@ -351,17 +362,21 @@ namespace Tesserafin.Providers.Plugins.Omdb
                     return path;
                 }
             }
-            else
+
+            // No key, no request — and no directory created for a download that will not happen.
+            if (!OmdbApi.TryGetRequestUrl(
+                    string.Format(
+                        CultureInfo.InvariantCulture,
+                        "i={0}&season={1}&detail=full",
+                        imdbParam,
+                        seasonId),
+                    _logger,
+                    out var url))
             {
-                Directory.CreateDirectory(Path.GetDirectoryName(path));
+                return null;
             }
 
-            var url = GetOmdbUrl(
-                string.Format(
-                    CultureInfo.InvariantCulture,
-                    "i={0}&season={1}&detail=full",
-                    imdbParam,
-                    seasonId));
+            Directory.CreateDirectory(Path.GetDirectoryName(path));
 
             var rootObject = await _httpClientFactory.CreateClient(NamedClient.Default).GetFromJsonAsync<SeasonRootObject>(url, _jsonOptions, cancellationToken).ConfigureAwait(false);
             FileStream jsonFileStream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, IODefaults.FileStreamBufferSize, FileOptions.Asynchronous);
