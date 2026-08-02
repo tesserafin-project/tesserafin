@@ -84,7 +84,10 @@ The canonical image package is
 > pulling. Making the packages publicly pullable is an owner decision that has not
 > been taken.
 
-Upgrades and the tag contract are documented separately in
+Once it is installed, [`docs/admin-guide.md`](docs/admin-guide.md) is the entry
+point for running it: what you are running, health and logs, backup and restore,
+upgrades, transcoding, and the limits worth knowing. Upgrades and the tag
+contract are documented in full in
 [`docs/container/A6-versioning-and-upgrades.md`](docs/container/A6-versioning-and-upgrades.md).
 Building from source is a development activity — see [Development](#development).
 
