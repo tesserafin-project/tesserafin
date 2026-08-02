@@ -205,7 +205,12 @@ fi
 
 # 11. The canonical contract MOVED after the web pin. A synthetic descendant of
 #     the analysed commit whose contract really is different, with its lock
-#     updated to match so that control 10's assertion is not what fires.
+#     updated to match so that control 10's assertion is not what fires. Only
+#     `.sha256` is rewritten: `.version` is left alone deliberately, so the
+#     version assertion in the verifier's section 4 cannot fire before the
+#     contract comparison in section 5. If a future contract regeneration bumps
+#     the version, this control fails loudly as "the wrong reason" rather than
+#     silently passing on the wrong assertion.
 if scratch_worktree "$SERVER_COMMIT" moved; then
     wt="$WT_PATH"
     printf '\n' >> "$wt/openapi/openapi.json"
