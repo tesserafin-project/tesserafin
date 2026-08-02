@@ -9,6 +9,17 @@
             <div class="content-primary">
                 <h1>OMDb</h1>
                 <form class="configForm">
+                    <div class="verticalSection">
+                        <h2>API key</h2>
+                        <div class="inputContainer">
+                            <input is="emby-input" type="password" id="omdbApiKey" autocomplete="off" spellcheck="false" label="OMDb API key" />
+                            <div class="fieldDescription" id="omdbApiKeyState">Tesserafin ships no API key of its own. Request a free key at omdbapi.com and paste it here. OMDb metadata and images stay unavailable until a key is saved and the server is restarted.</div>
+                        </div>
+                        <label class="checkboxContainer">
+                            <input is="emby-checkbox" type="checkbox" id="clearOmdbApiKey" />
+                            <span>Remove the stored API key when saving.</span>
+                        </label>
+                    </div>
                     <label class="checkboxContainer">
                         <input is="emby-checkbox" type="checkbox" id="castAndCrew" />
                         <span>Collect information about the cast and other crew members from OMDb.</span>
@@ -29,6 +40,16 @@
                 .addEventListener('pageshow', function () {
                     Dashboard.showLoadingMsg();
                     ApiClient.getPluginConfiguration(PluginConfig.pluginId).then(function (config) {
+                        // The stored key is deliberately NOT written into the field. Leaving the
+                        // input empty keeps the credential out of the rendered DOM, and an empty
+                        // field on save means "keep what is stored" — clearing it is the explicit
+                        // checkbox below, so a blank field can never silently delete a working key.
+                        document.querySelector('#omdbApiKey').value = '';
+                        document.querySelector('#clearOmdbApiKey').checked = false;
+                        document.querySelector('#omdbApiKeyState').textContent = config.OmdbApiKey
+                            ? 'An API key is stored. Leave this field empty to keep it, type a new key to replace it, or tick the box below to remove it. Changes take effect after a server restart.'
+                            : 'Tesserafin ships no API key of its own. Request a free key at omdbapi.com and paste it here. OMDb metadata and images stay unavailable until a key is saved and the server is restarted.';
+
                         document.querySelector('#castAndCrew').checked = config.CastAndCrew;
                         Dashboard.hideLoadingMsg();
                     });
@@ -40,6 +61,16 @@
                     Dashboard.showLoadingMsg();
 
                     ApiClient.getPluginConfiguration(PluginConfig.pluginId).then(function (config) {
+                        var apiKeyField = document.querySelector('#omdbApiKey');
+                        var replacement = apiKeyField.value.trim();
+                        if (document.querySelector('#clearOmdbApiKey').checked) {
+                            config.OmdbApiKey = '';
+                        } else if (replacement) {
+                            config.OmdbApiKey = replacement;
+                        }
+                        // else: leave config.OmdbApiKey exactly as the server returned it.
+                        apiKeyField.value = '';
+
                         config.CastAndCrew = document.querySelector('#castAndCrew').checked;
                         ApiClient.updatePluginConfiguration(PluginConfig.pluginId, config).then(Dashboard.processPluginConfigurationUpdateResult);
                     });

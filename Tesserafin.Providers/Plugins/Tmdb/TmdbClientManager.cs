@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 using Tesserafin.Model.Dto;
 using Tesserafin.Model.Entities;
 using Tesserafin.Model.Providers;
@@ -26,23 +27,47 @@ namespace Tesserafin.Providers.Plugins.Tmdb
         private const int CacheDurationInHours = 1;
 
         private readonly IMemoryCache _memoryCache;
-        private readonly TMDbClient _tmDbClient;
+        private readonly ILogger<TmdbClientManager> _logger;
+        private readonly TMDbClient? _tmDbClient;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="TmdbClientManager"/> class.
         /// </summary>
         /// <param name="memoryCache">An instance of <see cref="IMemoryCache"/>.</param>
-        public TmdbClientManager(IMemoryCache memoryCache)
+        /// <param name="logger">An instance of <see cref="ILogger{TmdbClientManager}"/>.</param>
+        /// <remarks>
+        /// Tesserafin ships no built-in TheMovieDb API key. When the operator has not supplied one
+        /// the manager is left unconfigured: no client is constructed and every read path returns an
+        /// empty result. Constructing <see cref="TMDbClient"/> with a blank key throws, so the absence
+        /// of a key must be handled here rather than deferred to the client.
+        /// </remarks>
+        public TmdbClientManager(IMemoryCache memoryCache, ILogger<TmdbClientManager> logger)
         {
             _memoryCache = memoryCache;
+            _logger = logger;
 
-            var apiKey = Plugin.Instance.Configuration.TmdbApiKey;
-            apiKey = string.IsNullOrEmpty(apiKey) ? TmdbUtils.ApiKey : apiKey;
+            var apiKey = Plugin.Instance?.Configuration.TmdbApiKey;
+            if (string.IsNullOrWhiteSpace(apiKey))
+            {
+                _logger.LogWarning(
+                    "No TheMovieDb API key is configured. TMDb metadata and images are unavailable until an API key is set on the TMDb plugin configuration page and the server is restarted.");
+                return;
+            }
+
             _tmDbClient = new TMDbClient(apiKey);
 
             // Not really interested in NotFoundException
             _tmDbClient.ThrowApiExceptions = false;
         }
+
+        /// <summary>
+        /// Gets a value indicating whether an operator-supplied TheMovieDb API key is available.
+        /// </summary>
+        /// <remarks>
+        /// The key is read once, when this singleton is first resolved. Changing it takes effect on
+        /// the next server restart — the same lifetime the configured key has always had.
+        /// </remarks>
+        public bool IsConfigured => _tmDbClient is not null;
 
         /// <summary>
         /// Gets a movie from the TMDb API based on its TMDb id.
@@ -55,6 +80,11 @@ namespace Tesserafin.Providers.Plugins.Tmdb
         /// <returns>The TMDb movie or null if not found.</returns>
         public async Task<Movie?> GetMovieAsync(int tmdbId, string? language, string? imageLanguages, string? countryCode, CancellationToken cancellationToken)
         {
+            if (_tmDbClient is null)
+            {
+                return null;
+            }
+
             var key = $"movie-{tmdbId.ToString(CultureInfo.InvariantCulture)}-{language}";
             if (_memoryCache.TryGetValue(key, out Movie? movie))
             {
@@ -95,6 +125,11 @@ namespace Tesserafin.Providers.Plugins.Tmdb
         /// <returns>The TMDb collection or null if not found.</returns>
         public async Task<Collection?> GetCollectionAsync(int tmdbId, string? language, string? imageLanguages, string? countryCode, CancellationToken cancellationToken)
         {
+            if (_tmDbClient is null)
+            {
+                return null;
+            }
+
             var key = $"collection-{tmdbId.ToString(CultureInfo.InvariantCulture)}-{language}";
             if (_memoryCache.TryGetValue(key, out Collection? collection))
             {
@@ -129,6 +164,11 @@ namespace Tesserafin.Providers.Plugins.Tmdb
         /// <returns>The TMDb tv show information or null if not found.</returns>
         public async Task<TvShow?> GetSeriesAsync(int tmdbId, string? language, string? imageLanguages, string? countryCode, CancellationToken cancellationToken)
         {
+            if (_tmDbClient is null)
+            {
+                return null;
+            }
+
             var key = $"series-{tmdbId.ToString(CultureInfo.InvariantCulture)}-{language}";
             if (_memoryCache.TryGetValue(key, out TvShow? series))
             {
@@ -170,6 +210,11 @@ namespace Tesserafin.Providers.Plugins.Tmdb
         /// <returns>The TMDb tv show episode group information or null if not found.</returns>
         private async Task<TvGroupCollection?> GetSeriesGroupAsync(int tvShowId, string displayOrder, string? language, string? imageLanguages, string? countryCode, CancellationToken cancellationToken)
         {
+            if (_tmDbClient is null)
+            {
+                return null;
+            }
+
             TvGroupType? groupType =
                 string.Equals(displayOrder, "originalAirDate", StringComparison.Ordinal) ? TvGroupType.OriginalAirDate :
                 string.Equals(displayOrder, "absolute", StringComparison.Ordinal) ? TvGroupType.Absolute :
@@ -226,6 +271,11 @@ namespace Tesserafin.Providers.Plugins.Tmdb
         /// <returns>The TMDb tv season information or null if not found.</returns>
         public async Task<TvSeason?> GetSeasonAsync(int tvShowId, int seasonNumber, string? language, string? imageLanguages, string? countryCode, CancellationToken cancellationToken)
         {
+            if (_tmDbClient is null)
+            {
+                return null;
+            }
+
             var key = $"season-{tvShowId.ToString(CultureInfo.InvariantCulture)}-s{seasonNumber.ToString(CultureInfo.InvariantCulture)}-{language}";
             if (_memoryCache.TryGetValue(key, out TvSeason? season))
             {
@@ -264,6 +314,11 @@ namespace Tesserafin.Providers.Plugins.Tmdb
         /// <returns>The TMDb tv episode information or null if not found.</returns>
         public async Task<TvEpisode?> GetEpisodeAsync(int tvShowId, int seasonNumber, long episodeNumber, string displayOrder, string? language, string? imageLanguages, string? countryCode, CancellationToken cancellationToken)
         {
+            if (_tmDbClient is null)
+            {
+                return null;
+            }
+
             var key = $"episode-{tvShowId.ToString(CultureInfo.InvariantCulture)}-s{seasonNumber.ToString(CultureInfo.InvariantCulture)}e{episodeNumber.ToString(CultureInfo.InvariantCulture)}-{displayOrder}-{language}";
             if (_memoryCache.TryGetValue(key, out TvEpisode? episode))
             {
@@ -312,6 +367,11 @@ namespace Tesserafin.Providers.Plugins.Tmdb
         /// <returns>The TMDb person information or null if not found.</returns>
         public async Task<Person?> GetPersonAsync(int personTmdbId, string language, string? countryCode, CancellationToken cancellationToken)
         {
+            if (_tmDbClient is null)
+            {
+                return null;
+            }
+
             var key = $"person-{personTmdbId.ToString(CultureInfo.InvariantCulture)}-{language}";
             if (_memoryCache.TryGetValue(key, out Person? person))
             {
@@ -350,6 +410,11 @@ namespace Tesserafin.Providers.Plugins.Tmdb
             string? countryCode,
             CancellationToken cancellationToken)
         {
+            if (_tmDbClient is null)
+            {
+                return null;
+            }
+
             var key = $"find-{source.ToString()}-{externalId.ToString(CultureInfo.InvariantCulture)}-{language}";
             if (_memoryCache.TryGetValue(key, out FindContainer? result))
             {
@@ -383,6 +448,11 @@ namespace Tesserafin.Providers.Plugins.Tmdb
         /// <returns>The TMDb tv show information.</returns>
         public async Task<IReadOnlyList<SearchTv>?> SearchSeriesAsync(string name, string language, string? countryCode, int year = 0, CancellationToken cancellationToken = default)
         {
+            if (_tmDbClient is null)
+            {
+                return null;
+            }
+
             var key = $"searchseries-{name}-{year.ToString(CultureInfo.InvariantCulture)}-{language}";
             if (_memoryCache.TryGetValue(key, out SearchContainer<SearchTv>? series) && series is not null)
             {
@@ -411,6 +481,11 @@ namespace Tesserafin.Providers.Plugins.Tmdb
         /// <returns>The TMDb person information.</returns>
         public async Task<IReadOnlyList<SearchPerson>?> SearchPersonAsync(string name, CancellationToken cancellationToken)
         {
+            if (_tmDbClient is null)
+            {
+                return null;
+            }
+
             var key = $"searchperson-{name}";
             if (_memoryCache.TryGetValue(key, out SearchContainer<SearchPerson>? person) && person is not null)
             {
@@ -454,6 +529,11 @@ namespace Tesserafin.Providers.Plugins.Tmdb
         /// <returns>The TMDb movie information.</returns>
         public async Task<IReadOnlyList<SearchMovie>?> SearchMovieAsync(string name, int year, string language, string? countryCode, CancellationToken cancellationToken)
         {
+            if (_tmDbClient is null)
+            {
+                return null;
+            }
+
             var key = $"moviesearch-{name}-{year.ToString(CultureInfo.InvariantCulture)}-{language}";
             if (_memoryCache.TryGetValue(key, out SearchContainer<SearchMovie>? movies) && movies is not null)
             {
@@ -484,6 +564,11 @@ namespace Tesserafin.Providers.Plugins.Tmdb
         /// <returns>The TMDb collection information.</returns>
         public async Task<IReadOnlyList<SearchCollection>?> SearchCollectionAsync(string name, string language, string? countryCode, CancellationToken cancellationToken)
         {
+            if (_tmDbClient is null)
+            {
+                return null;
+            }
+
             var key = $"collectionsearch-{name}-{language}";
             if (_memoryCache.TryGetValue(key, out SearchContainer<SearchCollection>? collections) && collections is not null)
             {
@@ -514,6 +599,11 @@ namespace Tesserafin.Providers.Plugins.Tmdb
         /// <returns>A tuple containing the list of similar movies and the total number of pages available.</returns>
         public async Task<(IReadOnlyList<SearchMovie> Results, int TotalPages)> GetMovieSimilarPageAsync(int tmdbId, int page, string? language, CancellationToken cancellationToken)
         {
+            if (_tmDbClient is null)
+            {
+                return ([], 0);
+            }
+
             await EnsureClientConfigAsync().ConfigureAwait(false);
 
             var searchResults = await _tmDbClient
@@ -538,6 +628,11 @@ namespace Tesserafin.Providers.Plugins.Tmdb
         /// <returns>A tuple containing the list of similar TV shows and the total number of pages available.</returns>
         public async Task<(IReadOnlyList<SearchTv> Results, int TotalPages)> GetSeriesSimilarPageAsync(int tmdbId, int page, string? language, CancellationToken cancellationToken)
         {
+            if (_tmDbClient is null)
+            {
+                return ([], 0);
+            }
+
             await EnsureClientConfigAsync().ConfigureAwait(false);
 
             var searchResults = await _tmDbClient
@@ -560,6 +655,11 @@ namespace Tesserafin.Providers.Plugins.Tmdb
         /// <returns>The absolute URL.</returns>
         private string? GetUrl(string? size, string? path)
         {
+            if (_tmDbClient is null)
+            {
+                return null;
+            }
+
             if (string.IsNullOrEmpty(path))
             {
                 return null;
@@ -646,6 +746,11 @@ namespace Tesserafin.Providers.Plugins.Tmdb
         /// <returns>The remote images.</returns>
         private IEnumerable<RemoteImageInfo> ConvertToRemoteImageInfo(IReadOnlyList<ImageData> images, string? size, ImageType type, string requestLanguage)
         {
+            if (_tmDbClient is null)
+            {
+                yield break;
+            }
+
             // sizes provided are for original resolution, don't store them when downloading scaled images
             var scaleImage = !string.Equals(size, "original", StringComparison.OrdinalIgnoreCase);
 
@@ -679,6 +784,11 @@ namespace Tesserafin.Providers.Plugins.Tmdb
 
         private async Task EnsureClientConfigAsync()
         {
+            if (_tmDbClient is null)
+            {
+                return;
+            }
+
             if (!_tmDbClient.HasConfig)
             {
                 var config = await _tmDbClient.GetConfigAsync().ConfigureAwait(false);
@@ -735,9 +845,14 @@ namespace Tesserafin.Providers.Plugins.Tmdb
         /// <summary>
         /// Gets the <see cref="TMDbClient"/> configuration.
         /// </summary>
-        /// <returns>The configuration.</returns>
-        public async Task<TMDbConfig> GetClientConfiguration()
+        /// <returns>The configuration, or <c>null</c> when no TheMovieDb API key is configured.</returns>
+        public async Task<TMDbConfig?> GetClientConfiguration()
         {
+            if (_tmDbClient is null)
+            {
+                return null;
+            }
+
             await EnsureClientConfigAsync().ConfigureAwait(false);
 
             return _tmDbClient.Config;

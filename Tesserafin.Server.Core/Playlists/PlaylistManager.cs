@@ -13,6 +13,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using PlaylistsNET.Content;
 using PlaylistsNET.Models;
+using Tesserafin.Common.IO;
 using Tesserafin.Controller.Dto;
 using Tesserafin.Controller.Entities;
 using Tesserafin.Controller.Entities.Audio;
@@ -87,7 +88,9 @@ namespace Tesserafin.Server.Core.Playlists
         public async Task<PlaylistCreationResult> CreatePlaylist(PlaylistCreationRequest request)
         {
             var name = request.Name;
-            var folderName = _fileSystem.GetValidFilename(name);
+            var folderName = SafeDirectoryLeafName.Validate(
+                name is null ? null : _fileSystem.GetValidFilename(name),
+                nameof(request));
             var parentFolder = GetPlaylistsFolder(request.UserId);
             if (parentFolder is null)
             {
@@ -134,7 +137,7 @@ namespace Tesserafin.Server.Core.Playlists
             }
 
             var user = _userManager.GetUserById(request.UserId);
-            var path = Path.Combine(parentFolder.Path, folderName);
+            var path = SafeDirectoryLeafName.CombineWithRoot(parentFolder.Path, folderName, nameof(request));
             path = GetTargetPath(path);
 
             _iLibraryMonitor.ReportFileSystemChangeBeginning(path);

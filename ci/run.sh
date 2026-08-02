@@ -37,6 +37,17 @@
 # boot the suite already pays for, and leaves this script unchanged in structure and runtime.
 # See docs/openapi-contract.md.
 #
+# Issue #174 / [C3]: the PROVIDER-AUTHENTICATION structural audit is likewise part of the dotnet test
+# stage below rather than a separate step. ProviderAuthAuditTests (tests/Tesserafin.Providers.Tests)
+# reads ci/provider-auth-inventory.json and the COMPILED Tesserafin.Providers.dll and fails this gate
+# when a third-party provider credential is compiled in, when a provider's outbound host or string
+# constant is undeclared, or when an inventory entry describes a code path that no longer exists.
+# It uses no entropy or length threshold: two of the three credentials this project inherited were
+# six and eight characters long, so it identifies a credential by WHERE it is used, not by what it
+# looks like. Gitleaks is complementary and does not cover this — it reported the contaminated image
+# as clean, because the values were .NET const strings in the UTF-16LE metadata heap.
+# See docs/provider-auth-audit.md.
+#
 # Issue #93 / [A7]: the server<->web RELEASE PAIR is deliberately NOT checked here.
 # ci/verify-release-pair.sh needs a published image, a tesserafin-web checkout and a
 # real browser; requiring all three would make ordinary server-only development

@@ -166,10 +166,10 @@ $ docker/version-verify.sh ghcr.io/tesserafin-project/tesserafin:<tag> --require
 
 ```dotenv
 # .env — exact immutable version tag
-TESSERAFIN_IMAGE=ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.28ace1b74f42
+TESSERAFIN_IMAGE=ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.fe2bd88fc02f
 
 # .env — digest pin, the strongest form; survives a tag being re-pointed
-TESSERAFIN_IMAGE=ghcr.io/tesserafin-project/tesserafin-server@sha256:636c3038a7eb34c5749c938a725f81998f85610d53b8d8598e4ca251eddb15d9
+TESSERAFIN_IMAGE=ghcr.io/tesserafin-project/tesserafin-server@sha256:133e5e3a6afb877641a2519a96f94a71e08db43361d992bc92ffd0224b86a950
 ```
 
 Resolve a tag to its digest before pinning:
@@ -345,8 +345,20 @@ This is what `docker-compose.yml`, `.env.example`, the Unraid template and
 [`A3-guided-install.md`](./A3-guided-install.md) name today.
 
 ```
-ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.28ace1b74f42
+ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.fe2bd88fc02f
 ```
+
+| | Digest |
+|---|---|
+| Multi-arch manifest | `sha256:133e5e3a6afb877641a2519a96f94a71e08db43361d992bc92ffd0224b86a950` |
+| `linux/amd64` | `sha256:c427614780778cc350f5fb8e417fc82a55205718972c082f98c53504f4ac07d9` |
+| `linux/arm64` | `sha256:9557c6560978629bfe7bdba696f147bb73b51b5c46b334576f7031f32dfef69f` |
+
+Built from `fe2bd88fc02f5e9fadf2e5d25ee80c6b0495585d`; reports version `1.0.0`.
+The equally immutable `sha-fe2bd88fc02f5e9fadf2e5d25ee80c6b0495585d` tag names the
+same manifest.
+
+### It supersedes the B2 candidate, which is not deleted
 
 | | Digest |
 |---|---|
@@ -354,9 +366,22 @@ ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.28ace1b74f42
 | `linux/amd64` | `sha256:db1201535094b768716bb136508b0229ad28a8f447968e98f2afb84f618a9651` |
 | `linux/arm64` | `sha256:1d0cf9351f9ff1b71fe4339de9bffa0f59da999e160c6958c1fa7d4effea20fb` |
 
-Built from `28ace1b74f42ae3c5e86c9dbb54f7977e34d541b`; reports version `1.0.0`.
-The equally immutable `sha-28ace1b74f42ae3c5e86c9dbb54f7977e34d541b` tag names the
-same manifest. `docker-compose.yml` pins the manifest digest; the dev tag is
+Tag `1.0.0-dev.28ace1b74f42`, built from
+`28ace1b74f42ae3c5e86c9dbb54f7977e34d541b`. Its B2 presentation evidence still
+stands, but it carried three third-party metadata provider credentials inherited
+from upstream — TheMovieDb, TheAudioDB and OMDb — compiled into
+`Tesserafin.Providers.dll` as .NET `const string`s in the UTF-16LE metadata heap,
+where a filesystem secret scan does not see them:
+
+> **SUPERSEDED — contains inherited upstream provider credentials; do not use**
+
+It remains published and immutable and is **not** deleted, so historical evidence
+that names it stays valid. It is simply no longer an installation default. The
+replacement above is the same tree with those credentials removed and nothing
+else changed; the three providers are now operator-supplied only. See
+[`../metadata-provider-keys.md`](../metadata-provider-keys.md),
+[`../provider-auth-audit.md`](../provider-auth-audit.md) and
+[tesserafin#174](https://github.com/tesserafin-project/tesserafin/issues/174). `docker-compose.yml` pins the manifest digest; the dev tag is
 provenance and an alternative spelling, never a moving channel. `1.0.0`, `1.0`,
 `1`, `latest`, `stable` and `preview` are **not** published.
 

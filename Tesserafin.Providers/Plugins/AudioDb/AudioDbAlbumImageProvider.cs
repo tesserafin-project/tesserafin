@@ -23,12 +23,14 @@ namespace Tesserafin.Providers.Plugins.AudioDb
     public class AudioDbAlbumImageProvider : IRemoteImageProvider, IHasOrder
     {
         private readonly IServerConfigurationManager _config;
+        private readonly IFileSystem _fileSystem;
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly JsonSerializerOptions _jsonOptions = JsonDefaults.Options;
 
-        public AudioDbAlbumImageProvider(IServerConfigurationManager config, IHttpClientFactory httpClientFactory)
+        public AudioDbAlbumImageProvider(IServerConfigurationManager config, IFileSystem fileSystem, IHttpClientFactory httpClientFactory)
         {
             _config = config;
+            _fileSystem = fileSystem;
             _httpClientFactory = httpClientFactory;
         }
 
@@ -54,6 +56,12 @@ namespace Tesserafin.Providers.Plugins.AudioDb
                 await AudioDbAlbumProvider.Current.EnsureInfo(id, cancellationToken).ConfigureAwait(false);
 
                 var path = AudioDbAlbumProvider.GetAlbumInfoPath(_config.ApplicationPaths, id);
+
+                // No key configured means nothing was downloaded; report no images rather than throw.
+                if (!_fileSystem.GetFileSystemInfo(path).Exists)
+                {
+                    return [];
+                }
 
                 FileStream jsonStream = AsyncFile.OpenRead(path);
                 await using (jsonStream.ConfigureAwait(false))

@@ -550,3 +550,89 @@ self-hosted automatique. Depuis #94 la purge `bin/`/`obj/` est faite par
 couvert sans step préalable : le script nettoie l'espace de travail hérité de
 la run précédente avant de compiler, et refuse de compiler s'il n'y arrive
 pas.
+
+---
+
+## Analyse de secrets (fail-closed) — #172 / [C3]
+
+Contrairement au reste de ce document, cette porte **tourne bien sur GitHub Actions**
+(`.github/workflows/secret-scan.yml`) : elle n'a besoin ni de CodeQL, ni de GitHub Advanced
+Security, ni d'un runner self-hosted, ni du moindre secret. Elle n'est pas pour autant une
+porte *obligatoire* — aucune protection de branche n'est disponible sur ce plan (voir
+« Corollaire » plus haut), donc elle rapporte automatiquement sans pouvoir bloquer.
+
+Elle **détecte** un secret commité. Elle ne l'**empêche** pas : quand elle démarre, GitHub a
+déjà accepté le push. L'empêcher exige la push protection native, donc GitHub Secret
+Protection, indisponible ici — #96 et #94 restent ouverts pour ça.
+
+### Lancer localement
+
+```bash
+# 1. installer le scanner épinglé (archive vérifiée AVANT exécution)
+./ci/install-gitleaks.sh
+
+# 2. les contrôles déterministes — c'est eux qui prouvent que la porte sait refuser
+./ci/tests/secret-scan.test.sh          # ajouter --no-live pour sauter les scans réels
+
+# 3. l'arbre courant (la baseline historique ne s'y applique pas)
+./ci/secret-scan.sh --mode tree --repo-name tesserafin
+
+# 4. l'historique complet comparé à la baseline commitée
+./ci/secret-scan.sh --mode history --repo-name tesserafin \
+  --default-branch master --min-commits 25000 --min-refs 10
+
+# 5. la baseline seule
+./ci/secret-scan.sh --mode baseline --repo-name tesserafin
+```
+
+Le scanner s'installe **hors de l'arbre de travail** (`$TMPDIR`), donc `git status` reste
+propre et le scan d'arbre ne se scanne pas lui-même.
+
+### Trois verdicts, pas deux
+
+| Code | Verdict | Sens |
+| --- | --- | --- |
+| `0` | CLEAN | la question a été posée, la réponse est « pas de secret » |
+| `1` | FINDINGS | la question a été posée, la réponse est « un secret » |
+| `2` | INDETERMINATE | la question **n'a pas** été posée |
+
+Le troisième est l'essentiel. Scanner absent, mauvaise version, checksum faux, dépôt
+superficiel, ref de branche par défaut manquante, crash, timeout, drapeau inconnu, rapport
+absent ou illisible, code de sortie contredit par le rapport, baseline invalide, dupliquée,
+non triée ou périmée : tout ça produit « aucun finding » avec un wrapper naïf, et tout ça
+sort en `2` ici. `1` et `2` sont rouges tous les deux.
+
+Gitleaks tourne avec `--exit-code 7` : son `1` par défaut est aussi ce que renvoie Cobra pour
+un drapeau inconnu, donc « tu as tapé une option inexistante » et « il y a un secret » seraient
+le même entier. Avec `7` réservé aux findings, tout ce qui n'est ni `0` ni `7` est par
+définition un problème de scanner.
+
+### Ce que ça ne couvre pas — à dire à chaque fois
+
+Gitleaks ne décode **pas** les heaps de métadonnées .NET : une `const string` C# est inlinée
+dans le heap `#US` en UTF-16LE, invisible aussi bien pour Gitleaks que pour un `strings` ASCII.
+Et deux des trois credentials fournisseurs retirés de ce dépôt faisaient **six et huit
+caractères** — aucun seuil d'entropie ou de longueur ne les atteint.
+
+C'est l'audit structurel d'authentification fournisseur
+([`docs/provider-auth-audit.md`](provider-auth-audit.md)) qui couvre ces deux classes, en
+lisant l'assembly **compilée** et en identifiant un credential par *l'endroit où il est
+utilisé*. Il tourne dans `dotnet test`, donc `./ci/run.sh` et le workflow `Tests` hébergé
+l'exécutent déjà. « Gitleaks est vert » ne veut jamais dire « aucun credential n'est compilé
+dedans ».
+
+### Baseline historique
+
+`.gitleaksignore` et `ci/secret-history-baseline.json` décrivent **exactement le même
+ensemble** : 30 empreintes exactes `<commit>:<chemin>:<règle>:<ligne>`, triées, uniques, sans
+glob, sans exception par chemin, sans exception par règle, sans regex. Le JSON ajoute la
+provenance, la classification et la disposition de chacune, plus 3 entrées structurelles pour
+les credentials fournisseurs que le scanner n'a jamais vus. Aucune valeur n'est stockée.
+
+Une empreinte historique ne peut pas excuser une trouvaille dans l'arbre courant : les
+empreintes `git` portent un commit, celles de `dir` non, et le validateur refuse toute entrée
+qui ne commence pas par un hash de 40 caractères. Un contrôle le prouve plutôt que de
+l'affirmer.
+
+Modifier le contenu de ces deux fichiers pour faire passer la CI n'est pas une correction.
+Une nouvelle trouvaille demande une disposition du propriétaire.

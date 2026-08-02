@@ -58,7 +58,12 @@ concurrency:
 
 jobs:
   controls:
-    name: Controls
+    # Named with the workflow's prefix, like every ABI job in ci-compat.yml.
+    # `Controls` alone collided byte-for-byte with secret-scan.yml's controls
+    # job, and branch protection matches a required status check by context
+    # NAME. Two jobs sharing one name make the required-check list ambiguous
+    # and the protection readback unverifiable.
+    name: OpenAPI - Controls
     # Minute economy, matching ci-tests.yml: draft pull requests do not spend
     # runner time. Marking one ready for review triggers a fresh run.
     if: ${{ github.event.pull_request.draft == false }}
