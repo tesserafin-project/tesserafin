@@ -14,6 +14,7 @@ using Tesserafin.Controller.Library;
 using Tesserafin.Controller.MediaEncoding;
 using Tesserafin.Controller.Session;
 using Tesserafin.Database.Implementations.Entities;
+using Tesserafin.Extensions;
 using Tesserafin.Model.Dto;
 using Tesserafin.Model.Session;
 
@@ -248,7 +249,7 @@ public class PlaystateController : BaseTesserafinApiController
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<ActionResult> ReportPlaybackStopped([FromBody] PlaybackStopInfo playbackStopInfo)
     {
-        _logger.LogDebug("ReportPlaybackStopped PlaySessionId: {0}", playbackStopInfo.PlaySessionId ?? string.Empty);
+        _logger.LogDebug("ReportPlaybackStopped PlaySessionId: {0}", (playbackStopInfo.PlaySessionId ?? string.Empty).ToSingleLogLine());
         if (!string.IsNullOrWhiteSpace(playbackStopInfo.PlaySessionId))
         {
             await _transcodeManager.KillTranscodingJobs(User.GetDeviceId()!, playbackStopInfo.PlaySessionId, s => true).ConfigureAwait(false);
@@ -464,7 +465,7 @@ public class PlaystateController : BaseTesserafinApiController
             NextMediaType = nextMediaType
         };
 
-        _logger.LogDebug("ReportPlaybackStopped PlaySessionId: {0}", playbackStopInfo.PlaySessionId ?? string.Empty);
+        _logger.LogDebug("ReportPlaybackStopped PlaySessionId: {0}", (playbackStopInfo.PlaySessionId ?? string.Empty).ToSingleLogLine());
         if (!string.IsNullOrWhiteSpace(playbackStopInfo.PlaySessionId))
         {
             await _transcodeManager.KillTranscodingJobs(User.GetDeviceId()!, playbackStopInfo.PlaySessionId, s => true).ConfigureAwait(false);

@@ -143,7 +143,7 @@ public sealed class TranscodeManager : ITranscodeManager, IDisposable
         _logger.LogDebug(
             "PingTranscodingJob RequestId={RequestId} PlaySessionId={PlaySessionId} isUsedPaused: {IsUserPaused}",
             _requestCorrelation.CurrentRequestId,
-            playSessionId,
+            playSessionId.ToSingleLogLine(),
             isUserPaused);
 
         List<TranscodingJob> jobs;

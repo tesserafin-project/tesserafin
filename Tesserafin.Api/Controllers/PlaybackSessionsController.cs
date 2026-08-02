@@ -18,6 +18,7 @@ using Tesserafin.Controller.Entities;
 using Tesserafin.Controller.Library;
 using Tesserafin.Controller.MediaEncoding;
 using Tesserafin.Data.Enums;
+using Tesserafin.Extensions;
 using Tesserafin.MediaEncoding.Playback;
 using Tesserafin.Model.Dlna;
 using Tesserafin.Model.Session;
@@ -300,7 +301,7 @@ public class PlaybackSessionsController : BaseTesserafinApiController
         _logger.LogInformation(
             "Playback session {SessionId} deleted (attempt {PlaybackAttemptId}).",
             id,
-            session.PlaybackAttemptId);
+            session.PlaybackAttemptId.ToSingleLogLine());
         return NoContent();
     }
 

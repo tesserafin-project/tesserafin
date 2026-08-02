@@ -8,6 +8,7 @@ using Tesserafin.Controller.Diagnostics;
 using Tesserafin.Controller.Library;
 using Tesserafin.Controller.MediaEncoding;
 using Tesserafin.Controller.Session;
+using Tesserafin.Extensions;
 using Tesserafin.Model.Session;
 
 namespace Tesserafin.MediaEncoding.Playback;
@@ -563,7 +564,7 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
                 _logger.LogInformation(
                     "Playback session {SessionId} replaced in place (play session {PlaySessionId}, method {OldPlayMethod} -> {NewPlayMethod}, kind {OldKind} -> {NewKind}, incoming request null {IncomingRequestWasNull}, plan preserved {PlanPreserved}, stream info {HasStreamInfo}, attempt {PlaybackAttemptId}).",
                     existingId,
-                    playSessionId,
+                    playSessionId.ToSingleLogLine(),
                     existing.Plan.PlayMethod,
                     updated.Plan.PlayMethod,
                     existing.Kind,
@@ -575,7 +576,7 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
                     // without a StreamInfo, so a false/false pair here IS the unservable state.
                     preservePlannedDecision,
                     updated.Plan.StreamInfo is not null,
-                    updated.PlaybackAttemptId);
+                    updated.PlaybackAttemptId.ToSingleLogLine());
 
                 return updated;
             }
@@ -615,8 +616,8 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
         _logger.LogInformation(
             "Playback session {SessionId} removed (play session {PlaySessionId}, attempt {PlaybackAttemptId}, reason {RemovalReason}, created {CreatedAt}, updated {UpdatedAt}, age {AgeSeconds}s).",
             id,
-            session.PlaySessionId,
-            session.PlaybackAttemptId,
+            session.PlaySessionId.ToSingleLogLine(),
+            session.PlaybackAttemptId.ToSingleLogLine(),
             reason,
             session.CreatedAt,
             session.UpdatedAt,
