@@ -128,22 +128,51 @@ ships for itself: `System.Web.HttpRequest.get_RawUrl -> ReturnValue`,
 
 ## 5. How an unpublished pack reaches the analysis
 
-The pinned workflow is **advanced setup**: `github/codeql-action` v4.37.0
-(`99df26d4f13ea111d4ec1a7dddef6063f76b97e9`), CodeQL CLI 2.26.0,
-`codeql/csharp-all` 7.0.0, `codeql/csharp-queries` 1.7.5, `security-extended`,
-manual C# build, category `/language:csharp`.
+The workflow is **advanced setup**: `github/codeql-action` v4.37.0
+(`99df26d4f13ea111d4ec1a7dddef6063f76b97e9`), `security-extended`, manual C#
+build, category `/language:csharp`.
+
+**The action pin is a floor, not an exact toolchain.** `src/defaults.json` at that
+commit names CodeQL CLI 2.26.0 / bundle `codeql-bundle-v2.26.0`, but a hosted
+runner resolves whatever newer CodeQL its tool cache already holds. Measured on
+this repository's own run:
+
+| | action default | actually used on the runner |
+| --- | --- | --- |
+| CodeQL CLI | 2.26.0 | **2.26.2** |
+| `codeql/csharp-all` | 7.0.0 | **7.1.1** |
+| `codeql/csharp-queries` | 1.7.5 | **1.9.0** |
+
+`barrierNode(this, "log-injection")` and the nine-column `barrierModel`
+declaration are identical at both versions; that was checked at
+`codeql-cli/v2.26.0` and `codeql-cli/v2.26.2` before the range was chosen. This
+drift is why `extensionTargets` is `^7.0.0` rather than an exact patch: an exact
+pin would turn the Thursday scheduled scan red without anything in this
+repository changing.
 
 Naming a pack in `packs:` makes `codeql database init` resolve it against the
 GitHub Container registry. For an unpublished pack that is a hard `403`. The
-CLI's own answer is a per-user configuration file carrying a `--search-path`, so
+CLI's own answer is a per-user configuration file, so
 `.github/workflows/ci-codeql-analysis.yml` writes, for the C# matrix entry only:
 
 ```
 database init --search-path $GITHUB_WORKSPACE/.github/codeql/extensions
+database run-queries --additional-packs $GITHUB_WORKSPACE/.github/codeql/extensions
 ```
 
-scoped to `database init` so it cannot affect any other CodeQL invocation. `init`
-then resolves the pack from the checkout, records it in the database's own
+Both lines are necessary and they are not interchangeable. `database init`
+resolves a model pack through `--search-path`; `database run-queries` does not,
+and needs `--additional-packs`. With only the first line the analysis initialises
+green and then dies at query time with
+
+```
+ERROR: Could not find extension pack 'tesserafin/csharp-log-barriers@0.0.1'.
+```
+
+Repeated `--additional-packs` values accumulate rather than replace, so this does
+not displace the action's own `pr-diff-range` extension pack.
+
+`init` then resolves the pack from the checkout, records it in the database's own
 `temp/analysisConfig.json`, and materialises its rows into
 `temp/extension-pack/`.
 
@@ -164,8 +193,8 @@ required `Analyze csharp` job, after `Initialize CodeQL`, with no
 
 1. `codeql resolve packs` finds the pack exactly once, at version `0.0.1`, inside
    `.github/codeql/extensions/csharp-log-barriers`;
-2. the pack's `extensionTargets` pin equals the `codeql/csharp-all` version the
-   CLI actually bundles;
+2. the pack's `extensionTargets` range is exactly the reviewed `^7.0.0` and the
+   `codeql/csharp-all` the CLI actually bundles is inside that major;
 3. `codeql resolve extensions-by-pack` reports no `is unused` warning and
    resolves exactly **one** data extension from this repository, of predicate
    `barrierModel`, with `rowCount` 1, from exactly the committed file;

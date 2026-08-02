@@ -64,6 +64,10 @@ MODEL_FILE="$PACK_DIR/ext/log-value-extensions.model.yml"
 # a widened field, a second row, a changed kind — must fail this job.
 EXPECTED_ROW='      - ["Tesserafin.Extensions", "LogValueExtensions", false, "ToSingleLogLine", "(System.String)", "", "ReturnValue", "log-injection", "manual"]'
 
+# The library range the row was derived and reviewed against.
+EXPECTED_TARGET_RANGE='^7.0.0'
+EXPECTED_CSHARP_ALL_MAJOR='7'
+
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -100,8 +104,10 @@ esac
 echo "ok   pack resolves: $PACK_NAME@$FOUND_VERSION at $FOUND_PATH"
 
 # ---------------------------------------------------------------------------
-# 2. The pack's extensionTargets pin matches the csharp-all the CLI actually
-#    bundles. A mismatch is the silent failure mode described above.
+# 2. The pack targets the csharp-all major version this row was derived against,
+#    and the CLI actually bundles that major. A mismatch is the silent failure
+#    mode described above. The exact patch is deliberately not pinned: the action
+#    pin is a floor and hosted runners resolve a newer CLI from the tool cache.
 # ---------------------------------------------------------------------------
 CSHARP_ALL_VERSION="$(jq -r \
     'first(.steps[].scans[]?.found["codeql/csharp-all"]? // empty) | .version' "$WORK/packs.json")"
@@ -109,12 +115,20 @@ if [ -z "$CSHARP_ALL_VERSION" ] || [ "$CSHARP_ALL_VERSION" = "null" ]; then
     fail "could not determine the bundled codeql/csharp-all version"
 fi
 
-TARGET_VERSION="$(sed -n 's/^  codeql\/csharp-all: *//p' "$PACK_DIR/codeql-pack.yml")"
-[ "$TARGET_VERSION" = "$CSHARP_ALL_VERSION" ] \
-    || fail "pack targets codeql/csharp-all $TARGET_VERSION but the CLI bundles $CSHARP_ALL_VERSION;
-         the model would be silently ignored. Re-derive the model against the new
-         library version and update docs/codeql-log-barrier-model.md."
-echo "ok   extensionTargets pin matches bundled codeql/csharp-all $CSHARP_ALL_VERSION"
+TARGET_RANGE="$(sed -n 's/^  codeql\/csharp-all: *//p' "$PACK_DIR/codeql-pack.yml")"
+[ "$TARGET_RANGE" = "$EXPECTED_TARGET_RANGE" ] \
+    || fail "pack targets codeql/csharp-all '$TARGET_RANGE', expected '$EXPECTED_TARGET_RANGE'.
+         Widening this range lets the model apply to a library version nobody
+         re-derived it against."
+case "$CSHARP_ALL_VERSION" in
+    "$EXPECTED_CSHARP_ALL_MAJOR".*) : ;;
+    *) fail "the CLI bundles codeql/csharp-all $CSHARP_ALL_VERSION, outside the
+         reviewed major $EXPECTED_CSHARP_ALL_MAJOR.x. Re-read LogForgingQuery.qll and
+         ExternalFlowExtensions.qll at the new version, re-derive the signature from a
+         fresh database, then update this script and
+         docs/codeql-log-barrier-model.md." ;;
+esac
+echo "ok   pack targets $TARGET_RANGE, CLI bundles codeql/csharp-all $CSHARP_ALL_VERSION"
 
 # ---------------------------------------------------------------------------
 # 3. The data extension resolves to exactly one row, of exactly one predicate,

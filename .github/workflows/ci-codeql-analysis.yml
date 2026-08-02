@@ -124,8 +124,16 @@ jobs:
       # An unpublished pack cannot be named in `packs:` on its own — `codeql
       # database init` resolves pack names against the GitHub Container registry
       # and dies with a 403. The CLI's documented answer to that is a per-user
-      # configuration file holding a --search-path; this writes one, scoped to
-      # `database init` so it cannot affect any other CodeQL invocation.
+      # configuration file, so this writes one, scoped to the two subcommands
+      # that need it and to nothing else.
+      #
+      # The two lines are not interchangeable, measured against this CLI:
+      # `database init` finds a model pack through --search-path, `database
+      # run-queries` does not and needs --additional-packs. Getting only the first
+      # right produces a green init followed by
+      #   ERROR: Could not find extension pack 'tesserafin/csharp-log-barriers'
+      # at query time. Repeated --additional-packs values accumulate, so this does
+      # not displace the action's own pr-diff-range pack.
       #
       # Deleting the pack does NOT make this silently green: `packs:` below still
       # names it, so init fails with the registry 403 and the job is red.
@@ -133,8 +141,12 @@ jobs:
         if: matrix.language == 'csharp'
         run: |
           mkdir -p "$HOME/.config/codeql"
-          printf 'database init --search-path %s\n' \
-            "$GITHUB_WORKSPACE/.github/codeql/extensions" > "$HOME/.config/codeql/config"
+          {
+            printf 'database init --search-path %s\n' \
+              "$GITHUB_WORKSPACE/.github/codeql/extensions"
+            printf 'database run-queries --additional-packs %s\n' \
+              "$GITHUB_WORKSPACE/.github/codeql/extensions"
+          } > "$HOME/.config/codeql/config"
           cat "$HOME/.config/codeql/config"
 
       - name: Initialize CodeQL

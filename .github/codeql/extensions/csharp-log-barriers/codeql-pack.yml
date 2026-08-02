@@ -4,10 +4,19 @@
 # Tesserafin.Extensions.LogValueExtensions.ToSingleLogLine(System.String) is a
 # barrier for the `log-injection` taint kind, and for nothing else.
 #
-# `extensionTargets` is pinned to the EXACT `codeql/csharp-all` version bundled
-# with the CodeQL action this repository pins (v4.37.0 -> CodeQL CLI 2.26.0 ->
-# codeql/csharp-all 7.0.0). That pin is deliberate and is the reason
-# ci/verify-codeql-model-pack.sh exists: when the target version stops matching,
+# `extensionTargets` is pinned to the MAJOR version of `codeql/csharp-all` that
+# declares the `barrierModel` extensible predicate this row populates. It is not
+# pinned to an exact patch on purpose: the CodeQL action pin (v4.37.0) is a
+# FLOOR, not an exact version — hosted runners resolve a newer CodeQL from the
+# tool cache (measured: CLI 2.26.2, codeql/csharp-all 7.1.1,
+# codeql/csharp-queries 1.9.0, against a v4.37.0 default of CLI 2.26.0 /
+# csharp-all 7.0.0). An exact pin would go red on GitHub's schedule rather than
+# on a change to this repository.
+#
+# The range is still the narrowest that is valid: a major bump of csharp-all may
+# change the predicate's arity or column order, and must be revalidated by hand.
+#
+# ci/verify-codeql-model-pack.sh exists because when the target stops matching,
 # CodeQL does NOT fail. It prints
 #
 #   WARNING: Extension pack 'tesserafin/csharp-log-barriers' is unused.
@@ -26,6 +35,6 @@ name: tesserafin/csharp-log-barriers
 version: 0.0.1
 library: true
 extensionTargets:
-  codeql/csharp-all: 7.0.0
+  codeql/csharp-all: ^7.0.0
 dataExtensions:
   - ext/**/*.model.yml
