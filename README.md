@@ -34,7 +34,9 @@ deciding whether to install anything.
 
 The authoritative rules for which numbers exist, where they are published and how
 a release may be resolved are in
-[`docs/versioning-policy.md`](docs/versioning-policy.md).
+[`docs/versioning-policy.md`](docs/versioning-policy.md). What the first public
+release will contain, and what it will not, is in
+[CHANGELOG.md](CHANGELOG.md).
 
 ## What Tesserafin is
 
