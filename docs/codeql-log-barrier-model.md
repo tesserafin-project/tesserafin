@@ -158,15 +158,23 @@ CLI's own answer is a per-user configuration file, so
 ```
 database init --search-path $GITHUB_WORKSPACE/.github/codeql/extensions
 database run-queries --additional-packs $GITHUB_WORKSPACE/.github/codeql/extensions
+resolve extensions-by-pack --additional-packs $GITHUB_WORKSPACE/.github/codeql/extensions
 ```
 
-Both lines are necessary and they are not interchangeable. `database init`
-resolves a model pack through `--search-path`; `database run-queries` does not,
-and needs `--additional-packs`. With only the first line the analysis initialises
-green and then dies at query time with
+All three lines are necessary and none is interchangeable with another:
+
+* `database init` resolves a model pack through `--search-path`;
+* `database run-queries` does not, and needs `--additional-packs`;
+* `run-queries` resolves the model packs recorded in the database by spawning
+  **`resolve extensions-by-pack` as a separate process**, which reads this file
+  under its own command scope and therefore needs its own line.
+
+Omitting either of the last two initialises green and then dies at query time
+with
 
 ```
 ERROR: Could not find extension pack 'tesserafin/csharp-log-barriers@0.0.1'.
+A fatal error occurred: A 'codeql resolve extensions-by-pack' operation failed
 ```
 
 Repeated `--additional-packs` values accumulate rather than replace, so this does

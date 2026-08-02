@@ -127,13 +127,20 @@ jobs:
       # configuration file, so this writes one, scoped to the two subcommands
       # that need it and to nothing else.
       #
-      # The two lines are not interchangeable, measured against this CLI:
-      # `database init` finds a model pack through --search-path, `database
-      # run-queries` does not and needs --additional-packs. Getting only the first
-      # right produces a green init followed by
+      # The three lines are not interchangeable, each measured against this CLI:
+      #
+      #   database init                 finds a model pack through --search-path
+      #   database run-queries          does not; it needs --additional-packs
+      #   resolve extensions-by-pack    run-queries resolves model packs by
+      #                                 spawning this as a SEPARATE process, which
+      #                                 reads this file under its own command
+      #                                 scope, so it needs its own line
+      #
+      # Omitting either of the last two produces a green init followed by
       #   ERROR: Could not find extension pack 'tesserafin/csharp-log-barriers'
-      # at query time. Repeated --additional-packs values accumulate, so this does
-      # not displace the action's own pr-diff-range pack.
+      #   A fatal error occurred: A 'codeql resolve extensions-by-pack' operation failed
+      # at query time. Repeated --additional-packs values accumulate rather than
+      # replace, so this does not displace the action's own pr-diff-range pack.
       #
       # Deleting the pack does NOT make this silently green: `packs:` below still
       # names it, so init fails with the registry 403 and the job is red.
@@ -141,11 +148,11 @@ jobs:
         if: matrix.language == 'csharp'
         run: |
           mkdir -p "$HOME/.config/codeql"
+          EXTENSIONS="$GITHUB_WORKSPACE/.github/codeql/extensions"
           {
-            printf 'database init --search-path %s\n' \
-              "$GITHUB_WORKSPACE/.github/codeql/extensions"
-            printf 'database run-queries --additional-packs %s\n' \
-              "$GITHUB_WORKSPACE/.github/codeql/extensions"
+            printf 'database init --search-path %s\n' "$EXTENSIONS"
+            printf 'database run-queries --additional-packs %s\n' "$EXTENSIONS"
+            printf 'resolve extensions-by-pack --additional-packs %s\n' "$EXTENSIONS"
           } > "$HOME/.config/codeql/config"
           cat "$HOME/.config/codeql/config"
 
