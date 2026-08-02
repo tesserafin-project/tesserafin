@@ -36,4 +36,4 @@ extensions:
       pack: codeql/csharp-all
       extensible: barrierModel
     data:
-      - ["Tesserafin.Extensions", "LogValueExtensions", false, "ToSingleLogLine", "(System.String)", "", "ReturnValue", "log-injection", "manual"]
+      - ["Tesserafin.Extensions", "LogValueExtensions", false, "ToSingleLogLine", "", "", "ReturnValue", "log-injection", "manual"]
