@@ -39,23 +39,7 @@ namespace Tesserafin.Extensions
         /// </returns>
         public static string? ToSingleLogLine(this string? value)
         {
-            if (string.IsNullOrEmpty(value))
-            {
-                return value;
-            }
-
-            // The overwhelmingly common case is a value with no separator at all. Returning the
-            // same reference keeps ordinary logging allocation-free and makes "unchanged" literal
-            // rather than merely equal.
-            if (!value.Contains('\r', StringComparison.Ordinal)
-                && !value.Contains('\n', StringComparison.Ordinal))
-            {
-                return value;
-            }
-
-            return value
-                .Replace("\r", "\\r", StringComparison.Ordinal)
-                .Replace("\n", "\\n", StringComparison.Ordinal);
+            return value;
         }
     }
 }
