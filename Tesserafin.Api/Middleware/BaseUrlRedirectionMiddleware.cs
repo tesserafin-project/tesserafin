@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Tesserafin.Common.Net;
 using Tesserafin.Controller.Configuration;
+using Tesserafin.Extensions;
 using static Tesserafin.Controller.Extensions.ConfigurationExtensions;
 
 namespace Tesserafin.Api.Middleware;
@@ -61,13 +62,13 @@ public class BaseUrlRedirectionMiddleware
             }
 
             // Always redirect back to the default path if the base prefix is invalid or missing
-            _logger.LogDebug("Normalizing an URL at {LocalPath}", localPath);
+            _logger.LogDebug("Normalizing an URL at {LocalPath}", localPath.ToSingleLogLine());
 
             var port = httpContext.Request.Host.Port ?? -1;
             var uri = new UriBuilder(httpContext.Request.Scheme, httpContext.Request.Host.Host, port, localPath).Uri;
             var redirectUri = new UriBuilder(httpContext.Request.Scheme, httpContext.Request.Host.Host, port, baseUrlPrefix + "/" + _configuration[DefaultRedirectKey]).Uri;
             var target = uri.MakeRelativeUri(redirectUri).ToString();
-            _logger.LogDebug("Redirecting to {Target}", target);
+            _logger.LogDebug("Redirecting to {Target}", target.ToSingleLogLine());
 
             httpContext.Response.Redirect(target);
             return;

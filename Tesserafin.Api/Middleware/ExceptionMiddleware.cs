@@ -77,8 +77,8 @@ public class ExceptionMiddleware
             {
                 _logger.LogError(
                     "Error processing request: {ExceptionMessage}. URL {Method} {Url}.",
-                    ex.Message.TrimEnd('.'),
-                    context.Request.Method,
+                    ex.Message.TrimEnd('.').ToSingleLogLine(),
+                    context.Request.Method.ToSingleLogLine(),
                     context.Request.Path.ToString().ToSingleLogLine());
             }
             else
@@ -86,8 +86,8 @@ public class ExceptionMiddleware
                 _logger.LogError(
                     ex,
                     "Error processing request. URL {Method} {Url}.",
-                    context.Request.Method,
-                    context.Request.Path);
+                    context.Request.Method.ToSingleLogLine(),
+                    context.Request.Path.ToString().ToSingleLogLine());
             }
 
             context.Response.StatusCode = GetStatusCode(ex);
