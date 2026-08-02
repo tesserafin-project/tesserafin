@@ -27,21 +27,29 @@ Related docs:
 All paths here use the immutable image published to GHCR:
 
 ```
-ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.28ace1b74f42
+ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.fe2bd88fc02f
 ```
 
-- Multi-arch manifest digest: `sha256:636c3038a7eb34c5749c938a725f81998f85610d53b8d8598e4ca251eddb15d9`
-  (`linux/amd64` `sha256:db1201535094b768716bb136508b0229ad28a8f447968e98f2afb84f618a9651`,
-  `linux/arm64` `sha256:1d0cf9351f9ff1b71fe4339de9bffa0f59da999e160c6958c1fa7d4effea20fb`).
-  Built from `28ace1b74f42ae3c5e86c9dbb54f7977e34d541b`. It reports version
+- Multi-arch manifest digest: `sha256:133e5e3a6afb877641a2519a96f94a71e08db43361d992bc92ffd0224b86a950`
+  (`linux/amd64` `sha256:c427614780778cc350f5fb8e417fc82a55205718972c082f98c53504f4ac07d9`,
+  `linux/arm64` `sha256:9557c6560978629bfe7bdba696f147bb73b51b5c46b334576f7031f32dfef69f`).
+  Built from `fe2bd88fc02f5e9fadf2e5d25ee80c6b0495585d`. It reports version
   `1.0.0`. This is what the checked-in `docker-compose.yml` pins, by digest — so
   following this guide and running the shipped Compose file give you the same
   image. The dev tag above is immutable too; it is provenance and an alternative
-  spelling of the same manifest, not a moving channel. This is the accepted B2
-  presentation/responsive/a11y release candidate
-  ([tesserafin-web#55](https://github.com/tesserafin-project/tesserafin-web/issues/55));
-  it replaces `1.0.0-dev.a8ac09f3ff5a` (`sha256:89dd01add7cb…`), which stays
-  published and immutable.
+  spelling of the same manifest, not a moving channel.
+- It supersedes `1.0.0-dev.28ace1b74f42`
+  (`sha256:636c3038a7eb…`), the accepted B2 presentation/responsive/a11y release
+  candidate ([tesserafin-web#55](https://github.com/tesserafin-project/tesserafin-web/issues/55)).
+  That image's presentation evidence still stands, but it carried three
+  third-party metadata provider credentials inherited from upstream and compiled
+  into `Tesserafin.Providers.dll`:
+  **SUPERSEDED — contains inherited upstream provider credentials; do not use.**
+  It stays published and immutable — it is not deleted — but it is no longer an
+  installation default. The image above is the same tree with those credentials
+  removed; nothing else about the build changed. See
+  [tesserafin#174](https://github.com/tesserafin-project/tesserafin/issues/174)
+  and [`metadata-provider-keys.md`](../metadata-provider-keys.md).
 - Bundled Tesserafin Web `1.0.0` at commit `c4d323d6bf397067869a755972bd21df3dc39315`
   (`ghcr.io/tesserafin-project/tesserafin-web-assets@sha256:6a0fb6347f56a021f6c9928f29f72d78092a0085bb0404b7e594dd475f3f5038`),
   recorded in the image's `org.tesserafin.web.revision` label and in
@@ -122,6 +130,13 @@ create your admin username + password → add a media library (type *Movies*, fo
 `/media`) → finish. You now have a running, onboarded server.
 
 That is the whole path: **5 numbered steps** after the one-time prerequisites.
+
+**Online metadata is opt-in.** Tesserafin ships no third-party provider credential, so
+**TheMovieDb, TheAudioDB and OMDb** each fetch nothing until you supply your own API
+key for that provider — see
+[`metadata-provider-keys.md`](../metadata-provider-keys.md) for where to get each one
+and where it is stored. The three are independent, each key is optional, and
+everything above works with none of them.
 
 ### What just happened / where state lives
 

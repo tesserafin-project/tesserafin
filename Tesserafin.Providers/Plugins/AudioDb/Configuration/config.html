@@ -9,6 +9,17 @@
             <div class="content-primary">
                 <h1>TheAudioDB</h1>
                 <form class="configForm">
+                    <div class="verticalSection">
+                        <h2>API key</h2>
+                        <div class="inputContainer">
+                            <input is="emby-input" type="password" id="audioDbApiKey" autocomplete="off" spellcheck="false" label="TheAudioDB API key" />
+                            <div class="fieldDescription" id="audioDbApiKeyState">Tesserafin ships no API key of its own. Register at theaudiodb.com, obtain an API key and paste it here. TheAudioDB artist and album metadata and images stay unavailable until a key is saved and the server is restarted.</div>
+                        </div>
+                        <label class="checkboxContainer">
+                            <input is="emby-checkbox" type="checkbox" id="clearAudioDbApiKey" />
+                            <span>Remove the stored API key when saving.</span>
+                        </label>
+                    </div>
                     <label class="checkboxContainer">
                         <input is="emby-checkbox" type="checkbox" id="replaceAlbumName" />
                         <span>When an album is found during a metadata search, replace the name with the value on the server.</span>
@@ -29,6 +40,16 @@
                 .addEventListener('pageshow', function () {
                     Dashboard.showLoadingMsg();
                     ApiClient.getPluginConfiguration(PluginConfig.pluginId).then(function (config) {
+                        // The stored key is deliberately NOT written into the field. Leaving the
+                        // input empty keeps the credential out of the rendered DOM, and an empty
+                        // field on save means "keep what is stored" — clearing it is the explicit
+                        // checkbox below, so a blank field can never silently delete a working key.
+                        document.querySelector('#audioDbApiKey').value = '';
+                        document.querySelector('#clearAudioDbApiKey').checked = false;
+                        document.querySelector('#audioDbApiKeyState').textContent = config.AudioDbApiKey
+                            ? 'An API key is stored. Leave this field empty to keep it, type a new key to replace it, or tick the box below to remove it. Changes take effect after a server restart.'
+                            : 'Tesserafin ships no API key of its own. Register at theaudiodb.com, obtain an API key and paste it here. TheAudioDB artist and album metadata and images stay unavailable until a key is saved and the server is restarted.';
+
                         document.querySelector('#replaceAlbumName').checked = config.ReplaceAlbumName;
 
                         Dashboard.hideLoadingMsg();
@@ -40,6 +61,16 @@
                     Dashboard.showLoadingMsg();
 
                     ApiClient.getPluginConfiguration(PluginConfig.pluginId).then(function (config) {
+                        var apiKeyField = document.querySelector('#audioDbApiKey');
+                        var replacement = apiKeyField.value.trim();
+                        if (document.querySelector('#clearAudioDbApiKey').checked) {
+                            config.AudioDbApiKey = '';
+                        } else if (replacement) {
+                            config.AudioDbApiKey = replacement;
+                        }
+                        // else: leave config.AudioDbApiKey exactly as the server returned it.
+                        apiKeyField.value = '';
+
                         config.ReplaceAlbumName = document.querySelector('#replaceAlbumName').checked;
 
                         ApiClient.updatePluginConfiguration(PluginConfig.pluginId, config).then(Dashboard.processPluginConfigurationUpdateResult);

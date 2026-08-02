@@ -8,8 +8,8 @@ namespace Tesserafin.Providers.Plugins.Tmdb
     public class PluginConfiguration : BasePluginConfiguration
     {
         /// <summary>
-        /// Gets or sets a value to use as the API key for accessing TMDb. This is intentionally excluded from the
-        /// settings page as the API key should not need to be changed by most users.
+        /// Gets or sets the API key used to access TMDb. Tesserafin ships no built-in key, so this is the only
+        /// source of one: the TMDb provider stays inert until an operator supplies their own on the settings page.
         /// </summary>
         public string TmdbApiKey { get; set; } = string.Empty;
 

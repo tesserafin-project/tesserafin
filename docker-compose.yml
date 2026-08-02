@@ -17,16 +17,25 @@ services:
     # `docker compose pull` could change your version — possibly across a schema
     # migration — at a moment you did not choose. A digest cannot be re-pointed.
     #
-    # This is the validated Tesserafin Server 1.0 development baseline, tag
-    # `1.0.0-dev.28ace1b74f42`, built from commit
-    # `28ace1b74f42ae3c5e86c9dbb54f7977e34d541b`, bundling Tesserafin Web
+    # This is the Tesserafin Server 1.0 development baseline, tag
+    # `1.0.0-dev.fe2bd88fc02f`, built from commit
+    # `fe2bd88fc02f5e9fadf2e5d25ee80c6b0495585d`, bundling Tesserafin Web
     # `c4d323d6bf397067869a755972bd21df3dc39315`. It reports version `1.0.0`.
-    # It is the accepted B2 presentation/responsive/a11y release candidate
-    # (tesserafin-project/tesserafin-web#55): three complete rounds of the full
-    # 127-test tesserafin-web browser suite, three separate pristine-instance
-    # onboarding rounds, and maintainer visual acceptance across desktop,
-    # mobile and TV. It replaces `1.0.0-dev.a8ac09f3ff5a`
-    # (`sha256:89dd01add7cb…`), which stays published and immutable.
+    #
+    # It supersedes `1.0.0-dev.28ace1b74f42` (`sha256:636c3038a7eb…`), the
+    # accepted B2 presentation/responsive/a11y release candidate
+    # (tesserafin-project/tesserafin-web#55). That candidate's presentation
+    # evidence still stands, but the image carried three third-party metadata
+    # provider credentials inherited from upstream, compiled into
+    # `Tesserafin.Providers.dll`:
+    #
+    #   SUPERSEDED — contains inherited upstream provider credentials; do not use
+    #
+    # That digest stays published and immutable — it is not deleted — but it must
+    # not be an installation default. This image is built from the same tree with
+    # those credentials removed; TheMovieDb, TheAudioDB and OMDb are now
+    # operator-supplied only (docs/metadata-provider-keys.md) and nothing else
+    # about the build changed. See tesserafin-project/tesserafin#174.
     #
     # The canonical v1+ package is `ghcr.io/tesserafin-project/tesserafin-server`.
     # `ghcr.io/tesserafin-project/tesserafin` is the frozen pre-v1 archive and
@@ -35,7 +44,7 @@ services:
     # Override with `TESSERAFIN_IMAGE=... docker compose up -d` or a .env file.
     # Moving channels are an explicit opt-in; the risks and the upgrade procedure
     # are in docs/container/A6-versioning-and-upgrades.md.
-    image: ${TESSERAFIN_IMAGE:-ghcr.io/tesserafin-project/tesserafin-server@sha256:636c3038a7eb34c5749c938a725f81998f85610d53b8d8598e4ca251eddb15d9}
+    image: ${TESSERAFIN_IMAGE:-ghcr.io/tesserafin-project/tesserafin-server@sha256:133e5e3a6afb877641a2519a96f94a71e08db43361d992bc92ffd0224b86a950}
     container_name: tesserafin
     # The image already runs as the fixed non-root identity 10000:10000; stated
     # here so the security posture is visible in the compose file itself.

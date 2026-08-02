@@ -11,6 +11,7 @@ using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using Tesserafin.Common.Configuration;
 using Tesserafin.Common.Extensions;
 using Tesserafin.Common.Net;
@@ -30,17 +31,19 @@ namespace Tesserafin.Providers.Plugins.AudioDb
         private readonly IServerConfigurationManager _config;
         private readonly IFileSystem _fileSystem;
         private readonly IHttpClientFactory _httpClientFactory;
+        private readonly ILogger<AudioDbAlbumProvider> _logger;
         private readonly JsonSerializerOptions _jsonOptions = JsonDefaults.Options;
 
 #pragma warning disable SA1401, CA2211
         public static AudioDbAlbumProvider Current;
 #pragma warning restore SA1401, CA2211
 
-        public AudioDbAlbumProvider(IServerConfigurationManager config, IFileSystem fileSystem, IHttpClientFactory httpClientFactory)
+        public AudioDbAlbumProvider(IServerConfigurationManager config, IFileSystem fileSystem, IHttpClientFactory httpClientFactory, ILogger<AudioDbAlbumProvider> logger)
         {
             _config = config;
             _fileSystem = fileSystem;
             _httpClientFactory = httpClientFactory;
+            _logger = logger;
 
             Current = this;
         }
@@ -67,6 +70,13 @@ namespace Tesserafin.Providers.Plugins.AudioDb
                 await EnsureInfo(id, cancellationToken).ConfigureAwait(false);
 
                 var path = GetAlbumInfoPath(_config.ApplicationPaths, id);
+
+                // With no operator key configured nothing was downloaded and nothing may have been
+                // cached, so the normal answer is an empty result rather than a FileNotFoundException.
+                if (!_fileSystem.GetFileSystemInfo(path).Exists)
+                {
+                    return result;
+                }
 
                 FileStream jsonStream = AsyncFile.OpenRead(path);
                 await using (jsonStream.ConfigureAwait(false))
@@ -169,7 +179,14 @@ namespace Tesserafin.Providers.Plugins.AudioDb
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var url = AudioDbArtistProvider.BaseUrl + "/album-mb.php?i=" + musicBrainzReleaseGroupId;
+            // No key, no request. TheAudioDB carries its credential as a path segment, so there is no
+            // anonymous form of this call to fall back to, and no built-in key to fall back on.
+            if (!AudioDbApi.TryGetBaseUrl(_logger, out var baseUrl))
+            {
+                return;
+            }
+
+            var url = baseUrl + "/album-mb.php?i=" + musicBrainzReleaseGroupId;
 
             var path = GetAlbumInfoPath(_config.ApplicationPaths, musicBrainzReleaseGroupId);
             var fileInfo = _fileSystem.GetFileSystemInfo(path);
