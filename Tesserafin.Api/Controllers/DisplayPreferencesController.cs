@@ -12,6 +12,7 @@ using Tesserafin.Common.Extensions;
 using Tesserafin.Controller;
 using Tesserafin.Database.Implementations.Entities;
 using Tesserafin.Database.Implementations.Enums;
+using Tesserafin.Extensions;
 using Tesserafin.Model.Dto;
 
 namespace Tesserafin.Api.Controllers;
@@ -202,7 +203,7 @@ public class DisplayPreferencesController : BaseTesserafinApiController
 
             if (!Enum.TryParse<ViewType>(viewType, true, out _))
             {
-                _logger.LogError("Invalid ViewType: {LandingScreenOption}", viewType);
+                _logger.LogError("Invalid ViewType: {LandingScreenOption}", viewType.ToSingleLogLine());
                 displayPreferences.CustomPrefs.Remove(key);
             }
         }

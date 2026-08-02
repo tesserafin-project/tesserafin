@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Tesserafin.Common.Extensions;
 using Tesserafin.Common.Net;
+using Tesserafin.Extensions;
 
 namespace Tesserafin.Api.Middleware;
 
@@ -50,8 +51,9 @@ public class IPBasedAccessValidationMiddleware
             // No access from network, respond with 503 instead of 200.
             _logger.LogWarning(
                 "Blocking request to {Path} by {RemoteIP} due to IP filtering rule, reason: {Reason}",
-                // url-encode to block log injection
-                HttpUtility.UrlEncode(httpContext.Request.Path),
+                // url-encode to block log injection, then cross the shared logging boundary so the
+                // guarantee does not rest on the encoder's own escaping rules
+                HttpUtility.UrlEncode(httpContext.Request.Path).ToSingleLogLine(),
                 remoteIP,
                 result);
             httpContext.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
