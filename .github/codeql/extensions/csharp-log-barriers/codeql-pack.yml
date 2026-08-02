@@ -1,0 +1,31 @@
+# Repository-local, UNPUBLISHED CodeQL model pack (#203).
+#
+# It declares exactly one barrier: the value returned by
+# Tesserafin.Extensions.LogValueExtensions.ToSingleLogLine(System.String) is a
+# barrier for the `log-injection` taint kind, and for nothing else.
+#
+# `extensionTargets` is pinned to the EXACT `codeql/csharp-all` version bundled
+# with the CodeQL action this repository pins (v4.37.0 -> CodeQL CLI 2.26.0 ->
+# codeql/csharp-all 7.0.0). That pin is deliberate and is the reason
+# ci/verify-codeql-model-pack.sh exists: when the target version stops matching,
+# CodeQL does NOT fail. It prints
+#
+#   WARNING: Extension pack 'tesserafin/csharp-log-barriers' is unused.
+#
+# and completes green with the barrier silently not applied. The verification
+# script turns that warning into a red `Analyze csharp` job.
+#
+# No dependencies, no registry reference, no token. This pack is never published;
+# it is resolved from the checkout by `--search-path`, written into
+# ~/.config/codeql/config by the workflow before `Initialize CodeQL`.
+#
+# Model packs are GitHub PUBLIC PREVIEW infrastructure. Revalidate this pack
+# whenever github/codeql-action, the CodeQL CLI or codeql/csharp-all changes:
+# see docs/codeql-log-barrier-model.md.
+name: tesserafin/csharp-log-barriers
+version: 0.0.1
+library: true
+extensionTargets:
+  codeql/csharp-all: 7.0.0
+dataExtensions:
+  - ext/**/*.model.yml

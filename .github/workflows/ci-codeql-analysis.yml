@@ -117,12 +117,47 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      # The barrier model pack in .github/codeql/extensions is repository-local and
+      # UNPUBLISHED, by design (#203): publishing it to a registry would put a
+      # security-relevant analysis input outside this repository's review.
+      #
+      # An unpublished pack cannot be named in `packs:` on its own — `codeql
+      # database init` resolves pack names against the GitHub Container registry
+      # and dies with a 403. The CLI's documented answer to that is a per-user
+      # configuration file holding a --search-path; this writes one, scoped to
+      # `database init` so it cannot affect any other CodeQL invocation.
+      #
+      # Deleting the pack does NOT make this silently green: `packs:` below still
+      # names it, so init fails with the registry 403 and the job is red.
+      - name: Point CodeQL at the repository-local model pack
+        if: matrix.language == 'csharp'
+        run: |
+          mkdir -p "$HOME/.config/codeql"
+          printf 'database init --search-path %s\n' \
+            "$GITHUB_WORKSPACE/.github/codeql/extensions" > "$HOME/.config/codeql/config"
+          cat "$HOME/.config/codeql/config"
+
       - name: Initialize CodeQL
+        id: init
         uses: github/codeql-action/init@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
           queries: security-extended
+          packs: ${{ matrix.language == 'csharp' && 'tesserafin/csharp-log-barriers@0.0.1' || '' }}
+
+      # Copied out now because the verification below runs after the analysis, and
+      # the CodeQL action is free to clean the database up in between. `cp` fails
+      # the job if init never wrote these, which is the correct outcome.
+      - name: Snapshot the analysis configuration CodeQL initialised
+        if: matrix.language == 'csharp'
+        run: |
+          DB="${{ runner.temp }}/codeql_databases/csharp"
+          SNAPSHOT="${{ runner.temp }}/codeql-model-snapshot"
+          mkdir -p "$SNAPSHOT"
+          cp "$DB/temp/analysisConfig.json" "$SNAPSHOT/analysisConfig.json"
+          cp -r "$DB/temp/extension-pack" "$SNAPSHOT/extension-pack"
+          cat "$SNAPSHOT/analysisConfig.json"
 
       - name: Build solution for CodeQL
         if: matrix.language == 'csharp'
@@ -132,3 +167,18 @@ jobs:
         uses: github/codeql-action/analyze@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
         with:
           category: "/language:${{ matrix.language }}"
+
+      # AFTER the analysis, on purpose. Placed before it, a disabled model pack
+      # would end the job before any analysis ran, and "the analysis completed and
+      # the five flows came back" — the observation that proves absence cannot
+      # become a silent green — would be unobservable. Placed here, a pack that
+      # stopped applying produces a completed analysis in which the suppressed
+      # alerts REAPPEAR, and a red required job on top of it.
+      #
+      # NO `continue-on-error`, deliberately: see the header of this file. A model
+      # pack that stopped applying must fail the required job, not warn in a log.
+      - name: Verify the CodeQL barrier model pack
+        if: matrix.language == 'csharp'
+        run: ./ci/verify-codeql-model-pack.sh
+          "${{ steps.init.outputs.codeql-path }}"
+          "${{ runner.temp }}/codeql-model-snapshot"

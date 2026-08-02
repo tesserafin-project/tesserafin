@@ -772,15 +772,7 @@ namespace Tesserafin.LiveTv.Listings
             ArgumentException.ThrowIfNullOrEmpty(token);
             ArgumentException.ThrowIfNullOrEmpty(info.ListingsId);
 
-            // DISCRIMINATING EXPERIMENT (#203): identical semantics to ToSingleLogLine, written
-            // inline. The helper form left this site reporting cs/log-forging on the PR analysis;
-            // if the inline form does not, the difference is CodeQL's barrier modelling rather
-            // than the behaviour of the code.
-            _logger.LogInformation(
-                "Adding new lineup {Id}",
-                info.ListingsId
-                    .Replace("\r", "\\r", StringComparison.Ordinal)
-                    .Replace("\n", "\\n", StringComparison.Ordinal));
+            _logger.LogInformation("Adding new lineup {Id}", info.ListingsId.ToSingleLogLine());
 
             using var message = new HttpRequestMessage(HttpMethod.Put, ApiUrl + "/lineups/" + info.ListingsId);
             message.Headers.TryAddWithoutValidation("token", token);
