@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Tesserafin.Common.Api;
 using Tesserafin.Common.Configuration;
+using Tesserafin.Common.IO;
 using Tesserafin.Controller.SystemBackupService;
 using Tesserafin.Server.Implementations.SystemBackupService;
 
@@ -61,7 +62,7 @@ public class BackupController : BaseTesserafinApiController
     public IActionResult StartRestoreBackup([FromBody, BindRequired] BackupRestoreRequestDto archiveRestoreDto)
     {
         var archivePath = SanitizePath(archiveRestoreDto.ArchiveFileName);
-        if (!System.IO.File.Exists(archivePath))
+        if (archivePath is null)
         {
             return NotFound();
         }
@@ -102,7 +103,7 @@ public class BackupController : BaseTesserafinApiController
     {
         var backupPath = SanitizePath(path);
 
-        if (!System.IO.File.Exists(backupPath))
+        if (backupPath is null)
         {
             return NotFound();
         }
@@ -116,12 +117,35 @@ public class BackupController : BaseTesserafinApiController
         return Ok(manifest);
     }
 
+    /// <summary>
+    /// Reduces a caller-supplied value to an archive that provably lives directly inside the
+    /// server-managed backup directory, or rejects it.
+    /// </summary>
+    /// <param name="path">The caller-supplied value.</param>
+    /// <returns>The validated archive path, or <c>null</c> if the value does not identify one.</returns>
+    /// <remarks>
+    /// Reducing the value to a leaf name proves only that the result is spelled as a direct child of
+    /// the backup directory. <see cref="ManagedPathBoundary.IsContainedFile"/> additionally proves
+    /// that the child is an ordinary file rather than a link out of the directory, and subsumes the
+    /// existence check the callers previously performed.
+    /// </remarks>
     [NonAction]
-    private string SanitizePath(string path)
+    private string? SanitizePath(string path)
     {
-        // sanitize path
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return null;
+        }
+
         var archiveRestorePath = Path.GetFileName(Path.GetFullPath(path));
+        if (!SafeDirectoryLeafName.IsValid(archiveRestorePath))
+        {
+            return null;
+        }
+
         var archivePath = Path.Combine(_applicationPaths.BackupPath, archiveRestorePath);
-        return archivePath;
+        return ManagedPathBoundary.TryResolveContainedFile(_applicationPaths.BackupPath, archivePath, out var resolvedPath)
+            ? resolvedPath
+            : null;
     }
 }
