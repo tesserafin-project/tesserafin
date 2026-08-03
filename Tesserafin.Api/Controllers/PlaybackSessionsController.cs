@@ -298,9 +298,17 @@ public class PlaybackSessionsController : BaseTesserafinApiController
             return NotFound();
         }
 
+        // #203: `id.Value.ToString("N")` is the body of PlaybackSessionId.ToString() written out at
+        // the logging boundary, so the bytes are the same 32 hexadecimal characters this statement
+        // has always written - PlaybackSessionIdProjectionTests holds that down against both
+        // shipped formatters. What changes is only what is visible: the route-bound value reached
+        // this sink as a whole struct, which is a two-node flow with nothing in between to model.
+        // Projecting the Guid out makes the safe rendering an ordinary expression instead of an
+        // override the analysis has to take on trust. The value business logic uses is untouched:
+        // Get, Delete and the ownership check above all still take `id` itself.
         _logger.LogInformation(
             "Playback session {SessionId} deleted (attempt {PlaybackAttemptId}).",
-            id,
+            id.Value.ToString("N"),
             session.PlaybackAttemptId.ToSingleLogLine());
         return NoContent();
     }
