@@ -102,6 +102,40 @@ namespace Tesserafin.Server.Tests.LogForging
         }
 
         [Fact]
+        public void Delete_RendersTheSessionIdExactlyAsItAlwaysDid()
+        {
+            // #203: the statement now hands the logger `id.Value.ToString("N")` rather than the
+            // PlaybackSessionId itself. This is the production-path half of that equivalence -
+            // PlaybackSessionIdProjectionTests proves the two spellings render identically, this
+            // proves the statement in the controller still writes the id the caller addressed,
+            // through the real formatter, in one record.
+            using var probe = RealFormatterLogProbe.Text();
+
+            var fixture = new Fixture(probe, OrdinaryAttempt);
+            Assert.IsType<NoContentResult>(fixture.DeleteAsOwner());
+
+            var record = Assert.Single(probe.Lines());
+            Assert.Equal(1, probe.TextRecordCount());
+            Assert.Contains(
+                "Playback session " + fixture.SessionId.Value.ToString("N") + " deleted (attempt attempt-7).",
+                record,
+                StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void Delete_PassesTheUnprojectedIdToBusinessLogic()
+        {
+            // The projection belongs to the logging boundary and nowhere else: lookup, deletion and
+            // the ownership check must still receive the bound PlaybackSessionId itself.
+            using var probe = RealFormatterLogProbe.Text();
+
+            var fixture = new Fixture(probe, OrdinaryAttempt);
+            Assert.IsType<NoContentResult>(fixture.DeleteAsOwner());
+
+            fixture.VerifyManagerSawTheBoundId();
+        }
+
+        [Fact]
         public void Delete_ByANonOwner_IsStillForbiddenAndLogsNothing()
         {
             using var probe = RealFormatterLogProbe.Text();
@@ -124,6 +158,7 @@ namespace Tesserafin.Server.Tests.LogForging
             private readonly PlaybackSessionsController _controller;
             private readonly Guid _ownerId = Guid.NewGuid();
             private readonly PlaybackSession _session;
+            private readonly Mock<IPlaybackSessionManager> _manager;
 
             public Fixture(RealFormatterLogProbe probe, string? attemptId)
             {
@@ -138,12 +173,12 @@ namespace Tesserafin.Server.Tests.LogForging
                     DateTimeOffset.UnixEpoch,
                     attemptId);
 
-                var manager = new Mock<IPlaybackSessionManager>();
-                manager.Setup(m => m.Get(_session.Id)).Returns(_session);
-                manager.Setup(m => m.Delete(_session.Id)).Returns(true);
+                _manager = new Mock<IPlaybackSessionManager>();
+                _manager.Setup(m => m.Get(_session.Id)).Returns(_session);
+                _manager.Setup(m => m.Delete(_session.Id)).Returns(true);
 
                 _controller = new PlaybackSessionsController(
-                    manager.Object,
+                    _manager.Object,
                     Mock.Of<IItemLookupService>(),
                     Mock.Of<IUserManager>(),
                     Mock.Of<IMediaSourceManager>(),
@@ -154,7 +189,15 @@ namespace Tesserafin.Server.Tests.LogForging
                     probe.LoggerFor<PlaybackSessionsController>());
             }
 
+            public PlaybackSessionId SessionId => _session.Id;
+
             public ActionResult DeleteAsOwner() => DeleteAs(_ownerId, isAdministrator: false);
+
+            public void VerifyManagerSawTheBoundId()
+            {
+                _manager.Verify(m => m.Get(_session.Id), Times.Once);
+                _manager.Verify(m => m.Delete(_session.Id), Times.Once);
+            }
 
             public ActionResult DeleteAs(Guid userId, bool isAdministrator)
             {

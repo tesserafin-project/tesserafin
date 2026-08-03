@@ -462,7 +462,10 @@ public class PlaybackSessionsControllerTests
 
         Assert.IsType<NoContentResult>(deleted);
         var entry = Assert.Single(logger.Entries, e => e.Message.Contains("deleted", StringComparison.Ordinal));
-        Assert.Equal(id, entry.Properties["SessionId"]);
+        // #203: this statement now projects the id at the logging boundary, so the state
+        // dictionary carries the rendered string rather than the boxed PlaybackSessionId. The
+        // bytes both shipped formatters write are unchanged - see PlaybackSessionIdProjectionTests.
+        Assert.Equal(id.Value.ToString("N"), Assert.IsType<string>(entry.Properties["SessionId"]));
         Assert.Equal(AttemptId, entry.Properties["PlaybackAttemptId"]);
         Assert.Null(manager.Get(id));
     }
@@ -1508,7 +1511,10 @@ public class PlaybackSessionsControllerTests
         Assert.IsType<NoContentResult>(result);
         var entry = Assert.Single(logger.Entries);
         Assert.Contains("deleted", entry.Message, StringComparison.Ordinal);
-        Assert.Equal(id, entry.Properties["SessionId"]);
+        // #203: this statement now projects the id at the logging boundary, so the state
+        // dictionary carries the rendered string rather than the boxed PlaybackSessionId. The
+        // bytes both shipped formatters write are unchanged - see PlaybackSessionIdProjectionTests.
+        Assert.Equal(id.Value.ToString("N"), Assert.IsType<string>(entry.Properties["SessionId"]));
         Assert.Equal(AttemptId, entry.Properties["PlaybackAttemptId"]);
         Assert.Contains(entry.ScopesAtLog, s => RecordingLogger.ScopeCarriesAttemptId(s, AttemptId));
     }
