@@ -24,10 +24,10 @@
   <Project>https://github.com/tesserafin-project/tesserafin</Project>
   <GitHub>https://github.com/tesserafin-project/tesserafin</GitHub>
   <!-- The Tesserafin Server 1.0 development baseline, built from commit
-       fe2bd88fc02f5e9fadf2e5d25ee80c6b0495585d and bundling Tesserafin Web
-       c4d323d6bf397067869a755972bd21df3dc39315. Pinned by manifest digest so the
+       6227dbef66c631081e3179a521561b32b94dac59 and bundling Tesserafin Web
+       a9a362eec764a9fe3fa6ba9b4a7dd7473677e35a. Pinned by manifest digest so the
        reference cannot be re-pointed; the equivalent immutable tag is
-       `1.0.0-dev.fe2bd88fc02f`.
+       `1.0.0-dev.6227dbef66c6`.
 
        It supersedes `1.0.0-dev.28ace1b74f42` (sha256:636c3038a7eb...), the
        accepted B2 release candidate, which carried three third-party metadata
@@ -41,7 +41,7 @@
        `tesserafin` is the frozen pre-v1 archive package
        and never receives another tag (docs/versioning-policy.md §2). -->
   <Registry>https://github.com/tesserafin-project/tesserafin/pkgs/container/tesserafin-server</Registry>
-  <Repository>ghcr.io/tesserafin-project/tesserafin-server@sha256:133e5e3a6afb877641a2519a96f94a71e08db43361d992bc92ffd0224b86a950</Repository>
+  <Repository>ghcr.io/tesserafin-project/tesserafin-server@sha256:bc7587bc7d99b40d77770046d49a2931ff8162b6d1df3da8d3f108b7677d7dc3</Repository>
   <BindTime>true</BindTime>
   <Privileged>false</Privileged>
   <Networking>

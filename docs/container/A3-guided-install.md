@@ -27,13 +27,13 @@ Related docs:
 All paths here use the immutable image published to GHCR:
 
 ```
-ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.fe2bd88fc02f
+ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.6227dbef66c6
 ```
 
-- Multi-arch manifest digest: `sha256:133e5e3a6afb877641a2519a96f94a71e08db43361d992bc92ffd0224b86a950`
-  (`linux/amd64` `sha256:c427614780778cc350f5fb8e417fc82a55205718972c082f98c53504f4ac07d9`,
-  `linux/arm64` `sha256:9557c6560978629bfe7bdba696f147bb73b51b5c46b334576f7031f32dfef69f`).
-  Built from `fe2bd88fc02f5e9fadf2e5d25ee80c6b0495585d`. It reports version
+- Multi-arch manifest digest: `sha256:bc7587bc7d99b40d77770046d49a2931ff8162b6d1df3da8d3f108b7677d7dc3`
+  (`linux/amd64` `sha256:63961ace461302693646a77e3204b1706d5cdc66a38152c910849c4a7b0912c8`,
+  `linux/arm64` `sha256:27f555cc38c999dd9aa84ce66caa47f4dbb0f0e041a061c010e6a470ba004a28`).
+  Built from `6227dbef66c631081e3179a521561b32b94dac59`. It reports version
   `1.0.0`. This is what the checked-in `docker-compose.yml` pins, by digest — so
   following this guide and running the shipped Compose file give you the same
   image. The dev tag above is immutable too; it is provenance and an alternative
@@ -50,8 +50,8 @@ ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.fe2bd88fc02f
   removed; nothing else about the build changed. See
   [tesserafin#174](https://github.com/tesserafin-project/tesserafin/issues/174)
   and [`metadata-provider-keys.md`](../metadata-provider-keys.md).
-- Bundled Tesserafin Web `1.0.0` at commit `c4d323d6bf397067869a755972bd21df3dc39315`
-  (`ghcr.io/tesserafin-project/tesserafin-web-assets@sha256:6a0fb6347f56a021f6c9928f29f72d78092a0085bb0404b7e594dd475f3f5038`),
+- Bundled Tesserafin Web `1.0.0` at commit `a9a362eec764a9fe3fa6ba9b4a7dd7473677e35a`
+  (`ghcr.io/tesserafin-project/tesserafin-web-assets@sha256:6150380052c8a3a154a8a25a9f40a741175a7563afdf89284f9c1f46d3042a6c`),
   recorded in the image's `org.tesserafin.web.revision` label and in
   `/opt/tesserafin-web.revision.json` inside the image.
 
