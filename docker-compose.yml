@@ -37,14 +37,17 @@ services:
     # operator-supplied only (docs/metadata-provider-keys.md) and nothing else
     # about the build changed. See tesserafin-project/tesserafin#174.
     #
-    # The canonical v1+ package is `ghcr.io/tesserafin-project/tesserafin-server`.
-    # `ghcr.io/tesserafin-project/tesserafin` is the frozen pre-v1 archive and
-    # never receives another tag (docs/versioning-policy.md §2).
+    # The public release package you install from is
+    # `ghcr.io/tesserafin-project/server`. `ghcr.io/tesserafin-project/tesserafin-server`
+    # is the private build package CI publishes every immutable build to, and
+    # `ghcr.io/tesserafin-project/tesserafin` is the frozen pre-v1 archive that
+    # never receives another tag (docs/versioning-policy.md §2). The digest below
+    # is the same manifest in all of them.
     #
     # Override with `TESSERAFIN_IMAGE=... docker compose up -d` or a .env file.
     # Moving channels are an explicit opt-in; the risks and the upgrade procedure
     # are in docs/container/A6-versioning-and-upgrades.md.
-    image: ${TESSERAFIN_IMAGE:-ghcr.io/tesserafin-project/tesserafin-server@sha256:bc7587bc7d99b40d77770046d49a2931ff8162b6d1df3da8d3f108b7677d7dc3}
+    image: ${TESSERAFIN_IMAGE:-ghcr.io/tesserafin-project/server@sha256:bc7587bc7d99b40d77770046d49a2931ff8162b6d1df3da8d3f108b7677d7dc3}
     container_name: tesserafin
     # The image already runs as the fixed non-root identity 10000:10000; stated
     # here so the security posture is visible in the compose file itself.

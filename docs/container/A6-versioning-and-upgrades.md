@@ -12,8 +12,8 @@ Prerequisites: [A1](./A1-implementation-note.md) (the image),
 > reference, tag and digest recorded in this document is a **pre-v1 development
 > artifact** in the frozen archive package
 > `ghcr.io/tesserafin-project/tesserafin`. Tesserafin public SemVer begins at
-> `1.0.0` and the canonical v1+ server package is
-> `ghcr.io/tesserafin-project/tesserafin-server` — see
+> `1.0.0` and the public release package is
+> `ghcr.io/tesserafin-project/server` — see
 > [docs/versioning-policy.md](../versioning-policy.md).
 >
 > The evidence recorded here remains valid **as evidence**: it proves the upgrade
@@ -166,10 +166,10 @@ $ docker/version-verify.sh ghcr.io/tesserafin-project/tesserafin:<tag> --require
 
 ```dotenv
 # .env — exact immutable version tag
-TESSERAFIN_IMAGE=ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.6227dbef66c6
+TESSERAFIN_IMAGE=ghcr.io/tesserafin-project/server:1.0.0
 
 # .env — digest pin, the strongest form; survives a tag being re-pointed
-TESSERAFIN_IMAGE=ghcr.io/tesserafin-project/tesserafin-server@sha256:bc7587bc7d99b40d77770046d49a2931ff8162b6d1df3da8d3f108b7677d7dc3
+TESSERAFIN_IMAGE=ghcr.io/tesserafin-project/server@sha256:bc7587bc7d99b40d77770046d49a2931ff8162b6d1df3da8d3f108b7677d7dc3
 ```
 
 Resolve a tag to its digest before pinning:
@@ -339,13 +339,13 @@ $ docker pull ghcr.io/tesserafin-project/tesserafin@sha256:29493c0ecf956a61f06c2
 
 ---
 
-## 5c. The validated Tesserafin Server 1.0 baseline
+## 5c. The published Tesserafin Server 1.0.0 release
 
 This is what `docker-compose.yml`, `.env.example`, the Unraid template and
 [`A3-guided-install.md`](./A3-guided-install.md) name today.
 
 ```
-ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.6227dbef66c6
+ghcr.io/tesserafin-project/server:1.0.0
 ```
 
 | | Digest |
@@ -355,8 +355,11 @@ ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.6227dbef66c6
 | `linux/arm64` | `sha256:27f555cc38c999dd9aa84ce66caa47f4dbb0f0e041a061c010e6a470ba004a28` |
 
 Built from `6227dbef66c631081e3179a521561b32b94dac59`; reports version `1.0.0`.
-The equally immutable `sha-6227dbef66c631081e3179a521561b32b94dac59` tag names the
-same manifest.
+The `1.0.0` tag is immutable and is never re-pointed. The same manifest also exists
+in the private build package as
+`ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.6227dbef66c6` and
+`…:sha-6227dbef66c631081e3179a521561b32b94dac59`; those are build provenance, not
+installation references.
 
 ### It supersedes the B2 candidate, which is not deleted
 

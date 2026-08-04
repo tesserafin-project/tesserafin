@@ -78,13 +78,18 @@ That guide covers:
   [`docs/container/A4-hardware-acceleration.md`](docs/container/A4-hardware-acceleration.md).
   A host with no GPU transcodes in software with zero configuration.
 
-The canonical image package is
-`ghcr.io/tesserafin-project/tesserafin-server`.
+The public release package is `ghcr.io/tesserafin-project/server`.
 
-> **The GHCR packages are private.** Anonymous pulls do not work. Run
-> `docker login ghcr.io` once with a GitHub token that can read packages before
-> pulling. Making the packages publicly pullable is an owner decision that has not
-> been taken.
+```console
+$ docker pull ghcr.io/tesserafin-project/server:1.0.0
+```
+
+> **Only the release package is public.** `ghcr.io/tesserafin-project/server`
+> holds the published release and nothing else, and it needs no authentication.
+> The build package `ghcr.io/tesserafin-project/tesserafin-server`, the web-assets
+> package `ghcr.io/tesserafin-project/tesserafin-web-assets` and the frozen pre-v1
+> archive `ghcr.io/tesserafin-project/tesserafin` stay private; they are build
+> provenance, not something you install from.
 
 Once it is installed, [`docs/user-guide.md`](docs/user-guide.md) covers first-run
 onboarding, signing in, browsing a library and searching, and
