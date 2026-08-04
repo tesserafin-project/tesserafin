@@ -78,13 +78,22 @@ claim over upstream plugin binaries, and it does not silently accept them either
 
 | Package | Role | Visibility |
 |---|---|---|
+| `ghcr.io/tesserafin-project/server` | **public release package** — the only thing a user installs from; contains released manifests and nothing else | public |
 | `ghcr.io/tesserafin-project/tesserafin` | **pre-v1 server archive** — every inherited `12.0.0-dev.*` image | private |
-| `ghcr.io/tesserafin-project/tesserafin-server` | **canonical v1+ server package** | private until [E3] ratifies publication |
-| `ghcr.io/tesserafin-project/tesserafin-web-assets` | web-assets package, spanning both epochs | private until [E3] ratifies publication |
+| `ghcr.io/tesserafin-project/tesserafin-server` | **canonical v1+ build package** — every immutable CI build, including the ones that are never released | private |
+| `ghcr.io/tesserafin-project/tesserafin-web-assets` | web-assets package, spanning both epochs | private |
+
+A release is a **copy, by digest, from the build package into the release
+package**. The manifest is never rebuilt, so a released image and its build-package
+original are the same bytes under two names. GHCR visibility is per package, not
+per version, which is exactly why the two are separate: publishing the build
+package would publish every unreleased development image in it.
 
 Rules:
 
-* Only `tesserafin-server` may ever receive future stable or channel tags.
+* Only `server` may ever receive a public release tag such as `1.0.0`, and only
+  `tesserafin-server` may ever receive a future stable or channel tag inside the
+  build epoch.
 * The archive `tesserafin` **must never** receive `latest`, `stable`, `1`, `1.0`
   or any other public-release alias. It is immutable: nothing is added to it, and
   nothing is removed from it.
@@ -92,10 +101,12 @@ Rules:
   `1.0.0-dev.*` versions. The web-assets package is a build input, not a product
   a user installs, so it does not carry product channel aliases either.
 
-The archive reference is a strict **prefix** of the canonical reference. Any
+The archive reference is a strict **prefix** of the build-package reference. Any
 check that identifies a package must compare the full repository reference or
-stop at the `:`/`@` boundary; a substring test for `tesserafin` matches all three
-packages and proves nothing.
+stop at the `:`/`@` boundary; a substring test for `tesserafin` matches the
+archive, the build package and the web-assets package and proves nothing. The
+release package `server` shares no prefix with any of them, which is deliberate:
+an installation reference cannot be mistaken for a build artefact.
 
 ---
 
@@ -116,7 +127,7 @@ guaranteed to produce it.
 Supported resolution uses an **explicit source of authority**, and only one of:
 
 1. an **immutable exact version or digest** the operator names
-   (`tesserafin-server:1.0.0`, or `tesserafin-server@sha256:…`);
+   (`server:1.0.0`, or `server@sha256:…`);
 2. a **documented channel tag** from the table in §4;
 3. a **curated release manifest** published by the project (not yet defined).
 

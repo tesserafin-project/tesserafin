@@ -17,17 +17,16 @@ Related docs:
 ## The image
 
 > **Epoch note.** Tesserafin public SemVer begins at `1.0.0`, published to the
-> canonical package `ghcr.io/tesserafin-project/tesserafin-server` — see
+> public release package `ghcr.io/tesserafin-project/server` — see
 > [`../versioning-policy.md`](../versioning-policy.md).
 > `ghcr.io/tesserafin-project/tesserafin` is the frozen pre-v1 archive and never
-> receives another tag. This guide names the validated `1.0.0` development
-> baseline; `1.0.0` itself is unpublished, and no moving channel (`latest`,
-> `preview`, `1`, `1.0`) exists.
+> receives another tag. This guide names the published `1.0.0` release, and no
+> moving channel (`latest`, `preview`, `1`, `1.0`) exists.
 
 All paths here use the immutable image published to GHCR:
 
 ```
-ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.6227dbef66c6
+ghcr.io/tesserafin-project/server:1.0.0
 ```
 
 - Multi-arch manifest digest: `sha256:bc7587bc7d99b40d77770046d49a2931ff8162b6d1df3da8d3f108b7677d7dc3`
@@ -36,8 +35,8 @@ ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.6227dbef66c6
   Built from `6227dbef66c631081e3179a521561b32b94dac59`. It reports version
   `1.0.0`. This is what the checked-in `docker-compose.yml` pins, by digest — so
   following this guide and running the shipped Compose file give you the same
-  image. The dev tag above is immutable too; it is provenance and an alternative
-  spelling of the same manifest, not a moving channel.
+  image. The `1.0.0` tag is immutable too; it names this manifest and is never
+  re-pointed, so it is not a moving channel.
 - It supersedes `1.0.0-dev.28ace1b74f42`
   (`sha256:636c3038a7eb…`), the accepted B2 presentation/responsive/a11y release
   candidate ([tesserafin-web#55](https://github.com/tesserafin-project/tesserafin-web/issues/55)).
@@ -207,8 +206,9 @@ image. See [`deployment/unraid/docker-templates/tesserafin.xml`](../../deploymen
 DSM 7.2+ with **Container Manager** installed.
 
 1. **Download the image.** Container Manager → *Registry*. If your DSM registry is
-   not configured for GHCR, the reliable path is SSH + `docker login ghcr.io` then
-   `docker pull ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.28ace1b74f42`.
+   not configured for GHCR, the reliable path is SSH +
+   `docker pull ghcr.io/tesserafin-project/server:1.0.0`. The release package is
+   public, so no `docker login` is required.
 2. **Create folders.** In *File Station*, under a `docker` shared folder create
    `tesserafin/config`, `tesserafin/data`, `tesserafin/cache`, and note your media
    share.

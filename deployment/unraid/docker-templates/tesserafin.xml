@@ -40,8 +40,8 @@
 
        `tesserafin` is the frozen pre-v1 archive package
        and never receives another tag (docs/versioning-policy.md §2). -->
-  <Registry>https://github.com/tesserafin-project/tesserafin/pkgs/container/tesserafin-server</Registry>
-  <Repository>ghcr.io/tesserafin-project/tesserafin-server@sha256:bc7587bc7d99b40d77770046d49a2931ff8162b6d1df3da8d3f108b7677d7dc3</Repository>
+  <Registry>https://github.com/orgs/tesserafin-project/packages/container/package/server</Registry>
+  <Repository>ghcr.io/tesserafin-project/server@sha256:bc7587bc7d99b40d77770046d49a2931ff8162b6d1df3da8d3f108b7677d7dc3</Repository>
   <BindTime>true</BindTime>
   <Privileged>false</Privileged>
   <Networking>
