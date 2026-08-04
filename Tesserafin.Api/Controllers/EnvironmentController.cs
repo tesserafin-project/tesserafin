@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using Tesserafin.Api.Auth.FirstTimeSetupPolicy;
 using Tesserafin.Api.Models.EnvironmentDtos;
 using Tesserafin.Common.Api;
 using Tesserafin.Common.Extensions;
@@ -18,6 +19,7 @@ namespace Tesserafin.Api.Controllers;
 /// Environment Controller.
 /// </summary>
 [Authorize(Policy = Policies.FirstTimeSetupOrElevated)]
+[FirstTimeSetupEndpoint]
 public class EnvironmentController : BaseTesserafinApiController
 {
     private const char UncSeparator = '\\';

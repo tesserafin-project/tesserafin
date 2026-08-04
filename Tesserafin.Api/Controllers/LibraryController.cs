@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Tesserafin.Api.Attributes;
+using Tesserafin.Api.Auth.FirstTimeSetupPolicy;
 using Tesserafin.Api.Extensions;
 using Tesserafin.Api.Helpers;
 using Tesserafin.Api.ModelBinders;
@@ -874,6 +875,7 @@ public class LibraryController : BaseTesserafinApiController
     /// <returns>Library options info.</returns>
     [HttpGet("Libraries/AvailableOptions")]
     [Authorize(Policy = Policies.FirstTimeSetupOrDefault)]
+    [FirstTimeSetupEndpoint]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public ActionResult<LibraryOptionsResultDto> GetLibraryOptionsInfo(
         [FromQuery] CollectionType? libraryContentType,

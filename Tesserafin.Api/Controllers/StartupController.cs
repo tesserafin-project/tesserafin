@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Tesserafin.Api.Auth.FirstTimeSetupPolicy;
 using Tesserafin.Api.Models.StartupDtos;
 using Tesserafin.Common.Api;
 using Tesserafin.Common.Net;
@@ -16,6 +17,7 @@ namespace Tesserafin.Api.Controllers;
 /// The startup wizard controller.
 /// </summary>
 [Authorize(Policy = Policies.FirstTimeSetupOrElevated)]
+[FirstTimeSetupEndpoint]
 public class StartupController : BaseTesserafinApiController
 {
     private readonly IServerConfigurationManager _config;

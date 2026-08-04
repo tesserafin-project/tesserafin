@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Tesserafin.Api.Attributes;
+using Tesserafin.Api.Auth.FirstTimeSetupPolicy;
 using Tesserafin.Api.Models.SystemInfoDtos;
 using Tesserafin.Common.Api;
 using Tesserafin.Common.Configuration;
@@ -66,6 +67,7 @@ public class SystemController : BaseTesserafinApiController
     /// <returns>A <see cref="SystemInfo"/> with info about the system.</returns>
     [HttpGet("Info")]
     [Authorize(Policy = Policies.FirstTimeSetupOrIgnoreParentalControl)]
+    [FirstTimeSetupEndpoint]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public ActionResult<SystemInfo> GetSystemInfo()

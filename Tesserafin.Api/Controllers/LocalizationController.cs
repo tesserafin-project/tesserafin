@@ -4,6 +4,7 @@ using System.Linq;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Tesserafin.Api.Auth.FirstTimeSetupPolicy;
 using Tesserafin.Common.Api;
 using Tesserafin.Model.Entities;
 using Tesserafin.Model.Globalization;
@@ -14,6 +15,7 @@ namespace Tesserafin.Api.Controllers;
 /// Localization controller.
 /// </summary>
 [Authorize(Policy = Policies.FirstTimeSetupOrDefault)]
+[FirstTimeSetupEndpoint]
 public class LocalizationController : BaseTesserafinApiController
 {
     private readonly ILocalizationManager _localization;

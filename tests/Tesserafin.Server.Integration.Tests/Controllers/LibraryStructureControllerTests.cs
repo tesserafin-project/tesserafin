@@ -124,4 +124,114 @@ public sealed class LibraryStructureControllerTests : IClassFixture<TesserafinAp
         using var response = await client.DeleteAsync("Library/VirtualFolders?name=test&refreshLibrary=true", TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
     }
+
+    // A caller-supplied virtual folder name that selects a location rather than naming one is
+    // refused with an explicit client error, on create as on every other operation, even for an
+    // administrator.
+    [Theory]
+    [Priority(2)]
+    [InlineData("../escape")]
+    [InlineData("..")]
+    [InlineData("/etc")]
+    [InlineData("a/b")]
+    public async Task Post_HostileVirtualFolderName_BadRequest(string name)
+    {
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.AddAuthHeader(_accessToken ??= await AuthHelper.CompleteStartupAsync(client));
+
+        var body = new AddVirtualFolderDto() { LibraryOptions = new LibraryOptions() { Enabled = false } };
+
+        using var response = await client.PostAsJsonAsync(
+            "Library/VirtualFolders?name=" + Uri.EscapeDataString(name),
+            body,
+            _jsonOptions,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Theory]
+    [Priority(2)]
+    [InlineData("../escape")]
+    [InlineData("/etc")]
+    public async Task Delete_HostileVirtualFolderName_BadRequest(string name)
+    {
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.AddAuthHeader(_accessToken ??= await AuthHelper.CompleteStartupAsync(client));
+
+        using var response = await client.DeleteAsync(
+            "Library/VirtualFolders?name=" + Uri.EscapeDataString(name),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Theory]
+    [Priority(2)]
+    [InlineData("../escape", "ok")]
+    [InlineData("ok", "../escape")]
+    public async Task Rename_HostileVirtualFolderName_BadRequest(string name, string newName)
+    {
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.AddAuthHeader(_accessToken ??= await AuthHelper.CompleteStartupAsync(client));
+
+        using var response = await client.PostAsync(
+            "Library/VirtualFolders/Name?name=" + Uri.EscapeDataString(name) + "&newName=" + Uri.EscapeDataString(newName),
+            null,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    // After onboarding, the privileged virtual-folder surface answers no caller that lacks a valid
+    // administrator credential — neither a tokenless one nor one presenting a malformed token.
+    [Fact]
+    [Priority(2)]
+    public async Task Get_AfterOnboarding_NoToken_IsRejected()
+    {
+        var client = _factory.CreateClient();
+        _accessToken ??= await AuthHelper.CompleteStartupAsync(client);
+
+        using var response = await client.GetAsync("Library/VirtualFolders", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    [Priority(2)]
+    public async Task Get_AfterOnboarding_MalformedToken_IsRejected()
+    {
+        var client = _factory.CreateClient();
+        _accessToken ??= await AuthHelper.CompleteStartupAsync(client);
+        client.DefaultRequestHeaders.AddAuthHeader("not-a-real-token");
+
+        using var response = await client.GetAsync("Library/VirtualFolders", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    // A legitimate name, including Unicode and spaces, still works end to end.
+    [Fact]
+    [Priority(2)]
+    public async Task Post_LegitimateUnicodeName_Succeeds()
+    {
+        const string Name = "Musique française 動画";
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.AddAuthHeader(_accessToken ??= await AuthHelper.CompleteStartupAsync(client));
+
+        var body = new AddVirtualFolderDto() { LibraryOptions = new LibraryOptions() { Enabled = false } };
+
+        using var response = await client.PostAsJsonAsync(
+            "Library/VirtualFolders?name=" + Uri.EscapeDataString(Name),
+            body,
+            _jsonOptions,
+            TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        using var cleanup = await client.DeleteAsync(
+            "Library/VirtualFolders?name=" + Uri.EscapeDataString(Name),
+            TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.NoContent, cleanup.StatusCode);
+    }
 }
