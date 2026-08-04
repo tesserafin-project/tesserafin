@@ -166,10 +166,10 @@ $ docker/version-verify.sh ghcr.io/tesserafin-project/tesserafin:<tag> --require
 
 ```dotenv
 # .env — exact immutable version tag
-TESSERAFIN_IMAGE=ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.fe2bd88fc02f
+TESSERAFIN_IMAGE=ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.6227dbef66c6
 
 # .env — digest pin, the strongest form; survives a tag being re-pointed
-TESSERAFIN_IMAGE=ghcr.io/tesserafin-project/tesserafin-server@sha256:133e5e3a6afb877641a2519a96f94a71e08db43361d992bc92ffd0224b86a950
+TESSERAFIN_IMAGE=ghcr.io/tesserafin-project/tesserafin-server@sha256:bc7587bc7d99b40d77770046d49a2931ff8162b6d1df3da8d3f108b7677d7dc3
 ```
 
 Resolve a tag to its digest before pinning:
@@ -345,17 +345,17 @@ This is what `docker-compose.yml`, `.env.example`, the Unraid template and
 [`A3-guided-install.md`](./A3-guided-install.md) name today.
 
 ```
-ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.fe2bd88fc02f
+ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.6227dbef66c6
 ```
 
 | | Digest |
 |---|---|
-| Multi-arch manifest | `sha256:133e5e3a6afb877641a2519a96f94a71e08db43361d992bc92ffd0224b86a950` |
-| `linux/amd64` | `sha256:c427614780778cc350f5fb8e417fc82a55205718972c082f98c53504f4ac07d9` |
-| `linux/arm64` | `sha256:9557c6560978629bfe7bdba696f147bb73b51b5c46b334576f7031f32dfef69f` |
+| Multi-arch manifest | `sha256:bc7587bc7d99b40d77770046d49a2931ff8162b6d1df3da8d3f108b7677d7dc3` |
+| `linux/amd64` | `sha256:63961ace461302693646a77e3204b1706d5cdc66a38152c910849c4a7b0912c8` |
+| `linux/arm64` | `sha256:27f555cc38c999dd9aa84ce66caa47f4dbb0f0e041a061c010e6a470ba004a28` |
 
-Built from `fe2bd88fc02f5e9fadf2e5d25ee80c6b0495585d`; reports version `1.0.0`.
-The equally immutable `sha-fe2bd88fc02f5e9fadf2e5d25ee80c6b0495585d` tag names the
+Built from `6227dbef66c631081e3179a521561b32b94dac59`; reports version `1.0.0`.
+The equally immutable `sha-6227dbef66c631081e3179a521561b32b94dac59` tag names the
 same manifest.
 
 ### It supersedes the B2 candidate, which is not deleted
@@ -386,9 +386,9 @@ provenance and an alternative spelling, never a moving channel. `1.0.0`, `1.0`,
 `1`, `latest`, `stable` and `preview` are **not** published.
 
 Bundled Tesserafin Web `1.0.0` at commit
-`c4d323d6bf397067869a755972bd21df3dc39315`
-(`ghcr.io/tesserafin-project/tesserafin-web-assets@sha256:6a0fb6347f56a021f6c9928f29f72d78092a0085bb0404b7e594dd475f3f5038`,
-tag `1.0.0-dev.c4d323d6bf39`).
+`a9a362eec764a9fe3fa6ba9b4a7dd7473677e35a`
+(`ghcr.io/tesserafin-project/tesserafin-web-assets@sha256:6150380052c8a3a154a8a25a9f40a741175a7563afdf89284f9c1f46d3042a6c`,
+tag `1.0.0-dev.a9a362eec764`).
 
 This is the accepted **B2** presentation/responsive/a11y release candidate
 ([tesserafin-web#55](https://github.com/tesserafin-project/tesserafin-web/issues/55),
