@@ -3417,12 +3417,17 @@ namespace Tesserafin.Server.Core.Library
 
             var shortcutFilename = Path.GetFileNameWithoutExtension(path);
 
-            var lnk = Path.Combine(virtualFolderPath, shortcutFilename + ShortcutFileExtension);
+            // The shortcut's leaf name is derived from the caller-supplied media path.
+            // GetFileNameWithoutExtension drops any directory structure, but dropping structure
+            // is not the same as guaranteeing containment, so the result is resolved through the
+            // same rule the virtual folder root uses. The link is then provably a direct child of
+            // this library, whatever the media path looked like.
+            var lnk = VirtualFolderPath.Resolve(virtualFolderPath, shortcutFilename + ShortcutFileExtension);
 
             while (File.Exists(lnk))
             {
                 shortcutFilename += "1";
-                lnk = Path.Combine(virtualFolderPath, shortcutFilename + ShortcutFileExtension);
+                lnk = VirtualFolderPath.Resolve(virtualFolderPath, shortcutFilename + ShortcutFileExtension);
             }
 
             _fileSystem.CreateShortcut(lnk, _appHost.ReverseVirtualPath(path));
