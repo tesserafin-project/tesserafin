@@ -481,13 +481,24 @@ public class ContentPacksController : BaseTesserafinApiController
 
     private bool IsItemVisible(Guid itemId, User? user)
     {
-        return _libraryManager.GetCount(new InternalItemsQuery(user)
+        var query = new InternalItemsQuery(user)
         {
-            ItemIds = [itemId],
             Recursive = true,
             EnableTotalRecordCount = true,
             DtoOptions = new DtoOptions(false)
-        }) > 0;
+        };
+
+        if (user is not null)
+        {
+            // Resolve the caller's accessible libraries into the query *before* narrowing it to
+            // one item. A query that already carries ItemIds is treated as scoped and skips that
+            // resolution, which would silently drop library and folder restriction.
+            _libraryManager.ConfigureUserAccess(query, user);
+        }
+
+        query.ItemIds = [itemId];
+
+        return _libraryManager.GetCount(query) > 0;
     }
 
     private ContentPackDto GetVisibleView(ContentPack pack, User? user)
