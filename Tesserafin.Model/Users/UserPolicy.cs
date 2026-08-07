@@ -18,6 +18,7 @@ namespace Tesserafin.Model.Users
             IsHidden = true;
             EnableCollectionManagement = false;
             EnableSubtitleManagement = false;
+            EnableContentPackManagement = false;
 
             EnableContentDeletion = false;
             EnableContentDeletionFromFolders = Array.Empty<string>();
@@ -92,6 +93,13 @@ namespace Tesserafin.Model.Users
         /// <value><c>true</c> if this instance is allowed; otherwise, <c>false</c>.</value>
         [DefaultValue(false)]
         public bool EnableSubtitleManagement { get; set; }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether this instance can manage content packs.
+        /// </summary>
+        /// <value><c>true</c> if this instance is allowed; otherwise, <c>false</c>.</value>
+        [DefaultValue(false)]
+        public bool EnableContentPackManagement { get; set; }
 
         /// <summary>
         /// Gets or sets a value indicating whether this user can manage lyrics.

@@ -338,6 +338,83 @@ Behaviour:
 
 ---
 
+## 4.4 Decisions settled in M1
+
+§4 left four questions to be answered against the repository's own conventions.
+M1 answered them as follows. These are now part of the contract.
+
+### 4.4.1 Browsing preference — per user, server-side
+
+§3.6 requires the media-family-first vs content-pack-first preference to remain
+changeable after onboarding, and §3.8 puts every product-level decision on the
+server. The preference is therefore:
+
+* **per user**, not household-global — one person switching does not move anyone
+  else's navigation;
+* **server-side**, never in browser storage, so Web, Android, Android TV, iOS and
+  TV clients all observe the same choice;
+* carried by the existing cross-client **user configuration**
+  (`UserConfiguration.ContentPackBrowsingPreference`, persisted on the `Users`
+  row, read and written through `GET /Users/Me` and
+  `POST /Users/{userId}/Configuration`). It is deliberately **not** a
+  `DisplayPreferences` record: those are scoped to one client and one display,
+  which is the opposite of what a cross-client product preference needs.
+* **not** a column on either content pack table, and **not** a global server
+  setting.
+
+Accepted values are `MediaFamilyFirst` and `ContentPackFirst`. An absent or
+legacy value resolves to `MediaFamilyFirst`, so every existing user keeps exactly
+the navigation they have today. M1 stores and exposes the field and changes no
+navigation; M3 consumes it.
+
+### 4.4.2 Pack origin is stored, and is a different vocabulary from membership provenance
+
+Operation 3 "records the creating provenance". Nothing in the repository lets
+that be derived after the fact — the pack row is the only durable record of how a
+pack came to exist — so it is stored, as `ContentPack.Origin`.
+
+It is a **separate enumeration** from membership provenance, not a reuse of it:
+
+* `ContentPackMembershipProvenance` answers *why is this item in this pack*, and
+  must be able to carry `Rule`, `ProviderSuggestion` and `PluginSuggestion` later
+  (§3.5).
+* `ContentPackOrigin` answers *who created this pack*, and only `Manual` or
+  `SystemSeed` can ever be true of it. A provider cannot create a pack.
+
+Sharing one enumeration would make `ProviderSuggestion` a legal pack origin,
+which §3.4 forbids.
+
+### 4.4.3 A pack the caller cannot see at all is omitted, then absent
+
+§3.4 says such a pack "renders as empty or is omitted". M1 chooses **omitted**,
+consistently across the read operations:
+
+| Situation | Operation 1 (list) | Operation 2 (get one) | Operation 9 (items in pack) |
+| --- | --- | --- | --- |
+| Pack has no memberships at all | listed, count `0` | `200`, count `0` | `200`, empty page |
+| Pack has members, none visible to the caller | omitted | `404` | `200`, empty page |
+| Pack does not exist | absent | `404` | `404` |
+
+An actually empty pack therefore stays distinguishable from a nonexistent one for
+whoever is managing packs, while a pack whose whole content is inaccessible is
+indistinguishable from one that does not exist. Operation 9 answering `200` with
+an empty page for a pack that exists is the behaviour §4.1 already specifies
+("Empty page, `200`"); it reveals only that the id names a pack, which the caller
+had to hold already, and never that inaccessible content is filed there.
+
+Counts and representative artwork in operations 1 and 2 are computed by the
+ordinary item query for the calling user — one bounded query per pack, returning
+the visible total and a single visible representative together. The raw
+membership count is never returned to a client.
+
+### 4.4.4 Operation 10 is implemented
+
+`GET /Items/{itemId}/ContentPacks` ships in M1. The caller must be able to see the
+item; an unknown item and an invisible one answer identically, so the response
+never says which of the two happened.
+
+---
+
 ## 5. Sequencing
 
 | Milestone | Issue | Scope |

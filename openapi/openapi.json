@@ -2858,6 +2858,90 @@
         },
         "type": "object"
       },
+      "ContentPackBrowsingPreference": {
+        "description": "The way a user prefers the top level of the library to be arranged.",
+        "enum": [
+          "MediaFamilyFirst",
+          "ContentPackFirst"
+        ],
+        "type": "string"
+      },
+      "ContentPackDto": {
+        "additionalProperties": false,
+        "description": "A content pack as one caller may see it.",
+        "properties": {
+          "DateCreated": {
+            "description": "Gets or sets the UTC instant the pack was created.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "Description": {
+            "description": "Gets or sets the optional description.",
+            "nullable": true,
+            "type": "string"
+          },
+          "Id": {
+            "description": "Gets or sets the stable opaque identifier. Unchanged by a rename.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "Name": {
+            "description": "Gets or sets the name.",
+            "type": "string"
+          },
+          "Origin": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContentPackOrigin"
+              }
+            ],
+            "description": "Gets or sets how the pack itself was created.",
+            "enum": [
+              "Manual",
+              "SystemSeed"
+            ]
+          },
+          "RepresentativeItemId": {
+            "description": "Gets or sets the item the client may use for representative artwork.",
+            "format": "uuid",
+            "nullable": true,
+            "type": "string"
+          },
+          "SortOrder": {
+            "description": "Gets or sets the position in the server\u0027s global pack ordering.",
+            "format": "int32",
+            "type": "integer"
+          },
+          "VisibleItemCount": {
+            "description": "Gets or sets the number of items in the pack that the calling user may see.",
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "Name"
+        ],
+        "type": "object"
+      },
+      "ContentPackMembershipProvenance": {
+        "description": "Records why an item is a member of a content pack.",
+        "enum": [
+          "Manual",
+          "SystemSeed",
+          "Rule",
+          "ProviderSuggestion",
+          "PluginSuggestion"
+        ],
+        "type": "string"
+      },
+      "ContentPackOrigin": {
+        "description": "Records how a content pack itself came into existence.",
+        "enum": [
+          "Manual",
+          "SystemSeed"
+        ],
+        "type": "string"
+      },
       "ContractFieldIssue": {
         "additionalProperties": false,
         "description": "One closed-vocabulary issue observed for one known contract member (issue #75): WHERE, by\nserver-owned path, and WHAT, by server-owned code. Never why, never with what value.",
@@ -3149,6 +3233,28 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "CreateContentPackRequest": {
+        "additionalProperties": false,
+        "description": "The body of a create content pack request.",
+        "properties": {
+          "Description": {
+            "description": "Gets or sets the optional description.",
+            "maxLength": 1024,
+            "nullable": true,
+            "type": "string"
+          },
+          "Name": {
+            "description": "Gets or sets the name of the pack. Trimmed, non-empty and unique once normalized.",
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "Name"
+        ],
         "type": "object"
       },
       "CreatePlaybackSessionRequest": {
@@ -12665,6 +12771,24 @@
         },
         "type": "object"
       },
+      "ReorderContentPacksRequest": {
+        "additionalProperties": false,
+        "description": "The body of a reorder content packs request.",
+        "properties": {
+          "PackIds": {
+            "description": "Gets or sets every content pack id, exactly once, in the wanted order.",
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "PackIds"
+        ],
+        "type": "object"
+      },
       "RepeatMode": {
         "enum": [
           "RepeatNone",
@@ -16989,6 +17113,28 @@
         ],
         "type": "string"
       },
+      "UpdateContentPackRequest": {
+        "additionalProperties": false,
+        "description": "The body of an update content pack request.",
+        "properties": {
+          "Description": {
+            "description": "Gets or sets the new optional description.",
+            "maxLength": 1024,
+            "nullable": true,
+            "type": "string"
+          },
+          "Name": {
+            "description": "Gets or sets the new name. Trimmed, non-empty and unique once normalized.",
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "Name"
+        ],
+        "type": "object"
+      },
       "UpdateLibraryOptionsDto": {
         "additionalProperties": false,
         "description": "Update library options dto.",
@@ -17224,6 +17370,18 @@
             "description": "Gets or sets the id of the selected cast receiver.",
             "nullable": true,
             "type": "string"
+          },
+          "ContentPackBrowsingPreference": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContentPackBrowsingPreference"
+              }
+            ],
+            "description": "Gets or sets how the user prefers the top level of the library to be arranged.",
+            "enum": [
+              "MediaFamilyFirst",
+              "ContentPackFirst"
+            ]
           },
           "DisplayCollectionsView": {
             "type": "boolean"
@@ -17689,6 +17847,11 @@
             "type": "array"
           },
           "EnableContentDownloading": {
+            "type": "boolean"
+          },
+          "EnableContentPackManagement": {
+            "default": false,
+            "description": "Gets or sets a value indicating whether this instance can manage content packs.",
             "type": "boolean"
           },
           "EnableLiveTvAccess": {
@@ -25250,6 +25413,1250 @@
         ]
       }
     },
+    "/ContentPacks": {
+      "get": {
+        "description": "A pack that holds items but none the caller may see is omitted. A pack that is genuinely\nempty is returned with a zero count, so an empty pack stays distinguishable from one that\ndoes not exist.",
+        "operationId": "GetContentPacks",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ContentPackDto"
+                  },
+                  "type": "array"
+                }
+              },
+              "application/json; profile=\u0022CamelCase\u0022": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ContentPackDto"
+                  },
+                  "type": "array"
+                }
+              },
+              "application/json; profile=\u0022PascalCase\u0022": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ContentPackDto"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Content packs returned."
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "503": {
+            "content": {
+              "text/html": {}
+            },
+            "description": "The server is currently starting or is temporarily not available.",
+            "headers": {
+              "Message": {
+                "allowEmptyValue": true,
+                "description": "A short plain-text reason why the server is not available.",
+                "schema": {
+                  "format": "text",
+                  "type": "string"
+                }
+              },
+              "Retry-After": {
+                "allowEmptyValue": true,
+                "description": "A hint for when to retry the operation in full seconds.",
+                "schema": {
+                  "format": "int32",
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "CustomAuthentication": [
+              "DefaultAuthorization"
+            ]
+          }
+        ],
+        "summary": "Gets the content packs the current user may see.",
+        "tags": [
+          "ContentPacks"
+        ]
+      },
+      "post": {
+        "operationId": "CreateContentPack",
+        "requestBody": {
+          "content": {
+            "application/*\u002Bjson": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/CreateContentPackRequest"
+                  }
+                ],
+                "description": "The body of a create content pack request."
+              }
+            },
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/CreateContentPackRequest"
+                  }
+                ],
+                "description": "The body of a create content pack request."
+              }
+            },
+            "text/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/CreateContentPackRequest"
+                  }
+                ],
+                "description": "The body of a create content pack request."
+              }
+            }
+          },
+          "description": "The content pack to create.",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentPackDto"
+                }
+              },
+              "application/json; profile=\u0022CamelCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentPackDto"
+                }
+              },
+              "application/json; profile=\u0022PascalCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentPackDto"
+                }
+              }
+            },
+            "description": "Content pack created."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022CamelCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022PascalCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "The name is missing, empty or too long."
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022CamelCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022PascalCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "The user does not have permission to manage content packs."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022CamelCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022PascalCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A content pack with that name already exists."
+          },
+          "503": {
+            "content": {
+              "text/html": {}
+            },
+            "description": "The server is currently starting or is temporarily not available.",
+            "headers": {
+              "Message": {
+                "allowEmptyValue": true,
+                "description": "A short plain-text reason why the server is not available.",
+                "schema": {
+                  "format": "text",
+                  "type": "string"
+                }
+              },
+              "Retry-After": {
+                "allowEmptyValue": true,
+                "description": "A hint for when to retry the operation in full seconds.",
+                "schema": {
+                  "format": "int32",
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "CustomAuthentication": [
+              "ContentPackManagement",
+              "DefaultAuthorization"
+            ]
+          }
+        ],
+        "summary": "Creates a content pack.",
+        "tags": [
+          "ContentPacks"
+        ]
+      }
+    },
+    "/ContentPacks/Order": {
+      "post": {
+        "operationId": "ReorderContentPacks",
+        "requestBody": {
+          "content": {
+            "application/*\u002Bjson": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/ReorderContentPacksRequest"
+                  }
+                ],
+                "description": "The body of a reorder content packs request."
+              }
+            },
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/ReorderContentPacksRequest"
+                  }
+                ],
+                "description": "The body of a reorder content packs request."
+              }
+            },
+            "text/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/ReorderContentPacksRequest"
+                  }
+                ],
+                "description": "The body of a reorder content packs request."
+              }
+            }
+          },
+          "description": "Every content pack id, exactly once, in the wanted order.",
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Content packs reordered."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022CamelCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022PascalCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "The submitted list is not a complete ordering."
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022CamelCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022PascalCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "The user does not have permission to manage content packs."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022CamelCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022PascalCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "One of the content packs does not exist."
+          },
+          "503": {
+            "content": {
+              "text/html": {}
+            },
+            "description": "The server is currently starting or is temporarily not available.",
+            "headers": {
+              "Message": {
+                "allowEmptyValue": true,
+                "description": "A short plain-text reason why the server is not available.",
+                "schema": {
+                  "format": "text",
+                  "type": "string"
+                }
+              },
+              "Retry-After": {
+                "allowEmptyValue": true,
+                "description": "A hint for when to retry the operation in full seconds.",
+                "schema": {
+                  "format": "int32",
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "CustomAuthentication": [
+              "ContentPackManagement",
+              "DefaultAuthorization"
+            ]
+          }
+        ],
+        "summary": "Replaces the global content pack ordering.",
+        "tags": [
+          "ContentPacks"
+        ]
+      }
+    },
+    "/ContentPacks/{packId}": {
+      "delete": {
+        "operationId": "DeleteContentPack",
+        "parameters": [
+          {
+            "description": "The content pack id.",
+            "in": "path",
+            "name": "packId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Content pack and its membership links deleted."
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022CamelCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022PascalCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "The user does not have permission to manage content packs."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022CamelCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022PascalCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Content pack not found."
+          },
+          "503": {
+            "content": {
+              "text/html": {}
+            },
+            "description": "The server is currently starting or is temporarily not available.",
+            "headers": {
+              "Message": {
+                "allowEmptyValue": true,
+                "description": "A short plain-text reason why the server is not available.",
+                "schema": {
+                  "format": "text",
+                  "type": "string"
+                }
+              },
+              "Retry-After": {
+                "allowEmptyValue": true,
+                "description": "A hint for when to retry the operation in full seconds.",
+                "schema": {
+                  "format": "int32",
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "CustomAuthentication": [
+              "ContentPackManagement",
+              "DefaultAuthorization"
+            ]
+          }
+        ],
+        "summary": "Deletes a content pack and its membership links. No media, metadata, artwork, collection or\nlibrary is touched.",
+        "tags": [
+          "ContentPacks"
+        ]
+      },
+      "get": {
+        "operationId": "GetContentPack",
+        "parameters": [
+          {
+            "description": "The content pack id.",
+            "in": "path",
+            "name": "packId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentPackDto"
+                }
+              },
+              "application/json; profile=\u0022CamelCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentPackDto"
+                }
+              },
+              "application/json; profile=\u0022PascalCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentPackDto"
+                }
+              }
+            },
+            "description": "Content pack returned."
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022CamelCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022PascalCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Content pack not found, or wholly inaccessible to the caller."
+          },
+          "503": {
+            "content": {
+              "text/html": {}
+            },
+            "description": "The server is currently starting or is temporarily not available.",
+            "headers": {
+              "Message": {
+                "allowEmptyValue": true,
+                "description": "A short plain-text reason why the server is not available.",
+                "schema": {
+                  "format": "text",
+                  "type": "string"
+                }
+              },
+              "Retry-After": {
+                "allowEmptyValue": true,
+                "description": "A hint for when to retry the operation in full seconds.",
+                "schema": {
+                  "format": "int32",
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "CustomAuthentication": [
+              "DefaultAuthorization"
+            ]
+          }
+        ],
+        "summary": "Gets one content pack.",
+        "tags": [
+          "ContentPacks"
+        ]
+      },
+      "post": {
+        "operationId": "UpdateContentPack",
+        "parameters": [
+          {
+            "description": "The content pack id.",
+            "in": "path",
+            "name": "packId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/*\u002Bjson": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UpdateContentPackRequest"
+                  }
+                ],
+                "description": "The body of an update content pack request."
+              }
+            },
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UpdateContentPackRequest"
+                  }
+                ],
+                "description": "The body of an update content pack request."
+              }
+            },
+            "text/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UpdateContentPackRequest"
+                  }
+                ],
+                "description": "The body of an update content pack request."
+              }
+            }
+          },
+          "description": "The new metadata.",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentPackDto"
+                }
+              },
+              "application/json; profile=\u0022CamelCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentPackDto"
+                }
+              },
+              "application/json; profile=\u0022PascalCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentPackDto"
+                }
+              }
+            },
+            "description": "Content pack updated."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022CamelCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022PascalCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "The name is missing, empty or too long."
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022CamelCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022PascalCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "The user does not have permission to manage content packs."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022CamelCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022PascalCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Content pack not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022CamelCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022PascalCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Another content pack already has that name."
+          },
+          "503": {
+            "content": {
+              "text/html": {}
+            },
+            "description": "The server is currently starting or is temporarily not available.",
+            "headers": {
+              "Message": {
+                "allowEmptyValue": true,
+                "description": "A short plain-text reason why the server is not available.",
+                "schema": {
+                  "format": "text",
+                  "type": "string"
+                }
+              },
+              "Retry-After": {
+                "allowEmptyValue": true,
+                "description": "A hint for when to retry the operation in full seconds.",
+                "schema": {
+                  "format": "int32",
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "CustomAuthentication": [
+              "ContentPackManagement",
+              "DefaultAuthorization"
+            ]
+          }
+        ],
+        "summary": "Updates a content pack\u0027s name and description. The identifier never changes.",
+        "tags": [
+          "ContentPacks"
+        ]
+      }
+    },
+    "/ContentPacks/{packId}/Items": {
+      "get": {
+        "description": "Expressed as a filter on the existing item query, so paging, sorting and every other item\nfilter keep their usual meaning and there is exactly one authorization implementation.",
+        "operationId": "GetContentPackItems",
+        "parameters": [
+          {
+            "description": "The content pack id.",
+            "in": "path",
+            "name": "packId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional. The record index to start at.",
+            "in": "query",
+            "name": "startIndex",
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Optional. The maximum number of records to return.",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Optional. Filter by search term.",
+            "in": "query",
+            "name": "searchTerm",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional. Specify one or more sort orders, comma delimited.",
+            "in": "query",
+            "name": "sortBy",
+            "schema": {
+              "items": {
+                "$ref": "#/components/schemas/ItemSortBy"
+              },
+              "type": "array"
+            }
+          },
+          {
+            "description": "Optional. Sort order, ascending or descending.",
+            "in": "query",
+            "name": "sortOrder",
+            "schema": {
+              "items": {
+                "$ref": "#/components/schemas/SortOrder"
+              },
+              "type": "array"
+            }
+          },
+          {
+            "description": "Optional. Filter by item kind, comma delimited.",
+            "in": "query",
+            "name": "includeItemTypes",
+            "schema": {
+              "items": {
+                "$ref": "#/components/schemas/BaseItemKind"
+              },
+              "type": "array"
+            }
+          },
+          {
+            "description": "Optional. The fields to return.",
+            "in": "query",
+            "name": "fields",
+            "schema": {
+              "items": {
+                "$ref": "#/components/schemas/ItemFields"
+              },
+              "type": "array"
+            }
+          },
+          {
+            "description": "Optional. Include image information in the output.",
+            "in": "query",
+            "name": "enableImages",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Optional. The max number of images to return per image type.",
+            "in": "query",
+            "name": "imageTypeLimit",
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Optional. The image types to include in the output.",
+            "in": "query",
+            "name": "enableImageTypes",
+            "schema": {
+              "items": {
+                "$ref": "#/components/schemas/ImageType"
+              },
+              "type": "array"
+            }
+          },
+          {
+            "description": "Optional. Include user data.",
+            "in": "query",
+            "name": "enableUserData",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BaseItemDtoQueryResult"
+                }
+              },
+              "application/json; profile=\u0022CamelCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/BaseItemDtoQueryResult"
+                }
+              },
+              "application/json; profile=\u0022PascalCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/BaseItemDtoQueryResult"
+                }
+              }
+            },
+            "description": "Items returned. An empty page is a normal answer."
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022CamelCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022PascalCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Content pack not found."
+          },
+          "503": {
+            "content": {
+              "text/html": {}
+            },
+            "description": "The server is currently starting or is temporarily not available.",
+            "headers": {
+              "Message": {
+                "allowEmptyValue": true,
+                "description": "A short plain-text reason why the server is not available.",
+                "schema": {
+                  "format": "text",
+                  "type": "string"
+                }
+              },
+              "Retry-After": {
+                "allowEmptyValue": true,
+                "description": "A hint for when to retry the operation in full seconds.",
+                "schema": {
+                  "format": "int32",
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "CustomAuthentication": [
+              "DefaultAuthorization"
+            ]
+          }
+        ],
+        "summary": "Gets the items in a content pack that the current user may see.",
+        "tags": [
+          "ContentPacks"
+        ]
+      }
+    },
+    "/ContentPacks/{packId}/Items/{itemId}": {
+      "delete": {
+        "description": "Idempotent: removing an absent membership succeeds.",
+        "operationId": "RemoveContentPackItem",
+        "parameters": [
+          {
+            "description": "The content pack id.",
+            "in": "path",
+            "name": "packId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The item id.",
+            "in": "path",
+            "name": "itemId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Item is not in the content pack."
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022CamelCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022PascalCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "The user does not have permission to manage content packs."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022CamelCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022PascalCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Content pack not found."
+          },
+          "503": {
+            "content": {
+              "text/html": {}
+            },
+            "description": "The server is currently starting or is temporarily not available.",
+            "headers": {
+              "Message": {
+                "allowEmptyValue": true,
+                "description": "A short plain-text reason why the server is not available.",
+                "schema": {
+                  "format": "text",
+                  "type": "string"
+                }
+              },
+              "Retry-After": {
+                "allowEmptyValue": true,
+                "description": "A hint for when to retry the operation in full seconds.",
+                "schema": {
+                  "format": "int32",
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "CustomAuthentication": [
+              "ContentPackManagement",
+              "DefaultAuthorization"
+            ]
+          }
+        ],
+        "summary": "Removes an item from a content pack. The item itself is not touched.",
+        "tags": [
+          "ContentPacks"
+        ]
+      },
+      "post": {
+        "description": "Idempotent: adding the same item twice leaves one membership. An existing manual membership\nis never downgraded by an automated add.",
+        "operationId": "AddContentPackItem",
+        "parameters": [
+          {
+            "description": "The content pack id.",
+            "in": "path",
+            "name": "packId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The item id.",
+            "in": "path",
+            "name": "itemId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Why the item is being added. Defaults to \u0060Manual\u0060.",
+            "in": "query",
+            "name": "provenance",
+            "schema": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/ContentPackMembershipProvenance"
+                }
+              ],
+              "default": "Manual",
+              "description": "Records why an item is a member of a content pack.",
+              "enum": [
+                "Manual",
+                "SystemSeed",
+                "Rule",
+                "ProviderSuggestion",
+                "PluginSuggestion"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Item is in the content pack."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022CamelCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022PascalCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "The provenance is not one of the values this server produces."
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022CamelCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022PascalCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "The user does not have permission to manage content packs."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022CamelCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022PascalCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Content pack not found, or the item is unknown or invisible to the caller."
+          },
+          "503": {
+            "content": {
+              "text/html": {}
+            },
+            "description": "The server is currently starting or is temporarily not available.",
+            "headers": {
+              "Message": {
+                "allowEmptyValue": true,
+                "description": "A short plain-text reason why the server is not available.",
+                "schema": {
+                  "format": "text",
+                  "type": "string"
+                }
+              },
+              "Retry-After": {
+                "allowEmptyValue": true,
+                "description": "A hint for when to retry the operation in full seconds.",
+                "schema": {
+                  "format": "int32",
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "CustomAuthentication": [
+              "ContentPackManagement",
+              "DefaultAuthorization"
+            ]
+          }
+        ],
+        "summary": "Adds an item to a content pack.",
+        "tags": [
+          "ContentPacks"
+        ]
+      }
+    },
     "/Devices": {
       "delete": {
         "operationId": "DeleteDevice",
@@ -31300,6 +32707,115 @@
         "summary": "Gets the collections that include the specified item.",
         "tags": [
           "Library"
+        ]
+      }
+    },
+    "/Items/{itemId}/ContentPacks": {
+      "get": {
+        "operationId": "GetContentPacksForItem",
+        "parameters": [
+          {
+            "description": "The item id.",
+            "in": "path",
+            "name": "itemId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ContentPackDto"
+                  },
+                  "type": "array"
+                }
+              },
+              "application/json; profile=\u0022CamelCase\u0022": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ContentPackDto"
+                  },
+                  "type": "array"
+                }
+              },
+              "application/json; profile=\u0022PascalCase\u0022": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ContentPackDto"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Content packs returned. An empty list is a normal answer."
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022CamelCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json; profile=\u0022PascalCase\u0022": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "The item is unknown or invisible to the caller."
+          },
+          "503": {
+            "content": {
+              "text/html": {}
+            },
+            "description": "The server is currently starting or is temporarily not available.",
+            "headers": {
+              "Message": {
+                "allowEmptyValue": true,
+                "description": "A short plain-text reason why the server is not available.",
+                "schema": {
+                  "format": "text",
+                  "type": "string"
+                }
+              },
+              "Retry-After": {
+                "allowEmptyValue": true,
+                "description": "A hint for when to retry the operation in full seconds.",
+                "schema": {
+                  "format": "int32",
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "CustomAuthentication": [
+              "DefaultAuthorization"
+            ]
+          }
+        ],
+        "summary": "Gets the content packs that contain an item.",
+        "tags": [
+          "ContentPacks"
         ]
       }
     },
@@ -66281,6 +67797,9 @@
     },
     {
       "name": "Collection"
+    },
+    {
+      "name": "ContentPacks"
     },
     {
       "name": "Plugin"

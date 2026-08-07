@@ -193,6 +193,7 @@ public static class UserEntityExtensions
         entity.Permissions.Add(new Permission(PermissionKind.EnableCollectionManagement, false));
         entity.Permissions.Add(new Permission(PermissionKind.EnableSubtitleManagement, false));
         entity.Permissions.Add(new Permission(PermissionKind.EnableLyricManagement, false));
+        entity.Permissions.Add(new Permission(PermissionKind.EnableContentPackManagement, false));
     }
 
     /// <summary>

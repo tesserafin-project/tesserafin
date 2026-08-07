@@ -436,7 +436,8 @@ namespace Tesserafin.Server.Implementations.Users
                     CastReceiverId = string.IsNullOrEmpty(user.CastReceiverId)
                         ? castReceiverApplications.FirstOrDefault()?.Id
                         : castReceiverApplications.FirstOrDefault(c => string.Equals(c.Id, user.CastReceiverId, StringComparison.Ordinal))?.Id
-                          ?? castReceiverApplications.FirstOrDefault()?.Id
+                          ?? castReceiverApplications.FirstOrDefault()?.Id,
+                    ContentPackBrowsingPreference = user.ContentPackBrowsingPreference
                 },
                 Policy = new UserPolicy
                 {
@@ -472,6 +473,7 @@ namespace Tesserafin.Server.Implementations.Users
                     EnablePublicSharing = user.HasPermission(PermissionKind.EnablePublicSharing),
                     EnableCollectionManagement = user.HasPermission(PermissionKind.EnableCollectionManagement),
                     EnableSubtitleManagement = user.HasPermission(PermissionKind.EnableSubtitleManagement),
+                    EnableContentPackManagement = user.HasPermission(PermissionKind.EnableContentPackManagement),
                     AccessSchedules = user.AccessSchedules.ToArray(),
                     BlockedTags = user.GetPreference(PreferenceKind.BlockedTags),
                     AllowedTags = user.GetPreference(PreferenceKind.AllowedTags),
@@ -773,6 +775,7 @@ namespace Tesserafin.Server.Implementations.Users
                     user.EnableNextEpisodeAutoPlay = config.EnableNextEpisodeAutoPlay;
                     user.RememberSubtitleSelections = config.RememberSubtitleSelections;
                     user.SubtitleLanguagePreference = config.SubtitleLanguagePreference;
+                    user.ContentPackBrowsingPreference = config.ContentPackBrowsingPreference;
 
                     // Only set cast receiver id if it is passed in and it exists in the server config.
                     if (!string.IsNullOrEmpty(config.CastReceiverId)
@@ -845,6 +848,7 @@ namespace Tesserafin.Server.Implementations.Users
                     user.SetPermission(PermissionKind.EnableCollectionManagement, policy.EnableCollectionManagement);
                     user.SetPermission(PermissionKind.EnableSubtitleManagement, policy.EnableSubtitleManagement);
                     user.SetPermission(PermissionKind.EnableLyricManagement, policy.EnableLyricManagement);
+                    user.SetPermission(PermissionKind.EnableContentPackManagement, policy.EnableContentPackManagement);
                     user.SetPermission(PermissionKind.ForceRemoteSourceTranscoding, policy.ForceRemoteSourceTranscoding);
                     user.SetPermission(PermissionKind.EnablePublicSharing, policy.EnablePublicSharing);
 

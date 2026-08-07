@@ -26,10 +26,18 @@ namespace Tesserafin.Server.Integration.Tests
 
         /// <summary>
         /// Number of schemas outside the <c>Tesserafin.Playback.Decision</c> namespace that declare
-        /// <c>required</c>. All of them come from an explicit <c>[Required]</c> attribute and none
-        /// is in this change's scope, so the filter must leave this figure untouched.
+        /// <c>required</c>. All of them come from an explicit <c>[Required]</c> attribute, so the
+        /// namespace filter must leave this figure untouched. Adding a brand new schema that
+        /// declares <c>required</c> does move it, and moving it then is the intended maintenance:
+        /// what this pins is that the filter never adds or removes <c>required</c> on a schema
+        /// outside its namespace.
         /// </summary>
-        private const int RequiredOutsideNamespace = 27;
+        /// <remarks>
+        /// 27 before the content pack surface. The four content pack request and response schemas
+        /// each declare a required member of their own, which is additive and does not touch any
+        /// existing schema's <c>required</c> array.
+        /// </remarks>
+        private const int RequiredOutsideNamespace = 31;
 
         /// <summary>
         /// The 29 members, across 13 schemas, that are primary-constructor parameters of

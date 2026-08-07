@@ -32,6 +32,7 @@ using Tesserafin.Controller.Chapters;
 using Tesserafin.Controller.ClientEvent;
 using Tesserafin.Controller.Collections;
 using Tesserafin.Controller.Configuration;
+using Tesserafin.Controller.ContentPacks;
 using Tesserafin.Controller.Diagnostics;
 using Tesserafin.Controller.Drawing;
 using Tesserafin.Controller.Dto;
@@ -111,6 +112,7 @@ using Tesserafin.Server.Core.Sorting;
 using Tesserafin.Server.Core.SyncPlay;
 using Tesserafin.Server.Core.TV;
 using Tesserafin.Server.Core.Updates;
+using Tesserafin.Server.Implementations.ContentPacks;
 using Tesserafin.Server.Implementations.FullSystemBackup;
 using Tesserafin.Server.Implementations.Item;
 using Tesserafin.Server.Implementations.MediaSegments;
@@ -621,6 +623,7 @@ namespace Tesserafin.Server.Core
             serviceCollection.AddSingleton<ISessionManager, SessionManager>();
 
             serviceCollection.AddSingleton<ICollectionManager, CollectionManager>();
+            serviceCollection.AddSingleton<IContentPackManager, ContentPackManager>();
             serviceCollection.AddSingleton<ILimitedConcurrencyLibraryScheduler, LimitedConcurrencyLibraryScheduler>();
 
             serviceCollection.AddSingleton<IPlaylistManager, PlaylistManager>();

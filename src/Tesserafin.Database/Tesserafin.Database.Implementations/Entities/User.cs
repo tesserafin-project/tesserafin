@@ -54,6 +54,7 @@ namespace Tesserafin.Database.Implementations.Entities
             PlayDefaultAudioTrack = true;
             SubtitleMode = SubtitlePlaybackMode.Default;
             SyncPlayAccess = SyncPlayUserAccessType.CreateAndJoinGroups;
+            ContentPackBrowsingPreference = ContentPackBrowsingPreference.MediaFamilyFirst;
         }
 
         /// <summary>
@@ -301,6 +302,16 @@ namespace Tesserafin.Database.Implementations.Entities
         /// </summary>
         [StringLength(32)]
         public string? CastReceiverId { get; set; }
+
+        /// <summary>
+        /// Gets or sets how this user prefers the top level of the library to be arranged.
+        /// </summary>
+        /// <remarks>
+        /// Cross-client and server-owned, so every client observes the same choice. Defaults to
+        /// <see cref="ContentPackBrowsingPreference.MediaFamilyFirst"/>, which is exactly the
+        /// navigation every existing user already has.
+        /// </remarks>
+        public ContentPackBrowsingPreference ContentPackBrowsingPreference { get; set; }
 
         /// <inheritdoc />
         [ConcurrencyCheck]

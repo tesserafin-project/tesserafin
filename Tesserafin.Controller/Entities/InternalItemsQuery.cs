@@ -99,6 +99,7 @@ namespace Tesserafin.Controller.Entities
             || SeriesStatuses.Length > 0
             || ItemIds.Length > 0
             || ExcludeItemIds.Length > 0
+            || ContentPackId.HasValue
             || AudioLanguages.Count > 0
             || SubtitleLanguages.Count > 0
             || LinkedChildAncestorIds.Length > 0
@@ -247,6 +248,15 @@ namespace Tesserafin.Controller.Entities
         public ExtraType[] ExtraTypes { get; set; }
 
         public Guid[] ExcludeItemIds { get; set; }
+
+        /// <summary>
+        /// Gets or sets the content pack whose members the query is restricted to.
+        /// </summary>
+        /// <remarks>
+        /// Restricting only. Membership is never a capability: this narrows the item set and the
+        /// ordinary authorization predicates still decide what the caller may see.
+        /// </remarks>
+        public Guid? ContentPackId { get; set; }
 
         public Guid? AdjacentTo { get; set; }
 
