@@ -130,6 +130,7 @@ public class ItemPersistenceService : IItemPersistenceService
         context.BaseItemProviders.WhereOneOrMany(relatedItems, e => e.ItemId).ExecuteDelete();
         context.BaseItemTrailerTypes.WhereOneOrMany(relatedItems, e => e.ItemId).ExecuteDelete();
         context.Chapters.WhereOneOrMany(relatedItems, e => e.ItemId).ExecuteDelete();
+        context.ContentPackMemberships.WhereOneOrMany(relatedItems, e => e.ItemId).ExecuteDelete();
         context.CustomItemDisplayPreferences.WhereOneOrMany(relatedItems, e => e.ItemId).ExecuteDelete();
         context.ItemDisplayPreferences.WhereOneOrMany(relatedItems, e => e.ItemId).ExecuteDelete();
         context.ItemValues.Where(e => e.BaseItemsMap!.Count == 0).ExecuteDelete();

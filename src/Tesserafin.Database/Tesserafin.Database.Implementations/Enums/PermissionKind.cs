@@ -124,4 +124,9 @@ public enum PermissionKind
     /// Whether the user can edit lyrics.
     /// </summary>
     EnableLyricManagement = 23,
+
+    /// <summary>
+    /// Whether the user can create, modify and delete content packs.
+    /// </summary>
+    EnableContentPackManagement = 24,
 }

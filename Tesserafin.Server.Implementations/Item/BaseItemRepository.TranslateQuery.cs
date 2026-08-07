@@ -975,6 +975,19 @@ public sealed partial class BaseItemRepository
                 .Where(e => !filter.ExcludeItemIds.Contains(e.Id));
         }
 
+        if (filter.ContentPackId.HasValue)
+        {
+            // Purely restricting, and composed before the visibility predicates below, so pack
+            // membership can only ever shrink the result set. There is no second authorization
+            // path: everything after this point is the ordinary item query.
+            var contentPackId = filter.ContentPackId.Value;
+            baseQuery = baseQuery
+                .Where(e => context.ContentPackMemberships
+                    .Where(m => m.PackId == contentPackId)
+                    .Select(m => m.ItemId)
+                    .Contains(e.Id));
+        }
+
         if (filter.ExcludeProviderIds is not null && filter.ExcludeProviderIds.Count > 0)
         {
             baseQuery = baseQuery.WhereExcludeProviderIds(filter.ExcludeProviderIds);

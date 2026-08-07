@@ -173,6 +173,16 @@ public class TesserafinDbContext(DbContextOptions<TesserafinDbContext> options, 
     /// </summary>
     public DbSet<KeyframeData> KeyframeData => Set<KeyframeData>();
 
+    /// <summary>
+    /// Gets the <see cref="DbSet{TEntity}"/> containing the content packs.
+    /// </summary>
+    public DbSet<ContentPack> ContentPacks => Set<ContentPack>();
+
+    /// <summary>
+    /// Gets the <see cref="DbSet{TEntity}"/> containing the content pack memberships.
+    /// </summary>
+    public DbSet<ContentPackMembership> ContentPackMemberships => Set<ContentPackMembership>();
+
     /*public DbSet<Artwork> Artwork => Set<Artwork>();
 
     public DbSet<Book> Books => Set<Book>();

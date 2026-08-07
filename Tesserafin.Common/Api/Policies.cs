@@ -94,4 +94,9 @@ public static class Policies
     /// Policy name for accessing lyric management.
     /// </summary>
     public const string LyricManagement = "LyricManagement";
+
+    /// <summary>
+    /// Policy name for accessing content pack management.
+    /// </summary>
+    public const string ContentPackManagement = "ContentPackManagement";
 }

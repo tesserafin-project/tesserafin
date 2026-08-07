@@ -74,5 +74,16 @@ namespace Tesserafin.Model.Configuration
         /// Gets or sets the id of the selected cast receiver.
         /// </summary>
         public string? CastReceiverId { get; set; }
+
+        /// <summary>
+        /// Gets or sets how the user prefers the top level of the library to be arranged.
+        /// </summary>
+        /// <remarks>
+        /// Server-owned and per user, so Web and every native client observe the same choice.
+        /// Absent or legacy values resolve to
+        /// <see cref="ContentPackBrowsingPreference.MediaFamilyFirst"/>. Nothing in the server
+        /// changes navigation from this value yet.
+        /// </remarks>
+        public ContentPackBrowsingPreference ContentPackBrowsingPreference { get; set; }
     }
 }
