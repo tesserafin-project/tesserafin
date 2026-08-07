@@ -441,6 +441,7 @@ streaming controllers (retained behind the v2 execution adapter for now).
 | Host / DI startup | `Tesserafin.Server/Program.cs`, `Tesserafin.Server.Core/ApplicationHost.cs` |
 | The rewrite plan & rationale | `docs/major-rewrite-plan-v13.md` |
 | Playback v2 design | `docs/pr91-rfc-playback-decision-v2.md`, `docs/design-playback-v2-lifecycle.md` |
+| Content packs (planned core concept) | `docs/content-pack-contract.md` |
 
 > **Status caveat.** Several rewrites described here are in progress: the v2
 > playback path runs behind shadow/canary gates and still reaches ffmpeg through a
