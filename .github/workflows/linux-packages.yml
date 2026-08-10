@@ -33,8 +33,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The packaging contract tests are pure logic — no docker, no dotnet, no
+  # network — so they gate the heavy jobs instead of running beside them. Without
+  # this job nothing in CI executes ci/tests/package.test.sh at all, and the
+  # assertions it makes about pin agreement, the service contract, maintainer
+  # scripts, publication safety and build-path hygiene would never fail a build.
+  contract:
+    name: Packaging contract
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout the pull request head
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Unit-test the packaging contract
+        run: ./ci/tests/package.test.sh
+
   build:
     name: Build ${{ matrix.rid }}
+    needs: contract
     runs-on: ubuntu-24.04
     permissions:
       contents: read
