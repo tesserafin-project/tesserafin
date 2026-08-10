@@ -56,14 +56,14 @@ docker run --rm \
     --network none \
     --user "$(id -u):$(id -g)" \
     --env HOME=/tmp \
-    --volume "${FF_REPO_ROOT}/ci/ffmpeg:/ci:ro" \
+    --volume "${FF_REPO_ROOT}:/repo:ro" \
     --volume "${CACHE}:/cache:ro" \
     --volume "${OUT}:/out" \
     --workdir /tmp \
     "${BUILDER_TAG}" \
     bash -eo pipefail -c '
         export DEBIAN_FRONTEND=noninteractive
-        /ci/build-in-container.sh --cache /cache --out /out --arch '"${ARCH}"'
+        /repo/ci/ffmpeg/build-in-container.sh --cache /cache --out /out --arch '"${ARCH}"'
     '
 
 ff_log "runtime staged under ${OUT}"

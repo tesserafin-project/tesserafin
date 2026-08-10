@@ -38,18 +38,22 @@ TRIPLET="$(ff_arch_triplet "${ARCH}")"
 [[ "$(uname -m)" == "${TRIPLET}" ]] \
     || ff_die "this host is $(uname -m); ${ARCH} must be built on a native ${TRIPLET} machine"
 
-export SOURCE_DATE_EPOCH="$(ff_source_date_epoch)"
+SOURCE_DATE_EPOCH="$(ff_source_date_epoch)"
+export SOURCE_DATE_EPOCH
 export LC_ALL=C LANG=C TZ=UTC
-export PREFIX=/opt/tesserafin-ffmpeg
-WORK="$(mktemp -d /tmp/ffbuild.XXXXXX)"
-mkdir -p "${PREFIX}" "${OUT}"
 
-# A single stable build root keeps -ffile-prefix-map effective and keeps any
-# path that does slip through identical between two runs.
-BUILDROOT=/ffbuild
-rm -rf "${BUILDROOT}"; mkdir -p "${BUILDROOT}"
+# Every path here is a FIXED string, never mktemp. Two runs must agree on the
+# bytes, and a random directory name can reach a binary through a debug string,
+# a generated config or a __FILE__ that escaped -ffile-prefix-map. They live
+# under /tmp so the container can run as the invoking user rather than root,
+# which also keeps the output files owned by the caller.
+export PREFIX=/tmp/tf-ffdeps
+BUILDROOT=/tmp/tf-ffbuild
+WORK=/tmp/tf-ffinstall
+rm -rf "${PREFIX}" "${BUILDROOT}" "${WORK}"
+mkdir -p "${PREFIX}" "${BUILDROOT}" "${WORK}" "${OUT}"
 
-export CFLAGS="-O2 -g0 -fPIC -ffile-prefix-map=${BUILDROOT}=. -ffile-prefix-map=${CACHE}=."
+export CFLAGS="-O2 -g0 -fPIC -ffile-prefix-map=${BUILDROOT}=. -ffile-prefix-map=${PREFIX}=. -ffile-prefix-map=${CACHE}=."
 export CXXFLAGS="${CFLAGS}"
 export LDFLAGS="-Wl,--build-id=none"
 export PKG_CONFIG_PATH="${PREFIX}/lib/pkgconfig:${PREFIX}/lib64/pkgconfig:${PREFIX}/share/pkgconfig"
@@ -86,8 +90,9 @@ d="$(unpack expat)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --disable-s
     --without-docbook --without-examples --without-tests && make -j"${J}" && make install )
 
 step openssl
+# no-docs only exists from 3.1; 3.0.x rejects it. install_sw skips docs anyway.
 d="$(unpack openssl)"; ( cd "${d}" && ./Configure --prefix="${PREFIX}" --libdir=lib no-shared no-tests \
-    no-docs --openssldir="${PREFIX}/ssl" && make -j"${J}" && make install_sw )
+    --openssldir="${PREFIX}/ssl" && make -j"${J}" && make install_sw )
 
 # =============================================================================
 # video codecs
@@ -105,7 +110,7 @@ d="$(unpack x265)"; ( cd "${d}/source" && cmake -S . -B build \
 step svt-av1
 d="$(unpack svt-av1)"; ( cd "${d}" && cmake -S . -B build \
     -DCMAKE_INSTALL_PREFIX="${PREFIX}" -DCMAKE_BUILD_TYPE=Release \
-    -DBUILD_SHARED_LIBS=OFF -DBUILD_APPS=OFF -DBUILD_TESTING=OFF -DENABLE_AVX512=ON \
+    -DBUILD_SHARED_LIBS=OFF -DBUILD_APPS=OFF -DBUILD_TESTING=OFF \
     && cmake --build build -j"${J}" && cmake --install build )
 
 step dav1d
@@ -116,7 +121,7 @@ d="$(unpack dav1d)"; ( cd "${d}" && meson setup build --prefix="${PREFIX}" --lib
 step libvpx
 d="$(unpack libvpx)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --disable-shared --enable-static \
     --enable-pic --disable-examples --disable-tools --disable-docs --disable-unit-tests \
-    --enable-vp8 --enable-vp9 --disable-vp8-encoder --enable-vp9-encoder \
+    --enable-vp8 --enable-vp9 \
     && make -j"${J}" && make install )
 
 # =============================================================================
@@ -124,7 +129,7 @@ d="$(unpack libvpx)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --disable-
 # =============================================================================
 step lame
 d="$(unpack lame)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --disable-shared --enable-static \
-    --enable-nasm --disable-frontend --disable-decoder && make -j"${J}" && make install )
+    --enable-nasm --disable-frontend && make -j"${J}" && make install )
 
 step opus
 d="$(unpack opus)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --disable-shared --enable-static \
@@ -142,8 +147,9 @@ d="$(unpack libvorbis)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --disab
 # filters: zimg and the subtitle stack
 # =============================================================================
 step zimg
-d="$(gitsrc zimg)"; ( cd "${d}" && git submodule update --init --recursive 2>/dev/null || true; \
-    ./autogen.sh && ./configure --prefix="${PREFIX}" --disable-shared --enable-static \
+# Submodules came down with the source cache; there is no network here.
+d="$(gitsrc zimg)"; ( cd "${d}" && ./autogen.sh \
+    && ./configure --prefix="${PREFIX}" --disable-shared --enable-static \
     && make -j"${J}" && make install )
 
 # freetype and harfbuzz are mutually dependent. Build freetype without
