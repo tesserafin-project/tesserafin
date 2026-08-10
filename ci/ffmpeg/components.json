@@ -68,11 +68,11 @@
     {
       "name": "harfbuzz",
       "license": "MIT",
-      "requiredBy": "complex text shaping for libass",
+      "requiredBy": "complex text shaping for libass (8.5.0: the newest release buildable with the pinned builder's meson 0.56)",
       "sourceType": "tar",
-      "url": "https://github.com/harfbuzz/harfbuzz/releases/download/10.1.0/harfbuzz-10.1.0.tar.xz",
-      "sha256": "6ce3520f2d089a33cef0fc48321334b8e0b72141f6a763719aaaecd2779ecb82",
-      "sizeBytes": 17922136
+      "url": "https://github.com/harfbuzz/harfbuzz/releases/download/8.5.0/harfbuzz-8.5.0.tar.xz",
+      "sha256": "77e4f7f98f3d86bf8788b53e6832fb96279956e1c3961988ea3d4b7ca41ddc27",
+      "sizeBytes": 19468172
     },
     {
       "name": "lame",
