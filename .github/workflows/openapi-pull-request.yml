@@ -70,7 +70,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      # Full history: the corrective-ledger controls below resolve the two
+      # contract digests the transition names back to the commits that carry
+      # them, by walking the history of openapi/openapi.json. A shallow clone
+      # cannot answer that and would fail the job for the wrong reason.
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
 
       # Thirty-odd assertions, roughly forty seconds. They run the real
       # committed contract through the engine — identical, with an endpoint
@@ -78,6 +84,24 @@ jobs:
       # path. This is what makes the verdict of the next job worth reading.
       - name: Run the compatibility gate controls
         run: ./ci/tests/openapi-compat.test.sh
+
+      # The corrective-transition ledger (#226) can turn a BREAKING verdict into
+      # a pass. A mechanism that can do that has to be observed REFUSING, here,
+      # on the same runner that judges the pull request — otherwise the only
+      # evidence it is narrow is that someone said so. Forty-one assertions:
+      # a sixth finding, a removed finding, every identity field mismatched in
+      # turn, either digest moved, wildcards and pattern keys rejected, a
+      # consumer exiting 126/127 treated as indeterminate rather than as a pass,
+      # and the corrected contract compared with itself passing WITHOUT the
+      # ledger ever being invoked.
+      #
+      # RUN_GATE_CONTROLS=1 additionally runs the end-to-end half through
+      # ci/openapi-compat.sh and the real engine; docker is already required by
+      # the suite above, so this adds no new dependency.
+      - name: Run the corrective-transition ledger controls
+        env:
+          RUN_GATE_CONTROLS: '1'
+        run: ./ci/tests/openapi-corrective-ledger.test.sh
 
   compare:
     name: Semantic Diff
