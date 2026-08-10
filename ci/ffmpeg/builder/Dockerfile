@@ -51,6 +51,7 @@ RUN printf '%s\n' \
       nasm \
       ninja-build \
       patch \
+      patchelf \
       perl \
       pkg-config \
       python3 \

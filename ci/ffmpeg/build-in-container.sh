@@ -318,6 +318,21 @@ fi
 # FFmpeg
 # =============================================================================
 FFSRC="${BUILDROOT}/ffmpeg"
+
+# libva builds shared only — its meson.build calls shared_library() outright and
+# ignores default_library — so it cannot be folded into the binary the way every
+# other component is. It is BUNDLED instead, with an $ORIGIN-relative RUNPATH,
+# which is strictly better than linking whatever libva the host happens to have:
+# the runtime always gets the pinned 2.17, and there is no implib trampoline to
+# turn a version difference into assert(0). $ORIGIN names no host path, no build
+# workspace and no vendor, so the portability gate accepts it.
+# The RUNPATH is NOT passed through configure. FFmpeg's configure mangles a
+# literal $ in --extra-ldflags — `$ORIGIN` arrived as `/../lib` and `$$ORIGIN`
+# as `25ORIGIN/../lib`, both of which produce a binary that cannot find its
+# bundled libva while still looking plausible in `readelf`. patchelf sets it
+# afterwards, exactly and verifiably.
+RPATH_FLAG=''
+
 mapfile -t FLAGS < <(grep -vE '^\s*(#|$)' "${FF_FLAGS_FILE}")
 # --prefix stays the real installed location, so -buildconf records where the
 # runtime actually lives and FFmpeg resolves its datadir against a path that
@@ -333,7 +348,7 @@ rm -rf "${FFSRC}"; cp -a "${CACHE}/git/jellyfin-ffmpeg" "${FFSRC}"
         --pkg-config-flags=--static \
         --extra-cflags="${CFLAGS} -I${PREFIX}/include" \
         --extra-cxxflags="${CXXFLAGS} -I${PREFIX}/include" \
-        --extra-ldflags="${LDFLAGS} -L${PREFIX}/lib -L${PREFIX}/lib64" \
+        --extra-ldflags="${LDFLAGS} -L${PREFIX}/lib -L${PREFIX}/lib64 ${RPATH_FLAG}" \
         --extra-libs="-lpthread -lm -ldl" \
         > "${OUT}/configure.log" 2>&1 || { tail -60 "${OUT}/configure.log" >&2; ff_die "FFmpeg configure failed"; }
     make -j"${J}" > "${OUT}/make.log" 2>&1 || { tail -80 "${OUT}/make.log" >&2; ff_die "FFmpeg build failed"; }
@@ -351,6 +366,23 @@ FF_PREFIX="$(grep -oE '^--prefix=.*' "${FF_FLAGS_FILE}" | head -1 | cut -d= -f2-
 install -m 0755 "${WORK}${FF_PREFIX}/bin/ffmpeg"  "${STAGE}/bin/ffmpeg"
 install -m 0755 "${WORK}${FF_PREFIX}/bin/ffprobe" "${STAGE}/bin/ffprobe"
 strip --strip-unneeded "${STAGE}/bin/ffmpeg" "${STAGE}/bin/ffprobe"
+
+# The only shared libraries the runtime carries. Copied by real name with the
+# soname symlink beside them, so the loader resolves them through $ORIGIN.
+mkdir -p "${STAGE}/lib"
+for soname in libva.so.2 libva-drm.so.2; do
+    real="$(readlink -f "${PREFIX}/lib/${soname}")"
+    install -m 0644 "${real}" "${STAGE}/lib/$(basename "${real}")"
+    ln -sfn "$(basename "${real}")" "${STAGE}/lib/${soname}"
+    strip --strip-unneeded "${STAGE}/lib/$(basename "${real}")"
+done
+
+patchelf --set-rpath '$ORIGIN/../lib' "${STAGE}/bin/ffmpeg" "${STAGE}/bin/ffprobe"
+for b in "${STAGE}/bin/ffmpeg" "${STAGE}/bin/ffprobe"; do
+    got="$(patchelf --print-rpath "${b}")"
+    [[ "${got}" == '$ORIGIN/../lib' ]] \
+        || ff_die "RUNPATH on $(basename "${b}") is '${got}', expected \$ORIGIN/../lib"
+done
 
 # No development headers, no static archives, no build caches: a runtime archive
 # carries what the packages run and nothing else.
