@@ -1,0 +1,67 @@
+# Tesserafin Server @VERSION@ — portable Linux archive (@RID@)
+
+This archive is the *portable* distribution: the same application and web payload
+as the `.deb` and `.rpm` packages, unpacked wherever you want it.
+
+**It installs nothing.** It creates no user, registers no systemd service and
+writes nothing outside the directories you give it on the command line. If you
+want a managed service, install the `.deb` or the `.rpm` instead.
+
+## Layout
+
+```
+bin/tesserafin                  symlink into lib/tesserafin/tesserafin
+lib/tesserafin/                 the server application (self-contained .NET build)
+lib/tesserafin/ffmpeg/ffmpeg    the bundled, checksum-pinned media encoder
+lib/tesserafin/ffmpeg/ffprobe
+share/tesserafin/web/           the bundled Tesserafin Web client
+share/tesserafin/web-revision.json   provenance of that web payload
+LICENSE
+```
+
+## Requirements
+
+The application payload carries its own .NET runtime, so no system .NET is
+needed. It does need a few ordinary system libraries:
+
+* `libicu` (globalization is on; the server refuses to start without it)
+* `fontconfig` and a font package such as DejaVu (image and subtitle rendering)
+* `libssl` / `openssl-libs`
+* `glibc` 2.28 or newer
+
+## Running it
+
+Pick your own directories. Nothing is created for you and nothing defaults to a
+system path.
+
+```sh
+PREFIX="$PWD"
+./bin/tesserafin \
+    --configdir "$PREFIX/state/config" \
+    --datadir   "$PREFIX/state/data" \
+    --cachedir  "$PREFIX/state/cache" \
+    --logdir    "$PREFIX/state/log" \
+    --webdir    "$PREFIX/share/tesserafin/web" \
+    --ffmpeg    "$PREFIX/lib/tesserafin/ffmpeg/ffmpeg"
+```
+
+The server listens on port 8096. `http://127.0.0.1:8096/` redirects to `/web/`
+and serves the first-run wizard.
+
+`--ffmpeg` is not optional in practice: the server validates the encoder at
+startup and refuses to start without a usable one. Always point it at the
+bundled binary rather than letting it search `$PATH`, so you get the encoder this
+build was tested against instead of whatever your distribution ships.
+
+Run it as an unprivileged user. Nothing here needs root.
+
+## Provenance
+
+| Input | Value |
+| --- | --- |
+| Server commit | `@VCS_REF@` |
+| Tesserafin Web commit | `@WEB_VCS_REF@` |
+| jellyfin-ffmpeg | `@FFMPEG_VERSION@` (portable GPL build) |
+
+`share/tesserafin/web-revision.json` records the web payload's own provenance as
+the web build produced it.
