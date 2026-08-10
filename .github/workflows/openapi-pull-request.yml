@@ -48,6 +48,15 @@ on:
   pull_request:
     branches:
       - master
+    # `ready_for_review` is REQUIRED here, not decorative. The jobs below are
+    # draft-gated with `if: github.event.pull_request.draft == false`, and they
+    # are REQUIRED status checks on master. Without this type the default set
+    # (opened, synchronize, reopened) means marking a draft ready fires no run
+    # at all: the draft-time "skipping" result is the last one recorded, a
+    # skipped required check never satisfies protection, and the pull request
+    # is unmergeable until somebody pushes an unrelated commit. Observed on
+    # #227.
+    types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
   contents: read
