@@ -204,3 +204,85 @@ pkg_clamp_mtimes() { # <dir>
 }
 
 pkg_sha256() { sha256sum "$1" | cut -d' ' -f1; }
+
+# --- embedded build-path hygiene ---------------------------------------------
+#
+# Some shipped bytes carry an absolute path from the machine that compiled them.
+# There are exactly two kinds, and a gate that cannot tell them apart is useless:
+#
+#   * a path from THIS build — its checkout, its building account's home. Those
+#     must never reach an artifact.
+#   * a path from an UPSTREAM dependency, baked into a NuGet assembly by its own
+#     maintainer long before this packaging saw the bytes. Those are inputs, they
+#     are not this packaging's to rewrite, and they are enumerated EXACTLY in
+#     ci/package/embedded-build-paths.allow. Anything outside the enumeration
+#     fails, so a new dependency that embeds a path is reviewed rather than
+#     absorbed.
+#
+# `${HOME}` is deliberately NOT the discriminator. On a GitHub runner it is
+# `/home/runner` for this build AND for every upstream project that was itself
+# built on Actions, so it cannot distinguish a first-party leak from an upstream
+# one — it flags exactly the assemblies the rest of the gate then tolerates. The
+# discriminator is the full path, matched against a closed list.
+
+PKG_EMBEDDED_ALLOW_FILE="${PKG_REPO_ROOT}/ci/package/embedded-build-paths.allow"
+
+# A build path is a user home or one of root's caches. `${PKG_REPO_ROOT}` is
+# checked separately, because a checkout is not necessarily under either.
+PKG_BUILD_PATH_RE='(/home/[A-Za-z0-9_][A-Za-z0-9_.+-]*|/root)(/[A-Za-z0-9_.+-]+)+'
+
+PKG_EMBEDDED_ALLOW=()
+
+pkg_load_embedded_allowlist() {
+    [[ -f "${PKG_EMBEDDED_ALLOW_FILE}" ]] || pkg_die "missing ${PKG_EMBEDDED_ALLOW_FILE}"
+    PKG_EMBEDDED_ALLOW=()
+    local line name path
+    while IFS= read -r line || [[ -n "${line}" ]]; do
+        line="${line%%#*}"
+        read -r name path <<<"${line}"
+        [[ -n "${name:-}" ]] || continue
+        [[ -n "${path:-}" && "${path}" == /* ]] || pkg_die \
+            "malformed entry in ${PKG_EMBEDDED_ALLOW_FILE}: '${line}'"
+        # The enumeration exists for UPSTREAM paths only. It must never be usable
+        # to excuse a first-party one, so an entry naming this project is itself
+        # an error rather than an allowance.
+        if grep -qi 'tesserafin' <<<"${name} ${path}"; then
+            pkg_die "${PKG_EMBEDDED_ALLOW_FILE} names Tesserafin in '${line}': \
+the enumeration covers upstream dependencies only"
+        fi
+        PKG_EMBEDDED_ALLOW+=("${name}"$'\t'"${path}")
+    done < "${PKG_EMBEDDED_ALLOW_FILE}"
+    [[ "${#PKG_EMBEDDED_ALLOW[@]}" -gt 0 ]] || pkg_die \
+        "${PKG_EMBEDDED_ALLOW_FILE} enumerates nothing"
+}
+
+# Scans one or more unpacked artifact roots and prints one tab-separated finding
+# per (file, embedded path) pair:
+#
+#   LEAK <file> <path>    a build path that is not an enumerated upstream one
+#   KNOWN <file> <path>   exactly an enumerated upstream dependency path
+#
+# Prints nothing when no shipped file carries a build path at all.
+pkg_scan_embedded_build_paths() { # <root>...
+    pkg_load_embedded_allowlist
+    local root file base path entry known
+    for root in "$@"; do
+        [[ -d "${root}" ]] || continue
+        while IFS= read -r file; do
+            [[ -n "${file}" ]] || continue
+            base="$(basename "${file}")"
+            while IFS= read -r path; do
+                [[ -n "${path}" ]] || continue
+                known=0
+                for entry in "${PKG_EMBEDDED_ALLOW[@]}"; do
+                    if [[ "${entry}" == "${base}"$'\t'"${path}" ]]; then known=1; break; fi
+                done
+                if [[ "${known}" -eq 1 ]]; then
+                    printf 'KNOWN\t%s\t%s\n' "${file}" "${path}"
+                else
+                    printf 'LEAK\t%s\t%s\n' "${file}" "${path}"
+                fi
+            done < <(grep -oaE "${PKG_BUILD_PATH_RE}" "${file}" 2>/dev/null | LC_ALL=C sort -u)
+        done < <(grep -rlaE "${PKG_BUILD_PATH_RE}" "${root}" 2>/dev/null || true)
+    done
+}

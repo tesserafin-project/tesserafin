@@ -112,42 +112,44 @@ fi
 # --- 3. content hygiene ------------------------------------------------------
 echo "== content hygiene"
 
-# 3a. Absolute paths belonging to THIS build. The directory the packages were
-#     assembled in and the building account's home must not appear anywhere.
+# 3a. The directory the packages were assembled in. A checkout path is this
+#     build's alone, so it is matched literally and is never excusable.
 leaks=0
 for root in "${WORK}/deb" "${WORK}/rpm" "${TGZ_ROOT}"; do
-    for pattern in "${PKG_REPO_ROOT}" "${HOME}"; do
-        [[ -n "${pattern}" && "${pattern}" != "/" ]] || continue
-        hits="$(grep -rlaF -- "${pattern}" "${root}" 2>/dev/null || true)"
-        if [[ -n "${hits}" ]]; then
-            fail "this build's path '${pattern}' is present under $(basename "${root}")"
-            leaks=$((leaks + 1))
-        fi
-    done
+    [[ -n "${PKG_REPO_ROOT}" && "${PKG_REPO_ROOT}" != "/" ]] || continue
+    hits="$(grep -rlaF -- "${PKG_REPO_ROOT}" "${root}" 2>/dev/null || true)"
+    if [[ -n "${hits}" ]]; then
+        fail "this build's checkout path '${PKG_REPO_ROOT}' is present under $(basename "${root}"): ${hits}"
+        leaks=$((leaks + 1))
+    fi
 done
 if [[ "${leaks}" -eq 0 ]]; then
-    pass "no path from this build environment appears in any artifact"
+    pass "no artifact carries this build's checkout path"
 fi
 
-# 3b. Generic CI-workspace paths in FIRST-PARTY output. Third-party NuGet
-#     assemblies are build INPUTS: several are compiled on GitHub Actions by
-#     their own maintainers and embed that project's own workspace path. Those
-#     bytes are identical in the container image and are not this packaging's to
-#     rewrite — but they are reported by name rather than passed over in silence.
-firstparty_leak=0
-while IFS= read -r file; do
-    case "$(basename "${file}")" in
-        [Tt]esserafin*) firstparty_leak=1; fail "first-party file carries a CI workspace path: ${file}" ;;
-    esac
-done < <(grep -rlaE -- '/home/runner/work|/root/\.nuget' "${WORK}/deb/usr/lib/tesserafin" 2>/dev/null || true)
-if [[ "${firstparty_leak}" -eq 0 ]]; then
-    pass "no first-party file carries a CI workspace path"
-fi
+# 3b. Every OTHER absolute build path found anywhere in the three artifacts —
+#     across the whole tree, not just the application directory. Each one must be
+#     exactly an enumerated upstream dependency path; see
+#     ci/package/embedded-build-paths.allow for why that enumeration is closed
+#     and why `${HOME}` cannot be the discriminator on a hosted runner.
+embedded_leak=0
+known_files=""
+while IFS=$'\t' read -r verdict file path; do
+    [[ -n "${verdict}" ]] || continue
+    if [[ "${verdict}" == "LEAK" ]]; then
+        embedded_leak=$((embedded_leak + 1))
+        fail "unenumerated embedded build path: ${file} carries '${path}'"
+    else
+        known_files+="$(basename "${file}")"$'\n'
+    fi
+done < <(pkg_scan_embedded_build_paths "${WORK}/deb" "${WORK}/rpm" "${TGZ_ROOT}")
 
-thirdparty="$(grep -rlaE -- '/home/runner/work|/root/\.nuget' "${WORK}/deb/usr/lib/tesserafin" 2>/dev/null \
-              | xargs -r -n1 basename | LC_ALL=C sort | tr '\n' ' ')"
-if [[ -n "${thirdparty}" ]]; then
-    echo "  note: third-party dependency assemblies carrying their own upstream CI paths: ${thirdparty}"
+if [[ "${embedded_leak}" -eq 0 ]]; then
+    pass "every embedded build path is an enumerated upstream dependency path"
+fi
+if [[ -n "${known_files}" ]]; then
+    echo "  note: third-party dependency assemblies carrying their own upstream build paths:" \
+         "$(LC_ALL=C sort -u <<<"${known_files}" | tr '\n' ' ')"
 fi
 
 # 3c. Key material and credential files.

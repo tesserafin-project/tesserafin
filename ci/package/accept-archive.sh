@@ -152,21 +152,18 @@ pass "ran as uid ${run_uid}"
 echo "== 5. no dependence on files inherited from the build host"
 # This container has no .NET, no ffmpeg and none of the build machine's tooling,
 # so simply having reached step 4 proves the payload is self-contained. What is
-# still worth asserting is that nothing REACHES OUT to a build path.
-# First-party files only: a handful of third-party NuGet assemblies are compiled
-# on GitHub Actions by their own maintainers and carry that project's workspace
-# path. Those bytes are inputs, identical in the container image, and not this
-# packaging's to rewrite.
-firstparty_leak=""
-while IFS= read -r file; do
-    case "$(basename "${file}")" in
-        [Tt]esserafin*) firstparty_leak="${firstparty_leak} ${file}" ;;
-    esac
-done < <(grep -rlaE -- '/home/runner/work|/root/\.nuget' "${ROOT}" 2>/dev/null || true)
-if [[ -n "${firstparty_leak}" ]]; then
-    fail "first-party payload files reference a CI workspace path:${firstparty_leak}"
+# still worth asserting is that nothing REACHES OUT to a build path. The same
+# classifier the artifact gate uses decides that here: an embedded path is either
+# exactly one of the enumerated upstream dependency paths, or it is a leak.
+embedded_leak=""
+while IFS=$'\t' read -r verdict file path; do
+    [[ "${verdict}" == "LEAK" ]] || continue
+    embedded_leak="${embedded_leak} ${file}:'${path}'"
+done < <(pkg_scan_embedded_build_paths "${ROOT}")
+if [[ -n "${embedded_leak}" ]]; then
+    fail "the extracted payload carries unenumerated build paths:${embedded_leak}"
 else
-    pass "no first-party payload file references a CI workspace path"
+    pass "every embedded build path is an enumerated upstream dependency path"
 fi
 if [[ -n "$(command -v dotnet || true)" ]]; then
     fail "the acceptance environment has a system .NET, so self-containment was not tested"

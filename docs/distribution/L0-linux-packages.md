@@ -125,6 +125,28 @@ The build fails closed on web provenance: the commit recorded inside the payload
 must equal the pin, **and** the payload's own digest must equal the pinned
 digest. Either mismatch stops the build; neither is a warning.
 
+### Embedded build paths
+
+No artifact may carry a path from the machine that built it. Two rules enforce
+that, and neither depends on who is building:
+
+* the checkout directory is matched literally and is never excusable;
+* every other absolute build path found anywhere in the three artifacts must be
+  **exactly** one of the upstream dependency paths enumerated in
+  `ci/package/embedded-build-paths.allow`.
+
+A handful of third-party NuGet assemblies are compiled by their own maintainers
+with a PDB path baked in. Those bytes are build inputs and cannot be rewritten
+here, so they are listed in full rather than waved through by prefix. The list is
+closed: a dependency upgrade that moves a path, or a new dependency that embeds
+one, fails the gate. It also cannot legitimise a first-party path — an entry
+naming Tesserafin is rejected when the list loads.
+
+`${HOME}` is deliberately not used as the discriminator. On a hosted runner it is
+`/home/runner` for this build *and* for every upstream project that was itself
+built on GitHub Actions, so it cannot tell a first-party leak from an upstream
+one.
+
 ### Artifact manifest
 
 Every artifact gets `<artifact>.provenance.json` next to it:

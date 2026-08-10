@@ -175,6 +175,71 @@ fi
 grep -q 'ubuntu-24.04-arm' "${WF}" && ok "arm64 acceptance runs on a native arm64 runner" \
     || bad "no native arm64 runner in the workflow"
 
+echo "== embedded build-path classification"
+#
+# Regression control for the hygiene gate. It used to reject any artifact
+# containing `${HOME}`, which on a hosted runner is `/home/runner` — the same
+# prefix several upstream NuGet assemblies embed from their OWN Actions
+# workspace. The gate therefore failed on every hosted build while passing on a
+# workstation, and the verdict depended on who was building rather than on what
+# was built. These assertions pin both halves: the enumerated upstream paths are
+# accepted, a Tesserafin path never is, and neither answer moves with ${HOME}.
+
+EMB="$(mktemp -d)"
+mkdir -p "${EMB}/root" "${EMB}/empty"
+# A real assembly stores the path NUL-terminated; the fixtures do the same, so
+# the extracted string is the whole path and nothing adjacent to it.
+embed() { printf '%s\000' "$2" > "${EMB}/root/$1"; }
+# Exactly the first enumerated upstream pair.
+ALLOWED_NAME="$(grep -vE '^\s*(#|$)' "${REPO_ROOT}/ci/package/embedded-build-paths.allow" \
+                | head -1 | awk '{print $1}')"
+ALLOWED_PATH="$(grep -vE '^\s*(#|$)' "${REPO_ROOT}/ci/package/embedded-build-paths.allow" \
+                | head -1 | awk '{print $2}')"
+embed "${ALLOWED_NAME}" "${ALLOWED_PATH}"
+
+scan_verdicts() { # <home> -> the sorted set of verdicts produced
+    HOME="$1" pkg_scan_embedded_build_paths "${EMB}/root" | cut -f1 | LC_ALL=C sort -u | tr '\n' ' '
+}
+
+check "an enumerated upstream path is accepted on a hosted runner's HOME" \
+      "KNOWN " "$(scan_verdicts /home/runner)"
+check "the same tree gets the same verdict on a workstation HOME" \
+      "KNOWN " "$(scan_verdicts /home/somebody-else)"
+
+# A first-party path is a leak no matter which account produced it.
+embed Tesserafin.Server.dll /home/runner/work/tesserafin/tesserafin/obj/Release/Tesserafin.Server.pdb
+if HOME=/home/runner pkg_scan_embedded_build_paths "${EMB}/root" | grep -q '^LEAK'; then
+    ok "a Tesserafin workspace path is reported as a leak"
+else
+    bad "a Tesserafin workspace path was not reported as a leak"
+fi
+rm -f "${EMB}/root/Tesserafin.Server.dll"
+
+# An upstream-looking path that is not enumerated is a leak too: the list is
+# closed, so a new dependency embedding a path is reviewed, not absorbed.
+embed SomeNewDep.dll /home/runner/work/SomeNewDep/SomeNewDep/obj/Release/SomeNewDep.pdb
+if HOME=/home/runner pkg_scan_embedded_build_paths "${EMB}/root" | grep -q '^LEAK'; then
+    ok "an unenumerated upstream path is reported as a leak"
+else
+    bad "an unenumerated upstream path was accepted"
+fi
+rm -f "${EMB}/root/SomeNewDep.dll"
+
+# The enumeration must not be usable to excuse a first-party path.
+FORGED="${EMB}/forged.allow"
+printf 'Tesserafin.Server.dll /home/runner/work/tesserafin/tesserafin/x.pdb\n' > "${FORGED}"
+if ( PKG_EMBEDDED_ALLOW_FILE="${FORGED}" pkg_load_embedded_allowlist ) >/dev/null 2>&1; then
+    bad "the enumeration accepted an entry naming Tesserafin"
+else
+    ok "an enumeration entry naming Tesserafin fails closed"
+fi
+
+# A tree with no build paths at all produces no findings, so "silence" cannot be
+# confused with "the scan did not run".
+check "a clean tree produces no findings" "" \
+      "$(pkg_scan_embedded_build_paths "${EMB}/empty" | tr -d '\n')"
+rm -rf "${EMB}"
+
 echo "== deterministic tar"
 SOURCE_DATE_EPOCH=1000000000
 T1="$(mktemp -d)"; printf 'a' > "${T1}/a"; printf 'b' > "${T1}/b"
