@@ -208,7 +208,11 @@ check "the same tree gets the same verdict on a workstation HOME" \
 
 # A first-party path is a leak no matter which account produced it.
 embed Tesserafin.Server.dll /home/runner/work/tesserafin/tesserafin/obj/Release/Tesserafin.Server.pdb
-if HOME=/home/runner pkg_scan_embedded_build_paths "${EMB}/root" | grep -q '^LEAK'; then
+# Collected into a variable rather than piped: `grep -q` closes the pipe on its
+# first match, and with pipefail that turns the producer's SIGPIPE into a
+# spurious verdict. Same hazard the artifact gate documents about `| head`.
+scan_out="$(HOME=/home/runner pkg_scan_embedded_build_paths "${EMB}/root")"
+if grep -q '^LEAK' <<<"${scan_out}"; then
     ok "a Tesserafin workspace path is reported as a leak"
 else
     bad "a Tesserafin workspace path was not reported as a leak"
@@ -218,7 +222,8 @@ rm -f "${EMB}/root/Tesserafin.Server.dll"
 # An upstream-looking path that is not enumerated is a leak too: the list is
 # closed, so a new dependency embedding a path is reviewed, not absorbed.
 embed SomeNewDep.dll /home/runner/work/SomeNewDep/SomeNewDep/obj/Release/SomeNewDep.pdb
-if HOME=/home/runner pkg_scan_embedded_build_paths "${EMB}/root" | grep -q '^LEAK'; then
+scan_out="$(HOME=/home/runner pkg_scan_embedded_build_paths "${EMB}/root")"
+if grep -q '^LEAK' <<<"${scan_out}"; then
     ok "an unenumerated upstream path is reported as a leak"
 else
     bad "an unenumerated upstream path was accepted"
