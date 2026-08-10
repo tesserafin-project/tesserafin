@@ -1,0 +1,212 @@
+name: '🎞️ FFmpeg runtime'
+
+# Builds the Tesserafin FFmpeg runtime from pinned source (#229).
+#
+# This workflow PUBLISHES NOTHING. It has no release trigger, no tag trigger, no
+# registry push, no signing key and no credential beyond the default read-only
+# token. No stable, beta, preview, nightly or latest tag is created. Artifacts
+# exist only as short-retention workflow artifacts.
+#
+# Both architectures are built AND accepted on architecture-native runners.
+# Nothing here is cross-compiled or emulated.
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ffmpeg-runtime-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  policy:
+    name: Component and licence policy
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout the pull request head
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Verify every component is licensed, pinned and justified
+        run: ./ci/ffmpeg/verify-components.sh
+
+  build:
+    name: Build ${{ matrix.rid }}
+    needs: policy
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 300
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: linux-x64
+            runner: ubuntu-24.04
+          - rid: linux-arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - name: Checkout the pull request head
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Report the build architecture
+        run: uname -m
+
+      # FF_INCREMENTAL is deliberately absent. Every hosted build is a clean
+      # build, because reproducibility evidence from a reused prefix is worthless.
+      - name: Build the runtime from pinned source
+        env:
+          RID: ${{ matrix.rid }}
+        run: ./ci/ffmpeg/build-runtime.sh --arch "${RID}" --out "${RUNNER_TEMP}/ffmpeg"
+
+      - name: Portability and licence contract
+        env:
+          RID: ${{ matrix.rid }}
+        run: |
+          stage="${RUNNER_TEMP}/ffmpeg/tesserafin-ffmpeg-7.1.4-tesserafin.1-${RID}"
+          ./ci/ffmpeg/verify-runtime.sh --stage "${stage}" --arch "${RID}" \
+              --manifest "${stage}/capability.json"
+
+      - name: Redistribution closure
+        env:
+          RID: ${{ matrix.rid }}
+        run: |
+          ./ci/ffmpeg/package-runtime.sh \
+              --stage "${RUNNER_TEMP}/ffmpeg/tesserafin-ffmpeg-7.1.4-tesserafin.1-${RID}" \
+              --cache "${RUNNER_TEMP}/ffmpeg/source-cache" \
+              --out   "${RUNNER_TEMP}/ffmpeg/pkg" \
+              --arch  "${RID}"
+          ./ci/ffmpeg/verify-closure.sh \
+              --runtime "${RUNNER_TEMP}/ffmpeg/pkg/tesserafin-ffmpeg-7.1.4-tesserafin.1-${RID}" \
+              --source-archive "${RUNNER_TEMP}/ffmpeg/pkg/tesserafin-ffmpeg-7.1.4-tesserafin.1-corresponding-source.tar.zst"
+
+      - name: Upload the runtime and its corresponding source
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ffmpeg-runtime-${{ matrix.rid }}
+          path: |
+            ${{ runner.temp }}/ffmpeg/pkg/*.tar.xz
+            ${{ runner.temp }}/ffmpeg/pkg/*.tar.zst
+            ${{ runner.temp }}/ffmpeg/pkg/SHA256SUMS-*.txt
+            ${{ runner.temp }}/ffmpeg/pkg/tesserafin-ffmpeg-*/SOURCE.json
+            ${{ runner.temp }}/ffmpeg/pkg/tesserafin-ffmpeg-*/sbom.cdx.json
+            ${{ runner.temp }}/ffmpeg/pkg/tesserafin-ffmpeg-*/capability.json
+            ${{ runner.temp }}/ffmpeg/pkg/tesserafin-ffmpeg-*/THIRD_PARTY_NOTICES.md
+          retention-days: 7
+          if-no-files-found: error
+
+  accept:
+    name: Functional acceptance ${{ matrix.rid }}
+    needs: build
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: linux-x64
+            runner: ubuntu-24.04
+          - rid: linux-arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - name: Checkout the pull request head
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Download the runtime
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        with:
+          name: ffmpeg-runtime-${{ matrix.rid }}
+          path: ${{ runner.temp }}/rt
+
+      - name: Report the acceptance architecture
+        run: uname -m
+
+      # Exercises the extracted ARCHIVE on every declared environment. Hosted
+      # runners have no GPU, so no hardware claim is made or recorded here.
+      - name: Software acceptance on every declared environment
+        env:
+          RID: ${{ matrix.rid }}
+        run: |
+          ./ci/ffmpeg/accept-runtime.sh \
+              --archive "${RUNNER_TEMP}/rt/tesserafin-ffmpeg-7.1.4-tesserafin.1-${RID}.tar.xz" \
+              --arch "${RID}" \
+              --evidence "${RUNNER_TEMP}/rt/acceptance-${RID}.json"
+
+  controls:
+    name: Negative controls
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout the pull request head
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Download the runtime
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        with:
+          name: ffmpeg-runtime-linux-x64
+          path: ${{ runner.temp }}/rt
+
+      - name: Prove each gate rejects its hostile input
+        run: |
+          tar -xf "${RUNNER_TEMP}/rt/tesserafin-ffmpeg-7.1.4-tesserafin.1-linux-x64.tar.xz" \
+              -C "${RUNNER_TEMP}/rt"
+          ./ci/tests/ffmpeg-controls.sh \
+              --runtime "${RUNNER_TEMP}/rt/tesserafin-ffmpeg-7.1.4-tesserafin.1-linux-x64" \
+              --source-archive "${RUNNER_TEMP}/rt/tesserafin-ffmpeg-7.1.4-tesserafin.1-corresponding-source.tar.zst"
+
+  reproducibility:
+    name: Reproducibility ${{ matrix.rid }}
+    needs: build
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 300
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: linux-x64
+            runner: ubuntu-24.04
+          - rid: linux-arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - name: Checkout the pull request head
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Download the first build's digests
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        with:
+          name: ffmpeg-runtime-${{ matrix.rid }}
+          path: ${{ runner.temp }}/first
+
+      # A fresh runner, a fresh clone and a fresh toolchain image: genuinely a
+      # second independent build, not the same machine building twice.
+      - name: Rebuild and require bit-for-bit identical digests
+        env:
+          RID: ${{ matrix.rid }}
+        run: |
+          ./ci/ffmpeg/repro-check.sh --arch "${RID}" --out "${RUNNER_TEMP}/repro"

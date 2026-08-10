@@ -113,7 +113,17 @@ import json, os, shutil, sys, tarfile
 cache, dest, manifest = sys.argv[1:4]
 names = ("COPYING", "COPYING.txt", "LICENSE", "LICENSE.txt", "LICENSE.md",
          "COPYING.LIB", "COPYING.LGPLv2.1", "COPYING.GPLv2", "COPYING.GPLv3",
-         "LICENSE.TXT", "License.txt", "COPYRIGHT", "NOTICE")
+         "LICENSE.TXT", "License.txt", "COPYRIGHT", "NOTICE",
+         # British spelling: libunibreak ships LICENCE and was silently missed.
+         "LICENCE", "LICENCE.txt", "LICENSE.rst", "COPYING.MIT")
+
+# Components that carry no standalone licence file because their terms live in
+# a per-file header. Naming the representative file keeps the extraction honest
+# and reviewable instead of leaving the component uncovered.
+HEADER_LICENCE = {
+    "libdrm": "xf86drm.h",
+    "nv-codec-headers": "include/ffnvcodec/nvEncodeAPI.h",
+}
 found = {}
 
 def take(component, path, data):
@@ -145,6 +155,34 @@ for archive in sorted(os.listdir(os.path.join(cache, "archives"))):
     except tarfile.TarError:
         pass
 
+# Fallback: lift the licence block out of the representative header.
+for component, relative in HEADER_LICENCE.items():
+    if component in found:
+        continue
+    for base in (os.path.join(cache, "git", component),):
+        candidate = os.path.join(base, relative)
+        if os.path.isfile(candidate):
+            text = open(candidate, "r", errors="replace").read(8000)
+            end = text.find("*/")
+            if end > 0:
+                take(component, f"LICENSE-extracted-from-{os.path.basename(relative)}",
+                     text[: end + 2].encode())
+    for archive in sorted(os.listdir(os.path.join(cache, "archives"))):
+        if not archive.startswith(component + "-"):
+            continue
+        with tarfile.open(os.path.join(cache, "archives", archive)) as tf:
+            for m in tf.getmembers():
+                if m.isfile() and m.name.endswith("/" + relative):
+                    fh = tf.extractfile(m)
+                    if fh:
+                        text = fh.read(8000).decode("utf-8", "replace")
+                        end = text.find("*/")
+                        if end > 0:
+                            take(component,
+                                 f"LICENSE-extracted-from-{os.path.basename(relative)}",
+                                 text[: end + 2].encode())
+                    break
+
 policy = json.load(open(manifest))
 missing = [c["name"] for c in policy["components"]
            if not any(k.startswith(c["name"].split("-")[0]) for k in found)]
@@ -167,6 +205,15 @@ ff_log "corresponding source ${SRC_SHA}"
 RT="${OUT}/${NAME}-${ARCH}"
 rm -rf "${RT}"; mkdir -p "${RT}/bin" "${RT}/LICENSES"
 cp -a "${STAGE}/bin/ffmpeg" "${STAGE}/bin/ffprobe" "${RT}/bin/"
+# The bundled shared libraries the $ORIGIN RUNPATH resolves to. Without these
+# the archive is a binary that cannot load — which is exactly what shipped the
+# first time this ran.
+if [[ -d "${STAGE}/lib" ]]; then
+    mkdir -p "${RT}/lib"
+    cp -a "${STAGE}/lib/." "${RT}/lib/"
+fi
+# The capability record, written by verify-runtime.sh before packaging.
+[[ -f "${STAGE}/capability.json" ]] && cp -a "${STAGE}/capability.json" "${RT}/capability.json"
 
 # Re-collect the licence texts straight into the runtime, from the same trees.
 tar --extract --file "${SRC_ARCHIVE}" --directory "${RT}/.." \
