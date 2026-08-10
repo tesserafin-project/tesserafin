@@ -1,0 +1,68 @@
+# FFmpeg configure flags for the Tesserafin runtime (F0, issue #229).
+#
+# One flag per line. Comments and blank lines are ignored.
+# ci/ffmpeg/verify-components.sh gates this file and the build reads it, so the
+# flags a gate inspects and the flags a build uses cannot drift apart.
+#
+# Licence shape:
+#   --enable-gpl       required by x264 and x265, both GPL-2.0-or-later.
+#   --enable-version3  the resulting closure contains LGPL-3.0 material through
+#                      the GPL-2.0-or-later + Apache-2.0 (OpenSSL) combination,
+#                      which is only reconcilable under GPLv3. Recorded rather
+#                      than assumed; see docs/distribution/F0-ffmpeg-runtime.md.
+#   --disable-nonfree  stated explicitly, not left to the default, so a diff
+#                      that removes it is visible.
+#
+# There is deliberately no --enable-lto. LTO partitioning depends on job count
+# and link order and is the largest single threat to bit-for-bit reproducibility.
+
+--prefix=/opt/tesserafin-ffmpeg
+--disable-doc
+--disable-debug
+--disable-ffplay
+--disable-sdl2
+--disable-libxcb
+--disable-xlib
+--disable-nonfree
+--disable-libfdk-aac
+--enable-gpl
+--enable-version3
+--enable-shared=no
+--enable-static
+--enable-pic
+
+# Base
+--enable-zlib
+--enable-openssl
+
+# Software video
+--enable-libx264
+--enable-libx265
+--enable-libsvtav1
+--enable-libdav1d
+--enable-libvpx
+
+# Audio
+--enable-libmp3lame
+--enable-libopus
+--enable-libvorbis
+
+# Filters the server names in EncoderValidator._requiredFilters
+--enable-libzimg
+--enable-libass
+--enable-libfreetype
+--enable-libfribidi
+--enable-libharfbuzz
+--enable-fontconfig
+
+# Hardware. Headers and libraries only; no runtime claim is made here.
+--enable-vaapi
+--enable-libdrm
+--enable-ffnvcodec
+--enable-cuda
+--enable-cuvid
+--enable-nvdec
+--enable-nvenc
+--enable-libvpl
+--enable-amf
+--enable-opencl
