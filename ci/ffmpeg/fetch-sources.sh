@@ -29,22 +29,37 @@ done
 ff_load_manifest
 mkdir -p "${CACHE}/archives" "${CACHE}/git"
 
+# Idempotent by construction: a cache left behind by an interrupted run is a
+# normal state, not a reason to trust whatever is on disk. The only thing that
+# satisfies this function is HEAD equal to the pinned commit.
+ff_git_at_commit() { # <dir> <repo> <commit> <fetch-submodules>
+    local dir="$1" repo="$2" commit="$3" submodules="$4"
+    if [[ "$(git -C "${dir}" rev-parse HEAD 2>/dev/null || true)" != "${commit}" ]]; then
+        rm -rf "${dir}"
+        git init -q "${dir}"
+        git -C "${dir}" remote add origin "${repo}"
+        git -C "${dir}" fetch -q --depth=1 origin "${commit}"
+        git -C "${dir}" checkout -q FETCH_HEAD
+    fi
+    local got
+    got="$(git -C "${dir}" rev-parse HEAD)"
+    [[ "${got}" == "${commit}" ]] \
+        || ff_die "commit mismatch in ${dir}: got ${got}, the manifest pins ${commit}"
+    # Submodules are fetched HERE, not in the build container, which has no
+    # network. They need no separate pin: the parent tree's gitlink already
+    # names an exact commit for each one.
+    if [[ "${submodules}" == "True" && -f "${dir}/.gitmodules" ]]; then
+        git -C "${dir}" submodule update --init --recursive --depth=1 --quiet
+    fi
+}
+
 # --- the FFmpeg baseline ------------------------------------------------------
-FFMPEG_DIR="${CACHE}/git/jellyfin-ffmpeg"
-if [[ ! -d "${FFMPEG_DIR}/.git" ]]; then
-    ff_log "fetching jellyfin-ffmpeg ${FF_FFMPEG_BASELINE} @ ${FF_FFMPEG_COMMIT}"
-    git init -q "${FFMPEG_DIR}"
-    git -C "${FFMPEG_DIR}" remote add origin "${FF_FFMPEG_REPO}"
-    git -C "${FFMPEG_DIR}" fetch -q --depth=1 origin "${FF_FFMPEG_COMMIT}"
-    git -C "${FFMPEG_DIR}" checkout -q FETCH_HEAD
-fi
-actual="$(git -C "${FFMPEG_DIR}" rev-parse HEAD)"
-[[ "${actual}" == "${FF_FFMPEG_COMMIT}" ]] \
-    || ff_die "ffmpeg checkout is ${actual}, the manifest pins ${FF_FFMPEG_COMMIT}"
-ff_log "ffmpeg source at ${actual}"
+ff_log "fetching jellyfin-ffmpeg ${FF_FFMPEG_BASELINE} @ ${FF_FFMPEG_COMMIT}"
+ff_git_at_commit "${CACHE}/git/jellyfin-ffmpeg" "${FF_FFMPEG_REPO}" "${FF_FFMPEG_COMMIT}" False
+ff_log "ffmpeg source at ${FF_FFMPEG_COMMIT}"
 
 # --- every component ----------------------------------------------------------
-while IFS=$'\t' read -r name kind pin src; do
+while IFS=$'\t' read -r name kind pin src submodules; do
     [[ -n "${name}" ]] || continue
     case "${kind}" in
         tar)
@@ -60,17 +75,8 @@ while IFS=$'\t' read -r name kind pin src; do
                 || ff_die "checksum mismatch for ${name}: got ${got}, the manifest pins ${pin}"
             ;;
         git)
-            dir="${CACHE}/git/${name}"
-            if [[ ! -d "${dir}/.git" ]]; then
-                ff_log "cloning ${name} @ ${pin}"
-                git init -q "${dir}"
-                git -C "${dir}" remote add origin "${src}"
-                git -C "${dir}" fetch -q --depth=1 origin "${pin}"
-                git -C "${dir}" checkout -q FETCH_HEAD
-            fi
-            got="$(git -C "${dir}" rev-parse HEAD)"
-            [[ "${got}" == "${pin}" ]] \
-                || ff_die "commit mismatch for ${name}: got ${got}, the manifest pins ${pin}"
+            ff_log "cloning ${name} @ ${pin}"
+            ff_git_at_commit "${CACHE}/git/${name}" "${src}" "${pin}" "${submodules}"
             ;;
         *) ff_die "${name} has unknown sourceType '${kind}'" ;;
     esac
@@ -79,7 +85,8 @@ import json, sys
 for c in json.load(open(sys.argv[1]))["components"]:
     print("\t".join([c["name"], c["sourceType"],
                      c.get("sha256") or c["commit"],
-                     c.get("url") or c["repository"]]))
+                     c.get("url") or c["repository"],
+                     str(c.get("submodules", False))]))
 PY
 )
 

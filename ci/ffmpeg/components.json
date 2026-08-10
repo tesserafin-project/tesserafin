@@ -221,11 +221,13 @@
     {
       "name": "zimg",
       "license": "WTFPL",
-      "requiredBy": "zscale \u2014 required filter",
+      "requiredBy": "zscale \u2014 required filter (submodule graphengine is pinned by the parent tree's gitlink)",
       "sourceType": "git",
       "repository": "https://github.com/sekrit-twc/zimg.git",
-      "ref": "7143181f4b0be1307bff1cd7d5d78d5f0839efd7",
-      "commit": "7143181f4b0be1307bff1cd7d5d78d5f0839efd7"
+      "ref": "release-3.0.6",
+      "commit": "f819b14e8f39d1282400b0d9543e8ef73c1b2bbd",
+      "submodules": true,
+      "refComment": "annotated tag release-3.0.6 (object ef19c4ad\u2026) peeled to its commit"
     },
     {
       "name": "zlib",
