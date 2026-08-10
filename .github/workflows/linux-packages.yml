@@ -1,0 +1,234 @@
+name: '📦 Linux packages'
+
+# Native Linux server distribution (#225 / [L0]).
+#
+# Builds the .deb, .rpm and .tar.gz for both supported architectures from one
+# source commit, then accepts the REAL artifacts on architecture-native hosted
+# runners: ubuntu-24.04 for amd64 and ubuntu-24.04-arm for arm64. Metadata
+# inspection and emulation are not acceptance and are not used here.
+#
+# This workflow PUBLISHES NOTHING. It has no `release:` trigger, no tag trigger,
+# no registry push and no credential beyond the read-only GITHUB_TOKEN it needs
+# to pull the pinned Tesserafin Web assets image. Artifacts exist only as
+# workflow artifacts.
+#
+# These jobs are NOT branch-protection required checks; branch protection lists a
+# fixed set of contexts and this work does not modify it.
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # The same SDK feed the rest of CI uses. global.json pins 10.0.0 with
+  # rollForward, which actions/setup-dotnet refuses to read as a `global-json-file`
+  # (it wants a full SDK version there); the build itself still honours global.json.
+  SDK_VERSION: "10.0.x"
+
+concurrency:
+  group: linux-packages-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build ${{ matrix.rid }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      # Read-only, and only so the pinned tesserafin-web-assets image can be
+      # pulled by digest. Nothing here writes to any registry.
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        rid: [linux-x64, linux-arm64]
+    steps:
+      - name: Checkout the pull request head
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Set up the .NET SDK
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: ${{ env.SDK_VERSION }}
+
+      - name: Authenticate to GHCR for the pinned web assets image
+        env:
+          GHCR_ACTOR: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_ACTOR}" --password-stdin
+
+      - name: Build every artifact for ${{ matrix.rid }}
+        env:
+          RID: ${{ matrix.rid }}
+        run: ./ci/package/build-all.sh --rid "${RID}" --out "${RUNNER_TEMP}/packages"
+
+      - name: Verify equivalence, provenance and content hygiene
+        env:
+          RID: ${{ matrix.rid }}
+        run: ./ci/package/verify-artifacts.sh --artifacts "${RUNNER_TEMP}/packages/artifacts" --rid "${RID}"
+
+      - name: Upload the artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: linux-packages-${{ matrix.rid }}
+          path: |
+            ${{ runner.temp }}/packages/artifacts/*.deb
+            ${{ runner.temp }}/packages/artifacts/*.rpm
+            ${{ runner.temp }}/packages/artifacts/*.tar.gz
+            ${{ runner.temp }}/packages/artifacts/*.json
+            ${{ runner.temp }}/packages/artifacts/SHA256SUMS-*.txt
+          retention-days: 7
+          if-no-files-found: error
+
+  reproducibility:
+    name: Reproducibility ${{ matrix.rid }}
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        rid: [linux-x64, linux-arm64]
+    steps:
+      - name: Checkout the pull request head
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Set up the .NET SDK
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: ${{ env.SDK_VERSION }}
+
+      - name: Authenticate to GHCR for the pinned web assets image
+        env:
+          GHCR_ACTOR: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_ACTOR}" --password-stdin
+
+      - name: Download the first build's artifacts
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        with:
+          name: linux-packages-${{ matrix.rid }}
+          path: ${{ runner.temp }}/first
+
+      # A fresh runner, a fresh clone and a fresh toolchain: this is a genuinely
+      # independent second build, not the same machine building twice.
+      - name: Rebuild and compare every SHA-256
+        env:
+          RID: ${{ matrix.rid }}
+        run: ./ci/package/repro-check.sh --rid "${RID}" --against "${RUNNER_TEMP}/first/SHA256SUMS-${RID}.txt"
+
+  accept-deb:
+    name: Debian lifecycle ${{ matrix.rid }}
+    needs: build
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: linux-x64
+            runner: ubuntu-24.04
+          - rid: linux-arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - name: Checkout the pull request head
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Download the artifacts
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        with:
+          name: linux-packages-${{ matrix.rid }}
+          path: ${{ runner.temp }}/artifacts
+
+      - name: Report the acceptance architecture
+        run: uname -m
+
+      - name: Install, start, upgrade and uninstall the real package
+        env:
+          RID: ${{ matrix.rid }}
+        run: ./ci/package/accept-deb.sh --artifacts "${RUNNER_TEMP}/artifacts" --rid "${RID}"
+
+  accept-rpm:
+    name: RPM lifecycle ${{ matrix.rid }}
+    needs: build
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: linux-x64
+            runner: ubuntu-24.04
+          - rid: linux-arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - name: Checkout the pull request head
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Download the artifacts
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        with:
+          name: linux-packages-${{ matrix.rid }}
+          path: ${{ runner.temp }}/artifacts
+
+      - name: Report the acceptance architecture
+        run: uname -m
+
+      - name: Install, start, upgrade and uninstall the real package
+        env:
+          RID: ${{ matrix.rid }}
+        run: ./ci/package/accept-rpm.sh --artifacts "${RUNNER_TEMP}/artifacts" --rid "${RID}"
+
+  accept-archive:
+    name: Portable archive ${{ matrix.rid }}
+    needs: build
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: linux-x64
+            runner: ubuntu-24.04
+          - rid: linux-arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - name: Checkout the pull request head
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Download the artifacts
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        with:
+          name: linux-packages-${{ matrix.rid }}
+          path: ${{ runner.temp }}/artifacts
+
+      - name: Report the acceptance architecture
+        run: uname -m
+
+      - name: Extract into a clean prefix and run it
+        env:
+          RID: ${{ matrix.rid }}
+        run: ./ci/package/accept-archive.sh --artifacts "${RUNNER_TEMP}/artifacts" --rid "${RID}"
