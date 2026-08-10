@@ -1,0 +1,55 @@
+[Unit]
+Description=Tesserafin Server
+Documentation=https://github.com/tesserafin-project/tesserafin
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/tesserafin/tesserafin.conf
+User=tesserafin
+Group=tesserafin
+
+# The application payload directory is also the working directory: the server
+# resolves its own `wwwroot` (the API documentation UI) relative to it, exactly
+# as the container image does with `WORKDIR /opt/tesserafin`.
+WorkingDirectory=/usr/lib/tesserafin
+
+# `--webdir` (never `--nowebclient`) hosts the bundled Tesserafin Web payload, so
+# `/` redirects to `/web/` and serves the first-run wizard. `--ffmpeg` points at
+# the bundled, checksum-pinned encoder: the server must never silently fall back
+# to whatever `ffmpeg` happens to be on $PATH.
+ExecStart=/usr/lib/tesserafin/tesserafin \
+    --configdir ${TESSERAFIN_CONFIG_DIR} \
+    --datadir ${TESSERAFIN_DATA_DIR} \
+    --cachedir ${TESSERAFIN_CACHE_DIR} \
+    --logdir ${TESSERAFIN_LOG_DIR} \
+    --webdir ${TESSERAFIN_WEB_DIR} \
+    --ffmpeg ${TESSERAFIN_FFMPEG} \
+    $TESSERAFIN_EXTRA_ARGS
+
+Restart=on-failure
+RestartSec=5
+# A transcode-heavy shutdown takes appreciably longer than the systemd default;
+# see docs/distribution/L0-linux-packages.md.
+TimeoutStopSec=120
+KillSignal=SIGTERM
+
+# Logs go to the journal. The application ALSO keeps its own rolling file sink
+# under ${TESSERAFIN_LOG_DIR}, because logging.json ships one and removing it
+# would change runtime behavior rather than package it.
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=tesserafin
+
+# Least privilege that is PROVEN compatible with hardware transcoding.
+#
+# NoNewPrivileges is safe: no part of the server escalates. Everything that would
+# hide or relabel device nodes is deliberately absent — PrivateDevices,
+# DevicePolicy, ProtectClock and friends all break VAAPI (/dev/dri/renderD*) and
+# NVIDIA (/dev/nvidia*) access, and this package does not ship hardening it has
+# not demonstrated to be device-compatible.
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
