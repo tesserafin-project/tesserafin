@@ -50,8 +50,17 @@ export LC_ALL=C LANG=C TZ=UTC
 export PREFIX=/tmp/tf-ffdeps
 BUILDROOT=/tmp/tf-ffbuild
 WORK=/tmp/tf-ffinstall
-rm -rf "${PREFIX}" "${BUILDROOT}" "${WORK}"
-mkdir -p "${PREFIX}" "${BUILDROOT}" "${WORK}" "${OUT}"
+
+# FF_INCREMENTAL is a DEVELOPMENT convenience: it keeps already-built components
+# so a failure late in the list does not rebuild the twelve that already
+# succeeded. CI never sets it, and it must never be set in the workflow — the
+# reproducibility evidence is only meaningful from a clean tree.
+if [[ "${FF_INCREMENTAL:-0}" == "1" ]]; then
+    ff_log "INCREMENTAL build: completed components are reused. Not valid for reproducibility evidence."
+else
+    rm -rf "${PREFIX}" "${BUILDROOT}" "${WORK}"
+fi
+mkdir -p "${PREFIX}/.stamps" "${BUILDROOT}" "${WORK}" "${OUT}"
 
 export CFLAGS="-O2 -g0 -fPIC -ffile-prefix-map=${BUILDROOT}=. -ffile-prefix-map=${PREFIX}=. -ffile-prefix-map=${CACHE}=."
 export CXXFLAGS="${CFLAGS}"
@@ -77,116 +86,171 @@ gitsrc() { # <component-name> -> echoes a writable copy of the pinned checkout
     printf '%s\n' "${dir}"
 }
 
-step() { ff_log "building $1"; }
+# Returns non-zero when the component is already built, so a recipe reads
+# `step x && ( ...build... )` and is skipped wholesale on a resumed run.
+step() {
+    local stamp="${PREFIX}/.stamps/${1// /_}"
+    if [[ "${FF_INCREMENTAL:-0}" == "1" && -e "${stamp}" ]]; then
+        ff_log "skipping $1 (already built)"
+        return 1
+    fi
+    ff_log "building $1"
+    return 0
+}
+done_step() { touch "${PREFIX}/.stamps/${1// /_}"; }
 
 # =============================================================================
 # base
 # =============================================================================
-step zlib
-d="$(unpack zlib)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --static && make -j"${J}" && make install )
+if step zlib; then
+    d="$(unpack zlib)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --static && make -j"${J}" && make install )
+    done_step zlib
+fi
 
-step expat
-d="$(unpack expat)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --disable-shared --enable-static \
-    --without-docbook --without-examples --without-tests && make -j"${J}" && make install )
+if step expat; then
+    d="$(unpack expat)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --disable-shared --enable-static \
+        --without-docbook --without-examples --without-tests && make -j"${J}" && make install )
+    done_step expat
+fi
 
-step openssl
-# no-docs only exists from 3.1; 3.0.x rejects it. install_sw skips docs anyway.
-d="$(unpack openssl)"; ( cd "${d}" && ./Configure --prefix="${PREFIX}" --libdir=lib no-shared no-tests \
-    --openssldir="${PREFIX}/ssl" && make -j"${J}" && make install_sw )
+if step openssl; then
+    # no-docs only exists from 3.1; 3.0.x rejects it. install_sw skips docs anyway.
+    d="$(unpack openssl)"; ( cd "${d}" && ./Configure --prefix="${PREFIX}" --libdir=lib no-shared no-tests \
+        --openssldir="${PREFIX}/ssl" && make -j"${J}" && make install_sw )
+    done_step openssl
+fi
 
 # =============================================================================
 # video codecs
 # =============================================================================
-step x264
-d="$(gitsrc x264)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --enable-static --enable-pic \
-    --disable-cli --disable-opencl && make -j"${J}" && make install )
+if step x264; then
+    d="$(gitsrc x264)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --enable-static --enable-pic \
+        --disable-cli --disable-opencl && make -j"${J}" && make install )
+    done_step x264
+fi
 
-step x265
-d="$(unpack x265)"; ( cd "${d}/source" && cmake -S . -B build \
-    -DCMAKE_INSTALL_PREFIX="${PREFIX}" -DCMAKE_BUILD_TYPE=Release \
-    -DENABLE_SHARED=OFF -DENABLE_CLI=OFF -DENABLE_PIC=ON \
-    && cmake --build build -j"${J}" && cmake --install build )
+if step x265; then
+    d="$(unpack x265)"; ( cd "${d}/source" && cmake -S . -B build \
+        -DCMAKE_INSTALL_PREFIX="${PREFIX}" -DCMAKE_BUILD_TYPE=Release \
+        -DENABLE_SHARED=OFF -DENABLE_CLI=OFF -DENABLE_PIC=ON \
+        && cmake --build build -j"${J}" && cmake --install build )
+    done_step x265
+fi
 
-step svt-av1
-d="$(unpack svt-av1)"; ( cd "${d}" && cmake -S . -B build \
-    -DCMAKE_INSTALL_PREFIX="${PREFIX}" -DCMAKE_BUILD_TYPE=Release \
-    -DBUILD_SHARED_LIBS=OFF -DBUILD_APPS=OFF -DBUILD_TESTING=OFF \
-    && cmake --build build -j"${J}" && cmake --install build )
+if step svt-av1; then
+    d="$(unpack svt-av1)"; ( cd "${d}" && cmake -S . -B build \
+        -DCMAKE_INSTALL_PREFIX="${PREFIX}" -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_SHARED_LIBS=OFF -DBUILD_APPS=OFF -DBUILD_TESTING=OFF \
+        && cmake --build build -j"${J}" && cmake --install build )
+    done_step svt-av1
+fi
 
-step dav1d
-d="$(unpack dav1d)"; ( cd "${d}" && meson setup build --prefix="${PREFIX}" --libdir=lib \
-    --buildtype=release --default-library=static -Denable_tools=false -Denable_tests=false \
-    && ninja -C build -j"${J}" && ninja -C build install )
+if step dav1d; then
+    d="$(unpack dav1d)"; ( cd "${d}" && meson setup build --prefix="${PREFIX}" --libdir=lib \
+        --buildtype=release --default-library=static -Denable_tools=false -Denable_tests=false \
+        && ninja -C build -j"${J}" && ninja -C build install )
+    done_step dav1d
+fi
 
-step libvpx
-d="$(unpack libvpx)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --disable-shared --enable-static \
-    --enable-pic --disable-examples --disable-tools --disable-docs --disable-unit-tests \
-    --enable-vp8 --enable-vp9 \
-    && make -j"${J}" && make install )
+if step libvpx; then
+    d="$(unpack libvpx)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --disable-shared --enable-static \
+        --enable-pic --disable-examples --disable-tools --disable-docs --disable-unit-tests \
+        --enable-vp8 --enable-vp9 \
+        && make -j"${J}" && make install )
+    done_step libvpx
+fi
 
 # =============================================================================
 # audio
 # =============================================================================
-step lame
-d="$(unpack lame)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --disable-shared --enable-static \
-    --enable-nasm --disable-frontend && make -j"${J}" && make install )
+if step lame; then
+    d="$(unpack lame)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --disable-shared --enable-static \
+        --enable-nasm --disable-frontend && make -j"${J}" && make install )
+    done_step lame
+fi
 
-step opus
-d="$(unpack opus)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --disable-shared --enable-static \
-    --disable-doc --disable-extra-programs && make -j"${J}" && make install )
+if step opus; then
+    d="$(unpack opus)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --disable-shared --enable-static \
+        --disable-doc --disable-extra-programs && make -j"${J}" && make install )
+    done_step opus
+fi
 
-step libogg
-d="$(unpack libogg)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --disable-shared --enable-static \
-    && make -j"${J}" && make install )
+if step libogg; then
+    d="$(unpack libogg)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --disable-shared --enable-static \
+        && make -j"${J}" && make install )
+    done_step libogg
+fi
 
-step libvorbis
-d="$(unpack libvorbis)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --disable-shared --enable-static \
-    --disable-docs --disable-examples --disable-oggtest && make -j"${J}" && make install )
+if step libvorbis; then
+    d="$(unpack libvorbis)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --disable-shared --enable-static \
+        --disable-docs --disable-examples --disable-oggtest && make -j"${J}" && make install )
+    done_step libvorbis
+fi
 
 # =============================================================================
 # filters: zimg and the subtitle stack
 # =============================================================================
-step zimg
-# Submodules came down with the source cache; there is no network here.
-d="$(gitsrc zimg)"; ( cd "${d}" && ./autogen.sh \
-    && ./configure --prefix="${PREFIX}" --disable-shared --enable-static \
-    && make -j"${J}" && make install )
+if step zimg; then
+    # Submodules came down with the source cache; there is no network here.
+    d="$(gitsrc zimg)"; ( cd "${d}" && ./autogen.sh \
+        && ./configure --prefix="${PREFIX}" --disable-shared --enable-static \
+        && make -j"${J}" && make install )
+    done_step zimg
+fi
 
 # freetype and harfbuzz are mutually dependent. Build freetype without
 # harfbuzz, build harfbuzz against it, then rebuild freetype with harfbuzz so
 # libass gets the shaping-aware freetype. Two passes, both deterministic.
-step "freetype (pass 1, no harfbuzz)"
-d="$(unpack freetype)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --disable-shared --enable-static \
-    --with-harfbuzz=no --with-brotli=no --with-bzip2=no --with-png=no && make -j"${J}" && make install )
+if step "freetype (pass 1, no harfbuzz)"; then
+    d="$(unpack freetype)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --disable-shared --enable-static \
+        --with-harfbuzz=no --with-brotli=no --with-bzip2=no --with-png=no && make -j"${J}" && make install )
+    done_step "freetype (pass 1, no harfbuzz)"
+fi
 
-step harfbuzz
-d="$(unpack harfbuzz)"; ( cd "${d}" && meson setup build --prefix="${PREFIX}" --libdir=lib \
-    --buildtype=release --default-library=static \
-    -Dfreetype=enabled -Dglib=disabled -Dgobject=disabled -Dcairo=disabled -Dicu=disabled \
-    -Dtests=disabled -Ddocs=disabled -Dbenchmark=disabled -Dutilities=disabled \
-    && ninja -C build -j"${J}" && ninja -C build install )
+if step harfbuzz; then
+    d="$(unpack harfbuzz)"; ( cd "${d}" && meson setup build --prefix="${PREFIX}" --libdir=lib \
+        --buildtype=release --default-library=static \
+        -Dfreetype=enabled -Dglib=disabled -Dgobject=disabled -Dcairo=disabled -Dicu=disabled \
+        -Dtests=disabled -Ddocs=disabled -Dbenchmark=disabled -Dutilities=disabled \
+        && ninja -C build -j"${J}" && ninja -C build install )
+    done_step harfbuzz
+fi
 
-step "freetype (pass 2, with harfbuzz)"
-d="$(unpack freetype)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --disable-shared --enable-static \
-    --with-harfbuzz=yes --with-brotli=no --with-bzip2=no --with-png=no && make -j"${J}" && make install )
+if step "freetype (pass 2, with harfbuzz)"; then
+    d="$(unpack freetype)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --disable-shared --enable-static \
+        --with-harfbuzz=yes --with-brotli=no --with-bzip2=no --with-png=no && make -j"${J}" && make install )
+    done_step "freetype (pass 2, with harfbuzz)"
+fi
 
-step fribidi
-d="$(unpack fribidi)"; ( cd "${d}" && meson setup build --prefix="${PREFIX}" --libdir=lib \
-    --buildtype=release --default-library=static -Ddocs=false -Dtests=false -Dbin=false \
-    && ninja -C build -j"${J}" && ninja -C build install )
+if step fribidi; then
+    d="$(unpack fribidi)"; ( cd "${d}" && meson setup build --prefix="${PREFIX}" --libdir=lib \
+        --buildtype=release --default-library=static -Ddocs=false -Dtests=false -Dbin=false \
+        && ninja -C build -j"${J}" && ninja -C build install )
+    done_step fribidi
+fi
 
-step fontconfig
-d="$(unpack fontconfig)"; ( cd "${d}" && meson setup build --prefix="${PREFIX}" --libdir=lib \
-    --buildtype=release --default-library=static -Ddoc=disabled -Dtests=disabled -Dtools=disabled \
-    -Dcache-build=disabled -Dnls=disabled && ninja -C build -j"${J}" && ninja -C build install )
+if step fontconfig; then
+    # autotools, not meson: 2.15 requires meson >= 0.60 and the pinned builder
+    # carries 0.56. 2.14.2 is the last release that still ships a configure
+    # script, which keeps the toolchain an input rather than something this
+    # build has to upgrade.
+    d="$(unpack fontconfig)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" \
+        --disable-shared --enable-static --disable-docs --disable-nls \
+        --with-expat="${PREFIX}" && make -j"${J}" && make install )
+    done_step fontconfig
+fi
 
-step libunibreak
-d="$(unpack libunibreak)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --disable-shared --enable-static \
-    && make -j"${J}" && make install )
+if step libunibreak; then
+    d="$(unpack libunibreak)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --disable-shared --enable-static \
+        && make -j"${J}" && make install )
+    done_step libunibreak
+fi
 
-step libass
-d="$(unpack libass)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --disable-shared --enable-static \
-    --disable-require-system-font-provider && make -j"${J}" && make install )
+if step libass; then
+    d="$(unpack libass)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --disable-shared --enable-static \
+        --disable-require-system-font-provider && make -j"${J}" && make install )
+    done_step libass
+fi
 
 # =============================================================================
 # hardware: the VAAPI stack and header-only SDKs
@@ -194,48 +258,73 @@ d="$(unpack libass)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --disable-
 # libva is pinned at the OLDEST release in the declared matrix and linked
 # normally. Upstream generates an implib trampoline here; that is precisely the
 # construct that turns a missing symbol into assert(0), and it is not used.
-step libdrm
-d="$(unpack libdrm)"; ( cd "${d}" && meson setup build --prefix="${PREFIX}" --libdir=lib \
-    --buildtype=release --default-library=static \
-    -Dintel=disabled -Dradeon=disabled -Damdgpu=disabled -Dnouveau=disabled -Dvmwgfx=disabled \
-    -Dcairo-tests=disabled -Dman-pages=disabled -Dvalgrind=disabled -Dtests=false \
-    -Dlibkms=disabled 2>/dev/null \
-    || meson setup build --prefix="${PREFIX}" --libdir=lib --buildtype=release \
-       --default-library=static -Dcairo-tests=disabled -Dman-pages=disabled -Dtests=false; \
-    ninja -C build -j"${J}" && ninja -C build install )
+if step libdrm; then
+    d="$(unpack libdrm)"; ( cd "${d}" && meson setup build --prefix="${PREFIX}" --libdir=lib \
+        --buildtype=release --default-library=static \
+        -Dintel=disabled -Dradeon=disabled -Damdgpu=disabled -Dnouveau=disabled -Dvmwgfx=disabled \
+        -Dcairo-tests=disabled -Dman-pages=disabled -Dvalgrind=disabled -Dtests=false \
+        -Dlibkms=disabled 2>/dev/null \
+        || meson setup build --prefix="${PREFIX}" --libdir=lib --buildtype=release \
+           --default-library=static -Dcairo-tests=disabled -Dman-pages=disabled -Dtests=false; \
+        ninja -C build -j"${J}" && ninja -C build install )
+    done_step libdrm
+fi
 
-step libva
-d="$(unpack libva)"; ( cd "${d}" && meson setup build --prefix="${PREFIX}" --libdir=lib \
-    --buildtype=release --default-library=static \
-    -Dwith_x11=no -Dwith_glx=no -Dwith_wayland=no -Dwith_win32=no -Denable_docs=false \
-    && ninja -C build -j"${J}" && ninja -C build install )
+if step libva; then
+    d="$(unpack libva)"; ( cd "${d}" && meson setup build --prefix="${PREFIX}" --libdir=lib \
+        --buildtype=release --default-library=static \
+        -Dwith_x11=no -Dwith_glx=no -Dwith_wayland=no -Dwith_win32=no -Denable_docs=false \
+        && ninja -C build -j"${J}" && ninja -C build install )
+    done_step libva
+fi
 
-step nv-codec-headers
-d="$(gitsrc nv-codec-headers)"; ( cd "${d}" && make PREFIX="${PREFIX}" install )
+if step nv-codec-headers; then
+    d="$(gitsrc nv-codec-headers)"; ( cd "${d}" && make PREFIX="${PREFIX}" install )
+    done_step nv-codec-headers
+fi
 
-step libvpl
-d="$(unpack libvpl)"; ( cd "${d}" && cmake -S . -B build -DCMAKE_INSTALL_PREFIX="${PREFIX}" \
-    -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTS=OFF -DBUILD_EXAMPLES=OFF \
-    -DINSTALL_EXAMPLE_CODE=OFF && cmake --build build -j"${J}" && cmake --install build )
+if step libvpl; then
+    d="$(unpack libvpl)"; ( cd "${d}" && cmake -S . -B build -DCMAKE_INSTALL_PREFIX="${PREFIX}" \
+        -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTS=OFF -DBUILD_EXAMPLES=OFF \
+        -DINSTALL_EXAMPLE_CODE=OFF && cmake --build build -j"${J}" && cmake --install build )
+    done_step libvpl
+fi
 
-step amf-headers
-d="$(gitsrc amf-headers)"; mkdir -p "${PREFIX}/include/AMF"; cp -a "${d}/amf/public/include/." "${PREFIX}/include/AMF/"
+if step amf-headers; then
+    d="$(gitsrc amf-headers)"; mkdir -p "${PREFIX}/include/AMF"; cp -a "${d}/amf/public/include/." "${PREFIX}/include/AMF/"
+    done_step amf-headers
+fi
 
-step opencl-headers
-d="$(gitsrc opencl-headers)"; mkdir -p "${PREFIX}/include/CL"; cp -a "${d}/CL/." "${PREFIX}/include/CL/"
+if step opencl-headers; then
+    d="$(gitsrc opencl-headers)"; mkdir -p "${PREFIX}/include/CL"; cp -a "${d}/CL/." "${PREFIX}/include/CL/"
+    done_step opencl-headers
+fi
+
+if step opencl-icd-loader; then
+    # FFmpeg's opencl check links against -lOpenCL, so headers alone are not
+    # enough. Upstream solves this with an implib trampoline; this links the
+    # Khronos ICD loader statically instead. Vendor discovery still happens at
+    # runtime through /etc/OpenCL/vendors, so a machine with no OpenCL driver
+    # gets a controlled "no platforms" result rather than an abort.
+    d="$(gitsrc opencl-icd-loader)"; ( cd "${d}" && cmake -S . -B build \
+        -DCMAKE_INSTALL_PREFIX="${PREFIX}" -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTING=OFF \
+        -DOPENCL_ICD_LOADER_HEADERS_DIR="${PREFIX}/include" \
+        && cmake --build build -j"${J}" && cmake --install build )
+    done_step opencl-icd-loader
+fi
 
 # =============================================================================
 # FFmpeg
 # =============================================================================
-step "FFmpeg ${FF_FFMPEG_BASELINE} (${FF_BUILD_REVISION})"
 FFSRC="${BUILDROOT}/ffmpeg"
-rm -rf "${FFSRC}"; cp -a "${CACHE}/git/jellyfin-ffmpeg" "${FFSRC}"
-
 mapfile -t FLAGS < <(grep -vE '^\s*(#|$)' "${FF_FLAGS_FILE}")
-# The prefix in the flag file is the INSTALL prefix of the runtime, not the
-# dependency prefix; override it here so both are explicit.
-FLAGS=("${FLAGS[@]/--prefix=*/--prefix=${WORK}/install}")
+# --prefix stays the real installed location, so -buildconf records where the
+# runtime actually lives and FFmpeg resolves its datadir against a path that
+# will exist. Staging happens through DESTDIR instead.
 
+if step "FFmpeg ${FF_FFMPEG_BASELINE} (${FF_BUILD_REVISION})"; then
+rm -rf "${FFSRC}"; cp -a "${CACHE}/git/jellyfin-ffmpeg" "${FFSRC}"
 (
     cd "${FFSRC}"
     ./configure \
@@ -248,16 +337,19 @@ FLAGS=("${FLAGS[@]/--prefix=*/--prefix=${WORK}/install}")
         --extra-libs="-lpthread -lm -ldl" \
         > "${OUT}/configure.log" 2>&1 || { tail -60 "${OUT}/configure.log" >&2; ff_die "FFmpeg configure failed"; }
     make -j"${J}" > "${OUT}/make.log" 2>&1 || { tail -80 "${OUT}/make.log" >&2; ff_die "FFmpeg build failed"; }
-    make install >> "${OUT}/make.log" 2>&1
+    make install DESTDIR="${WORK}" >> "${OUT}/make.log" 2>&1
 )
+    done_step "FFmpeg ${FF_FFMPEG_BASELINE} (${FF_BUILD_REVISION})"
+fi
 
 # =============================================================================
 # stage the runtime
 # =============================================================================
 STAGE="${OUT}/tesserafin-ffmpeg-${FF_BUILD_REVISION}-${ARCH}"
 rm -rf "${STAGE}"; mkdir -p "${STAGE}/bin" "${STAGE}/LICENSES"
-install -m 0755 "${WORK}/install/bin/ffmpeg"  "${STAGE}/bin/ffmpeg"
-install -m 0755 "${WORK}/install/bin/ffprobe" "${STAGE}/bin/ffprobe"
+FF_PREFIX="$(grep -oE '^--prefix=.*' "${FF_FLAGS_FILE}" | head -1 | cut -d= -f2-)"
+install -m 0755 "${WORK}${FF_PREFIX}/bin/ffmpeg"  "${STAGE}/bin/ffmpeg"
+install -m 0755 "${WORK}${FF_PREFIX}/bin/ffprobe" "${STAGE}/bin/ffprobe"
 strip --strip-unneeded "${STAGE}/bin/ffmpeg" "${STAGE}/bin/ffprobe"
 
 # No development headers, no static archives, no build caches: a runtime archive

@@ -52,10 +52,24 @@ ff_log "building ${ARCH}"
 # --network none: every byte the build consumes was fetched and digest-checked
 # above, so the build itself has nothing left to download. A recipe that tries
 # fails loudly instead of silently introducing an unpinned input.
+# FF_INCREMENTAL keeps the dependency prefix and build root on the host so a
+# resumed run reuses what already built. Development only: CI never sets it,
+# because reproducibility evidence is only meaningful from a clean tree.
+INCREMENTAL_MOUNTS=()
+if [[ "${FF_INCREMENTAL:-0}" == "1" ]]; then
+    mkdir -p "${OUT}/state/deps" "${OUT}/state/build"
+    INCREMENTAL_MOUNTS=(
+        --volume "${OUT}/state/deps:/tmp/tf-ffdeps"
+        --volume "${OUT}/state/build:/tmp/tf-ffbuild"
+    )
+fi
+
 docker run --rm \
     --network none \
     --user "$(id -u):$(id -g)" \
     --env HOME=/tmp \
+    --env FF_INCREMENTAL="${FF_INCREMENTAL:-0}" \
+    "${INCREMENTAL_MOUNTS[@]+"${INCREMENTAL_MOUNTS[@]}"}" \
     --volume "${FF_REPO_ROOT}:/repo:ro" \
     --volume "${CACHE}:/cache:ro" \
     --volume "${OUT}:/out" \

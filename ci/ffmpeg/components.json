@@ -41,11 +41,11 @@
     {
       "name": "fontconfig",
       "license": "MIT",
-      "requiredBy": "font discovery for subtitle burn-in",
+      "requiredBy": "font discovery for subtitle burn-in (2.14.2: the last release that still ships autotools; 2.15 requires meson >= 0.60, above the pinned builder's 0.56)",
       "sourceType": "tar",
-      "url": "https://www.freedesktop.org/software/fontconfig/release/fontconfig-2.15.0.tar.xz",
-      "sha256": "63a0658d0e06e0fa886106452b58ef04f21f58202ea02a94c39de0d3335d7c0e",
-      "sizeBytes": 1447820
+      "url": "https://www.freedesktop.org/software/fontconfig/release/fontconfig-2.14.2.tar.xz",
+      "sha256": "dba695b57bce15023d2ceedef82062c2b925e51f5d4cc4aef736cf13f60a468b",
+      "sizeBytes": 1440844
     },
     {
       "name": "freetype",
@@ -172,6 +172,16 @@
       "repository": "https://github.com/KhronosGroup/OpenCL-Headers.git",
       "ref": "v2024.05.08",
       "commit": "8275634cf9ec31b6484c2e6be756237cb583999d"
+    },
+    {
+      "name": "opencl-icd-loader",
+      "license": "Apache-2.0",
+      "requiredBy": "the *_opencl filters need a real -lOpenCL to link; the Khronos ICD loader supplies it and defers vendor discovery to /etc/OpenCL/vendors at runtime, so an absent GPU is a controlled failure rather than a link error",
+      "sourceType": "git",
+      "repository": "https://github.com/KhronosGroup/OpenCL-ICD-Loader.git",
+      "ref": "v2024.05.08",
+      "commit": "861b68b290e76d08e7241608479c16431f529945",
+      "refComment": "annotated tag v2024.05.08 (object 59363628\u2026) peeled to its commit"
     },
     {
       "name": "openssl",

@@ -36,12 +36,16 @@ RUN printf '%s\n' \
  && export DEBIAN_FRONTEND=noninteractive \
  && apt-get -o Acquire::Check-Valid-Until=false update \
  && apt-get install -y --no-install-recommends \
+      autoconf \
+      automake \
       build-essential \
       ca-certificates \
       cmake \
       diffutils \
       file \
+      gettext \
       git \
+      gperf \
       libtool \
       meson \
       nasm \
@@ -50,6 +54,7 @@ RUN printf '%s\n' \
       perl \
       pkg-config \
       python3 \
+      python3-setuptools \
       texinfo \
       xxd \
       yasm \
