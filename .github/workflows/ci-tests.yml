@@ -94,6 +94,15 @@ on:
     # required check that can actually report.
     #
     # The `push` trigger above keeps its exclusion: nothing gates on it.
+    #
+    # `ready_for_review` is REQUIRED here for the same "a required check must be
+    # able to report" reason. `run-tests` is draft-gated below, and without this
+    # type the default set (opened, synchronize, reopened) means marking a draft
+    # ready fires no run at all: the draft-time "skipping" result stays the last
+    # one recorded, a skipped required check never satisfies protection, and the
+    # pull request is unmergeable until somebody pushes an unrelated commit.
+    # Observed on #227.
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 
 permissions:

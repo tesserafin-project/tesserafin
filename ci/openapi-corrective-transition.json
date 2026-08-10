@@ -1,0 +1,92 @@
+{
+  "$comment": "ONE-SHOT corrective transition ledger — issue #226, PR #227. This is NOT a waiver, NOT an ignore list and NOT a severity override. It records exactly one transition between two named canonical contracts, and exactly the five findings that transition produces. It is consumed only when the observed baseline digest, the observed candidate digest AND the complete observed finding set all match verbatim. Once 6af8bd0f...ea80 is the committed baseline, baselineSha256 matches nothing again, so the transition cannot be re-consumed or silently inherited by a later pull request. Adding a sixth finding, changing a rule id, an operation or a path, or moving either digest makes it stop applying and the gate stays red. ci/openapi-severity-levels.txt is untouched: no check is lowered anywhere.",
+  "schemaVersion": 1,
+  "transition": {
+    "id": "issue-226-playback-session-id-wire-shape",
+    "baselineSha256": "c18438eef039007a81d928210a8a1ac95852c092a02f1075a8647981074c823d",
+    "candidateSha256": "6af8bd0fd94ef0f7e70ecc14a6db9fb3f3cfa0383ef93284954deb937a79ea80",
+    "issue": "https://github.com/tesserafin-project/tesserafin/issues/226",
+    "pullRequest": "https://github.com/tesserafin-project/tesserafin/pull/227",
+    "engine": {
+      "version": "v1.26.1",
+      "digest": "sha256:aae8cfcf7d18d3b0ebce6bdf407623bf8788ca318c7a0440627aaf583ed3e9f4"
+    },
+    "rationale": "The CLR shape was corrected to the wire shape the model binder already accepted. PlaybackSessionId is a readonly record struct implementing IParsable<T>, so ASP.NET Core binds it as a simple type from a single route value; Swashbuckle reflected over its properties and described it as an object with a Value member. Every object serialization that description implied is answered HTTP 400 by the server, and only the scalar string/uuid form binds. The correction removes a description that was unusable, not a capability.",
+    "serverBindingUnchanged": true,
+    "serverBindingStatement": "No route, controller signature, model binder, accepted request or response body changes in this transition. Tesserafin.Controller/MediaEncoding/PlaybackSessionId.cs is byte-identical to the baseline commit (sha256 a5dd33b376877a178499dd9c1e8e65852cbd1825dea152e412003ebeeecc6504). Every request the server accepted at the baseline contract is accepted unchanged at the candidate contract; no request that previously succeeded now fails.",
+    "runtimeWireBreaks": 0,
+    "findingCount": 5,
+    "findings": [
+      {
+        "fingerprint": "0d51b1aa84cf",
+        "ruleId": "request-parameter-type-changed",
+        "level": 3,
+        "section": "paths",
+        "operation": "DELETE",
+        "operationId": "DeletePlaybackSession",
+        "path": "/Playback/Sessions/{id}",
+        "text": "for the `path` request parameter `id`, the `type/format` was changed from `any` to `string/uuid`",
+        "parameterIn": "path",
+        "parameterName": "id",
+        "beforeShape": "object with a Value member of format uuid",
+        "afterShape": "scalar string of format uuid"
+      },
+      {
+        "fingerprint": "4114d6193661",
+        "ruleId": "request-parameter-type-changed",
+        "level": 3,
+        "section": "paths",
+        "operation": "PUT",
+        "operationId": "ReplacePlaybackSession",
+        "path": "/Playback/Sessions/{id}",
+        "text": "for the `path` request parameter `id`, the `type/format` was changed from `any` to `string/uuid`",
+        "parameterIn": "path",
+        "parameterName": "id",
+        "beforeShape": "object with a Value member of format uuid",
+        "afterShape": "scalar string of format uuid"
+      },
+      {
+        "fingerprint": "9b9fe9d86d43",
+        "ruleId": "request-parameter-type-changed",
+        "level": 3,
+        "section": "paths",
+        "operation": "GET",
+        "operationId": "GetPlaybackSessionStream",
+        "path": "/Playback/Sessions/{id}/Stream",
+        "text": "for the `path` request parameter `id`, the `type/format` was changed from `any` to `string/uuid`",
+        "parameterIn": "path",
+        "parameterName": "id",
+        "beforeShape": "object with a Value member of format uuid",
+        "afterShape": "scalar string of format uuid"
+      },
+      {
+        "fingerprint": "00925bed3f3f",
+        "ruleId": "request-parameter-type-changed",
+        "level": 3,
+        "section": "paths",
+        "operation": "GET",
+        "operationId": "GetPlaybackSession",
+        "path": "/System/PlaybackDiagnostics/Sessions/{id}",
+        "text": "for the `path` request parameter `id`, the `type/format` was changed from `any` to `string/uuid`",
+        "parameterIn": "path",
+        "parameterName": "id",
+        "beforeShape": "object with a Value member of format uuid",
+        "afterShape": "scalar string of format uuid"
+      },
+      {
+        "fingerprint": "ed43f1d5ddf3",
+        "ruleId": "request-parameter-type-changed",
+        "level": 3,
+        "section": "paths",
+        "operation": "GET",
+        "operationId": "ExportFixture",
+        "path": "/System/PlaybackDiagnostics/Sessions/{id}/Fixture",
+        "text": "for the `path` request parameter `id`, the `type/format` was changed from `any` to `string/uuid`",
+        "parameterIn": "path",
+        "parameterName": "id",
+        "beforeShape": "object with a Value member of format uuid",
+        "afterShape": "scalar string of format uuid"
+      }
+    ]
+  }
+}

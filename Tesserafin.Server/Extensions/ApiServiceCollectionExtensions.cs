@@ -31,6 +31,7 @@ using Tesserafin.Api.ModelBinders;
 using Tesserafin.Api.Playback;
 using Tesserafin.Common.Api;
 using Tesserafin.Common.Net;
+using Tesserafin.Controller.MediaEncoding;
 using Tesserafin.Data.Enums;
 using Tesserafin.Database.Implementations.Enums;
 using Tesserafin.Extensions.Json;
@@ -287,6 +288,11 @@ namespace Tesserafin.Server.Extensions
                 c.OperationFilter<FileResponseFilter>();
                 c.OperationFilter<FileRequestFilter>();
                 c.OperationFilter<ParameterObsoleteFilter>();
+
+                // Issue #226: `style: deepObject` without `explode` is the one style/explode
+                // combination OpenAPI 3.0.4 leaves undefined. See the filter's remarks.
+                c.ParameterFilter<DeepObjectExplodeParameterFilter>();
+
                 c.DocumentFilter<AdditionalModelFilter>();
                 c.DocumentFilter<SecuritySchemeReferenceFixupFilter>();
             })
@@ -427,6 +433,36 @@ namespace Tesserafin.Server.Extensions
             options.MapType<Version>(() => new OpenApiSchema
             {
                 Type = JsonSchemaType.String
+            });
+
+            /*
+             * Issue #226: PlaybackSessionId is a `readonly record struct PlaybackSessionId(Guid Value)`
+             * that implements IParsable<T>, which is why ASP.NET Core binds it as a SIMPLE type from a
+             * single route/query string value. Swashbuckle's schema generator has no such notion: it
+             * reflects over the type's properties and emitted `{ type: object, properties: { Value:
+             * {string/uuid} } }`. The two descriptions disagreed, and the contract recorded the CLR
+             * shape. Every object serialization the emitted schema implied — `Value,<uuid>` under
+             * `simple`/explode:false, `Value=<uuid>` under `simple`/explode:true, a literal JSON object
+             * — is answered 400 by the running server; only the bare scalar binds. A generated Kotlin
+             * client that transcribed it faithfully produced
+             * `/Playback/Sessions/PlaybackSessionId(value=<uuid>)`, the analogue of the `[object
+             * Object]` that tesserafin-web's scripts/generate-tesserafin-sdk.mjs already post-processes
+             * away.
+             *
+             * `format: uuid` stays accurate: the binder accepts both the dashed form and the
+             * 32-character "N" form PlaybackSessionId.ToString() emits, and `format` is an annotation,
+             * not a validator.
+             *
+             * Deliberately scoped to this one CLR type rather than to record structs or IParsable<T> in
+             * general — no other such type was measured, and widening it needs its own evidence.
+             * Nothing about the runtime representation, parsing, ToString(), routes or response bodies
+             * changes; this is what the document says, not what the server does.
+             */
+            options.MapType<PlaybackSessionId>(() => new OpenApiSchema
+            {
+                Type = JsonSchemaType.String,
+                Format = "uuid",
+                Description = "Opaque identifier for a Tesserafin.Controller.MediaEncoding.PlaybackSession."
             });
         }
     }
