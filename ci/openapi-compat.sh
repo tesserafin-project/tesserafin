@@ -47,6 +47,18 @@
 #       --head      <head-openapi.json>       --head-lock <head-contract.lock.json> \
 #       --report    <report.md>               [--json <findings.json>]
 #       [--severity-levels <policy.txt>]
+#       [--corrective-ledger <ledger.json>] [--corrective-consumer <script>]
+#
+# CORRECTIVE TRANSITION. A recorded, one-shot, digest-scoped maintainer ruling
+# may account for a specific breaking finding set — see
+# ci/openapi-corrective-transition.json and ci/openapi-corrective-ledger.sh.
+# It is consulted ONLY after the ordinary comparison has run with no exclusions
+# and its complete structured output has been preserved, and only ever for a
+# finding set matching the ruling verbatim between two named contract digests.
+# It lowers no check, edits no severity, and excludes nothing from the run; a
+# consumer that cannot run is INDETERMINATE, never a pass. When it applies the
+# verdict is reported distinctly as "COMPATIBLE — CORRECTIVE TRANSITION" and
+# every accepted finding is printed in full.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -79,6 +91,13 @@ REPORT_PATH=""
 JSON_PATH=""
 SEVERITY_LEVELS="$SCRIPT_DIR/openapi-severity-levels.txt"
 
+# One-shot corrective-transition ledger (#226/#227). Consulted ONLY after the
+# ordinary comparison has already produced breaking findings, and only ever able
+# to account for a finding set that matches a named ruling verbatim for two
+# named digests. It cannot lower a check and it excludes nothing from the run.
+CORRECTIVE_LEDGER="$SCRIPT_DIR/openapi-corrective-transition.json"
+CORRECTIVE_CONSUMER="$SCRIPT_DIR/openapi-corrective-ledger.sh"
+
 WORKDIR=""
 cleanup() {
     [ -n "$WORKDIR" ] && rm -rf "$WORKDIR"
@@ -96,7 +115,7 @@ indeterminate() {
 }
 
 usage() {
-    err "usage: $0 --base <spec> --base-lock <lock> --head <spec> --head-lock <lock> --report <md> [--json <json>]"
+    err "usage: $0 --base <spec> --base-lock <lock> --head <spec> --head-lock <lock> --report <md> [--json <json>] [--severity-levels <policy.txt>] [--corrective-ledger <ledger.json>] [--corrective-consumer <script>]"
 }
 
 # The report is written on EVERY outcome, including the ones that abort early.
@@ -137,6 +156,8 @@ while [ $# -gt 0 ]; do
         --report)    REPORT_PATH="${2:-}"; shift 2 || indeterminate "--report needs a value" ;;
         --json)      JSON_PATH="${2:-}"; shift 2 || indeterminate "--json needs a value" ;;
         --severity-levels) SEVERITY_LEVELS="${2:-}"; shift 2 || indeterminate "--severity-levels needs a value" ;;
+        --corrective-ledger) CORRECTIVE_LEDGER="${2:-}"; shift 2 || indeterminate "--corrective-ledger needs a value" ;;
+        --corrective-consumer) CORRECTIVE_CONSUMER="${2:-}"; shift 2 || indeterminate "--corrective-consumer needs a value" ;;
         -h|--help)   usage; exit "$EXIT_INDETERMINATE" ;;
         *)           usage; indeterminate "unknown argument: $1" ;;
     esac
@@ -333,6 +354,50 @@ if [ "$BREAKING_COUNT" -gt 0 ]; then
     log ""
     log "$(jq -r '.[] | select((.level // 0) >= 3) | "BREAKING  \(.operation // "-") \(.path // "-")  \(.id): \(.text)"' "$FINDINGS")"
     log ""
+    # The ordinary comparison is complete and its full structured output is
+    # already preserved. Only now may a recorded corrective transition be
+    # consulted, and only for a finding set that matches a named ruling exactly
+    # for the two named digests. Every unexpected status from the consumer —
+    # including 126 (not executable) and 127 (not found) — is indeterminate:
+    # a consumer that could not run must never read as "no exception applied".
+    CORRECTIVE_OUT="$WORKDIR/corrective.log"
+    "$CORRECTIVE_CONSUMER" \
+        --ledger   "$CORRECTIVE_LEDGER" \
+        --findings "$FINDINGS" \
+        --base-sha "$BASE_SHA" \
+        --head-sha "$HEAD_SHA" >"$CORRECTIVE_OUT" 2>&1
+    CORRECTIVE_STATUS=$?
+
+    case "$CORRECTIVE_STATUS" in
+        0)
+            log ""
+            log "$(cat "$CORRECTIVE_OUT")"
+            log ""
+            REPORT_BODY="$(printf '### Accepted corrective transition\n\n```\n%s\n```\n\n%s' \
+                "$(cat "$CORRECTIVE_OUT")" "$REPORT_BODY")"
+            write_report "COMPATIBLE — CORRECTIVE TRANSITION" \
+                "All $BREAKING_COUNT breaking finding(s) are accounted for by the recorded one-shot corrective transition between \`$BASE_SHA\` and \`$HEAD_SHA\`. No check was lowered and nothing was excluded from the comparison."
+            [ -s "$REPORT_PATH" ] || indeterminate "the run completed but no report was written to $REPORT_PATH"
+            log "RESULT: COMPATIBLE — CORRECTIVE TRANSITION — $BREAKING_COUNT accepted corrective finding(s), 0 unaccounted, $WARNING_COUNT non-breaking finding(s)"
+            exit "$EXIT_COMPATIBLE"
+            ;;
+        1)
+            log ""
+            log "$(cat "$CORRECTIVE_OUT")"
+            log ""
+            ;;
+        2)
+            REPORT_BODY="$(printf '### Corrective-ledger diagnostics\n\n```\n%s\n```\n\n%s' \
+                "$(cat "$CORRECTIVE_OUT")" "$REPORT_BODY")"
+            indeterminate "the corrective-transition ledger could not be evaluated: $(tail -1 "$CORRECTIVE_OUT")"
+            ;;
+        *)
+            REPORT_BODY="$(printf '### Corrective-ledger diagnostics\n\n```\n%s\n```\n\n%s' \
+                "$(cat "$CORRECTIVE_OUT")" "$REPORT_BODY")"
+            indeterminate "the corrective-transition ledger consumer exited $CORRECTIVE_STATUS (not a verdict)"
+            ;;
+    esac
+
     write_report "BREAKING" "$BREAKING_COUNT breaking change(s) detected between the base and head contracts."
     err "RESULT: BREAKING — $BREAKING_COUNT breaking change(s)"
     exit "$EXIT_BREAKING"
