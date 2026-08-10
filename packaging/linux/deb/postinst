@@ -1,0 +1,71 @@
+#!/bin/sh
+# Tesserafin Server — Debian post-installation.
+#
+# Creates the unprivileged service identity and the runtime directories, then
+# hands the unit to systemd. It NEVER touches the contents of
+# /var/lib/tesserafin, /etc/tesserafin or /var/log/tesserafin beyond fixing
+# ownership: this script runs on every upgrade as well as on first install.
+set -e
+
+TESSERAFIN_USER=tesserafin
+TESSERAFIN_GROUP=tesserafin
+DATA_DIR=/var/lib/tesserafin
+CONFIG_DIR=/etc/tesserafin
+CACHE_DIR=/var/cache/tesserafin
+LOG_DIR=/var/log/tesserafin
+
+case "$1" in
+    configure)
+        if ! getent group "${TESSERAFIN_GROUP}" >/dev/null; then
+            addgroup --system "${TESSERAFIN_GROUP}"
+        fi
+
+        if ! getent passwd "${TESSERAFIN_USER}" >/dev/null; then
+            adduser --system --no-create-home \
+                    --ingroup "${TESSERAFIN_GROUP}" \
+                    --home "${DATA_DIR}" \
+                    --shell /usr/sbin/nologin \
+                    --gecos "Tesserafin Server" \
+                    "${TESSERAFIN_USER}"
+        fi
+
+        # 0750: readable by the service identity and by an administrator who
+        # joins the tesserafin group, and by nobody else.
+        for dir in "${DATA_DIR}" "${CONFIG_DIR}" "${CACHE_DIR}" "${LOG_DIR}"; do
+            mkdir -p "${dir}"
+            chown "${TESSERAFIN_USER}:${TESSERAFIN_GROUP}" "${dir}"
+            chmod 0750 "${dir}"
+        done
+
+        # The environment file stays root-owned and group-readable: the service
+        # reads it as root before dropping to the tesserafin user.
+        if [ -f "${CONFIG_DIR}/tesserafin.conf" ]; then
+            chown root:"${TESSERAFIN_GROUP}" "${CONFIG_DIR}/tesserafin.conf"
+            chmod 0640 "${CONFIG_DIR}/tesserafin.conf"
+        fi
+        ;;
+
+    abort-upgrade|abort-remove|abort-deconfigure)
+        ;;
+
+    *)
+        echo "postinst called with unknown argument '$1'" >&2
+        exit 1
+        ;;
+esac
+
+if [ -d /run/systemd/system ]; then
+    systemctl daemon-reload >/dev/null 2>&1 || true
+    if [ "$1" = "configure" ] && [ -z "$2" ]; then
+        # First install: enable, but do not start. The administrator decides when
+        # a media server starts serving.
+        systemctl enable tesserafin.service >/dev/null 2>&1 || true
+    fi
+    if [ "$1" = "configure" ] && [ -n "$2" ] \
+       && systemctl is-active --quiet tesserafin.service; then
+        # Upgrade of a running service: restart onto the new payload.
+        systemctl restart tesserafin.service >/dev/null 2>&1 || true
+    fi
+fi
+
+exit 0

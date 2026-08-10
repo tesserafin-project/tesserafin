@@ -1,0 +1,25 @@
+#!/bin/sh
+# Tesserafin Server — Debian post-removal.
+#
+# DELIBERATELY DESTRUCTIVE-FREE. This script never removes /var/lib/tesserafin,
+# /etc/tesserafin, /var/log/tesserafin, the tesserafin user, or anything else
+# that could hold a library, a database or user media — not on `remove`, and not
+# on `purge` either. Package management removes what the package installed;
+# everything the server produced is the operator's, and only the operator
+# deletes it. See docs/distribution/L0-linux-packages.md.
+set -e
+
+case "$1" in
+    remove|purge|upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
+        ;;
+    *)
+        echo "postrm called with unknown argument '$1'" >&2
+        exit 1
+        ;;
+esac
+
+if [ -d /run/systemd/system ]; then
+    systemctl daemon-reload >/dev/null 2>&1 || true
+fi
+
+exit 0
