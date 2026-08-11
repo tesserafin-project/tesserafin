@@ -137,7 +137,8 @@ Jellyfin's builder happens to include.
 | HLS segmenting, image extraction, `ffprobe` JSON | native |
 | VAAPI encode/decode/filters | libva 2.24.1 (bundled) + libdrm |
 | QSV | libvpl |
-| NVENC/NVDEC/CUVID and `*_cuda` filters | nv-codec-headers |
+| NVENC/NVDEC/CUVID | nv-codec-headers |
+| `scale_cuda`, `tonemap_cuda`, `overlay_cuda`, `transpose_cuda` | nv-codec-headers **+ `--enable-cuda-llvm`** — the kernels are `.cu` files gcc cannot compile, and `--enable-cuda` alone silently omits every one of these filters |
 | AMF | AMF headers |
 | `*_opencl` filters | OpenCL headers |
 
@@ -252,10 +253,29 @@ string `$ORIGIN/../lib` and refuses every other value, including the mangled
 `25ORIGIN/../lib` that FFmpeg's `configure` produces from `--extra-ldflags`.
 Negative control 8 proves the refusal with a real absolute vendor RUNPATH.
 
+A bundled libva also needs its **driver search path** set explicitly, and this
+is the option that is easy to miss. meson derives `driverdir` from `--prefix`,
+so a libva built into `/opt/tesserafin-ffmpeg` looks for VA drivers in
+`/opt/tesserafin-ffmpeg/lib/dri` — a directory this project never installs
+anything into. The symptom is not an obvious one: `ffmpeg -hwaccels` still lists
+`vaapi` and looks entirely healthy, and only a real transcode reveals
+`va_openDriver() returns -1` on a machine with a perfectly good driver. libva is
+therefore built with an explicit `driverdir` covering every location the four
+declared distributions put a VA driver, on both architectures.
+`LIBVA_DRIVERS_PATH` still takes precedence for anything unusual.
+
 On every declared environment, `ffmpeg -hwaccels` and the server-style hardware
 probe must return without aborting, and an unavailable device must produce a
 controlled "device creation failed", not `SIGABRT`. A runtime that survives only
 because the caller wraps the subprocess is not accepted.
+
+Note that **exit code alone cannot make that distinction** for ffmpeg. It
+reports AVERROR values by truncating a negative errno into the exit status, so
+`EINVAL` leaves 234 and `EIO` leaves 251 — squarely inside the range a signal
+death occupies. What separates a controlled failure from a crash is the abort
+signature on stderr, and that is what the acceptance scripts test. A non-zero
+exit with nothing on stderr is treated as a failure too: a death with no
+diagnostic is not something a caller can fall back on.
 
 ---
 
@@ -263,10 +283,28 @@ because the caller wraps the subprocess is not accepted.
 
 Compiled capability and runtime capability are recorded separately, always.
 
-Listing an encoder proves it is compiled in. It does not prove it operates. A
-hardware path is claimed as working only where matching physical hardware
-produced the evidence; everywhere else the capability manifest says
-**"not runtime-tested"**. Hosted CI has no GPU and makes no hardware claim.
+Listing an encoder proves it is compiled in. It does not prove it operates.
+
+**The runtime archive never carries an affirmative hardware claim — not even a
+true one.** Every path in `capability.json` reads `"not runtime-tested"`, always,
+and `ci/ffmpeg/verify-closure.sh` refuses any other value. Two reasons pointing
+the same way:
+
+* *reproducibility* — a machine with a GPU and a hosted runner without one would
+  otherwise produce different bytes for the same build revision, and bit-for-bit
+  is not something to trade away for a hardware accident;
+* *honesty* — "works" is a property of a machine, not of an artifact. The same
+  binary on the same distribution succeeds or fails depending on a driver the
+  archive does not contain.
+
+Runtime hardware evidence therefore lives **beside** the archive, produced by
+`ci/ffmpeg/accept-hardware.sh` on a machine that actually had the hardware. That
+script performs a complete transcode and verifies the output is genuinely H.264
+and genuinely non-empty rather than trusting an exit code — a device that
+initialises and then produces nothing is not a working hardware path. Where no
+render node exists it records `deferred` and exits 0, because absence of a GPU
+is a deferral rather than a failure, and it will never write an affirmative
+claim it did not observe. Hosted CI has no GPU and makes no hardware claim.
 
 ---
 
