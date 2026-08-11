@@ -90,7 +90,7 @@ p=sys.argv[1]; j=json.load(open(p))
 for c in j["components"]:
     if c["sourceType"]=="git": c["commit"]="deadbeef"; break
 json.dump(j, open(p,"w"))' "${d}/components.json"
-control "12 a truncated commit pin is refused" "not pinned to a full commit" gate_policy "${d}"
+control "4b a truncated commit pin is refused" "not pinned to a full commit" gate_policy "${d}"
 
 echo "== source integrity"
 d="$(mktemp -d "${LAB}/fetch.XXXX")"
@@ -127,7 +127,18 @@ pe --add-needed 'libtotally-undeclared.so.9' "/lab/needed/bin/ffmpeg"
 control "9  an undeclared DT_NEEDED is refused" "undocumented libtotally-undeclared.so.9" run_gate "${s}"
 
 s="${LAB}/nobundle"; cp -a "${STAGE}" "${s}"; rm -f "${s}/lib/libva.so.2"
-control "7b a required library that is not bundled is refused" "not bundled" run_gate "${s}"
+control "8b a required library that is not bundled is refused" "not bundled" run_gate "${s}"
+
+s="${LAB}/buildpath"; cp -a "${STAGE}" "${s}"
+# A build path leaks through a section the compiler never rewrote — a generated
+# config, a dependency that dropped CFLAGS, a .comment record. Reproduce that
+# shape with objcopy rather than by appending bytes to the file: a section is
+# what a real leak looks like, and the binary stays loadable, so the gate has to
+# catch it by reading the binary rather than by the binary failing to run.
+printf '/tmp/tf-ffbuild/x264\n' > "${LAB}/leak.txt"
+docker run --rm --user "$(id -u):$(id -g)" --volume "${LAB}:/lab" "${BUILDER_TAG}" \
+    objcopy --add-section .tf_leak=/lab/leak.txt /lab/buildpath/bin/ffmpeg
+control "11 an embedded build-host path is refused" "embeds build path" run_gate "${s}"
 
 glibc_floor_control() {
     FF_GLIBC_FLOOR=2.17 "${ROOT}/ci/ffmpeg/verify-runtime.sh" --stage "${STAGE}" --arch linux-x64
@@ -155,7 +166,7 @@ int main(int argc, char **argv) {
 STUB
 docker run --rm --user "$(id -u):$(id -g)" --volume "${LAB}:/lab" "${BUILDER_TAG}" \
     gcc -O0 -o /lab/aborting/bin/ffmpeg /lab/abort-stub.c
-control "13 a hardware query that aborts is refused" "did not return cleanly" run_gate "${s}"
+control "14 a libva probe that aborts is refused" "did not return cleanly" run_gate "${s}"
 
 echo "== redistribution closure"
 if [[ -n "${SRC_ARCHIVE}" && -f "${SRC_ARCHIVE}" ]]; then
@@ -173,16 +184,38 @@ json.dump(j, open(p,"w"), indent=2, sort_keys=True)' "${s}"
     control "6  a corresponding-source digest that does not match is refused" \
             "the archive hashes to" closure "${s}" "${SRC_ARCHIVE}"
 
+    # Control 6 doctors the provenance and leaves the archive alone. This is the
+    # other direction: the provenance is exactly as generated, and the SOURCE a
+    # recipient would receive has been edited afterwards. Both sides have to be
+    # proven, because a gate that only compared SOURCE.json against itself would
+    # pass control 6 and still ship altered source.
+    altered_source() {
+        local lab="${LAB}/altered" arch
+        rm -rf "${lab}"; mkdir -p "${lab}/x"
+        tar --use-compress-program=unzstd -xf "${SRC_ARCHIVE}" -C "${lab}/x"
+        # A real edit to a real source file, not a corrupted byte: this is the
+        # scenario where someone patches the shipped source and reships it.
+        local victim
+        victim="$(find "${lab}/x" -name 'configure' -path '*ffmpeg*' -print -quit)"
+        [[ -n "${victim}" ]] || victim="$(find "${lab}/x" -type f -name '*.c' -print -quit)"
+        printf '\n# altered after provenance generation\n' >> "${victim}"
+        arch="${lab}/$(basename "${SRC_ARCHIVE}")"
+        tar -C "${lab}/x" -cf - . | zstd -q -o "${arch}"
+        "${ROOT}/ci/ffmpeg/verify-closure.sh" --runtime "${RUNTIME}" --source-archive "${arch}"
+    }
+    control "13 source altered after provenance generation is refused" \
+            "the archive hashes to" altered_source
+
     s="${LAB}/hwclaim"; cp -a "${RUNTIME}" "${s}"
     python3 -c '
 import json,sys
 p=sys.argv[1]+"/capability.json"; j=json.load(open(p))
 j["hardwareRuntimeEvidence"]["nvenc"]="works on all NVIDIA GPUs"
 json.dump(j, open(p,"w"), indent=2, sort_keys=True)' "${s}"
-    control "14 a hardware claim with no recorded evidence is refused" \
+    control "15 a hardware claim with no recorded evidence is refused" \
             "claimed without recorded evidence" closure "${s}" "${SRC_ARCHIVE}"
 else
-    echo "  note: no --source-archive given; controls 6, 7 and 14 not run"
+    echo "  note: no --source-archive given; controls 6, 7, 13 and 15 not run"
 fi
 
 echo "== determinism"
@@ -197,9 +230,9 @@ epoch_control() {
     return 0
 }
 if epoch_control; then
-    PASSED=$((PASSED + 1)); echo "  ok   11 SOURCE_DATE_EPOCH is fixed, not the clock"
+    PASSED=$((PASSED + 1)); echo "  ok   12 SOURCE_DATE_EPOCH is fixed, not the clock"
 else
-    FAILED=$((FAILED + 1)); echo "  FAIL 11 SOURCE_DATE_EPOCH is not stable"
+    FAILED=$((FAILED + 1)); echo "  FAIL 12 SOURCE_DATE_EPOCH is not stable"
 fi
 
 echo

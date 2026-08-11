@@ -8,6 +8,7 @@
 # refuses:
 #   * an RPATH or RUNPATH naming Jellyfin, a build workspace or a host path;
 #   * a DT_NEEDED entry that ci/ffmpeg/allowed-dt-needed.txt does not document;
+#   * an embedded build-host path;
 #   * a GLIBC symbol version above the declared floor;
 #   * a wrong ELF machine for the architecture;
 #   * a nonfree or unredistributable licence, or any trace of libfdk_aac.
@@ -61,7 +62,6 @@ done
 echo "== RPATH / RUNPATH"
 for b in "${FFMPEG}" "${FFPROBE}"; do
     name="$(basename "${b}")"
-    paths="$(readelf -d "${b}" | grep -oE '\[(.*)\]' | tr -d '[]' | grep -E '^/|\$ORIGIN' || true)"
     rp="$(readelf -d "${b}" | grep -E '\(RPATH\)|\(RUNPATH\)' || true)"
     if [[ -z "${rp}" ]]; then
         pass "${name} carries no RPATH and no RUNPATH"
@@ -78,7 +78,6 @@ for b in "${FFMPEG}" "${FFPROBE}"; do
             fail "${name} RUNPATH is '${value}', expected exactly \$ORIGIN/../lib"
         fi
     fi
-    unset paths
 done
 
 echo "== DT_NEEDED closure"
@@ -117,6 +116,43 @@ while read -r soname; do
     esac
 done < <(readelf -d "${FFMPEG}" | grep NEEDED | sed -E 's/.*\[(.*)\].*/\1/')
 [[ "${bundled}" -gt 0 ]] || pass "no bundled shared library is required"
+
+echo "== embedded build paths"
+# -ffile-prefix-map is applied to every compilation unit, but it only reaches
+# what the compiler sees. A generated config header, a build system that bakes
+# its own workspace into a string, or a dependency that ignores CFLAGS can still
+# leave the build machine's layout inside the shipped binary. That is both a
+# reproducibility hazard — two runners with different paths would differ — and
+# an information leak. The scan reads the binaries, not the build logs.
+#
+# --prefix is deliberately NOT in this list: /opt/tesserafin-ffmpeg is the
+# installed location, it is identical on every machine, and -buildconf is
+# supposed to report it.
+FORBIDDEN_PATHS=(
+    /tmp/tf-ffbuild   # the dependency build root
+    /tmp/tf-ffdeps    # the dependency install prefix
+    /tmp/tf-ffinstall # the FFmpeg DESTDIR
+    /cache/           # the read-only source cache mount
+    /repo/            # the read-only repository mount
+    /out/             # the output mount
+    /home/            # any workstation home directory
+    /Users/           # ditto, on a developer machine
+    /builds/          # common CI checkout roots
+    /github/
+    /runner/
+)
+for b in "${FFMPEG}" "${FFPROBE}"; do
+    name="$(basename "${b}")"
+    hits=()
+    for p in "${FORBIDDEN_PATHS[@]}"; do
+        if LC_ALL=C grep -qaF -- "${p}" "${b}"; then hits+=("${p}"); fi
+    done
+    if [[ "${#hits[@]}" -eq 0 ]]; then
+        pass "${name} embeds no build-host path"
+    else
+        fail "${name} embeds build path(s): ${hits[*]}"
+    fi
+done
 
 echo "== GLIBC floor (${FF_GLIBC_FLOOR}, set by Rocky Linux 9)"
 for b in "${FFMPEG}" "${FFPROBE}"; do
