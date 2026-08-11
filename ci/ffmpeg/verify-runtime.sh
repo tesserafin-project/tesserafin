@@ -121,41 +121,68 @@ echo "== embedded build paths"
 # -ffile-prefix-map is applied to every compilation unit, but it only reaches
 # what the compiler sees. A generated config header, a build system that bakes
 # its own workspace into a string, or a dependency that ignores CFLAGS can still
-# leave the build machine's layout inside the shipped binary. That is both a
-# reproducibility hazard — two runners with different paths would differ — and
-# an information leak. The scan reads the binaries, not the build logs.
+# leave the build machine's layout inside the shipped binary. That is a
+# reproducibility hazard, an information leak, and — when the leaked prefix is
+# world-writable — a live dlopen and config-injection surface: libvpl dlopen()s
+# its dispatcher from its compiled-in prefix and OpenSSL reads openssl.cnf from
+# its own.
 #
-# --prefix is deliberately NOT in this list: /opt/tesserafin-ffmpeg is the
-# installed location, it is identical on every machine, and -buildconf is
-# supposed to report it.
-FORBIDDEN_PATHS=(
-    /tmp/tf-ffbuild   # the dependency build root
-    /tmp/tf-ffdeps    # the former dependency prefix; must never come back
-    /tmp/tf-ffinstall # the FFmpeg DESTDIR
-    /tmp/             # any scratch path at all: several dependencies READ their
-                      # compiled-in prefix at runtime, and a world-writable one
-                      # is a dlopen and a config-injection surface
-    /cache/           # the read-only source cache mount
-    /repo/            # the read-only repository mount
-    /out/             # the output mount
-    /home/            # any workstation home directory
-    /Users/           # ditto, on a developer machine
-    /builds/          # common CI checkout roots
-    /github/
-    /runner/
-)
-for b in "${FFMPEG}" "${FFPROBE}"; do
-    name="$(basename "${b}")"
-    hits=()
-    for p in "${FORBIDDEN_PATHS[@]}"; do
-        if LC_ALL=C grep -qaF -- "${p}" "${b}"; then hits+=("${p}"); fi
-    done
-    if [[ "${#hits[@]}" -eq 0 ]]; then
-        pass "${name} embeds no build-host path"
-    else
-        fail "${name} embeds build path(s): ${hits[*]}"
-    fi
-done
+# The scan reads the binaries, not the build logs, and it distinguishes a
+# compiled-in DIRECTORY PREFIX from an ordinary runtime path. `/tmp/%sXXXXXX` is
+# an mkstemp template and `/tmp/_x265_semW_` is a shared-memory name; neither is
+# a build path, and a gate that fails on them teaches people to disable it.
+# --prefix is likewise not a finding: /opt/tesserafin-ffmpeg is the installed
+# location, identical on every machine, and -buildconf is supposed to report it.
+python3 - "${FFMPEG}" "${FFPROBE}" <<'PY' || FAILURES=$((FAILURES + 1))
+import re, sys
+
+# Roots that are a build machine's layout by definition. Each must appear at the
+# START of a path — anchoring stops /cache/ matching inside
+# /opt/tesserafin-ffmpeg/var/cache/fontconfig, which is the install prefix doing
+# exactly what it should.
+ROOTS = [
+    (rb"/tmp/tf-",  "a Tesserafin build or dependency directory"),
+    (rb"/cache/",   "the read-only source cache mount"),
+    (rb"/repo/",    "the read-only repository mount"),
+    (rb"/out/",     "the build output mount"),
+    (rb"/home/",    "a workstation home directory"),
+    (rb"/Users/",   "a developer machine home directory"),
+    (rb"/builds/",  "a CI checkout root"),
+    (rb"/github/",  "a CI checkout root"),
+    (rb"/runner/",  "a CI checkout root"),
+]
+# A path may only start at the beginning of a string, so anything but a path
+# character in front of it.
+LEAD = rb"(?:^|[^A-Za-z0-9_./+-])"
+
+# And a generic catch: any scratch prefix under /tmp that has an installed-tree
+# shape. This is what makes the rule survive someone renaming the build root.
+TREE = re.compile(
+    LEAD + rb"/tmp/[A-Za-z0-9_.-]+/(?:lib|lib64|bin|etc|share|include|ssl|var)/")
+
+failures = 0
+for path in sys.argv[1:3]:
+    blob = open(path, "rb").read()
+    name = path.rsplit("/", 1)[-1]
+    hits = []
+    for root, why in ROOTS:
+        m = re.search(LEAD + re.escape(root), blob)
+        if m:
+            ctx = blob[m.start():m.start() + 90].split(b"\x00")[0]
+            hits.append(f"{root.decode()} ({why}): {ctx.decode('utf-8', 'replace').strip()}")
+    m = TREE.search(blob)
+    if m:
+        ctx = blob[m.start():m.start() + 90].split(b"\x00")[0]
+        hits.append("a scratch prefix under /tmp with an installed-tree shape: "
+                    + ctx.decode("utf-8", "replace").strip())
+    if hits:
+        failures += 1
+        for h in hits:
+            print(f"  FAIL: {name} embeds {h}")
+    else:
+        print(f"  ok  : {name} embeds no build-host path")
+sys.exit(1 if failures else 0)
+PY
 
 echo "== GLIBC floor (${FF_GLIBC_FLOOR}, set by Rocky Linux 9)"
 for b in "${FFMPEG}" "${FFPROBE}"; do

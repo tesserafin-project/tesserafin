@@ -69,21 +69,29 @@ ok(){ printf 'PASS %s\n' "$1"; }
 no(){ printf 'FAIL %s :: %s\n' "$1" "${2:-}"; }
 try(){ name="$1"; shift; out=$("$@" 2>&1); if [ $? -eq 0 ]; then ok "$name"; else no "$name" "$(printf '%s' "$out" | tail -1)"; fi; }
 
-# A command that is EXPECTED to fail, and must fail in a controlled way. Exit
-# codes at or above 128 mean the process died on a signal — 134 is SIGABRT,
-# which is exactly how the upstream portable binary reports a missing libva
-# symbol. A gate that only checked "did it fail" would accept that crash.
+# A command that is EXPECTED to fail, and must fail in a CONTROLLED way rather
+# than crash. The distinction is the whole point of Phase 6: the upstream
+# portable binary raises SIGABRT when libva is missing a symbol, and a caller
+# that only checks for a non-zero exit cannot tell that apart from "no device".
+#
+# Exit code alone cannot make the distinction here. ffmpeg reports AVERROR
+# values by truncating a negative errno into the exit status, so EINVAL leaves
+# 234 and EPERM leaves 255 — squarely inside the range a signal death would
+# occupy. What separates them is what reaches stderr: a controlled failure
+# prints a diagnostic, and a crash prints an abort signature or nothing at all.
+ABORT_SIGNATURE='Assertion|assertion failed|Segmentation fault|stack smashing|core dumped|terminated by signal|Aborted'
 controlled(){
   name="$1"; shift
   out=$("$@" 2>&1); rc=$?
-  if [ "$rc" -ge 128 ]; then
-    no "$name" "died on signal $((rc - 128)) (exit $rc): $(printf '%s' "$out" | tail -1)"
+  if printf '%s' "$out" | grep -qE "$ABORT_SIGNATURE"; then
+    no "$name" "crashed: $(printf '%s' "$out" | grep -E "$ABORT_SIGNATURE" | tail -1)"
   elif [ "$rc" -eq 0 ]; then
     ok "$name"
+  elif [ -n "$out" ]; then
+    # Non-zero with a diagnostic the caller can read and fall back on.
+    ok "$name"
   else
-    # A non-zero, non-signal exit with a diagnostic on stderr is the controlled
-    # outcome: the caller can read it and fall back.
-    if [ -n "$out" ]; then ok "$name"; else no "$name" "exit $rc with no diagnostic at all"; fi
+    no "$name" "exit $rc with nothing on stderr; a silent death is not a controlled result"
   fi
 }
 
@@ -119,11 +127,10 @@ controlled cuda-probe "$FF" -hide_banner -loglevel error \
 # Software fallback after a failed hardware attempt must be a real encode, not a
 # crash the caller swallowed. Run the hardware attempt, ignore it, then require
 # the software path to produce actual output in the same environment.
-"$FF" -hide_banner -loglevel error -init_hw_device vaapi=va:/dev/dri/renderD128 \
-    -f lavfi -i testsrc=size=64x64:rate=5:duration=1 -c:v h264_vaapi -f null - >/dev/null 2>&1
-hwrc=$?
-if [ "$hwrc" -ge 128 ]; then
-  no software-fallback "the hardware attempt died on signal $((hwrc - 128)); a fallback here would be hiding a crash"
+hwout=$("$FF" -hide_banner -loglevel error -init_hw_device vaapi=va:/dev/dri/renderD128 \
+    -f lavfi -i testsrc=size=64x64:rate=5:duration=1 -c:v h264_vaapi -f null - 2>&1)
+if printf '%s' "$hwout" | grep -qE "$ABORT_SIGNATURE"; then
+  no software-fallback "the hardware attempt crashed; a fallback here would be hiding it"
 else
   "$FF" -hide_banner -loglevel error -f lavfi -i testsrc=size=64x64:rate=5:duration=1 \
       -c:v libx264 -preset ultrafast -f mp4 fallback.mp4 -y >/dev/null 2>&1

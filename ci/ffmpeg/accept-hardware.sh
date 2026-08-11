@@ -109,10 +109,16 @@ else
         rc=$?
         set -e
 
-        if [[ "${rc}" -ge 128 ]]; then
+        # Exit code alone cannot tell a crash from a controlled failure here:
+        # ffmpeg reports AVERROR values by truncating a negative errno into the
+        # exit status, so EIO leaves 251 and EINVAL leaves 234 — squarely inside
+        # the range a signal death would occupy. The abort signature on stderr
+        # is what actually separates them.
+        if grep -qE 'Assertion|assertion failed|Segmentation fault|stack smashing|core dumped' \
+                "${WORK}/vaapi.log"; then
             # The specific failure #229 exists to eliminate.
             STATUS="failed"
-            DETAIL="the VAAPI transcode died on signal $((rc - 128)); an abort is never an acceptable hardware outcome"
+            DETAIL="the VAAPI transcode crashed: $(grep -m1 -E 'Assertion|Segmentation fault' "${WORK}/vaapi.log" | tail -1)"
             echo "   FAIL: ${DETAIL}"
             tail -5 "${WORK}/vaapi.log" >&2
         elif [[ "${rc}" -ne 0 ]]; then

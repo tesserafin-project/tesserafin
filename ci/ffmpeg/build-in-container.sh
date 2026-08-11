@@ -301,8 +301,21 @@ if step libdrm; then
 fi
 
 if step libva; then
+    # driverdir is the single most important option here and it has no sensible
+    # default for a BUNDLED libva. Left alone, meson derives it from --prefix, so
+    # the shipped libva looks for VA drivers in /opt/tesserafin-ffmpeg/lib/dri —
+    # a directory this project never installs anything into. The result is
+    # va_openDriver() returning -1 on a machine that has a perfectly good driver,
+    # with -hwaccels still listing vaapi and looking healthy.
+    #
+    # The list below is every location the four declared distributions put a VA
+    # driver, for both architectures. libva walks it in order and also honours
+    # LIBVA_DRIVERS_PATH ahead of it, so a user with a driver somewhere unusual
+    # can still point at it.
+    LIBVA_DRIVERDIR='/usr/lib/x86_64-linux-gnu/dri:/usr/lib/aarch64-linux-gnu/dri:/usr/lib64/dri:/usr/lib64/dri-freeworld:/usr/lib/dri:/usr/local/lib/dri'
     d="$(unpack libva)"; ( cd "${d}" && meson setup build --prefix="${PREFIX}" --libdir=lib \
         --buildtype=release --default-library=static \
+        -Ddriverdir="${LIBVA_DRIVERDIR}" \
         -Dwith_x11=no -Dwith_glx=no -Dwith_wayland=no -Dwith_win32=no -Denable_docs=false \
         && ninja -C build -j"${J}" && ninja -C build install )
     done_step libva
