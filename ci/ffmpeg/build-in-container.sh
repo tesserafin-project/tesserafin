@@ -71,7 +71,13 @@ WORK=/tmp/tf-ffinstall
 if [[ "${FF_INCREMENTAL:-0}" == "1" ]]; then
     ff_log "INCREMENTAL build: completed components are reused. Not valid for reproducibility evidence."
 else
-    rm -rf "${PREFIX}" "${BUILDROOT}" "${WORK}"
+    # PREFIX itself is created by the builder image and owned by root, so the
+    # build can write into it but cannot remove it. Only its CONTENTS belong to
+    # the build. Removing the directory fails with EACCES on /opt, which killed
+    # every clean build while incremental ones — which never take this branch —
+    # kept working.
+    rm -rf "${BUILDROOT}" "${WORK}"
+    find "${PREFIX}" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
 fi
 mkdir -p "${PREFIX}/.stamps" "${BUILDROOT}" "${WORK}" "${OUT}"
 
