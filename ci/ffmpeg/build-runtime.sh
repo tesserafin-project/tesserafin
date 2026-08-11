@@ -24,7 +24,12 @@ while [[ $# -gt 0 ]]; do
 done
 [[ -n "${ARCH}" ]] || ff_die "--arch is required"
 [[ -n "${OUT}" ]]  || ff_die "--out is required"
-CACHE="${CACHE:-${OUT}/source-cache}"
+# FF_SOURCE_CACHE moves the VERIFIED SOURCE cache out of the build output
+# directory so it can outlive it — a restored actions/cache entry, or a local
+# cache shared between two clean builds (#232). It relocates fetched source and
+# nothing else: the dependency prefix, the build root and every compiled object
+# still live inside the container and are still discarded with it.
+CACHE="${CACHE:-${FF_SOURCE_CACHE:-${OUT}/source-cache}}"
 
 ff_load_manifest
 TRIPLET="$(ff_arch_triplet "${ARCH}")"

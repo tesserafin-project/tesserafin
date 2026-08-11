@@ -234,6 +234,14 @@ jobs:
               --runtime "${RUNNER_TEMP}/rt/tesserafin-ffmpeg-7.1.4-tesserafin.1-linux-x64" \
               --source-archive "${RUNNER_TEMP}/rt/tesserafin-ffmpeg-7.1.4-tesserafin.1-corresponding-source.tar.zst"
 
+      # A separate suite, deliberately. The 17 controls above gate the RUNTIME
+      # and are unchanged by #232; these gate the source CACHE, and keeping them
+      # apart is what makes "the 17 are untouched" a fact anyone can check with
+      # a diff rather than a claim. This job has no source cache of its own — it
+      # builds its own hostile ones from scratch.
+      - name: Prove a restored source cache buys no trust
+        run: ./ci/tests/ffmpeg-source-cache-controls.sh
+
   reproducibility:
     name: Reproducibility ${{ matrix.rid }}
     needs: build

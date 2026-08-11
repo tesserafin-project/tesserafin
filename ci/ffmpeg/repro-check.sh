@@ -53,13 +53,18 @@ ci_delivered_names() {
 
 one_build() { # <output dir>
     local dir="$1"
+    # The build root is destroyed first, every time. FF_SOURCE_CACHE, when set,
+    # holds VERIFIED SOURCE outside that root so a restored cache survives this
+    # line; it carries no compiled output, so the compilation below is as clean
+    # as it was before. fetch-sources.sh re-verifies every byte of it anyway.
+    local cache="${FF_SOURCE_CACHE:-${dir}/source-cache}"
     rm -rf "${dir}"; mkdir -p "${dir}"
-    "${FF_REPO_ROOT}/ci/ffmpeg/build-runtime.sh" --arch "${ARCH}" --out "${dir}" >&2
+    "${FF_REPO_ROOT}/ci/ffmpeg/build-runtime.sh" --arch "${ARCH}" --out "${dir}" --cache "${cache}" >&2
     "${FF_REPO_ROOT}/ci/ffmpeg/verify-runtime.sh" \
         --stage "${dir}/${NAME}-${ARCH}" --arch "${ARCH}" \
         --manifest "${dir}/${NAME}-${ARCH}/capability.json" >&2
     "${FF_REPO_ROOT}/ci/ffmpeg/package-runtime.sh" \
-        --stage "${dir}/${NAME}-${ARCH}" --cache "${dir}/source-cache" \
+        --stage "${dir}/${NAME}-${ARCH}" --cache "${cache}" \
         --out "${dir}/pkg" --arch "${ARCH}" >&2
 }
 
