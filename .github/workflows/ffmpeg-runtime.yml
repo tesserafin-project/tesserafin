@@ -10,8 +10,53 @@ name: '🎞️ FFmpeg runtime'
 # Both architectures are built AND accepted on architecture-native runners.
 # Nothing here is cross-compiled or emulated.
 
+# Eight jobs, ~77 runner-minutes and a ~44-minute critical path, so it runs only
+# when the runtime or the contract it has to satisfy can actually change (#232).
+#
+# The path set is the F0 CONTRACT, not a convenience list. It is everything that
+# builds the runtime, everything that gates it, and the three server files the
+# required FFmpeg capability is derived from:
+#
+#   EncoderValidator.cs          _requiredDecoders, _requiredEncoders,
+#                                _requiredFilters and MinVersion
+#   HardwareBackendCatalog.cs    the encoder and hwaccel name each hardware
+#                                backend probes for
+#   HardwareAccelerationType.cs  the hardware accelerators the server can ask for
+#
+# Required protocols are derived in ci/ffmpeg/verify-runtime.sh and have no
+# server-side declaration, so no further server path belongs here.
+#
+# Anything outside this set — packaging, Docker, docs, server endpoints,
+# dependency bumps — cannot change a delivered byte and no longer pays for the
+# matrix. These jobs are deliberately NOT branch-protection required contexts,
+# so a pull request that does not match leaves no check pending.
 on:
   pull_request:
+    paths:
+      - '.github/workflows/ffmpeg-runtime.yml'
+      - 'ci/ffmpeg/**'
+      - 'ci/tests/ffmpeg-controls.sh'
+      - 'ci/tests/ffmpeg-source-cache-controls.sh'
+      - 'Tesserafin.MediaEncoding/Encoder/EncoderValidator.cs'
+      - 'Tesserafin.Controller/MediaEncoding/HardwareBackendCatalog.cs'
+      - 'Tesserafin.Model/Entities/HardwareAccelerationType.cs'
+  # The same set on master. An F0-affecting merge now verifies itself instead of
+  # depending on someone remembering to dispatch the workflow afterwards.
+  # GitHub Actions does not support YAML anchors, so the list is written twice;
+  # the two must stay identical.
+  push:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/ffmpeg-runtime.yml'
+      - 'ci/ffmpeg/**'
+      - 'ci/tests/ffmpeg-controls.sh'
+      - 'ci/tests/ffmpeg-source-cache-controls.sh'
+      - 'Tesserafin.MediaEncoding/Encoder/EncoderValidator.cs'
+      - 'Tesserafin.Controller/MediaEncoding/HardwareBackendCatalog.cs'
+      - 'Tesserafin.Model/Entities/HardwareAccelerationType.cs'
+  # Unconditional and unfiltered: a manual run must always be possible, whatever
+  # the last commit touched.
   workflow_dispatch:
 
 permissions:
@@ -19,7 +64,10 @@ permissions:
 
 concurrency:
   group: ffmpeg-runtime-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # A newer push to a pull request supersedes the older one. A merge to master
+  # does not supersede the master run before it: that run is the acceptance
+  # evidence for its own commit, and cancelling it would destroy the record.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   policy:
