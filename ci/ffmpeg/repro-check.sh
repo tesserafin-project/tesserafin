@@ -43,6 +43,14 @@ digests() { # <build dir>
     "${FF_REPO_ROOT}/ci/ffmpeg/delivered-digests.sh" --pkg "$1/pkg" --arch "${ARCH}"
 }
 
+# The delivered file NAMES alone, for validating a reference list before any
+# digest is compared. --pkg /nonexistent makes every entry MISSING, which is
+# exactly right here: only the second column is read.
+ci_delivered_names() {
+    "${FF_REPO_ROOT}/ci/ffmpeg/delivered-digests.sh" --pkg "${OUT}" --arch "${ARCH}" \
+        | awk '{print $2}' | LC_ALL=C sort
+}
+
 one_build() { # <output dir>
     local dir="$1"
     rm -rf "${dir}"; mkdir -p "${dir}"
@@ -58,6 +66,17 @@ one_build() { # <output dir>
 mkdir -p "${OUT}"
 if [[ -n "${AGAINST}" ]]; then
     [[ -f "${AGAINST}" ]] || ff_die "reference digest file not found: ${AGAINST}"
+    # A reference in a different shape would "differ" from this build for
+    # reasons that have nothing to do with reproducibility, and a reference
+    # listing FEWER files would let a missing artifact pass unnoticed. Require
+    # the same file set, by name, before comparing any digest.
+    expected="$(ci_delivered_names)"
+    actual="$(awk '{print $2}' "${AGAINST}" | LC_ALL=C sort)"
+    if [[ "${expected}" != "${actual}" ]]; then
+        echo "the reference digest list does not describe the same delivered files:" >&2
+        diff <(printf '%s\n' "${expected}") <(printf '%s\n' "${actual}") >&2 || true
+        ff_die "refusing to compare ${AGAINST} against a differently shaped list"
+    fi
     cp "${AGAINST}" "${OUT}/first.sha256"
     ff_log "reproducibility: comparing against ${AGAINST}"
 else
