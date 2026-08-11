@@ -66,7 +66,22 @@ while IFS=$'\t' read -r name kind pin src submodules; do
             dest="${CACHE}/archives/${name}-$(basename "${src}")"
             if [[ ! -f "${dest}" ]]; then
                 ff_log "fetching ${name}"
-                curl --fail --silent --show-error --location --retry 3 \
+                # --retry-all-errors, not just --retry. curl's plain --retry
+                # covers timeouts, 5xx and 429 only, so an HTTP status outside
+                # that set kills the fetch on the first attempt with no retry at
+                # all. www.freedesktop.org answered a hosted x64 runner with 418
+                # while the arm64 runner in the same run fetched the identical
+                # URL successfully, and `--retry 3` returned exit 22 instantly.
+                # A shared-IP CI runner meeting a rate limiter is a permanent
+                # condition of hosted builds, not a freak event.
+                #
+                # This changes nothing about what may be fetched: the URL is
+                # still the pinned one and the SHA-256 below is still checked
+                # against the manifest, so a retry can only ever obtain the same
+                # bytes or fail.
+                curl --fail --silent --show-error --location \
+                     --retry 5 --retry-all-errors --retry-max-time 180 \
+                     --connect-timeout 30 \
                      --output "${dest}.part" "${src}"
                 mv "${dest}.part" "${dest}"
             fi
