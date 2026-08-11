@@ -1,0 +1,12 @@
+# Configure flags that apply only to linux-x64 (F0, issue #229).
+#
+# Appended to ffmpeg-configure.txt by ci/ffmpeg/build-in-container.sh. Same
+# format: one flag per line, comments and blank lines ignored.
+#
+# Both entries are x86-64 vendor stacks. oneVPL is Intel's QSV runtime and AMF
+# is AMD's encoder SDK; neither has an arm64 target, and upstream's builder
+# gates both on `[[ $TARGET == *arm64 ]] && return -1`. Enabling them on arm64
+# does not produce a wider runtime, it produces no runtime.
+
+--enable-libvpl
+--enable-amf

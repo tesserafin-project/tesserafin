@@ -1,0 +1,17 @@
+# Configure flags that apply only to linux-arm64 (F0, issue #229).
+#
+# Appended to ffmpeg-configure.txt by ci/ffmpeg/build-in-container.sh.
+#
+# Deliberately empty, and that is a decision rather than an omission:
+#
+#   * QSV (oneVPL) and AMF are x86-64 vendor stacks with no arm64 target, so
+#     they live in ffmpeg-configure.linux-x64.txt. Upstream's own builder gates
+#     both on `[[ $TARGET == *arm64 ]] && return -1`.
+#   * Rockchip's rkmpp/rkrga pipeline (fork patch 0046) is a specific SoC family
+#     rather than the generic arm64 the packages target, so it is not enabled.
+#   * NVIDIA is NOT excluded here. --enable-cuda, --enable-nvenc/nvdec/cuvid and
+#     --enable-cuda-llvm stay in the COMMON file on purpose: NVIDIA arm64
+#     platforms are real (Jetson, Grace), the kernels are compiled by clang to
+#     NVPTX rather than by anything host-specific, and dropping them would make
+#     the arm64 runtime narrower than the hardware it will run on. VAAPI and
+#     OpenCL are common for the same reason.

@@ -1,0 +1,26 @@
+# Every shared library the Tesserafin FFmpeg runtime is allowed to require at
+# load time, and why (F0 / #229).
+#
+# Format: <soname> <justification>
+#
+# The point of this file is that the list is CLOSED. Every codec library is
+# linked statically, so a new entry appearing here means a dependency escaped
+# into the runtime and has to be explained before it ships — that is exactly the
+# failure that made the upstream portable binary unusable, where sixteen
+# external sonames arrived undeclared.
+#
+# ci/ffmpeg/verify-runtime.sh fails on any DT_NEEDED entry that is not listed.
+
+libc.so.6                 glibc, the C runtime; the GLIBC floor gate bounds which symbol versions it may use
+libm.so.6                 glibc maths; split out of libc on glibc < 2.34
+libdl.so.2                glibc dynamic loading; split out of libc on glibc < 2.34
+libpthread.so.0           glibc threads; split out of libc on glibc < 2.34
+librt.so.1                glibc realtime clocks; split out of libc on glibc < 2.34
+libmvec.so.1              glibc vector maths, referenced by autovectorised code on x86_64
+libstdc++.so.6            the C++ runtime, required by x265 and SVT-AV1
+libgcc_s.so.1             the GCC unwinder, required by the C++ runtime
+libatomic.so.1            GCC atomics fallback where the target lacks native wide atomics
+ld-linux-x86-64.so.2      the x86_64 program interpreter
+ld-linux-aarch64.so.1     the aarch64 program interpreter
+libva.so.2                VAAPI core, BUNDLED in lib/ at the pinned release and resolved through $ORIGIN/../lib — never taken from the host
+libva-drm.so.2            VAAPI DRM backend, bundled on the same terms as libva.so.2
