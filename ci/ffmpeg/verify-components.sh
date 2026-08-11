@@ -64,7 +64,8 @@ d = json.load(open(sys.argv[1]))
 for c in d["components"]:
     pin = c.get("sha256") or c.get("commit") or ""
     print("\t".join([c["name"], c.get("license", ""), c.get("sourceType", ""),
-                     pin, c.get("url", c.get("repository", "")), c.get("requiredBy", "")]))
+                     pin, c.get("url", c.get("repository", "")), c.get("requiredBy", ""),
+                     ",".join(c.get("mirrors", []))]))
 PY
 )
 
@@ -72,7 +73,7 @@ PY
 
 declare -A SEEN_NAMES=()
 for line in "${COMPONENT_LINES[@]}"; do
-    IFS=$'\t' read -r name lic kind pin src why <<<"${line}"
+    IFS=$'\t' read -r name lic kind pin src why mirrors <<<"${line}"
     SEEN_NAMES["${name}"]=1
 
     if [[ -z "${lic}" ]]; then
@@ -93,6 +94,19 @@ for line in "${COMPONENT_LINES[@]}"; do
                 */master*|*/main*|*/HEAD*|*latest*)
                     fail "${name} source URL points at a moving reference: ${src}" ;;
             esac
+            # A mirror is an alternative HOST for the same pinned bytes, never a
+            # second pin and never a looser one. It answers to the same rules as
+            # the primary URL, because the digest below is the only thing that
+            # makes either of them safe and a mirror naming a moving reference
+            # would be just as wrong there.
+            for m in ${mirrors//,/ }; do
+                [[ "${m}" == https://* ]] \
+                    || fail "${name} mirror is not https: '${m}'"
+                case "${m}" in
+                    */master*|*/main*|*/HEAD*|*latest*)
+                        fail "${name} mirror points at a moving reference: ${m}" ;;
+                esac
+            done
             ;;
         git)
             [[ "${pin}" =~ ^[0-9a-f]{40}$ ]] || fail "${name} is not pinned to a full commit (got '${pin}')"

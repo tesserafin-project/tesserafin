@@ -59,7 +59,7 @@ ff_git_at_commit "${CACHE}/git/jellyfin-ffmpeg" "${FF_FFMPEG_REPO}" "${FF_FFMPEG
 ff_log "ffmpeg source at ${FF_FFMPEG_COMMIT}"
 
 # --- every component ----------------------------------------------------------
-while IFS=$'\t' read -r name kind pin src submodules; do
+while IFS=$'\t' read -r name kind pin src submodules mirrors; do
     [[ -n "${name}" ]] || continue
     case "${kind}" in
         tar)
@@ -79,10 +79,29 @@ while IFS=$'\t' read -r name kind pin src submodules; do
                 # still the pinned one and the SHA-256 below is still checked
                 # against the manifest, so a retry can only ever obtain the same
                 # bytes or fail.
-                curl --fail --silent --show-error --location \
-                     --retry 5 --retry-all-errors --retry-max-time 180 \
-                     --connect-timeout 30 \
-                     --output "${dest}.part" "${src}"
+                # The pinned URL first, then any declared mirror. A mirror is
+                # not a second pin: the SHA-256 check below is unchanged and
+                # applies to whichever host answered, so a mirror can only ever
+                # supply the same bytes or fail the build.
+                #
+                # Needed because retrying is not always enough. A hosted run
+                # retried a 502 from download.savannah.gnu.org six times over
+                # 34 s and still could not fetch freetype. Every clean build
+                # fetches 20 tarballs from 12 distinct hosts, and a run performs
+                # four such fetches, so single-homed sources fail regularly.
+                fetched=0
+                for candidate in "${src}" ${mirrors//,/ }; do
+                    if curl --fail --silent --show-error --location \
+                            --retry 5 --retry-all-errors --retry-max-time 180 \
+                            --connect-timeout 30 \
+                            --output "${dest}.part" "${candidate}"; then
+                        fetched=1
+                        [[ "${candidate}" == "${src}" ]] || ff_log "  (from mirror ${candidate})"
+                        break
+                    fi
+                    ff_log "  ${candidate} did not answer; trying the next source"
+                done
+                [[ "${fetched}" -eq 1 ]] || ff_die "every source for ${name} failed"
                 mv "${dest}.part" "${dest}"
             fi
             got="$(ff_sha256 "${dest}")"
@@ -101,7 +120,8 @@ for c in json.load(open(sys.argv[1]))["components"]:
     print("\t".join([c["name"], c["sourceType"],
                      c.get("sha256") or c["commit"],
                      c.get("url") or c["repository"],
-                     str(c.get("submodules", False))]))
+                     str(c.get("submodules", False)),
+                     ",".join(c.get("mirrors", []))]))
 PY
 )
 
