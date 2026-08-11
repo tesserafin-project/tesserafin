@@ -122,11 +122,11 @@
     {
       "name": "libva",
       "license": "MIT",
-      "requiredBy": "VAAPI encode/decode/filters",
+      "requiredBy": "VAAPI encode/decode/filters. Pinned to the NEWEST stable release, not the oldest in the support matrix: libva loads a VA driver through vaDriverInit_<major>_<minor> and is backward compatible with older drivers but not forward compatible with newer ones. A bundled 2.17 could not load this host's vaDriverInit_1_20 driver at all.",
       "sourceType": "tar",
-      "url": "https://github.com/intel/libva/archive/refs/tags/2.17.0.tar.gz",
-      "sha256": "8940541980ef998a36cd8f6ad905e81838ea4ddf56dc479ed2bebd12711e6001",
-      "sizeBytes": 276993
+      "url": "https://github.com/intel/libva/archive/refs/tags/2.24.1.tar.gz",
+      "sha256": "0b4a3649ee8d683b9cce2ef094df4fb039d276c0cef7e49337c43d3b297b9f42",
+      "sizeBytes": 306278
     },
     {
       "name": "libvorbis",

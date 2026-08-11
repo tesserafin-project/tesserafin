@@ -113,9 +113,17 @@ try image-extract "$FF" -hide_banner -loglevel error -i v.mp4 -frames:v 1 -f ima
 try zscale "$FF" -hide_banner -loglevel error -i v.mp4 -vf "zscale=w=160:h=120" -frames:v 5 -f null -
 
 # ffprobe JSON, which is how the server reads media.
-probe=$("$FP" -hide_banner -loglevel error -print_format json -show_format -show_streams v.mp4 2>&1)
-printf '%s' "$probe" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["streams"], "no streams"' 2>/dev/null \
-  && ok ffprobe-json || no ffprobe-json "$(printf '%s' "$probe" | tail -1)"
+# Checked without python3: the Fedora image does not carry it, and a test that
+# depends on the ENVIRONMENT having a JSON parser is testing the wrong thing.
+"$FP" -hide_banner -loglevel error -print_format json -show_format -show_streams v.mp4 > probe.json 2>probe.err
+if head -c1 probe.json | grep -q '{' \
+   && grep -q '"codec_type"' probe.json \
+   && grep -q '"format"' probe.json \
+   && tail -c2 probe.json | grep -q '}'; then
+  ok ffprobe-json
+else
+  no ffprobe-json "$(tail -1 probe.err 2>/dev/null || head -c 120 probe.json)"
+fi
 
 # A server-shaped invocation: the long transcode command line the server builds.
 try server-shaped "$FF" -hide_banner -loglevel error -fflags +genpts -i v.mp4 \
@@ -136,8 +144,20 @@ SH
 for entry in "${ENVIRONMENTS[@]}"; do
     label="${entry%%|*}"; image="${entry#*|}"
     echo "== ${label}"
+    # bash, not sh: Debian and Ubuntu ship dash as /bin/sh, which rejects
+    # `set -o pipefail`. Under sh the suite died on its first line and the
+    # environment silently contributed no results at all.
     output="$(docker run --rm --volume "${ROOT}:/rt:ro" "${image}" \
-                 sh -c "$(printf '%s' "${SUITE}")" 2>&1 || true)"
+                 bash -c "$(printf '%s' "${SUITE}")" 2>&1 || true)"
+    # An environment that produced no verdicts has not been tested. Silence is
+    # not a pass.
+    if ! grep -qE '^(PASS|FAIL)' <<<"${output}"; then
+        echo "  FAIL: ${label} produced no results at all" >&2
+        FAILURES=$((FAILURES + 1))
+        printf '       %s\n' "$(tail -3 <<<"${output}")"
+        RESULTS+=("${label}|FAIL suite-did-not-run")
+        continue
+    fi
     while read -r line; do
         [[ -n "${line}" ]] || continue
         case "${line}" in

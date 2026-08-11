@@ -8,8 +8,11 @@
 set -euo pipefail
 
 FF_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-FF_COMPONENTS="${FF_REPO_ROOT}/ci/ffmpeg/components.json"
-FF_FLAGS_FILE="${FF_REPO_ROOT}/ci/ffmpeg/ffmpeg-configure.txt"
+# Overridable so a negative control can aim a gate at a doctored manifest.
+# Nothing in CI sets these; if a gate could not be pointed at hostile input,
+# the control would silently test the real input and always pass.
+FF_COMPONENTS="${FF_COMPONENTS:-${FF_REPO_ROOT}/ci/ffmpeg/components.json}"
+FF_FLAGS_FILE="${FF_FLAGS_FILE:-${FF_REPO_ROOT}/ci/ffmpeg/ffmpeg-configure.txt}"
 
 # The builder environment, pinned by digest. Debian 11 carries glibc 2.31, which
 # is below the Rocky 9 floor of 2.34, and a toolchain (gcc 10, meson 0.56,
@@ -20,11 +23,11 @@ FF_BUILDER_IMAGE='debian@sha256:99cdf7792e25416bd801861ccd8e2fb27fb527b25e8d9a87
 
 # The highest GLIBC symbol version the produced binaries may reference.
 # Measured: Rocky 9 = 2.34, Debian 12 = 2.36, Ubuntu 24.04 = 2.39, Fedora 42 = 2.41.
-FF_GLIBC_FLOOR='2.34'
+FF_GLIBC_FLOOR="${FF_GLIBC_FLOOR:-2.34}"
 
 # A fixed job count, not $(nproc): parallelism must not be an input to the
 # artifact, and two runners with different core counts must agree byte for byte.
-FF_JOBS=4
+FF_JOBS="${FF_JOBS:-4}"
 
 ff_die() { echo "ffmpeg-runtime: $*" >&2; exit 1; }
 ff_log() { echo "== $*" >&2; }

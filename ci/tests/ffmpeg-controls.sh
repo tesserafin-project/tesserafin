@@ -135,14 +135,26 @@ glibc_floor_control() {
 control "10 a GLIBC requirement above the floor is refused" "above the 2.17 floor" glibc_floor_control
 
 s="${LAB}/aborting"; cp -a "${STAGE}" "${s}"
-cat > "${s}/bin/ffmpeg" <<'STUB'
-#!/bin/sh
-# Stands in for the upstream implib trampoline: a hardware query that aborts.
-case " $* " in *" -hwaccels "*) kill -ABRT $$ ;; esac
-case " $* " in *" -L "*) echo "GNU General Public License version 3"; exit 0 ;; esac
-exit 0
+# A real ELF, not a shell script: a script fails the ELF-shape check first and
+# never reaches the hardware query, so the control would pass for the wrong
+# reason. This stands in for the upstream implib trampoline — a binary whose
+# hardware query raises SIGABRT.
+cat > "${LAB}/abort-stub.c" <<'STUB'
+#include <signal.h>
+#include <stdio.h>
+#include <string.h>
+int main(int argc, char **argv) {
+    for (int i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "-hwaccels")) { raise(SIGABRT); }
+        if (!strcmp(argv[i], "-L")) {
+            puts("GNU General Public License version 3 or later"); return 0;
+        }
+    }
+    return 0;
+}
 STUB
-chmod 0755 "${s}/bin/ffmpeg"
+docker run --rm --user "$(id -u):$(id -g)" --volume "${LAB}:/lab" "${BUILDER_TAG}" \
+    gcc -O0 -o /lab/aborting/bin/ffmpeg /lab/abort-stub.c
 control "13 a hardware query that aborts is refused" "did not return cleanly" run_gate "${s}"
 
 echo "== redistribution closure"
