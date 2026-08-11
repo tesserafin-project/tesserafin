@@ -20,6 +20,7 @@ FF_EXCLUDED_PATCHES="${FF_EXCLUDED_PATCHES:-${FF_REPO_ROOT}/ci/ffmpeg/excluded-p
 # cmake 3.18, nasm 2.15) new enough for every pinned component. The compiler is
 # an INPUT here — this build never produces its own toolchain, which is what
 # makes bit-for-bit reproducibility reachable.
+# shellcheck disable=SC2034  # read by the scripts that source this file
 FF_BUILDER_IMAGE='debian@sha256:99cdf7792e25416bd801861ccd8e2fb27fb527b25e8d9a8704ebc3ead2015675'
 
 # The highest GLIBC symbol version the produced binaries may reference.
@@ -69,6 +70,21 @@ ff_deterministic_tar() { # <dir> <dest> <compressor...>
         --format=gnu \
         --exclude-vcs \
         . | "$@" > "${dest}"
+}
+
+# Modes, like owner and mtime, must come from policy rather than from whoever
+# ran the packaging. A tree assembled with `cp -a` carries the modes the source
+# checkout was created with, so a workstation at umask 002 emits 664/775 where a
+# hosted runner at 022 emits 644/755 and the two archives differ for a reason
+# unrelated to their contents.
+#
+# Applied with find rather than tar --mode because tar would rewrite SYMLINK
+# modes too. Those are meaningless on Linux but tar records them, so `go-w`
+# turned lrwxrwxrwx into lrwxr-xr-x and simply moved the divergence.
+ff_normalize_modes() { # <dir>
+    find "$1" -type d -exec chmod 755 {} +
+    find "$1" -type f -perm -u+x -exec chmod 755 {} +
+    find "$1" -type f ! -perm -u+x -exec chmod 644 {} +
 }
 
 ff_sha256() { sha256sum "$1" | cut -d' ' -f1; }

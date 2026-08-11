@@ -193,6 +193,7 @@ print(f"  licence texts collected for {len(found)} components; "
 PY
 
     ff_clamp_mtimes "${OUT}/.corresponding-source"
+    ff_normalize_modes "${OUT}/.corresponding-source"
     ff_deterministic_tar "${OUT}/.corresponding-source" "${SRC_ARCHIVE}" zstd -19 -T1 -q
     rm -rf "${OUT}/.corresponding-source"
 fi
@@ -378,6 +379,9 @@ chmod 0755 "${RT}/bin/ffmpeg" "${RT}/bin/ffprobe"
 ff_clamp_mtimes "${RT}"
 
 ARCHIVE="${OUT}/${NAME}-${ARCH}.tar.xz"
+# Modes normalised for the same reason owner and mtime are: otherwise the
+# archive records the packaging machine's umask. See ff_normalize_modes.
+ff_normalize_modes "${RT}"
 ( cd "${OUT}" && tar --create \
     --sort=name --owner=0 --group=0 --numeric-owner \
     --mtime="@${EPOCH}" --format=gnu \
