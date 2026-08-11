@@ -203,6 +203,14 @@ ff_log "corresponding source ${SRC_SHA}"
 # 2. Runtime payload: notices, provenance, licences
 # =============================================================================
 RT="${OUT}/${NAME}-${ARCH}"
+# The packaged runtime is built fresh, which means clearing RT. If the caller
+# passed an --out whose ${NAME}-${ARCH} subdirectory IS the --stage, that clear
+# deletes the very binaries about to be copied out of it. Refuse rather than
+# self-destruct: this is a caller mistake with a silent, confusing symptom
+# ("cannot stat .../bin/ffmpeg") that looks like a build failure.
+if [[ "$(cd "${STAGE}" && pwd -P)" == "$(cd "$(dirname "${RT}")" && pwd -P)/$(basename "${RT}")" ]]; then
+    ff_die "--out ${OUT} would place the packaged runtime on top of --stage ${STAGE}; give --out a directory of its own"
+fi
 rm -rf "${RT}"; mkdir -p "${RT}/bin" "${RT}/LICENSES"
 cp -a "${STAGE}/bin/ffmpeg" "${STAGE}/bin/ffprobe" "${RT}/bin/"
 # The bundled shared libraries the $ORIGIN RUNPATH resolves to. Without these

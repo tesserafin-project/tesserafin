@@ -36,18 +36,16 @@ export FF_INCREMENTAL=0
 NAME="tesserafin-ffmpeg-${FF_BUILD_REVISION}"
 
 # The files whose digests must agree, relative to a build's output directory.
-delivered() { # <build dir>
-    local b="$1"
+delivered() {
     printf '%s\n' \
-        "${NAME}-${ARCH}/bin/ffmpeg" \
-        "${NAME}-${ARCH}/bin/ffprobe" \
-        "${NAME}-${ARCH}/SOURCE.json" \
-        "${NAME}-${ARCH}/sbom.cdx.json" \
-        "${NAME}-${ARCH}/capability.json" \
-        "${NAME}-${ARCH}/THIRD_PARTY_NOTICES.md" \
-        "${NAME}-${ARCH}.tar.xz" \
-        "${NAME}-corresponding-source.tar.zst"
-    unset b
+        "pkg/${NAME}-${ARCH}/bin/ffmpeg" \
+        "pkg/${NAME}-${ARCH}/bin/ffprobe" \
+        "pkg/${NAME}-${ARCH}/SOURCE.json" \
+        "pkg/${NAME}-${ARCH}/sbom.cdx.json" \
+        "pkg/${NAME}-${ARCH}/capability.json" \
+        "pkg/${NAME}-${ARCH}/THIRD_PARTY_NOTICES.md" \
+        "pkg/${NAME}-${ARCH}.tar.xz" \
+        "pkg/${NAME}-corresponding-source.tar.zst"
 }
 
 one_build() { # <output dir>
@@ -59,7 +57,7 @@ one_build() { # <output dir>
         --manifest "${dir}/${NAME}-${ARCH}/capability.json" >&2
     "${FF_REPO_ROOT}/ci/ffmpeg/package-runtime.sh" \
         --stage "${dir}/${NAME}-${ARCH}" --cache "${dir}/source-cache" \
-        --out "${dir}" --arch "${ARCH}" >&2
+        --out "${dir}/pkg" --arch "${ARCH}" >&2
 }
 
 digests() { # <build dir>
