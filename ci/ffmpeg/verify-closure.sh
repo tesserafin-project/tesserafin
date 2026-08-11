@@ -69,10 +69,11 @@ else
 fi
 
 echo "== every pinned component is accounted for"
-python3 - "${FF_COMPONENTS}" "${RUNTIME}" <<'PY' || exit 1
+python3 - "${FF_COMPONENTS}" "${RUNTIME}" "${FF_REPO_ROOT}/ci/ffmpeg/fork-patches.json" <<'PY' || exit 1
 import json, os, sys
-manifest, runtime = sys.argv[1:3]
+manifest, runtime, patch_catalogue = sys.argv[1:4]
 policy = json.load(open(manifest))
+catalogue = json.load(open(patch_catalogue))
 source = json.load(open(os.path.join(runtime, "SOURCE.json")))
 bom = json.load(open(os.path.join(runtime, "sbom.cdx.json")))
 notices = open(os.path.join(runtime, "THIRD_PARTY_NOTICES.md")).read()
@@ -101,6 +102,28 @@ if source["components"] != policy["components"]:
     print("  FAIL: SOURCE.json component pins differ from ci/ffmpeg/components.json"); failures += 1
 else:
     print("  ok  : SOURCE.json reproduces the pinned component set exactly")
+
+# The provenance must also say what was done with the fork's patch series. A
+# recipient has to be able to tell an applied series from one that merely
+# shipped next to an unpatched tree.
+fp = source.get("forkPatches")
+if not fp:
+    print("  FAIL: SOURCE.json records nothing about the fork patch series"); failures += 1
+else:
+    expected_applied = sorted(e["patch"] for e in catalogue["patches"] if e["applied"])
+    expected_excluded = sorted(e["patch"] for e in catalogue["patches"] if not e["applied"])
+    if fp.get("applied") != expected_applied:
+        print("  FAIL: SOURCE.json's applied patch list differs from the classification")
+        failures += 1
+    elif sorted(e["patch"] for e in fp.get("excluded", [])) != expected_excluded:
+        print("  FAIL: SOURCE.json's excluded patch list differs from the classification")
+        failures += 1
+    elif fp.get("seriesLength") != len(catalogue["patches"]):
+        print("  FAIL: SOURCE.json records a different series length")
+        failures += 1
+    else:
+        print(f"  ok  : SOURCE.json records {len(expected_applied)} applied and "
+              f"{len(expected_excluded)} excluded fork patches")
 sys.exit(1 if failures else 0)
 PY
 [[ $? -eq 0 ]] || FAILURES=$((FAILURES + 1))

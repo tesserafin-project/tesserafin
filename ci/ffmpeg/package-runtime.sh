@@ -227,10 +227,11 @@ fi
 "${RT}/bin/ffmpeg" -hide_banner -buildconf 2>/dev/null > "${RT}/build-configuration.txt" || true
 
 python3 - "${FF_COMPONENTS}" "${ARCH}" "${SRC_SHA}" "$(basename "${SRC_ARCHIVE}")" \
-         "${EPOCH}" "${RT}" <<'PY'
+         "${EPOCH}" "${RT}" "${FF_REPO_ROOT}/ci/ffmpeg/fork-patches.json" <<'PY'
 import json, os, sys
-manifest, arch, src_sha, src_name, epoch, rt = sys.argv[1:7]
+manifest, arch, src_sha, src_name, epoch, rt, patch_catalogue = sys.argv[1:8]
 policy = json.load(open(manifest))
+fork_patches = json.load(open(patch_catalogue))
 
 source = {
     "buildRevision": policy["buildRevision"],
@@ -246,6 +247,23 @@ source = {
                     "preferred form for modification of every statically linked component, "
                     "the exact build scripts and instructions sufficient to rebuild both "
                     "architectures.",
+    },
+    # Which of the fork's changes this binary actually contains. The
+    # corresponding-source archive carries the patch files themselves; this
+    # records what was DONE with them, so a recipient can tell an applied series
+    # from a series that merely shipped alongside an unpatched tree — the exact
+    # confusion that once produced a binary branded as the fork with none of the
+    # fork's work in it.
+    "forkPatches": {
+        "seriesLength": len(fork_patches["patches"]),
+        "applied": sorted(e["patch"] for e in fork_patches["patches"] if e["applied"]),
+        "excluded": [
+            {"patch": e["patch"], "classification": e["classification"],
+             "rationale": e["rationale"]}
+            for e in fork_patches["patches"] if not e["applied"]
+        ],
+        "classificationCounts": fork_patches["counts"],
+        "$comment": "Applied in series order at zero fuzz. Only the 'unsafe' class is skipped.",
     },
     "$comment": "Engineering redistribution closure. Not a legal ruling.",
 }
