@@ -69,6 +69,24 @@ ok(){ printf 'PASS %s\n' "$1"; }
 no(){ printf 'FAIL %s :: %s\n' "$1" "${2:-}"; }
 try(){ name="$1"; shift; out=$("$@" 2>&1); if [ $? -eq 0 ]; then ok "$name"; else no "$name" "$(printf '%s' "$out" | tail -1)"; fi; }
 
+# A command that is EXPECTED to fail, and must fail in a controlled way. Exit
+# codes at or above 128 mean the process died on a signal — 134 is SIGABRT,
+# which is exactly how the upstream portable binary reports a missing libva
+# symbol. A gate that only checked "did it fail" would accept that crash.
+controlled(){
+  name="$1"; shift
+  out=$("$@" 2>&1); rc=$?
+  if [ "$rc" -ge 128 ]; then
+    no "$name" "died on signal $((rc - 128)) (exit $rc): $(printf '%s' "$out" | tail -1)"
+  elif [ "$rc" -eq 0 ]; then
+    ok "$name"
+  else
+    # A non-zero, non-signal exit with a diagnostic on stderr is the controlled
+    # outcome: the caller can read it and fall back.
+    if [ -n "$out" ]; then ok "$name"; else no "$name" "exit $rc with no diagnostic at all"; fi
+  fi
+}
+
 # no ffmpeg from $PATH: the environments must not carry one, and nothing here
 # relies on finding one.
 if command -v ffmpeg >/dev/null 2>&1; then
@@ -78,7 +96,39 @@ else
 fi
 
 try version        "$FF" -hide_banner -version
+try buildconf      "$FF" -hide_banner -buildconf
 try hwaccels       "$FF" -hide_banner -hwaccels
+
+# The hardware surface must be a QUERY, never an abort. -hwaccels above already
+# has to return; these are the paths that actually touch libva.
+#
+# The distinction being tested is not "does it work" — no container here has a
+# render node — but "does it fail like a program or die like a crash". The
+# upstream portable binary raises SIGABRT here, through an implib trampoline
+# that turns a missing libva symbol into assert(0), and a server that only
+# checks a non-zero exit cannot tell the two apart.
+controlled vaapi-probe-no-device "$FF" -hide_banner -loglevel error \
+    -init_hw_device vaapi=va:/dev/dri/renderD128 -f lavfi -i nullsrc=s=64x64 -frames:v 1 -f null -
+controlled vaapi-probe-absent-path "$FF" -hide_banner -loglevel error \
+    -init_hw_device vaapi=va:/dev/dri/renderD999 -f lavfi -i nullsrc=s=64x64 -frames:v 1 -f null -
+controlled qsv-probe "$FF" -hide_banner -loglevel error \
+    -init_hw_device qsv=hw -f lavfi -i nullsrc=s=64x64 -frames:v 1 -f null -
+controlled cuda-probe "$FF" -hide_banner -loglevel error \
+    -init_hw_device cuda=gpu -f lavfi -i nullsrc=s=64x64 -frames:v 1 -f null -
+
+# Software fallback after a failed hardware attempt must be a real encode, not a
+# crash the caller swallowed. Run the hardware attempt, ignore it, then require
+# the software path to produce actual output in the same environment.
+"$FF" -hide_banner -loglevel error -init_hw_device vaapi=va:/dev/dri/renderD128 \
+    -f lavfi -i testsrc=size=64x64:rate=5:duration=1 -c:v h264_vaapi -f null - >/dev/null 2>&1
+hwrc=$?
+if [ "$hwrc" -ge 128 ]; then
+  no software-fallback "the hardware attempt died on signal $((hwrc - 128)); a fallback here would be hiding a crash"
+else
+  "$FF" -hide_banner -loglevel error -f lavfi -i testsrc=size=64x64:rate=5:duration=1 \
+      -c:v libx264 -preset ultrafast -f mp4 fallback.mp4 -y >/dev/null 2>&1
+  if [ -s fallback.mp4 ]; then ok software-fallback; else no software-fallback "the software path produced nothing"; fi
+fi
 
 # H.264 software encode, then decode what was produced.
 try h264-encode "$FF" -hide_banner -loglevel error -f lavfi -i testsrc=size=320x240:rate=25:duration=2 \
