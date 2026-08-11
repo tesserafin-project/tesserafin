@@ -1,0 +1,22 @@
+# Patches from jellyfin-ffmpeg's own series that the Tesserafin runtime does NOT
+# take (F0 / #229).
+#
+# Format: <patch filename> <classification> <reason>
+#
+# The default is to apply the full series. `v7.1.4-3` is the named compatibility
+# baseline, the 95 patches are what makes it that baseline rather than plain
+# FFmpeg 7.1.4, and they are interdependent — 0057 (tonemapx) sits on top of
+# refactors introduced earlier in the series. Cherry-picking a subset would
+# produce a tree that is neither the fork nor upstream, which is exactly what the
+# distribution contract says the baseline must not become.
+#
+# So this file is short by design. A patch belongs here only when applying it
+# would weaken a Tesserafin guarantee, not merely because it is unused on
+# linux-x64/linux-arm64. Every patch in the series is classified in
+# docs/distribution/F0-ffmpeg-runtime.md; only the "unsafe" class appears here.
+#
+# ci/ffmpeg/build-in-container.sh refuses to build if this file names a patch
+# that is not in the series, and ci/ffmpeg/verify-components.sh refuses if the
+# set changes without the contract changing with it.
+
+0029-remove-fdk-aac-from-nonfree.patch  unsafe  Deletes libfdk_aac from FFmpeg's own EXTERNAL_LIBRARY_NONFREE_LIST and moves it to the ordinary list, so `--enable-gpl --enable-libfdk-aac` stops being a configure-time error. Tesserafin excludes FDK AAC and uses the native AAC encoder; keeping this patch out means FFmpeg's upstream licence enforcement stays as a fourth independent layer under the flag policy, the buildconf scan and the encoder-listing scan, rather than being disarmed in the source tree they all inspect.

@@ -56,6 +56,10 @@
 --enable-fontconfig
 
 # Hardware. Headers and libraries only; no runtime claim is made here.
+# Architecture-specific hardware flags live in ffmpeg-configure.<rid>.txt, which
+# the build appends to this file. QSV (oneVPL) and AMF are Intel and AMD x86-64
+# stacks; upstream's own builder disables both on arm64, and enabling them there
+# fails the build rather than producing a wider runtime.
 --enable-vaapi
 --enable-libdrm
 --enable-ffnvcodec
@@ -63,6 +67,4 @@
 --enable-cuvid
 --enable-nvdec
 --enable-nvenc
---enable-libvpl
---enable-amf
 --enable-opencl

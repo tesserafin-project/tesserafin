@@ -13,6 +13,7 @@ FF_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # the control would silently test the real input and always pass.
 FF_COMPONENTS="${FF_COMPONENTS:-${FF_REPO_ROOT}/ci/ffmpeg/components.json}"
 FF_FLAGS_FILE="${FF_FLAGS_FILE:-${FF_REPO_ROOT}/ci/ffmpeg/ffmpeg-configure.txt}"
+FF_EXCLUDED_PATCHES="${FF_EXCLUDED_PATCHES:-${FF_REPO_ROOT}/ci/ffmpeg/excluded-patches.txt}"
 
 # The builder environment, pinned by digest. Debian 11 carries glibc 2.31, which
 # is below the Rocky 9 floor of 2.34, and a toolchain (gcc 10, meson 0.56,

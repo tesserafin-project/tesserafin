@@ -1,0 +1,9 @@
+# Configure flags that apply only to linux-arm64 (F0, issue #229).
+#
+# Appended to ffmpeg-configure.txt by ci/ffmpeg/build-in-container.sh.
+#
+# Deliberately empty. arm64 gets the common set and nothing else: QSV and AMF
+# are x86-64 vendor stacks, and Rockchip's rkmpp/rkrga pipeline (patch 0046) is
+# a specific SoC family rather than the generic arm64 the packages target. The
+# file exists so that "arm64 adds nothing" is a stated decision with a place to
+# change, not an absence.

@@ -14,11 +14,14 @@
     {
       "name": "amf-headers",
       "license": "MIT",
-      "requiredBy": "AMD AMF encoders (h264/hevc/av1_amf)",
+      "requiredBy": "AMD AMF encoders (h264/hevc/av1_amf). x86-64 only: upstream's builder disables AMF on arm64, and v1.5.0 is the SDK version the v7.1.4-3 patch series compiles against \u2014 v1.4.35 lacks AMF_VIDEO_ENCODER_AV1_B_PIC_PATTERN and fails to build.",
       "sourceType": "git",
       "repository": "https://github.com/GPUOpen-LibrariesAndSDKs/AMF.git",
-      "ref": "v1.4.35",
-      "commit": "ba07d1b3c7c7ee0d846125cffc1d6d78a020c45a"
+      "ref": "v1.5.0",
+      "commit": "afed28d37aca1938da2eedc50599bb3535a987ec",
+      "architectures": [
+        "linux-x64"
+      ]
     },
     {
       "name": "dav1d",
@@ -140,11 +143,14 @@
     {
       "name": "libvpl",
       "license": "MIT",
-      "requiredBy": "Intel QSV encode/decode and the *_qsv filters",
+      "requiredBy": "Intel QSV encode/decode and the *_qsv filters. x86-64 only: oneVPL targets Intel GPUs and upstream's builder disables it on arm64.",
       "sourceType": "tar",
       "url": "https://github.com/intel/libvpl/archive/refs/tags/v2.13.0.tar.gz",
       "sha256": "1c740e2b58f7853f56b618bdb7d4a7e5d37f8c1a9b30105a0b79ba80873e1cbd",
-      "sizeBytes": 12952887
+      "sizeBytes": 12952887,
+      "architectures": [
+        "linux-x64"
+      ]
     },
     {
       "name": "libvpx",

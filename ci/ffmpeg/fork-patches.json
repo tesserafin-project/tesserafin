@@ -1,0 +1,583 @@
+{
+  "$comment": "Classification of every patch in the jellyfin-ffmpeg v7.1.4-3 series (F0 / #229). 'required' means Tesserafin names the capability the patch provides, or the patch is correctness for a capability it names. 'useful' is a real improvement Tesserafin does not depend on. 'irrelevant' is a platform outside the declared linux-x64/linux-arm64 matrix. 'unsafe' weakens a Tesserafin guarantee and is not applied. The whole series is applied except the unsafe class: the patches are interdependent and v7.1.4-3 is the named compatibility baseline, so a cherry-picked subset would be neither the fork nor upstream.",
+  "baseline": "jellyfin/jellyfin-ffmpeg v7.1.4-3",
+  "seriesLength": 95,
+  "counts": {
+    "irrelevant": 26,
+    "required": 50,
+    "unsafe": 1,
+    "useful": 18
+  },
+  "patches": [
+    {
+      "patch": "0001-add-fixes-for-segment-muxer.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "Segment-muxer correctness. HLS segmenting is a declared capability."
+    },
+    {
+      "patch": "0002-update-cuda-func-header.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "CUDA function header the later CUDA filter patches build on."
+    },
+    {
+      "patch": "0003-add-enhanced-cuda-pixfmt-converter-impl.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "scale_cuda pixel-format conversion; the server names scale_cuda."
+    },
+    {
+      "patch": "0004-add-cuda-tonemap-impl.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "tonemap_cuda; the server names it as an HDR path."
+    },
+    {
+      "patch": "0005-add-amf-fixes-from-upstream-and-custom-tunings.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "AMF encode fixes; AMF is a declared compiled capability."
+    },
+    {
+      "patch": "0006-add-opencl-scaler-and-pixfmt-converter-impl.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "scale_opencl and OpenCL pixel-format conversion."
+    },
+    {
+      "patch": "0007-add-bt2390-eetf-and-code-refactor-to-opencl-tonemap.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "tonemap_opencl BT.2390 EETF; the server names tonemap_opencl."
+    },
+    {
+      "patch": "0008-add-pgs-support-to-opencl-overlay.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "PGS subtitle support in overlay_opencl; the server names overlay_opencl."
+    },
+    {
+      "patch": "0009-add-d3d11-opencl-interop-for-amd.patch",
+      "classification": "irrelevant",
+      "applied": true,
+      "rationale": "D3D11/OpenCL interop for AMD. Windows only; outside the declared matrix."
+    },
+    {
+      "patch": "0010-add-a-hack-for-opencl-reverse-mapping.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "OpenCL reverse mapping, required by the OpenCL filter chain above."
+    },
+    {
+      "patch": "0011-add-fixes-for-mapping-from-qsv-source-device.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "QSV source-device mapping; QSV is a declared capability."
+    },
+    {
+      "patch": "0012-add-d3d11-opencl-interop-for-qsv.patch",
+      "classification": "irrelevant",
+      "applied": true,
+      "rationale": "D3D11/OpenCL interop for QSV. Windows only."
+    },
+    {
+      "patch": "0013-add-vendor-id-option-for-d3d11.patch",
+      "classification": "irrelevant",
+      "applied": true,
+      "rationale": "D3D11 vendor-id option. Windows only."
+    },
+    {
+      "patch": "0014-add-vaapi-hwupload-filter.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "hwupload_vaapi filter; the server names hwupload_vaapi."
+    },
+    {
+      "patch": "0015-add-alpha-format-option-to-vaapi-overlay-filter.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "Alpha format for overlay_vaapi, which is how VAAPI subtitle burn-in works."
+    },
+    {
+      "patch": "0016-add-fixes-for-nvdec-exceed-32-surfaces-error.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "NVDEC beyond 32 surfaces; NVDEC is a declared capability."
+    },
+    {
+      "patch": "0017-backport-fixes-for-vaapi-from-upstream.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "Upstream VAAPI fixes."
+    },
+    {
+      "patch": "0018-backport-fixes-for-qsv-from-upstream.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "Upstream QSV fixes."
+    },
+    {
+      "patch": "0019-backport-fixes-for-qsv-from-cartwheel.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "Cartwheel QSV fixes."
+    },
+    {
+      "patch": "0020-add-fixes-for-qsv-vpp-filters.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "vpp_qsv filter fixes; the server names vpp_qsv."
+    },
+    {
+      "patch": "0021-add-external-frame-support-for-qsv-enc.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "External frame support for QSV encode."
+    },
+    {
+      "patch": "0022-suppress-overlay-warning-logs.patch",
+      "classification": "useful",
+      "applied": true,
+      "rationale": "Suppresses overlay warning logs. Log noise only."
+    },
+    {
+      "patch": "0023-add-fixes-for-hevc-hdr-decoding-in-bsf.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "HEVC HDR decoding in the bitstream filter; feeds every tone-mapping path."
+    },
+    {
+      "patch": "0024-add-sub2video-option-to-subtitles-filter.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "sub2video in the subtitles filter; the server names sub2video for burn-in."
+    },
+    {
+      "patch": "0025-add-alphasrc-source-video-filter.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "alphasrc source filter; named in EncoderValidator._requiredFilters."
+    },
+    {
+      "patch": "0026-increase-the-default-async-depth-for-vaapi-encode.patch",
+      "classification": "useful",
+      "applied": true,
+      "rationale": "Raises the default VAAPI encode async depth. Throughput tuning."
+    },
+    {
+      "patch": "0027-add-fixes-for-hevc-vaapi-encoding-on-tgl.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "HEVC VAAPI encoding on Tiger Lake."
+    },
+    {
+      "patch": "0028-add-multiple-values-tags-and-webp-support-for-id3v2.patch",
+      "classification": "useful",
+      "applied": true,
+      "rationale": "id3v2 multi-value tags and WebP cover art. Metadata only."
+    },
+    {
+      "patch": "0029-remove-fdk-aac-from-nonfree.patch",
+      "classification": "unsafe",
+      "applied": false,
+      "rationale": "Deletes libfdk_aac from FFmpeg's own nonfree list. Excluded; see ci/ffmpeg/excluded-patches.txt."
+    },
+    {
+      "patch": "0030-pass-dovi-sidedata-to-hlsenc-and-mpegtsenc.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "Dolby Vision side data into hlsenc and mpegtsenc; the server handles DoVi and HLS."
+    },
+    {
+      "patch": "0031-add-pause-support-for-ffmpeg-cli.patch",
+      "classification": "irrelevant",
+      "applied": true,
+      "rationale": "Pause support in the ffmpeg CLI. The server never sends it."
+    },
+    {
+      "patch": "0032-enable-gcc-vectorization-and-fix-cpuflags.patch",
+      "classification": "useful",
+      "applied": true,
+      "rationale": "GCC vectorisation and cpuflags. Performance only."
+    },
+    {
+      "patch": "0033-tune-dxva-align-for-intel-to-avoid-copy-on-qsv.patch",
+      "classification": "irrelevant",
+      "applied": true,
+      "rationale": "DXVA alignment tuning for Intel. Windows only."
+    },
+    {
+      "patch": "0034-add-10bit-support-for-cuda-overlay.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "10-bit overlay_cuda; the server names overlay_cuda."
+    },
+    {
+      "patch": "0035-add-hdr-metadata-for-nvenc-hevc-encoder.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "HDR metadata for the NVENC HEVC encoder."
+    },
+    {
+      "patch": "0036-add-d3d11va-dxva2-hevc-422-444-decoding-on-intel.patch",
+      "classification": "irrelevant",
+      "applied": true,
+      "rationale": "D3D11VA/DXVA2 HEVC 4:2:2 and 4:4:4 decoding. Windows only."
+    },
+    {
+      "patch": "0037-default-vaapi-scaler-algorithm-to-fast.patch",
+      "classification": "useful",
+      "applied": true,
+      "rationale": "Defaults the VAAPI scaler algorithm to fast. Quality/speed tuning."
+    },
+    {
+      "patch": "0038-dont-fail-on-vaapi-to-drm-export-vasync.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "Stops VAAPI-to-DRM export failing on vaSyncSurface; a hard failure otherwise."
+    },
+    {
+      "patch": "0039-skip-loading-plugins-on-vpl-runtime.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "Skips plugin loading on the oneVPL runtime; QSV init correctness."
+    },
+    {
+      "patch": "0040-tune-the-default-bf-for-qsv-enc.patch",
+      "classification": "useful",
+      "applied": true,
+      "rationale": "Default B-frame count for QSV encode. Tuning."
+    },
+    {
+      "patch": "0041-allow-vaapi-import-drm-prime2-planar-formats.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "VAAPI import of DRM PRIME2 planar formats."
+    },
+    {
+      "patch": "0042-add-vui-info-to-the-seq-header-of-hevc-vaapi-encoder.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "VUI info in the HEVC VAAPI sequence header; players need it."
+    },
+    {
+      "patch": "0043-sync-intel-d3d11va-textures-before-mapping-to-opencl.patch",
+      "classification": "irrelevant",
+      "applied": true,
+      "rationale": "Intel D3D11VA texture sync before OpenCL mapping. Windows only."
+    },
+    {
+      "patch": "0044-add-icon-for-windows-version-ffmpeg.patch",
+      "classification": "irrelevant",
+      "applied": true,
+      "rationale": "Windows executable icon."
+    },
+    {
+      "patch": "0045-fix-libx265-encoded-fmp4-hls-playback-on-safari.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "libx265 fMP4 HLS playback on Safari. HLS is a declared capability."
+    },
+    {
+      "patch": "0046-add-full-hwa-pipeline-for-rockchip-rk3588-platform.patch",
+      "classification": "irrelevant",
+      "applied": true,
+      "rationale": "Full Rockchip RK3588 pipeline. Outside the declared linux-x64/linux-arm64 matrix."
+    },
+    {
+      "patch": "0047-add-format-option-to-vt-scale-filter.patch",
+      "classification": "irrelevant",
+      "applied": true,
+      "rationale": "VideoToolbox scale filter. macOS only."
+    },
+    {
+      "patch": "0048-add-vf-overlay-videotoolbox-filter.patch",
+      "classification": "irrelevant",
+      "applied": true,
+      "rationale": "VideoToolbox overlay filter. macOS only."
+    },
+    {
+      "patch": "0049-add-coreimage-based-vf-transpose-vt-filter.patch",
+      "classification": "irrelevant",
+      "applied": true,
+      "rationale": "CoreImage transpose filter. macOS only."
+    },
+    {
+      "patch": "0050-add-vf-tonemap-videotoolbox-filter.patch",
+      "classification": "irrelevant",
+      "applied": true,
+      "rationale": "VideoToolbox tone-map filter. macOS only."
+    },
+    {
+      "patch": "0051-add-mjpeg-videotoolbox-encoder.patch",
+      "classification": "irrelevant",
+      "applied": true,
+      "rationale": "VideoToolbox MJPEG encoder. macOS only."
+    },
+    {
+      "patch": "0052-add-vt-low-priority-keyframe-decoding.patch",
+      "classification": "irrelevant",
+      "applied": true,
+      "rationale": "VideoToolbox low-priority keyframe decoding. macOS only."
+    },
+    {
+      "patch": "0053-add-dummy-device-derive-to-videotoolbox-hwcontext.patch",
+      "classification": "irrelevant",
+      "applied": true,
+      "rationale": "VideoToolbox dummy device derive. macOS only."
+    },
+    {
+      "patch": "0054-add-cuda-transpose-filter-impl.patch",
+      "classification": "useful",
+      "applied": true,
+      "rationale": "transpose_cuda. Rotation on NVIDIA; the server does not name it."
+    },
+    {
+      "patch": "0055-add-flip-feat-to-opencl-transpose-filter.patch",
+      "classification": "useful",
+      "applied": true,
+      "rationale": "Flip in transpose_opencl. The server does not name it."
+    },
+    {
+      "patch": "0056-opus-allow-5point1-side-inputs.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "Opus 5.1 side inputs; Opus is a declared capability."
+    },
+    {
+      "patch": "0057-add-simd-optimized-tonemapx-filter.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "SIMD tonemapx. Named in EncoderValidator._requiredFilters; the reason the fork is the baseline."
+    },
+    {
+      "patch": "0058-add-ac4-decoder-for-atsc-3-0.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "AC-4 decoder for ATSC 3.0; the server names ac4."
+    },
+    {
+      "patch": "0059-tune-the-default-inter-thread-queue-sizes.patch",
+      "classification": "useful",
+      "applied": true,
+      "rationale": "Inter-thread queue size defaults. Throughput tuning."
+    },
+    {
+      "patch": "0060-backport-fixes-for-vulkan-from-upstream.patch",
+      "classification": "useful",
+      "applied": true,
+      "rationale": "Upstream Vulkan fixes. Vulkan filters are not built in 7.1.4-tesserafin.1."
+    },
+    {
+      "patch": "0061-revert-the-broken-vulkan-hwupload-rewrite.patch",
+      "classification": "useful",
+      "applied": true,
+      "rationale": "Reverts the Vulkan hwupload rewrite. Not built in this revision."
+    },
+    {
+      "patch": "0062-use-linear-contiguous-vulkan-images-for-amd-encoder.patch",
+      "classification": "useful",
+      "applied": true,
+      "rationale": "Linear contiguous Vulkan images for the AMD encoder. Not built in this revision."
+    },
+    {
+      "patch": "0063-prefer-vulkan-device-with-higher-api-version.patch",
+      "classification": "useful",
+      "applied": true,
+      "rationale": "Prefers a higher Vulkan API version. Not built in this revision."
+    },
+    {
+      "patch": "0064-add-pgs-support-to-vulkan-overlay.patch",
+      "classification": "useful",
+      "applied": true,
+      "rationale": "PGS in the Vulkan overlay. Not built in this revision."
+    },
+    {
+      "patch": "0065-fix-yuv420p-to-p01x-unscaled-conversion.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "yuv420p to p01x unscaled conversion; the software HDR path depends on it."
+    },
+    {
+      "patch": "0066-allow-vt-sw-decoder-for-every-codec.patch",
+      "classification": "irrelevant",
+      "applied": true,
+      "rationale": "VideoToolbox software decoder for every codec. macOS only."
+    },
+    {
+      "patch": "0067-add-bwdif-videotoolbox-filter.patch",
+      "classification": "irrelevant",
+      "applied": true,
+      "rationale": "bwdif_videotoolbox. macOS only."
+    },
+    {
+      "patch": "0068-add-12bit-decoding-on-videotoolbox.patch",
+      "classification": "irrelevant",
+      "applied": true,
+      "rationale": "12-bit VideoToolbox decoding. macOS only."
+    },
+    {
+      "patch": "0069-fix-the-sub2video-perf-regressions.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "sub2video performance regressions; burn-in is unusable without it."
+    },
+    {
+      "patch": "0070-allow-vpl-qsv-to-init-with-the-legacy-msdk-path.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "oneVPL falling back to the legacy MSDK path; QSV on older Intel."
+    },
+    {
+      "patch": "0071-alway-set-videotoolboxenc-pixel-buffer-info.patch",
+      "classification": "irrelevant",
+      "applied": true,
+      "rationale": "VideoToolbox encoder pixel buffer info. macOS only."
+    },
+    {
+      "patch": "0072-add-remove-dovi-hdr10plus-bsf.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "remove_dovi and hdr10plus bitstream filters; the server names remove_dovi."
+    },
+    {
+      "patch": "0073-fix-atenc-layout-samplerate.patch",
+      "classification": "irrelevant",
+      "applied": true,
+      "rationale": "AudioToolbox encoder layout and sample rate. macOS only."
+    },
+    {
+      "patch": "0074-videotoolbox-remove-opengl-compatability.patch",
+      "classification": "irrelevant",
+      "applied": true,
+      "rationale": "VideoToolbox OpenGL compatibility removal. macOS only."
+    },
+    {
+      "patch": "0075-use-dynamic-pool-for-vpl-qsv-hwupload.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "Dynamic pool for oneVPL QSV hwupload."
+    },
+    {
+      "patch": "0076-backport-av1-videotoolbox.patch",
+      "classification": "irrelevant",
+      "applied": true,
+      "rationale": "AV1 VideoToolbox backport. macOS only."
+    },
+    {
+      "patch": "0077-fix-ass-incorrect-null-copy.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "libass NULL copy fix; subtitle burn-in crashes without it."
+    },
+    {
+      "patch": "0078-fix-a-race-condition-in-vaapi-csc-to-yuv420p.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "Race in VAAPI colour conversion to yuv420p."
+    },
+    {
+      "patch": "0079-add-first-vframe-only-to-ffprobe.patch",
+      "classification": "useful",
+      "applied": true,
+      "rationale": "ffprobe -first_vframe_only. The server does not pass it."
+    },
+    {
+      "patch": "0080-fix-auto-inserting-sw-color-conv-filters-between-hw-fmts.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "Stops software colour-conversion filters being auto-inserted between hardware formats."
+    },
+    {
+      "patch": "0081-fix-dummy-hw-frame-missing-hw-frames-ctx.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "Dummy hardware frame missing hw_frames_ctx; a hard failure otherwise."
+    },
+    {
+      "patch": "0082-add-yadif-and-bwdif-opencl-filter-impl.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "yadif_opencl and bwdif_opencl; the server names both."
+    },
+    {
+      "patch": "0083-allow-vpp-tonemap-without-hdr10-metadata.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "vpp tone-mapping without HDR10 metadata; real files often lack it."
+    },
+    {
+      "patch": "0084-allow-qsvenc-to-bail-out-from-unsupported-low-power-mode.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "Lets QSV encode bail out of an unsupported low-power mode instead of failing."
+    },
+    {
+      "patch": "0085-pass-eac3-addbsi-to-movenc-for-dolby-atmos-remuxing.patch",
+      "classification": "useful",
+      "applied": true,
+      "rationale": "E-AC-3 addbsi into movenc for Atmos remuxing."
+    },
+    {
+      "patch": "0086-add-array-of-textures-support-for-d3d11va-hwaccel.patch",
+      "classification": "irrelevant",
+      "applied": true,
+      "rationale": "Array-of-textures D3D11VA hwaccel. Windows only."
+    },
+    {
+      "patch": "0087-no-error-out-on-unmatched-dovi-rpu-trailing-padding-bytes.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "Tolerates unmatched Dolby Vision RPU trailing padding; the server handles DoVi."
+    },
+    {
+      "patch": "0088-remove-el-when-stripping-dovi-metadata.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "Removes the enhancement layer when stripping Dolby Vision metadata."
+    },
+    {
+      "patch": "0089-fix-avcodec-params-when-bsfs-are-enable-by-decoder.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "Codec parameters when bitstream filters are enabled by the decoder."
+    },
+    {
+      "patch": "0090-dont-return-ext-error-for-invalid-vt-frame.patch",
+      "classification": "irrelevant",
+      "applied": true,
+      "rationale": "VideoToolbox invalid-frame error. macOS only."
+    },
+    {
+      "patch": "0091-backport-a-fix-for-stripping-fps-from-setpts-outlink.patch",
+      "classification": "useful",
+      "applied": true,
+      "rationale": "setpts outlink fps backport."
+    },
+    {
+      "patch": "0092-add-hevc-recovery-point-support-backport-from-upstream.patch",
+      "classification": "useful",
+      "applied": true,
+      "rationale": "HEVC recovery-point support. The server does not depend on it."
+    },
+    {
+      "patch": "0093-backport-fixes-by-comparing-n7.1.4-and-release-7.1.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "Backported differences between n7.1.4 and release/7.1; baseline correctness."
+    },
+    {
+      "patch": "0094-backport-a-fix-from-upstream-for-magicyuv-decoder.patch",
+      "classification": "irrelevant",
+      "applied": true,
+      "rationale": "MagicYUV decoder fix. Not a format the server serves."
+    },
+    {
+      "patch": "0095-relax-to-allow-safe-filenames-in-mkv-attachments.patch",
+      "classification": "required",
+      "applied": true,
+      "rationale": "Safe filenames in Matroska attachments; ASS font extraction for burn-in."
+    }
+  ]
+}

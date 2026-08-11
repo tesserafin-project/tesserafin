@@ -135,7 +135,7 @@ Jellyfin's builder happens to include.
 | Subtitle burn-in | libass + freetype + fribidi + harfbuzz + fontconfig + libunibreak |
 | SubRip (`srt`) encode | native — *not* libsrt, which is a transport |
 | HLS segmenting, image extraction, `ffprobe` JSON | native |
-| VAAPI encode/decode/filters | libva 2.17 + libdrm |
+| VAAPI encode/decode/filters | libva 2.24.1 (bundled) + libdrm |
 | QSV | libvpl |
 | NVENC/NVDEC/CUVID and `*_cuda` filters | nv-codec-headers |
 | AMF | AMF headers |
@@ -158,10 +158,72 @@ matrix. macOS paths (`aac_at`, `*_videotoolbox`, `scale_vt`) do not apply.
 
 ---
 
+## 3a. The fork's patch series
+
+The jellyfin-ffmpeg checkout is **not pre-patched**. Its 95 changes live in
+`debian/patches` as a quilt series and are applied during upstream's own Debian
+packaging, which this build does not use. Configuring the checkout directly
+produces plain FFmpeg 7.1.4 — no `tonemapx`, no `alphasrc`, none of the fork's
+VAAPI/QSV/NVENC work — while every manifest still names the fork. The build
+therefore applies the series itself, in series order, at zero fuzz, and then
+asserts that `tonemapx` and `alphasrc` actually reached `libavfilter/allfilters.c`
+before configuring anything.
+
+**The whole series is applied except the unsafe class.** `v7.1.4-3` is the named
+compatibility baseline; the 95 patches are what make it that baseline rather than
+plain 7.1.4, and they are interdependent — patch 0057 (`tonemapx`) sits on
+refactors introduced earlier. A cherry-picked subset would be neither the fork
+nor upstream, which is exactly what §1 says the baseline must not become. What
+the audit changes is not *which* patches apply but whether each one was looked
+at: every patch is classified in `ci/ffmpeg/fork-patches.json`, and
+`ci/ffmpeg/verify-components.sh` refuses a series entry with no classification.
+
+| Class | Count | Meaning |
+| --- | --- | --- |
+| required | 50 | Tesserafin names the capability, or the patch is correctness for one it names |
+| useful | 18 | A real improvement Tesserafin does not depend on |
+| irrelevant | 26 | A platform outside the declared `linux-x64`/`linux-arm64` matrix |
+| unsafe | 1 | Weakens a Tesserafin guarantee — **not applied** |
+
+`required` is grounded in what the server source actually references, not in what
+sounds important: `tonemapx`, `alphasrc`, `sub2video`, `hwupload_vaapi`,
+`overlay_vaapi`/`_opencl`/`_cuda`, `tonemap_vaapi`/`_opencl`/`_cuda`,
+`yadif_opencl`, `bwdif_opencl`, `vpp_qsv`, `remove_dovi` and `ac4` all appear in
+`Tesserafin.MediaEncoding`.
+
+`irrelevant` is almost entirely platform: `0009`, `0012`, `0013`, `0031` … are
+Windows D3D11/DXVA, macOS VideoToolbox, the Windows executable icon, and the
+Rockchip RK3588 pipeline. They are applied anyway, because they are part of the
+named baseline and skipping them buys nothing.
+
+**The one exclusion** is `0029-remove-fdk-aac-from-nonfree.patch`. It deletes
+`libfdk_aac` from FFmpeg's own `EXTERNAL_LIBRARY_NONFREE_LIST`, so
+`--enable-gpl --enable-libfdk-aac` stops being a configure-time error. Tesserafin
+excludes FDK AAC and uses the native AAC encoder; keeping this patch out leaves
+FFmpeg's upstream licence enforcement in place as a fourth independent layer
+under the flag policy, the `-buildconf` scan and the encoder-listing scan —
+rather than disarming it inside the very source tree those layers inspect. The
+build asserts after patching that `libfdk_aac` is still in the nonfree list.
+
+The exclusion set lives in `ci/ffmpeg/excluded-patches.txt` and must equal the
+`unsafe` class exactly; the gate fails if the two disagree.
+
+---
+
 ## 4. Architectures and the portability floor
 
 `linux-x64` and `linux-arm64`. Both built on architecture-native hosted runners;
 runtime acceptance is always architecture-native, never emulated.
+
+The two architectures do not get the same configure flags. QSV (oneVPL) and AMF
+are Intel and AMD x86-64 vendor stacks with no arm64 target — upstream's own
+builder gates both on `[[ $TARGET == *arm64 ]] && return -1` — so they live in
+`ci/ffmpeg/ffmpeg-configure.linux-x64.txt` and `components.json` marks
+`libvpl` and `amf-headers` as `linux-x64` only.
+`ci/ffmpeg/ffmpeg-configure.linux-arm64.txt` exists and is empty on purpose, so
+that "arm64 adds nothing" is a decision with a place to change rather than an
+absence. Everything else — VAAPI, NVENC/NVDEC/CUVID, OpenCL, and the whole
+software codec set — is common to both.
 
 **GLIBC floor: 2.34.** Measured on the declared environments — Rocky 9 = 2.34,
 Debian 12 = 2.36, Ubuntu 24.04 = 2.39, Fedora 42 = 2.41 — so Rocky 9 sets the
@@ -169,12 +231,31 @@ ceiling. The builder is `debian:11` (glibc 2.31), pinned by digest, and the
 highest `GLIBC_2.x` symbol referenced by the produced binaries is gated at
 ≤ 2.34.
 
-**libva floor: 2.17**, the oldest in the declared matrix (Debian 12). libva is
-built from that pinned release and linked normally. On every declared
-environment, `ffmpeg -hwaccels` and the server-style hardware probe must return
-without aborting, and an unavailable device must produce a controlled
-"device creation failed", not `SIGABRT`. A runtime that survives only because
-the caller wraps the subprocess is not accepted.
+**libva is bundled at 2.24.1 — the newest stable, deliberately not the oldest.**
+
+None of the four declared images ships `libva.so.2` at all, so a hard
+`DT_NEEDED` on the host's copy would make `ffmpeg` fail to load on every row of
+the matrix. libva is therefore built from a pinned release, shipped in `lib/`,
+and resolved through `RUNPATH=$ORIGIN/../lib`.
+
+Given that it is bundled, it must be the *newest* stable rather than the oldest.
+libva loads a VA driver by looking up `vaDriverInit_<major>_<minor>` and walking
+the minor version downwards: it is backward compatible with older drivers and
+not forward compatible with newer ones. A bundled 2.17 could not load a host
+driver built against 2.20 at all. "Build against the oldest libva in the matrix"
+would be the right instruction for a binary that links the *host's* libva; for a
+bundled one it inverts.
+
+This is a stated deviation from a flat "no RPATH/RUNPATH" rule. The gate does
+not relax to accommodate it: `ci/ffmpeg/verify-runtime.sh` accepts exactly the
+string `$ORIGIN/../lib` and refuses every other value, including the mangled
+`25ORIGIN/../lib` that FFmpeg's `configure` produces from `--extra-ldflags`.
+Negative control 8 proves the refusal with a real absolute vendor RUNPATH.
+
+On every declared environment, `ffmpeg -hwaccels` and the server-style hardware
+probe must return without aborting, and an unavailable device must produce a
+controlled "device creation failed", not `SIGABRT`. A runtime that survives only
+because the caller wraps the subprocess is not accepted.
 
 ---
 

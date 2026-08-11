@@ -99,6 +99,23 @@ step() {
 }
 done_step() { touch "${PREFIX}/.stamps/${1// /_}"; }
 
+# A component that components.json restricts to a subset of architectures. The
+# restriction is read from the manifest rather than repeated here, so the gate,
+# the fetcher and the build cannot disagree about which architectures a
+# component belongs to.
+arch_allows() { # <component-name>
+    python3 -c '
+import json, sys
+manifest, name, arch = sys.argv[1:4]
+for c in json.load(open(manifest))["components"]:
+    if c["name"] == name:
+        allowed = c.get("architectures")
+        sys.exit(0 if allowed is None or arch in allowed else 1)
+sys.exit(0)
+' "${FF_COMPONENTS}" "$1" "${ARCH}" \
+        || { ff_log "skipping $1 (not built for ${ARCH})"; return 1; }
+}
+
 # =============================================================================
 # base
 # =============================================================================
@@ -283,14 +300,14 @@ if step nv-codec-headers; then
     done_step nv-codec-headers
 fi
 
-if step libvpl; then
+if arch_allows libvpl && step libvpl; then
     d="$(unpack libvpl)"; ( cd "${d}" && cmake -S . -B build -DCMAKE_INSTALL_PREFIX="${PREFIX}" \
         -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTS=OFF -DBUILD_EXAMPLES=OFF \
         -DINSTALL_EXAMPLE_CODE=OFF && cmake --build build -j"${J}" && cmake --install build )
     done_step libvpl
 fi
 
-if step amf-headers; then
+if arch_allows amf-headers && step amf-headers; then
     d="$(gitsrc amf-headers)"; mkdir -p "${PREFIX}/include/AMF"; cp -a "${d}/amf/public/include/." "${PREFIX}/include/AMF/"
     done_step amf-headers
 fi
@@ -323,7 +340,7 @@ FFSRC="${BUILDROOT}/ffmpeg"
 # ignores default_library — so it cannot be folded into the binary the way every
 # other component is. It is BUNDLED instead, with an $ORIGIN-relative RUNPATH,
 # which is strictly better than linking whatever libva the host happens to have:
-# the runtime always gets the pinned 2.17, and there is no implib trampoline to
+# the runtime always gets the pinned libva, and there is no implib trampoline to
 # turn a version difference into assert(0). $ORIGIN names no host path, no build
 # workspace and no vendor, so the portability gate accepts it.
 # The RUNPATH is NOT passed through configure. FFmpeg's configure mangles a
@@ -333,13 +350,61 @@ FFSRC="${BUILDROOT}/ffmpeg"
 # afterwards, exactly and verifiably.
 RPATH_FLAG=''
 
-mapfile -t FLAGS < <(grep -vE '^\s*(#|$)' "${FF_FLAGS_FILE}")
+# The common flags plus whatever this architecture adds. QSV and AMF are x86-64
+# vendor stacks and are not in the common set; see ffmpeg-configure.linux-x64.txt.
+ARCH_FLAGS_FILE="${FF_REPO_ROOT}/ci/ffmpeg/ffmpeg-configure.${ARCH}.txt"
+[[ -f "${ARCH_FLAGS_FILE}" ]] \
+    || ff_die "no configure flags declared for ${ARCH} (expected ${ARCH_FLAGS_FILE})"
+mapfile -t FLAGS < <(grep -hvE '^\s*(#|$)' "${FF_FLAGS_FILE}" "${ARCH_FLAGS_FILE}")
 # --prefix stays the real installed location, so -buildconf records where the
 # runtime actually lives and FFmpeg resolves its datadir against a path that
 # will exist. Staging happens through DESTDIR instead.
 
 if step "FFmpeg ${FF_FFMPEG_BASELINE} (${FF_BUILD_REVISION})"; then
 rm -rf "${FFSRC}"; cp -a "${CACHE}/git/jellyfin-ffmpeg" "${FFSRC}"
+
+# The jellyfin-ffmpeg tree is NOT pre-patched: its 95 changes live in
+# debian/patches and are applied during its own packaging, which this build does
+# not use. Configuring the checkout directly produces plain FFmpeg 7.1.4 — no
+# tonemapx, no alphasrc, none of the fork's VAAPI/QSV/NVENC work — while every
+# manifest still names the fork. Apply the series here, in series order, and
+# prove afterwards that it took.
+(
+    cd "${FFSRC}"
+    mapfile -t EXCLUDED < <(grep -vE '^\s*(#|$)' "${FF_EXCLUDED_PATCHES}" | awk '{print $1}')
+    for e in "${EXCLUDED[@]}"; do
+        [[ -f "debian/patches/${e}" ]] \
+            || ff_die "excluded-patches.txt names ${e}, which is not in this series"
+    done
+    applied=0; skipped=0
+    while read -r p; do
+        [[ -n "${p}" ]] || continue
+        for e in "${EXCLUDED[@]}"; do
+            if [[ "${p}" == "${e}" ]]; then
+                ff_log "skipping ${p} (declared unsafe)"; skipped=$((skipped + 1)); continue 2
+            fi
+        done
+        # --forward and no fuzz: a patch that only applies approximately is a
+        # patch applying to the wrong place. The series is pinned by the same
+        # commit as the tree, so anything but a clean apply means the pin moved.
+        patch -p1 --forward --no-backup-if-mismatch -F0 -i "debian/patches/${p}" \
+            >> "${OUT}/patches.log" 2>&1 \
+            || { tail -20 "${OUT}/patches.log" >&2; ff_die "patch ${p} did not apply cleanly"; }
+        applied=$((applied + 1))
+    done < debian/patches/series
+    ff_log "applied ${applied} fork patches, skipped ${skipped}"
+
+    # The series having run is not the same as the series having landed. Assert
+    # the two things the distribution contract justifies the fork with.
+    grep -q 'tonemapx' libavfilter/allfilters.c \
+        || ff_die "the patch series applied but tonemapx is absent: the fork baseline did not land"
+    grep -q 'alphasrc' libavfilter/allfilters.c \
+        || ff_die "the patch series applied but alphasrc is absent: the fork baseline did not land"
+    # And the one that must NOT have landed: FFmpeg's own nonfree classification
+    # of libfdk_aac has to survive into the tree the build configures.
+    awk '/^EXTERNAL_LIBRARY_NONFREE_LIST=/,/^"/' configure | grep -q 'libfdk_aac' \
+        || ff_die "libfdk_aac is no longer in FFmpeg's nonfree list: 0029 was applied"
+)
 (
     cd "${FFSRC}"
     ./configure \

@@ -22,5 +22,5 @@ libgcc_s.so.1             the GCC unwinder, required by the C++ runtime
 libatomic.so.1            GCC atomics fallback where the target lacks native wide atomics
 ld-linux-x86-64.so.2      the x86_64 program interpreter
 ld-linux-aarch64.so.1     the aarch64 program interpreter
-libva.so.2                VAAPI core, BUNDLED in lib/ at the pinned 2.17 and resolved through $ORIGIN/../lib — never taken from the host
+libva.so.2                VAAPI core, BUNDLED in lib/ at the pinned release and resolved through $ORIGIN/../lib — never taken from the host
 libva-drm.so.2            VAAPI DRM backend, bundled on the same terms as libva.so.2

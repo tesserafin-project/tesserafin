@@ -115,7 +115,17 @@ print(f"  ok  : jellyfin-ffmpeg {f['baseline']} @ {f['commit']} ({f['commitSigna
 PY
 
 echo "== configure flags"
-FLAGS="$(grep -vE '^\s*(#|$)' "${FLAGS_FILE}" || true)"
+# Every architecture's flags, not just the common file: a flag that only applies
+# to linux-x64 is still a flag this policy has to accept or refuse. When --flags
+# points somewhere else (a negative control aiming the gate at a doctored file)
+# only that file is read, because the control's whole point is a single input.
+ARCH_FLAG_FILES=()
+if [[ "${FLAGS_FILE}" == "${ROOT}/ci/ffmpeg/ffmpeg-configure.txt" ]]; then
+    for f in "${ROOT}"/ci/ffmpeg/ffmpeg-configure.*.txt; do
+        [[ -f "${f}" ]] && ARCH_FLAG_FILES+=("${f}")
+    done
+fi
+FLAGS="$(grep -hvE '^\s*(#|$)' "${FLAGS_FILE}" "${ARCH_FLAG_FILES[@]+"${ARCH_FLAG_FILES[@]}"}" || true)"
 [[ -n "${FLAGS}" ]] || fail "${FLAGS_FILE} declares no flags"
 
 if grep -qE -- '--enable-nonfree' <<<"${FLAGS}"; then
@@ -173,6 +183,66 @@ for ex in "${EXCLUDED[@]}"; do
     fi
 done
 pass "no excluded component is enabled"
+
+echo "== fork patch classification"
+# The jellyfin-ffmpeg tree ships its 95 changes as a quilt series rather than
+# pre-applied, so the build applies them. Every one of them has to be classified
+# before it ships, and the only patches the build may skip are the ones this
+# policy calls unsafe. A patch appearing in the series with no classification is
+# a change to the baseline that nobody looked at.
+python3 - "${ROOT}/ci/ffmpeg/fork-patches.json" "${ROOT}/ci/ffmpeg/excluded-patches.txt" <<'PY' || exit 1
+import json, sys
+
+catalogue, excluded_file = sys.argv[1:3]
+d = json.load(open(catalogue))
+patches = d["patches"]
+failures = 0
+
+valid = {"required", "useful", "irrelevant", "unsafe"}
+for entry in patches:
+    if entry["classification"] not in valid:
+        print(f"  FAIL: {entry['patch']} has unknown classification "
+              f"'{entry['classification']}'")
+        failures += 1
+    if not entry.get("rationale", "").strip():
+        print(f"  FAIL: {entry['patch']} is classified with no rationale")
+        failures += 1
+    # The two fields must agree: 'unsafe' is the only class that is not applied,
+    # and nothing else may be quietly dropped.
+    expected = entry["classification"] != "unsafe"
+    if entry["applied"] is not expected:
+        print(f"  FAIL: {entry['patch']} is {entry['classification']} but "
+              f"applied={entry['applied']}")
+        failures += 1
+
+if len(patches) != d["seriesLength"]:
+    print(f"  FAIL: seriesLength is {d['seriesLength']} but {len(patches)} patches are listed")
+    failures += 1
+if len({e["patch"] for e in patches}) != len(patches):
+    print("  FAIL: the catalogue lists a patch twice")
+    failures += 1
+
+catalogued_unsafe = {e["patch"] for e in patches if e["classification"] == "unsafe"}
+declared_excluded = set()
+for line in open(excluded_file):
+    line = line.strip()
+    if line and not line.startswith("#"):
+        declared_excluded.add(line.split()[0])
+
+if catalogued_unsafe != declared_excluded:
+    print(f"  FAIL: the unsafe class is {sorted(catalogued_unsafe)} but "
+          f"excluded-patches.txt declares {sorted(declared_excluded)}")
+    failures += 1
+
+if failures:
+    sys.exit(1)
+counts = {}
+for e in patches:
+    counts[e["classification"]] = counts.get(e["classification"], 0) + 1
+print(f"  ok  : {len(patches)} patches classified "
+      + ", ".join(f"{v} {k}" for k, v in sorted(counts.items())))
+print(f"  ok  : {len(declared_excluded)} patch(es) excluded, all classified unsafe")
+PY
 
 # --- optional: inspect a real binary -----------------------------------------
 if [[ -n "${BINARY}" ]]; then
