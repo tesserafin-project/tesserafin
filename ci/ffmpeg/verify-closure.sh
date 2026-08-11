@@ -106,22 +106,40 @@ PY
 [[ $? -eq 0 ]] || FAILURES=$((FAILURES + 1))
 
 echo "== no unsupported hardware claim"
+# The runtime archive may never carry an affirmative hardware claim, not even a
+# true one. Two reasons, and they point the same way:
+#
+#   * reproducibility — a machine with a GPU and a hosted runner without one
+#     would otherwise produce different bytes for the same revision, and the
+#     bit-for-bit requirement is not negotiable for a hardware accident;
+#   * honesty — "works" is a property of a machine, not of an artifact. The same
+#     binary on the same distribution succeeds or fails depending on a driver
+#     the archive does not contain.
+#
+# So every path is "not runtime-tested" inside the archive, always, and runtime
+# evidence lives beside it as a separate record produced by
+# ci/ffmpeg/accept-hardware.sh on a machine that actually had the hardware.
+# There is no free-text escape hatch here: a value that merely mentions the word
+# "evidence" used to pass, which meant a sentence could claim anything.
 CAP="${RUNTIME}/capability.json"
 if [[ -f "${CAP}" ]]; then
-    python3 - "${CAP}" <<'PY' || exit 1
+    python3 - "${CAP}" <<'PY' || FAILURES=$((FAILURES + 1))
 import json, sys
 cap = json.load(open(sys.argv[1]))
 evidence = cap.get("hardwareRuntimeEvidence", {})
-bad = [k for k, v in evidence.items()
-       if not isinstance(v, str) or not k.startswith("$")
-       and v not in ("not runtime-tested",) and "evidence" not in v.lower()]
-if bad:
-    print(f"  FAIL: hardware paths claimed without recorded evidence: {bad}")
+paths = {k: v for k, v in evidence.items() if not k.startswith("$")}
+if not paths:
+    print("  FAIL: capability.json records no hardware paths at all")
     sys.exit(1)
-print(f"  ok  : {len([k for k in evidence if not k.startswith('$')])} hardware paths, "
-      "each either marked not runtime-tested or carrying recorded evidence")
+bad = {k: v for k, v in paths.items() if v != "not runtime-tested"}
+if bad:
+    for k, v in bad.items():
+        print(f"  FAIL: {k} is claimed as {v!r}; the archive may only say "
+              f"'not runtime-tested'. Runtime evidence belongs in the separate "
+              f"hardware record, not inside a reproducible artifact.")
+    sys.exit(1)
+print(f"  ok  : {len(paths)} hardware paths, every one marked not runtime-tested")
 PY
-    [[ $? -eq 0 ]] || FAILURES=$((FAILURES + 1))
 else
     echo "  note: no capability.json in the runtime; run verify-runtime.sh --manifest first"
 fi

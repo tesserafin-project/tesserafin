@@ -138,7 +138,7 @@ s="${LAB}/buildpath"; cp -a "${STAGE}" "${s}"
 printf '/tmp/tf-ffbuild/x264\n' > "${LAB}/leak.txt"
 docker run --rm --user "$(id -u):$(id -g)" --volume "${LAB}:/lab" "${BUILDER_TAG}" \
     objcopy --add-section .tf_leak=/lab/leak.txt /lab/buildpath/bin/ffmpeg
-control "11 an embedded build-host path is refused" "embeds build path" run_gate "${s}"
+control "11 an embedded build-host path is refused" "a Tesserafin build or dependency directory" run_gate "${s}"
 
 glibc_floor_control() {
     FF_GLIBC_FLOOR=2.17 "${ROOT}/ci/ffmpeg/verify-runtime.sh" --stage "${STAGE}" --arch linux-x64
@@ -212,8 +212,8 @@ import json,sys
 p=sys.argv[1]+"/capability.json"; j=json.load(open(p))
 j["hardwareRuntimeEvidence"]["nvenc"]="works on all NVIDIA GPUs"
 json.dump(j, open(p,"w"), indent=2, sort_keys=True)' "${s}"
-    control "15 a hardware claim with no recorded evidence is refused" \
-            "claimed without recorded evidence" closure "${s}" "${SRC_ARCHIVE}"
+    control "15 a hardware claim inside the archive is refused" \
+            "may only say 'not runtime-tested'" closure "${s}" "${SRC_ARCHIVE}"
 else
     echo "  note: no --source-archive given; controls 6, 7, 13 and 15 not run"
 fi
