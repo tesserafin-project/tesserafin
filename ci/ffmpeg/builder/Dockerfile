@@ -12,6 +12,12 @@
 #
 # The toolchain is an INPUT. This image never builds a compiler — that is what
 # makes the FFmpeg build reproducible rather than merely repeatable.
+#
+# clang is here for one reason: FFmpeg's CUDA filters (scale_cuda, tonemap_cuda,
+# overlay_cuda, transpose_cuda) are .cu kernels that gcc cannot compile.
+# --enable-cuda alone builds NVDEC/NVENC and silently omits every one of those
+# filters. --enable-cuda-llvm compiles them with clang targeting NVPTX, with no
+# CUDA toolkit and nothing proprietary involved.
 
 FROM debian@sha256:99cdf7792e25416bd801861ccd8e2fb27fb527b25e8d9a8704ebc3ead2015675
 
@@ -40,6 +46,7 @@ RUN printf '%s\n' \
       automake \
       build-essential \
       ca-certificates \
+      clang \
       cmake \
       diffutils \
       file \
@@ -63,8 +70,15 @@ RUN printf '%s\n' \
  && rm -rf /var/lib/apt/lists/*
 
 # Recorded so a build log can prove which toolchain produced an artifact.
-RUN { gcc --version | head -1; ld --version | head -1; ldd --version | head -1; \
-      cmake --version | head -1; meson --version; nasm -v; } > /toolchain.txt \
+RUN { gcc --version | head -1; clang --version | head -1; ld --version | head -1; \
+      ldd --version | head -1; cmake --version | head -1; meson --version; nasm -v; } > /toolchain.txt \
  && cat /toolchain.txt
+
+# The dependency prefix, pre-created writable so the build can run as the
+# invoking user and still install into the real install location. Several
+# dependencies compile this path into the binary and read from it at runtime on
+# the recipient's machine, so it has to be the path the runtime is installed to
+# rather than a scratch directory under /tmp — see build-in-container.sh.
+RUN mkdir -p /opt/tesserafin-ffmpeg && chmod 0777 /opt/tesserafin-ffmpeg
 
 ENV LC_ALL=C LANG=C TZ=UTC

@@ -130,8 +130,11 @@ echo "== embedded build paths"
 # supposed to report it.
 FORBIDDEN_PATHS=(
     /tmp/tf-ffbuild   # the dependency build root
-    /tmp/tf-ffdeps    # the dependency install prefix
+    /tmp/tf-ffdeps    # the former dependency prefix; must never come back
     /tmp/tf-ffinstall # the FFmpeg DESTDIR
+    /tmp/             # any scratch path at all: several dependencies READ their
+                      # compiled-in prefix at runtime, and a world-writable one
+                      # is a dlopen and a config-injection surface
     /cache/           # the read-only source cache mount
     /repo/            # the read-only repository mount
     /out/             # the output mount

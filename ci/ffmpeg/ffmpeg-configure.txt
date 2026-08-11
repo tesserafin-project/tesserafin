@@ -67,4 +67,5 @@
 --enable-cuvid
 --enable-nvdec
 --enable-nvenc
+--enable-cuda-llvm
 --enable-opencl

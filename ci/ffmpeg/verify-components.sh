@@ -153,8 +153,8 @@ fi
 # no excluded component may be enabled. This is what stops the flags and the
 # manifest drifting into different builds.
 while read -r flag; do
-    [[ "${flag}" =~ ^--enable-(lib)?([a-z0-9_]+)$ ]] || continue
-    feature="${BASH_REMATCH[2]}"
+    [[ "${flag}" =~ ^--enable-(lib)?([a-z0-9_-]+)$ ]] || continue
+    feature="${BASH_REMATCH[2]//-/_}"
     case "${feature}" in
         gpl|version3|shared|static|pic|small|cross_compile) continue ;;
     esac
@@ -167,6 +167,9 @@ while read -r flag; do
     # same name; they are named here so the exception is visible, not implicit.
     case "${feature}" in
         vaapi|cuda|cuvid|nvdec|nvenc|ffnvcodec|amf|opencl|openssl|zlib|fontconfig) matched=1 ;;
+        # Not a component either: it selects clang-as-NVPTX-compiler in the
+        # pinned builder image, which is how the *_cuda filter kernels get built.
+        cuda_llvm) matched=1 ;;
     esac
     [[ "${matched}" -eq 1 ]] || fail "flag --enable-${BASH_REMATCH[1]}${feature} names no pinned component"
 done <<<"${FLAGS}"

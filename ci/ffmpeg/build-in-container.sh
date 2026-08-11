@@ -44,10 +44,23 @@ export LC_ALL=C LANG=C TZ=UTC
 
 # Every path here is a FIXED string, never mktemp. Two runs must agree on the
 # bytes, and a random directory name can reach a binary through a debug string,
-# a generated config or a __FILE__ that escaped -ffile-prefix-map. They live
-# under /tmp so the container can run as the invoking user rather than root,
-# which also keeps the output files owned by the caller.
-export PREFIX=/tmp/tf-ffdeps
+# a generated config or a __FILE__ that escaped -ffile-prefix-map.
+#
+# PREFIX is the REAL install prefix, not a scratch directory, because several
+# dependencies compile their prefix into the shipped binary and then read from
+# it at RUNTIME on the user's machine:
+#
+#   * OpenSSL bakes in OPENSSLDIR and reads openssl.cnf from it;
+#   * libvpl bakes the dispatcher's search path and dlopen()s libmfx-gen.so from it;
+#   * fontconfig bakes its cache and config directories.
+#
+# With a /tmp prefix all three resolve into a world-writable directory on the
+# recipient's system. The dlopen one is arbitrary code execution: anyone who can
+# create /tmp/<prefix>/lib/libmfx-gen.so.1.2 gets it loaded into ffmpeg. /opt is
+# root-owned on every declared distribution, so the same paths become inert.
+# The builder image pre-creates it writable so the container can still run as
+# the invoking user and leave the output owned by the caller.
+export PREFIX=/opt/tesserafin-ffmpeg
 BUILDROOT=/tmp/tf-ffbuild
 WORK=/tmp/tf-ffinstall
 
@@ -407,13 +420,20 @@ rm -rf "${FFSRC}"; cp -a "${CACHE}/git/jellyfin-ffmpeg" "${FFSRC}"
 )
 (
     cd "${FFSRC}"
+    # Deliberately NOT ${CFLAGS}: FFmpeg records its configure line verbatim and
+    # echoes it from -buildconf, so every -ffile-prefix-map argument would put
+    # the path it maps away straight back into the shipped binary. FFmpeg builds
+    # in-tree, so its __FILE__ values are already relative and it needs no
+    # mapping; the dependencies, which cmake and meson build out of tree with
+    # absolute paths, keep theirs.
+    FF_CFLAGS="-O2 -g0 -fPIC -I${PREFIX}/include"
     ./configure \
         "${FLAGS[@]}" \
         --extra-version="tesserafin.1" \
         --pkg-config-flags=--static \
-        --extra-cflags="${CFLAGS} -I${PREFIX}/include" \
-        --extra-cxxflags="${CXXFLAGS} -I${PREFIX}/include" \
-        --extra-ldflags="${LDFLAGS} -L${PREFIX}/lib -L${PREFIX}/lib64 ${RPATH_FLAG}" \
+        --extra-cflags="${FF_CFLAGS}" \
+        --extra-cxxflags="${FF_CFLAGS}" \
+        --extra-ldflags="-Wl,--build-id=none -L${PREFIX}/lib -L${PREFIX}/lib64 ${RPATH_FLAG}" \
         --extra-libs="-lpthread -lm -ldl" \
         > "${OUT}/configure.log" 2>&1 || { tail -60 "${OUT}/configure.log" >&2; ff_die "FFmpeg configure failed"; }
     make -j"${J}" > "${OUT}/make.log" 2>&1 || { tail -80 "${OUT}/make.log" >&2; ff_die "FFmpeg build failed"; }

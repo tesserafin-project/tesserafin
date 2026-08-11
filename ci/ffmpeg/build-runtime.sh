@@ -59,7 +59,7 @@ INCREMENTAL_MOUNTS=()
 if [[ "${FF_INCREMENTAL:-0}" == "1" ]]; then
     mkdir -p "${OUT}/state/deps" "${OUT}/state/build"
     INCREMENTAL_MOUNTS=(
-        --volume "${OUT}/state/deps:/tmp/tf-ffdeps"
+        --volume "${OUT}/state/deps:/opt/tesserafin-ffmpeg"
         --volume "${OUT}/state/build:/tmp/tf-ffbuild"
     )
 fi
