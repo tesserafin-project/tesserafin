@@ -90,6 +90,16 @@ jobs:
               --runtime "${RUNNER_TEMP}/ffmpeg/pkg/tesserafin-ffmpeg-7.1.4-tesserafin.1-${RID}" \
               --source-archive "${RUNNER_TEMP}/ffmpeg/pkg/tesserafin-ffmpeg-7.1.4-tesserafin.1-corresponding-source.tar.zst"
 
+      # The delivered digests, computed by the SAME script the reproducibility
+      # job uses, so the two can actually be compared.
+      - name: Record the delivered digests
+        env:
+          RID: ${{ matrix.rid }}
+        run: |
+          ./ci/ffmpeg/delivered-digests.sh \
+              --pkg "${RUNNER_TEMP}/ffmpeg/pkg" --arch "${RID}" \
+              | tee "${RUNNER_TEMP}/ffmpeg/pkg/delivered-${RID}.sha256"
+
       - name: Upload the runtime and its corresponding source
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -98,6 +108,7 @@ jobs:
             ${{ runner.temp }}/ffmpeg/pkg/*.tar.xz
             ${{ runner.temp }}/ffmpeg/pkg/*.tar.zst
             ${{ runner.temp }}/ffmpeg/pkg/SHA256SUMS-*.txt
+            ${{ runner.temp }}/ffmpeg/pkg/delivered-*.sha256
             ${{ runner.temp }}/ffmpeg/pkg/tesserafin-ffmpeg-*/SOURCE.json
             ${{ runner.temp }}/ffmpeg/pkg/tesserafin-ffmpeg-*/sbom.cdx.json
             ${{ runner.temp }}/ffmpeg/pkg/tesserafin-ffmpeg-*/capability.json
@@ -197,16 +208,20 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
-      - name: Download the first build's digests
+      - name: Download the build job's delivered digests
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
         with:
           name: ffmpeg-runtime-${{ matrix.rid }}
           path: ${{ runner.temp }}/first
 
-      # A fresh runner, a fresh clone and a fresh toolchain image: genuinely a
-      # second independent build, not the same machine building twice.
-      - name: Rebuild and require bit-for-bit identical digests
+      # --against, not a second local build: this runner rebuilds once and
+      # compares with the digests the BUILD job produced on a different machine.
+      # Two builds inside one job share a kernel, a CPU model and a Docker
+      # state, and a machine agreeing with itself is the weaker claim.
+      - name: Rebuild on a second runner and require bit-for-bit identical digests
         env:
           RID: ${{ matrix.rid }}
         run: |
-          ./ci/ffmpeg/repro-check.sh --arch "${RID}" --out "${RUNNER_TEMP}/repro"
+          ref="${RUNNER_TEMP}/first/delivered-${RID}.sha256"
+          test -s "${ref}" || { echo "the build job uploaded no digest list; nothing to compare against" >&2; exit 1; }
+          ./ci/ffmpeg/repro-check.sh --arch "${RID}" --out "${RUNNER_TEMP}/repro" --against "${ref}"

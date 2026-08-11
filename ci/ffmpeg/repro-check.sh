@@ -35,17 +35,12 @@ ff_load_manifest
 export FF_INCREMENTAL=0
 NAME="tesserafin-ffmpeg-${FF_BUILD_REVISION}"
 
-# The files whose digests must agree, relative to a build's output directory.
-delivered() {
-    printf '%s\n' \
-        "pkg/${NAME}-${ARCH}/bin/ffmpeg" \
-        "pkg/${NAME}-${ARCH}/bin/ffprobe" \
-        "pkg/${NAME}-${ARCH}/SOURCE.json" \
-        "pkg/${NAME}-${ARCH}/sbom.cdx.json" \
-        "pkg/${NAME}-${ARCH}/capability.json" \
-        "pkg/${NAME}-${ARCH}/THIRD_PARTY_NOTICES.md" \
-        "pkg/${NAME}-${ARCH}.tar.xz" \
-        "pkg/${NAME}-corresponding-source.tar.zst"
+# Delegated to ci/ffmpeg/delivered-digests.sh so the job that BUILDS and the job
+# that REBUILDS compute the same list from the same definition. That is what
+# makes --against a real comparison between two different runners rather than a
+# machine agreeing with itself.
+digests() { # <build dir>
+    "${FF_REPO_ROOT}/ci/ffmpeg/delivered-digests.sh" --pkg "$1/pkg" --arch "${ARCH}"
 }
 
 one_build() { # <output dir>
@@ -58,17 +53,6 @@ one_build() { # <output dir>
     "${FF_REPO_ROOT}/ci/ffmpeg/package-runtime.sh" \
         --stage "${dir}/${NAME}-${ARCH}" --cache "${dir}/source-cache" \
         --out "${dir}/pkg" --arch "${ARCH}" >&2
-}
-
-digests() { # <build dir>
-    local dir="$1" f
-    while read -r f; do
-        if [[ -f "${dir}/${f}" ]]; then
-            printf '%s  %s\n' "$(ff_sha256 "${dir}/${f}")" "${f}"
-        else
-            printf 'MISSING  %s\n' "${f}"
-        fi
-    done < <(delivered) | LC_ALL=C sort -k2
 }
 
 mkdir -p "${OUT}"
@@ -101,7 +85,7 @@ diff "${OUT}/first.sha256" "${OUT}/second.sha256" >&2 || true
 
 # Point at the cause rather than only reporting a digest difference.
 while read -r _ name; do
-    a="${OUT}/b1/${name}"; b="${OUT}/b2/${name}"
+    a="${OUT}/b1/pkg/${name}"; b="${OUT}/b2/pkg/${name}"
     [[ -f "${a}" && -f "${b}" ]] || continue
     cmp -s "${a}" "${b}" && continue
     echo "--- differing: ${name}" >&2
