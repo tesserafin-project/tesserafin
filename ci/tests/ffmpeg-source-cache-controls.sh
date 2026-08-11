@@ -73,13 +73,20 @@ ARCHIVE_PIN="$(python3 -c '
 import json, sys
 print(json.load(open(sys.argv[1]))["components"][0]["sha256"])' "${MANIFEST}")"
 
-fetch() { # <cache> [manifest]  -> stdout+stderr of the run, exit status preserved
-    FF_COMPONENTS="${2:-${MANIFEST}}" "${ROOT}/ci/ffmpeg/fetch-sources.sh" --cache "$1" 2>&1
+# Runs the fetcher and records BOTH its output and its exit status without
+# aborting the suite. A control whose fetch is supposed to fail and a control
+# whose fetch is supposed to repair the cache have to be judged the same way:
+# by what the cache holds afterwards, not by whether the suite survived.
+OUT=""; RC=0
+run() { # <cache> [manifest] -> sets OUT and RC
+    RC=0
+    OUT="$(FF_COMPONENTS="${2:-${MANIFEST}}" "${ROOT}/ci/ffmpeg/fetch-sources.sh" --cache "$1" 2>&1)" || RC=$?
 }
 
 # --- a warm cache every control starts from -----------------------------------
 WARM="${LAB}/warm"
-if ! out="$(fetch "${WARM}")"; then
+run "${WARM}"; out="${OUT}"
+if [[ "${RC}" -ne 0 ]]; then
     echo "the control suite could not populate a clean cache; nothing below is meaningful" >&2
     printf '%s\n' "${out}" >&2
     exit 1
@@ -99,8 +106,9 @@ lab_copy() { local d="${LAB}/$1"; rm -rf "${d}"; cp -a "${WARM}" "${d}"; printf 
 
 echo "== a cache hit is re-verified, not trusted"
 c="$(lab_copy hit)"
-out="$(fetch "${c}")"
-if grep -q "matches its digest" <<<"${out}" && ! grep -q "^== fetching zlib" <<<"${out}"; then
+run "${c}"; out="${OUT}"
+if [[ "${RC}" -eq 0 ]] && grep -q "matches its digest" <<<"${out}" \
+   && ! grep -q "^== fetching zlib" <<<"${out}"; then
     pass "C2 a cache hit re-verifies every component without downloading it again"
 else
     fail "C2 a cache hit re-verifies every component without downloading it again" \
@@ -122,8 +130,9 @@ fi
 echo "== corrupted restored bytes"
 c="$(lab_copy corrupt-archive)"
 printf 'not the pinned bytes' > "${c}/archives/${ARCHIVE_NAME}"
-out="$(fetch "${c}")"
-if [[ "$(ff_sha256 "${c}/archives/${ARCHIVE_NAME}")" == "${ARCHIVE_PIN}" ]] \
+run "${c}"; out="${OUT}"
+if [[ "${RC}" -eq 0 ]] \
+   && [[ "$(ff_sha256 "${c}/archives/${ARCHIVE_NAME}")" == "${ARCHIVE_PIN}" ]] \
    && grep -q "discarding it" <<<"${out}"; then
     pass "C4 a corrupted cached archive is discarded and replaced from the pin"
 else
@@ -142,7 +151,8 @@ j = json.load(open(sys.argv[1]))
 j["components"][0]["sha256"] = "0" * 64
 json.dump(j, open(sys.argv[2], "w"))' "${MANIFEST}" "${doctored}"
 printf 'not the pinned bytes' > "${c}/archives/${ARCHIVE_NAME}"
-if out="$(fetch "${c}" "${doctored}")"; then
+run "${c}" "${doctored}"; out="${OUT}"
+if [[ "${RC}" -eq 0 ]]; then
     fail "C5 a cached archive that cannot satisfy its pin stops the build" "the fetch succeeded"
 elif grep -q "checksum mismatch" <<<"${out}"; then
     pass "C5 a cached archive that cannot satisfy its pin stops the build"
@@ -155,8 +165,9 @@ echo "== restored git trees"
 c="$(lab_copy wrong-commit)"
 git -C "${c}/git/jellyfin-ffmpeg" fetch -q --depth=1 origin "${OTHER_COMMIT}"
 git -C "${c}/git/jellyfin-ffmpeg" checkout -q "${OTHER_COMMIT}"
-out="$(fetch "${c}")"
-if [[ "$(git -C "${c}/git/jellyfin-ffmpeg" rev-parse HEAD)" == "${PINNED_COMMIT}" ]] \
+run "${c}"; out="${OUT}"
+if [[ "${RC}" -eq 0 ]] \
+   && [[ "$(git -C "${c}/git/jellyfin-ffmpeg" rev-parse HEAD)" == "${PINNED_COMMIT}" ]] \
    && [[ "$(cat "${c}/git/jellyfin-ffmpeg/VERSION")" == "pinned" ]]; then
     pass "C6 a cached git tree at the wrong commit is never consumed"
 else
@@ -170,8 +181,9 @@ fi
 c="$(lab_copy tampered-tree)"
 printf 'backdoored\n' > "${c}/git/jellyfin-ffmpeg/VERSION"
 printf 'extra\n' > "${c}/git/jellyfin-ffmpeg/EXTRA"
-fetch "${c}" >/dev/null
-if [[ "$(cat "${c}/git/jellyfin-ffmpeg/VERSION")" == "pinned" ]] \
+run "${c}"; out="${OUT}"
+if [[ "${RC}" -eq 0 ]] \
+   && [[ "$(cat "${c}/git/jellyfin-ffmpeg/VERSION")" == "pinned" ]] \
    && [[ ! -e "${c}/git/jellyfin-ffmpeg/EXTRA" ]]; then
     pass "C7 a cached git tree altered at the pinned commit is never consumed"
 else
@@ -181,8 +193,9 @@ fi
 
 c="$(lab_copy wrong-origin)"
 git -C "${c}/git/jellyfin-ffmpeg" remote set-url origin "${LAB}/somewhere-else"
-fetch "${c}" >/dev/null
-if [[ "$(git -C "${c}/git/jellyfin-ffmpeg" remote get-url origin)" == "${ORIGIN}" ]] \
+run "${c}"; out="${OUT}"
+if [[ "${RC}" -eq 0 ]] \
+   && [[ "$(git -C "${c}/git/jellyfin-ffmpeg" remote get-url origin)" == "${ORIGIN}" ]] \
    && [[ "$(git -C "${c}/git/jellyfin-ffmpeg" rev-parse HEAD)" == "${PINNED_COMMIT}" ]]; then
     pass "C8 a cached git tree from an undeclared origin is never consumed"
 else
@@ -194,8 +207,9 @@ echo "== an incomplete or over-full cache"
 c="$(lab_copy missing)"
 rm -f "${c}/archives/${ARCHIVE_NAME}"
 rm -rf "${c}/git/jellyfin-ffmpeg"
-out="$(fetch "${c}")"
-if [[ "$(ff_sha256 "${c}/archives/${ARCHIVE_NAME}")" == "${ARCHIVE_PIN}" ]] \
+run "${c}"; out="${OUT}"
+if [[ "${RC}" -eq 0 ]] \
+   && [[ "$(ff_sha256 "${c}/archives/${ARCHIVE_NAME}")" == "${ARCHIVE_PIN}" ]] \
    && [[ "$(git -C "${c}/git/jellyfin-ffmpeg" rev-parse HEAD)" == "${PINNED_COMMIT}" ]]; then
     pass "C9 a missing cached component is fetched and verified"
 else
@@ -210,8 +224,9 @@ printf 'payload' > "${c}/archives/definitely-not-a-component.tar.gz"
 printf 'payload' > "${c}/archives/${ARCHIVE_NAME}.part"
 mkdir -p "${c}/git/definitely-not-a-component"
 printf 'payload' > "${c}/git/definitely-not-a-component/x"
-out="$(fetch "${c}")"
-if [[ ! -e "${c}/archives/definitely-not-a-component.tar.gz" ]] \
+run "${c}"; out="${OUT}"
+if [[ "${RC}" -eq 0 ]] \
+   && [[ ! -e "${c}/archives/definitely-not-a-component.tar.gz" ]] \
    && [[ ! -e "${c}/archives/${ARCHIVE_NAME}.part" ]] \
    && [[ ! -e "${c}/git/definitely-not-a-component" ]] \
    && grep -q "unexpected source-cache entry" <<<"${out}"; then
@@ -225,8 +240,9 @@ echo "== an obsolete cache"
 c="$(lab_copy obsolete)"
 printf 'legacy-layout\n' > "${c}/.source-cache-format"
 touch "${c}/archives/${ARCHIVE_NAME}"   # the shape an older layout might have left
-out="$(fetch "${c}")"
-if grep -q "no recognised format stamp" <<<"${out}" \
+run "${c}"; out="${OUT}"
+if [[ "${RC}" -eq 0 ]] \
+   && grep -q "no recognised format stamp" <<<"${out}" \
    && [[ "$(ff_sha256 "${c}/archives/${ARCHIVE_NAME}")" == "${ARCHIVE_PIN}" ]]; then
     pass "C11 a cache in an obsolete format is discarded, not interpreted"
 else
