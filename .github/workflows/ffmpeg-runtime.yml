@@ -110,6 +110,50 @@ jobs:
       - name: Report the build architecture
         run: uname -m
 
+      # VERIFIED SOURCE ONLY. This restores the pinned tarballs and git trees
+      # that fetch-sources.sh would otherwise download from 12 hosts, and
+      # NOTHING else: no compiler output, no object file, no library built here,
+      # no /opt/tesserafin-ffmpeg, no /tmp/tf-ffbuild, no staged runtime, no
+      # package and no digest list. Those live inside the build container and
+      # are destroyed with it. This is not a build cache and does not make the
+      # compilation below any less clean.
+      #
+      # A hit is not trust. fetch-sources.sh re-verifies every archive digest,
+      # every git origin and 40-character commit, every required submodule and
+      # the whole source-set inventory on this runner before the build starts,
+      # and the build itself still runs with --network none afterwards.
+      #
+      # The key is exact and content-addressed, with no restore-keys: a partial
+      # match must never silently select an older source generation. It covers
+      # the manifest (URLs, mirrors, commits, SHA-256s, the FFmpeg repository
+      # and commit), the fetch implementation, the shared definitions, the patch
+      # inventory and excluded-patch policy, and the cache format version, which
+      # lives in fetch-sources.sh. The architecture is part of the key so the
+      # two matrix legs never race to save the same entry.
+      - name: Restore the verified source cache
+        id: source-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/ffmpeg/source-cache
+          key: >-
+            ffmpeg-source-v1-${{ runner.arch }}-${{ hashFiles(
+              'ci/ffmpeg/components.json',
+              'ci/ffmpeg/fetch-sources.sh',
+              'ci/ffmpeg/lib.sh',
+              'ci/ffmpeg/fork-patches.json',
+              'ci/ffmpeg/excluded-patches.txt') }}
+
+      - name: Report the source-cache outcome
+        env:
+          HIT: ${{ steps.source-cache.outputs.cache-hit }}
+        run: |
+          echo "source-cache: ${HIT:-false} (hit means restored, not trusted)"
+          if [[ -d "${RUNNER_TEMP}/ffmpeg/source-cache" ]]; then
+              du -sb "${RUNNER_TEMP}/ffmpeg/source-cache"
+          else
+              echo "no source cache on disk"
+          fi
+
       # FF_INCREMENTAL is deliberately absent. Every hosted build is a clean
       # build, because reproducibility evidence from a reused prefix is worthless.
       - name: Build the runtime from pinned source
@@ -270,6 +314,43 @@ jobs:
           name: ffmpeg-runtime-${{ matrix.rid }}
           path: ${{ runner.temp }}/first
 
+      # Restore-only, and only the same VERIFIED SOURCE the build job used. The
+      # build job on the same architecture has already finished and saved this
+      # entry, so nothing here races it and nothing here writes one.
+      #
+      # This shares SOURCE BYTES with the build job and nothing more. This
+      # runner is a different machine, its build root and dependency prefix are
+      # empty, it compiles every selected component and FFmpeg itself, and it
+      # packages independently. No compiled result crosses between the two jobs;
+      # if it did, the comparison below would be worthless.
+      #
+      # The path is outside ${RUNNER_TEMP}/repro on purpose: repro-check.sh
+      # destroys its build root before every build, and a restored cache must
+      # survive that. FF_SOURCE_CACHE, read by repro-check.sh, points at it.
+      - name: Restore the verified source cache
+        id: source-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/ffmpeg-source-cache
+          key: >-
+            ffmpeg-source-v1-${{ runner.arch }}-${{ hashFiles(
+              'ci/ffmpeg/components.json',
+              'ci/ffmpeg/fetch-sources.sh',
+              'ci/ffmpeg/lib.sh',
+              'ci/ffmpeg/fork-patches.json',
+              'ci/ffmpeg/excluded-patches.txt') }}
+
+      - name: Report the source-cache outcome
+        env:
+          HIT: ${{ steps.source-cache.outputs.cache-hit }}
+        run: |
+          echo "source-cache: ${HIT:-false} (hit means restored, not trusted)"
+          if [[ -d "${RUNNER_TEMP}/ffmpeg-source-cache" ]]; then
+              du -sb "${RUNNER_TEMP}/ffmpeg-source-cache"
+          else
+              echo "no source cache on disk"
+          fi
+
       # --against, not a second local build: this runner rebuilds once and
       # compares with the digests the BUILD job produced on a different machine.
       # Two builds inside one job share a kernel, a CPU model and a Docker
@@ -277,6 +358,7 @@ jobs:
       - name: Rebuild on a second runner and require bit-for-bit identical digests
         env:
           RID: ${{ matrix.rid }}
+          FF_SOURCE_CACHE: ${{ runner.temp }}/ffmpeg-source-cache
         run: |
           ref="${RUNNER_TEMP}/first/delivered-${RID}.sha256"
           test -s "${ref}" || { echo "the build job uploaded no digest list; nothing to compare against" >&2; exit 1; }
