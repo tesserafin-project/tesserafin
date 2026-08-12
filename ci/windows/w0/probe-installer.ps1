@@ -96,9 +96,12 @@ $wixFacts.reportedVersion = (& wix --version 2>&1 | Out-String).Trim()
 # Read the licence out of the package that was actually resolved rather than
 # asserting terms from memory. Redistribution compatibility is a scored criterion
 # and must come from the artifact.
+# A `dotnet tool install --global` unpacks into .dotnet\tools\.store as well as
+# the ordinary package cache, and on a hosted runner it is often ONLY there.
 $packageRoots = @(
     $env:NUGET_PACKAGES
     (Join-Path $env:USERPROFILE '.nuget\packages')
+    (Join-Path $env:USERPROFILE '.dotnet\tools\.store')
 ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
 
 $wixPackage = $packageRoots |
@@ -106,6 +109,11 @@ $wixPackage = $packageRoots |
     Where-Object { Test-Path -LiteralPath $_ } |
     Select-Object -First 1 |
     ForEach-Object { Get-Item -LiteralPath $_ }
+if (-not $wixPackage) {
+    $wixPackage = Get-ChildItem -LiteralPath (Join-Path $env:USERPROFILE '.dotnet\tools\.store') `
+        -Directory -Recurse -Filter $WixVersion -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+}
 
 $wixFacts.licence = 'not-read'
 $wixFacts.packageRootsSearched = $packageRoots
@@ -168,9 +176,16 @@ function New-ProbeMsi {
                         ErrorControl="normal"
                         Account="NT SERVICE\$serviceName"
                         Vital="yes" />
+        <!-- Deliberately NO Start="install". The first hosted run proved why:
+             with the service started inside the transaction the install failed
+             with "Error 1920. Service ... failed to start", and MSI rolled the
+             whole thing back to 1603 -- so nothing about install, upgrade,
+             repair or uninstall could be measured. The service is registered
+             here and started AFTER the ACL grant below, which turns a failed
+             install into the actual finding: a virtual service account cannot
+             execute from %ProgramFiles% until it is granted that right. -->
         <ServiceControl Id="ProbeServiceControl"
                         Name="$serviceName"
-                        Start="install"
                         Stop="both"
                         Remove="uninstall"
                         Wait="yes" />
@@ -240,6 +255,34 @@ Start-Sleep -Seconds 4
 $lifecycle.installedService = (& sc.exe query $serviceName 2>&1 | Out-String).Trim()
 $lifecycle.installedFilePresent = Test-Path -LiteralPath (Join-Path $installRoot 'w0servicehost.exe')
 
+# 1b. The identity experiment the install failure of the first hosted run turned
+#     up. `NT SERVICE\<name>` is not a member of Users, so it inherits no right
+#     to execute from %ProgramFiles%. Measured in two phases so the ACL grant is
+#     shown to be the thing that makes the difference, rather than assumed.
+$lifecycle.startBeforeGrant = (& sc.exe start $serviceName 2>&1 | Out-String).Trim()
+Start-Sleep -Seconds 5
+$lifecycle.runningBeforeGrant = ((& sc.exe query $serviceName 2>&1 | Out-String) -match 'RUNNING')
+& sc.exe stop $serviceName *>&1 | Out-Null
+Start-Sleep -Seconds 2
+
+$grantResult = @{}
+try {
+    $acl = Get-Acl -LiteralPath $installRoot
+    $acl.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new(
+        "NT SERVICE\$serviceName", 'ReadAndExecute', 'ContainerInherit,ObjectInherit', 'None', 'Allow'))
+    Set-Acl -LiteralPath $installRoot -AclObject $acl
+    $grantResult.granted = $true
+} catch {
+    $grantResult.granted = $false
+    $grantResult.error = $_.Exception.Message
+}
+$lifecycle.aclGrant = $grantResult
+
+$lifecycle.startAfterGrant = (& sc.exe start $serviceName 2>&1 | Out-String).Trim()
+Start-Sleep -Seconds 5
+$lifecycle.runningAfterGrant = ((& sc.exe query $serviceName 2>&1 | Out-String) -match 'RUNNING')
+$lifecycle.aclGrantIsWhatMattered = (-not $lifecycle.runningBeforeGrant) -and $lifecycle.runningAfterGrant
+
 # 2. retained-data sentinel, written between install and upgrade exactly as the
 #    Linux L0 lifecycle acceptance does
 New-Item -ItemType Directory -Force -Path $dataRoot | Out-Null
@@ -278,6 +321,7 @@ $wixFacts.lifecycle = $lifecycle
 
 $msiSatisfies = $lifecycle.install.exitCode -eq 0 -and
     $lifecycle.installedFilePresent -and
+    $lifecycle.runningAfterGrant -and
     $lifecycle.upgrade.exitCode -eq 0 -and
     $lifecycle.sentinelSurvivedUpgrade -and
     $lifecycle.singleProductAfterUpgrade -and
@@ -291,8 +335,12 @@ $wixFacts.satisfiesLifecycle = $msiSatisfies
 
 Add-W0Fact -Evidence $evidence -Id 'installer.msi' -Bucket $(if ($msiSatisfies) { 'working' } else { 'blocked' }) `
     -Detail ("WiX $WixVersion ($($wixFacts.reportedVersion)) MSI driven unattended through clean " +
-             "install, retained-data sentinel, in-place major upgrade, file-removal repair, " +
-             "refused downgrade and silent uninstall on this native Windows host. " +
+             "install, service start before and after an explicit ACL grant, retained-data " +
+             "sentinel, in-place major upgrade, file-removal repair, refused downgrade and silent " +
+             "uninstall on this native Windows host. " +
+             "runningBeforeGrant=$($lifecycle.runningBeforeGrant) " +
+             "runningAfterGrant=$($lifecycle.runningAfterGrant) " +
+             "aclGrantIsWhatMattered=$($lifecycle.aclGrantIsWhatMattered). " +
              "satisfiesLifecycle=$msiSatisfies. Unsigned output reproducible across two identical " +
              "builds=$($wixFacts.msiReproducible) -- MEASURED. The service lifecycle is inside the " +
              "MSI transaction via ServiceInstall/ServiceControl under a virtual service account, " +
