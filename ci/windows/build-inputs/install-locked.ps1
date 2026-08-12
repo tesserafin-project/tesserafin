@@ -107,16 +107,49 @@ $before = @(& $bash -lc 'pacman -Qq' | Where-Object { $_ })
 if ($LASTEXITCODE -ne 0) { Stop-Hard "pacman -Qq exited $LASTEXITCODE" }
 
 # ── 3. Install. `-U` over explicit local files; no `-S`, no `-Syu`. ─────────
+#
+# In TWO phases, and the reason is measured rather than defensive. The runner's
+# MSYS2 carries an older msys2-runtime than the lock, so a single transaction
+# replaces msys-2.0.dll underneath the very pacman that is running on it, and
+# every subsequent post-install script dies with
+#
+#     error: could not fork a new process (Resource temporarily unavailable)
+#
+# That is what the second hosted run recorded. MSYS2's own core update has the
+# same shape and the same remedy: update the runtime, leave the shell, come
+# back in a new one. Each `& $bash -lc` is a new process, so phase 2 already
+# runs on the replaced runtime.
+#
+# This is still `pacman -U` over local files only. No `-S`, no `-Syu`, no
+# mirror: the phases change WHEN packages are installed, never WHERE they come
+# from.
 $posix = (& $bash -lc "cygpath -u '$($BundleDir -replace '\\', '/')'").Trim()
 if ($LASTEXITCODE -ne 0) { Stop-Hard "cygpath exited $LASTEXITCODE" }
 
 $stderrFile = Join-Path $EvidenceDir 'pacman-stderr.log'
+$runtime = @($archives | Where-Object { $_.Name -like 'msys2-runtime-*' })
+if ($runtime.Count -gt 1) {
+    Stop-Hard "the lock declares $($runtime.Count) msys2-runtime archives"
+}
+
+if ($runtime.Count -eq 1) {
+    $first = "pacman -U --noconfirm --needed --overwrite '*' $posix/packages/$($runtime[0].Name)"
+    Write-Host "phase 1 (core runtime): $first"
+    & $bash -lc $first 2> $stderrFile
+    $runtimeExit = $LASTEXITCODE
+    Get-Content -LiteralPath $stderrFile -ErrorAction SilentlyContinue | Write-Host
+    if ($runtimeExit -ne 0) { Stop-Hard "phase 1 pacman -U exited $runtimeExit" }
+    # The old runtime is gone; nothing started before this line may be reused.
+    Start-Sleep -Seconds 5
+}
+
+$stderrFile2 = Join-Path $EvidenceDir 'pacman-stderr-phase2.log'
 $command = "pacman -U --noconfirm --needed --overwrite '*' $posix/packages/*.pkg.tar.zst"
-Write-Host "installing: $command"
-& $bash -lc $command 2> $stderrFile
+Write-Host "phase 2 (everything else): $command"
+& $bash -lc $command 2> $stderrFile2
 $installExit = $LASTEXITCODE
-Get-Content -LiteralPath $stderrFile -ErrorAction SilentlyContinue | Write-Host
-if ($installExit -ne 0) { Stop-Hard "pacman -U exited $installExit" }
+Get-Content -LiteralPath $stderrFile2 -ErrorAction SilentlyContinue | Write-Host
+if ($installExit -ne 0) { Stop-Hard "phase 2 pacman -U exited $installExit" }
 
 # ── 4. Everything the lock names must now be installed ─────────────────────
 $after = @(& $bash -lc 'pacman -Qq' | Where-Object { $_ })
@@ -152,6 +185,7 @@ $evidence = [ordered]@{
     mirrorsEmptied    = $emptied
     upstreamConsulted = $false
     pacmanMode        = 'pacman -U over local files only; no -S, no -Syu, no mirror configured'
+    installPhases     = if ($runtime.Count -eq 1) { 'core runtime first, then the rest in a new shell' } else { 'single transaction' }
 }
 $evidence | ConvertTo-Json -Depth 6 |
     Set-Content -LiteralPath (Join-Path $EvidenceDir 'install-locked.json') -Encoding utf8NoBOM
