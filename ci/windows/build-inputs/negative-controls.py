@@ -29,6 +29,7 @@ from pathlib import Path
 
 import bundle
 import contract
+import msys2db
 
 HERE = Path(__file__).resolve().parent
 
@@ -275,6 +276,45 @@ def contract_control(name: str, call, expect_fragment: str) -> None:
     record(name, False, "the contract accepted something it must refuse")
 
 
+def real_package_beats_virtual_provides_control() -> None:
+    """A real package must win its own name against another's %PROVIDES%.
+
+    This is not hypothetical. `base` depends on `msys2-runtime`, and the
+    compatibility package `msys2-runtime-3.3` declares
+    `provides: msys2-runtime=3.3.6`. A resolver that lets whichever package it
+    visits first take the name pulled the OLDER runtime into the closure, and
+    installing it downgraded the runtime out from under the running MSYS2.
+    """
+    real = {
+        "msys2-runtime": {
+            "repository": "msys", "name": "msys2-runtime", "version": "3.6.10-2",
+            "architecture": "x86_64", "filename": "msys2-runtime-3.6.10-2-x86_64.pkg.tar.zst",
+            "sha256": "0" * 64, "compressedBytes": 1, "installedBytes": 1,
+            "license": [], "depends": [], "provides": [], "groups": [],
+        },
+        "msys2-runtime-3.3": {
+            "repository": "msys", "name": "msys2-runtime-3.3", "version": "3.3.6-16",
+            "architecture": "x86_64", "filename": "msys2-runtime-3.3-3.3.6-16-x86_64.pkg.tar.zst",
+            "sha256": "0" * 64, "compressedBytes": 1, "installedBytes": 1,
+            "license": [], "depends": [], "provides": ["msys2-runtime=3.3.6"], "groups": [],
+        },
+        "base": {
+            "repository": "msys", "name": "base", "version": "1-1",
+            "architecture": "any", "filename": "base-1-1-any.pkg.tar.zst",
+            "sha256": "0" * 64, "compressedBytes": 1, "installedBytes": 1,
+            "license": [], "depends": ["msys2-runtime"], "provides": [], "groups": [],
+        },
+    }
+    packages, provides, groups = msys2db.index(real)
+    closure = msys2db.resolve(["base"], packages, provides, groups)
+    ok = "msys2-runtime" in closure and "msys2-runtime-3.3" not in closure
+    record(
+        "control.real-package-beats-virtual-provides",
+        ok,
+        f"closure={closure}",
+    )
+
+
 def prohibited_pacman_control(repo_root: Path) -> None:
     """No tracked W1-R script may invoke live pacman resolution."""
     offenders = []
@@ -482,6 +522,7 @@ def main() -> int:
         except contract.ContractError as error:
             record("control.trusted-master-accepted", False, str(error))
 
+        real_package_beats_virtual_provides_control()
         prohibited_pacman_control(args.repo_root)
     finally:
         shutil.rmtree(work, ignore_errors=True)

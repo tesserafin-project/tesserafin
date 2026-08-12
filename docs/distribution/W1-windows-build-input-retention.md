@@ -210,7 +210,7 @@ digest and compared byte for byte with what was pushed.
 dispatch.** GitHub would otherwise auto-create it unprotected on first use, which
 would be simulating approval rather than obtaining it.
 
-## 9. Two things the hosted runs found
+## 9. Three things the hosted runs found
 
 Both were found by a check refusing rather than by a build going quietly wrong.
 
@@ -230,6 +230,30 @@ this shape and exactly this remedy: update the runtime, leave the shell, return
 in a new one. The installer therefore runs two phases, the second in a new
 process. **This changes when packages are installed, never where they come from**
 — it is still `pacman -U` over local files with no mirror configured.
+
+**A virtual `%PROVIDES%` was beating a real package to its own name.** This one
+was a genuine defect in the closure, and it is the reason the Windows leg was
+worth running at all. `base` depends on `msys2-runtime`. The compatibility
+package `msys2-runtime-3.3` declares `provides: msys2-runtime=3.3.6`. The
+resolver built one name map in a single pass, so whichever package it visited
+first took the name — and the *compat* package won. The lock therefore carried
+`msys2-runtime-3.3` and not `msys2-runtime`, and installing it **downgraded the
+runtime out from under the running MSYS2**:
+
+```
+:: msys2-runtime-3.3-3.3.6-16 and msys2-runtime-3.6.10-2 are in conflict
+error: could not fork a new process (Resource temporarily unavailable)
+```
+
+The rule is now explicit and in two passes: **a real package always wins the name
+it actually has, before any other package's `%PROVIDES%` may claim it.** A
+negative control encodes exactly this case, so a future resolver change that
+reintroduces it fails in seconds instead of on a Windows runner.
+
+Worth stating plainly: the two Linux bundle passes were byte-identical and green
+across all three runs while the lock was wrong. Reproducibility says two builds
+agree, not that what they agree on is correct. **Only the native install found
+this.**
 
 ## 10. Update and revocation
 
