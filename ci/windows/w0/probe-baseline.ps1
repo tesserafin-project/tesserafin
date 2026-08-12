@@ -73,7 +73,7 @@ function Wait-ForHttp {
     #>
     param(
         [Parameter(Mandatory)] [string] $BaseUrl,
-        [Parameter()] [int] $TimeoutSeconds = 180
+        [Parameter()] [int] $TimeoutSeconds = 600
     )
 
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
@@ -105,7 +105,10 @@ function Invoke-ServerRun {
         [Parameter()] [string] $WebDir = '',
         [Parameter()] [switch] $NoWebClient,
         [Parameter()] [hashtable] $EnvironmentOverride = @{},
-        [Parameter()] [int] $TimeoutSeconds = 180
+        # A cold first start creates the database and runs every migration. The
+        # first hosted run timed out at 180 s while still applying them, which
+        # reads as "this build does not start" and is not what was measured.
+        [Parameter()] [int] $TimeoutSeconds = 600
     )
 
     $dirs = @{
@@ -156,7 +159,14 @@ function Invoke-ServerRun {
         [Environment]::SetEnvironmentVariable($key, $EnvironmentOverride[$key])
     }
     try {
-        $process = Start-Process -FilePath $Exe -ArgumentList $arguments -PassThru `
+        # Start-Process joins -ArgumentList with spaces and quotes NOTHING, so a
+        # path containing a space arrives at the server split in two. The first
+        # run of this probe truncated 'Program Files Etè\...' to 'Program' and
+        # the server died in BaseApplicationPaths.CheckOrCreateMarker on a marker
+        # it had written into the wrong directory. Quoting each element is the
+        # fix; the paths under test never contain a quote themselves.
+        $quoted = @($arguments | ForEach-Object { '"' + $_ + '"' })
+        $process = Start-Process -FilePath $Exe -ArgumentList $quoted -PassThru `
             -RedirectStandardOutput $stdout -RedirectStandardError $stderr -NoNewWindow
 
         $root = Wait-ForHttp -BaseUrl "$baseUrl/" -TimeoutSeconds $TimeoutSeconds
@@ -214,6 +224,16 @@ function Invoke-ServerRun {
         }
         $process.WaitForExit()
         $stopWatch.Stop()
+
+        # Keep the WHOLE console output as evidence, not only the tail: the
+        # decisive line is usually the FIRST exception, which a tail cannot show.
+        $label = Split-Path -Leaf $StateRoot
+        foreach ($pair in @(@($stdout, 'stdout'), @($stderr, 'stderr'))) {
+            if (Test-Path -LiteralPath $pair[0]) {
+                Copy-Item -LiteralPath $pair[0] `
+                    -Destination (Join-Path $EvidenceDir "$label.$($pair[1]).txt") -Force
+            }
+        }
 
         $result.stopSeconds = [math]::Round($stopWatch.Elapsed.TotalSeconds, 1)
         $result.exitCode = $process.ExitCode
@@ -473,7 +493,7 @@ $noFfmpeg = Invoke-ServerRun -Exe (Join-Path $relocatedRoot 'tesserafin.exe') `
     -StateRoot (Join-Path $WorkRoot 'state-noffmpeg') `
     -NoWebClient `
     -EnvironmentOverride @{ PATH = $scrubbedPath } `
-    -TimeoutSeconds 60
+    -TimeoutSeconds 600
 
 Add-W0Fact -Evidence $evidence -Id 'control.systemffmpeg' -Bucket 'working' `
     -Detail ("System-FFmpeg-substitution control: PATH scrubbed of every directory containing " +
