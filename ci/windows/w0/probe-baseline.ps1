@@ -70,12 +70,49 @@ function Get-FreeTcpPort {
     try { return $listener.LocalEndpoint.Port } finally { $listener.Stop() }
 }
 
+function Get-HttpResponse {
+    <#
+        Invoke-WebRequest is the wrong instrument here. With -MaximumRedirection 0
+        it raises "maximum redirection count exceeded" on a 3xx, and
+        -SkipHttpErrorCheck does NOT cover that class -- so a server answering
+        302 on '/' looked identical to a server that was not answering at all.
+        That cost two hosted runs: the process was listening on exactly the port
+        the probe had asked for and had logged "Startup complete", while the
+        probe recorded "did not start".
+
+        HttpClient with AllowAutoRedirect disabled returns the 302 as a value
+        rather than as an exception, which is the behaviour a probe needs.
+    #>
+    param(
+        [Parameter(Mandatory)] [string] $Uri,
+        [Parameter()] [int] $TimeoutSeconds = 30
+    )
+
+    $handler = [System.Net.Http.HttpClientHandler]::new()
+    $handler.AllowAutoRedirect = $false
+    $client = [System.Net.Http.HttpClient]::new($handler)
+    $client.Timeout = [TimeSpan]::FromSeconds($TimeoutSeconds)
+    try {
+        $response = $client.GetAsync($Uri).GetAwaiter().GetResult()
+        return @{
+            status   = [int]$response.StatusCode
+            body     = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+            location = if ($response.Headers.Location) { $response.Headers.Location.ToString() } else { '' }
+        }
+    } finally {
+        $client.Dispose()
+        $handler.Dispose()
+    }
+}
+
 function Wait-ForHttp {
     <#
-        Readiness is NOT "the port answers". /System/Info/Public answers from the
-        startup SetupServer long before the real application is up, so a probe that
-        waits on it measures the wrong server. The main host is up when '/'
-        answers, which is why that is what this waits for.
+        Readiness is '/' ANSWERING -- with any status at all. It is deliberately
+        not "'/' returns 200": Tesserafin redirects '/' to the web client, and a
+        probe that only accepted 200 would be asserting a routing decision rather
+        than measuring whether the server is up. /System/Info/Public is also
+        wrong for this, because the startup SetupServer answers it long before
+        the application host exists.
     #>
     param(
         [Parameter(Mandatory)] [string] $BaseUrl,
@@ -83,16 +120,16 @@ function Wait-ForHttp {
     )
 
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    $lastError = ''
     while ((Get-Date) -lt $deadline) {
         try {
-            $response = Invoke-WebRequest -Uri $BaseUrl -MaximumRedirection 0 `
-                -SkipHttpErrorCheck -ErrorAction Stop -TimeoutSec 10
-            if ($response.StatusCode -in 200, 301, 302) { return $response }
+            return Get-HttpResponse -Uri $BaseUrl -TimeoutSeconds 10
         } catch {
-            Write-Verbose "not ready yet: $($_.Exception.Message)"
+            $lastError = $_.Exception.Message
         }
         Start-Sleep -Milliseconds 750
     }
+    Write-Host "W0: '$BaseUrl' never answered; last transport error: $lastError"
     return $null
 }
 
@@ -202,8 +239,9 @@ function Invoke-ServerRun {
             arguments      = $arguments
             requestedPort  = $port
             listeningPorts = $listening
-            rootStatus     = if ($root) { [int]$root.StatusCode } else { $null }
-            rootBodyLength = if ($root) { $root.RawContentLength } else { $null }
+            rootStatus     = if ($root) { $root.status } else { $null }
+            rootLocation   = if ($root) { $root.location } else { '' }
+            rootBodyLength = if ($root) { $root.body.Length } else { $null }
             healthStatus   = $null
             healthBody     = ''
             webBootstrap   = $false
@@ -216,9 +254,9 @@ function Invoke-ServerRun {
 
         if ($root) {
             try {
-                $health = Invoke-WebRequest -Uri "$baseUrl/health" -SkipHttpErrorCheck -TimeoutSec 30
-                $result.healthStatus = [int]$health.StatusCode
-                $result.healthBody = ($health.Content | Out-String).Trim()
+                $health = Get-HttpResponse -Uri "$baseUrl/health"
+                $result.healthStatus = $health.status
+                $result.healthBody = $health.body.Trim()
             } catch {
                 $result.healthBody = "request failed: $($_.Exception.Message)"
             }
@@ -227,10 +265,10 @@ function Invoke-ServerRun {
             # has to reference a hashed bundle for the browser to have anything
             # to run; a 200 that returns the setup page is not the Web client.
             try {
-                $index = Invoke-WebRequest -Uri "$baseUrl/web/index.html" -SkipHttpErrorCheck -TimeoutSec 30
-                $body = ($index.Content | Out-String)
-                $result.webBootstrap = ($index.StatusCode -eq 200) -and
-                    ($body -match '(?i)<script[^>]+src="[^"]*main\.tesserafin[^"]*\.bundle\.js')
+                $index = Get-HttpResponse -Uri "$baseUrl/web/index.html"
+                $result.webIndexStatus = $index.status
+                $result.webBootstrap = ($index.status -eq 200) -and
+                    ($index.body -match '(?i)<script[^>]+src="[^"]*main\.tesserafin[^"]*\.bundle\.js')
             } catch {
                 $result.webBootstrap = $false
             }

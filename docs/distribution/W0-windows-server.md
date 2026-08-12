@@ -122,6 +122,16 @@ allows 600 s: the first hosted run timed out at 180 s while migrations were
 still running and read as "this build does not start", which is not what was
 measured.
 
+**Readiness is `/` answering with any status, and the request is made with
+`HttpClient`, not `Invoke-WebRequest`.** Tesserafin redirects `/` to the web
+client, and `Invoke-WebRequest -MaximumRedirection 0` raises "maximum
+redirection count exceeded" on a 3xx — a class `-SkipHttpErrorCheck` does not
+cover. A server answering 302 was therefore indistinguishable from a server that
+was not answering at all, which cost two hosted runs. `HttpClient` with
+`AllowAutoRedirect` disabled returns the 302 as a value. Insisting on 200 would
+also have been wrong: it asserts a routing decision rather than measuring whether
+the server is up. **W2's acceptance suite inherits both rules.**
+
 **The port is discovered from the process, not assumed.** The listening port is
 not a Kestrel setting and not an environment variable: `ApplicationHost` reads
 `NetworkConfiguration.InternalHttpPort`, persisted as `<configdir>/network.xml`
@@ -409,7 +419,9 @@ install, upgrade, repair and uninstall behind a single identity problem. Splitti
 it makes the identity question answerable on its own (§9.2).
 
 The exact WiX version used is recorded in the evidence, and its licence is read
-out of the resolved NuGet package's `.nuspec` rather than asserted from memory.
+**out of the resolved package** rather than asserted from memory — see §5.4,
+which is the one place where reading the artifact instead of trusting a summary
+changed the answer.
 
 ### 5.3 Scoring
 
@@ -425,10 +437,38 @@ out of the resolved NuGet package's `.nuspec` rather than asserted from memory.
 | Authenticode support | yes | yes (over the ZIP contents) | mandatory, not optional | yes |
 | silent uninstall | yes, `msiexec /x /qn` | script-defined | yes | yes |
 | long-term automation / maintenance | `wix` is a `dotnet tool`, pinned like any package | trivial | tooling churn | external installer, not a `dotnet tool` |
-| open-source redistribution | licence read from the resolved package | n/a | n/a | permissive, but see below |
+| open-source redistribution | MS-RL source; the maintenance fee attaches to the build tool, never to its output (§5.4) | n/a | n/a | permissive, but see below |
 | reproducible unsigned output | **measured** — two identical builds compared | **measured** | not reached | not reached |
 
-### 5.4 Rejections, on recorded facts
+### 5.4 The WiX licence, read rather than assumed
+
+`wix` 6.0.2 declares `license type="file"` in its `.nuspec`, not an SPDX
+expression, so the probe copies the referenced text into the evidence. What it
+says matters, and a summary would have got it wrong in both directions:
+
+* the Software is licensed under the **Microsoft Reciprocal License**, an
+  OSI-approved open-source licence;
+* layered on top is an **Open Source Maintenance Fee** agreement that applies
+  **only to the Binary Release** — the pre-compiled `wix` tool — and **only to
+  Users that generate revenue by the Software**. Non-revenue-generating use is
+  exempt by name;
+* the agreement states explicitly that the Fee "is not a license fee", that on
+  any conflict "the OSI License shall govern", and that it "does not restrict
+  the User from obtaining or redistributing binaries from other sources or
+  self-compiling them".
+
+Two consequences for this decision. First, Tesserafin's use is exempt as
+written. Second — and this is the part that survives any future change in the
+project's revenue position — **the fee attaches to the build tool, never to its
+output.** No obligation propagates to the MSI that WiX produces or to anyone who
+downloads it. Even in the worst case the remedy is documented in the agreement
+itself: compile the toolset from MS-RL source. That is a bounded, first-party
+mitigation rather than a dependency Tesserafin cannot escape.
+
+It is still recorded as a **watch item** for W4: the toolset licence is now
+something a build must pin and re-read, exactly like a component checksum.
+
+### 5.5 Rejections, on recorded facts
 
 **MSIX** is rejected and the experiment is *unperformable inside W0's
 invariants*, which is a stronger statement than "not performed": an MSIX package
@@ -448,7 +488,7 @@ and obtaining it would need either an unpinned Chocolatey dependency —
 explicitly forbidden — or a pinned third-party download whose only purpose would
 be to confirm a disqualification already established.
 
-### 5.5 Reproducible unsigned output, measured
+### 5.6 Reproducible unsigned output, measured
 
 The probe builds the same MSI twice and compares SHA-256, and does the same for
 the ZIP. The answer is **measured, not assumed** — and the two disagree:
@@ -644,7 +684,7 @@ The Linux rule is inherited without relaxation.
    is probe evidence, and W2 replaces it with a daemonless digest-pinned OCI pull
    on the Windows host.
 
-Where a container's own bytes cannot be reproducible — the MSI, measured in §5.5
+Where a container's own bytes cannot be reproducible — the MSI, measured in §5.6
 — the *contents* still are, and the container records the input digests. The
 proof lives on the ZIP and the FFmpeg component.
 
@@ -844,7 +884,7 @@ Open risks, ranked:
    the toolchain is pinned by exact package identity, two clean builds cannot be
    guaranteed bit-for-bit identical, and the reproducibility gate is the whole
    contract.
-2. **MSI bytes are not reproducible (§5.5).** Handled by design — the proof
+2. **MSI bytes are not reproducible (§5.6).** Handled by design — the proof
    moves to the ZIP and the FFmpeg component and the MSI records input digests —
    but it must not be quietly re-described as "the MSI reproduces".
 3. **72 tests fail on native Windows on stock master (§2.7).** Pre-existing and
