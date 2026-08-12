@@ -287,19 +287,36 @@ quiescent server.
 
 ### 2.7 The server is not test-green on native Windows
 
-Running the identical `Tests` command on `windows-latest` against the frozen
-master produces **72 failures out of roughly 3,560 tests**, in four assemblies:
+Running the identical `Tests` command on `windows-latest` produces, on both this
+branch and its base commit, exactly:
 
-| Assembly | Failed | Total |
-| --- | --- | --- |
-| `Tesserafin.Server.Tests` | 69 | 201 |
-| `Tesserafin.Controller.Tests` | 1 | 338 |
-| `Tesserafin.MediaEncoding.Tests` | 1 | 264 |
-| `Tesserafin.Server.Integration.Tests` | 1 | 189 |
+| | count |
+| --- | --- |
+| total | **3,992** |
+| passed | **3,911** |
+| failed | **72** |
+| skipped | **0** |
+| `dotnet test` exit code | **1** |
 
-Every other assembly is green. The failures fall into three families:
+Read off the `Counters` element of all 21 TRX files, not estimated. An earlier
+draft of this section said "roughly 3,560", which was both approximate and
+wrong, and gave a family breakdown (67 + 2 + 2) that did not add up to its own
+72. The corrected figures below are measured and do.
 
-1. **Log-forging guards under CRLF (the 67-test bulk).** Every
+The 72 failures fall in four assemblies:
+
+| Assembly | Failed |
+| --- | --- |
+| `Tesserafin.Server.Tests` | 69 |
+| `Tesserafin.Controller.Tests` | 1 |
+| `Tesserafin.MediaEncoding.Tests` | 1 |
+| `Tesserafin.Server.Integration.Tests` | 1 |
+
+Every other assembly is green. The failures fall into three families, and
+**68 + 2 + 2 = 72** with nothing left over — the gate rejects any failure that
+matches none of them:
+
+1. **Log-forging guards under CRLF (the 68-test bulk).** Every
    `…LogTests.*_WritesExactlyOnePhysicalRecord` assertion in
    `Tesserafin.Server.Tests.LogForging` fails on Windows. These tests count
    *physical* log records, and `Environment.NewLine` is `\r\n` on Windows and
@@ -320,10 +337,18 @@ Every other assembly is green. The failures fall into three families:
    same family as the macOS failure in §2.1: the canonical XML documentation
    order does not survive a third host, so the generated contract diverges.
 
-All 72 are **pre-existing on master**. W0 introduces none of them, fixes none of
-them, and does not gate its own pull request on them — the probe workflow's
-`windows-tests` job is marked `continue-on-error` and states its result in words
-so a non-blocking job cannot be mistaken for a passing one.
+All 72 are **pre-existing on the base commit**, and that is asserted rather than
+asserted-about: the probe workflow runs the identical command on the head and on
+the pinned base commit, keeps both TRX sets, and compares the failing-test
+**set** — not its size. The two sets are identical, with nothing failing only on
+the head and nothing failing only on the base.
+
+That comparison is the gate. Adding a failure, removing one, renaming one, or
+producing one that matches none of the three families above fails the job. The
+suite itself is never reported as passing: it is red on both trees, and what is
+asserted is that an architecture-only change leaves it red in exactly the same
+places. `ci/windows/w0/Compare-W0TestBaseline.ps1` carries the logic and its own
+negative controls.
 
 They are recorded here because a Windows distribution whose server fails 72
 tests on the platform it is being distributed for is not a distribution anyone
@@ -373,9 +398,9 @@ these, enforced at recording time.
 
 ### Not a gap in the distribution, but red on the platform
 
-72 of roughly 3,560 tests fail on native Windows on stock master (§2.7). None of
-them is a missing distribution surface, so none belongs in the table above — but
-two of the three families are preconditions for W3 and W5.
+72 of 3,992 tests fail on native Windows, identically on this branch and its
+base (§2.7). None of them is a missing distribution surface, so none belongs in
+the table above — but two of the three families are preconditions for W3 and W5.
 
 ### Blocked
 
@@ -944,10 +969,11 @@ Open risks, ranked:
 2. **MSI bytes are not reproducible (§5.6).** Handled by design — the proof
    moves to the ZIP and the FFmpeg component and the MSI records input digests —
    but it must not be quietly re-described as "the MSI reproduces".
-3. **72 tests fail on native Windows on stock master (§2.7).** Pre-existing and
+3. **72 of 3,992 tests fail on native Windows (§2.7).** Pre-existing -- proven by
+   an exact failing-set comparison against the base commit, not assumed -- and
    outside W0 scope, but not cosmetic. The child-process stdin family is the
    `q`-on-stdin graceful-stop path **W3 depends on**; the OpenAPI family is a
-   cross-host contract divergence **W5 depends on**; and the 67-test log-forging
+   cross-host contract divergence **W5 depends on**; and the 68-test log-forging
    family is a security guard whose Windows behaviour is unproven either way.
    Confirmed on Windows what §2.1 already showed on macOS: the canonical XML
    documentation order does not survive a third host.

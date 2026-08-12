@@ -513,15 +513,28 @@ if ($determinismFacts.buildA.exitCode -ne 0 -or $determinismFacts.buildB.exitCod
     }
 
     # Corroborating instrument: the real Windows-Installer-native mechanism for
-    # a table-level MSI diff. Only changed rows are emitted (no -p).
+    # a table-level MSI diff. Only changed rows are emitted (no -p), so two
+    # databases with no row differences produce NO transform at all -- the
+    # absence of an .mst is itself the corroborating signal, not a failure.
+    # Both fields are initialised up front because Set-StrictMode makes reading
+    # an unset property fatal, and the first run of this experiment died on
+    # exactly that after the comparison had already succeeded.
+    $determinismFacts.transformProducedMst = $false
+    $determinismFacts.transformBytes = 0
     $mstPath = Join-Path $WorkRoot 'determinism.mst'
     $transformLog = & wix msi transform $determinismA $determinismB -out $mstPath 2>&1 | Out-String
     $determinismFacts.transformExit = $LASTEXITCODE
     $determinismFacts.transformLog = $transformLog.Trim()
     if (Test-Path -LiteralPath $mstPath) {
+        $determinismFacts.transformProducedMst = $true
         $determinismFacts.transformBytes = (Get-Item -LiteralPath $mstPath).Length
         Copy-Item -LiteralPath $mstPath -Destination (Join-Path $EvidenceDir 'msi-determinism.mst') -Force
     }
+
+    Write-Host ("W0 MSI determinism: rawBytesIdentical=$($determinismFacts.rawBytesIdentical) " +
+                "digestA=$($determinismFacts.digestA) digestB=$($determinismFacts.digestB) " +
+                "decompiledTablesIdentical=$($determinismFacts.decompiledTablesIdentical) " +
+                "transformProducedMst=$($determinismFacts.transformProducedMst)")
 
     # Is the Package Code even pinnable? The bounded exception below rests on
     # "this field cannot be controlled", so that claim is MEASURED against the
@@ -568,8 +581,11 @@ if ($determinismFacts.buildA.exitCode -ne 0 -or $determinismFacts.buildB.exitCod
                  "design regenerates on every build. If raw bytes differ but the decompiled diff is " +
                  "empty, the residual delta is bounded to those known container fields -- a table- " +
                  "level exception, not an assumption. `wix msi transform` between the two builds is " +
-                 "kept as corroboration ($($determinismFacts.transformBytes) byte MST, exit " +
-                 "$($determinismFacts.transformExit)). The Package Code is settable in this toolset: " +
+                 "kept as corroboration (produced an MST: " +
+                 "$($determinismFacts.transformProducedMst), $($determinismFacts.transformBytes) bytes, " +
+                 "exit $($determinismFacts.transformExit)) -- with no row differences there is nothing " +
+                 "for a transform to express, so no MST is the expected result. The Package Code is " +
+                 "settable in this toolset: " +
                  "$($determinismFacts.packageCodeSettable) -- measured by compiling a " +
                  "Package/@PackageCode and recording whether WiX accepts it, so 'this field cannot be " +
                  "pinned' is evidence rather than folklore.") `
