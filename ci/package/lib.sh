@@ -5,15 +5,23 @@
 # resolves the pinned inputs, and it fails closed when any of them disagree.
 #
 # The rule this file exists to enforce: a pin has exactly ONE definition. The
-# web assets image, the paired web commit and the ffmpeg version are declared in
-# the Dockerfile and read back from it; ci/package/pins.env only adds what the
-# container path has no reason to know.
+# web assets image and the paired web commit are declared in the Dockerfile and
+# read back from it; the FFmpeg runtime revision and its upstream commit are
+# declared in ci/ffmpeg/components.json and read back from there. ci/package/
+# pins.env only adds what neither declares, and asserts against both.
+#
+# Nothing in this file knows how to build FFmpeg. The runtime is produced by the
+# merged F0 scripts under ci/ffmpeg/**; ci/package/ffmpeg-runtime.sh drives them
+# and this file only derives names and identities from the F0 manifest.
 
 set -euo pipefail
 
 PKG_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PKG_PINS_FILE="${PKG_REPO_ROOT}/ci/package/pins.env"
 PKG_DOCKERFILE="${PKG_REPO_ROOT}/Dockerfile"
+PKG_F0_COMPONENTS="${PKG_REPO_ROOT}/ci/ffmpeg/components.json"
+# shellcheck disable=SC2034  # read by ci/package/ffmpeg-runtime.sh, which sources this file
+PKG_F0_BASELINE="${PKG_REPO_ROOT}/ci/package/f0-accepted-digests.txt"
 
 pkg_die() { echo "package: $*" >&2; exit 1; }
 pkg_log() { echo "== $*" >&2; }
@@ -42,20 +50,84 @@ pkg_rpm_arch() {
     esac
 }
 
-pkg_ffmpeg_asset() {
+# The ELF machine each runtime identifier must produce, so a package can refuse a
+# runtime built for the wrong architecture instead of shipping one.
+pkg_elf_machine() {
     case "$1" in
-        linux-x64)   printf 'jellyfin-ffmpeg_%s_portable_linux64-gpl.tar.xz\n'    "${FFMPEG_VERSION}" ;;
-        linux-arm64) printf 'jellyfin-ffmpeg_%s_portable_linuxarm64-gpl.tar.xz\n' "${FFMPEG_VERSION}" ;;
+        linux-x64)   printf 'Advanced Micro Devices X86-64\n' ;;
+        linux-arm64) printf 'AArch64\n' ;;
         *) pkg_die "unsupported runtime identifier: $1" ;;
     esac
 }
 
-pkg_ffmpeg_sha256() {
-    case "$1" in
-        linux-x64)   printf '%s\n' "${FFMPEG_PORTABLE_SHA256_LINUX_X64}" ;;
-        linux-arm64) printf '%s\n' "${FFMPEG_PORTABLE_SHA256_LINUX_ARM64}" ;;
-        *) pkg_die "unsupported runtime identifier: $1" ;;
-    esac
+# --- the accepted F0 runtime -------------------------------------------------
+#
+# ci/ffmpeg/components.json is the ONE definition of the runtime revision and of
+# the upstream commit it is built from. Everything the packages say about the
+# encoder is derived from it here; no package script restates a version, a
+# configure flag, a component list or a patch decision.
+
+pkg_load_f0_manifest() {
+    [[ -f "${PKG_F0_COMPONENTS}" ]] || pkg_die "missing ${PKG_F0_COMPONENTS}"
+    local values
+    values="$(python3 - "${PKG_F0_COMPONENTS}" <<'PY'
+import json, sys
+m = json.load(open(sys.argv[1]))
+print(m["buildRevision"])
+print(m["ffmpeg"]["commit"])
+print(m["ffmpeg"]["repository"])
+print(m["ffmpeg"]["baseline"])
+PY
+)"
+    {
+        read -r F0_BUILD_REVISION
+        read -r F0_FFMPEG_COMMIT
+        read -r F0_FFMPEG_REPOSITORY
+        read -r F0_FFMPEG_BASELINE
+    } <<<"${values}"
+
+    # The two files must agree. pins.env is the package-side declaration of what
+    # was ACCEPTED; components.json is what would actually be built. A silent
+    # disagreement is exactly the case where a package ships a runtime nobody
+    # accepted.
+    [[ "${F0_BUILD_REVISION}" == "${F0_RUNTIME_REVISION}" ]] || pkg_die \
+        "F0 runtime revision drift: components.json says '${F0_BUILD_REVISION}', pins.env expects '${F0_RUNTIME_REVISION}'"
+    [[ "${F0_FFMPEG_COMMIT}" == "${F0_UPSTREAM_COMMIT}" ]] || pkg_die \
+        "F0 upstream commit drift: components.json says '${F0_FFMPEG_COMMIT}', pins.env expects '${F0_UPSTREAM_COMMIT}'"
+    [[ "${F0_FFMPEG_COMMIT}" =~ ^[0-9a-f]{40}$ ]] || pkg_die \
+        "F0 upstream commit '${F0_FFMPEG_COMMIT}' is not a full 40-character lowercase SHA"
+
+    F0_RUNTIME_NAME="tesserafin-ffmpeg-${F0_BUILD_REVISION}"
+    F0_SOURCE_ARCHIVE="${F0_RUNTIME_NAME}-corresponding-source.tar.zst"
+
+    export F0_BUILD_REVISION F0_FFMPEG_COMMIT F0_FFMPEG_REPOSITORY F0_FFMPEG_BASELINE
+    export F0_RUNTIME_NAME F0_SOURCE_ARCHIVE
+}
+
+# The runtime directory name for one architecture, as F0 packages it.
+pkg_f0_runtime_dir_name() { # <rid>
+    printf '%s-%s\n' "${F0_RUNTIME_NAME}" "$1"
+}
+
+# The runtime archive name for one architecture, as F0 packages it.
+pkg_f0_runtime_archive_name() { # <rid>
+    printf '%s-%s.tar.xz\n' "${F0_RUNTIME_NAME}" "$1"
+}
+
+# Is the accepted digest baseline still describing the current ci/ffmpeg tree?
+# Prints "current" or "stale". A stale baseline is reported, never enforced: an
+# oracle that no longer describes the inputs must not be able to green a build,
+# and must not be able to fail one either.
+pkg_f0_baseline_state() {
+    local tree
+    tree="$(git -C "${PKG_REPO_ROOT}" rev-parse HEAD:ci/ffmpeg 2>/dev/null || true)"
+    if [[ -z "${tree}" ]]; then
+        printf 'unknown\n'
+    elif [[ "${tree}" == "${F0_ACCEPTED_CI_TREE}" ]]; then
+        printf 'current\n'
+    else
+        printf 'stale\n'
+    fi
 }
 
 # --- pinned inputs -----------------------------------------------------------
@@ -80,10 +152,17 @@ pkg_load_pins() {
     WEB_VCS_REF="$(pkg_dockerfile_arg WEB_VCS_REF)"
     WEB_VERSION="$(pkg_dockerfile_arg WEB_VERSION)"
 
-    local dockerfile_ffmpeg
-    dockerfile_ffmpeg="$(pkg_dockerfile_arg FFMPEG_VERSION)"
-    [[ "${dockerfile_ffmpeg}" == "${FFMPEG_VERSION}" ]] || pkg_die \
-        "ffmpeg pin drift: Dockerfile says '${dockerfile_ffmpeg}', pins.env says '${FFMPEG_VERSION}'"
+    # The FFmpeg runtime is deliberately NOT read from the Dockerfile. The
+    # container installs an upstream jellyfin-ffmpeg .deb; the packages build the
+    # accepted Tesserafin runtime from source. They are different artifacts under
+    # different terms, and coupling the two pins is what previously made the
+    # packages inherit a binary nobody in this project built.
+    pkg_load_f0_manifest
+
+    [[ "${F0_ACCEPTED_CI_TREE}" =~ ^[0-9a-f]{40}$ ]] || pkg_die \
+        "F0_ACCEPTED_CI_TREE '${F0_ACCEPTED_CI_TREE}' is not a full 40-character lowercase tree SHA"
+    [[ "${F0_RUNTIME_LICENSE}" == "GPL-3.0-or-later" ]] || pkg_die \
+        "the accepted F0 runtime licence is GPL-3.0-or-later, pins.env says '${F0_RUNTIME_LICENSE}'"
 
     [[ "${WEB_ASSETS_IMAGE}" == *"@sha256:"* ]] || pkg_die \
         "the web assets image must be pinned by digest, got '${WEB_ASSETS_IMAGE}'"
@@ -94,9 +173,9 @@ pkg_load_pins() {
         "the rpm builder image must be pinned by digest, got '${RPM_BUILDER_IMAGE}'"
 
     export WEB_ASSETS_IMAGE WEB_ASSETS_TAG WEB_VCS_REF WEB_VERSION
-    export FFMPEG_VERSION WEB_PAYLOAD_SHA256 RPM_BUILDER_IMAGE RPM_BUILDER_RPM_VERSION
+    export WEB_PAYLOAD_SHA256 RPM_BUILDER_IMAGE RPM_BUILDER_RPM_VERSION
     export RPM_ACCEPT_IMAGE DEB_ACCEPT_IMAGE ARCHIVE_ACCEPT_IMAGE
-    export FFMPEG_PORTABLE_SHA256_LINUX_X64 FFMPEG_PORTABLE_SHA256_LINUX_ARM64
+    export F0_RUNTIME_REVISION F0_UPSTREAM_COMMIT F0_RUNTIME_LICENSE F0_ACCEPTED_CI_TREE
 }
 
 # Builds (and caches) the rpm toolchain image, then asserts the tool version is

@@ -13,9 +13,15 @@ Description: Tesserafin media server
  it as the unprivileged "tesserafin" user.
  .
  The application payload is a self-contained .NET build, so no system .NET
- runtime is required. A checksum-pinned jellyfin-ffmpeg build is bundled and is
- the only encoder the service uses; it never falls back to an ffmpeg found on
- $PATH.
+ runtime is required. The Tesserafin FFmpeg runtime, built from source at a
+ pinned commit, is bundled with its own shared libraries and is the only encoder
+ the service uses; it never falls back to an ffmpeg found on $PATH.
+ .
+ The server is GPL-2.0-or-later. The bundled FFmpeg runtime is GPL-3.0-or-later.
+ See /usr/share/doc/tesserafin-server/copyright for the per-component breakdown,
+ and /usr/share/doc/tesserafin-server/FFMPEG-CORRESPONDING-SOURCE.txt for the
+ corresponding-source archive distributed alongside this package.
  .
  Server commit: @VCS_REF@
  Bundled Tesserafin Web commit: @WEB_VCS_REF@
+ FFmpeg runtime: @F0_BUILD_REVISION@ (@F0_UPSTREAM_COMMIT@)

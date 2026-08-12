@@ -117,7 +117,7 @@ dpkg -s tesserafin-server > /tmp/tf-dpkg-status.txt
 grep -q '^Package: tesserafin-server$'      /tmp/tf-dpkg-status.txt || fail "wrong package name"
 grep -q "^Version: ${VERSION}-1$"            /tmp/tf-dpkg-status.txt || fail "wrong package version"
 grep -q "^Architecture: ${DEB_ARCH}$"        /tmp/tf-dpkg-status.txt || fail "wrong architecture"
-# Identity fields only. The Description legitimately names jellyfin-ffmpeg,
+# Identity fields only. No package metadata carries Jellyfin branding at all:
 # which is the bundled encoder's real upstream name.
 if grep -E '^(Package|Homepage|Maintainer|Section):' /tmp/tf-dpkg-status.txt | grep -qi 'jellyfin'; then
     fail "package identity metadata carries Jellyfin branding"
@@ -125,7 +125,7 @@ fi
 pass "metadata: tesserafin-server ${VERSION}-1 ${DEB_ARCH}"
 
 for path in /usr/bin/tesserafin /usr/lib/tesserafin/tesserafin \
-            /usr/lib/tesserafin/ffmpeg/ffmpeg /usr/share/tesserafin/web/index.html \
+            /usr/lib/tesserafin/ffmpeg/bin/ffmpeg /usr/share/tesserafin/web/index.html \
             /usr/lib/systemd/system/tesserafin.service /etc/tesserafin/tesserafin.conf; do
     [[ -e "${path}" ]] || fail "missing installed path ${path}"
 done
@@ -202,8 +202,8 @@ run_user="$(ps -o user= -p "${main_pid}" | tr -d ' ')"
 pass "running as ${run_user} (uid ${run_uid})"
 
 # The bundled encoder must be the one in use, not a host ffmpeg.
-/usr/lib/tesserafin/ffmpeg/ffmpeg -hide_banner -version | head -1
-grep -q '^TESSERAFIN_FFMPEG=/usr/lib/tesserafin/ffmpeg/ffmpeg$' /etc/tesserafin/tesserafin.conf \
+/usr/lib/tesserafin/ffmpeg/bin/ffmpeg -hide_banner -version | head -1
+grep -q '^TESSERAFIN_FFMPEG=/usr/lib/tesserafin/ffmpeg/bin/ffmpeg$' /etc/tesserafin/tesserafin.conf \
     || fail "the environment file does not point at the bundled encoder"
 pass "the service is configured with the bundled encoder"
 

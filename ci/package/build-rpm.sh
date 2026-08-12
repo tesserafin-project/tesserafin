@@ -50,6 +50,8 @@ sed -e "s|@RPM_VERSION@|${VERSION}|g" \
     -e "s|@RPM_CHANGELOG_DATE@|${CHANGELOG_DATE}|g" \
     -e "s|@VCS_REF@|${VCS_REF}|g" \
     -e "s|@WEB_VCS_REF@|${WEB_VCS_REF}|g" \
+    -e "s|@F0_BUILD_REVISION@|${F0_BUILD_REVISION}|g" \
+    -e "s|@F0_UPSTREAM_COMMIT@|${F0_FFMPEG_COMMIT}|g" \
     "${PKG_REPO_ROOT}/packaging/linux/rpm/tesserafin-server.spec.in" \
     > "${WORK}/SPECS/tesserafin-server.spec"
 

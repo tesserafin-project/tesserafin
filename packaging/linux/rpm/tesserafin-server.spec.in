@@ -29,7 +29,15 @@ Name:           tesserafin-server
 Version:        @RPM_VERSION@
 Release:        @RPM_RELEASE@
 Summary:        Tesserafin media server
-License:        GPL-2.0-or-later
+# Two separately licensed works in one package. The server is GPL-2.0-or-later;
+# the bundled FFmpeg runtime is built with --enable-gpl --enable-version3 and is
+# GPL-3.0-or-later. `AND` is the SPDX operator for "this artifact contains both",
+# which is the accurate statement — the server is NOT relicensed by being shipped
+# next to the runtime.
+#
+# Measured against the pinned rpm 4.20.1 builder rather than assumed: the
+# expression is accepted and round-trips through %{LICENSE} byte-identically.
+License:        GPL-2.0-or-later AND GPL-3.0-or-later
 URL:            https://github.com/tesserafin-project/tesserafin
 
 # The architecture comes from rpmbuild --target, never from a BuildArch tag.
@@ -55,12 +63,18 @@ application, the bundled Tesserafin Web client and a systemd service that runs
 it as the unprivileged "tesserafin" user.
 
 The application payload is a self-contained .NET build, so no system .NET
-runtime is required. A checksum-pinned jellyfin-ffmpeg build is bundled and is
-the only encoder the service uses; it never falls back to an ffmpeg found on
-$PATH.
+runtime is required. The Tesserafin FFmpeg runtime, built from source at a
+pinned commit, is bundled with its own shared libraries and is the only encoder
+the service uses; it never falls back to an ffmpeg found on $PATH.
+
+The server is GPL-2.0-or-later. The bundled FFmpeg runtime is GPL-3.0-or-later.
+See /usr/share/doc/tesserafin-server/copyright for the per-component breakdown,
+and /usr/share/doc/tesserafin-server/FFMPEG-CORRESPONDING-SOURCE.txt for the
+corresponding-source archive distributed alongside this package.
 
 Server commit: @VCS_REF@
 Bundled Tesserafin Web commit: @WEB_VCS_REF@
+FFmpeg runtime: @F0_BUILD_REVISION@ (@F0_UPSTREAM_COMMIT@)
 
 %prep
 # Nothing to unpack: %%install copies the pre-staged payload tree.
@@ -108,7 +122,11 @@ fi
 exit 0
 
 %files
+# Both licence sets are marked %%license, so `rpm -qL` lists the runtime's
+# licences as well as the server's. Marking only the server's would let a
+# recipient querying the package conclude it contains one licensed work.
 %license /usr/share/licenses/tesserafin-server/LICENSE
+%license /usr/share/licenses/tesserafin-server/ffmpeg
 /usr/share/doc/tesserafin-server
 %dir %attr(0750, tesserafin, tesserafin) /etc/tesserafin
 %config(noreplace) %attr(0640, root, tesserafin) /etc/tesserafin/tesserafin.conf

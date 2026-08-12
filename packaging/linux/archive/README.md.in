@@ -10,14 +10,26 @@ want a managed service, install the `.deb` or the `.rpm` instead.
 ## Layout
 
 ```
-bin/tesserafin                  symlink into lib/tesserafin/tesserafin
-lib/tesserafin/                 the server application (self-contained .NET build)
-lib/tesserafin/ffmpeg/ffmpeg    the bundled, checksum-pinned media encoder
-lib/tesserafin/ffmpeg/ffprobe
-share/tesserafin/web/           the bundled Tesserafin Web client
+bin/tesserafin                       symlink into lib/tesserafin/tesserafin
+lib/tesserafin/                      the server application (self-contained .NET build)
+lib/tesserafin/ffmpeg/bin/ffmpeg     the bundled Tesserafin FFmpeg runtime
+lib/tesserafin/ffmpeg/bin/ffprobe
+lib/tesserafin/ffmpeg/lib/           the runtime's own shared libraries
+share/tesserafin/web/                the bundled Tesserafin Web client
 share/tesserafin/web-revision.json   provenance of that web payload
-LICENSE
+share/tesserafin/ffmpeg/             the runtime's SBOM, source manifest,
+                                     compiled-capability record and notices
+LICENSE                              the server licence, GPL-2.0-or-later
+LICENSES.md                          the licence index for the whole archive
+licenses/ffmpeg/                     the runtime's per-component licence texts
+FFMPEG-CORRESPONDING-SOURCE.txt      where to get the runtime's complete source
 ```
+
+`bin/` and `lib/` inside `lib/tesserafin/ffmpeg/` are **siblings on purpose**.
+The executables carry `RUNPATH=$ORIGIN/../lib` and load their bundled libraries
+relative to themselves, which is what makes this archive relocatable: unpack it
+anywhere and the encoder still resolves its own libraries and never a system
+copy. Moving `bin/ffmpeg` out of that directory breaks it.
 
 ## Requirements
 
@@ -42,7 +54,7 @@ PREFIX="$PWD"
     --cachedir  "$PREFIX/state/cache" \
     --logdir    "$PREFIX/state/log" \
     --webdir    "$PREFIX/share/tesserafin/web" \
-    --ffmpeg    "$PREFIX/lib/tesserafin/ffmpeg/ffmpeg"
+    --ffmpeg    "$PREFIX/lib/tesserafin/ffmpeg/bin/ffmpeg"
 ```
 
 The server listens on port 8096. `http://127.0.0.1:8096/` redirects to `/web/`
@@ -57,11 +69,27 @@ Run it as an unprivileged user. Nothing here needs root.
 
 ## Provenance
 
-| Input | Value |
-| --- | --- |
-| Server commit | `@VCS_REF@` |
-| Tesserafin Web commit | `@WEB_VCS_REF@` |
-| jellyfin-ffmpeg | `@FFMPEG_VERSION@` (portable GPL build) |
+| Input | Value | Licence |
+| --- | --- | --- |
+| Server commit | `@VCS_REF@` | GPL-2.0-or-later |
+| Tesserafin Web commit | `@WEB_VCS_REF@` | see `share/tesserafin/web-licenses/` |
+| FFmpeg runtime revision | `@F0_BUILD_REVISION@` | GPL-3.0-or-later |
+| FFmpeg upstream commit | `@F0_UPSTREAM_COMMIT@` | |
+
+The server and the bundled FFmpeg runtime are **separately licensed works**. The
+server is GPL-2.0-or-later and is not relicensed by being distributed alongside a
+GPL-3.0-or-later runtime. `LICENSES.md` states the boundary and points at every
+licence text in this archive.
 
 `share/tesserafin/web-revision.json` records the web payload's own provenance as
-the web build produced it.
+the web build produced it. `share/tesserafin/ffmpeg/SOURCE.json` and
+`share/tesserafin/ffmpeg/sbom.cdx.json` do the same for the runtime, component by
+component, and `FFMPEG-CORRESPONDING-SOURCE.txt` names the corresponding-source
+archive distributed alongside this one.
+
+## Compiled capability is not tested capability
+
+`share/tesserafin/ffmpeg/capability.json` lists what the runtime was **compiled**
+with. Listing an encoder proves it was compiled in and nothing more. What has
+actually been executed, and what has not, is recorded in
+`docs/distribution/L0-linux-packages.md` in the server repository.

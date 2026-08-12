@@ -1,0 +1,54 @@
+Complete corresponding source for the bundled FFmpeg runtime
+============================================================
+
+This package bundles the Tesserafin FFmpeg runtime, build revision
+@F0_BUILD_REVISION@. That runtime is licensed GPL-3.0-or-later: it is built from
+FFmpeg with --enable-gpl and --enable-version3, and it statically links a number
+of GPL, LGPL and permissively licensed components.
+
+The complete corresponding source for it — the preferred form for modification of
+everything statically linked into the binaries, plus the exact build scripts and
+the instructions needed to rebuild them — is NOT inside this package. It is
+approximately 232 MB, it is identical for every architecture and for all three
+package formats, and duplicating it six times would only invite the copies to
+diverge.
+
+It is distributed as a single archive ALONGSIDE this package, in the same place
+this package was obtained from:
+
+  filename : @F0_SOURCE_ARCHIVE@
+  SHA-256  : @F0_SOURCE_SHA256@
+
+The same filename and digest are recorded in the architecture checksum manifest
+(SHA256SUMS-<architecture>.txt) and in the provenance manifest of every artifact
+(<artifact>.provenance.json), so the archive can be identified without trusting
+this file alone.
+
+The runtime also records its own source baseline: see
+/usr/share/tesserafin/ffmpeg/SOURCE.json, which names this archive and its
+digest, and /usr/share/tesserafin/ffmpeg/sbom.cdx.json, which enumerates every
+component with its version, licence and source location.
+
+Upstream
+--------
+
+The FFmpeg tree is @F0_UPSTREAM_REPOSITORY@ at commit
+@F0_UPSTREAM_COMMIT@. The archive contains that tree, every dependency source,
+and the build scripts, all at the exact revisions the binaries were produced
+from.
+
+What this archive is NOT
+------------------------
+
+It is the corresponding source for the FFmpeg RUNTIME only. It does not contain
+the Tesserafin server source or the Tesserafin Web source, and it does not claim
+to. Those are separate works with their own repositories and their own licences:
+
+  server : https://github.com/tesserafin-project/tesserafin.git
+           at commit @SERVER_COMMIT@, GPL-2.0-or-later
+  web    : https://github.com/tesserafin-project/tesserafin-web.git
+           at commit @WEB_VCS_REF@
+
+Both are public at the commits named above; see
+/usr/share/doc/tesserafin-server/copyright for the full component and licence
+breakdown of this package.

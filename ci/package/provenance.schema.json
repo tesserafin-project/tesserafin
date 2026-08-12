@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tesserafin-project/tesserafin/ci/package/provenance.schema.json",
+  "title": "Tesserafin native Linux package provenance",
+  "description": "The machine-readable record emitted beside every .deb, .rpm and portable archive. Strict: unknown keys are rejected, because a field nobody declared is a field nobody validates. Version 2 replaced the upstream-release-asset fields (ffmpegVersion / ffmpegAsset / ffmpegSha256) with the F0-native ffmpegRuntime object; the ambiguous 'ffmpegVersion' string could not distinguish the upstream baseline 7.1.4-3 from the Tesserafin build revision 7.1.4-tesserafin.1.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "packageFormat",
+    "packageName",
+    "packageVersion",
+    "architecture",
+    "runtimeIdentifier",
+    "serverCommit",
+    "serverRepository",
+    "webCommit",
+    "webVersion",
+    "webRepository",
+    "webAssetsImage",
+    "webPayloadSha256",
+    "ffmpegRuntime",
+    "licensing",
+    "applicationPayloadSha256",
+    "stagedTreeSha256",
+    "sourceDateEpoch",
+    "buildTimestamp",
+    "toolchain",
+    "artifactFilename",
+    "artifactSizeBytes",
+    "artifactSha256"
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "Lowercase hexadecimal SHA-256. Uppercase is rejected so two manifests describing the same bytes cannot differ textually."
+    },
+    "gitCommit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    }
+  },
+  "properties": {
+    "schemaVersion": { "const": 2 },
+    "packageFormat": { "enum": ["deb", "rpm", "tar.gz"] },
+    "packageName": { "const": "tesserafin-server" },
+    "packageVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+" },
+    "architecture": { "enum": ["amd64", "arm64", "x86_64", "aarch64", "linux-x64", "linux-arm64"] },
+    "runtimeIdentifier": { "enum": ["linux-x64", "linux-arm64"] },
+
+    "serverCommit": { "$ref": "#/$defs/gitCommit" },
+    "serverRepository": { "type": "string", "format": "uri" },
+
+    "webCommit": { "$ref": "#/$defs/gitCommit" },
+    "webVersion": { "type": "string" },
+    "webRepository": { "type": "string", "format": "uri" },
+    "webAssetsImage": {
+      "type": "string",
+      "pattern": "@sha256:[0-9a-f]{64}$",
+      "description": "Pinned by digest, never by tag."
+    },
+    "webPayloadSha256": { "$ref": "#/$defs/sha256" },
+
+    "ffmpegRuntime": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The accepted Tesserafin FFmpeg runtime, built from source. There is deliberately no field naming a release asset, a download URL or a workflow run: the runtime is reconstructed from the pinned sources, not obtained.",
+      "required": [
+        "buildRevision",
+        "upstreamRepository",
+        "upstreamCommit",
+        "upstreamBaseline",
+        "architecture",
+        "license",
+        "ffmpegSha256",
+        "ffprobeSha256",
+        "runtimeArchive",
+        "runtimeArchiveSha256",
+        "capabilityManifestSha256",
+        "sbomSha256",
+        "sourceManifestSha256",
+        "noticesSha256",
+        "correspondingSource",
+        "correspondingSourceSha256"
+      ],
+      "properties": {
+        "buildRevision": { "const": "7.1.4-tesserafin.1" },
+        "upstreamRepository": { "type": "string", "format": "uri" },
+        "upstreamCommit": { "$ref": "#/$defs/gitCommit" },
+        "upstreamBaseline": {
+          "type": "string",
+          "description": "The upstream tag this fork tracks. Recorded because it is honest provenance, and kept in a separate field from buildRevision precisely so the two can never be confused."
+        },
+        "architecture": { "enum": ["linux-x64", "linux-arm64"] },
+        "license": { "const": "GPL-3.0-or-later" },
+        "ffmpegSha256": { "$ref": "#/$defs/sha256" },
+        "ffprobeSha256": { "$ref": "#/$defs/sha256" },
+        "runtimeArchive": { "type": "string", "pattern": "^tesserafin-ffmpeg-.*\\.tar\\.xz$" },
+        "runtimeArchiveSha256": { "$ref": "#/$defs/sha256" },
+        "capabilityManifestSha256": { "$ref": "#/$defs/sha256" },
+        "sbomSha256": { "$ref": "#/$defs/sha256" },
+        "sourceManifestSha256": { "$ref": "#/$defs/sha256" },
+        "noticesSha256": { "$ref": "#/$defs/sha256" },
+        "correspondingSource": {
+          "type": "string",
+          "pattern": "^tesserafin-ffmpeg-.*-corresponding-source\\.tar\\.zst$"
+        },
+        "correspondingSourceSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+
+    "licensing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["server", "ffmpegRuntime", "spdxExpression", "note"],
+      "properties": {
+        "server": { "const": "GPL-2.0-or-later" },
+        "ffmpegRuntime": { "const": "GPL-3.0-or-later" },
+        "spdxExpression": { "const": "GPL-2.0-or-later AND GPL-3.0-or-later" },
+        "note": { "type": "string" }
+      }
+    },
+
+    "applicationPayloadSha256": {
+      "$ref": "#/$defs/sha256",
+      "description": "The deterministic tar digest of /usr/lib/tesserafin only, excluding all package-specific metadata, so the three formats can be proven to carry the same application."
+    },
+    "stagedTreeSha256": { "$ref": "#/$defs/sha256" },
+
+    "sourceDateEpoch": { "type": "string", "pattern": "^[0-9]+$" },
+    "buildTimestamp": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" },
+
+    "toolchain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dotnetSdk", "tar", "dpkgDeb", "rpmbuild", "rpmBuilderImage"],
+      "properties": {
+        "dotnetSdk": { "type": "string" },
+        "tar": { "type": "string" },
+        "dpkgDeb": { "type": "string" },
+        "rpmbuild": { "type": "string" },
+        "rpmBuilderImage": { "type": "string", "pattern": "@sha256:[0-9a-f]{64}$" }
+      }
+    },
+
+    "artifactFilename": { "type": "string" },
+    "artifactSizeBytes": { "type": "integer", "minimum": 1 },
+    "artifactSha256": { "$ref": "#/$defs/sha256" }
+  }
+}

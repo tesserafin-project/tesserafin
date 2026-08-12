@@ -43,43 +43,114 @@ echo "== pinned inputs"
     || bad "pkg_load_pins failed: the Dockerfile and pins.env disagree"
 
 pkg_load_pins >/dev/null 2>&1
-check "the ffmpeg asset name follows the runtime identifier" \
-      "jellyfin-ffmpeg_${FFMPEG_VERSION}_portable_linux64-gpl.tar.xz" \
-      "$(pkg_ffmpeg_asset linux-x64)"
-check "the arm64 ffmpeg asset name follows the runtime identifier" \
-      "jellyfin-ffmpeg_${FFMPEG_VERSION}_portable_linuxarm64-gpl.tar.xz" \
-      "$(pkg_ffmpeg_asset linux-arm64)"
 
-for pin in WEB_ASSETS_IMAGE WEB_VCS_REF FFMPEG_VERSION WEB_PAYLOAD_SHA256 \
-           FFMPEG_PORTABLE_SHA256_LINUX_X64 FFMPEG_PORTABLE_SHA256_LINUX_ARM64 \
+for pin in WEB_ASSETS_IMAGE WEB_VCS_REF WEB_PAYLOAD_SHA256 \
+           F0_RUNTIME_REVISION F0_UPSTREAM_COMMIT F0_RUNTIME_LICENSE F0_ACCEPTED_CI_TREE \
            RPM_BUILDER_IMAGE RPM_ACCEPT_IMAGE ARCHIVE_ACCEPT_IMAGE; do
     if [[ -n "${!pin:-}" ]]; then ok "${pin} is pinned"; else bad "${pin} is empty"; fi
 done
 
-for sha in "${WEB_PAYLOAD_SHA256}" "${FFMPEG_PORTABLE_SHA256_LINUX_X64}" \
-           "${FFMPEG_PORTABLE_SHA256_LINUX_ARM64}"; do
-    if [[ "${sha}" =~ ^[0-9a-f]{64}$ ]]; then
-        ok "a pinned digest is a full lowercase SHA-256"
+if [[ "${WEB_PAYLOAD_SHA256}" =~ ^[0-9a-f]{64}$ ]]; then
+    ok "the pinned web payload digest is a full lowercase SHA-256"
+else
+    bad "'${WEB_PAYLOAD_SHA256}' is not a full lowercase SHA-256"
+fi
+
+# The packages must not carry a pin for a downloaded encoder any more. These are
+# not decorative: reintroducing either name is exactly how the inherited runtime
+# would come back, and ci/package/verify-no-inherited-ffmpeg.sh enforces the same
+# boundary over the whole package surface.
+echo "== the inherited portable-runtime pins are gone"
+for gone in FFMPEG_VERSION FFMPEG_PORTABLE_SHA256_LINUX_X64 FFMPEG_PORTABLE_SHA256_LINUX_ARM64; do
+    if [[ -n "${!gone:-}" ]]; then
+        bad "${gone} is still set after pkg_load_pins"
     else
-        bad "'${sha}' is not a full lowercase SHA-256"
+        ok "${gone} is no longer a package pin"
     fi
 done
+for gone_fn in pkg_ffmpeg_asset pkg_ffmpeg_sha256; do
+    if declare -F "${gone_fn}" >/dev/null; then
+        bad "${gone_fn} still exists, so a release asset can still be constructed"
+    else
+        ok "${gone_fn} no longer exists"
+    fi
+done
+
+echo "== the F0 runtime is derived from ci/ffmpeg, not restated"
+check "the runtime revision comes from components.json" \
+      "$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["buildRevision"])' \
+         "${REPO_ROOT}/ci/ffmpeg/components.json")" \
+      "${F0_BUILD_REVISION}"
+check "the upstream commit comes from components.json" \
+      "$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["ffmpeg"]["commit"])' \
+         "${REPO_ROOT}/ci/ffmpeg/components.json")" \
+      "${F0_FFMPEG_COMMIT}"
+check "the runtime directory name is derived, not spelled out" \
+      "tesserafin-ffmpeg-${F0_BUILD_REVISION}-linux-arm64" \
+      "$(pkg_f0_runtime_dir_name linux-arm64)"
+check "the runtime archive name is derived, not spelled out" \
+      "tesserafin-ffmpeg-${F0_BUILD_REVISION}-linux-x64.tar.xz" \
+      "$(pkg_f0_runtime_archive_name linux-x64)"
+check "the corresponding-source name is derived, not spelled out" \
+      "tesserafin-ffmpeg-${F0_BUILD_REVISION}-corresponding-source.tar.zst" \
+      "${F0_SOURCE_ARCHIVE}"
+check "the ELF machine is declared per architecture" \
+      "AArch64" "$(pkg_elf_machine linux-arm64)"
+
+# The adapter must not have grown a copy of any F0 configuration. If it ever
+# restates a configure flag or a component pin, the two definitions can drift and
+# the packages stop shipping the accepted runtime.
+if grep -qE -- '--enable-|--disable-|libx26|libvpx|nv-codec' "${REPO_ROOT}/ci/package/ffmpeg-runtime.sh"; then
+    bad "the package adapter restates FFmpeg configuration that belongs to ci/ffmpeg"
+else
+    ok "the package adapter restates no FFmpeg configuration"
+fi
 
 # A drifting pin must break the build rather than silently win.
 echo "== pin drift fails closed"
 DRIFT_DIR="$(mktemp -d)"
 cp -a "${REPO_ROOT}/Dockerfile" "${REPO_ROOT}/ci" "${REPO_ROOT}/docker" "${DRIFT_DIR}/" 2>/dev/null
-sed -i -E 's/^ARG FFMPEG_VERSION=.*/ARG FFMPEG_VERSION=0.0.0-drift/' "${DRIFT_DIR}/Dockerfile"
-if ( cd "${DRIFT_DIR}" && bash -c 'source ci/package/lib.sh; PKG_REPO_ROOT="'"${DRIFT_DIR}"'"; PKG_PINS_FILE="$PKG_REPO_ROOT/ci/package/pins.env"; PKG_DOCKERFILE="$PKG_REPO_ROOT/Dockerfile"; pkg_load_pins' ) >/dev/null 2>&1; then
-    bad "an ffmpeg version disagreement between the Dockerfile and pins.env was accepted"
+sed -i -E 's/"buildRevision": *"[^"]*"/"buildRevision": "0.0.0-drift"/' \
+    "${DRIFT_DIR}/ci/ffmpeg/components.json"
+if ( cd "${DRIFT_DIR}" && bash -c 'source ci/package/lib.sh; PKG_REPO_ROOT="'"${DRIFT_DIR}"'"; PKG_PINS_FILE="$PKG_REPO_ROOT/ci/package/pins.env"; PKG_DOCKERFILE="$PKG_REPO_ROOT/Dockerfile"; PKG_F0_COMPONENTS="$PKG_REPO_ROOT/ci/ffmpeg/components.json"; pkg_load_pins' ) >/dev/null 2>&1; then
+    bad "a runtime revision disagreement between components.json and pins.env was accepted"
 else
-    ok "an ffmpeg version disagreement fails closed"
+    ok "a runtime revision disagreement fails closed"
+fi
+
+sed -i -E 's/"commit": *"[0-9a-f]{40}"/"commit": "0000000000000000000000000000000000000000"/' \
+    "${DRIFT_DIR}/ci/ffmpeg/components.json"
+sed -i -E 's/"buildRevision": *"[^"]*"/"buildRevision": "7.1.4-tesserafin.1"/' \
+    "${DRIFT_DIR}/ci/ffmpeg/components.json"
+if ( cd "${DRIFT_DIR}" && bash -c 'source ci/package/lib.sh; PKG_REPO_ROOT="'"${DRIFT_DIR}"'"; PKG_PINS_FILE="$PKG_REPO_ROOT/ci/package/pins.env"; PKG_DOCKERFILE="$PKG_REPO_ROOT/Dockerfile"; PKG_F0_COMPONENTS="$PKG_REPO_ROOT/ci/ffmpeg/components.json"; pkg_load_pins' ) >/dev/null 2>&1; then
+    bad "an upstream commit disagreement between components.json and pins.env was accepted"
+else
+    ok "an upstream commit disagreement fails closed"
 fi
 rm -rf "${DRIFT_DIR}"
 
+echo "== the negative gate rejects a reintroduced portable asset"
+GATE_DIR="$(mktemp -d)"
+cp -a "${REPO_ROOT}/ci" "${REPO_ROOT}/packaging" "${REPO_ROOT}/docs" "${REPO_ROOT}/.github" "${GATE_DIR}/" 2>/dev/null
+if ( "${REPO_ROOT}/ci/package/verify-no-inherited-ffmpeg.sh" --root "${GATE_DIR}" ) >/dev/null 2>&1; then
+    ok "the current package surface passes the inherited-runtime gate"
+else
+    bad "the current package surface fails its own inherited-runtime gate"
+fi
+printf 'FFMPEG_PORTABLE_SHA256_LINUX_X64=cab9ff40a47e4232d231e4eb7e4e85fabfeec56c6905266bc94291fc0881f83f\n' \
+    >> "${GATE_DIR}/ci/package/pins.env"
+if ( "${REPO_ROOT}/ci/package/verify-no-inherited-ffmpeg.sh" --root "${GATE_DIR}" ) >/dev/null 2>&1; then
+    bad "the gate accepted a reintroduced portable checksum pin"
+else
+    ok "a reintroduced portable checksum pin is rejected"
+fi
+rm -rf "${GATE_DIR}"
+
 echo "== packaging templates are complete"
-for template in packaging/linux/deb/control.in packaging/linux/rpm/tesserafin-server.spec.in \
-                packaging/linux/archive/README.md.in; do
+for template in packaging/linux/deb/control.in packaging/linux/deb/copyright.in \
+                packaging/linux/rpm/tesserafin-server.spec.in \
+                packaging/linux/archive/README.md.in packaging/linux/archive/LICENSES.md.in \
+                packaging/linux/FFMPEG-CORRESPONDING-SOURCE.txt.in; do
     placeholders="$(grep -oE '@[A-Z_]+@' "${REPO_ROOT}/${template}" | sort -u | tr '\n' ' ')"
     if [[ -n "${placeholders}" ]]; then
         ok "${template} declares placeholders: ${placeholders}"
@@ -93,10 +164,13 @@ done
 declare -A SUBSTITUTED=()
 while read -r token; do SUBSTITUTED["${token}"]=1; done < <(
     grep -ohE 's\|@[A-Z_]+@\|' "${REPO_ROOT}"/ci/package/build-*.sh \
+                               "${REPO_ROOT}"/ci/package/assemble-payload.sh \
       | sed -E 's/^s\|(@[A-Z_]+@)\|$/\1/' | sort -u
 )
-for template in packaging/linux/deb/control.in packaging/linux/rpm/tesserafin-server.spec.in \
-                packaging/linux/archive/README.md.in; do
+for template in packaging/linux/deb/control.in packaging/linux/deb/copyright.in \
+                packaging/linux/rpm/tesserafin-server.spec.in \
+                packaging/linux/archive/README.md.in packaging/linux/archive/LICENSES.md.in \
+                packaging/linux/FFMPEG-CORRESPONDING-SOURCE.txt.in; do
     while read -r token; do
         [[ -n "${token}" ]] || continue
         if [[ -n "${SUBSTITUTED[${token}]:-}" ]]; then
@@ -106,6 +180,144 @@ for template in packaging/linux/deb/control.in packaging/linux/rpm/tesserafin-se
         fi
     done < <(grep -oE '@[A-Z_]+@' "${REPO_ROOT}/${template}" | sort -u)
 done
+
+echo "== licence metadata states both boundaries"
+SPEC="${REPO_ROOT}/packaging/linux/rpm/tesserafin-server.spec.in"
+check "the RPM License is the two-component SPDX expression" \
+      "GPL-2.0-or-later AND GPL-3.0-or-later" \
+      "$(sed -nE 's/^License: +(.*)$/\1/p' "${SPEC}")"
+
+# The .deb must not invent a License control field: dpkg has no such field, and a
+# reader parsing the control file would simply not see it. The licence statement
+# belongs in the copyright file.
+if grep -qE '^License:' "${REPO_ROOT}/packaging/linux/deb/control.in"; then
+    bad "control.in declares a nonstandard License field"
+else
+    ok "control.in declares no nonstandard License field"
+fi
+
+COPY="${REPO_ROOT}/packaging/linux/deb/copyright.in"
+if head -1 "${COPY}" | grep -q '^Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/'; then
+    ok "the Debian copyright is a machine-readable DEP-5 document"
+else
+    bad "the Debian copyright is not DEP-5"
+fi
+for boundary in 'License: GPL-2.0-or-later' 'License: GPL-3.0-or-later'; do
+    if grep -q "^${boundary}$" "${COPY}"; then
+        ok "the copyright declares '${boundary}'"
+    else
+        bad "the copyright never declares '${boundary}'"
+    fi
+done
+if grep -qE '^Files: usr/lib/tesserafin/ffmpeg/' "${COPY}"; then
+    ok "the copyright gives the FFmpeg runtime its own Files stanza"
+else
+    bad "the copyright has no separate stanza for the FFmpeg runtime"
+fi
+# The server must never be described as GPL-3-only anywhere in the packaging.
+# The server's own licence must never be restated as GPL-3. Matched inside a
+# single sentence, because the accurate text "The server is GPL-2.0-or-later. The
+# bundled FFmpeg runtime is GPL-3.0-or-later." legitimately contains both strings
+# and a looser pattern would reject the correct wording.
+if grep -rhoE '[^.]*\b[Ss]erver\b[^.]*' "${REPO_ROOT}/packaging/linux" 2>/dev/null \
+     | grep -qE 'GPL-3'; then
+    bad "packaging metadata describes the server itself as GPL-3: $(grep -rhoE '[^.]*\b[Ss]erver\b[^.]*' "${REPO_ROOT}/packaging/linux" | grep -E 'GPL-3' | head -1)"
+else
+    ok "no sentence about the server states GPL-3"
+fi
+# Likewise for nonfree/FDK: the copyright legitimately says the runtime contains
+# NEITHER, so only an affirmative claim is a finding. Sentence-scoped in python
+# rather than with grep, because these documents wrap and a line-based check
+# splits "no nonfree component and no / FDK AAC" into a fragment that looks
+# affirmative.
+nonfree_claims="$(python3 - "${REPO_ROOT}/packaging/linux" <<'PYEOF'
+import os, re, sys
+root = sys.argv[1]
+negation = re.compile(r"\b(no|not|never|without|free of|absent|neither|nor)\b", re.I)
+target = re.compile(r"nonfree|libfdk|fdk[- ]aac", re.I)
+for dirpath, _, names in os.walk(root):
+    for name in names:
+        path = os.path.join(dirpath, name)
+        try:
+            text = open(path, encoding="utf-8", errors="replace").read()
+        except OSError:
+            continue
+        for sentence in re.split(r"(?<=[.!?])\s+", " ".join(text.split())):
+            if target.search(sentence) and not negation.search(sentence):
+                print(f"{os.path.relpath(path, root)}: {sentence}")
+PYEOF
+)"
+if [[ -n "${nonfree_claims}" ]]; then
+    bad "packaging metadata affirmatively claims a nonfree component or FDK AAC: ${nonfree_claims}"
+else
+    ok "packaging metadata makes no affirmative nonfree or FDK AAC claim"
+fi
+
+echo "== the corresponding source is a sidecar, not package content"
+# The name is derived from the F0 manifest rather than spelled out, so the
+# assertion looks for the derivation, not for a literal filename.
+if grep -q 'F0_SOURCE_ARCHIVE' "${REPO_ROOT}/ci/package/build-all.sh" \
+   && grep -q 'SIDECAR=' "${REPO_ROOT}/ci/package/build-all.sh"; then
+    ok "build-all.sh emits the corresponding-source sidecar beside the artifacts"
+else
+    bad "build-all.sh never emits the corresponding-source sidecar"
+fi
+if grep -qE 'cp .*corresponding-source.*\$\{OUT\}/usr' "${REPO_ROOT}/ci/package/assemble-payload.sh"; then
+    bad "the corresponding-source archive is copied INTO the staged package tree"
+else
+    ok "the corresponding-source archive is not copied into the package payload"
+fi
+if grep -q 'FFMPEG-CORRESPONDING-SOURCE.txt' "${REPO_ROOT}/ci/package/assemble-payload.sh"; then
+    ok "every package carries the notice naming the sidecar"
+else
+    bad "no package carries a notice naming the sidecar"
+fi
+
+echo "== the runtime layout keeps bin/ and lib/ siblings"
+for expected in 'ffmpeg/bin/ffmpeg' 'ffmpeg/bin/ffprobe' 'ffmpeg/lib/'; do
+    if grep -q "${expected}" "${REPO_ROOT}/ci/package/assemble-payload.sh"; then
+        ok "the staged tree installs ${expected}"
+    else
+        bad "the staged tree does not install ${expected}"
+    fi
+done
+check "the service points at the packaged runtime binary" \
+      "TESSERAFIN_FFMPEG=/usr/lib/tesserafin/ffmpeg/bin/ffmpeg" \
+      "$(grep '^TESSERAFIN_FFMPEG=' "${REPO_ROOT}/packaging/linux/tesserafin.conf")"
+# verify-artifacts.sh names the path in order to REJECT it, so it is excluded
+# here for the same reason the inherited-runtime gate excludes its own source.
+if grep -l '/opt/tesserafin-ffmpeg' "${REPO_ROOT}/ci/package"/*.sh "${REPO_ROOT}/packaging/linux"/* 2>/dev/null \
+     | grep -qv 'verify-artifacts.sh'; then
+    bad "the packaging expects something under /opt/tesserafin-ffmpeg"
+else
+    ok "the packaging expects nothing under /opt/tesserafin-ffmpeg"
+fi
+
+echo "== the provenance schema is strict"
+SCHEMA="${REPO_ROOT}/ci/package/provenance.schema.json"
+if python3 -c 'import json,sys;json.load(open(sys.argv[1]))' "${SCHEMA}" 2>/dev/null; then
+    ok "the provenance schema is valid JSON"
+else
+    bad "the provenance schema is not valid JSON"
+fi
+schema_text="$(cat "${SCHEMA}")"
+for obsolete in '"ffmpegVersion"' '"ffmpegAsset"'; do
+    if grep -q -- "${obsolete}" <<<"${schema_text}"; then
+        bad "the schema still declares ${obsolete}"
+    else
+        ok "the schema declares no ${obsolete}"
+    fi
+done
+if python3 -c '
+import json,sys
+s=json.load(open(sys.argv[1]))
+assert s["additionalProperties"] is False
+assert s["properties"]["ffmpegRuntime"]["additionalProperties"] is False
+' "${SCHEMA}" 2>/dev/null; then
+    ok "the schema rejects unknown keys at both levels"
+else
+    bad "the schema tolerates unknown keys"
+fi
 
 echo "== the service contract"
 UNIT="${REPO_ROOT}/packaging/linux/tesserafin.service"

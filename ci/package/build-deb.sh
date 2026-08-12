@@ -50,6 +50,8 @@ sed -e "s|@DEB_VERSION@|${DEB_VERSION}|g" \
     -e "s|@INSTALLED_SIZE_KB@|${INSTALLED_SIZE_KB}|g" \
     -e "s|@VCS_REF@|${VCS_REF}|g" \
     -e "s|@WEB_VCS_REF@|${WEB_VCS_REF}|g" \
+    -e "s|@F0_BUILD_REVISION@|${F0_BUILD_REVISION}|g" \
+    -e "s|@F0_UPSTREAM_COMMIT@|${F0_FFMPEG_COMMIT}|g" \
     "${PKG_REPO_ROOT}/packaging/linux/deb/control.in" > "${ROOT}/DEBIAN/control"
 
 # The one configuration file dpkg must never overwrite on upgrade.

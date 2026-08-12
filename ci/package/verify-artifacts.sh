@@ -5,14 +5,17 @@
 #
 # Proves, from the ARTIFACTS themselves rather than from the build that produced
 # them:
-#   1. the .deb, the .rpm and the .tar.gz carry byte-identical application and
-#      web payloads for this architecture;
+#   1. the .deb, the .rpm and the .tar.gz carry byte-identical application, web
+#      AND FFmpeg-runtime payloads for this architecture;
 #   2. the bundled web payload matches the pinned commit and digest;
 #   3. no artifact carries build-host absolute paths, key material, credentials
 #      or unexpectedly writable application files;
-#   4. no user-facing package or service metadata is branded as Jellyfin. The
-#      bundled upstream encoder is NOT renamed: it is genuine jellyfin-ffmpeg and
-#      says so, which is honest provenance rather than branding.
+#   4. no user-facing package or service metadata carries Jellyfin branding at
+#      all — including in the description. The packages no longer bundle an
+#      upstream binary, so the exemption that used to permit "jellyfin-ffmpeg"
+#      there describes something that is no longer true;
+#   5. the installed FFmpeg runtime is the accepted one, complete, at the
+#      documented path, with its RUNPATH and bundled libraries intact.
 
 set -euo pipefail
 
@@ -88,6 +91,30 @@ if [[ "${web_deb}" == "${web_rpm}" && "${web_deb}" == "${web_tgz}" ]]; then
     pass "web payload identical across .deb/.rpm/.tar.gz (${web_deb})"
 else
     fail "web payload differs: deb=${web_deb} rpm=${web_rpm} tgz=${web_tgz}"
+fi
+
+# The FFmpeg runtime is the whole point of this packaging work, so it is compared
+# explicitly rather than left inside the /usr/lib/tesserafin comparison. Both its
+# subtrees are covered: the executable prefix (bin/ + lib/) and the read-only
+# metadata (SBOM, source manifest, capability record, notices).
+rt_deb="$(pkg_tree_digest "${WORK}/deb/usr/lib/tesserafin/ffmpeg" "${EPOCH_FOR_COMPARE}")"
+rt_rpm="$(pkg_tree_digest "${WORK}/rpm/usr/lib/tesserafin/ffmpeg" "${EPOCH_FOR_COMPARE}")"
+rt_tgz="$(pkg_tree_digest "${TGZ_ROOT}/lib/tesserafin/ffmpeg"     "${EPOCH_FOR_COMPARE}")"
+
+if [[ "${rt_deb}" == "${rt_rpm}" && "${rt_deb}" == "${rt_tgz}" ]]; then
+    pass "FFmpeg runtime identical across .deb/.rpm/.tar.gz (${rt_deb})"
+else
+    fail "FFmpeg runtime differs: deb=${rt_deb} rpm=${rt_rpm} tgz=${rt_tgz}"
+fi
+
+meta_deb="$(pkg_tree_digest "${WORK}/deb/usr/share/tesserafin/ffmpeg" "${EPOCH_FOR_COMPARE}")"
+meta_rpm="$(pkg_tree_digest "${WORK}/rpm/usr/share/tesserafin/ffmpeg" "${EPOCH_FOR_COMPARE}")"
+meta_tgz="$(pkg_tree_digest "${TGZ_ROOT}/share/tesserafin/ffmpeg"     "${EPOCH_FOR_COMPARE}")"
+
+if [[ "${meta_deb}" == "${meta_rpm}" && "${meta_deb}" == "${meta_tgz}" ]]; then
+    pass "FFmpeg runtime metadata identical across .deb/.rpm/.tar.gz (${meta_deb})"
+else
+    fail "FFmpeg runtime metadata differs: deb=${meta_deb} rpm=${meta_rpm} tgz=${meta_tgz}"
 fi
 
 # --- 2. web provenance -------------------------------------------------------
@@ -195,9 +222,7 @@ fi
 echo "== user-facing naming"
 
 # The identity fields — what a user sees in a package manager listing — must be
-# Tesserafin. The DESCRIPTION is allowed to name jellyfin-ffmpeg, because the
-# bundled encoder genuinely is jellyfin-ffmpeg and stating so is accurate
-# provenance; renaming it to hide the ancestry would be the dishonest option.
+# Tesserafin.
 identity="$(dpkg-deb -f "${DEB}" Package Source Maintainer Homepage Section)"
 identity+=$'\n'"$(docker run --rm --volume "${ARTIFACTS}:/artifacts:ro" "${RPM_TOOLS}" \
                   rpm -qp --nosignature --qf '%{NAME}\n%{SUMMARY}\n%{URL}\n%{PACKAGER}\n' \
@@ -209,16 +234,26 @@ else
     pass "package identity metadata is Tesserafin-branded"
 fi
 
-# Any remaining mention must be the encoder, spelled as the upstream project.
+# The descriptions too. This used to carry an exemption permitting the exact
+# string "jellyfin-ffmpeg", because the package really did bundle a downloaded
+# upstream binary and saying so was honest. It no longer does: the encoder is
+# built from source in this repository, so the exemption would now describe
+# something untrue and is deliberately gone.
+#
+# The runtime's OWN metadata — SOURCE.json, the SBOM, THIRD_PARTY_NOTICES.md —
+# still names the Jellyfin fork and its upstream baseline tag, because that is
+# where the source genuinely comes from. That is provenance inside the accepted
+# F0 contract, it is not user-facing package metadata, and erasing it to quiet a
+# grep would be the dishonest fix. This check reads package metadata only.
 descriptions="$(dpkg-deb -f "${DEB}" Description)"
 descriptions+=$'\n'"$(docker run --rm --volume "${ARTIFACTS}:/artifacts:ro" "${RPM_TOOLS}" \
                       rpm -qp --nosignature --qf '%{DESCRIPTION}\n' \
                       "/artifacts/$(basename "${RPM}")" 2>/dev/null)"
-stray="$(grep -oiE 'jellyfin[a-z0-9-]*' <<<"${descriptions}" | grep -viE '^jellyfin-ffmpeg$' || true)"
+stray="$(grep -oiE 'jellyfin[a-z0-9-]*' <<<"${descriptions}" || true)"
 if [[ -n "${stray}" ]]; then
-    fail "package descriptions mention Jellyfin outside the bundled encoder: ${stray}"
+    fail "package descriptions carry Jellyfin branding: ${stray}"
 else
-    pass "the only Jellyfin mention in any description is the bundled jellyfin-ffmpeg encoder"
+    pass "no package description carries Jellyfin branding"
 fi
 
 unit="${WORK}/deb/usr/lib/systemd/system/tesserafin.service"
@@ -228,12 +263,132 @@ else
     pass "the systemd unit is Tesserafin-branded"
 fi
 
-# The encoder is genuine upstream jellyfin-ffmpeg and is not renamed. Assert it
-# is present and identifies itself, so provenance stays visible.
-if [[ -x "${WORK}/deb/usr/lib/tesserafin/ffmpeg/ffmpeg" ]]; then
-    pass "the bundled upstream encoder is present at /usr/lib/tesserafin/ffmpeg/ffmpeg"
+# --- 5. the installed FFmpeg runtime -----------------------------------------
+echo "== installed FFmpeg runtime"
+
+for root_spec in "deb:${WORK}/deb/usr/lib/tesserafin/ffmpeg:${WORK}/deb/usr/share/tesserafin/ffmpeg" \
+                 "rpm:${WORK}/rpm/usr/lib/tesserafin/ffmpeg:${WORK}/rpm/usr/share/tesserafin/ffmpeg" \
+                 "tar.gz:${TGZ_ROOT}/lib/tesserafin/ffmpeg:${TGZ_ROOT}/share/tesserafin/ffmpeg"; do
+    IFS=':' read -r fmt rt meta <<<"${root_spec}"
+
+    for binary in ffmpeg ffprobe; do
+        if [[ ! -x "${rt}/bin/${binary}" ]]; then
+            fail "${fmt}: ${binary} is missing from ${rt#"${WORK}/"}/bin"
+            continue
+        fi
+        runpath="$(readelf -d "${rt}/bin/${binary}" | sed -nE 's/.*\(RUNPATH\).*\[(.*)\]/\1/p')"
+        [[ "${runpath}" == '$ORIGIN/../lib' ]] \
+            || fail "${fmt}: ${binary} RUNPATH is '${runpath}', expected '\$ORIGIN/../lib'"
+        machine="$(readelf -h "${rt}/bin/${binary}" | sed -nE 's/^ *Machine: *//p')"
+        [[ "${machine}" == "$(pkg_elf_machine "${RID}")" ]] \
+            || fail "${fmt}: ${binary} ELF machine '${machine}' is not $(pkg_elf_machine "${RID}")"
+    done
+
+    # The bundled libraries the RUNPATH resolves to, and their SONAME symlinks.
+    # A relative symlink that does not resolve inside the artifact means the
+    # encoder loads a HOST library or nothing at all.
+    if [[ ! -d "${rt}/lib" ]]; then
+        fail "${fmt}: the runtime has no lib/ directory beside bin/"
+    else
+        broken=0
+        while IFS= read -r link; do
+            [[ -n "${link}" ]] || continue
+            [[ -e "${link}" && "$(readlink "${link}")" != /* ]] || { broken=$((broken + 1)); \
+                fail "${fmt}: SONAME symlink does not resolve inside the artifact: ${link##*/}"; }
+        done < <(find "${rt}/lib" -type l)
+        if [[ "${broken}" -eq 0 ]]; then
+            pass "${fmt}: bin/ and lib/ are siblings, RUNPATH intact, every SONAME symlink resolves inside the artifact"
+        fi
+    fi
+
+    # The runtime describes itself, and describes the accepted revision.
+    if [[ -f "${meta}/SOURCE.json" ]]; then
+        rev="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["buildRevision"])' "${meta}/SOURCE.json")"
+        [[ "${rev}" == "${F0_RUNTIME_REVISION}" ]] \
+            && pass "${fmt}: installed runtime is the accepted revision ${rev}" \
+            || fail "${fmt}: installed runtime revision '${rev}' is not the accepted ${F0_RUNTIME_REVISION}"
+    else
+        fail "${fmt}: the installed runtime carries no SOURCE.json"
+    fi
+
+    for required in sbom.cdx.json capability.json THIRD_PARTY_NOTICES.md; do
+        [[ -f "${meta}/${required}" ]] || fail "${fmt}: the runtime metadata is missing ${required}"
+    done
+done
+
+# Nothing anywhere expects the F0 development prefix. build-in-container.sh uses
+# /opt/tesserafin-ffmpeg as a dependency staging prefix; a packaged artifact that
+# still referenced it would be a build that leaked its scaffolding.
+opt_refs="$(grep -rla '/opt/tesserafin-ffmpeg' "${WORK}/deb/usr/lib" "${WORK}/rpm/usr/lib" \
+                 "${TGZ_ROOT}/lib" 2>/dev/null || true)"
+if [[ -n "${opt_refs}" ]]; then
+    fail "an installed file still references /opt/tesserafin-ffmpeg: ${opt_refs}"
 else
-    fail "the bundled encoder is missing"
+    pass "no installed file expects anything under /opt/tesserafin-ffmpeg"
+fi
+
+# --- 6. licensing closure ----------------------------------------------------
+echo "== licensing"
+
+for root_spec in "deb:${WORK}/deb/usr/share/licenses/tesserafin-server:${WORK}/deb/usr/share/doc/tesserafin-server" \
+                 "rpm:${WORK}/rpm/usr/share/licenses/tesserafin-server:${WORK}/rpm/usr/share/doc/tesserafin-server"; do
+    IFS=':' read -r fmt lic doc <<<"${root_spec}"
+    [[ -f "${lic}/LICENSE" ]] || fail "${fmt}: the server licence is missing"
+    # The server licence must be the project's own file, byte for byte. A build
+    # that "helpfully" substituted the runtime's GPL-3 text would relicense the
+    # server by accident.
+    if [[ -f "${lic}/LICENSE" ]]; then
+        [[ "$(pkg_sha256 "${lic}/LICENSE")" == "$(pkg_sha256 "${PKG_REPO_ROOT}/LICENSE")" ]] \
+            && pass "${fmt}: the installed server licence is byte-identical to the project LICENSE" \
+            || fail "${fmt}: the installed server licence is not the project LICENSE"
+    fi
+    count="$(find "${lic}/ffmpeg" -type f 2>/dev/null | wc -l)"
+    [[ "${count}" -ge 20 ]] \
+        && pass "${fmt}: ${count} FFmpeg component licence texts installed" \
+        || fail "${fmt}: only ${count} FFmpeg licence texts installed; the runtime's licence set is incomplete"
+    [[ -f "${doc}/FFMPEG-CORRESPONDING-SOURCE.txt" ]] \
+        || fail "${fmt}: no corresponding-source notice in the package"
+    grep -q "${F0_SOURCE_ARCHIVE}" "${doc}/FFMPEG-CORRESPONDING-SOURCE.txt" 2>/dev/null \
+        || fail "${fmt}: the corresponding-source notice does not name ${F0_SOURCE_ARCHIVE}"
+done
+
+# The .deb copyright must be a real per-component document, not a copy of the
+# server licence, and must state both boundaries.
+copyright="${WORK}/deb/usr/share/doc/tesserafin-server/copyright"
+if [[ -f "${copyright}" ]] \
+   && grep -q '^Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/' "${copyright}" \
+   && grep -q 'License: GPL-2.0-or-later' "${copyright}" \
+   && grep -q 'License: GPL-3.0-or-later' "${copyright}"; then
+    pass "the Debian copyright is DEP-5 and states both licence boundaries"
+else
+    fail "the Debian copyright is not a DEP-5 document stating both licence boundaries"
+fi
+
+# No metadata may describe the whole package as GPL-2-only, and none may claim
+# the server itself is GPL-3.
+rpm_license="$(docker run --rm --volume "${ARTIFACTS}:/artifacts:ro" "${RPM_TOOLS}" \
+               rpm -qp --nosignature --qf '%{LICENSE}' "/artifacts/$(basename "${RPM}")" 2>/dev/null)"
+if [[ "${rpm_license}" == "GPL-2.0-or-later AND GPL-3.0-or-later" ]]; then
+    pass "the RPM License field states both boundaries: ${rpm_license}"
+elif [[ "${rpm_license}" == "GPL-2.0-or-later" ]]; then
+    fail "the RPM describes the whole package as GPL-2.0-or-later only, but it bundles a GPL-3.0-or-later runtime"
+elif [[ "${rpm_license}" == "GPL-3.0-or-later" ]]; then
+    fail "the RPM describes the whole package as GPL-3.0-or-later, which misstates the server's licence"
+else
+    fail "unexpected RPM License field: '${rpm_license}'"
+fi
+
+# Capability drift: the runtime must remain free of nonfree components and of
+# FDK AAC. Read from the capability record the runtime itself produced.
+cap="${WORK}/deb/usr/share/tesserafin/ffmpeg/capability.json"
+if [[ -f "${cap}" ]]; then
+    if grep -qiE 'libfdk|nonfree' "${cap}"; then
+        fail "the capability manifest reports a nonfree component or FDK AAC: $(grep -oiE 'libfdk[a-z_]*|nonfree' "${cap}" | sort -u | tr '\n' ' ')"
+    else
+        pass "no nonfree component and no FDK AAC in the capability manifest"
+    fi
+else
+    fail "no capability manifest installed"
 fi
 
 echo

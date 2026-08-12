@@ -90,7 +90,7 @@ tar -xzf "${ARCHIVE}" -C "${PREFIX}"
 ROOT="${PREFIX}/tesserafin-server-${VERSION}-${RID}"
 [[ -d "${ROOT}" ]] || pkg_die "the archive did not unpack to ${ROOT}"
 [[ -x "${ROOT}/lib/tesserafin/tesserafin" ]] || fail "the application binary is not executable"
-[[ -x "${ROOT}/lib/tesserafin/ffmpeg/ffmpeg" ]] || fail "the bundled encoder is not executable"
+[[ -x "${ROOT}/lib/tesserafin/ffmpeg/bin/ffmpeg" ]] || fail "the bundled encoder is not executable"
 [[ -f "${ROOT}/README.md" ]] || fail "the archive has no README"
 [[ ! -e "${ROOT}/etc" ]] || fail "the archive ships /etc content"
 archive_units="$(find "${ROOT}" -name '*.service' -print 2>/dev/null || true)"
@@ -98,6 +98,53 @@ if [[ -n "${archive_units}" ]]; then
     fail "the archive ships a systemd unit"
 else
     pass "no unit file and no /etc content: the archive does not pretend to install a service"
+fi
+
+echo "== 2b. the bundled FFmpeg runtime survives relocation"
+# The whole claim of a portable archive is that it works wherever it is unpacked.
+# For the encoder that claim rests on one mechanism: RUNPATH=$ORIGIN/../lib, which
+# is resolved relative to the BINARY, not to any install prefix. So it is tested
+# the only way that means anything — by moving the tree to a second, differently
+# named directory and running it from there.
+#
+# There is no system ffmpeg in this container, so a binary that silently fell
+# back to one would simply fail; and every resolved library is checked to be
+# inside the relocated prefix, so one that found a HOST libva would be caught even
+# on a machine that has one.
+RELOC="${PREFIX}/relocated-$$/deeper/still"
+mkdir -p "$(dirname "${RELOC}")"
+cp -a "${ROOT}" "${RELOC}"
+
+reloc_ffmpeg="${RELOC}/lib/tesserafin/ffmpeg/bin/ffmpeg"
+if "${reloc_ffmpeg}" -hide_banner -version >/dev/null 2>&1; then
+    pass "the relocated encoder runs: $("${reloc_ffmpeg}" -hide_banner -version | head -1)"
+else
+    "${reloc_ffmpeg}" -hide_banner -version 2>&1 | head -5 >&2
+    fail "the relocated encoder does not run; \$ORIGIN/../lib did not survive relocation"
+fi
+
+"${reloc_ffmpeg}" -hide_banner -buildconf > "${PREFIX}/relocated-buildconf.txt" 2>&1 \
+    && pass "-buildconf executes from the relocated path ($(wc -l < "${PREFIX}/relocated-buildconf.txt") lines)" \
+    || fail "-buildconf failed from the relocated path"
+"${reloc_ffmpeg}" -hide_banner -hwaccels > "${PREFIX}/relocated-hwaccels.txt" 2>&1 \
+    && pass "-hwaccels executes from the relocated path: $(tail -n +2 "${PREFIX}/relocated-hwaccels.txt" | tr -d ' ' | grep -v '^$' | tr '\n' ' ')" \
+    || fail "-hwaccels failed from the relocated path"
+
+# Every bundled soname must resolve INSIDE the relocated tree. `ldd` prints the
+# path the loader would actually use, so this catches a host substitution that a
+# successful run alone would not.
+outside=""
+while read -r soname _ resolved _; do
+    [[ "${resolved}" == /* ]] || continue
+    case "${resolved}" in
+        "${RELOC}"/*) : ;;
+        *) [[ -e "${RELOC}/lib/tesserafin/ffmpeg/lib/${soname}" ]] && outside+="${soname} -> ${resolved}"$'\n' ;;
+    esac
+done < <(ldd "${reloc_ffmpeg}" 2>/dev/null | sed -nE 's/^\s*(\S+) (=>) (\S+).*/\1 \2 \3 x/p')
+if [[ -n "${outside}" ]]; then
+    fail "a bundled library resolved to a HOST copy after relocation:"$'\n'"${outside}"
+else
+    pass "every bundled library the loader resolves comes from the relocated tree"
 fi
 
 echo "== 3. run the server from the extracted payload, unprivileged"
@@ -114,7 +161,7 @@ setpriv --reuid="$(id -u tfarchive)" --regid="$(id -g tfarchive)" --clear-groups
         --cachedir  "${STATE}/cache" \
         --logdir    "${STATE}/log" \
         --webdir    "${ROOT}/share/tesserafin/web" \
-        --ffmpeg    "${ROOT}/lib/tesserafin/ffmpeg/ffmpeg" \
+        --ffmpeg    "${ROOT}/lib/tesserafin/ffmpeg/bin/ffmpeg" \
     > "${PREFIX}/server.log" 2>&1 &
 SERVER_PID=$!
 # shellcheck disable=SC2064

@@ -17,7 +17,8 @@ WorkingDirectory=/usr/lib/tesserafin
 
 # `--webdir` (never `--nowebclient`) hosts the bundled Tesserafin Web payload, so
 # `/` redirects to `/web/` and serves the first-run wizard. `--ffmpeg` points at
-# the bundled, checksum-pinned encoder: the server must never silently fall back
+# the bundled Tesserafin FFmpeg runtime under
+# /usr/lib/tesserafin/ffmpeg/bin/ffmpeg: the server must never silently fall back
 # to whatever `ffmpeg` happens to be on $PATH.
 ExecStart=/usr/lib/tesserafin/tesserafin \
     --configdir ${TESSERAFIN_CONFIG_DIR} \

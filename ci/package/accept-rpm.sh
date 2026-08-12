@@ -109,7 +109,7 @@ rpm -qi tesserafin-server > /tmp/tf-rpm-info.txt
 grep -q "^Name *: tesserafin-server$" /tmp/tf-rpm-info.txt || fail "wrong package name"
 grep -q "^Version *: ${VERSION}$"      /tmp/tf-rpm-info.txt || fail "wrong package version"
 grep -q "^Architecture: ${RPM_ARCH}$"  /tmp/tf-rpm-info.txt || fail "wrong architecture"
-# Identity fields only; the description legitimately names jellyfin-ffmpeg.
+# Identity fields only; no package metadata carries Jellyfin branding at all.
 if grep -E '^(Name|Summary|URL|Packager) *:' /tmp/tf-rpm-info.txt | grep -qi 'jellyfin'; then
     fail "package identity metadata carries Jellyfin branding"
 fi
@@ -120,7 +120,7 @@ grep -q "^Build Host *: tesserafin-build$" /tmp/tf-rpm-info.txt \
 pass "metadata: tesserafin-server ${VERSION}-1 ${RPM_ARCH}"
 
 for path in /usr/bin/tesserafin /usr/lib/tesserafin/tesserafin \
-            /usr/lib/tesserafin/ffmpeg/ffmpeg /usr/share/tesserafin/web/index.html \
+            /usr/lib/tesserafin/ffmpeg/bin/ffmpeg /usr/share/tesserafin/web/index.html \
             /usr/lib/systemd/system/tesserafin.service /etc/tesserafin/tesserafin.conf; do
     [[ -e "${path}" ]] || fail "missing installed path ${path}"
 done
@@ -176,7 +176,7 @@ run_uid="$(ps -o uid= -p "${main_pid}" | tr -d ' ')"
 run_user="$(ps -o user= -p "${main_pid}" | tr -d ' ')"
 [[ "${run_uid}" != "0" ]]           || fail "the service is running as root"
 [[ "${run_user}" == "tesserafin" ]] || fail "the service runs as '${run_user}', expected tesserafin"
-/usr/lib/tesserafin/ffmpeg/ffmpeg -hide_banner -version | head -1
+/usr/lib/tesserafin/ffmpeg/bin/ffmpeg -hide_banner -version | head -1
 pass "running as ${run_user} (uid ${run_uid})"
 
 echo "== 8. sentinels in configuration and state"

@@ -38,17 +38,34 @@ PREFIX="tesserafin-server-${VERSION}-${RID}"
 ROOT="${WORK}/${PREFIX}"
 mkdir -p "${ROOT}/lib" "${ROOT}/share" "${ROOT}/bin"
 
+# /usr/lib/tesserafin carries the server AND the FFmpeg runtime's bin/ + lib/, so
+# the runtime's $ORIGIN/../lib relationship is preserved by copying the tree
+# whole. -a keeps the bundled SONAME symlinks as symlinks; dereferencing them
+# here would double the archive and break the loader's own resolution.
 cp -a "${STAGE}/usr/lib/tesserafin"   "${ROOT}/lib/tesserafin"
 cp -a "${STAGE}/usr/share/tesserafin" "${ROOT}/share/tesserafin"
 cp -a "${STAGE}/usr/share/licenses/tesserafin-server/LICENSE" "${ROOT}/LICENSE"
+cp -a "${STAGE}/usr/share/doc/tesserafin-server/FFMPEG-CORRESPONDING-SOURCE.txt" \
+      "${ROOT}/FFMPEG-CORRESPONDING-SOURCE.txt"
+
+# The runtime's licence texts travel with the runtime. An archive that carried
+# GPL-3.0-or-later binaries and only the server's GPL-2.0-or-later text would be
+# an incomplete distribution, not a smaller one.
+mkdir -p "${ROOT}/licenses"
+cp -a "${STAGE}/usr/share/licenses/tesserafin-server/ffmpeg" "${ROOT}/licenses/ffmpeg"
+
 ln -sf ../lib/tesserafin/tesserafin "${ROOT}/bin/tesserafin"
 
-sed -e "s|@VERSION@|${VERSION}|g" \
-    -e "s|@RID@|${RID}|g" \
-    -e "s|@VCS_REF@|${VCS_REF}|g" \
-    -e "s|@WEB_VCS_REF@|${WEB_VCS_REF}|g" \
-    -e "s|@FFMPEG_VERSION@|${FFMPEG_VERSION}|g" \
-    "${PKG_REPO_ROOT}/packaging/linux/archive/README.md.in" > "${ROOT}/README.md"
+for template in README LICENSES; do
+    sed -e "s|@VERSION@|${VERSION}|g" \
+        -e "s|@RID@|${RID}|g" \
+        -e "s|@VCS_REF@|${VCS_REF}|g" \
+        -e "s|@WEB_VCS_REF@|${WEB_VCS_REF}|g" \
+        -e "s|@F0_BUILD_REVISION@|${F0_BUILD_REVISION}|g" \
+        -e "s|@F0_UPSTREAM_COMMIT@|${F0_FFMPEG_COMMIT}|g" \
+        -e "s|@F0_UPSTREAM_REPOSITORY@|${F0_FFMPEG_REPOSITORY}|g" \
+        "${PKG_REPO_ROOT}/packaging/linux/archive/${template}.md.in" > "${ROOT}/${template}.md"
+done
 
 pkg_clamp_mtimes "${ROOT}"
 
