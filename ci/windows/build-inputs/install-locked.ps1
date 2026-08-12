@@ -34,13 +34,22 @@ function Stop-Hard {
 
 New-Item -ItemType Directory -Force -Path $EvidenceDir | Out-Null
 
+# Prefer an explicitly supplied root. Deriving one from `bash.exe` on PATH
+# finds Git for Windows' bash on a hosted runner, and that tree has no
+# etc/pacman.d — the caller must say which MSYS2 this is.
 if (-not $MsysRoot) {
     $bashCommand = Get-Command bash.exe -ErrorAction SilentlyContinue
-    if (-not $bashCommand) { Stop-Hard 'no bash.exe on PATH; is MSYS2 set up?' }
+    if (-not $bashCommand) { Stop-Hard 'no bash.exe on PATH and no -MsysRoot given' }
     $MsysRoot = Split-Path -Parent (Split-Path -Parent $bashCommand.Source)
+    Write-Host "no -MsysRoot given; derived $MsysRoot from $($bashCommand.Source)"
 }
+$MsysRoot = $MsysRoot.TrimEnd('\', '/')
 $bash = Join-Path $MsysRoot 'usr\bin\bash.exe'
 if (-not (Test-Path -LiteralPath $bash)) { Stop-Hard "no bash at $bash" }
+$pacman = Join-Path $MsysRoot 'usr\bin\pacman.exe'
+if (-not (Test-Path -LiteralPath $pacman)) {
+    Stop-Hard "no pacman at $pacman; '$MsysRoot' is not an MSYS2 installation"
+}
 Write-Host "MSYS2 root: $MsysRoot"
 
 # ── 1. The bundle must match its own manifest before anything is installed ──
