@@ -64,7 +64,14 @@ $binPath = '"{0}" --service --datadir "{1}" --configdir "{2}" --cachedir "{3}" -
     (Join-Path $stateRoot 'cache'),
     (Join-Path $stateRoot 'log')
 
-$create = Invoke-Sc -Arguments @('create', $serviceName, "binPath= $binPath", 'start= demand', 'DisplayName= Tesserafin W0 stock probe')
+# sc.exe wants each `key=` and its value as SEPARATE argv entries -- `cmd` splits
+# `start= demand` into two tokens and sc.exe rejoins them. Passing one argument
+# containing the space yields "ERROR: Invalid start= field" and no service.
+$create = Invoke-Sc -Arguments @(
+    'create', $serviceName,
+    'binPath=', $binPath,
+    'start=', 'demand',
+    'DisplayName=', 'Tesserafin W0 stock probe')
 
 $startWatch = [System.Diagnostics.Stopwatch]::StartNew()
 $start = Invoke-Sc -Arguments @('start', $serviceName)
@@ -188,7 +195,11 @@ if ($spikePublishExit -eq 0) {
     $spikeExe = Join-Path $spikePublish 'w0servicehost.exe'
     [Environment]::SetEnvironmentVariable('W0_SENTINEL', $sentinel, 'Machine')
 
-    $spikeFacts.create = Invoke-Sc -Arguments @('create', $spikeName, "binPath= `"$spikeExe`"", 'start= demand', 'DisplayName= Tesserafin W0 service-host spike')
+    $spikeFacts.create = Invoke-Sc -Arguments @(
+        'create', $spikeName,
+        'binPath=', $spikeExe,
+        'start=', 'demand',
+        'DisplayName=', 'Tesserafin W0 service-host spike')
 
     $spikeStartWatch = [System.Diagnostics.Stopwatch]::StartNew()
     $spikeFacts.start = Invoke-Sc -Arguments @('start', $spikeName)
@@ -238,7 +249,11 @@ New-Item -ItemType Directory -Force -Path $aclProbeRoot | Out-Null
 
 $aclService = 'TesserafinW0Acl'
 Remove-ProbeService -Name $aclService
-$aclCreate = Invoke-Sc -Arguments @('create', $aclService, "binPath= `"$exe`"", 'start= demand', 'obj= NT SERVICE\TesserafinW0Acl')
+$aclCreate = Invoke-Sc -Arguments @(
+    'create', $aclService,
+    'binPath=', $exe,
+    'start=', 'demand',
+    'obj=', 'NT SERVICE\TesserafinW0Acl')
 
 $aclResult = @{ create = $aclCreate }
 try {
