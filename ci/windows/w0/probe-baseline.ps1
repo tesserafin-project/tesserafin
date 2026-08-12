@@ -107,12 +107,19 @@ function Get-HttpResponse {
 
 function Wait-ForHttp {
     <#
-        Readiness is '/' ANSWERING -- with any status at all. It is deliberately
-        not "'/' returns 200": Tesserafin redirects '/' to the web client, and a
-        probe that only accepted 200 would be asserting a routing decision rather
-        than measuring whether the server is up. /System/Info/Public is also
-        wrong for this, because the startup SetupServer answers it long before
-        the application host exists.
+        Readiness is NOT "the port answers", and it is NOT "'/' answers with any
+        status" either. Tesserafin's startup SetupServer binds the real port
+        early and answers EVERY path with 503 and
+        {"status":"starting",...} until the application host takes over. A probe
+        that accepts any status therefore measures the setup server and calls a
+        server that never came up "started" -- which is exactly what happened
+        here, and it made the no-FFmpeg negative control report success while
+        the server was dying.
+
+        So readiness is "'/' answers with something OTHER than 503". Requiring
+        200 would instead assert a routing decision: '/' redirects to the web
+        client. The last 503 body is kept so the transition is visible in the
+        evidence rather than inferred.
     #>
     param(
         [Parameter(Mandatory)] [string] $BaseUrl,
@@ -121,15 +128,19 @@ function Wait-ForHttp {
 
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     $lastError = ''
+    $lastSetup = ''
     while ((Get-Date) -lt $deadline) {
         try {
-            return Get-HttpResponse -Uri $BaseUrl -TimeoutSeconds 10
+            $response = Get-HttpResponse -Uri $BaseUrl -TimeoutSeconds 10
+            if ($response.status -ne 503) { return $response }
+            $lastSetup = $response.body
         } catch {
             $lastError = $_.Exception.Message
         }
         Start-Sleep -Milliseconds 750
     }
-    Write-Host "W0: '$BaseUrl' never answered; last transport error: $lastError"
+    Write-Host ("W0: '$BaseUrl' never left the startup SetupServer. " +
+                "last 503 body: '$lastSetup'; last transport error: '$lastError'")
     return $null
 }
 
