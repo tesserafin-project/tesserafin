@@ -295,12 +295,36 @@ jobs:
           restore-keys: ${{ runner.os }}-nuget-
 
       # Identical to the command ci-tests.yml runs, so the answer is comparable.
+      #
+      # continue-on-error because this job reports on MASTER, not on this branch.
+      # It is EVIDENCE, not a gate: the W0 pull request must not be gated on
+      # pre-existing Windows failures it neither introduced nor is allowed to fix.
+      # The summary step below states the result in words so a non-blocking job
+      # can never be mistaken for a passing one.
       - name: Run DotNet CLI Tests
+        id: tests
+        continue-on-error: true
         run: >
           dotnet test Tesserafin.sln
           --configuration Release
           --filter 'Category!=Smoke'
           --verbosity minimal
+
+      - name: State the result plainly
+        if: ${{ always() }}
+        run: |
+          if [ "${{ steps.tests.outcome }}" = "success" ]; then
+            echo "### Windows test suite: GREEN on this tree" >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "### Windows test suite: RED on this tree"
+              echo ""
+              echo "Pre-existing native Windows failures on master. This job is"
+              echo "evidence for W0, not a gate, and W0 does not fix them."
+              echo "See docs/distribution/W0-windows-server.md section 2.7."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+        shell: bash
 
   # ── Static analysis and unit tests for the probe harness itself ─────────────
   probe-selftest:

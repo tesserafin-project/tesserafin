@@ -41,6 +41,17 @@ Import-Module (Join-Path $PSScriptRoot 'W0Probe.psm1') -Force
 
 $evidence = New-W0Evidence -Probe 'installer' -HeadSha $HeadSha
 
+# Evidence is worth more than a clean stack. A probe that dies half way through
+# still measured something, and losing that forces a whole hosted run to be
+# repeated to learn what was already known. `break` rethrows, so the job still
+# fails; it just fails with a ledger attached.
+trap {
+    if ($null -ne $evidence) {
+        Save-W0Evidence -Evidence $evidence -Path (Join-Path $EvidenceDir 'installer.json') | Out-Null
+    }
+    break
+}
+
 $installRoot = Join-Path $env:ProgramFiles 'TesserafinW0'
 $dataRoot = Join-Path $env:ProgramData 'TesserafinW0'
 $serviceName = 'TesserafinW0Installed'
@@ -59,18 +70,17 @@ if (-not (Test-Path -LiteralPath $payloadSource)) {
     throw "W0: probe-service.ps1 must run first; '$payloadSource' does not exist."
 }
 
-# Keep the experiment payload small: an MSI over a full self-contained publish
-# turns every lifecycle step into a multi-minute file copy and measures the disk,
-# not the installer.
+# The payload is the single-file service host and a marker file, and nothing
+# else. It has to be a payload that actually RUNS: the MSI starts the service
+# inside the install transaction, so a payload that cannot start would fail the
+# install and the experiment would be measuring the payload rather than the
+# installer. Keeping it to two files also keeps every lifecycle step from
+# becoming a multi-minute file copy that measures the disk.
 $payload = Join-Path $WorkRoot 'installer-payload'
 if (Test-Path -LiteralPath $payload) { Remove-Item -Recurse -Force -LiteralPath $payload }
 New-Item -ItemType Directory -Force -Path $payload | Out-Null
 Copy-Item -LiteralPath (Join-Path $payloadSource 'w0servicehost.exe') -Destination $payload -Force
-Get-ChildItem -LiteralPath $payloadSource -Filter '*.dll' |
-    Where-Object { $_.Name -in 'hostfxr.dll', 'hostpolicy.dll', 'coreclr.dll', 'System.Private.CoreLib.dll', 'clrjit.dll' } |
-    Copy-Item -Destination $payload -Force
-Copy-Item -LiteralPath (Join-Path $payloadSource 'w0servicehost.runtimeconfig.json') -Destination $payload -Force -ErrorAction SilentlyContinue
-Copy-Item -LiteralPath (Join-Path $payloadSource 'w0servicehost.deps.json') -Destination $payload -Force -ErrorAction SilentlyContinue
+Set-Content -LiteralPath (Join-Path $payload 'marker.txt') -Value "w0 $HeadSha" -Encoding utf8NoBOM
 
 # -- Candidate A: WiX MSI -------------------------------------------------------
 
@@ -86,11 +96,22 @@ $wixFacts.reportedVersion = (& wix --version 2>&1 | Out-String).Trim()
 # Read the licence out of the package that was actually resolved rather than
 # asserting terms from memory. Redistribution compatibility is a scored criterion
 # and must come from the artifact.
-$wixPackage = Get-ChildItem -LiteralPath (Join-Path $env:USERPROFILE '.nuget\packages\wix') -Directory -ErrorAction SilentlyContinue |
-    Where-Object { $_.Name -eq $WixVersion } | Select-Object -First 1
+$packageRoots = @(
+    $env:NUGET_PACKAGES
+    (Join-Path $env:USERPROFILE '.nuget\packages')
+) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
+
+$wixPackage = $packageRoots |
+    ForEach-Object { Join-Path $_ "wix\$WixVersion" } |
+    Where-Object { Test-Path -LiteralPath $_ } |
+    Select-Object -First 1 |
+    ForEach-Object { Get-Item -LiteralPath $_ }
+
 $wixFacts.licence = 'not-read'
+$wixFacts.packageRootsSearched = $packageRoots
 if ($wixPackage) {
-    $nuspec = Get-ChildItem -LiteralPath $wixPackage.FullName -Filter '*.nuspec' | Select-Object -First 1
+    $nuspec = Get-ChildItem -LiteralPath $wixPackage.FullName -Filter '*.nuspec' -Recurse |
+        Select-Object -First 1
     if ($nuspec) {
         $spec = [xml](Get-Content -LiteralPath $nuspec.FullName -Raw)
         $wixFacts.licence = @{
@@ -155,7 +176,7 @@ function New-ProbeMsi {
                         Wait="yes" />
       </Component>
       <Component Id="Runtime" Guid="8d5c1e77-2b4a-4c6f-9a13-7e0d4f8b2c65">
-        <File Id="MarkerFile" Source="$payload\w0servicehost.runtimeconfig.json" KeyPath="yes" />
+        <File Id="MarkerFile" Source="$payload\marker.txt" KeyPath="yes" />
       </Component>
     </ComponentGroup>
 
@@ -234,7 +255,7 @@ $lifecycle.installedProducts = @(Get-CimInstance -ClassName Win32_Product -Error
 $lifecycle.singleProductAfterUpgrade = $lifecycle.installedProducts.Count -eq 1
 
 # 4. repair, after deliberately removing a delivered file
-$victim = Join-Path $installRoot 'w0servicehost.runtimeconfig.json'
+$victim = Join-Path $installRoot 'marker.txt'
 Remove-Item -LiteralPath $victim -Force -ErrorAction SilentlyContinue
 $lifecycle.victimRemoved = -not (Test-Path -LiteralPath $victim)
 $lifecycle.repair = Invoke-Msi -Arguments @('/f', "`"$msiV2`"") -LogName 'msi-repair.log'

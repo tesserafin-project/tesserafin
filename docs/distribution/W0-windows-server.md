@@ -167,6 +167,53 @@ transcode is running, so the measurement is a **floor**, not a worst case. The
 Linux side already shows post-transcode shutdown taking tens of seconds; W3's
 service stop timeout must be derived from the worst case, never from §2.6.
 
+### 2.7 The server is not test-green on native Windows
+
+Running the identical `Tests` command on `windows-latest` against the frozen
+master produces **72 failures out of roughly 3,560 tests**, in four assemblies:
+
+| Assembly | Failed | Total |
+| --- | --- | --- |
+| `Tesserafin.Server.Tests` | 69 | 201 |
+| `Tesserafin.Controller.Tests` | 1 | 338 |
+| `Tesserafin.MediaEncoding.Tests` | 1 | 264 |
+| `Tesserafin.Server.Integration.Tests` | 1 | 189 |
+
+Every other assembly is green. The failures fall into three families:
+
+1. **Log-forging guards under CRLF (the 67-test bulk).** Every
+   `…LogTests.*_WritesExactlyOnePhysicalRecord` assertion in
+   `Tesserafin.Server.Tests.LogForging` fails on Windows. These tests count
+   *physical* log records, and `Environment.NewLine` is `\r\n` on Windows and
+   `\n` on Linux, so a hostile value containing a bare `\r` splits differently
+   than the Linux-tuned assertion expects. This family is security-adjacent —
+   it is the log-injection guard — so "the test is Linux-shaped" must be
+   *proven* rather than assumed before it is written off. Whether the guard or
+   the assertion is wrong on Windows is a real question W0 does not answer.
+2. **Child-process standard input.**
+   `TranscodingJobStopTests.Stop_ProcessReadsQFromStdin_ExitsGracefullyWithoutBeingKilled`
+   and `FfmpegProcessRunnerTests.RunProbeAsync_StandardInput_IsWrittenToChildProcess`.
+   This is the `q`-on-stdin graceful-stop path, which is exactly the mechanism a
+   Windows Service stop has to rely on to end a transcode cleanly. **W3 depends
+   on this working**, so it is not a cosmetic failure.
+3. **Cross-host OpenAPI contract.**
+   `OpenApiXmlDocumentationOrderTests.XmlDocumentationFiles_ReadsTopLevelXmlInCanonicalOrder`
+   and `OpenApiContractTests.CommittedContract_MatchesRunningServer`. This is the
+   same family as the macOS failure in §2.1: the canonical XML documentation
+   order does not survive a third host, so the generated contract diverges.
+
+All 72 are **pre-existing on master**. W0 introduces none of them, fixes none of
+them, and does not gate its own pull request on them — the probe workflow's
+`windows-tests` job is marked `continue-on-error` and states its result in words
+so a non-blocking job cannot be mistaken for a passing one.
+
+They are recorded here because a Windows distribution whose server fails 72
+tests on the platform it is being distributed for is not a distribution anyone
+should sign. **Closing families 2 and 3 is a precondition for W3 and W5
+respectively**, and family 1 needs a ruling on whether the guard or the
+assertion is at fault. This deserves its own tracked issue; W0 names it rather
+than absorbing it.
+
 ---
 
 ## 3. Gap inventory
@@ -205,6 +252,12 @@ these, enforced at recording time.
 | Windows signing configuration | none, by ruling (§11) |
 | daemonless Web-payload acquisition on Windows | the Linux path needs a Linux container runtime |
 
+### Not a gap in the distribution, but red on the platform
+
+72 of roughly 3,560 tests fail on native Windows on stock master (§2.7). None of
+them is a missing distribution surface, so none belongs in the table above — but
+two of the three families are preconditions for W3 and W5.
+
 ### Blocked
 
 Nothing in W0 is blocked. Every hard-stop condition in the tracker was tested
@@ -225,21 +278,22 @@ Linux and which Windows inherits.
 
 This is a measurement, not a preference. The probe establishes both halves:
 
-1. The unmodified `tesserafin.exe`, registered with the SCM and started, does
-   not participate in the service lifecycle. A plain console executable never
-   calls `StartServiceCtrlDispatcher`, so the SCM's verdict is a start failure —
-   classically error 1053, "the service did not respond to the start or control
-   request in a timely fashion". The probe also records whether a **live process
-   was left behind**, because an orphan is worse than a clean failure: an
-   installer would then be uninstalling a service whose process still holds the
-   database. This is a missing boundary in the **server**. No installer
-   technology can paper over it, and treating it as an installer problem is the
-   specific mistake #234 names.
+1. The unmodified `tesserafin.exe`, registered with the SCM and started,
+   **fails with error 1053 after 7 seconds** — "the service did not respond to
+   the start or control request in a timely fashion". That is the SCM's verdict
+   on a plain console executable that never calls
+   `StartServiceCtrlDispatcher`. The probe also recorded **zero orphaned
+   `tesserafin` processes**, which matters: an orphan would be worse than a clean
+   failure, because an installer would then be uninstalling a service whose
+   process still holds the database. This is a missing boundary in the
+   **server**. No installer technology can paper over it, and treating it as an
+   installer problem is the specific mistake #234 names.
 2. A disposable, throwaway Generic Host with `AddWindowsService`, published
-   self-contained `win-x64` and registered with the SCM, is driven through real
-   `sc start` and `sc stop` and must report `IsWindowsService() == True` and run
-   `IHostedService.StartAsync` **and** `StopAsync`. That is what makes "the
-   smallest maintainable design is sufficient" a fact.
+   self-contained `win-x64` and registered with the SCM, was driven through real
+   `sc start` and `sc stop`. It reported `IsWindowsService() == True` and ran
+   `IHostedService.StartAsync` **and** `StopAsync` — `lifecycleObserved = true`.
+   That is what makes "the smallest maintainable design is sufficient" a fact
+   rather than an expectation.
 
 A dedicated first-party service host is therefore **rejected**: it would add a
 second executable, a second lifetime and a second failure surface to obtain
@@ -334,8 +388,15 @@ be to confirm a disqualification already established.
 ### 5.5 Reproducible unsigned output, measured
 
 The probe builds the same MSI twice and compares SHA-256, and does the same for
-the ZIP. The answer is **measured, not assumed**, because an MSI carries a
-per-build package-code GUID and stream timestamps and is expected to differ.
+the ZIP. The answer is **measured, not assumed** — and the two disagree:
+
+| Artifact | Two identical builds | Result |
+| --- | --- | --- |
+| MSI (WiX 6.0.2+b3f3403) | `2a17c258…` vs `9fb97698…` | **not reproducible** |
+| portable ZIP | `899d995f…` vs `899d995f…` | **reproducible** |
+
+The MSI difference is structural, not a bug: an MSI carries a per-build package
+code GUID and stream timestamps.
 
 The consequence is a design constraint on §8 rather than a defect: **the
 reproducibility proof is carried by the ZIP and by the FFmpeg runtime
@@ -417,6 +478,20 @@ commit and **asserts** the resolved SHA, applies the quilt series, configures,
 compiles `ffmpeg.exe` and `ffprobe.exe`, records `-version`, `-buildconf`,
 encoders, decoders, filters, protocols and hwaccels, inspects PE architecture
 and the import table, and runs a software **encode → probe → decode** smoke.
+
+**Result, on `windows-latest`:** all **95** patches in the fork's series applied
+cleanly, `ffmpeg` **7.1.4** and `ffprobe` built, both **PE32+ x86-64**, and the
+software encode -> probe -> decode smoke **passed** (139,833 bytes encoded,
+`mpeg4` video plus native `aac` audio, re-probed and decoded on the same host).
+
+The import closure is worth stating explicitly, because it is the Windows
+redistribution question in concrete form. Both executables import **only**
+Windows system DLLs and the UCRT forwarders — `KERNEL32`, `USER32`, `GDI32`,
+`SHELL32`, `SHLWAPI`, `ole32`, `OLEAUT32`, `WS2_32`, `AVICAP32`, `bcrypt` and
+`api-ms-win-crt-*`. There is no MinGW runtime DLL, no `libwinpthread`, no
+`libc++` and nothing from MSYS2 in the closure. A static native build therefore
+delivers as two files with no redistributable to ship alongside them, which is a
+materially better position than the Linux side's `DT_NEEDED` closure.
 
 It is bounded by `--disable-autodetect` **on purpose**. That proves the build
 *mechanism* and stops MSYS2's ambient packages from silently entering the link,
@@ -675,9 +750,13 @@ Open risks, ranked:
 2. **MSI bytes are not reproducible (§5.5).** Handled by design — the proof
    moves to the ZIP and the FFmpeg component and the MSI records input digests —
    but it must not be quietly re-described as "the MSI reproduces".
-3. **`OpenApiXmlDocumentationOrderTests` fails on macOS on master.** Pre-existing
-   and out of W0 scope, but collation-shaped; if Windows disagrees with Linux on
-   the canonical order, the contract gate has a second host to reconcile.
+3. **72 tests fail on native Windows on stock master (§2.7).** Pre-existing and
+   outside W0 scope, but not cosmetic. The child-process stdin family is the
+   `q`-on-stdin graceful-stop path **W3 depends on**; the OpenAPI family is a
+   cross-host contract divergence **W5 depends on**; and the 67-test log-forging
+   family is a security guard whose Windows behaviour is unproven either way.
+   Confirmed on Windows what §2.1 already showed on macOS: the canonical XML
+   documentation order does not survive a third host.
 4. **Web payload acquisition on Windows.** The Linux path needs a Linux
    container runtime. W2 must implement a daemonless digest-pinned OCI pull;
    until it does, the payload crosses a boundary the production path will not
