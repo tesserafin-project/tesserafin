@@ -1,11 +1,11 @@
 {
-  "compressedBytes": 407637205,
+  "compressedBytes": 406886665,
   "ffmpeg": {
     "buildRevision": "7.1.4-tesserafin.1",
     "source": "ci/ffmpeg/components.json, asserted equal to ci/package/pins.env",
     "upstreamCommit": "d4590e12452f94d40e413caecb34b08de608353b"
   },
-  "installedBytes": 2699049167,
+  "installedBytes": 2695179178,
   "mingwPackagePrefix": "mingw-w64-clang-x86_64",
   "msystem": "CLANG64",
   "packageCount": 246,
@@ -4317,23 +4317,21 @@
     },
     {
       "architecture": "x86_64",
-      "compressedBytes": 2746999,
+      "compressedBytes": 1996459,
       "depends": [],
-      "filename": "msys2-runtime-3.3-3.3.6-16-x86_64.pkg.tar.zst",
+      "filename": "msys2-runtime-3.6.10-2-x86_64.pkg.tar.zst",
       "groups": [],
-      "installedBytes": 10671620,
+      "installedBytes": 6801631,
       "license": [
-        "GPL"
+        "spdx:GPL-3.0-or-later"
       ],
-      "name": "msys2-runtime-3.3",
-      "provides": [
-        "msys2-runtime=3.3.6"
-      ],
+      "name": "msys2-runtime",
+      "provides": [],
       "repository": "msys",
-      "sha256": "97b9bf47fb6682f849d4f63c9fc33a59b70d904a5e7a1aea7249c8829663b0b1",
-      "signatureUrl": "https://repo.msys2.org/msys/x86_64/msys2-runtime-3.3-3.3.6-16-x86_64.pkg.tar.zst.sig",
-      "url": "https://repo.msys2.org/msys/x86_64/msys2-runtime-3.3-3.3.6-16-x86_64.pkg.tar.zst",
-      "version": "3.3.6-16"
+      "sha256": "60f418696c4b683843596e45838f9e52c3391ff3fdfd550ee32a0655d949cf53",
+      "signatureUrl": "https://repo.msys2.org/msys/x86_64/msys2-runtime-3.6.10-2-x86_64.pkg.tar.zst.sig",
+      "url": "https://repo.msys2.org/msys/x86_64/msys2-runtime-3.6.10-2-x86_64.pkg.tar.zst",
+      "version": "3.6.10-2"
     },
     {
       "architecture": "x86_64",

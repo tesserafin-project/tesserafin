@@ -133,10 +133,22 @@ def index(*databases: Dict[str, dict]) -> tuple:
     for database in databases:
         packages.update(database)
 
+    # TWO passes, and the order is load-bearing. A real package must always win
+    # the name it actually has, before any other package's virtual %PROVIDES%
+    # can claim it.
+    #
+    # Measured, not theoretical: `base` depends on `msys2-runtime`, and the
+    # compatibility package `msys2-runtime-3.3` declares
+    # `provides: msys2-runtime=3.3.6`. A single pass let whichever package was
+    # visited first take the name, and the compat package won -- so the closure
+    # carried an OLDER runtime instead of the real one. Installing that
+    # downgraded the runtime out from under the running MSYS2 and every
+    # subsequent process failed to fork.
     provides: Dict[str, str] = {}
     groups: Dict[str, List[str]] = {}
+    for name in packages:
+        provides[name] = name
     for name, record in packages.items():
-        provides.setdefault(name, name)
         for expression in record["provides"]:
             provides.setdefault(_CONSTRAINT.split(expression)[0], name)
         for group in record["groups"]:
