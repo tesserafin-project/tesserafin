@@ -1,0 +1,413 @@
+# Windows FFmpeg build-input retention (#236, W1-R).
+#
+# THIS WORKFLOW SHIPS NOTHING. It carries MSYS2 build inputs — compilers and
+# build tools — and never an FFmpeg binary, a Tesserafin server runtime, an
+# installer or anything a user downloads.
+#
+# It has two deliberately separated paths:
+#
+#   VALIDATION  (pull_request, push to the W1-R branch, workflow_dispatch)
+#     `contents: read` only. It CANNOT publish: it is not granted
+#     `packages: write` at any level, and the publish job is gated on the
+#     trusted branch as well.
+#
+#   PUBLICATION (workflow_dispatch from refs/heads/master only)
+#     the only job with `packages: write`, and only at job level. It pushes the
+#     exact manifest bytes a reviewed digest names, reads them back and compares.
+#
+# The gate on `github.ref` is asserted INSIDE the publisher's steps, not only in
+# a job-level `if:`. A job-level `if:` that evaluates false reports SUCCESS, and
+# a security boundary that reports success when it did not run is not a boundary.
+
+name: W1 Windows Build Inputs
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'ci/windows/build-inputs/**'
+      - '.github/workflows/w1-windows-build-inputs.yml'
+      - 'docs/distribution/W1-windows-build-input-retention.md'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish the reviewed bundle to GHCR (master only)'
+        type: boolean
+        default: false
+
+# Read-only for the whole workflow. The publisher raises its own, at job level.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: true
+
+env:
+  # The commit every job checks out and every evidence document records.
+  #
+  # On `pull_request`, actions/checkout defaults to the SYNTHETIC MERGE REF,
+  # which exists in no branch and changes whenever master moves. W0 was bitten
+  # by exactly that (docs/distribution/W0-windows-server.md, finding 1). On
+  # `workflow_dispatch` there is no pull request and this resolves to the
+  # dispatched commit.
+  W1R_EVIDENCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
+jobs:
+  # ── The lock is a contract, and it is checked before anything is fetched ────
+  lock:
+    name: Lock, contract and negative controls
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ env.W1R_EVIDENCE_SHA }}
+          persist-credentials: false
+
+      - name: Assert the evidence SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          echo "expected : ${W1R_EVIDENCE_SHA}"
+          echo "actual   : ${actual}"
+          if [ "${actual}" != "${W1R_EVIDENCE_SHA}" ]; then
+            echo "W1-R HARD STOP: standing in ${actual}, not ${W1R_EVIDENCE_SHA}." >&2
+            exit 1
+          fi
+
+      - name: Validate the committed lock
+        run: python3 ci/windows/build-inputs/verify-lock.py --lock ci/windows/build-inputs/msys2-lock.json
+
+      - name: Assert the FFmpeg pins are consumed, not forked
+        shell: bash
+        run: |
+          set -euo pipefail
+          locked="$(python3 -c 'import json;print(json.load(open("ci/windows/build-inputs/msys2-lock.json"))["ffmpeg"]["upstreamCommit"])')"
+          component="$(python3 -c 'import json;print(json.load(open("ci/ffmpeg/components.json"))["ffmpeg"]["commit"])')"
+          pinned="$(grep -E '^F0_UPSTREAM_COMMIT=' ci/package/pins.env | cut -d= -f2)"
+          echo "lock       : ${locked}"
+          echo "components : ${component}"
+          echo "pins.env   : ${pinned}"
+          if [ "${locked}" != "${component}" ] || [ "${locked}" != "${pinned}" ]; then
+            echo "W1-R HARD STOP: the Windows lock has forked the Linux FFmpeg pin." >&2
+            exit 1
+          fi
+
+      - name: Negative controls
+        run: python3 ci/windows/build-inputs/negative-controls.py --repo-root .
+
+  # ── Two independent ingest+build passes, on two separate runner instances ──
+  build:
+    name: Deterministic bundle (pass ${{ matrix.pass }})
+    needs: [lock]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        pass: [a, b]
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ env.W1R_EVIDENCE_SHA }}
+          persist-credentials: false
+
+      - name: Assert the evidence SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          echo "expected : ${W1R_EVIDENCE_SHA}"
+          echo "actual   : ${actual}"
+          [ "${actual}" = "${W1R_EVIDENCE_SHA}" ] || {
+            echo "W1-R HARD STOP: standing in ${actual}." >&2; exit 1; }
+
+      # Each matrix leg is a distinct runner instance with its own filesystem,
+      # so the two passes share no download cache, no bundle and no layout.
+      # There is deliberately NO actions/cache step anywhere in this workflow.
+      - name: Ingest the locked archives
+        env:
+          LC_ALL: C
+          TZ: UTC
+        run: |
+          set -euo pipefail
+          python3 ci/windows/build-inputs/ingest.py \
+            --lock ci/windows/build-inputs/msys2-lock.json \
+            --out "${RUNNER_TEMP}/bundle-${{ matrix.pass }}"
+
+      - name: Build the OCI layout
+        env:
+          LC_ALL: C
+          TZ: UTC
+        run: |
+          set -euo pipefail
+          python3 ci/windows/build-inputs/build-oci.py \
+            --bundle "${RUNNER_TEMP}/bundle-${{ matrix.pass }}" \
+            --out "${RUNNER_TEMP}/oci-${{ matrix.pass }}" \
+            | tee "${RUNNER_TEMP}/descriptor-${{ matrix.pass }}.json"
+
+      # The layer is ~390 MiB and is NOT uploaded: the comparison needs the
+      # bundle's path digests and the descriptor, and re-uploading the archives
+      # would only prove that an artifact round-trips.
+      - name: Collect the comparable evidence
+        run: |
+          set -euo pipefail
+          out="${RUNNER_TEMP}/evidence-${{ matrix.pass }}"
+          mkdir -p "${out}"
+          cp "${RUNNER_TEMP}/oci-${{ matrix.pass }}/manifest.json" "${out}/manifest.json"
+          cp "${RUNNER_TEMP}/oci-${{ matrix.pass }}/descriptor.json" "${out}/descriptor.json"
+          cp "${RUNNER_TEMP}/bundle-${{ matrix.pass }}/manifest.sha256" "${out}/manifest.sha256"
+          cp "${RUNNER_TEMP}/bundle-${{ matrix.pass }}/bundle.json" "${out}/bundle.json"
+          cp "${RUNNER_TEMP}/bundle-${{ matrix.pass }}/signatures/signatures.json" "${out}/signatures.json"
+          printf '%s\n' "${W1R_EVIDENCE_SHA}" > "${out}/evidence-sha.txt"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: w1r-evidence-${{ matrix.pass }}
+          path: ${{ runner.temp }}/evidence-${{ matrix.pass }}
+          if-no-files-found: error
+          retention-days: 3
+
+  # ── The comparison, in its own job, downloading only the two evidence sets ──
+  compare:
+    name: Two-build reproducibility
+    needs: [build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ env.W1R_EVIDENCE_SHA }}
+          persist-credentials: false
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: w1r-evidence-a
+          path: ${{ runner.temp }}/a
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: w1r-evidence-b
+          path: ${{ runner.temp }}/b
+
+      - name: Compare the two builds and the reviewed digest
+        shell: bash
+        run: |
+          set -euo pipefail
+          a="${RUNNER_TEMP}/a"
+          b="${RUNNER_TEMP}/b"
+
+          for name in a b; do
+            recorded="$(cat "${RUNNER_TEMP}/${name}/evidence-sha.txt")"
+            [ "${recorded}" = "${W1R_EVIDENCE_SHA}" ] || {
+              echo "W1-R HARD STOP: pass ${name} recorded ${recorded}." >&2; exit 1; }
+          done
+
+          # Complete path inventory first, then per-path digests, then the
+          # container digests — a digest-first comparison would say "differs"
+          # and name nothing.
+          diff -u <(cut -d' ' -f3- "${a}/manifest.sha256" | sort) \
+                  <(cut -d' ' -f3- "${b}/manifest.sha256" | sort) \
+            || { echo "W1-R HARD STOP: the two builds deliver different paths." >&2; exit 1; }
+          echo "path inventory  : identical ($(wc -l < "${a}/manifest.sha256") paths)"
+
+          diff -u <(sort "${a}/manifest.sha256") <(sort "${b}/manifest.sha256") \
+            || { echo "W1-R HARD STOP: a delivered path differs between the builds." >&2; exit 1; }
+          echo "per-path digests: identical"
+
+          cmp "${a}/manifest.json" "${b}/manifest.json" \
+            || { echo "W1-R HARD STOP: the manifest BYTES differ." >&2; exit 1; }
+          cmp "${a}/descriptor.json" "${b}/descriptor.json" \
+            || { echo "W1-R HARD STOP: the descriptors differ." >&2; exit 1; }
+
+          built="$(python3 -c 'import hashlib,sys;print("sha256:"+hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "${a}/manifest.json")"
+          reviewed="$(python3 -c 'import json;print(json.load(open("ci/windows/build-inputs/expected-digest.json"))["manifestDigest"])')"
+          echo "built    : ${built}"
+          echo "reviewed : ${reviewed}"
+          if [ "${built}" != "${reviewed}" ]; then
+            echo "W1-R HARD STOP: both builds agree on ${built}, but the reviewed digest is ${reviewed}." >&2
+            exit 1
+          fi
+          echo "REPRODUCIBLE and equal to the reviewed digest"
+
+      - name: Summarise
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          {
+            echo "| field | value |"
+            echo "| --- | --- |"
+            python3 - <<'PY'
+          import json, os
+          d = json.load(open(os.environ["RUNNER_TEMP"] + "/a/descriptor.json"))
+          for key in ("manifestDigest", "layerDigest", "configDigest", "lockSha256", "layerSize"):
+              print(f"| {key} | `{d[key]}` |")
+          PY
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  # ── Native Windows: install the locked set from local files, no mirrors ─────
+  windows-install:
+    name: Native Windows install from locked files only
+    needs: [lock]
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ env.W1R_EVIDENCE_SHA }}
+          persist-credentials: false
+
+      - name: Assert the evidence SHA
+        shell: pwsh
+        run: |
+          $actual = (git rev-parse HEAD).Trim()
+          Write-Host "expected : $env:W1R_EVIDENCE_SHA"
+          Write-Host "actual   : $actual"
+          if ($actual -ne $env:W1R_EVIDENCE_SHA) {
+            throw "W1-R HARD STOP: standing in $actual."
+          }
+
+      # A bare MSYS2, so the install proves the LOCK is sufficient rather than
+      # relying on what an action happened to preinstall. `update: false` and no
+      # `install:` list: this action must not resolve anything.
+      - uses: msys2/setup-msys2@e9898307ac31d1a803454791be09ab9973336e1c # v2
+        with:
+          msystem: CLANG64
+          update: false
+          release: false
+
+      - name: Ingest the locked archives
+        shell: bash
+        env:
+          LC_ALL: C
+          TZ: UTC
+        run: |
+          set -euo pipefail
+          python3 ci/windows/build-inputs/ingest.py \
+            --lock ci/windows/build-inputs/msys2-lock.json \
+            --out "${RUNNER_TEMP}/bundle"
+
+      - name: Install from local files only, with every mirror removed
+        shell: pwsh
+        run: |
+          ./ci/windows/build-inputs/install-locked.ps1 `
+            -BundleDir (Join-Path $env:RUNNER_TEMP 'bundle') `
+            -EvidenceDir (Join-Path $env:RUNNER_TEMP 'w1r-evidence')
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ always() }}
+        with:
+          name: w1r-evidence-windows-install
+          path: ${{ runner.temp }}/w1r-evidence
+          if-no-files-found: error
+          retention-days: 3
+
+  # ── PUBLICATION. Never runs on a pull request. Not executed in W1-R-A. ──────
+  publish:
+    name: Publish the reviewed bundle to GHCR (master only)
+    needs: [compare, windows-install]
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.publish &&
+      github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: windows-build-input-publication
+    permissions:
+      contents: read
+      # The ONLY grant of packages: write in this repository's Windows work, and
+      # it is job level, not workflow level.
+      packages: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      # The trust boundary, asserted as a STEP. A job-level `if:` that evaluates
+      # false reports success; this cannot.
+      - name: Assert the trusted branch and the reviewed digest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, sys
+          sys.path.insert(0, "ci/windows/build-inputs")
+          import contract
+          contract.assert_trusted_ref(os.environ["GITHUB_REF"])
+          expected = json.load(open("ci/windows/build-inputs/expected-digest.json"))
+          contract.parse_reference(expected["reference"])
+          print("trusted ref and reviewed reference accepted")
+          PY
+
+      - name: Install the pinned ORAS
+        run: ./ci/windows/build-inputs/install-oras.sh linux-amd64 "${RUNNER_TEMP}/bin"
+
+      - name: Rebuild the bundle on this trusted runner
+        env:
+          LC_ALL: C
+          TZ: UTC
+        run: |
+          set -euo pipefail
+          python3 ci/windows/build-inputs/ingest.py \
+            --lock ci/windows/build-inputs/msys2-lock.json \
+            --out "${RUNNER_TEMP}/bundle"
+          python3 ci/windows/build-inputs/build-oci.py \
+            --bundle "${RUNNER_TEMP}/bundle" \
+            --out "${RUNNER_TEMP}/oci"
+
+      - name: Refuse to push anything but the reviewed digest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, os, sys
+          sys.path.insert(0, "ci/windows/build-inputs")
+          import contract
+          temp = os.environ["RUNNER_TEMP"]
+          built = "sha256:" + hashlib.sha256(
+              open(f"{temp}/oci/manifest.json", "rb").read()
+          ).hexdigest()
+          expected = json.load(open("ci/windows/build-inputs/expected-digest.json"))
+          contract.assert_expected_digest(expected["manifestDigest"], built)
+          print(f"this run built the reviewed digest {built}")
+          PY
+
+      - name: Push the exact manifest bytes
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          export PATH="${RUNNER_TEMP}/bin:${PATH}"
+          printf '%s' "${GHCR_TOKEN}" | oras login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+
+          repo="ghcr.io/tesserafin-project/windows-ffmpeg-build-inputs"
+          descriptor="${RUNNER_TEMP}/oci/descriptor.json"
+          layer="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["layerDigest"])' "${descriptor}")"
+          config="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["configDigest"])' "${descriptor}")"
+
+          # Blobs first, then the manifest — a manifest referencing a blob the
+          # registry does not hold is rejected, which is the ordering we want.
+          oras blob push "${repo}" "${RUNNER_TEMP}/oci/blobs/sha256/${layer#sha256:}"
+          oras blob push "${repo}" "${RUNNER_TEMP}/oci/blobs/sha256/${config#sha256:}"
+
+          # `oras manifest push` and NEVER `oras push`: the latter constructs a
+          # manifest of its own and would inject a created timestamp.
+          oras manifest push "${repo}@$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["manifestDigest"])' "${descriptor}")" \
+            --media-type application/vnd.oci.image.manifest.v1+json \
+            "${RUNNER_TEMP}/oci/manifest.json"
+
+      - name: Read it back by digest and compare byte for byte
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          export PATH="${RUNNER_TEMP}/bin:${PATH}"
+          digest="$(python3 -c 'import json;print(json.load(open("ci/windows/build-inputs/expected-digest.json"))["manifestDigest"])')"
+          oras manifest fetch "ghcr.io/tesserafin-project/windows-ffmpeg-build-inputs@${digest}" \
+            > "${RUNNER_TEMP}/registry-manifest.json"
+          cmp "${RUNNER_TEMP}/registry-manifest.json" "${RUNNER_TEMP}/oci/manifest.json" \
+            || { echo "W1-R HARD STOP: the registry stored different manifest bytes." >&2; exit 1; }
+          echo "the registry holds the reviewed manifest, byte for byte"
