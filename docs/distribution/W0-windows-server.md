@@ -116,7 +116,26 @@ both answers.
 correctly.
 
 Readiness is `/` answering, not `/System/Info/Public` answering: the latter is
-served by the startup `SetupServer` long before the application host is up.
+served by the startup `SetupServer` long before the application host is up. A
+cold first start creates the database and applies every migration, so the probe
+allows 600 s: the first hosted run timed out at 180 s while migrations were
+still running and read as "this build does not start", which is not what was
+measured.
+
+Two things this exercise turned up in the **server**, neither of which W0 fixes:
+
+* `BaseApplicationPaths.MakeSanityCheckOrThrow` writes a marker file into each
+  of the configuration, cache, log and data directories and refuses to start if
+  it finds the wrong one. It is a good guard — it is what caught a mis-split
+  path immediately rather than fifty lines later — but the markers are still
+  named **`.reefin-config`, `.reefin-log`** and so on, from before the rename.
+  On Linux they are hidden dotfiles inside package-managed directories. On
+  Windows there are no hidden dotfiles by convention, so they become visible
+  files with the old product name inside `%ProgramData%\Tesserafin\Server\`.
+  W2 should rename them, and must do so with a migration that recognises the old
+  marker, or every existing installation fails its own sanity check on upgrade.
+* Those directories are therefore not interchangeable and not shareable. The
+  layout in §9.1 gives each its own directory for that reason.
 
 ### 2.4 Endpoints and the Web payload
 
@@ -341,9 +360,16 @@ lacks a real lifecycle experiment" as a hard stop, so `probe-installer.ps1`
 makes the candidates do the work on a native Windows host. Both MSI and the
 portable ZIP are driven through the same sequence with a disposable payload:
 
-unattended clean install → retained-data sentinel written → in-place major
-upgrade → deliberate file removal → repair → refused downgrade → silent
-uninstall → retained-data re-read.
+unattended clean install → service start attempted with no ACL grant → read and
+execute granted to the service SID → service start attempted again →
+retained-data sentinel written → in-place major upgrade → deliberate file
+removal → repair → refused downgrade → silent uninstall → retained-data re-read.
+
+The two-phase service start is not decoration. The first hosted attempt started
+the service **inside** the install transaction and the install failed with
+"Error 1920. Service … failed to start", which MSI rolled back to 1603 — hiding
+install, upgrade, repair and uninstall behind a single identity problem. Splitting
+it makes the identity question answerable on its own (§9.2).
 
 The exact WiX version used is recorded in the evidence, and its licence is read
 out of the resolved NuGet package's `.nuspec` rather than asserted from memory.
@@ -632,7 +658,19 @@ probe creates a service with `obj= NT SERVICE\<name>` and then **grants that SID
 `Modify` on a real directory**, which is the property that matters: the account
 is created by the SCM with the service and removed with it, so an installer can
 grant per-machine least-privilege ACLs without inventing, storing or rotating a
-password. `LocalService` is rejected because it is shared with unrelated
+password.
+
+**The measured consequence, which is easy to get wrong:** a virtual service
+account is not a member of `Users`, so it inherits **no** right to read or
+execute anything under `%ProgramFiles%`. A service registered there under such
+an account fails to start with error 1920 until the installer grants it read and
+execute explicitly. The installer experiment demonstrates exactly this — the same
+executable, under the same kind of account, starts happily from a permissive
+path in the portable-ZIP candidate and refuses to start from `%ProgramFiles%`
+until the grant is applied.
+
+**W4 therefore cannot rely on inherited ACLs.** Every grant in §9.3 is
+load-bearing, including the read-and-execute one that looks redundant. `LocalService` is rejected because it is shared with unrelated
 services; `LocalSystem` is rejected outright as administrator-equivalent; a
 managed local user is rejected because it introduces a credential the installer
 would have to create and the operator would have to maintain.
