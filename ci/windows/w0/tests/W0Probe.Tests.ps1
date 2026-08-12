@@ -23,7 +23,7 @@ Describe 'Add-W0Fact' {
     }
 
     It 'accepts every declared bucket' {
-        foreach ($bucket in Get-W0Buckets) {
+        foreach ($bucket in Get-W0BucketSet) {
             $evidence = New-W0Evidence -Probe 'unit' -HeadSha 'deadbeef'
             { Add-W0Fact -Evidence $evidence -Id 'x' -Bucket $bucket -Detail 'd' } | Should -Not -Throw
         }
