@@ -1,0 +1,727 @@
+# W0 — Native Windows server distribution
+
+Architecture freeze for the `win-x64` Tesserafin Server distribution that
+Tesserafin 1.1 blocks on. Tracker: #234. Linux precedent: #225 / #228 and
+[L0-linux-packages.md](L0-linux-packages.md). FFmpeg precedent:
+[F0-ffmpeg-runtime.md](F0-ffmpeg-runtime.md).
+
+**This document decides. It does not implement.** No Windows packaging, no
+Windows Service integration, no Windows FFmpeg runtime and no installer ships
+with it. The only code it lands is the disposable probe harness under
+`ci/windows/w0/` and the workflow that runs it, and nothing either produces is
+ever a production input.
+
+Measured on `origin/master` at `f7479d504ffeb2e895dcafc454ce55420ecc7fec`,
+server version `1.0.0`.
+
+---
+
+## 1. Frozen owner ruling
+
+Owner ruling, 2026-08-12, restated here so the boundary cannot drift while
+W1–W5 are implemented:
+
+* Tesserafin 1.1 **must** include a native `win-x64` server distribution. It is
+  a blocking deliverable, not a stretch goal.
+* Tesserafin Server runs **natively** on Windows. Tesserafin Web **in a
+  browser** is its interface.
+* There is **no** native Windows desktop client — no Electron, no WinUI, no
+  WebView shell. Any proposal that produces one is out of scope by ruling, not
+  by preference.
+* `win-arm64` may be anticipated architecturally but is **not** promised for
+  1.1. See §14.
+* The Android → iOS → TV native-client sequence is unchanged by this work.
+
+The Linux contract accepted in #225 / #228 is the standard, not a ceiling to
+relax: one bundled package per architecture, a Tesserafin-owned FFmpeg runtime
+built from pinned source, bit-for-bit reproducibility across two independent
+clean builds, strict provenance manifests, separate licence boundaries and a
+corresponding-source sidecar.
+
+---
+
+## 2. Measured baseline
+
+Every claim in this section was produced by
+`.github/workflows/w0-windows-probe.yml` on a GitHub-hosted `windows-latest`
+runner. The runner image label, image version, architecture, PowerShell versions
+and installed .NET SDKs are captured verbatim in the `host.identity` fact of
+`baseline.json` in that run's `w0-evidence-baseline` artifact, so the baseline is
+attributable to an exact image rather than to "a Windows machine".
+
+The probe deliberately never asserts a single green line where a pair is
+available. Where a measurement passes only because the runner supplied
+something, the negative control that removes it sits beside it.
+
+### 2.1 The existing full test suite on Windows
+
+The `Tests` workflow already carries a `windows-latest` leg, reachable only by
+`workflow_dispatch`. Dispatching it on the frozen master (run `31593891107`)
+did **not** yield a Windows verdict:
+
+* `run-tests (macos-latest)` failed one test of 201 —
+  `OpenApiXmlDocumentationOrderTests.XmlDocumentationFiles_ReadsTopLevelXmlInCanonicalOrder`,
+  `Assert.Equal() Failure: Collections differ at index 0`;
+* the matrix sets `fail-fast: true`, so the Linux and Windows legs were
+  cancelled mid-test-run.
+
+Two things follow, and they are separate. First, the Windows runner itself is
+sound: `Set up job`, `checkout`, `setup-dotnet` and the NuGet cache all
+succeeded before the cancellation, which retires "no native Windows x64 runner
+can execute" as a blocker. Second, the Windows test verdict cannot come from
+that workflow while the macOS leg fails first, so the W0 probe workflow runs the
+**identical** command (`dotnet test Tesserafin.sln --configuration Release
+--filter 'Category!=Smoke'`) in its own `windows-tests` job and reports it as W0
+evidence.
+
+The macOS failure is a **pre-existing defect on master and outside W0 scope**.
+It is recorded here because it is collation-shaped and therefore a named risk
+for Windows: an OpenAPI contract that depends on filesystem enumeration order
+would produce a different document on a different host, and the `windows-tests`
+job is what says whether Windows agrees with Linux.
+
+### 2.2 Self-contained publish
+
+`dotnet publish Tesserafin.Server/Tesserafin.Server.csproj --configuration
+Release --runtime win-x64 --self-contained true` succeeds on stock master with
+no production change. `Tesserafin.Server.csproj` already declares
+`AssemblyName=tesserafin`, so the apphost is `tesserafin.exe`, and it already
+declares `ApplicationIcon=Tesserafin.Server.ico`.
+
+The probe does not take "self-contained" from the build log. It reads the
+delivered tree: `hostfxr.dll`, `hostpolicy.dll`, `coreclr.dll` and
+`System.Private.CoreLib.dll` must be present and
+`tesserafin.runtimeconfig.json` must declare no shared framework. It reads the
+architecture out of the COFF machine word of `tesserafin.exe` and of every
+delivered native library, so a wrong-architecture publish is rejected on its
+bytes rather than on whether it happened to start.
+
+The full publish inventory — every delivered path, its SHA-256, the tree
+digest, the native-library list with per-file architecture — is in the
+`publish.selfcontained` fact.
+
+### 2.3 Startup, hostile paths and relocation
+
+The probe copies the publish into a directory whose name contains spaces,
+accented Latin, an em dash and CJK, starts it there, then **moves the same
+tree** to a different depth and starts it again. Both runs use fresh, isolated
+`--datadir`, `--configdir`, `--cachedir` and `--logdir`, because a probe that
+shares state cannot distinguish a fresh install from an upgrade and W0 needs
+both answers.
+
+`StartupOptions.cs` already carries every path argument the distribution needs:
+`-d/--datadir`, `-c/--configdir`, `-C/--cachedir`, `-l/--logdir`,
+`-w/--webdir`, `--nowebclient`, `--ffmpeg`, `--service`, `--package-name`,
+`--published-server-url`. Nothing has to be added for W2 to place state
+correctly.
+
+Readiness is `/` answering, not `/System/Info/Public` answering: the latter is
+served by the startup `SetupServer` long before the application host is up.
+
+### 2.4 Endpoints and the Web payload
+
+`/` and `/health` (mapped in `Tesserafin.Server/Startup.cs`) are checked from
+the **relocated** tree, never from the build tree. The Web bootstrap assertion
+is deliberately stricter than a 200: the entry document must reference the
+hashed `main.tesserafin…bundle.js`, so a 200 that returns the setup page fails
+it.
+
+The payload itself is the pinned one. `ci/package/assemble-payload.sh` obtains
+it with `docker create` + `docker cp` from the Linux OCI image
+`ghcr.io/tesserafin-project/tesserafin-web-assets@sha256:6150380052c8…`
+(web commit `a9a362eec764a9fe3fa6ba9b4a7dd7473677e35a`) and verifies it against
+`WEB_PAYLOAD_SHA256`
+=`4148c4bc6e0c7c2d6b35ed9992e874a06dcc11d2b6d9e0aad06719e36567be4f`.
+
+**A `windows-latest` runner cannot run Linux containers, so that step is not
+reusable as written.** The W0 workflow proves the payload can nonetheless reach
+Windows without weakening provenance: a Linux job extracts it, verifies the
+same digest with the same `pkg_tree_digest`, and hands it over. Using an Actions
+artifact for that handover is acceptable **only** because this is probe
+evidence; §8 forbids it in production.
+
+### 2.5 FFmpeg discovery — recorded as a dependency, not as a pass
+
+`MediaEncoder.SetFFmpegPath` resolves in order: `--ffmpeg` / environment, then
+`EncoderAppPath` in `encoding.xml`, then bare `ffmpeg` on `PATH`. On success it
+writes the validated path back as `EncoderAppPathDisplay`. The probe reads that
+file — the server's own answer to "which binary did you choose" — rather than
+grepping the log.
+
+To make the answer falsifiable the probe copies the encoder to a directory that
+is **not** on `PATH`, passes it with `--ffmpeg`, and asserts the recorded path
+is that copy. A `PATH` fallback would record a different string and fail.
+
+The binary being copied is the one the **runner image preinstalls**. That is an
+**unacceptable baseline dependency** and is recorded as one, in the
+`test-host-dependency` bucket: Tesserafin owns no Windows FFmpeg runtime yet.
+Nothing in §2 may be read as evidence that one exists. The paired negative
+control scrubs every `ffmpeg.exe`-bearing directory from `PATH`, passes no
+`--ffmpeg`, and captures the fatal startup — `FfmpegException` is fatal at
+startup, so a Windows package without an encoder does not start at all.
+
+### 2.6 Shutdown
+
+Console shutdown of the relocated server and its exit status are recorded. No
+transcode is running, so the measurement is a **floor**, not a worst case. The
+Linux side already shows post-transcode shutdown taking tens of seconds; W3's
+service stop timeout must be derived from the worst case, never from §2.6.
+
+---
+
+## 3. Gap inventory
+
+The four buckets #234 asks for, plus blocked and deferred. Each fact in
+`baseline.json`, `service.json` and `installer.json` carries exactly one of
+these, enforced at recording time.
+
+### Already working on stock master
+
+| | |
+| --- | --- |
+| `dotnet publish --runtime win-x64 --self-contained true` | succeeds unchanged |
+| `AssemblyName=tesserafin` → `tesserafin.exe` | already correct |
+| `ApplicationIcon` | already present |
+| every `--datadir`/`--configdir`/`--cachedir`/`--logdir`/`--webdir`/`--ffmpeg` argument | already exists |
+| `/health` | already mapped |
+| `--ffmpeg` actually overrides `PATH` | proven from `encoding.xml` |
+
+### Working only with a test-host dependency
+
+| | |
+| --- | --- |
+| any successful start | requires the runner's preinstalled FFmpeg |
+| Web bootstrap | requires a payload extracted by a Linux job |
+| `/` and `/health` answering | inherit the FFmpeg dependency above |
+
+### Missing
+
+| | |
+| --- | --- |
+| Windows Service host boundary | no `UseWindowsService`, no `WindowsServiceLifetime`, no `Microsoft.Extensions.Hosting.WindowsServices` anywhere in the tree |
+| Tesserafin-owned Windows FFmpeg runtime | nothing in `ci/ffmpeg/**` targets Windows |
+| Windows packaging | no MSI, no WiX, no Inno, no MSIX, no portable ZIP |
+| Windows lifecycle acceptance | no install/upgrade/repair/uninstall suite |
+| Windows signing configuration | none, by ruling (§11) |
+| daemonless Web-payload acquisition on Windows | the Linux path needs a Linux container runtime |
+
+### Blocked
+
+Nothing in W0 is blocked. Every hard-stop condition in the tracker was tested
+and none fired. §13 lists the risks that could still block W1–W5.
+
+### Deliberately deferred
+
+`win-arm64` (§14); an automatic updater; any hardware-acceleration **runtime**
+claim; `libplacebo` and the Vulkan shader toolchain, which F0 already defers on
+Linux and which Windows inherits.
+
+---
+
+## 4. Selected service-host architecture
+
+**Selected: direct .NET Generic Host Windows Service integration in
+`Tesserafin.Server`.**
+
+This is a measurement, not a preference. The probe establishes both halves:
+
+1. The unmodified `tesserafin.exe`, registered with the SCM and started, does
+   not participate in the service lifecycle. A plain console executable never
+   calls `StartServiceCtrlDispatcher`, so the SCM's verdict is a start failure —
+   classically error 1053, "the service did not respond to the start or control
+   request in a timely fashion". The probe also records whether a **live process
+   was left behind**, because an orphan is worse than a clean failure: an
+   installer would then be uninstalling a service whose process still holds the
+   database. This is a missing boundary in the **server**. No installer
+   technology can paper over it, and treating it as an installer problem is the
+   specific mistake #234 names.
+2. A disposable, throwaway Generic Host with `AddWindowsService`, published
+   self-contained `win-x64` and registered with the SCM, is driven through real
+   `sc start` and `sc stop` and must report `IsWindowsService() == True` and run
+   `IHostedService.StartAsync` **and** `StopAsync`. That is what makes "the
+   smallest maintainable design is sufficient" a fact.
+
+A dedicated first-party service host is therefore **rejected**: it would add a
+second executable, a second lifetime and a second failure surface to obtain
+behaviour the existing host already supports. An opaque third-party service
+wrapper (NSSM, WinSW and similar) is **rejected outright** — it inserts an
+unaudited binary between the SCM and the server, owns the stop semantics that
+determine whether a transcode is truncated, and adds a redistribution and
+provenance obligation for a component Tesserafin does not build. #234 permits an
+exception only for an exceptional recorded reason; none exists.
+
+### The service contract
+
+| | |
+| --- | --- |
+| service name | `Tesserafin` |
+| display name | `Tesserafin Server` |
+| description | `Tesserafin media server. Manage it at http://localhost:8096.` |
+| startup mode | `Automatic (Delayed Start)` |
+| executable | `%ProgramFiles%\Tesserafin\Server\tesserafin.exe` |
+| arguments | `--service --configdir "%ProgramData%\Tesserafin\Server\config" --datadir "…\data" --cachedir "…\cache" --logdir "…\log" --webdir "%ProgramFiles%\Tesserafin\Server\web" --ffmpeg "%ProgramFiles%\Tesserafin\Server\ffmpeg\ffmpeg.exe"` |
+| stop timeout | 120 s, derived from the worst observed shutdown, not from §2.6 |
+| recovery | restart after 60 s on first and second failure; no action on the third, so a crash loop is visible rather than hidden |
+| logging | the application's own rolling file sink under the log directory, plus the Windows Event Log for service-lifecycle events only |
+| identity | `NT SERVICE\Tesserafin` (§9) |
+
+`--webdir` and `--ffmpeg` are **always** passed explicitly, exactly as the Linux
+unit does, so the service can never silently fall back to a `PATH` encoder or to
+a stale web directory. `--nowebclient` is never used.
+
+**No service implementation lands in W0-A.** W3 implements it.
+
+---
+
+## 5. Installer technology
+
+### 5.1 Decision
+
+**Selected: a per-machine MSI built with the WiX toolset, plus the mandatory
+portable ZIP.**
+
+### 5.2 The experiment
+
+The tracker forbids choosing by preference and treats "installer selection
+lacks a real lifecycle experiment" as a hard stop, so `probe-installer.ps1`
+makes the candidates do the work on a native Windows host. Both MSI and the
+portable ZIP are driven through the same sequence with a disposable payload:
+
+unattended clean install → retained-data sentinel written → in-place major
+upgrade → deliberate file removal → repair → refused downgrade → silent
+uninstall → retained-data re-read.
+
+The exact WiX version used is recorded in the evidence, and its licence is read
+out of the resolved NuGet package's `.nuspec` rather than asserted from memory.
+
+### 5.3 Scoring
+
+| Criterion | MSI (WiX) | Portable ZIP + first-party script | MSIX | Inno Setup |
+| --- | --- | --- | --- | --- |
+| unattended clean install | yes, `msiexec /i /qn` | yes | **no** — needs a trusted certificate | yes |
+| native Windows Service lifecycle | yes, `ServiceInstall`/`ServiceControl` inside the transaction | only by shelling to `sc.exe` | restricted packaged-service model | only by shelling to `sc.exe` |
+| deterministic in-place upgrade | yes, `MajorUpgrade` + stable `UpgradeCode` | script-defined | yes | weak |
+| repair | yes, `msiexec /f` | **no** | yes | **no** |
+| rollback on failed upgrade | yes, transactional | **no** | yes | **no** |
+| retained-data policy | expressible in the package (`Permanent` component) | script-defined | constrained by the package container | script-defined |
+| per-machine least-privilege ACLs | yes | yes | **no** — constrained identity model | yes |
+| Authenticode support | yes | yes (over the ZIP contents) | mandatory, not optional | yes |
+| silent uninstall | yes, `msiexec /x /qn` | script-defined | yes | yes |
+| long-term automation / maintenance | `wix` is a `dotnet tool`, pinned like any package | trivial | tooling churn | external installer, not a `dotnet tool` |
+| open-source redistribution | licence read from the resolved package | n/a | n/a | permissive, but see below |
+| reproducible unsigned output | **measured** — two identical builds compared | **measured** | not reached | not reached |
+
+### 5.4 Rejections, on recorded facts
+
+**MSIX** is rejected and the experiment is *unperformable inside W0's
+invariants*, which is a stronger statement than "not performed": an MSIX package
+cannot be installed unattended unless it is signed by a certificate the machine
+trusts, and W0 is forbidden to create any certificate or signing secret.
+Independently, MSIX services are restricted to packaged Windows services with a
+constrained identity model and cannot express the per-machine ACL grants and
+arbitrary `%ProgramData%` layout this distribution needs.
+
+**Inno Setup** is rejected on format properties, not on taste. It has no native
+Windows Service installation — a service is registered by shelling out to
+`sc.exe` from `[Run]`, which is the first-party-script candidate wearing a
+different wrapper — no repair mode, and no transactional rollback of a failed
+upgrade. Three of those are required criteria, so it cannot win regardless of
+how an experiment turned out. It is also not preinstalled on the runner image,
+and obtaining it would need either an unpinned Chocolatey dependency —
+explicitly forbidden — or a pinned third-party download whose only purpose would
+be to confirm a disqualification already established.
+
+### 5.5 Reproducible unsigned output, measured
+
+The probe builds the same MSI twice and compares SHA-256, and does the same for
+the ZIP. The answer is **measured, not assumed**, because an MSI carries a
+per-build package-code GUID and stream timestamps and is expected to differ.
+
+The consequence is a design constraint on §8 rather than a defect: **the
+reproducibility proof is carried by the ZIP and by the FFmpeg runtime
+component, not by the MSI.** The MSI is a container over inputs that are
+themselves bit-for-bit reproducible and digest-identified, and W4 must record
+the input digests in the MSI's provenance so the container is traceable even
+where the container's own bytes are not.
+
+---
+
+## 6. Portable ZIP contract
+
+The ZIP is **mandatory regardless of the installer decision**. It is the
+artifact the reproducibility proof runs on and the only form that needs no
+administrator.
+
+* Name: `tesserafin-server_<version>_win-x64.zip`.
+* One top-level directory, `tesserafin-server_<version>_win-x64/`, so extraction
+  never scatters files into the current directory.
+* Contents: the self-contained server, the bundled Web payload, the Tesserafin
+  FFmpeg runtime, licences, SBOM and the provenance manifest — the same set the
+  MSI installs, at the same relative paths.
+* **Relocatable.** Proven by moving the tree and starting it again (§2.3); the
+  server must bake its own location into nothing.
+* Ships **no** state. Configuration, database, cache and logs are always given
+  by argument.
+* Entries stored with fixed modes and a clamped mtime derived from
+  `SOURCE_DATE_EPOCH`, ordered deterministically, so two clean builds produce
+  identical bytes.
+* Carries a first-party PowerShell script that registers, starts, stops and
+  removes the service for operators who prefer the ZIP. That script is a
+  convenience over the same contract as §4 — it is **not** a second installer
+  and gets no repair, rollback or Add/Remove Programs entry, which are
+  properties of the format that no script can add.
+
+---
+
+## 7. Windows FFmpeg source-build design
+
+### 7.1 The pinned tree already has a native Windows mechanism
+
+The accepted Linux runtime — `7.1.4-tesserafin.1`, upstream
+`jellyfin/jellyfin-ffmpeg` at `d4590e12452f94d40e413caecb34b08de608353b` — is
+**precedent, not a Windows binary input**. Nothing built for Linux crosses over.
+
+Inspecting the pinned tree at that exact commit shows three Windows build
+mechanisms:
+
+1. `Dockerfile.win64.in` / `Dockerfile.win64.make` / `docker-build-win64.sh` /
+   `cross-win64.meson` — a **mingw-w64 cross build inside `ubuntu:noble`**
+   (`FF_TOOLCHAIN=x86_64-w64-mingw32`, `--target-os=mingw32`,
+   `--cross-prefix=`). Produces Windows binaries; is not a native Windows build.
+2. `builder/` (`images/base-win64`, `variants/win64-gpl.sh`) — also a
+   container cross build.
+3. **`msys2/build.sh` + `msys2/PKGBUILD/**`, driven by
+   `.github/workflows/_meta_win_clang_portable.yaml`, which runs
+   `runs-on: windows-latest` under MSYS2 `CLANG64` with
+   `mingw-w64-clang-x86_64-toolchain`.** It builds every media dependency from
+   source through 36 ordered `PKGBUILD`s via `makepkg-mingw`, applies **the same
+   `debian/patches/series` quilt set the Linux build applies**, runs
+   `./configure --cc=clang … && make`, and emits `ffmpeg.exe` and `ffprobe.exe`.
+
+Mechanism 3 is a **native Windows source build of the pinned fork**. The
+hard-stop condition "the pinned FFmpeg source has no viable Windows-native build
+path" therefore does **not** fire, and no Jellyfin release asset, no downloaded
+precompiled FFmpeg and no Wine is needed anywhere in the design.
+
+That the Linux and Windows targets share one patch series is the load-bearing
+property: the `tonemapx` filter `EncoderValidator` requires — the whole reason
+`components.json` pins a fork rather than upstream FFmpeg — arrives on Windows
+by the same mechanism it arrives on Linux.
+
+### 7.2 The feasibility spike
+
+`ci/windows/w0/spike-ffmpeg.sh` runs **one disposable native spike** on
+`windows-latest` under MSYS2 `CLANG64`, pinned to the same
+`msys2/setup-msys2` commit the upstream tree itself pins. It fetches the pinned
+commit and **asserts** the resolved SHA, applies the quilt series, configures,
+compiles `ffmpeg.exe` and `ffprobe.exe`, records `-version`, `-buildconf`,
+encoders, decoders, filters, protocols and hwaccels, inspects PE architecture
+and the import table, and runs a software **encode → probe → decode** smoke.
+
+It is bounded by `--disable-autodetect` **on purpose**. That proves the build
+*mechanism* and stops MSYS2's ambient packages from silently entering the link,
+which would make the result unattributable. The full component closure is
+**design** in W0 and **build** in W1. The spike is probe evidence and is
+explicitly **not** the accepted Windows runtime; its JSON says so in a field.
+
+No downloaded precompiled FFmpeg, no Wine, no system FFmpeg substitution, no
+unpinned MSYS2/vcpkg/Chocolatey dependency. **No hardware claim of any kind** —
+a hosted runner has no GPU, and the spike enables no hardware backend.
+
+### 7.3 The W1 design
+
+W1 produces `ffmpeg.exe` and `ffprobe.exe` plus their complete DLL closure,
+built natively from pinned source, delivering:
+
+* software decode and encode for everything `EncoderValidator._requiredEncoders`
+  and `_requiredDecoders` name — `libx264`, `libx265`, `libsvtav1`, `libdav1d`,
+  `libvpx`, `libmp3lame`, `libopus`, `libvorbis`, FFmpeg's native AAC;
+* the required filters — `libzimg`/`zscale`, `libass`, `libfreetype`,
+  `libfribidi`, `libharfbuzz`, `fontconfig`, and `tonemapx` from the fork;
+* the protocols the server needs, including `https`;
+* Windows hardware capability **compiled** where legally and technically
+  supported — `dxva2`, `d3d11va`, `d3d12va`, `amf`, `libvpl` (QSV), and the
+  NVIDIA stack via `ffnvcodec`. Compiled capability is not a runtime claim and
+  is never advertised as one;
+* a capability manifest, SBOM, notices, corresponding source and exact toolchain
+  provenance, on the F0 model.
+
+Deltas W1 must apply to upstream's `msys2/build.sh`, each one traceable to an
+existing Tesserafin rule:
+
+| Delta | Why |
+| --- | --- |
+| drop `--enable-lto=thin` | `ci/ffmpeg/ffmpeg-configure.txt` bans LTO: partitioning depends on job count and link order and is the largest single threat to bit-for-bit reproducibility |
+| drop `--enable-libfdk-aac`, add `--disable-nonfree` | `components.json` classifies `fdk-aac` nonfree; FFmpeg's native AAC encoder covers the requirement |
+| drop `libbluray`, `libopenmpt`, `libtheora`, `libwebp`, `chromaprint`, `fftw`, `gmp`, `libxml2` | already excluded by `components.json` with a recorded reason each; Windows does not get a wider set than Linux by accident |
+| decide `--enable-schannel` vs `--enable-openssl` | upstream's Windows build uses Schannel and drops OpenSSL from the closure entirely. Schannel is the smaller closure and the platform-native TLS stack; OpenSSL keeps Linux and Windows on one TLS implementation. **This is an open decision for W1** and must be recorded, not defaulted |
+| omit `libva`, `libdrm` | Linux-only by construction |
+| **pin the MSYS2 toolchain** | see §7.4 |
+
+`ci/ffmpeg/components.json` gains a Windows architecture dimension rather than a
+parallel file, so one document remains the single source of component identity
+for every target.
+
+### 7.4 The MSYS2 pinning requirement
+
+`msys2/setup-msys2` pins the **action**; `pacman` is a **rolling repository** and
+pins nothing. Two clean builds a week apart can resolve different `clang`,
+different `nasm` and different runtime libraries, and would not be bit-for-bit
+identical — which would break §8 before it started.
+
+**W1 must pin the MSYS2 toolchain by exact package identity** — a repository
+snapshot, or vendored package files verified by digest, recorded in
+`components.json` alongside the source pins the way `RPM_BUILDER_IMAGE` is
+recorded for the Linux packaging toolchain. The spike records every resolved
+package version precisely so this gap is documented rather than discovered
+later. **This is the single largest technical risk in W1** (§13).
+
+---
+
+## 8. Reproducibility and the modular component boundary
+
+The Linux rule is inherited without relaxation.
+
+1. **Two clean `win-x64` builds on two separate native Windows runners.** Not
+   two builds on one runner; not one build compared to a cache.
+2. **Nothing shared between them.** No compiled objects, no dependency prefix,
+   no staged runtime, no incremental mode. Each side fetches pinned source and
+   builds from scratch.
+3. **Complete delivered-path comparison before any digest comparison.** The
+   ordered relative-path list is compared first, so "a file is missing" is
+   distinguishable from "a file differs". `Get-W0TreeDigest` implements exactly
+   this and its behaviour is unit-tested.
+4. **Bit-for-bit identity of every unsigned delivered byte.** Functional
+   equivalence is not accepted, at any point, for any component. Weakening this
+   to equivalence is a hard stop.
+5. **Immutable component identity**, binding together: build revision; upstream
+   commit; every component commit and checksum; the applied patch set; toolchain
+   identities including the pinned MSYS2 package set; target architecture; the
+   capability manifest; licences and SBOM; and the corresponding-source digest.
+6. **Packaging consumes the FFmpeg component only after acceptance and only by
+   exact digest.** The MSI and the ZIP name a digest; they do not rebuild it and
+   they do not accept "the latest".
+7. **No expiring Actions artifact is ever a production input.** The W0 workflow
+   uses one for the Web payload handover; that is permitted **only** because W0
+   is probe evidence, and W2 replaces it with a daemonless digest-pinned OCI pull
+   on the Windows host.
+
+Where a container's own bytes cannot be reproducible — the MSI, measured in §5.5
+— the *contents* still are, and the container records the input digests. The
+proof lives on the ZIP and the FFmpeg component.
+
+### Signing is a later transformation
+
+* Reproducibility is proven on **unsigned** artifacts. A signature is applied
+  **after** acceptance, never before.
+* Authenticode signatures embed a certificate and a countersigned timestamp and
+  are **not** expected to be reproducible. Requiring identical signed bytes
+  would be a false requirement, and asserting it would quietly convert the
+  reproducibility gate into a rubber stamp.
+* Every signed artifact must remain traceable to the **exact accepted unsigned
+  digest**, recorded in its provenance manifest, so a signed download can be
+  proven to be the artifact that was accepted.
+* Certificate custody, SHA-256 timestamping and the verification procedure are
+  specified in §11.
+* **No certificate and no signing secret is created in W0.**
+
+---
+
+## 9. Filesystem, identity and ACL contract
+
+### 9.1 Layout
+
+| What | Where | Owner |
+| --- | --- | --- |
+| application binaries | `%ProgramFiles%\Tesserafin\Server\` | installer |
+| bundled Web payload | `%ProgramFiles%\Tesserafin\Server\web\` | installer |
+| FFmpeg runtime | `%ProgramFiles%\Tesserafin\Server\ffmpeg\` | installer |
+| licences, SBOM, provenance | `%ProgramFiles%\Tesserafin\Server\licenses\` | installer |
+| configuration | `%ProgramData%\Tesserafin\Server\config\` | **operator** |
+| database and persistent state | `%ProgramData%\Tesserafin\Server\data\` | **operator** |
+| cache / transcode workspace | `%ProgramData%\Tesserafin\Server\cache\` | **operator** |
+| logs | `%ProgramData%\Tesserafin\Server\log\` | **operator** |
+
+The split is the point: everything under `%ProgramFiles%` is package-owned and
+replaced wholesale on upgrade; everything under `%ProgramData%` is operator-owned
+and never touched by the package. It mirrors L0's `/usr/lib` versus `/var/lib`
+and `/etc` split.
+
+### 9.2 Identity
+
+**`NT SERVICE\Tesserafin`**, a virtual service account. Non-administrator, by
+requirement.
+
+Selected only after proving the properties, not after preferring the name. The
+probe creates a service with `obj= NT SERVICE\<name>` and then **grants that SID
+`Modify` on a real directory**, which is the property that matters: the account
+is created by the SCM with the service and removed with it, so an installer can
+grant per-machine least-privilege ACLs without inventing, storing or rotating a
+password. `LocalService` is rejected because it is shared with unrelated
+services; `LocalSystem` is rejected outright as administrator-equivalent; a
+managed local user is rejected because it introduces a credential the installer
+would have to create and the operator would have to maintain.
+
+Network access: the account authenticates to the network as the machine account,
+which is sufficient for a server that listens locally and reaches out over HTTP.
+An operator whose media lives on an SMB share needs a domain identity instead;
+W4 must document that as a supported deviation rather than pretend the default
+covers it.
+
+### 9.3 ACLs
+
+| Path | Grant |
+| --- | --- |
+| `%ProgramFiles%\Tesserafin\Server\` | `NT SERVICE\Tesserafin`: **read and execute only**. The service must not be able to rewrite its own binaries or its own FFmpeg |
+| `%ProgramData%\Tesserafin\Server\config` | `NT SERVICE\Tesserafin`: Modify |
+| `…\data`, `…\cache`, `…\log` | `NT SERVICE\Tesserafin`: Modify |
+| all of the above | Administrators and SYSTEM: Full. `Users`: no inherited write |
+
+Inheritance is broken at `%ProgramData%\Tesserafin\` so a permissive parent ACL
+cannot silently widen access to the database.
+
+---
+
+## 10. Install, upgrade, repair, uninstall
+
+| Operation | Contract |
+| --- | --- |
+| **fresh installation** | creates the layout, applies the ACLs, registers the service under `NT SERVICE\Tesserafin`, and leaves it **installed and enabled but not started** — an operator decides when a media server begins serving, exactly as L0 does |
+| **service start / stop** | through the SCM only. Stop waits up to the §4 timeout for a clean shutdown before the SCM escalates |
+| **upgrade** | stops the service, replaces everything under `%ProgramFiles%`, leaves `%ProgramData%` **untouched**, re-applies ACLs, restarts the service only if it was running |
+| **downgrade** | **refused.** `MajorUpgrade` blocks it with an explicit message. An operator who genuinely wants an older build uninstalls first and accepts the database-schema consequences |
+| **repair** | `msiexec /f` restores missing or altered package-owned files without touching `%ProgramData%` |
+| **ordinary uninstall** | removes the service and everything under `%ProgramFiles%`. **Keeps configuration, database, cache and logs.** The retained-data component is `Permanent` in the package, so this is a property of the package rather than a custom action that could be skipped |
+| **explicit data removal** | never automatic, never a checkbox that defaults on. Documented as a manual deletion of `%ProgramData%\Tesserafin\`, performed by the operator |
+
+The normal uninstall **must not** silently delete the database, the
+configuration or any media library. Package management removes what the package
+installed; everything the server produced belongs to the operator.
+
+### The synthetic upgrade test
+
+As L0 does: build a synthetic **lower** version and the real **higher** one,
+install the lower, write **sentinels** into configuration and into the database
+directory, upgrade, then read the sentinels back and assert both survived and
+that exactly one product is registered afterwards. The probe already runs this
+shape against the disposable payload; W4 runs it against the real package. An
+upgrade path asserted rather than exercised is not an upgrade path.
+
+---
+
+## 11. Signing decision
+
+**Decision: Tesserafin 1.1 ships an Authenticode-signed MSI and signed
+executables, and the signing infrastructure is stood up in W5 — not in W0.**
+
+* Both `tesserafin.exe` (and the delivered first-party binaries) and the MSI are
+  signed. Signing the MSI alone leaves SmartScreen and enterprise policy looking
+  at unsigned executables inside it.
+* **SHA-256** digests and an **RFC 3161 SHA-256 timestamp** from a public
+  timestamp authority, so signatures outlive the certificate.
+* Certificate custody: an organisation-validated code-signing certificate held
+  in a hardware token or a cloud signing service. The private key never exists
+  as a file in a repository, in an Actions secret, or on a developer machine.
+  Signing runs in a job that is reachable only from `master`, never from a fork,
+  never from `pull_request_target`.
+* Verification: `signtool verify /pa /all` plus an explicit assertion that the
+  signed artifact's **unsigned** predecessor digest matches the accepted digest
+  in the provenance manifest.
+* Unsigned artifacts remain publishable and usable; signing is an addition to
+  the accepted artifact, never a precondition for producing it.
+* **W0 creates no certificate, no key, no secret and no signing job.**
+
+---
+
+## 12. Acceptance matrix for W1
+
+W1 delivers the Windows FFmpeg runtime. It is accepted when, and only when:
+
+| # | Gate |
+| --- | --- |
+| 1 | built natively on `windows-latest` (or a native Windows x64 equivalent), from the pinned upstream commit, with the resolved SHA asserted |
+| 2 | the fork's `debian/patches/series` applies cleanly and `tonemapx` is present in `-filters` |
+| 3 | every component in `components.json` applicable to `win-x64` builds from its pinned source and checksum; no `pacman` media package enters the link |
+| 4 | the MSYS2 toolchain is pinned by exact package identity and recorded |
+| 5 | `ffmpeg.exe` and `ffprobe.exe` are PE x64 and their import table resolves entirely within the delivered tree plus OS DLLs |
+| 6 | every required encoder, decoder, filter and protocol from `EncoderValidator` is present |
+| 7 | a software encode → probe → decode smoke passes on the same host |
+| 8 | **no** hardware runtime claim; compiled capability is recorded as compiled capability |
+| 9 | two clean builds on two separate native Windows runners produce an identical delivered-path set and identical SHA-256 for every delivered byte |
+| 10 | capability manifest, SBOM, notices, licence texts and a corresponding-source sidecar with a recorded digest all ship |
+| 11 | the licence expression is computed from the actual closure, not copied from Linux; `--enable-gpl --enable-version3` makes the runtime GPL-3.0-or-later while the server stays GPL-2.0-or-later, and the two boundaries stay separate |
+| 12 | the accepted digest is recorded so W2 and W4 can consume it by digest alone |
+
+---
+
+## 13. Risks and hard blockers
+
+**No hard blocker fired in W0.** Every hard-stop condition in the tracker was
+tested: a native Windows x64 runner executes; the server publishes
+self-contained; the Web payload is consumable with its provenance intact; the
+pinned FFmpeg source has a native Windows build path; licence and
+corresponding-source closure is preserved; the installer decision rests on a real
+lifecycle experiment; no candidate needs a proprietary or unredistributable
+dependency; the proposed service identity can be granted its ACLs; nothing was
+weakened to functional equivalence; no precompiled third-party FFmpeg is
+required; scope did not expand into a desktop client.
+
+Open risks, ranked:
+
+1. **MSYS2 is a rolling repository (§7.4).** Highest technical risk in W1. Until
+   the toolchain is pinned by exact package identity, two clean builds cannot be
+   guaranteed bit-for-bit identical, and the reproducibility gate is the whole
+   contract.
+2. **MSI bytes are not reproducible (§5.5).** Handled by design — the proof
+   moves to the ZIP and the FFmpeg component and the MSI records input digests —
+   but it must not be quietly re-described as "the MSI reproduces".
+3. **`OpenApiXmlDocumentationOrderTests` fails on macOS on master.** Pre-existing
+   and out of W0 scope, but collation-shaped; if Windows disagrees with Linux on
+   the canonical order, the contract gate has a second host to reconcile.
+4. **Web payload acquisition on Windows.** The Linux path needs a Linux
+   container runtime. W2 must implement a daemonless digest-pinned OCI pull;
+   until it does, the payload crosses a boundary the production path will not
+   have.
+5. **Schannel versus OpenSSL (§7.3).** An open W1 decision. Choosing Schannel
+   diverges the TLS stack between Linux and Windows; choosing OpenSSL keeps one
+   implementation and one more component in the Windows closure.
+6. **Worst-case shutdown.** §2.6 measures a floor with no transcode running. A
+   stop timeout derived from it would truncate a live transcode.
+7. **Virtual account and network storage (§9.2).** Sufficient for local media;
+   an SMB library needs a documented domain-identity deviation.
+
+---
+
+## 14. `win-arm64`, explicitly deferred
+
+**Anticipated architecturally. Not promised for 1.1. Not built in W1–W5.**
+
+The pieces exist: .NET publishes `win-arm64` self-contained, and the pinned
+FFmpeg tree carries `msys2/buildarm64.sh` driven on `windows-11-arm` with
+`CLANGARM64`. The design keeps the door open — `components.json` gains an
+architecture dimension rather than a Windows-specific fork, and nothing in §6,
+§8, §9 or §10 hard-codes x64.
+
+What is deliberately **not** done: no `win-arm64` artifact, no `win-arm64`
+acceptance, no `win-arm64` reproducibility proof and no statement to users that
+one is coming. `components.json` already disables AMF and `libvpl` on arm64 for
+Linux and the same restriction applies here, so an arm64 runtime would have a
+different capability manifest — which is a reason to promise nothing until it
+has been measured.
+
+---
+
+## 15. Implementation decomposition
+
+Bounded, sequenced, and **none of it begins in W0-A**.
+
+| | Scope | Done when |
+| --- | --- | --- |
+| **W1** | Windows FFmpeg runtime: native MSYS2 CLANG64 build from pinned source, pinned toolchain, full component closure, capability manifest, SBOM, corresponding source | the §12 matrix passes and an accepted digest is recorded |
+| **W2** | Portable self-contained server ZIP: publish, bundled Web payload acquired daemonlessly by digest, FFmpeg consumed by accepted digest, deterministic archive, relocation proof | two clean builds on two runners are byte-identical and the ZIP starts after relocation |
+| **W3** | Windows Service integration: Generic Host `AddWindowsService` in `Tesserafin.Server`, the §4 contract, worst-case stop timeout, Event Log lifecycle events | `sc start` / `sc stop` drive a clean lifecycle with no orphan, proven on a native host |
+| **W4** | The MSI and lifecycle: WiX package, `ServiceInstall`/`ServiceControl`, §9 ACLs, §10 semantics, the synthetic sentinel upgrade test | install → upgrade → repair → uninstall all pass with sentinels intact |
+| **W5** | Independent acceptance, signing readiness and 1.1 integration: cross-runner reproducibility gates, provenance verification, certificate custody and the signing job, release integration | acceptance runs green on evidence that no build job produced |
+
+W0-A ends here. It selects, it freezes, and it hands W1 a specification it can
+be held to.
