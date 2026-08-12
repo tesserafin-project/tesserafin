@@ -140,11 +140,24 @@ made a *failing* server look like a *starting* one or the reverse.
    the 302 as a value.
 3. **The startup `SetupServer` binds the real port early and answers *every*
    path with `503` and `{"status":"starting",…}`.** A probe that accepts "any
-   status" therefore measures the setup server. This one was the most dangerous
-   of the three: it made the **no-FFmpeg negative control report success** while
-   the server was in fact dying. Readiness is therefore "`/` answers with
-   something other than `503`". Requiring `200` would be wrong in the other
-   direction — that asserts a routing decision rather than liveness.
+   status" therefore measures the setup server. Readiness is "`/` answers with
+   something other than `503`"; requiring `200` would be wrong in the other
+   direction, since that asserts a routing decision rather than liveness.
+4. **A live process is part of readiness, not a separate question.** Even the
+   `503` rule was not enough. When the application host dies — and
+   `FfmpegException` is precisely the case that matters — the setup server keeps
+   answering, with something that is *not* `503`. So the **no-FFmpeg negative
+   control reported a started server** while its own log showed
+   `FfmpegException: Failed to find valid ffmpeg` and the host disposing. A
+   negative control that passes for the wrong reason is worse than no control at
+   all. Readiness now also requires that the process has not exited.
+
+**And `/health` lags `/`.** Once `/` answers `302` the health report still says
+`{"status":"starting","version":"1.0.0","database":"healthy"}` for a further
+interval, because the startup tasks have not finished. The probe measures that
+lag rather than sampling once and calling the endpoint broken. **It is a contract
+detail W4 needs:** a service readiness gate or an installer that keys on `/`
+will declare the server ready early.
 
 **The port is discovered from the process, not assumed.** The listening port is
 not a Kestrel setting and not an environment variable: `ApplicationHost` reads
