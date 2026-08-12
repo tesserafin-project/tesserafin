@@ -5,7 +5,7 @@
 .DESCRIPTION
     W0-ONLY. Establishes the CURRENT truth: what the Service Control Manager does
     with the unmodified published Tesserafin server, and whether the smallest
-    maintainable fix — .NET Generic Host Windows Service integration — actually
+    maintainable fix -- .NET Generic Host Windows Service integration -- actually
     participates in the SCM lifecycle on this host.
 
     The second half builds a DISPOSABLE probe host in the work directory. It is
@@ -44,7 +44,7 @@ function Remove-ProbeService {
     Start-Sleep -Seconds 1
 }
 
-# ── 1. The unmodified server under the SCM ─────────────────────────────────────
+# -- 1. The unmodified server under the SCM -------------------------------------
 
 $serviceName = 'TesserafinW0Stock'
 Remove-ProbeService -Name $serviceName
@@ -80,7 +80,7 @@ $orphans = @(Get-Process -Name 'tesserafin' -ErrorAction SilentlyContinue |
     ForEach-Object { @{ id = $_.Id; path = $_.Path; started = $_.StartTime.ToString('o') } })
 
 # Error 1053: "The service did not respond to the start or control request in a
-# timely fashion" — the SCM's answer when a plain console executable never calls
+# timely fashion" -- the SCM's answer when a plain console executable never calls
 # StartServiceCtrlDispatcher. That is a MISSING SERVICE-HOST BOUNDARY in the
 # server, not an installer defect, and no installer technology can paper over it.
 $is1053 = $start.output -match '\b1053\b'
@@ -105,7 +105,7 @@ Add-W0Fact -Evidence $evidence -Id 'scm.stock' -Bucket 'missing' `
 foreach ($orphan in $orphans) { Stop-Process -Id $orphan.id -Force -ErrorAction SilentlyContinue }
 Remove-ProbeService -Name $serviceName
 
-# ── 2. Disposable proof that Generic Host integration is sufficient ────────────
+# -- 2. Disposable proof that Generic Host integration is sufficient ------------
 
 # Deliberately the SMALLEST possible host: if a bare Generic Host with
 # UseWindowsService participates correctly in the SCM lifecycle on this image,
@@ -220,14 +220,14 @@ if ($spikePublishExit -eq 0) {
 Add-W0Fact -Evidence $evidence -Id 'scm.generichost' -Bucket $(if ($spikeFacts.lifecycleObserved) { 'working' } else { 'blocked' }) `
     -Detail ("Disposable spike: a bare .NET Generic Host with AddWindowsService, published " +
              "self-contained win-x64 and registered with the SCM. " +
-             "lifecycleObserved=$($spikeFacts.lifecycleObserved) — the host reported " +
+             "lifecycleObserved=$($spikeFacts.lifecycleObserved) -- the host reported " +
              "IsWindowsService()=True and ran IHostedService StartAsync AND StopAsync under real " +
              "sc start / sc stop. This is the measurement that lets W0 select direct Generic Host " +
              "integration over a dedicated first-party host or a third-party wrapper. It is a " +
              "throwaway in the work directory and is NOT a Tesserafin service implementation.") `
     -Data $spikeFacts
 
-# ── 3. Least-privilege identity feasibility ────────────────────────────────────
+# -- 3. Least-privilege identity feasibility ------------------------------------
 
 # NT SERVICE\<name> virtual accounts only exist once the service exists, so the
 # question W0 has to answer is not "can it be typed into an installer" but
@@ -266,11 +266,11 @@ Add-W0Fact -Evidence $evidence -Id 'identity.virtualaccount' -Bucket $(if ($aclR
              "obj= 'NT SERVICE\\TesserafinW0Acl' and that SID was then granted Modify on a real " +
              "directory. granted=$($aclResult.granted). The account is created BY the SCM with the " +
              "service and is removed with it, so an installer can grant per-machine least-privilege " +
-             "ACLs to it without inventing a password — which is the property that makes it " +
+             "ACLs to it without inventing a password -- which is the property that makes it " +
              "preferable to LocalService or a managed local user.") `
     -Data $aclResult
 
-# ── 4. Completeness gate ───────────────────────────────────────────────────────
+# -- 4. Completeness gate -------------------------------------------------------
 
 $required = @('scm.stock', 'scm.generichost', 'identity.virtualaccount')
 $completeness = Test-W0EvidenceComplete -Evidence $evidence -RequiredIds $required

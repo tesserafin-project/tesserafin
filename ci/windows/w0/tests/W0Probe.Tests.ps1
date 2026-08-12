@@ -37,7 +37,7 @@ Describe 'Add-W0Fact' {
     }
 }
 
-Describe 'Test-W0EvidenceComplete — the incomplete-evidence negative control' {
+Describe 'Test-W0EvidenceComplete -- the incomplete-evidence negative control' {
     It 'reports a skipped measurement rather than passing' {
         $evidence = New-W0Evidence -Probe 'unit' -HeadSha 'deadbeef'
         Add-W0Fact -Evidence $evidence -Id 'present' -Bucket 'working' -Detail 'd'
@@ -56,7 +56,7 @@ Describe 'Test-W0EvidenceComplete — the incomplete-evidence negative control' 
     }
 }
 
-Describe 'Get-W0PeMachine — the wrong-architecture negative control' {
+Describe 'Get-W0PeMachine -- the wrong-architecture negative control' {
     BeforeAll {
         function New-SyntheticPe {
             param([uint16] $Machine)
@@ -99,7 +99,7 @@ Describe 'Get-W0PeMachine — the wrong-architecture negative control' {
     }
 }
 
-Describe 'Test-W0SelfContained — the missing-runtime negative control' {
+Describe 'Test-W0SelfContained -- the missing-runtime negative control' {
     BeforeAll {
         function New-PublishFixture {
             param([switch] $Complete, [switch] $FrameworkDependent)
@@ -151,7 +151,7 @@ Describe 'Test-W0SelfContained — the missing-runtime negative control' {
     }
 }
 
-Describe 'Get-W0TreeDigest — delivered-path comparison before digest comparison' {
+Describe 'Get-W0TreeDigest -- delivered-path comparison before digest comparison' {
     BeforeAll {
         function New-Tree {
             param([hashtable] $Files)

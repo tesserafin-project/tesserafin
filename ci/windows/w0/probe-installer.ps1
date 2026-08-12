@@ -52,7 +52,7 @@ function Remove-InstalledProbe {
     if (Test-Path -LiteralPath $installRoot) { Remove-Item -Recurse -Force -LiteralPath $installRoot -ErrorAction SilentlyContinue }
 }
 
-# ── Disposable payload: the same Generic Host spike the service probe measured ──
+# -- Disposable payload: the same Generic Host spike the service probe measured --
 
 $payloadSource = Join-Path $WorkRoot 'w0-servicehost-spike\publish'
 if (-not (Test-Path -LiteralPath $payloadSource)) {
@@ -72,7 +72,7 @@ Get-ChildItem -LiteralPath $payloadSource -Filter '*.dll' |
 Copy-Item -LiteralPath (Join-Path $payloadSource 'w0servicehost.runtimeconfig.json') -Destination $payload -Force -ErrorAction SilentlyContinue
 Copy-Item -LiteralPath (Join-Path $payloadSource 'w0servicehost.deps.json') -Destination $payload -Force -ErrorAction SilentlyContinue
 
-# ── Candidate A: WiX MSI ───────────────────────────────────────────────────────
+# -- Candidate A: WiX MSI -------------------------------------------------------
 
 $wixFacts = @{ version = $WixVersion }
 
@@ -115,7 +115,7 @@ function New-ProbeMsi {
     # ServiceInstall/ServiceControl put the service lifecycle inside the
     # transaction, which is the property Inno Setup cannot offer natively.
     # The ProgramData component is deliberately marked Permanent so the normal
-    # uninstall CANNOT remove retained data — the retained-data policy is
+    # uninstall CANNOT remove retained data -- the retained-data policy is
     # expressed in the package, not left to a custom action.
     $wxs = @"
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
@@ -273,14 +273,14 @@ Add-W0Fact -Evidence $evidence -Id 'installer.msi' -Bucket $(if ($msiSatisfies) 
              "install, retained-data sentinel, in-place major upgrade, file-removal repair, " +
              "refused downgrade and silent uninstall on this native Windows host. " +
              "satisfiesLifecycle=$msiSatisfies. Unsigned output reproducible across two identical " +
-             "builds=$($wixFacts.msiReproducible) — MEASURED. The service lifecycle is inside the " +
+             "builds=$($wixFacts.msiReproducible) -- MEASURED. The service lifecycle is inside the " +
              "MSI transaction via ServiceInstall/ServiceControl under a virtual service account, " +
              "and retained data is a Permanent component so an ordinary uninstall cannot remove it.") `
     -Data $wixFacts
 
 Remove-InstalledProbe
 
-# ── Candidate B: portable ZIP + first-party PowerShell service installer ───────
+# -- Candidate B: portable ZIP + first-party PowerShell service installer -------
 
 # The ZIP is MANDATORY regardless of which installer wins, so its lifecycle is
 # measured too rather than assumed to be the easy case.
@@ -321,13 +321,13 @@ Add-W0Fact -Evidence $evidence -Id 'installer.zip' -Bucket $(if ($zipFacts.runni
     -Detail ("Portable ZIP plus a first-party service registration, driven through extract, " +
              "register under a virtual service account, start, stop and remove. running=" +
              "$($zipFacts.running) removed=$($zipFacts.removed). Unsigned ZIP reproducible across " +
-             "two identical archives=$($zipFacts.reproducible) — MEASURED. It has NO repair, NO " +
+             "two identical archives=$($zipFacts.reproducible) -- MEASURED. It has NO repair, NO " +
              "upgrade rollback and NO Add/Remove Programs entry; those are properties of the " +
              "format, not gaps a script can close, which is why it is the mandatory companion and " +
              "not the primary installation path.") `
     -Data $zipFacts
 
-# ── Disqualified candidates, on recorded facts ─────────────────────────────────
+# -- Disqualified candidates, on recorded facts ---------------------------------
 
 Add-W0Fact -Evidence $evidence -Id 'installer.msix' -Bucket 'blocked' `
     -Detail ("MSIX disqualified without a lifecycle experiment, and the reason is recorded: an " +
@@ -346,11 +346,11 @@ Add-W0Fact -Evidence $evidence -Id 'installer.inno' -Bucket 'blocked' `
              "no transactional rollback of a failed upgrade. Two of those are REQUIRED criteria, so " +
              "it cannot win regardless of how the experiment turned out. It is also not " +
              "preinstalled on this image, and installing it would need either an unpinned " +
-             "Chocolatey dependency — explicitly forbidden — or a pinned third-party download whose " +
+             "Chocolatey dependency -- explicitly forbidden -- or a pinned third-party download whose " +
              "only purpose would be to confirm a disqualification already established.") `
     -Data @{ missingRequired = @('native Windows Service lifecycle', 'repair', 'rollback on failed upgrade') }
 
-# ── Completeness gate ──────────────────────────────────────────────────────────
+# -- Completeness gate ----------------------------------------------------------
 
 $required = @('installer.msi', 'installer.zip', 'installer.msix', 'installer.inno')
 $completeness = Test-W0EvidenceComplete -Evidence $evidence -RequiredIds $required
