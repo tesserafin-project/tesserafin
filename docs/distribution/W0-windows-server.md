@@ -267,7 +267,29 @@ a field rather than in a footnote.
 
 The paired negative control still runs: `PATH` scrubbed of every
 `ffmpeg.exe`-bearing directory and no `--ffmpeg` given, capturing the fatal
-startup verbatim.
+startup verbatim. What it captured:
+
+```
+System.ComponentModel.Win32Exception (2): An error occurred trying to start process 'ffmpeg'
+[ERR] MediaEncoder: FFmpeg: Failed version check: ffmpeg
+Tesserafin.Common.FfmpegException: Failed to find valid ffmpeg
+   at Tesserafin.Server.Core.ApplicationHost.RunStartupTasksAsync()
+   at Tesserafin.Server.Program.StartServer(...)
+[INF] ApplicationHost: Disposing CoreAppHost
+```
+
+**And the process then exits with code 0.** That is a finding W3 has to act on,
+not a curiosity. A Windows service whose process dies during startup but returns
+0 tells the Service Control Manager the service **stopped normally**: no failure
+action fires, no configured restart happens, and nothing is written to the event
+log to say the server never came up. An operator would see a service that is
+simply not running, with no recorded reason.
+
+W0 does not fix this — the service host boundary is W3's (§4) — but W3's exit
+contract must map a fatal startup failure onto a **non-zero** exit code so the
+SCM can see it, and W3's acceptance must include that negative control. Recorded
+here because it is invisible until the server runs under the SCM, and by then it
+looks like an installer defect rather than an exit-code contract.
 
 ### 2.6 Shutdown, deferred rather than faked
 
@@ -449,6 +471,12 @@ provenance obligation for a component Tesserafin does not build. #234 permits an
 exception only for an exceptional recorded reason; none exists.
 
 ### The service contract
+
+W3's contract must also make a **fatal startup failure visible to the SCM**: the
+unmodified server exits 0 when `FfmpegException` kills startup (§2.5), which the
+SCM reads as a normal stop. A non-zero exit on fatal startup is part of the
+boundary W3 closes, and part of what its acceptance must prove.
+
 
 | | |
 | --- | --- |
