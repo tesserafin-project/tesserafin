@@ -53,6 +53,30 @@ The probe deliberately never asserts a single green line where a pair is
 available. Where a measurement passes only because the runner supplied
 something, the negative control that removes it sits beside it.
 
+### Measured values
+
+| | |
+| --- | --- |
+| runner image | `win25-vs2026`, version `20260803.193.1` |
+| OS | Windows NT 10.0.26100, x64 |
+| PowerShell | 7.6.4 (pwsh) and 10.0.26100.33158 (Windows PowerShell) |
+| .NET SDKs present | 8.0.129 – 10.0.400 (11 SDKs) |
+| `ffmpeg` on the image | **none** |
+| self-contained publish | 522 files, 284,254,832 bytes, ~73 s |
+| `tesserafin.exe` | PE x64, self-contained confirmed from the delivered tree |
+| server startup | `Startup complete` in ~22 s from a cold state directory |
+| `/` | `302`, `Location: web/` |
+| `/web/index.html` | `200`, references the hashed `main.tesserafin…bundle.js` |
+| `/health` after `/` | reaches `200` ~4.3s later -- a measured lag, not a failure |
+| Web payload digest | matches the pinned `4148c4bc…` |
+| stock server under the SCM | **error 1053** after 7 s, 0 orphaned processes |
+| Generic Host spike under the SCM | `IsWindowsService()=True`, `StartAsync` and `StopAsync` both ran |
+| FFmpeg spike | 95/95 fork patches applied, ffmpeg 7.1.4 + ffprobe, PE x64, smoke pass (139,833 bytes) |
+| FFmpeg import closure | Windows system DLLs and `api-ms-win-crt-*` only |
+| MSI reproducibility | **not** reproducible across two identical builds |
+| ZIP reproducibility | reproducible |
+| WiX | 6.0.2+b3f3403, MS-RL (§5.4) |
+
 ### 2.1 The existing full test suite on Windows
 
 The `Tests` workflow already carries a `windows-latest` leg, reachable only by
@@ -143,14 +167,16 @@ made a *failing* server look like a *starting* one or the reverse.
    status" therefore measures the setup server. Readiness is "`/` answers with
    something other than `503`"; requiring `200` would be wrong in the other
    direction, since that asserts a routing decision rather than liveness.
-4. **A live process is part of readiness, not a separate question.** Even the
-   `503` rule was not enough. When the application host dies — and
-   `FfmpegException` is precisely the case that matters — the setup server keeps
-   answering, with something that is *not* `503`. So the **no-FFmpeg negative
-   control reported a started server** while its own log showed
-   `FfmpegException: Failed to find valid ffmpeg` and the host disposing. A
-   negative control that passes for the wrong reason is worse than no control at
-   all. Readiness now also requires that the process has not exited.
+4. **A live process is part of readiness, not a single sample.** Even the `503`
+   rule was not enough, and neither was checking `HasExited` once at the top of
+   the wait loop. The setup server answered with a non-`503` in the same instant
+   the application host was tearing itself down over `FfmpegException`, so the
+   probe caught the one response the dying process managed to serve before it
+   died — and the **no-FFmpeg negative control reported a started server** while
+   its own log showed `FfmpegException: Failed to find valid ffmpeg` and the host
+   disposing. A negative control that passes for the wrong reason is worse than
+   no control at all. Readiness now requires the process to still be running
+   **three seconds after** it answers, not merely at the instant it answers.
 
 **And `/health` lags `/`.** Once `/` answers `302` the health report still says
 `{"status":"starting","version":"1.0.0","database":"healthy"}` for a further
@@ -324,14 +350,14 @@ these, enforced at recording time.
 | every `--datadir`/`--configdir`/`--cachedir`/`--logdir`/`--webdir`/`--ffmpeg` argument | already exists |
 | `/health` | already mapped |
 | `--ffmpeg` actually overrides `PATH` | proven from `encoding.xml` |
+| server startup, relocation, `/`, `/web/index.html`, `/health` | all pass, given an FFmpeg (§2.5) |
+| stock server under the SCM | fails cleanly with error 1053, no orphan (§4) — the exact, bounded gap W3 closes |
 
 ### Working only with a test-host dependency
 
 | | |
 | --- | --- |
-| any successful start | requires an FFmpeg the host does not have; W0 supplies its own spike build |
 | Web bootstrap | requires a payload extracted by a Linux job, because Windows cannot run the Linux container the packaging path uses |
-| `/` and `/health` answering | inherit the FFmpeg dependency above |
 
 ### Missing
 
