@@ -128,6 +128,24 @@ if ($wixPackage) {
             projectUrl = $spec.package.metadata.projectUrl
             copyright  = $spec.package.metadata.copyright
         }
+
+        # A licence FILENAME is not a licence. Open-source redistribution
+        # compatibility is a scored criterion, so the text itself is captured:
+        # WiX 5 and later reference an OSMFEULA rather than a plain SPDX
+        # expression, and whether that permits Tesserafin's use has to be read
+        # rather than inferred from a file name.
+        if ($spec.package.metadata.license.type -eq 'file') {
+            $licenceFile = Get-ChildItem -LiteralPath $wixPackage.FullName `
+                -Filter $spec.package.metadata.license.InnerText -Recurse -ErrorAction SilentlyContinue |
+                Select-Object -First 1
+            if ($licenceFile) {
+                Copy-Item -LiteralPath $licenceFile.FullName `
+                    -Destination (Join-Path $EvidenceDir 'wix-licence.txt') -Force
+                $wixFacts.licence.firstLines = @(Get-Content -LiteralPath $licenceFile.FullName -TotalCount 25)
+            } else {
+                $wixFacts.licence.firstLines = @('licence file named in the nuspec was not found in the package')
+            }
+        }
     }
 }
 
@@ -179,7 +197,7 @@ function New-ProbeMsi {
         <!-- Deliberately NO Start="install". The first hosted run proved why:
              with the service started inside the transaction the install failed
              with "Error 1920. Service ... failed to start", and MSI rolled the
-             whole thing back to 1603 -- so nothing about install, upgrade,
+             whole thing back to 1603, so nothing about install, upgrade,
              repair or uninstall could be measured. The service is registered
              here and started AFTER the ACL grant below, which turns a failed
              install into the actual finding: a virtual service account cannot

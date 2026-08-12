@@ -159,7 +159,7 @@ same digest with the same `pkg_tree_digest`, and hands it over. Using an Actions
 artifact for that handover is acceptable **only** because this is probe
 evidence; §8 forbids it in production.
 
-### 2.5 FFmpeg discovery — recorded as a dependency, not as a pass
+### 2.5 FFmpeg — the runner has none, and that is the whole point
 
 `MediaEncoder.SetFFmpegPath` resolves in order: `--ffmpeg` / environment, then
 `EncoderAppPath` in `encoding.xml`, then bare `ffmpeg` on `PATH`. On success it
@@ -171,13 +171,29 @@ To make the answer falsifiable the probe copies the encoder to a directory that
 is **not** on `PATH`, passes it with `--ffmpeg`, and asserts the recorded path
 is that copy. A `PATH` fallback would record a different string and fail.
 
-The binary being copied is the one the **runner image preinstalls**. That is an
-**unacceptable baseline dependency** and is recorded as one, in the
-`test-host-dependency` bucket: Tesserafin owns no Windows FFmpeg runtime yet.
-Nothing in §2 may be read as evidence that one exists. The paired negative
-control scrubs every `ffmpeg.exe`-bearing directory from `PATH`, passes no
-`--ffmpeg`, and captures the fatal startup — `FfmpegException` is fatal at
-startup, so a Windows package without an encoder does not start at all.
+The probe expected to have to record the runner's preinstalled encoder as an
+unacceptable baseline dependency. **It could not: `win25-vs2026` ships no
+`ffmpeg` at all.** `Get-Command ffmpeg.exe` resolves to nothing.
+
+That single fact is the sharpest thing in this document. `FfmpegException` is
+fatal at startup, so the stock Windows server is **unstartable out of the box on
+a clean Windows host** — not degraded, not missing hardware acceleration,
+unstartable. It is why W1 is a blocking deliverable rather than a refinement,
+and it is why no ordering of W1–W5 that ships a server before an encoder is
+viable.
+
+The encoder the baseline actually uses is therefore the one **W0 built itself**
+(§7.2): compiled on a Windows runner from the pinned upstream commit by the
+native MSYS2 toolchain, handed to the baseline job as a short-retention probe
+artifact. That keeps the entire chain inside W0 and inside the pin rather than
+depending on whatever an image happens to preinstall. It is emphatically **not**
+the accepted Tesserafin Windows runtime — it is bounded by `--disable-autodetect`
+and carries none of the required component closure — and the evidence says so in
+a field rather than in a footnote.
+
+The paired negative control still runs: `PATH` scrubbed of every
+`ffmpeg.exe`-bearing directory and no `--ffmpeg` given, capturing the fatal
+startup verbatim.
 
 ### 2.6 Shutdown
 
@@ -256,8 +272,8 @@ these, enforced at recording time.
 
 | | |
 | --- | --- |
-| any successful start | requires the runner's preinstalled FFmpeg |
-| Web bootstrap | requires a payload extracted by a Linux job |
+| any successful start | requires an FFmpeg the host does not have; W0 supplies its own spike build |
+| Web bootstrap | requires a payload extracted by a Linux job, because Windows cannot run the Linux container the packaging path uses |
 | `/` and `/health` answering | inherit the FFmpeg dependency above |
 
 ### Missing
@@ -265,7 +281,8 @@ these, enforced at recording time.
 | | |
 | --- | --- |
 | Windows Service host boundary | no `UseWindowsService`, no `WindowsServiceLifetime`, no `Microsoft.Extensions.Hosting.WindowsServices` anywhere in the tree |
-| Tesserafin-owned Windows FFmpeg runtime | nothing in `ci/ffmpeg/**` targets Windows |
+| Tesserafin-owned Windows FFmpeg runtime | nothing in `ci/ffmpeg/**` targets Windows, and no Windows host ships one — the server cannot start without it |
+| renamed directory sanity markers | still `.reefin-*`, and visible files on Windows (§2.3) |
 | Windows packaging | no MSI, no WiX, no Inno, no MSIX, no portable ZIP |
 | Windows lifecycle acceptance | no install/upgrade/repair/uninstall suite |
 | Windows signing configuration | none, by ruling (§11) |

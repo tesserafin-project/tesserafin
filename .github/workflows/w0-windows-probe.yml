@@ -134,7 +134,12 @@ jobs:
   baseline:
     name: Native Windows baseline
     runs-on: windows-latest
-    needs: web-payload
+    # The FFmpeg dependency is real, not bureaucratic: FfmpegException is fatal
+    # at startup and win25-vs2026 ships no ffmpeg at all, so without the spike's
+    # output the server cannot start on this image and there is no baseline to
+    # measure. Taking the encoder from the spike also keeps the whole chain
+    # inside W0 and inside the pinned commit.
+    needs: [web-payload, ffmpeg-spike]
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -154,6 +159,11 @@ jobs:
           name: w0-web-payload
           path: ${{ runner.temp }}\w0-web
 
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: w0-ffmpeg-bin
+          path: ${{ runner.temp }}\w0-ffmpeg-bin
+
       - name: Run the baseline probe
         shell: pwsh
         run: |
@@ -165,7 +175,8 @@ jobs:
             -WorkRoot $work `
             -EvidenceDir $evidence `
             -HeadSha $env:GITHUB_SHA `
-            -WebPayloadDir (Join-Path $env:RUNNER_TEMP 'w0-web\w0-web')
+            -WebPayloadDir (Join-Path $env:RUNNER_TEMP 'w0-web\w0-web') `
+            -FfmpegDir (Join-Path $env:RUNNER_TEMP 'w0-ffmpeg-bin')
 
       - name: Summarise
         if: ${{ always() }}
@@ -275,6 +286,16 @@ jobs:
           name: w0-evidence-ffmpeg
           path: ${{ runner.temp }}\w0-ffmpeg-evidence
           retention-days: 3
+
+      # The binaries themselves, so the baseline job can start the server at all.
+      # Short retention and probe-only: #234 forbids an expiring Actions artifact
+      # from ever becoming a production input, and this one never does -- W1
+      # produces the accepted runtime and packaging consumes it by digest.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: w0-ffmpeg-bin
+          path: ${{ runner.temp }}\w0-ffmpeg-evidence\bin
+          retention-days: 1
 
   # ── The Windows test verdict master's `Tests` matrix cannot currently give ───
   windows-tests:
