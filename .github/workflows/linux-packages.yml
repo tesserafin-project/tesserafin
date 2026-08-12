@@ -7,16 +7,38 @@ name: '📦 Linux packages'
 # runners: ubuntu-24.04 for amd64 and ubuntu-24.04-arm for arm64. Metadata
 # inspection and emulation are not acceptance and are not used here.
 #
+# Each build first RECONSTRUCTS the accepted Tesserafin FFmpeg runtime (F0 /
+# #229) from the pinned sources with the merged ci/ffmpeg scripts. Nothing is
+# downloaded from a release page, no expiring workflow artifact is consulted, and
+# no previously accepted binary is an input. That is why both architectures build
+# on native runners now: the runtime is never cross-built or emulated.
+#
 # This workflow PUBLISHES NOTHING. It has no `release:` trigger, no tag trigger,
-# no registry push and no credential beyond the read-only GITHUB_TOKEN it needs
-# to pull the pinned Tesserafin Web assets image. Artifacts exist only as
-# workflow artifacts.
+# no registry push, no signing key and no credential beyond the read-only
+# GITHUB_TOKEN it needs to pull the pinned Tesserafin Web assets image. Artifacts
+# exist only as workflow artifacts.
 #
 # These jobs are NOT branch-protection required checks; branch protection lists a
 # fixed set of contexts and this work does not modify it.
 
 on:
   pull_request:
+    # Scoped to what can change a delivered package byte. `ci/ffmpeg/**` is in the
+    # set because the packages now BUILD that runtime: a change there changes the
+    # encoder they ship, and a package matrix that ignored it would validate a
+    # runtime the packages no longer contain.
+    paths:
+      - '.github/workflows/linux-packages.yml'
+      - 'ci/package/**'
+      - 'ci/tests/package.test.sh'
+      - 'ci/ffmpeg/**'
+      - 'packaging/linux/**'
+      - 'docs/distribution/L0-linux-packages.md'
+      - 'Dockerfile'
+      - 'docker/version-contract.sh'
+      - 'LICENSE'
+  # Unconditional and unfiltered: a manual run must always be possible, whatever
+  # the last commit touched.
   workflow_dispatch:
 
 permissions:
@@ -36,8 +58,9 @@ jobs:
   # The packaging contract tests are pure logic — no docker, no dotnet, no
   # network — so they gate the heavy jobs instead of running beside them. Without
   # this job nothing in CI executes ci/tests/package.test.sh at all, and the
-  # assertions it makes about pin agreement, the service contract, maintainer
-  # scripts, publication safety and build-path hygiene would never fail a build.
+  # assertions it makes about pin agreement, the F0 derivation, licence metadata,
+  # the service contract, maintainer scripts, publication safety and build-path
+  # hygiene would never fail a build.
   contract:
     name: Packaging contract
     runs-on: ubuntu-24.04
@@ -53,10 +76,18 @@ jobs:
       - name: Unit-test the packaging contract
         run: ./ci/tests/package.test.sh
 
+      - name: Refuse a reintroduced inherited FFmpeg runtime
+        run: ./ci/package/verify-no-inherited-ffmpeg.sh
+
   build:
     name: Build ${{ matrix.rid }}
     needs: contract
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
+    # The FFmpeg runtime is built from source here. The F0 baseline measured
+    # 24m10s for x64 and 13m44s for arm64; the package work adds a self-contained
+    # publish, three package formats and the gates. 300 minutes is headroom, not
+    # an expectation.
+    timeout-minutes: 300
     permissions:
       contents: read
       # Read-only, and only so the pinned tesserafin-web-assets image can be
@@ -65,13 +96,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        rid: [linux-x64, linux-arm64]
+        include:
+          - rid: linux-x64
+            runner: ubuntu-24.04
+          - rid: linux-arm64
+            runner: ubuntu-24.04-arm
     steps:
       - name: Checkout the pull request head
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+
+      - name: Report the build architecture
+        run: uname -m
 
       - name: Set up the .NET SDK
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
@@ -84,17 +122,35 @@ jobs:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: printf '%s' "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_ACTOR}" --password-stdin
 
+      # FF_INCREMENTAL and PKG_ALLOW_COMPRESSOR_DRIFT are deliberately absent.
+      # Every hosted build is a clean build against the accepted F0 digests, and
+      # this runner image is the one that produced them.
       - name: Build every artifact for ${{ matrix.rid }}
         env:
           RID: ${{ matrix.rid }}
         run: ./ci/package/build-all.sh --rid "${RID}" --out "${RUNNER_TEMP}/packages"
 
-      - name: Verify equivalence, provenance and content hygiene
+      - name: Verify equivalence, runtime layout, licensing and content hygiene
         env:
           RID: ${{ matrix.rid }}
         run: ./ci/package/verify-artifacts.sh --artifacts "${RUNNER_TEMP}/packages/artifacts" --rid "${RID}"
 
-      - name: Upload the artifacts
+      - name: Validate every provenance manifest against the committed schema
+        env:
+          RID: ${{ matrix.rid }}
+        run: ./ci/package/verify-provenance.sh --artifacts "${RUNNER_TEMP}/packages/artifacts" --rid "${RID}"
+
+      - name: Reproducibility comparison controls
+        env:
+          RID: ${{ matrix.rid }}
+        run: ./ci/package/repro-controls.sh --artifacts "${RUNNER_TEMP}/packages/artifacts" --rid "${RID}"
+
+      # The complete delivery inventory: the three formats, the two synthetic
+      # upgrade packages, the runtime archive, the corresponding-source sidecar,
+      # every provenance manifest and the checksum file. A later release assembler
+      # needs all of it, and nothing here depends on an F0 artifact that may have
+      # expired.
+      - name: Upload the complete delivery inventory
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: linux-packages-${{ matrix.rid }}
@@ -102,28 +158,95 @@ jobs:
             ${{ runner.temp }}/packages/artifacts/*.deb
             ${{ runner.temp }}/packages/artifacts/*.rpm
             ${{ runner.temp }}/packages/artifacts/*.tar.gz
+            ${{ runner.temp }}/packages/artifacts/*.tar.xz
+            ${{ runner.temp }}/packages/artifacts/*.tar.zst
             ${{ runner.temp }}/packages/artifacts/*.json
             ${{ runner.temp }}/packages/artifacts/SHA256SUMS-*.txt
+          # zstd is already at -19 and the .deb/.rpm payloads are compressed; a
+          # second pass costs minutes and saves nothing.
+          compression-level: 0
           retention-days: 7
           if-no-files-found: error
 
-  reproducibility:
-    name: Reproducibility ${{ matrix.rid }}
+  # The corresponding source is architecture-INDEPENDENT: one tree, one archive,
+  # produced by both architecture jobs. Either they are byte-identical and a
+  # release assembler may keep one copy, or they are not and shipping either one
+  # under that name would be a lie. There is no third outcome, so it is checked
+  # rather than assumed.
+  source-identity:
+    name: Corresponding-source identity
     needs: build
     runs-on: ubuntu-24.04
     permissions:
       contents: read
-      packages: read
-    strategy:
-      fail-fast: false
-      matrix:
-        rid: [linux-x64, linux-arm64]
     steps:
       - name: Checkout the pull request head
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+
+      - name: Download the linux-x64 delivery
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        with:
+          name: linux-packages-linux-x64
+          path: ${{ runner.temp }}/x64
+
+      - name: Download the linux-arm64 delivery
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        with:
+          name: linux-packages-linux-arm64
+          path: ${{ runner.temp }}/arm64
+
+      - name: Require one canonical corresponding-source archive
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          x64=( "${RUNNER_TEMP}"/x64/*-corresponding-source.tar.zst )
+          arm=( "${RUNNER_TEMP}"/arm64/*-corresponding-source.tar.zst )
+          [[ ${#x64[@]} -eq 1 ]] || { echo "linux-x64 delivered ${#x64[@]} source archives" >&2; exit 1; }
+          [[ ${#arm[@]} -eq 1 ]] || { echo "linux-arm64 delivered ${#arm[@]} source archives" >&2; exit 1; }
+          [[ "$(basename "${x64[0]}")" == "$(basename "${arm[0]}")" ]] \
+            || { echo "the two architectures named the source archive differently" >&2; exit 1; }
+          a="$(sha256sum "${x64[0]}" | cut -d' ' -f1)"
+          b="$(sha256sum "${arm[0]}" | cut -d' ' -f1)"
+          if [[ "${a}" != "${b}" ]]; then
+              echo "the two architectures produced DIFFERENT bytes under one filename:" >&2
+              echo "  linux-x64   ${a}" >&2
+              echo "  linux-arm64 ${b}" >&2
+              exit 1
+          fi
+          echo "canonical corresponding source: $(basename "${x64[0]}")"
+          echo "canonical SHA-256: ${a}"
+          echo "Both architecture jobs produced identical bytes; a release assembler may ship one copy."
+
+  reproducibility:
+    name: Reproducibility ${{ matrix.rid }}
+    needs: build
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 300
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: linux-x64
+            runner: ubuntu-24.04
+          - rid: linux-arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - name: Checkout the pull request head
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Report the rebuild architecture and runner
+        run: |
+          uname -m
+          echo "runner: ${RUNNER_NAME:-unknown}"
 
       - name: Set up the .NET SDK
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
@@ -136,15 +259,17 @@ jobs:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: printf '%s' "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_ACTOR}" --password-stdin
 
-      - name: Download the first build's artifacts
+      # Only the checksum manifest is taken from the first build. No compiled
+      # object, no staged payload and no FFmpeg runtime crosses this boundary:
+      # repro-check.sh exports PKG_REPRO=1, which makes the runtime adapter refuse
+      # to reuse anything, so this machine rebuilds the encoder from source too.
+      - name: Download the first build's checksum manifest
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
         with:
           name: linux-packages-${{ matrix.rid }}
           path: ${{ runner.temp }}/first
 
-      # A fresh runner, a fresh clone and a fresh toolchain: this is a genuinely
-      # independent second build, not the same machine building twice.
-      - name: Rebuild and compare every SHA-256
+      - name: Rebuild from source and compare the complete delivery
         env:
           RID: ${{ matrix.rid }}
         run: ./ci/package/repro-check.sh --rid "${RID}" --against "${RUNNER_TEMP}/first/SHA256SUMS-${RID}.txt"
@@ -249,7 +374,7 @@ jobs:
       - name: Report the acceptance architecture
         run: uname -m
 
-      - name: Extract into a clean prefix and run it
+      - name: Extract into a clean prefix, relocate it, and run it
         env:
           RID: ${{ matrix.rid }}
         run: ./ci/package/accept-archive.sh --artifacts "${RUNNER_TEMP}/artifacts" --rid "${RID}"

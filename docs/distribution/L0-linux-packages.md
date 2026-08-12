@@ -49,9 +49,15 @@ together. There is no separately versioned web package to drift.
 | --- | --- |
 | `/usr/bin/tesserafin` | relative symlink into the payload |
 | `/usr/lib/tesserafin/` | application payload (self-contained .NET build) |
-| `/usr/lib/tesserafin/ffmpeg/` | the bundled `ffmpeg` and `ffprobe` |
+| `/usr/lib/tesserafin/ffmpeg/bin/` | the bundled `ffmpeg` and `ffprobe` |
+| `/usr/lib/tesserafin/ffmpeg/lib/` | the runtime's own shared libraries |
 | `/usr/share/tesserafin/web/` | bundled Tesserafin Web client |
 | `/usr/share/tesserafin/web-revision.json` | web payload provenance |
+| `/usr/share/tesserafin/ffmpeg/` | runtime SBOM, source manifest, capability record, notices |
+| `/usr/share/licenses/tesserafin-server/LICENSE` | the server licence, GPL-2.0-or-later |
+| `/usr/share/licenses/tesserafin-server/ffmpeg/` | the runtime's per-component licence texts |
+| `/usr/share/doc/tesserafin-server/copyright` | DEP-5, one stanza per licensed component |
+| `/usr/share/doc/tesserafin-server/FFMPEG-CORRESPONDING-SOURCE.txt` | where to obtain the runtime's source |
 | `/etc/tesserafin/` | configuration, owned by the service account |
 | `/etc/tesserafin/tesserafin.conf` | the service environment file |
 | `/var/lib/tesserafin/` | persistent state: database, metadata, plugins |
@@ -59,9 +65,17 @@ together. There is no separately versioned web package to drift.
 | `/var/log/tesserafin/` | rolling application log files |
 | `/usr/lib/systemd/system/tesserafin.service` | the unit |
 
-The portable archive carries the same application and web payload under a
-relocatable prefix and **no** `/etc` content and **no** unit file. It installs
-nothing; see its own `README.md`.
+`bin/` and `lib/` under `/usr/lib/tesserafin/ffmpeg/` are siblings **on purpose**.
+The executables carry `RUNPATH=$ORIGIN/../lib`, so they resolve their bundled
+libraries relative to themselves rather than through any system search path.
+Flattening the two directories, or moving the libraries under `/usr/lib`, would
+silently hand the encoder to whatever `libva` the host happens to carry. Nothing
+is installed under `/opt/tesserafin-ffmpeg`; that prefix exists only inside the
+F0 build container.
+
+The portable archive carries the same application, web and runtime payload under
+a relocatable prefix and **no** `/etc` content and **no** unit file. It installs
+nothing; see its own `README.md` and `LICENSES.md`.
 
 ---
 
@@ -110,16 +124,29 @@ every artifact derives from it.
 
 | Input | Value |
 | --- | --- |
-| Server commit | `1cca371cbaeef63a03e055eab158b8a51759f92f` |
 | Tesserafin Web commit | `a9a362eec764a9fe3fa6ba9b4a7dd7473677e35a` |
 | Tesserafin Web assets image | `ghcr.io/tesserafin-project/tesserafin-web-assets@sha256:6150380052c8a3a154a8a25a9f40a741175a7563afdf89284f9c1f46d3042a6c` |
 | Tesserafin Web payload SHA-256 | `4148c4bc6e0c7c2d6b35ed9992e874a06dcc11d2b6d9e0aad06719e36567be4f` |
-| jellyfin-ffmpeg | `7.1.4-3`, portable GPL build |
+| FFmpeg runtime revision | `7.1.4-tesserafin.1` |
+| FFmpeg upstream commit | `d4590e12452f94d40e413caecb34b08de608353b` |
 
-The web pin has exactly one definition — the `ARG` block in the `Dockerfile` —
-and `ci/package/lib.sh` reads it from there. `ci/package/pins.env` adds only what
-the container path has no reason to know, and the build fails if the two
-disagree about the ffmpeg version.
+The server commit is whatever commit the artifact was built from and is recorded
+per artifact rather than pinned here; freezing it in prose only guarantees the
+prose goes stale.
+
+Each pin has exactly **one** definition and is read from it:
+
+* the web assets image and the paired web commit — the `ARG` block in the
+  `Dockerfile`;
+* the FFmpeg runtime revision and its upstream commit —
+  `ci/ffmpeg/components.json`.
+
+`ci/package/pins.env` restates both only in order to **assert** them, and the
+build fails closed if either source disagrees with it. There is no package-side
+FFmpeg version pin coupled to the container any more: the container installs an
+upstream `.deb` and the packages build the accepted runtime from source, and
+coupling those two is what previously made the packages inherit a binary nobody
+in this project built.
 
 The build fails closed on web provenance: the commit recorded inside the payload
 must equal the pin, **and** the payload's own digest must equal the pinned
@@ -149,21 +176,53 @@ one.
 
 ### Artifact manifest
 
-Every artifact gets `<artifact>.provenance.json` next to it:
+Every artifact gets `<artifact>.provenance.json` next to it, validated against
+the committed schema `ci/package/provenance.schema.json` by
+`ci/package/verify-provenance.sh`. The schema is strict: required keys, no
+unknown keys at any declared level, lowercase 64-hex digests, and a validator
+that fails closed on any JSON Schema keyword it does not implement.
 
 ```json
 {
+  "schemaVersion": 2,
   "packageFormat": "deb",
   "packageName": "tesserafin-server",
   "packageVersion": "1.0.0",
   "architecture": "amd64",
   "runtimeIdentifier": "linux-x64",
   "serverCommit": "...",
+  "serverRepository": "https://github.com/tesserafin-project/tesserafin.git",
   "webCommit": "...",
+  "webVersion": "1.0.0",
+  "webRepository": "https://github.com/tesserafin-project/tesserafin-web.git",
+  "webAssetsImage": "ghcr.io/...@sha256:...",
   "webPayloadSha256": "...",
+  "ffmpegRuntime": {
+    "buildRevision": "7.1.4-tesserafin.1",
+    "upstreamRepository": "https://github.com/jellyfin/jellyfin-ffmpeg.git",
+    "upstreamCommit": "d4590e12452f94d40e413caecb34b08de608353b",
+    "upstreamBaseline": "v7.1.4-3",
+    "architecture": "linux-x64",
+    "license": "GPL-3.0-or-later",
+    "ffmpegSha256": "...",
+    "ffprobeSha256": "...",
+    "runtimeArchive": "tesserafin-ffmpeg-7.1.4-tesserafin.1-linux-x64.tar.xz",
+    "runtimeArchiveSha256": "...",
+    "capabilityManifestSha256": "...",
+    "sbomSha256": "...",
+    "sourceManifestSha256": "...",
+    "noticesSha256": "...",
+    "correspondingSource": "tesserafin-ffmpeg-7.1.4-tesserafin.1-corresponding-source.tar.zst",
+    "correspondingSourceSha256": "..."
+  },
+  "licensing": {
+    "server": "GPL-2.0-or-later",
+    "ffmpegRuntime": "GPL-3.0-or-later",
+    "spdxExpression": "GPL-2.0-or-later AND GPL-3.0-or-later",
+    "note": "..."
+  },
   "applicationPayloadSha256": "...",
-  "ffmpegVersion": "7.1.4-3",
-  "ffmpegSha256": "...",
+  "stagedTreeSha256": "...",
   "sourceDateEpoch": "...",
   "buildTimestamp": "...",
   "toolchain": {
@@ -176,7 +235,98 @@ Every artifact gets `<artifact>.provenance.json` next to it:
 }
 ```
 
+There is deliberately **no** `ffmpegVersion` field. A single version string could
+not distinguish the upstream baseline `7.1.4-3` from the Tesserafin build
+revision `7.1.4-tesserafin.1`, and that ambiguity is precisely how a package
+could claim to carry a runtime it did not build. `buildRevision` and
+`upstreamBaseline` are separate fields for that reason. The obsolete
+`ffmpegAsset` and `ffmpegSha256` fields, which described a release download, are
+gone; `verify-provenance.sh` rejects a manifest that carries them.
+
+Beyond the schema, the gate checks what a schema cannot: that the manifest names
+the artifact it sits beside, with its actual size and digest; that the format's
+architecture spelling, the RID and the runtime's architecture describe one
+machine; that the corresponding-source archive it names is the one actually
+delivered, with the recorded digest; that the version matches the version
+contract; and that the three manifests agree on everything not artifact-specific.
+
 ---
+
+## 5b. Corresponding source and redistribution closure
+
+The bundled FFmpeg runtime is GPL-3.0-or-later, so its complete corresponding
+source has to travel with it. That archive is about 232 MB, it is
+architecture-independent, and it is identical for all three formats — putting it
+inside every `.deb`, `.rpm` and `.tar.gz` would ship six copies of one tree and
+give them six chances to disagree.
+
+It is therefore delivered as an explicit **sidecar** beside the packages:
+
+```
+tesserafin-ffmpeg-7.1.4-tesserafin.1-corresponding-source.tar.zst
+```
+
+* its SHA-256 is in `SHA256SUMS-<rid>.txt`, so a recipient verifying the binaries
+  verifies the source from the same manifest;
+* its filename and SHA-256 are in every artifact provenance manifest;
+* every package carries `/usr/share/doc/tesserafin-server/FFMPEG-CORRESPONDING-SOURCE.txt`,
+  naming it and its digest, so an operator holding only the installed package
+  knows exactly what to ask for;
+* the runtime's own `SOURCE.json` names it too, and `ci/ffmpeg/verify-closure.sh`
+  fails if that name and digest do not match the archive shipped beside it.
+
+Both architecture jobs produce it. The `Corresponding-source identity` job
+requires the two copies to be **byte-identical** and records one canonical digest;
+two different archives under one filename is not a size optimisation to
+deduplicate later, it is a defect. If they ever differ, the job fails rather than
+picking one.
+
+Each package also carries, inside itself, everything needed to identify what it
+contains: F0's `SOURCE.json`, its CycloneDX SBOM, `THIRD_PARTY_NOTICES.md`, the
+capability record and the full `LICENSES/` set.
+
+**What the source archive is not.** It is the corresponding source for the FFmpeg
+runtime only. It does not contain the Tesserafin server source or the Tesserafin
+Web source, and nothing in this delivery implies it does. Those are separate
+works, recorded separately in the provenance manifest as `serverRepository` +
+`serverCommit` and `webRepository` + `webCommit`.
+
+---
+
+## 5c. Licensing
+
+The package contains three separately licensed works. Nothing here relicenses
+anything: a GPL-2.0-or-later server distributed alongside a GPL-3.0-or-later
+runtime is still a GPL-2.0-or-later server.
+
+| Component | Licence | Where the text is |
+| --- | --- | --- |
+| Tesserafin server | GPL-2.0-or-later | `/usr/share/licenses/tesserafin-server/LICENSE` |
+| Tesserafin FFmpeg runtime | GPL-3.0-or-later | `/usr/share/licenses/tesserafin-server/ffmpeg/` |
+| Tesserafin Web client | GPL-2.0-or-later plus its recorded dependency licences | `/usr/share/tesserafin/web-licenses/` |
+
+Format-appropriate metadata, rather than one licence stamped over everything:
+
+* **RPM** — `License: GPL-2.0-or-later AND GPL-3.0-or-later`. `AND` is the SPDX
+  operator for "this artifact contains both". Measured against the pinned
+  rpm 4.20.1 builder rather than assumed: the expression is accepted and
+  round-trips through `%{LICENSE}` byte-identically. Both licence directories are
+  marked `%license`, so `rpm -qL` lists the runtime's texts as well as the
+  server's.
+* **Debian** — a real machine-readable DEP-5 `copyright` with one stanza per
+  differently licensed component. dpkg has no `License` control field and none is
+  invented; a reader parsing `control` would simply never see it.
+* **Portable archive** — `LICENSES.md`, a licence index naming each component,
+  its paths, its licence and where its text is, next to the texts themselves.
+
+`ci/package/verify-artifacts.sh` rejects: a missing server licence, a server
+licence that is not byte-identical to the project `LICENSE`, fewer than twenty
+installed FFmpeg component licence texts, missing F0 notices, a missing
+corresponding-source notice, a package-wide GPL-2-only claim, a GPL-3 claim over
+the server itself, and any nonfree or FDK AAC capability drift. The FDK AAC
+boundary is not rhetorical: F0 skips
+`0029-remove-fdk-aac-from-nonfree.patch` as unsafe, and `verify-runtime.sh`
+refuses any trace of `libfdk_aac`.
 
 ## 6. Docker coexistence
 
@@ -187,11 +337,19 @@ deliberate way:
 | --- | --- | --- |
 | .NET runtime | framework-dependent, supplied by the base image | **self-contained**, carried in the payload |
 | Web payload | the pinned assets image | the same pinned assets image |
-| Encoder | jellyfin-ffmpeg noble `.deb` | jellyfin-ffmpeg portable build, same release |
+| Encoder | upstream jellyfin-ffmpeg noble `.deb` | the accepted Tesserafin FFmpeg runtime, built from source |
 | Identity | fixed UID 10000 in the image | system user `tesserafin` |
 
-The runtime difference is forced: an image can supply a runtime, a `.deb` cannot
+The .NET difference is forced: an image can supply a runtime, a `.deb` cannot
 unless it depends on a vendor APT/DNF feed, which is out of scope here.
+
+The **encoder** difference is not a packaging accident either. The container's
+FFmpeg is unchanged by this work and stays out of scope; the packages carry the
+accepted Tesserafin runtime because that is the runtime this project builds,
+gates and can supply corresponding source for. The two are different artifacts
+under different terms — the container's upstream `.deb` is GPL-2.0-or-later, the
+Tesserafin runtime is GPL-3.0-or-later — and nothing claims they are the same
+FFmpeg or carry the same capability surface.
 
 Because of it, **payload equivalence is an intra-L0 property**: the `.deb`, the
 `.rpm` and the `.tar.gz` for one architecture are proven to carry identical
@@ -205,43 +363,127 @@ runner — so their evidence is local, as it has always been.
 
 ---
 
-## 7. FFmpeg boundary
+## 7. FFmpeg runtime
 
-**Measured, not assumed.** The relevant facts:
+The packages carry the **accepted Tesserafin FFmpeg runtime** (F0 / #229),
+reconstructed from the pinned sources on every build. The relevant facts:
 
 1. The server's encoder precedence is `--ffmpeg` / environment, then
    `EncoderAppPath` in `encoding.xml`, then a bare `ffmpeg` on `$PATH`.
 2. The server **refuses to start** without a usable encoder:
    `FfmpegException: Failed to find valid ffmpeg` is fatal. "Ship no encoder" is
    therefore not a shippable option — the service would never start.
-3. The container installs `jellyfin-ffmpeg7_7.1.4-3-noble_<arch>.deb`. That
-   binary hard-codes `RUNPATH=/usr/lib/jellyfin-ffmpeg/lib` and needs sixteen
-   external sonames. It fails `GLIBC_2.38` outright on Debian 12 and Rocky 9, and
-   on EL10/Fedora it needs `libx264.so.164`, `libx265.so.199` and
-   `libmp3lame.so.0`, which are in no base RPM repository. It is not
-   redistributable across distributions.
-4. The **same upstream release** publishes
-   `jellyfin-ffmpeg_7.1.4-3_portable_{linux64,linuxarm64}-gpl.tar.xz`: two
-   relocatable binaries with no external dependencies. Verified to run a real
-   `libx264` encode on bare `debian:12`, `ubuntu:24.04`, `rockylinux:9` and
-   `fedora:42`.
-5. Capability was compared between the two builds, not assumed equal. Both report
-   the same hardware acceleration methods — `cuda vaapi qsv drm opencl vulkan` —
-   and the same hardware encoder set: `h264/hevc/av1` across `nvenc`, `qsv`,
-   `vaapi`, `amf`, plus `h264/hevc_v4l2m2m`.
+3. The unit passes `--ffmpeg /usr/lib/tesserafin/ffmpeg/bin/ffmpeg`, so the
+   server never silently falls back to a distribution `ffmpeg`.
 
-So the packages bundle the portable asset of the release the container already
-pins, by version and SHA-256. Same project, same version, same GPL terms, same
-supply chain — a different asset of it, which is a deviation worth naming rather
-than burying. No new FFmpeg distribution strategy is introduced, and no
-distribution's arbitrary `ffmpeg` is depended on, silently or otherwise.
+### How it is produced
 
-What is **not** claimed: that the bundled encoder is byte-identical to the
-container's, or that any codec beyond the compared surface behaves identically.
+`ci/package/ffmpeg-runtime.sh` is an **adapter over `ci/ffmpeg/**`**, not a second
+FFmpeg build. It runs the merged F0 scripts in the F0 workflow's own order —
+`build-runtime.sh`, `verify-runtime.sh`, `package-runtime.sh`,
+`verify-closure.sh`, `delivered-digests.sh` — and restates no configure flag, no
+component pin, no patch decision and no version constant. Every name and identity
+is derived from `ci/ffmpeg/components.json`.
+
+The build depends on **none** of: an expiring workflow artifact, a historical run
+ID, a manually downloaded accepted binary, a Jellyfin release asset, the system
+FFmpeg, an unpinned container or package repository, or a registry publication.
+The runtime is never cross-built or emulated, which is why both architectures now
+build on architecture-native runners.
+
+### What the package build refuses
+
+* a runtime revision that is not the accepted `7.1.4-tesserafin.1`;
+* a runtime architecture that does not match the package RID;
+* a failed F0 closure gate;
+* an absent or additional F0 delivered path;
+* a wrong ELF machine for `ffmpeg` or `ffprobe`;
+* a `RUNPATH` that is not exactly `$ORIGIN/../lib`;
+* a bundled SONAME symlink that does not resolve inside the runtime;
+* a missing corresponding-source archive;
+* a delivered digest that differs from the accepted baseline while
+  `ci/ffmpeg/**` is unchanged.
+
+### The accepted digest baseline
+
+`ci/package/f0-accepted-digests.txt` holds the sixteen delivered digests F0-A2
+accepted. It is a **comparison oracle**: nothing consumes those bytes, and using
+an accepted binary as a build input is exactly what this work removed. It is
+enforced only while `git rev-parse HEAD:ci/ffmpeg` equals `F0_ACCEPTED_CI_TREE`
+in `pins.env` — when `ci/ffmpeg/**` legitimately changes the baseline is stale by
+construction, and a stale oracle must not be able to green a build or fail one.
+
+One caveat is recorded rather than hidden. The corresponding-source archive is
+zstd-compressed, and zstd does not guarantee identical compressed bytes across
+library builds, so a workstation and a hosted runner can emit different
+`.tar.zst` files from an identical tar stream. Four further digests
+(`SOURCE.json`, `THIRD_PARTY_NOTICES.md`, `sbom.cdx.json` and the runtime
+`.tar.xz` that contains them) record that archive's digest and move with it. The
+baseline therefore also records the **decompressed** stream digest, and the gate
+distinguishes that case explicitly — but accepts it only when
+`PKG_ALLOW_COMPRESSOR_DRIFT=1` is set deliberately. CI never sets it: a hosted
+build runs the same runner image that produced the baseline, so a difference
+there is a real one.
+
+### The inherited runtime, and why it is gated
+
+Before this work the packages downloaded
+`jellyfin-ffmpeg_<version>_portable_{linux64,linuxarm64}-gpl.tar.xz` from an
+upstream release page, pinned by two SHA-256 values, and described it as "the
+same FFmpeg release and GPL terms" as the container. That binary is gone, along
+with the version pin, both checksums, the asset-name construction, the download,
+the extraction and the `ffmpegAsset` provenance field.
+
+`ci/package/verify-no-inherited-ffmpeg.sh` fails if any of them returns. It
+deliberately does **not** forbid the strings `jellyfin-ffmpeg` or `7.1.4-3` on
+their own: the runtime is genuinely built from that fork at a pinned commit, F0's
+`SOURCE.json`, SBOM and notices say so, and those files ship inside every
+package. Erasing honest upstream provenance to quiet a grep would be the
+dishonest fix. The gate targets the download, not the ancestry.
 
 ---
 
-## 8. Hardware transcoding
+## 8. Hardware boundary
+
+Three distinct claims, kept distinct because collapsing them is how a package
+ends up promising hardware it has never run.
+
+### Compiled and advertised
+
+Taken from the runtime's own `capability.json`, which each package installs at
+`/usr/share/tesserafin/ffmpeg/capability.json`. It states **compiled capability
+only**: listing an encoder proves it was compiled in and nothing more.
+
+| Path | linux-x64 | linux-arm64 |
+| --- | --- | --- |
+| VAAPI | yes | yes |
+| DRM | yes | yes |
+| OpenCL | yes | yes |
+| CUDA / NVENC / NVDEC / CUVID | yes | as declared by that architecture's manifest |
+| QSV | yes | **no** — x64 only |
+| AMF | yes | **no** — x64 only |
+
+`-hwaccels` on the accepted linux-x64 runtime reports exactly
+`cuda vaapi qsv drm opencl`. **Vulkan is not present** — not as an hwaccel, not
+as an encoder, not as a filter — so no package claims it, and libplacebo is out
+of scope for this work. V4L2 M2M encoders (`h264_v4l2m2m`, `hevc_v4l2m2m`,
+`vp8_v4l2m2m`, `mpeg4_v4l2m2m`, `h263_v4l2m2m`) *are* compiled in and the
+capability manifest proves it; that is a compiled-capability statement and
+nothing more.
+
+### Actually executed
+
+* Software encode and decode flows, on both architectures, in every declared
+  acceptance environment.
+* **VAAPI**, on the available AMD render node, from a real package artifact —
+  see §8b.
+
+### Not runtime-tested
+
+QSV, NVENC/NVDEC, AMF and Rockchip. The runtime's own manifest says so in
+`hardwareRuntimeEvidence`, and this document does not upgrade it.
+
+### The unit's privilege
 
 The unit ships the least privilege that is *proven* device-compatible:
 `NoNewPrivileges=true`, and nothing else. Every directive that hides or relabels
@@ -259,9 +501,25 @@ systemctl restart tesserafin
 
 The hosted lifecycle jobs have no GPU. They prove the unit does not block device
 access and that the software path works; they do **not** prove hardware encoding
-on any specific GPU, and this document does not claim they do. The startup
-hardware decision is logged — see `docs/container/A4-hardware-acceleration.md`,
-whose probe logic is the same code.
+on any specific GPU.
+
+---
+
+## 8b. AMD VAAPI package integration
+
+Performed against a **real package artifact**, not the staging tree: the package
+is extracted or installed, and the `ffmpeg` executable inside it is the one
+invoked. A complete `h264_vaapi` transcode is run on the AMD render node, and the
+output is verified to be genuine H.264 with the expected frame count and duration
+and to decode back cleanly.
+
+What this proves: the packaged runtime's bundled `libva` layout works from its
+installed location, `$ORIGIN/../lib` resolves to the package's own libraries and
+not the host's, and no abort or silent software substitution occurs.
+
+What this does **not** prove: automatic hardware selection by the server. That is
+issues #29 and #76 and neither is complete. This evidence is about package
+integration with the accepted runtime.
 
 ---
 
@@ -309,6 +567,45 @@ What makes it hold:
   `use_source_date_epoch_as_buildtime` and `clamp_mtime_to_source_date_epoch`
   set, and with debuginfo, stripping and build-id links disabled.
 * `tar --sort=name --owner=0 --group=0 --numeric-owner`.
+* the FFmpeg runtime is itself reproducible: the F0 build is pinned to one
+  builder image, one package snapshot, a fixed `FF_JOBS` rather than `$(nproc)`,
+  and an epoch derived from the pinned FFmpeg baseline.
+
+### What crosses between the two sides
+
+Only the checksum manifest. `ci/package/repro-check.sh` exports `PKG_REPRO=1`,
+which makes `ci/package/ffmpeg-runtime.sh` **refuse** `--reuse` — so the second
+machine rebuilds the FFmpeg runtime from source too. No compiled object and no
+staged payload is shared. Within a single build `--reuse` is used, and only
+there: one freshly built runtime feeds the `.deb`, the `.rpm` and the `.tar.gz`
+of that architecture, which is what makes their equivalence a fact rather than a
+coincidence.
+
+Both sides run on architecture-native hosted runners, and the rebuild runs on a
+different runner from the build.
+
+### Path set before digests
+
+The delivered **path set** is compared before any digest. Two builds that agree
+on every digest they both produced have still not reproduced if one produced
+fewer files — a shortened reference list is the failure mode a digest-only
+comparison cannot see. The corresponding-source archive must be in that set.
+
+### Controls
+
+`ci/package/repro-controls.sh` damages a real artifact set eight ways and
+requires each damaged copy to be rejected, plus one undamaged control that must
+be accepted — without it, "rejected" could just mean the comparison rejects
+everything:
+
+1. shortened reference list
+2. additional delivered path
+3. renamed delivered path
+4. obsolete v1 provenance manifest (the removed upstream-asset fields)
+5. corrupted package
+6. corrupted provenance manifest
+7. mismatched corresponding-source archive
+8. architecture mismatch in a manifest
 
 ---
 
@@ -321,6 +618,11 @@ workflow artifacts.
 
 The packaging checks are **not** branch-protection required checks. Branch
 protection lists a fixed set of contexts, and this work does not modify it.
+
+This work also does not implement automatic hardware selection, does not add
+Vulkan or libplacebo, does not change the server's playback behaviour, does not
+change Docker's FFmpeg or container distribution, and does not change the F0
+component set, flags, patches, pins or runtime version.
 
 ### Deferred to L1
 

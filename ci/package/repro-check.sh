@@ -10,11 +10,23 @@
 # The verdict is bit-for-bit or nothing. On a mismatch the differing artifacts
 # are named, and their members are diffed far enough to point at the cause; the
 # gate is never downgraded to "functionally equivalent".
+#
+# The delivered PATH SET is compared before any digest. Two builds that agree on
+# every digest they both produced have still not reproduced if one of them
+# produced fewer files — a shortened reference list is the failure mode a
+# digest-only comparison cannot see.
+#
+# PKG_REPRO=1 is exported for every build this script runs. It makes
+# ci/package/ffmpeg-runtime.sh refuse `--reuse`, so each side rebuilds the FFmpeg
+# runtime from source rather than sharing one. An independent rebuild that reuses
+# anything has not rebuilt.
 
 set -euo pipefail
 
 # shellcheck source=ci/package/lib.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
+
+export PKG_REPRO=1
 
 RID=""; AGAINST=""
 
@@ -53,6 +65,29 @@ echo
 echo "-- reference --"; cat "${AGAINST}"
 echo "-- rebuild   --"; cat "${SECOND}"
 echo
+
+# --- the delivered path set, before any digest --------------------------------
+#
+# A reference list that lost a line, gained one, or renamed one describes a
+# different delivery. Comparing digests first would report "no differing
+# digests" for a reference that simply stopped mentioning an artifact.
+ref_paths="$(awk '{print $2}' "${AGAINST}" | LC_ALL=C sort)"
+new_paths="$(awk '{print $2}' "${SECOND}"  | LC_ALL=C sort)"
+if [[ "${ref_paths}" != "${new_paths}" ]]; then
+    echo "REPRO: FAIL — the two builds do not deliver the same set of paths" >&2
+    diff <(echo "${ref_paths}") <(echo "${new_paths}") >&2 || true
+    exit 1
+fi
+ref_count="$(wc -l <<<"${ref_paths}")"
+echo "delivered path sets agree: ${ref_count} paths on both sides"
+
+# The corresponding-source archive is architecture-independent, so it must be in
+# the set and both sides must have produced the same bytes. Two different
+# archives under one name is precisely the silent divergence this forbids.
+if ! grep -q "${F0_SOURCE_ARCHIVE}" <<<"${ref_paths}"; then
+    echo "REPRO: FAIL — the corresponding-source archive is not in the delivered set" >&2
+    exit 1
+fi
 
 if diff -q "${AGAINST}" "${SECOND}" >/dev/null; then
     echo "REPRO: PASS — every ${RID} artifact is bit-for-bit identical across two clean builds"

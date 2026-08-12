@@ -61,10 +61,14 @@ PATTERNS=(
     '"ffmpegAsset"'$'\t''a provenance field describing an upstream release download'
 )
 
+# The ENFORCEMENT files necessarily contain the strings they forbid, because
+# forbidding a string means naming it. None of them is on any build path, so none
+# of them can reintroduce a runtime download.
 EXEMPT=(
-    "ci/package/verify-no-inherited-ffmpeg.sh"
-    "ci/package/verify-provenance.sh"
-    "ci/tests/package.test.sh"
+    "ci/package/verify-no-inherited-ffmpeg.sh"   # names its own patterns
+    "ci/package/verify-provenance.sh"            # rejects the obsolete manifest fields by name
+    "ci/package/repro-controls.sh"               # fabricates an obsolete v1 manifest as a control
+    "ci/tests/package.test.sh"                   # asserts both behaviours with the real values
 )
 
 FAILURES=0
