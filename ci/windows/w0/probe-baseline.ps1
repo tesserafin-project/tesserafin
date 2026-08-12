@@ -423,13 +423,32 @@ if (-not (Test-Path -LiteralPath $exe)) {
 $tree = Get-W0TreeDigest -Root $publishDir
 $selfContained = Test-W0SelfContained -PublishDir $publishDir
 $machine = Get-W0PeMachine -Path $exe
-$nativeDlls = @(Get-ChildItem -LiteralPath $publishDir -Recurse -Filter *.dll |
-    Where-Object { -not (Test-Path -LiteralPath ($_.FullName -replace '\.dll$', '.deps.json')) } |
+# Managed assemblies are separated from native libraries BEFORE any
+# architecture claim is made. The earlier filter looked for a sibling
+# '.deps.json' to spot managed code, but only the application has one, so all
+# 439 delivered DLLs were inspected as native -- and the 192 pure managed
+# AnyCPU assemblies among them carry COFF machine i386 by design. The probe
+# duly reported '192 libraries disagree with x64' on a correct x64 publish.
+# Standing false positives are not cosmetic: one genuinely wrong-architecture
+# native library would have been indistinguishable from them.
+$inspected = @(Get-ChildItem -LiteralPath $publishDir -Recurse -Filter *.dll |
     ForEach-Object {
-        try { @{ name = $_.Name; machine = (Get-W0PeMachine -Path $_.FullName); bytes = $_.Length } }
+        try {
+            @{
+                name    = $_.Name
+                machine = (Get-W0PeMachine -Path $_.FullName)
+                managed = (Test-W0ManagedAssembly -Path $_.FullName)
+                bytes   = $_.Length
+            }
+        }
         catch { $null }
     } | Where-Object { $_ })
 
+$managedAssemblies = @($inspected | Where-Object { $_.managed })
+$nativeDlls = @($inspected | Where-Object { -not $_.managed })
+
+# Only NATIVE libraries make an architecture claim; a managed assembly's COFF
+# word says nothing about the process it will be JITted into.
 $foreignArchitecture = @($nativeDlls | Where-Object { $_.machine -notin 'x64', 'unknown-0x0000' })
 
 Add-W0Fact -Evidence $evidence -Id 'publish.selfcontained' -Bucket 'working' `
@@ -444,6 +463,8 @@ Add-W0Fact -Evidence $evidence -Id 'publish.selfcontained' -Bucket 'working' `
         totalBytes        = (Get-ChildItem -LiteralPath $publishDir -Recurse -File | Measure-Object -Property Length -Sum).Sum
         exeMachine        = $machine
         selfContained     = $selfContained
+        dllsInspected     = $inspected.Count
+        managedAssemblies = $managedAssemblies.Count
         nativeLibraries   = $nativeDlls
         foreignArchitecture = $foreignArchitecture
     }
@@ -451,12 +472,30 @@ Add-W0Fact -Evidence $evidence -Id 'publish.selfcontained' -Bucket 'working' `
 # Wrong-architecture negative control, answered from the PE header rather than
 # from whether the binary happened to start on this host.
 Add-W0Fact -Evidence $evidence -Id 'control.architecture' -Bucket 'working' `
-    -Detail ("Wrong-architecture control: tesserafin.exe reports COFF machine '$machine' and " +
-             "$($foreignArchitecture.Count) delivered native library/libraries disagree with x64.") `
-    -Data @{ expected = 'x64'; actual = $machine; foreign = $foreignArchitecture }
+    -Detail ("Wrong-architecture control: tesserafin.exe reports COFF machine '$machine'. Of " +
+             "$($inspected.Count) delivered DLLs, $($managedAssemblies.Count) are managed .NET " +
+             "assemblies -- excluded from the architecture claim because a managed AnyCPU image " +
+             "carries COFF machine i386 by design and is JITted to the process architecture -- and " +
+             "$($nativeDlls.Count) are native. $($foreignArchitecture.Count) NATIVE " +
+             "library/libraries disagree with x64, which is the number that can actually indict a " +
+             "publish.") `
+    -Data @{
+        expected      = 'x64'
+        actual        = $machine
+        dllsInspected = $inspected.Count
+        managed       = $managedAssemblies.Count
+        native        = $nativeDlls.Count
+        foreign       = $foreignArchitecture
+    }
 
 if ($machine -ne 'x64') {
     throw "W0 HARD STOP: the published tesserafin.exe is '$machine', not x64."
+}
+
+# Now that the count means something, it is gated rather than merely recorded.
+if ($foreignArchitecture.Count -gt 0) {
+    throw ("W0 HARD STOP: $($foreignArchitecture.Count) delivered NATIVE library/libraries are not " +
+           "x64: " + (($foreignArchitecture | ForEach-Object { "$($_.name)=$($_.machine)" }) -join ', '))
 }
 
 # Missing self-contained runtime negative control.

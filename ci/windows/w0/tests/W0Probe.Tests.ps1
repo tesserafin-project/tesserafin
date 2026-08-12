@@ -99,6 +99,65 @@ Describe 'Get-W0PeMachine -- the wrong-architecture negative control' {
     }
 }
 
+Describe 'Test-W0ManagedAssembly -- so the architecture control means something' {
+    BeforeAll {
+        function New-Pe {
+            <#
+                A PE32+ image whose CLI data directory is either populated (a
+                managed assembly) or zero (a native library).
+            #>
+            param([uint16] $Machine, [switch] $Managed)
+
+            $bytes = [byte[]]::new(0x400)
+            $bytes[0] = 0x4D; $bytes[1] = 0x5A
+            [System.BitConverter]::GetBytes([int]0x80).CopyTo($bytes, 0x3C)
+            $bytes[0x80] = 0x50; $bytes[0x81] = 0x45
+            [System.BitConverter]::GetBytes($Machine).CopyTo($bytes, 0x84)
+
+            # optional header starts at 0x80 + 24; PE32+ magic 0x20B
+            $optional = 0x80 + 24
+            [System.BitConverter]::GetBytes([uint16]0x20B).CopyTo($bytes, $optional)
+            if ($Managed) {
+                $cli = $optional + 112 + (14 * 8)
+                [System.BitConverter]::GetBytes([uint32]0x2050).CopyTo($bytes, $cli)
+            }
+            return $bytes
+        }
+
+        function New-PeFile {
+            param([byte[]] $Bytes)
+            $file = Join-Path ([System.IO.Path]::GetTempPath()) ("w0-mgd-{0}.bin" -f [guid]::NewGuid())
+            [System.IO.File]::WriteAllBytes($file, $Bytes)
+            return $file
+        }
+    }
+
+    It 'recognises a managed AnyCPU assembly, which reports i386 by design' {
+        $file = New-PeFile -Bytes (New-Pe -Machine 0x014C -Managed)
+        try {
+            Get-W0PeMachine -Path $file | Should -Be 'x86'
+            Test-W0ManagedAssembly -Path $file | Should -BeTrue
+        } finally { Remove-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue }
+    }
+
+    It 'does NOT mistake a genuinely x86 native library for a managed assembly' {
+        $file = New-PeFile -Bytes (New-Pe -Machine 0x014C)
+        try {
+            Get-W0PeMachine -Path $file | Should -Be 'x86'
+            # This is the case the architecture control must still catch: same
+            # COFF word as the managed assembly above, but native.
+            Test-W0ManagedAssembly -Path $file | Should -BeFalse
+        } finally { Remove-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue }
+    }
+
+    It 'treats an x64 native library as native' {
+        $file = New-PeFile -Bytes (New-Pe -Machine 0x8664)
+        try {
+            Test-W0ManagedAssembly -Path $file | Should -BeFalse
+        } finally { Remove-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue }
+    }
+}
+
 Describe 'Test-W0SelfContained -- the missing-runtime negative control' {
     BeforeAll {
         function New-PublishFixture {

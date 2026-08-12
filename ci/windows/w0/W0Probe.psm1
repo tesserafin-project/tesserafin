@@ -203,6 +203,62 @@ function Get-W0PeMachine {
     }
 }
 
+function Test-W0ManagedAssembly {
+    <#
+    .SYNOPSIS
+        Is this PE image a managed .NET assembly rather than a native library?
+
+    .DESCRIPTION
+        The architecture control is worthless without this distinction. A pure
+        managed AnyCPU assembly carries COFF machine 0x014C -- i386 -- with the
+        ILONLY flag set, and the CLR JITs it to whatever the process is. A
+        self-contained Tesserafin publish delivers 192 of them, so a check that
+        reads the COFF word alone reports 192 libraries "disagreeing with x64"
+        on a perfectly correct x64 publish. That is not a harmless cosmetic
+        error: 192 standing false positives are exactly where one genuinely
+        wrong-architecture NATIVE library would hide.
+
+        The discriminator is the PE optional header's fifteenth data directory,
+        the CLI header. Non-zero means the image carries a .NET metadata root
+        and is managed; zero means it is native code and its COFF machine word
+        is a real architecture claim.
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [string] $Path
+    )
+
+    $bytes = [System.IO.File]::ReadAllBytes($Path)
+    if ($bytes.Length -lt 0x40) { return $false }
+    if ($bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) { return $false }
+
+    $peOffset = [System.BitConverter]::ToInt32($bytes, 0x3C)
+    if ($peOffset -lt 0 -or ($peOffset + 24) -gt $bytes.Length) { return $false }
+
+    # PE signature (4) + COFF header (20) = the optional header start.
+    $optional = $peOffset + 24
+    if (($optional + 2) -gt $bytes.Length) { return $false }
+
+    # The data directories sit after the optional header's fixed part, whose
+    # size differs between PE32 and PE32+.
+    $magic = [System.BitConverter]::ToUInt16($bytes, $optional)
+    $directories = switch ($magic) {
+        0x10B   { $optional + 96 }   # PE32
+        0x20B   { $optional + 112 }  # PE32+
+        default { $null }
+    }
+    if ($null -eq $directories) { return $false }
+
+    # Directory 14 is the CLI header; each entry is an 8-byte RVA/size pair.
+    $cli = $directories + (14 * 8)
+    if (($cli + 4) -gt $bytes.Length) { return $false }
+
+    return ([System.BitConverter]::ToUInt32($bytes, $cli) -ne 0)
+}
+
 function Test-W0SelfContained {
     <#
     .SYNOPSIS
@@ -339,6 +395,7 @@ Export-ModuleMember -Function `
     Add-W0Fact, `
     Save-W0Evidence, `
     Get-W0PeMachine, `
+    Test-W0ManagedAssembly, `
     Test-W0SelfContained, `
     Test-W0EvidenceComplete, `
     Get-W0TreeDigest

@@ -516,7 +516,7 @@ changed the answer.
 | silent uninstall | yes, `msiexec /x /qn` | script-defined | yes | yes |
 | long-term automation / maintenance | `wix` is a `dotnet tool`, pinned like any package | trivial | tooling churn | external installer, not a `dotnet tool` |
 | open-source redistribution | MS-RL source; the maintenance fee attaches to the build tool, never to its output (§5.4) | n/a | n/a | permissive, but see below |
-| reproducible unsigned output | **measured** — two identical builds compared | **measured** | not reached | not reached |
+| reproducible unsigned output | **measured** — payload and every authored table deterministic; bounded exception for two container fields (§5.6) | **measured** — bit-for-bit | not reached | not reached |
 
 ### 5.4 The WiX licence, read rather than assumed
 
@@ -566,25 +566,83 @@ and obtaining it would need either an unpinned Chocolatey dependency —
 explicitly forbidden — or a pinned third-party download whose only purpose would
 be to confirm a disqualification already established.
 
-### 5.6 Reproducible unsigned output, measured
+### 5.6 Reproducible unsigned output, measured — and the one bounded exception
 
-The probe builds the same MSI twice and compares SHA-256, and does the same for
-the ZIP. The answer is **measured, not assumed** — and the two disagree:
+The Linux rule is that an unsigned deliverable must be **bit-for-bit
+reproducible**. The MSI is the only artifact in this distribution that does not
+reach it, and the honest form of that statement is narrow, not a shrug. An
+earlier draft of this section said the difference was "structural, not a bug"
+and moved the burden elsewhere. That is a weakening of the standard by
+assertion, so the question was reopened and answered by experiment.
 
-| Artifact | Two identical builds | Result |
-| --- | --- | --- |
-| MSI (WiX 6.0.2+b3f3403) | `2a17c258…` vs `9fb97698…` | **not reproducible** |
-| portable ZIP | `899d995f…` vs `899d995f…` | **reproducible** |
+#### The first measurement was not measuring WiX
 
-The MSI difference is structural, not a bug: an MSI carries a per-build package
-code GUID and stream timestamps.
+The lifecycle MSI's payload comes from `dotnet publish`, which is not itself
+guaranteed deterministic across builds or runners without its own
+`<Deterministic>` and path-mapping controls. Two MSIs differing for that reason
+would say nothing about the installer format. So a second, **isolated**
+experiment builds a probe MSI from a fixed-content payload with a fixed
+modification time and a pinned `ProductCode`, twice, into two separate
+intermediate folders sharing no compiled object.
 
-The consequence is a design constraint on §8 rather than a defect: **the
-reproducibility proof is carried by the ZIP and by the FFmpeg runtime
-component, not by the MSI.** The MSI is a container over inputs that are
-themselves bit-for-bit reproducible and digest-identified, and W4 must record
-the input digests in the MSI's provenance so the container is traceable even
-where the container's own bytes are not.
+(`ProductCode`, not `Id`: in WiX v4 and later `Package/@Id` is an *identifier*
+and rejects a GUID with `WIX0014`. The first run of the experiment failed
+exactly that way, which is why the attribute is named here from the compiler's
+answer rather than from memory.)
+
+#### What two fixed-input builds actually produce
+
+| | result |
+| --- | --- |
+| raw SHA-256 | `8f608446…` vs `44bab68d…` — **differ** |
+| decompiled authored tables | **byte-identical**, 0 diff lines |
+| `wix msi transform` between them | `WIX0227: The transform being built did not contain any differences so it could not be created` |
+| `Package/@PackageCode` settable | **no** — `WIX0004: unexpected attribute` |
+| portable ZIP, two builds | `899d995f…` vs `899d995f…` — **reproducible** |
+
+Three of those lines are the ruling.
+
+`wix msi decompile` reconstructs every authored table — `Directory`,
+`Component`, `File`, `Registry`, `ServiceInstall`, `ServiceControl`, the
+`Feature` tree — and never re-emits the OLE summary-information stream. The two
+decompiled sources are identical, so **every security-relevant table and the
+payload are deterministically identical**, with the container fields excluded by
+construction rather than by an assumption about which fields differ.
+
+Windows Installer's own transform engine agrees, and this is the stronger
+statement: asked to express the difference between the two databases as an MST,
+it reports that there **is no difference to express**. That is not the probe
+grading its own homework — it is the platform's diff mechanism returning empty.
+
+#### The irreducible fields, enumerated
+
+The residual byte delta is confined to:
+
+1. **the Package Code** (summary-information `PID_REVNUMBER`), which Windows
+   Installer defines as identifying a *package instance* and regenerates per
+   build. WiX 6.0.2 exposes no attribute to pin it — measured, not assumed: the
+   probe compiles a `Package/@PackageCode` every run and records that the
+   compiler rejects it with `WIX0004`;
+2. **OLE container and stream timestamps** written by the storage layer.
+
+Pinning the Package Code would also be **harmful, not merely impossible**: two
+packages with differing content and an identical Package Code are precisely the
+condition the installer's caching and repair logic must be able to tell apart.
+
+#### The ruling
+
+The MSI is accepted with an **explicit, bounded architectural exception**:
+its payload and every authored table are proven deterministic, and its
+irreducible delta is the two container fields named above. This is **not**
+"functional equivalence" — nothing about the comparison is behavioural, and no
+table is exempted. The exception is bounded by the two instruments above, and
+W4 must keep both in its acceptance suite so the boundary cannot silently widen.
+
+The bit-for-bit standard itself is **not relaxed**: the ZIP and the FFmpeg
+runtime component remain bit-for-bit reproducible with no exception at all
+(§8), and W4 records the input digests in the MSI's provenance so the container
+is traceable through its contents. Signing remains a later transformation over
+an accepted unsigned digest (§11).
 
 ---
 
@@ -808,9 +866,18 @@ The Linux rule is inherited without relaxation.
    is probe evidence, and W2 replaces it with a daemonless digest-pinned OCI pull
    on the Windows host.
 
-Where a container's own bytes cannot be reproducible — the MSI, measured in §5.6
-— the *contents* still are, and the container records the input digests. The
-proof lives on the ZIP and the FFmpeg component.
+Exactly one artifact carries an exception to clause 4, and it is bounded and
+enumerated rather than delegated: the MSI's payload and every authored database
+table are proven deterministic across two fixed-input builds, and its residual
+delta is confined to the Package Code and OLE container timestamps — neither
+pinnable in the toolset, the former harmful to pin (§5.6). That is a named
+exception to byte identity for two container fields, **not** a downgrade to
+functional equivalence and **not** a transfer of the burden to another artifact.
+
+Every other unsigned deliverable — the portable ZIP, the FFmpeg runtime
+component and its corresponding source — is bit-for-bit reproducible with no
+exception. The MSI additionally records its input digests, so the container is
+traceable through contents that are themselves reproducible.
 
 ### Signing is a later transformation
 
@@ -978,7 +1045,8 @@ W1 delivers the Windows FFmpeg runtime. It is accepted when, and only when:
 | 1 | built natively on `windows-latest` (or a native Windows x64 equivalent), from the pinned upstream commit, with the resolved SHA asserted |
 | 2 | the fork's `debian/patches/series` applies cleanly and `tonemapx` is present in `-filters` |
 | 3 | every component in `components.json` applicable to `win-x64` builds from its pinned source and checksum; no `pacman` media package enters the link |
-| 4 | the MSYS2 toolchain is pinned by exact package identity and recorded |
+| 4 | the MSYS2 toolchain satisfies the six-clause entry contract in §7.4 — every package's name, version, architecture, filename and SHA-256 recorded in `components.json`; files mirrored immutably and digest-verified before installation; installed with `pacman -U` from the pinned set, never `-Syu` or `-S` against a live repository |
+| 4b | the runtime is built with `--enable-schannel` (§7.3) and its import closure contains no OpenSSL, GnuTLS or other third-party TLS library |
 | 5 | `ffmpeg.exe` and `ffprobe.exe` are PE x64 and their import table resolves entirely within the delivered tree plus OS DLLs |
 | 6 | every required encoder, decoder, filter and protocol from `EncoderValidator` is present |
 | 7 | a software encode → probe → decode smoke passes on the same host |
@@ -1011,9 +1079,13 @@ Open risks, ranked:
    contract (repository-published per-package SHA-256, mirrored immutably,
    `pacman -U` from pinned files, never `-Syu`) -- but implementing it is W1
    work and the risk stands until it is done.
-2. **MSI bytes are not reproducible (§5.6).** Handled by design — the proof
-   moves to the ZIP and the FFmpeg component and the MSI records input digests —
-   but it must not be quietly re-described as "the MSI reproduces".
+2. **MSI bytes are not bit-for-bit reproducible (§5.6).** Bounded, not waved
+   through: the payload and every authored table are proven identical across two
+   fixed-input builds, Windows Installer's own transform engine reports no
+   difference between the two databases, and the residual delta is the Package
+   Code and OLE container timestamps -- neither pinnable in WiX 6.0.2, and the
+   former harmful to pin. It must never be re-described as "the MSI reproduces",
+   and W4 must keep both instruments so the exception cannot widen.
 3. **72 of 3,992 tests fail on native Windows (§2.7).** Pre-existing -- proven by
    an exact failing-set comparison against the base commit, not assumed -- and
    outside W0 scope, but not cosmetic. The child-process stdin family is the
