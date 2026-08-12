@@ -122,15 +122,29 @@ allows 600 s: the first hosted run timed out at 180 s while migrations were
 still running and read as "this build does not start", which is not what was
 measured.
 
-**Readiness is `/` answering with any status, and the request is made with
-`HttpClient`, not `Invoke-WebRequest`.** Tesserafin redirects `/` to the web
-client, and `Invoke-WebRequest -MaximumRedirection 0` raises "maximum
-redirection count exceeded" on a 3xx — a class `-SkipHttpErrorCheck` does not
-cover. A server answering 302 was therefore indistinguishable from a server that
-was not answering at all, which cost two hosted runs. `HttpClient` with
-`AllowAutoRedirect` disabled returns the 302 as a value. Insisting on 200 would
-also have been wrong: it asserts a routing decision rather than measuring whether
-the server is up. **W2's acceptance suite inherits both rules.**
+**Readiness has three separate traps, and W0 walked into all three.** They are
+written out because W2's acceptance suite inherits every one of them, and each
+made a *failing* server look like a *starting* one or the reverse.
+
+1. **The port is not in Kestrel configuration or the environment.**
+   `ApplicationHost` reads `NetworkConfiguration.InternalHttpPort`, persisted as
+   `<configdir>/network.xml` (store key `network`, default 8096), and the server
+   logs only `Kestrel is listening on 0.0.0.0` with no port in it. Seeding the
+   file is a request, not a guarantee, so the probe enumerates the **process's
+   own listening TCP ports**. Without that, a run where the server logged
+   `Startup complete` in 22 s was recorded as "did not start".
+2. **A redirect is an answer.** `Invoke-WebRequest -MaximumRedirection 0` raises
+   "maximum redirection count exceeded" on a 3xx, a class `-SkipHttpErrorCheck`
+   does not cover — and `/` redirects to the web client, so that was every run.
+   The probe uses `HttpClient` with `AllowAutoRedirect` disabled, which returns
+   the 302 as a value.
+3. **The startup `SetupServer` binds the real port early and answers *every*
+   path with `503` and `{"status":"starting",…}`.** A probe that accepts "any
+   status" therefore measures the setup server. This one was the most dangerous
+   of the three: it made the **no-FFmpeg negative control report success** while
+   the server was in fact dying. Readiness is therefore "`/` answers with
+   something other than `503`". Requiring `200` would be wrong in the other
+   direction — that asserts a routing decision rather than liveness.
 
 **The port is discovered from the process, not assumed.** The listening port is
 not a Kestrel setting and not an environment variable: `ApplicationHost` reads
