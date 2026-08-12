@@ -122,6 +122,17 @@ allows 600 s: the first hosted run timed out at 180 s while migrations were
 still running and read as "this build does not start", which is not what was
 measured.
 
+**The port is discovered from the process, not assumed.** The listening port is
+not a Kestrel setting and not an environment variable: `ApplicationHost` reads
+`NetworkConfiguration.InternalHttpPort`, persisted as `<configdir>/network.xml`
+(store key `network`, default 8096). Seeding that file is a request rather than a
+guarantee, and the server logs only `Kestrel is listening on 0.0.0.0` with no
+port, so the probe asks the process itself which TCP ports it bound. Without
+that, a run where the server logged `Startup complete` in 22 s was still recorded
+as "did not start", because the prober was knocking on a port nothing was
+listening on. A distribution probe that cannot tell those two apart is worthless,
+and **W2's acceptance suite must discover the port the same way.**
+
 Two things this exercise turned up in the **server**, neither of which W0 fixes:
 
 * `BaseApplicationPaths.MakeSanityCheckOrThrow` writes a marker file into each
@@ -195,12 +206,21 @@ The paired negative control still runs: `PATH` scrubbed of every
 `ffmpeg.exe`-bearing directory and no `--ffmpeg` given, capturing the fatal
 startup verbatim.
 
-### 2.6 Shutdown
+### 2.6 Shutdown, deferred rather than faked
 
-Console shutdown of the relocated server and its exit status are recorded. No
-transcode is running, so the measurement is a **floor**, not a worst case. The
-Linux side already shows post-transcode shutdown taking tens of seconds; W3's
-service stop timeout must be derived from the worst case, never from §2.6.
+Graceful console shutdown is **not measurable from this harness**, and W0 says so
+instead of reporting a number that means nothing. The server is started sharing
+the runner's console, so it has no window and `CloseMainWindow` is a no-op;
+delivering `CTRL_C_EVENT` to a shared console group would kill the probe along
+with it. Every stop therefore degrades to a kill after the timeout, and a kill
+measures the operating system, not the server.
+
+The number W3 actually needs — the **worst-case** stop, with a transcode running,
+under the SCM — is a W3 measurement. What W0 does establish is that the mechanism
+exists: the Generic Host spike ran `IHostedService.StopAsync` under a real
+`sc stop` (§4). The Linux side already shows post-transcode shutdown taking tens
+of seconds, so W3's stop timeout must come from that worst case and never from a
+quiescent server.
 
 ### 2.7 The server is not test-green on native Windows
 
@@ -677,30 +697,39 @@ is created by the SCM with the service and removed with it, so an installer can
 grant per-machine least-privilege ACLs without inventing, storing or rotating a
 password.
 
-**The measured consequence, and the first guess was wrong.** Starting the
-service inside the MSI transaction failed with error 1920, which rolled the whole
-install back to 1603. The obvious explanation — a virtual service account is not
-a member of `Users`, so it inherits no right to execute from `%ProgramFiles%` —
-was tested by granting read and execute on the install directory and starting
-again. **It still failed, with 1053.** `aclGrantIsWhatMattered` came back
-`false`, which is exactly what a two-phase experiment is for.
+**The measured consequence, arrived at by being wrong twice.**
 
-What actually broke it was the *write* side. The service process wanted to write
-a file next to its own binaries, and a correctly locked-down `%ProgramFiles%`
-does not allow that — nor should it. The fix is the design, not an exception to
-it: the process writes to the retained-data directory, and the installer grants
-`Modify` **there**.
+The service first refused to start at all. Started inside the MSI transaction it
+failed with error 1920, rolling the install back to 1603; registered and started
+separately it failed with 1053. The obvious explanation — a virtual service
+account is not a member of `Users` and so inherits no right to execute from
+`%ProgramFiles%` — was tested directly by granting read and execute on the
+install directory and starting again. **It still failed.**
 
-The general rule this establishes for W3 and W4:
+The deciding factor turned out to be neither the account nor the grant but
+**where the process writes**. It was writing a file next to its own binaries,
+and a correctly locked-down `%ProgramFiles%` refuses that — as it should. Moving
+that write to `%ProgramData%` made the service start immediately, and
+`aclGrantIsWhatMattered` correctly reports `false`: with the write in the right
+place, the default `%ProgramData%` ACL is already permissive enough, and the
+explicit grants that follow are not what rescued it.
 
-* the service must never need to write inside `%ProgramFiles%`, and W3 must
-  ensure nothing in the startup path does — a log sink, a marker file or a
-  scratch file defaulting to `AppContext.BaseDirectory` will fail exactly this
-  way, and it will fail *only* in the installed configuration, never in a
-  developer's build tree;
-* **W4 cannot rely on inherited ACLs at all.** Both grants in §9.3 are
-  load-bearing, and the `Modify` grant on `%ProgramData%` is the one that
-  decides whether the service starts. `LocalService` is rejected because it is shared with unrelated
+Two conclusions, and they pull in different directions, which is why both are
+stated:
+
+* **For W3:** the service must never need to write inside `%ProgramFiles%`.
+  Anything in the startup path that defaults to `AppContext.BaseDirectory` — a
+  log sink, a marker file, a scratch file — will fail exactly this way, and it
+  will fail *only* in the installed configuration and never in a developer's
+  build tree. That is the worst shape a defect can have, and it is why W3 must
+  be acceptance-tested from an installed layout rather than from a publish
+  directory.
+* **For W4:** that the default `%ProgramData%` ACL happens to be permissive
+  enough is **not** a reason to rely on it. It is permissive because it lets any
+  authenticated user create files there, which is not a property this
+  distribution wants for a directory holding the database. §9.3 still breaks
+  inheritance and grants explicitly — the grants are for least privilege, not
+  for making the service start. `LocalService` is rejected because it is shared with unrelated
 services; `LocalSystem` is rejected outright as administrator-equivalent; a
 managed local user is rejected because it introduces a credential the installer
 would have to create and the operator would have to maintain.

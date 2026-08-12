@@ -316,3 +316,9 @@ Write-Host "W0 service evidence written to $path"
 if (-not $completeness.complete) {
     throw ("W0: incomplete service evidence. absent=" + ($completeness.absent -join ','))
 }
+
+# PowerShell hands the caller the exit code of the LAST NATIVE COMMAND when a
+# script ends without one of its own. Every probe here finishes near an sc.exe
+# call, and `sc query` on a service that was just deleted returns 1060, so the
+# step failed while every measurement in it had passed. Say it explicitly.
+exit 0

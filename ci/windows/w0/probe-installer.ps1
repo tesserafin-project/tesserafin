@@ -478,3 +478,9 @@ Write-Host "W0 installer evidence written to $path"
 if (-not $msiSatisfies) {
     throw "W0 HARD STOP: the MSI lifecycle experiment did not satisfy the required criteria; see installer.json."
 }
+
+# PowerShell hands the caller the exit code of the LAST NATIVE COMMAND when a
+# script ends without one of its own. Every probe here finishes near an sc.exe
+# call, and `sc query` on a service that was just deleted returns 1060, so the
+# step failed while every measurement in it had passed. Say it explicitly.
+exit 0

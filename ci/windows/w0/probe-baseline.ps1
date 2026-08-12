@@ -176,6 +176,23 @@ function Invoke-ServerRun {
         $process = Start-Process -FilePath $Exe -ArgumentList $quoted -PassThru `
             -RedirectStandardOutput $stdout -RedirectStandardError $stderr -NoNewWindow
 
+        # Seeding network.xml is a request, not a guarantee, and the server logs
+        # "Kestrel is listening on 0.0.0.0" without a port -- so the probe asks
+        # the PROCESS what it actually bound rather than trusting either. This
+        # is the difference between "the server did not start" and "the prober
+        # knocked on the wrong door", which the first hosted runs could not tell
+        # apart: the server had logged "Startup complete" while the probe was
+        # still polling a port nothing was listening on.
+        $listenDeadline = (Get-Date).AddSeconds([Math]::Min(300, $TimeoutSeconds))
+        $listening = @()
+        while ((Get-Date) -lt $listenDeadline -and -not $process.HasExited) {
+            $listening = @(Get-NetTCPConnection -OwningProcess $process.Id -State Listen -ErrorAction SilentlyContinue |
+                Select-Object -ExpandProperty LocalPort -Unique | Sort-Object)
+            if ($listening.Count -gt 0) { break }
+            Start-Sleep -Milliseconds 750
+        }
+        if ($listening.Count -gt 0) { $baseUrl = "http://127.0.0.1:$($listening[0])" }
+
         $root = Wait-ForHttp -BaseUrl "$baseUrl/" -TimeoutSeconds $TimeoutSeconds
 
         $result = @{
@@ -183,6 +200,8 @@ function Invoke-ServerRun {
             exe            = $Exe
             baseUrl        = $baseUrl
             arguments      = $arguments
+            requestedPort  = $port
+            listeningPorts = $listening
             rootStatus     = if ($root) { [int]$root.StatusCode } else { $null }
             rootBodyLength = if ($root) { $root.RawContentLength } else { $null }
             healthStatus   = $null
@@ -221,9 +240,14 @@ function Invoke-ServerRun {
         # so the probe closes the main window / signals the process the way a
         # service stop would and measures how long a clean exit takes. A transcode
         # is not running, so this is the floor, not the worst case.
+        # A console process started with -NoNewWindow has no main window, so
+        # CloseMainWindow is a no-op and every stop degrades into a kill after
+        # the timeout. That is recorded honestly rather than dressed up as a
+        # graceful shutdown measurement: see the `shutdown` fact.
         $stopWatch = [System.Diagnostics.Stopwatch]::StartNew()
         if (-not $process.HasExited) {
-            $process.CloseMainWindow() | Out-Null
+            $closed = $process.CloseMainWindow()
+            $result.closeMainWindowAccepted = $closed
             if (-not $process.WaitForExit(30000)) {
                 $result.forcedKill = $true
                 $process.Kill($true)
@@ -544,10 +568,16 @@ Add-W0Fact -Evidence $evidence -Id 'control.systemffmpeg' -Bucket 'working' `
 
 # -- 9. Shutdown ----------------------------------------------------------------
 
-Add-W0Fact -Evidence $evidence -Id 'shutdown' -Bucket $(if ($relocated.exitCode -eq 0) { 'working' } else { 'missing' }) `
-    -Detail ("Console shutdown of the relocated server took $($relocated.stopSeconds)s and exited " +
-             "with code $($relocated.exitCode). No transcode was running, so this is the floor. " +
-             "The Windows Service stop timeout (W3) must be derived from the WORST case, not this one.") `
+Add-W0Fact -Evidence $evidence -Id 'shutdown' -Bucket 'deferred' `
+    -Detail ("Graceful console shutdown is NOT measurable from this harness and is deferred rather " +
+             "than faked. The server is started with -NoNewWindow so it shares the runner's " +
+             "console and has no window: CloseMainWindow is a no-op " +
+             "(accepted=$(if ($relocated.ContainsKey('closeMainWindowAccepted')) { $relocated.closeMainWindowAccepted } else { 'n/a' })), " +
+             "and delivering CTRL_C_EVENT to a shared console group would also kill the probe. " +
+             "Every stop here therefore degrades to a kill after 30s: stopSeconds=" +
+             "$($relocated.stopSeconds) exitCode=$($relocated.exitCode). The number W3 actually " +
+             "needs is the WORST-CASE stop with a transcode running, under the SCM, which is where " +
+             "the Generic Host spike already demonstrates IHostedService.StopAsync running.") `
     -Data @{
         stopSeconds = $relocated.stopSeconds
         exitCode    = $relocated.exitCode
@@ -585,3 +615,9 @@ if (-not $completeness.complete) {
     throw ("W0: incomplete evidence. absent=" + ($completeness.absent -join ',') +
            " unclassified=" + ($completeness.unclassified -join ','))
 }
+
+# PowerShell hands the caller the exit code of the LAST NATIVE COMMAND when a
+# script ends without one of its own. Every probe here finishes near an sc.exe
+# call, and `sc query` on a service that was just deleted returns 1060, so the
+# step failed while every measurement in it had passed. Say it explicitly.
+exit 0
