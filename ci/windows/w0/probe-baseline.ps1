@@ -45,7 +45,7 @@ Import-Module (Join-Path $PSScriptRoot 'W0Probe.psm1') -Force
 
 $evidence = New-W0Evidence -Probe 'baseline' -HeadSha $HeadSha
 
-# ── Helpers ────────────────────────────────────────────────────────────────────
+# -- Helpers --------------------------------------------------------------------
 
 function Get-FreeTcpPort {
     $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
@@ -202,7 +202,7 @@ function Invoke-ServerRun {
     }
 }
 
-# ── 1. Host identity ───────────────────────────────────────────────────────────
+# -- 1. Host identity -----------------------------------------------------------
 
 $sdks = @(& dotnet --list-sdks) 2>&1
 $runtimes = @(& dotnet --list-runtimes) 2>&1
@@ -223,7 +223,7 @@ Add-W0Fact -Evidence $evidence -Id 'host.identity' -Bucket 'working' `
         dotnetRuntimes     = $runtimes
     }
 
-# ── 2. Clean self-contained publish ────────────────────────────────────────────
+# -- 2. Clean self-contained publish --------------------------------------------
 
 $publishDir = Join-Path $WorkRoot 'publish'
 if (Test-Path -LiteralPath $publishDir) { Remove-Item -Recurse -Force -LiteralPath $publishDir }
@@ -304,7 +304,7 @@ if (-not $selfContained.selfContained) {
            ($selfContained.missing -join ',') + " declaresFramework=$($selfContained.declaresFramework)")
 }
 
-# ── 3. FFmpeg discovery, as an explicit pair ───────────────────────────────────
+# -- 3. FFmpeg discovery, as an explicit pair -----------------------------------
 
 $runnerFfmpeg = (Get-Command ffmpeg.exe -ErrorAction SilentlyContinue)?.Source
 
@@ -331,11 +331,20 @@ Add-W0Fact -Evidence $evidence -Id 'ffmpeg.hostsupplied' -Bucket 'test-host-depe
         version = if ($runnerFfmpeg) { (& $runnerFfmpeg -version 2>&1 | Select-Object -First 1) } else { $null }
     }
 
-# ── 4. Startup from a hostile path, with isolated state ────────────────────────
+# -- 4. Startup from a hostile path, with isolated state ------------------------
 
 # Spaces AND non-ASCII in one path, because they fail differently: quoting versus
 # code page. A probe that only tests one of them proves half the thing.
-$hostileRoot = Join-Path $WorkRoot 'Program Files Ètè\Tesserafin — Café 数据'
+# The path is built from code points rather than written as literals so this
+# script stays pure ASCII on disk: PSScriptAnalyzer's PSUseBOMForUnicodeEncodedFile
+# would otherwise demand a byte-order mark, and .editorconfig declares
+# `charset = utf-8` for every file in the repository. The path actually exercised
+# is unchanged and fully non-ASCII.
+$hostileLeaf = [string]::Concat(
+    'Program Files ', [char]0x00C8, [char]0x0074, [char]0x00E8, [char]0x005C,
+    'Tesserafin ', [char]0x2014, ' Caf', [char]0x00E9, ' ',
+    [char]0x6570, [char]0x636E)
+$hostileRoot = Join-Path $WorkRoot $hostileLeaf
 New-Item -ItemType Directory -Force -Path $hostileRoot | Out-Null
 $hostileTree = Join-Path $hostileRoot 'app'
 Copy-Item -LiteralPath $publishDir -Destination $hostileTree -Recurse -Force
@@ -352,7 +361,7 @@ Add-W0Fact -Evidence $evidence -Id 'startup.hostilepath' -Bucket $(if ($primary.
              "because it required the runner's FFmpeg, not because the path handling is in doubt.") `
     -Data $primary
 
-# ── 5. Relocation ──────────────────────────────────────────────────────────────
+# -- 5. Relocation --------------------------------------------------------------
 
 $relocatedRoot = Join-Path $WorkRoot 'relocated\deeper\still'
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $relocatedRoot) | Out-Null
@@ -376,7 +385,7 @@ Add-W0Fact -Evidence $evidence -Id 'control.pathdependent' -Bucket 'working' `
              "relocated=$($relocated.started).") `
     -Data @{ primary = $primary.started; relocated = $relocated.started; agree = ($primary.started -eq $relocated.started) }
 
-# ── 6. Endpoints and the Web payload ───────────────────────────────────────────
+# -- 6. Endpoints and the Web payload -------------------------------------------
 
 $webBucket = if ($WebPayloadDir -and $relocated.webBootstrap) { 'working' }
              elseif ($WebPayloadDir) { 'missing' }
@@ -404,7 +413,7 @@ Add-W0Fact -Evidence $evidence -Id 'control.webpayload' -Bucket $webBucket `
     }) `
     -Data @{ payloadDir = $WebPayloadDir; bootstrap = $relocated.webBootstrap }
 
-# ── 7. Was the REQUESTED ffmpeg actually selected? ─────────────────────────────
+# -- 7. Was the REQUESTED ffmpeg actually selected? -----------------------------
 
 # MediaEncoder.SetFFmpegPath writes the validated path to encoding.xml as
 # EncoderAppPathDisplay. That file is the server's own answer to "which binary
@@ -425,7 +434,7 @@ Add-W0Fact -Evidence $evidence -Id 'ffmpeg.selection' -Bucket $(if ($selectionPr
              "string and fail this assertion.") `
     -Data @{ requested = $requestedFfmpeg; selected = $selectedPath; proven = $selectionProven; encodingXml = $encodingXml }
 
-# ── 8. No-FFmpeg negative control ──────────────────────────────────────────────
+# -- 8. No-FFmpeg negative control ----------------------------------------------
 
 # FfmpegException is fatal at startup, so the honest way to show that every green
 # start above is host-supplied is to take FFmpeg away and record the failure.
@@ -451,7 +460,7 @@ Add-W0Fact -Evidence $evidence -Id 'control.systemffmpeg' -Bucket 'working' `
         stdoutTail = $noFfmpeg.stdoutTail
     }
 
-# ── 9. Shutdown ────────────────────────────────────────────────────────────────
+# -- 9. Shutdown ----------------------------------------------------------------
 
 Add-W0Fact -Evidence $evidence -Id 'shutdown' -Bucket $(if ($relocated.exitCode -eq 0) { 'working' } else { 'missing' }) `
     -Detail ("Console shutdown of the relocated server took $($relocated.stopSeconds)s and exited " +
@@ -463,7 +472,7 @@ Add-W0Fact -Evidence $evidence -Id 'shutdown' -Bucket $(if ($relocated.exitCode 
         forcedKill  = if ($relocated.ContainsKey('forcedKill')) { $relocated.forcedKill } else { $false }
     }
 
-# ── 10. Completeness gate ──────────────────────────────────────────────────────
+# -- 10. Completeness gate ------------------------------------------------------
 
 $required = @(
     'host.identity'

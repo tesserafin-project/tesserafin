@@ -59,12 +59,24 @@ jobs:
     name: Web payload (digest-verified)
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+      # Read-only, and only so the pinned tesserafin-web-assets image can be
+      # pulled by digest — the same grant and the same reason as the
+      # `linux-packages` build job. Nothing here writes to any registry.
+      packages: read
     outputs:
       digest: ${{ steps.extract.outputs.digest }}
       expected: ${{ steps.extract.outputs.expected }}
       matches: ${{ steps.extract.outputs.matches }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Authenticate to GHCR for the pinned web assets image
+        env:
+          GHCR_ACTOR: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_ACTOR}" --password-stdin
 
       - name: Extract and verify the pinned Web payload
         id: extract
