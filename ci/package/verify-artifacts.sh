@@ -396,6 +396,21 @@ else
     fail "the Debian copyright is not a DEP-5 document stating both licence boundaries"
 fi
 
+# The runtime's licences must be visible through the FORMAT'S OWN query surface,
+# not merely present on disk. `%license` was applied to a directory; rpm may
+# expand that into its members, or record only the directory entry, and counting
+# files after rpm2cpio would pass either way. `rpm -qL` is what a recipient
+# actually runs.
+qL="$(docker run --rm --volume "${ARTIFACTS}:/artifacts:ro" "${RPM_TOOLS}" \
+      rpm -qLp --nosignature "/artifacts/$(basename "${RPM}")" 2>/dev/null || true)"
+qL_count="$(grep -c . <<<"${qL}" || true)"
+if grep -q '/usr/share/licenses/tesserafin-server/LICENSE$' <<<"${qL}" \
+   && [[ "$(grep -c '/ffmpeg/' <<<"${qL}" || true)" -ge 20 ]]; then
+    pass "rpm -qL lists ${qL_count} licence files: the server's and the runtime's components"
+else
+    fail "rpm -qL does not expose the runtime's licence set (${qL_count} entries); %license over the directory did not expand"
+fi
+
 # No metadata may describe the whole package as GPL-2-only, and none may claim
 # the server itself is GPL-3.
 rpm_license="$(docker run --rm --volume "${ARTIFACTS}:/artifacts:ro" "${RPM_TOOLS}" \
