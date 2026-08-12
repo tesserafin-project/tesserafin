@@ -302,7 +302,12 @@ $zipService = 'TesserafinW0Portable'
 & sc.exe stop $zipService *>&1 | Out-Null
 & sc.exe delete $zipService *>&1 | Out-Null
 
-$zipFacts.install = (& sc.exe create $zipService "binPath= `"$(Join-Path $zipTarget 'w0servicehost.exe')`"" 'start= auto' "obj= NT SERVICE\$zipService" 2>&1 | Out-String).Trim()
+# Each `key=` and its value are separate argv entries; see the note in
+# probe-service.ps1 -- one argument containing the space is rejected by sc.exe.
+$zipFacts.install = (& sc.exe create $zipService `
+    'binPath=' (Join-Path $zipTarget 'w0servicehost.exe') `
+    'start=' 'auto' `
+    'obj=' "NT SERVICE\$zipService" 2>&1 | Out-String).Trim()
 $zipFacts.installExit = $LASTEXITCODE
 $zipFacts.start = (& sc.exe start $zipService 2>&1 | Out-String).Trim()
 Start-Sleep -Seconds 3
