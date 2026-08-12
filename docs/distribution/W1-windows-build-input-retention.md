@@ -210,7 +210,28 @@ digest and compared byte for byte with what was pushed.
 dispatch.** GitHub would otherwise auto-create it unprotected on first use, which
 would be simulating approval rather than obtaining it.
 
-## 9. Update and revocation
+## 9. Two things the hosted runs found
+
+Both were found by a check refusing rather than by a build going quietly wrong.
+
+**Git for Windows' bash is not MSYS2's.** The installer originally derived the
+MSYS2 root from `bash.exe` on PATH. On a hosted runner that resolves to Git for
+Windows, whose tree has no `etc/pacman.d` at all — so there was no mirrorlist to
+empty, and the script stopped with *"the no-upstream proof would be vacuous"*
+instead of installing and reporting success. The root now comes from
+`setup-msys2`'s own output and `pacman.exe` is asserted present.
+
+**The core runtime cannot be replaced underneath the pacman that is using it.**
+The runner's MSYS2 carries an older `msys2-runtime` than the lock. Installing all
+246 packages in one transaction swaps `msys-2.0.dll` while pacman is running on
+it, and every subsequent post-install script dies with `could not fork a new
+process (Resource temporarily unavailable)`. MSYS2's own core update has exactly
+this shape and exactly this remedy: update the runtime, leave the shell, return
+in a new one. The installer therefore runs two phases, the second in a new
+process. **This changes when packages are installed, never where they come from**
+— it is still `pacman -U` over local files with no mirror configured.
+
+## 10. Update and revocation
 
 An existing bundle is **never mutated**. If W1 later needs another package, or a
 toolchain moves:
@@ -231,7 +252,7 @@ cleanup automation is authorised.** Revocation means publishing a successor and
 recording why the predecessor must not be used, not removing bytes someone's
 provenance already names.
 
-## 10. Known limitations
+## 11. Known limitations
 
 * **Signature verification is presence-and-integrity, not trust.** All 246
   detached signatures are fetched, hashed and carried in the bundle, but they are
@@ -252,7 +273,7 @@ provenance already names.
   and verifies the stored manifest, the retention claim is *designed and proven
   reproducible*, not *in effect*.
 
-## 11. Sequence
+## 12. Sequence
 
 | loop | does |
 | --- | --- |
