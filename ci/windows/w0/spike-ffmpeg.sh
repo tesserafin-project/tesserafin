@@ -23,6 +23,10 @@ set -o pipefail
 
 FFMPEG_COMMIT="${FFMPEG_COMMIT:?FFMPEG_COMMIT must be the pinned upstream commit}"
 EVIDENCE_DIR="${EVIDENCE_DIR:?EVIDENCE_DIR must be set}"
+# The immutable commit this evidence is attributable to. Required, not defaulted:
+# evidence that cannot name the tree it came from is not evidence, and the merge
+# ref this workflow used to check out could not name it truthfully.
+W0_EVIDENCE_SHA="${W0_EVIDENCE_SHA:?W0_EVIDENCE_SHA must be the immutable head under test}"
 WORK_DIR="${WORK_DIR:-/tmp/w0-ffmpeg}"
 
 mkdir -p "${EVIDENCE_DIR}" "${WORK_DIR}"
@@ -90,6 +94,15 @@ PREFIX="${WORK_DIR}/prefix"
 # is a capability claim; the software encoders and decoders used by the smoke
 # below are FFmpeg's own. Licence shape still stated explicitly rather than left
 # to defaults, matching ci/ffmpeg/ffmpeg-configure.txt.
+#
+# --enable-schannel is the TLS backend DECISION (#234), not a default carried
+# over by accident. Upstream's own native Windows mechanism at this exact pinned
+# commit (msys2/build.sh) builds with --enable-schannel and never enables OpenSSL
+# or GnuTLS, and this spike's PE import closure is bcrypt-only with no OpenSSL
+# DLL -- which is what Schannel's use of the platform's native bcrypt/crypt32
+# predicts and an OpenSSL build would not. Building the decided backend here
+# means the closure recorded below is the closure of the architecture W1
+# inherits, rather than of an untested configuration.
 ./configure \
   --cc=clang \
   --prefix="${PREFIX}" \
@@ -102,6 +115,7 @@ PREFIX="${WORK_DIR}/prefix"
   --disable-libfdk-aac \
   --enable-gpl \
   --enable-version3 \
+  --enable-schannel \
   --disable-shared \
   --enable-static \
   > "${EVIDENCE_DIR}/configure.log" 2>&1 || {
@@ -180,9 +194,11 @@ ls -l "${EVIDENCE_DIR}/bin/"
 cat > "${EVIDENCE_DIR}/ffmpeg-spike.json" <<EOF
 {
   "probe": "ffmpeg-spike",
+  "headSha": "${W0_EVIDENCE_SHA}",
   "upstreamCommit": "${resolved}",
   "mechanism": "native Windows MSYS2 CLANG64, the upstream msys2/build.sh path",
   "patchSeries": { "status": "${patch_status}", "count": ${patch_count} },
+  "tlsBackend": "schannel",
   "smoke": { "status": "${smoke_status}", "encodedBytes": ${encoded_bytes} },
   "hardwareClaim": "none — a hosted runner has no GPU and this spike enables no hardware backend",
   "isAcceptedRuntime": false,
