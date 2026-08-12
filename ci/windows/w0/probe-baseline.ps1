@@ -254,6 +254,21 @@ function Invoke-ServerRun {
 
         $root = Wait-ForHttp -BaseUrl "$baseUrl/" -TimeoutSeconds $TimeoutSeconds -Process $process
 
+        # Answering once is not surviving. Checking HasExited only at the top of
+        # the wait loop still let the no-FFmpeg control through: the setup server
+        # answered with a non-503 in the same instant the application host was
+        # tearing itself down over FfmpegException, so the probe caught the one
+        # response the dying process managed to serve. A server that is gone
+        # three seconds later did not start.
+        if ($root) {
+            Start-Sleep -Seconds 3
+            if ($process.HasExited) {
+                Write-Host ("W0: '$baseUrl/' answered $($root.status) but the process exited " +
+                            "with $($process.ExitCode) immediately afterwards; not started.")
+                $root = $null
+            }
+        }
+
         $result = @{
             started        = $null -ne $root
             exe            = $Exe
@@ -535,10 +550,15 @@ $primary = Invoke-ServerRun -Exe (Join-Path $hostileTree 'tesserafin.exe') `
     -WebDir $WebPayloadDir `
     -NoWebClient:([string]::IsNullOrEmpty($WebPayloadDir))
 
-Add-W0Fact -Evidence $evidence -Id 'startup.hostilepath' -Bucket $(if ($primary.started) { 'test-host-dependency' } else { 'blocked' }) `
+$startupBucket = if (-not $primary.started) { 'blocked' }
+                 elseif ($ffmpegOrigin -eq 'w0-native-spike') { 'working' }
+                 else { 'test-host-dependency' }
+
+Add-W0Fact -Evidence $evidence -Id 'startup.hostilepath' -Bucket $startupBucket `
     -Detail ("Start from a path containing spaces, accented Latin, an em dash and CJK: " +
-             "'$hostileTree'. started=$($primary.started). Bucketed as a test-host dependency " +
-             "because it required the runner's FFmpeg, not because the path handling is in doubt.") `
+             "'$hostileTree'. started=$($primary.started). The encoder came from '$ffmpegOrigin', " +
+             "so this is not a test-host dependency: nothing outside W0 and the pinned commit " +
+             "contributed to it.") `
     -Data $primary
 
 # -- 5. Relocation --------------------------------------------------------------
@@ -553,7 +573,11 @@ $relocated = Invoke-ServerRun -Exe (Join-Path $relocatedRoot 'tesserafin.exe') `
     -WebDir $WebPayloadDir `
     -NoWebClient:([string]::IsNullOrEmpty($WebPayloadDir))
 
-Add-W0Fact -Evidence $evidence -Id 'startup.relocated' -Bucket $(if ($relocated.started) { 'test-host-dependency' } else { 'blocked' }) `
+$relocatedBucket = if (-not $relocated.started) { 'blocked' }
+                   elseif ($ffmpegOrigin -eq 'w0-native-spike') { 'working' }
+                   else { 'test-host-dependency' }
+
+Add-W0Fact -Evidence $evidence -Id 'startup.relocated' -Bucket $relocatedBucket `
     -Detail ("The SAME tree moved to '$relocatedRoot' and started again with fresh state. " +
              "started=$($relocated.started). This is the portable-ZIP precondition (W2): the " +
              "server must not bake its own location into anything.") `

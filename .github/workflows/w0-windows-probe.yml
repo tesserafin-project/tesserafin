@@ -31,8 +31,14 @@ on:
 permissions:
   contents: read
 
+# Keyed on the commit, not the ref: `push` on `w0/**` and `pull_request` against
+# `master` both fire for the SAME commit while this branch has an open PR, on
+# two different refs (`refs/heads/w0/...` vs `refs/pull/235/merge`), which ran
+# every hosted job twice and made two evidence sets race each other. Keying on
+# the head SHA instead means the second trigger cancels the first rather than
+# duplicating it.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.sha || github.sha }}
   cancel-in-progress: true
 
 env:
