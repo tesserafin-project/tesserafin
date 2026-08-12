@@ -123,13 +123,24 @@ function Wait-ForHttp {
     #>
     param(
         [Parameter(Mandatory)] [string] $BaseUrl,
-        [Parameter()] [int] $TimeoutSeconds = 600
+        [Parameter()] [int] $TimeoutSeconds = 600,
+        [Parameter()] [System.Diagnostics.Process] $Process
     )
 
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     $lastError = ''
     $lastSetup = ''
     while ((Get-Date) -lt $deadline) {
+        # A LIVE process is part of readiness, not a separate question. When the
+        # application host dies -- FfmpegException is the case that matters here
+        # -- the setup server can still answer, and it answers with something
+        # that is not 503. Without this check the no-FFmpeg negative control
+        # reported a started server while the log showed
+        # "FfmpegException: Failed to find valid ffmpeg" and the host disposing.
+        if ($Process -and $Process.HasExited) {
+            Write-Host "W0: the server process exited with $($Process.ExitCode) before answering."
+            return $null
+        }
         try {
             $response = Get-HttpResponse -Uri $BaseUrl -TimeoutSeconds 10
             if ($response.status -ne 503) { return $response }
@@ -241,7 +252,7 @@ function Invoke-ServerRun {
         }
         if ($listening.Count -gt 0) { $baseUrl = "http://127.0.0.1:$($listening[0])" }
 
-        $root = Wait-ForHttp -BaseUrl "$baseUrl/" -TimeoutSeconds $TimeoutSeconds
+        $root = Wait-ForHttp -BaseUrl "$baseUrl/" -TimeoutSeconds $TimeoutSeconds -Process $process
 
         $result = @{
             started        = $null -ne $root
@@ -264,13 +275,27 @@ function Invoke-ServerRun {
         }
 
         if ($root) {
-            try {
-                $health = Get-HttpResponse -Uri "$baseUrl/health"
-                $result.healthStatus = $health.status
-                $result.healthBody = $health.body.Trim()
-            } catch {
-                $result.healthBody = "request failed: $($_.Exception.Message)"
+            # /health lags '/': the redirect is served as soon as the pipeline is
+            # up, while the health report stays "starting" until the startup
+            # tasks finish. Sampling it once at the moment '/' answers therefore
+            # measures the lag, not the endpoint. The lag itself is what an
+            # installer or a service readiness gate needs to know, so it is
+            # measured rather than waited out silently.
+            $healthWatch = [System.Diagnostics.Stopwatch]::StartNew()
+            $healthDeadline = (Get-Date).AddSeconds(300)
+            while ((Get-Date) -lt $healthDeadline -and -not $process.HasExited) {
+                try {
+                    $health = Get-HttpResponse -Uri "$baseUrl/health"
+                    $result.healthStatus = $health.status
+                    $result.healthBody = $health.body.Trim()
+                    if ($health.status -eq 200) { break }
+                } catch {
+                    $result.healthBody = "request failed: $($_.Exception.Message)"
+                }
+                Start-Sleep -Seconds 2
             }
+            $healthWatch.Stop()
+            $result.healthSecondsAfterRoot = [math]::Round($healthWatch.Elapsed.TotalSeconds, 1)
 
             # The Web bootstrap, not merely a 200. The payload's entry document
             # has to reference a hashed bundle for the browser to have anything
@@ -546,14 +571,23 @@ $webBucket = if ($WebPayloadDir -and $relocated.webBootstrap) { 'working' }
              elseif ($WebPayloadDir) { 'missing' }
              else { 'missing' }
 
-Add-W0Fact -Evidence $evidence -Id 'endpoints' -Bucket $(if ($relocated.rootStatus -and $relocated.healthStatus -eq 200) { 'test-host-dependency' } else { 'missing' }) `
-    -Detail ("From the RELOCATED tree: '/' answered $($relocated.rootStatus), '/health' answered " +
-             "$($relocated.healthStatus), Web bootstrap=$($relocated.webBootstrap).") `
+Add-W0Fact -Evidence $evidence -Id 'endpoints' -Bucket $(if ($relocated.rootStatus -in 200, 301, 302 -and $relocated.healthStatus -eq 200) { 'working' } else { 'missing' }) `
+    -Detail ("From the RELOCATED tree: '/' answered $($relocated.rootStatus) " +
+             "(Location: '$($relocated.rootLocation)'), '/web/index.html' answered " +
+             "$($relocated.webIndexStatus) and referenced the hashed bundle " +
+             "(bootstrap=$($relocated.webBootstrap)), and '/health' reached " +
+             "$($relocated.healthStatus) after $($relocated.healthSecondsAfterRoot)s of additional " +
+             "wait. That lag is a contract detail, not noise: '/' is answerable before the startup " +
+             "tasks finish, so an installer or service readiness gate that keys on '/' will call " +
+             "the server ready early.") `
     -Data @{
-        root         = $relocated.rootStatus
-        health       = $relocated.healthStatus
-        healthBody   = $relocated.healthBody
-        webBootstrap = $relocated.webBootstrap
+        root                  = $relocated.rootStatus
+        rootLocation          = $relocated.rootLocation
+        webIndexStatus        = $relocated.webIndexStatus
+        health                = $relocated.healthStatus
+        healthBody            = $relocated.healthBody
+        healthSecondsAfterRoot = $relocated.healthSecondsAfterRoot
+        webBootstrap          = $relocated.webBootstrap
     }
 
 Add-W0Fact -Evidence $evidence -Id 'control.webpayload' -Bucket $webBucket `
