@@ -295,6 +295,11 @@ jobs:
         with:
           name: w0-ffmpeg-bin
           path: ${{ runner.temp }}\w0-ffmpeg-evidence\bin
+          # The default is `warn`, which uploads nothing and still reports
+          # success. That happened once: the spike job went green having produced
+          # no binaries, and the baseline job three steps later failed with
+          # "Artifact not found". An empty artifact is a failure here.
+          if-no-files-found: error
           retention-days: 1
 
   # ── The Windows test verdict master's `Tests` matrix cannot currently give ───
