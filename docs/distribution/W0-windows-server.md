@@ -729,12 +729,54 @@ pins nothing. Two clean builds a week apart can resolve different `clang`,
 different `nasm` and different runtime libraries, and would not be bit-for-bit
 identical — which would break §8 before it started.
 
-**W1 must pin the MSYS2 toolchain by exact package identity** — a repository
-snapshot, or vendored package files verified by digest, recorded in
-`components.json` alongside the source pins the way `RPM_BUILDER_IMAGE` is
-recorded for the Linux packaging toolchain. The spike records every resolved
-package version precisely so this gap is documented rather than discovered
-later. **This is the single largest technical risk in W1** (§13).
+**W1 must pin the MSYS2 toolchain by exact package identity.** That is not an
+aspiration: the route exists, was checked against the primary source, and is
+frozen here as W1's entry contract.
+
+The MSYS2 repository database is itself the pin material. Every package entry in
+`clang64.db` publishes `%NAME%`, `%VERSION%`, `%ARCH%`, `%FILENAME%` and
+`%SHA256SUM%`. Verified end to end while writing this section: the entry for
+`mingw-w64-clang-x86_64-nasm` declares version `3.02-1`, arch `any`, and
+SHA-256 `b338c604…1961e`; downloading the exact `%FILENAME%` and hashing it
+reproduces that digest. Identity and integrity therefore come from the
+repository's own metadata rather than from trusting whatever `pacman` resolves
+on the day.
+
+W1's entry contract:
+
+1. **Resolve once, record everything.** At pin time, capture `%NAME%`,
+   `%VERSION%`, `%ARCH%`, `%FILENAME%` and `%SHA256SUM%` for every package in
+   the transitive toolchain set, into `ci/ffmpeg/components.json` beside the
+   source pins — the same role `RPM_BUILDER_IMAGE` plays for Linux packaging.
+2. **Mirror to an immutable store.** `repo.msys2.org` serves only current
+   versions and prunes superseded ones, so a URL alone is not a durable pin. The
+   verified package files are mirrored into a Tesserafin-owned immutable
+   location. The recorded SHA-256 is what makes that mirror trustworthy — the
+   mirror is a cache, never the authority.
+3. **Verify before installing, always.** Every package file is checked against
+   its recorded digest before it is allowed near the build. A mismatch is a hard
+   stop, not a warning.
+4. **Install from the pinned files only** — `pacman -U` over the local set.
+   **No `pacman -Syu`, no `pacman -S`, no `update: true`** against a live
+   repository at build time. The set must be transitively complete, because
+   nothing may be resolved from the network to fill a gap.
+5. **No shared prefix between the two reproducibility builds.** Separate
+   machines, separate MSYS2 prefixes, separate dependency prefixes, no shared
+   compiled objects and no shared staged runtime — otherwise the second build is
+   partly a copy of the first and proves nothing.
+6. **Provenance and corresponding source close over the toolchain too**, not
+   only over FFmpeg's own sources.
+
+Until that contract is implemented, W1's two clean builds cannot be guaranteed
+bit-for-bit identical. **This remains the single largest technical risk in W1**
+(§13) — but it is now a bounded implementation task with a proven mechanism
+rather than an open question.
+
+The W0 spike itself deliberately does **not** implement this: it runs
+`setup-msys2` with `update: true` and unpinned package names, and records every
+resolved package version in `toolchain.txt` precisely so the gap is measured.
+The spike proves the build mechanism; it is not, and does not claim to be, a
+reproducible build.
 
 ---
 
@@ -965,7 +1007,10 @@ Open risks, ranked:
 1. **MSYS2 is a rolling repository (§7.4).** Highest technical risk in W1. Until
    the toolchain is pinned by exact package identity, two clean builds cannot be
    guaranteed bit-for-bit identical, and the reproducibility gate is the whole
-   contract.
+   contract. The mechanism is no longer unknown -- §7.4 freezes a verified
+   contract (repository-published per-package SHA-256, mirrored immutably,
+   `pacman -U` from pinned files, never `-Syu`) -- but implementing it is W1
+   work and the risk stands until it is done.
 2. **MSI bytes are not reproducible (§5.6).** Handled by design — the proof
    moves to the ZIP and the FFmpeg component and the MSI records input digests —
    but it must not be quietly re-described as "the MSI reproduces".
