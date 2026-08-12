@@ -26,7 +26,7 @@ $script:W0Buckets = @(
     'deferred'             # deliberately out of 1.1 scope
 )
 
-function Get-W0Buckets {
+function Get-W0BucketSet {
     <#
     .SYNOPSIS
         The closed set of evidence buckets.
@@ -334,7 +334,7 @@ function Get-W0TreeDigest {
 }
 
 Export-ModuleMember -Function `
-    Get-W0Buckets, `
+    Get-W0BucketSet, `
     New-W0Evidence, `
     Add-W0Fact, `
     Save-W0Evidence, `
