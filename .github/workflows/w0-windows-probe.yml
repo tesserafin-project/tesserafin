@@ -18,8 +18,14 @@
 name: W0 Windows Probe
 
 on:
-  push:
-    branches: ['w0/**']
+  # There is deliberately NO `push` trigger.
+  #
+  # `push` on `w0/**` and `pull_request` against `master` both fire for the SAME
+  # commit while the branch has an open PR, on two different refs. The
+  # concurrency group below then cancels one of them -- and a cancelled job is
+  # not acceptance evidence. Deduplicating was not enough: the duplicate is
+  # removed, leaving one attributable trigger per commit. `workflow_dispatch`
+  # covers running this on master after the merge, where no pull request exists.
   pull_request:
     branches: [master]
     paths:
@@ -31,12 +37,6 @@ on:
 permissions:
   contents: read
 
-# Keyed on the commit, not the ref: `push` on `w0/**` and `pull_request` against
-# `master` both fire for the SAME commit while this branch has an open PR, on
-# two different refs (`refs/heads/w0/...` vs `refs/pull/235/merge`), which ran
-# every hosted job twice and made two evidence sets race each other. Keying on
-# the head SHA instead means the second trigger cancels the first rather than
-# duplicating it.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.head.sha || github.sha }}
   cancel-in-progress: true
@@ -46,6 +46,22 @@ env:
   # Must equal ffmpeg.commit in ci/ffmpeg/components.json and F0_UPSTREAM_COMMIT
   # in ci/package/pins.env. Asserted by the spike, not assumed.
   FFMPEG_COMMIT: d4590e12452f94d40e413caecb34b08de608353b
+
+  # THE canonical evidence SHA. Defined once; every job checks this exact commit
+  # out and every evidence document records it.
+  #
+  # On `pull_request`, actions/checkout defaults to GitHub's SYNTHETIC MERGE REF
+  # (`refs/pull/N/merge`) -- a commit that exists in no branch and changes
+  # whenever master moves. Evidence measured there is not attributable to the
+  # immutable PR head that a reviewer accepts and that actually gets merged. An
+  # earlier run of this workflow did exactly that: it checked out
+  # `18a36c2c... "Merge 21abb7e1... into f7479d5..."` and stamped that merge
+  # commit into every evidence file as the head SHA.
+  #
+  # Pinning the head SHA is only half of it -- a job could still be handed a
+  # tree that is not that commit. Each job therefore ASSERTS its checked-out
+  # HEAD equals this value before measuring anything (`Assert the evidence SHA`).
+  W0_EVIDENCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
 
 jobs:
   # ── The Web payload boundary ────────────────────────────────────────────────
@@ -77,6 +93,25 @@ jobs:
       matches: ${{ steps.extract.outputs.matches }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ env.W0_EVIDENCE_SHA }}
+          persist-credentials: false
+
+      # Attribution guard. A pinned `ref:` says which commit was REQUESTED; this
+      # says which commit is actually here. Without it a checkout that silently
+      # resolved to something else -- a merge ref, a moved branch -- would still
+      # produce confident-looking evidence.
+      - name: Assert the evidence SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          echo "expected : ${W0_EVIDENCE_SHA}"
+          echo "actual   : ${actual}"
+          if [ "${actual}" != "${W0_EVIDENCE_SHA}" ]; then
+            echo "W0 HARD STOP: this job is standing in ${actual}, not the evidence SHA ${W0_EVIDENCE_SHA}." >&2
+            exit 1
+          fi
 
       - name: Authenticate to GHCR for the pinned web assets image
         env:
@@ -149,6 +184,23 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ env.W0_EVIDENCE_SHA }}
+          persist-credentials: false
+
+      # Attribution guard. A pinned `ref:` says which commit was REQUESTED; this
+      # says which commit is actually here. Without it a checkout that silently
+      # resolved to something else -- a merge ref, a moved branch -- would still
+      # produce confident-looking evidence.
+      - name: Assert the evidence SHA
+        shell: pwsh
+        run: |
+          $actual = (git rev-parse HEAD).Trim()
+          Write-Host "expected : $env:W0_EVIDENCE_SHA"
+          Write-Host "actual   : $actual"
+          if ($actual -ne $env:W0_EVIDENCE_SHA) {
+            throw "W0 HARD STOP: this job is standing in $actual, not the evidence SHA $env:W0_EVIDENCE_SHA."
+          }
 
       - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
@@ -180,7 +232,7 @@ jobs:
             -RepoRoot $PWD `
             -WorkRoot $work `
             -EvidenceDir $evidence `
-            -HeadSha $env:GITHUB_SHA `
+            -HeadSha $env:W0_EVIDENCE_SHA `
             -WebPayloadDir (Join-Path $env:RUNNER_TEMP 'w0-web\w0-web') `
             -FfmpegDir (Join-Path $env:RUNNER_TEMP 'w0-ffmpeg-bin')
 
@@ -213,6 +265,23 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ env.W0_EVIDENCE_SHA }}
+          persist-credentials: false
+
+      # Attribution guard. A pinned `ref:` says which commit was REQUESTED; this
+      # says which commit is actually here. Without it a checkout that silently
+      # resolved to something else -- a merge ref, a moved branch -- would still
+      # produce confident-looking evidence.
+      - name: Assert the evidence SHA
+        shell: pwsh
+        run: |
+          $actual = (git rev-parse HEAD).Trim()
+          Write-Host "expected : $env:W0_EVIDENCE_SHA"
+          Write-Host "actual   : $actual"
+          if ($actual -ne $env:W0_EVIDENCE_SHA) {
+            throw "W0 HARD STOP: this job is standing in $actual, not the evidence SHA $env:W0_EVIDENCE_SHA."
+          }
 
       - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
@@ -234,7 +303,7 @@ jobs:
             -PublishDir (Join-Path $env:RUNNER_TEMP 'w0-publish') `
             -WorkRoot (Join-Path $env:RUNNER_TEMP 'w0-work') `
             -EvidenceDir $evidence `
-            -HeadSha $env:GITHUB_SHA
+            -HeadSha $env:W0_EVIDENCE_SHA
 
       - name: Installer lifecycle experiment
         shell: pwsh
@@ -242,7 +311,7 @@ jobs:
           ./ci/windows/w0/probe-installer.ps1 `
             -WorkRoot (Join-Path $env:RUNNER_TEMP 'w0-work') `
             -EvidenceDir (Join-Path $env:RUNNER_TEMP 'w0-evidence') `
-            -HeadSha $env:GITHUB_SHA
+            -HeadSha $env:W0_EVIDENCE_SHA
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ always() }}
@@ -277,10 +346,28 @@ jobs:
             mingw-w64-clang-x86_64-nasm
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ env.W0_EVIDENCE_SHA }}
+          persist-credentials: false
+
+      # Attribution guard. A pinned `ref:` says which commit was REQUESTED; this
+      # says which commit is actually here. Without it a checkout that silently
+      # resolved to something else -- a merge ref, a moved branch -- would still
+      # produce confident-looking evidence.
+      - name: Assert the evidence SHA
+        shell: pwsh
+        run: |
+          $actual = (git rev-parse HEAD).Trim()
+          Write-Host "expected : $env:W0_EVIDENCE_SHA"
+          Write-Host "actual   : $actual"
+          if ($actual -ne $env:W0_EVIDENCE_SHA) {
+            throw "W0 HARD STOP: this job is standing in $actual, not the evidence SHA $env:W0_EVIDENCE_SHA."
+          }
 
       - name: Feasibility spike from the pinned source
         env:
           FFMPEG_COMMIT: ${{ env.FFMPEG_COMMIT }}
+          W0_EVIDENCE_SHA: ${{ env.W0_EVIDENCE_SHA }}
         run: |
           export EVIDENCE_DIR="$(cygpath -u "${RUNNER_TEMP}")/w0-ffmpeg-evidence"
           export WORK_DIR="$(cygpath -u "${RUNNER_TEMP}")/w0-ffmpeg"
@@ -308,13 +395,47 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  # ── The Windows test verdict master's `Tests` matrix cannot currently give ───
+  # ── The Windows test verdict, as a comparison rather than a slogan ──────────
+  #
+  # Runs the identical `Tests` command on BOTH the immutable PR head and the
+  # pull request's base commit, keeps the structured results, and compares the
+  # failing-test SET. See ci/windows/w0/Compare-W0TestBaseline.ps1 for why a
+  # count is not the question.
+  #
+  # The matrix legs deliberately do NOT fail on test failures: the suite is red
+  # on both trees and W0 neither caused that nor may fix it. They record. The
+  # gate that follows is what can fail, and it fails on a CHANGED failure set --
+  # which an architecture-only pull request must never produce.
   windows-tests:
-    name: Server test suite on native Windows
+    name: Server test suite on native Windows (${{ matrix.tree }})
     runs-on: windows-latest
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - tree: head
+            sha: ${{ github.event.pull_request.head.sha || github.sha }}
+          - tree: base
+            # The base COMMIT, pinned -- not the `master` branch name. A
+            # floating ref would let master move mid-run and silently change
+            # what the head was compared against.
+            sha: ${{ github.event.pull_request.base.sha || github.sha }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ matrix.sha }}
+          persist-credentials: false
+
+      - name: Assert the checked-out SHA
+        shell: pwsh
+        run: |
+          $actual = (git rev-parse HEAD).Trim()
+          Write-Host "expected : ${{ matrix.sha }}"
+          Write-Host "actual   : $actual"
+          if ($actual -ne "${{ matrix.sha }}") {
+            throw "W0 HARD STOP: this leg is standing in $actual, not ${{ matrix.sha }}."
+          }
 
       - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
@@ -326,37 +447,104 @@ jobs:
           key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/Directory.Packages.props') }}
           restore-keys: ${{ runner.os }}-nuget-
 
-      # Identical to the command ci-tests.yml runs, so the answer is comparable.
+      # Byte-identical between the two legs apart from `--results-directory`.
+      # A filter that differed would make the set comparison meaningless.
       #
-      # continue-on-error because this job reports on MASTER, not on this branch.
-      # It is EVIDENCE, not a gate: the W0 pull request must not be gated on
-      # pre-existing Windows failures it neither introduced nor is allowed to fix.
-      # The summary step below states the result in words so a non-blocking job
-      # can never be mistaken for a passing one.
+      # The real exit code is CAPTURED rather than discarded: `continue-on-error`
+      # threw away the one number that says whether the run itself completed.
       - name: Run DotNet CLI Tests
         id: tests
-        continue-on-error: true
-        run: >
-          dotnet test Tesserafin.sln
-          --configuration Release
-          --filter 'Category!=Smoke'
-          --verbosity minimal
-
-      - name: State the result plainly
-        if: ${{ always() }}
+        shell: pwsh
         run: |
-          if [ "${{ steps.tests.outcome }}" = "success" ]; then
-            echo "### Windows test suite: GREEN on this tree" >> "$GITHUB_STEP_SUMMARY"
-          else
-            {
-              echo "### Windows test suite: RED on this tree"
-              echo ""
-              echo "Pre-existing native Windows failures on master. This job is"
-              echo "evidence for W0, not a gate, and W0 does not fix them."
-              echo "See docs/distribution/W0-windows-server.md section 2.7."
-            } >> "$GITHUB_STEP_SUMMARY"
-          fi
-        shell: bash
+          $results = Join-Path $env:RUNNER_TEMP 'w0-trx'
+          New-Item -ItemType Directory -Force -Path $results | Out-Null
+          dotnet test Tesserafin.sln `
+            --configuration Release `
+            --filter 'Category!=Smoke' `
+            --verbosity minimal `
+            --logger "trx" `
+            --results-directory $results
+          $code = $LASTEXITCODE
+          Write-Host "dotnet test exit code: $code"
+          "exitCode=$code" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+          # Deliberately not rethrown. A red suite is the MEASUREMENT here; the
+          # comparison job decides whether it is acceptable. A missing TRX is a
+          # different matter and the comparison script hard-stops on it.
+          exit 0
+
+      - name: Record the exit code beside the results
+        if: ${{ always() }}
+        shell: pwsh
+        run: |
+          $results = Join-Path $env:RUNNER_TEMP 'w0-trx'
+          New-Item -ItemType Directory -Force -Path $results | Out-Null
+          "${{ steps.tests.outputs.exitCode }}" |
+            Set-Content -LiteralPath (Join-Path $results 'exit-code.txt') -Encoding utf8NoBOM
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ always() }}
+        with:
+          name: w0-trx-${{ matrix.tree }}
+          path: ${{ runner.temp }}\w0-trx
+          if-no-files-found: error
+          retention-days: 3
+
+  windows-test-baseline:
+    name: Windows failing-test set matches the base
+    runs-on: windows-latest
+    needs: [windows-tests]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ env.W0_EVIDENCE_SHA }}
+          persist-credentials: false
+
+      - name: Assert the evidence SHA
+        shell: pwsh
+        run: |
+          $actual = (git rev-parse HEAD).Trim()
+          Write-Host "expected : $env:W0_EVIDENCE_SHA"
+          Write-Host "actual   : $actual"
+          if ($actual -ne $env:W0_EVIDENCE_SHA) {
+            throw "W0 HARD STOP: this job is standing in $actual, not the evidence SHA $env:W0_EVIDENCE_SHA."
+          }
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: w0-trx-head
+          path: ${{ runner.temp }}\trx-head
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: w0-trx-base
+          path: ${{ runner.temp }}\trx-base
+
+      - name: Compare the failing-test sets
+        shell: pwsh
+        run: |
+          $headExit = -1
+          $baseExit = -1
+          $headExitFile = Join-Path $env:RUNNER_TEMP 'trx-head\exit-code.txt'
+          $baseExitFile = Join-Path $env:RUNNER_TEMP 'trx-base\exit-code.txt'
+          if (Test-Path -LiteralPath $headExitFile) { $headExit = [int](Get-Content -LiteralPath $headExitFile -Raw).Trim() }
+          if (Test-Path -LiteralPath $baseExitFile) { $baseExit = [int](Get-Content -LiteralPath $baseExitFile -Raw).Trim() }
+
+          ./ci/windows/w0/Compare-W0TestBaseline.ps1 `
+            -HeadResultsDir (Join-Path $env:RUNNER_TEMP 'trx-head') `
+            -BaseResultsDir (Join-Path $env:RUNNER_TEMP 'trx-base') `
+            -EvidenceDir (Join-Path $env:RUNNER_TEMP 'w0-evidence') `
+            -HeadSha $env:W0_EVIDENCE_SHA `
+            -BaseSha "${{ github.event.pull_request.base.sha || github.sha }}" `
+            -HeadExitCode $headExit `
+            -BaseExitCode $baseExit
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ always() }}
+        with:
+          name: w0-evidence-windows-tests
+          path: ${{ runner.temp }}\w0-evidence
+          retention-days: 3
 
   # ── Static analysis and unit tests for the probe harness itself ─────────────
   probe-selftest:
@@ -365,6 +553,25 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ env.W0_EVIDENCE_SHA }}
+          persist-credentials: false
+
+      # Attribution guard. A pinned `ref:` says which commit was REQUESTED; this
+      # says which commit is actually here. Without it a checkout that silently
+      # resolved to something else -- a merge ref, a moved branch -- would still
+      # produce confident-looking evidence.
+      - name: Assert the evidence SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          echo "expected : ${W0_EVIDENCE_SHA}"
+          echo "actual   : ${actual}"
+          if [ "${actual}" != "${W0_EVIDENCE_SHA}" ]; then
+            echo "W0 HARD STOP: this job is standing in ${actual}, not the evidence SHA ${W0_EVIDENCE_SHA}." >&2
+            exit 1
+          fi
 
       - name: PSScriptAnalyzer and Pester
         shell: pwsh

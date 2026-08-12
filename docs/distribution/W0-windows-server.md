@@ -645,9 +645,13 @@ redistribution question in concrete form. Both executables import **only**
 Windows system DLLs and the UCRT forwarders — `KERNEL32`, `USER32`, `GDI32`,
 `SHELL32`, `SHLWAPI`, `ole32`, `OLEAUT32`, `WS2_32`, `AVICAP32`, `bcrypt` and
 `api-ms-win-crt-*`. There is no MinGW runtime DLL, no `libwinpthread`, no
-`libc++` and nothing from MSYS2 in the closure. A static native build therefore
-delivers as two files with no redistributable to ship alongside them, which is a
-materially better position than the Linux side's `DT_NEEDED` closure.
+`libc++`, no OpenSSL and nothing from MSYS2 in the closure. `bcrypt` being
+present and no OpenSSL DLL being present is exactly what building with
+`--enable-schannel` (§7.3) predicts and an OpenSSL build would not — the TLS
+backend decision is corroborated by the closure it was expected to produce
+rather than merely declared. A static native build therefore delivers as two
+files with no redistributable to ship alongside them, which is a materially
+better position than the Linux side's `DT_NEEDED` closure.
 
 It is bounded by `--disable-autodetect` **on purpose**. That proves the build
 *mechanism* and stops MSYS2's ambient packages from silently entering the link,
@@ -685,7 +689,7 @@ existing Tesserafin rule:
 | drop `--enable-lto=thin` | `ci/ffmpeg/ffmpeg-configure.txt` bans LTO: partitioning depends on job count and link order and is the largest single threat to bit-for-bit reproducibility |
 | drop `--enable-libfdk-aac`, add `--disable-nonfree` | `components.json` classifies `fdk-aac` nonfree; FFmpeg's native AAC encoder covers the requirement |
 | drop `libbluray`, `libopenmpt`, `libtheora`, `libwebp`, `chromaprint`, `fftw`, `gmp`, `libxml2` | already excluded by `components.json` with a recorded reason each; Windows does not get a wider set than Linux by accident |
-| decide `--enable-schannel` vs `--enable-openssl` | upstream's Windows build uses Schannel and drops OpenSSL from the closure entirely. Schannel is the smaller closure and the platform-native TLS stack; OpenSSL keeps Linux and Windows on one TLS implementation. **This is an open decision for W1** and must be recorded, not defaulted |
+| `--enable-schannel`, **not** `--enable-openssl` | **Decided in W0, not deferred to W1.** Upstream's own native Windows mechanism at the exact pinned commit builds with `--enable-schannel` (`msys2/build.sh`) and never enables OpenSSL or GnuTLS — this is what the pinned tree's build script does, not an inference about it. The spike now builds with the same flag (§7.2) and its PE import closure is `bcrypt`-only with no OpenSSL DLL, which is what Schannel's use of the platform's native `bcrypt`/`crypt32` predicts and OpenSSL would not. Schannel is also the smaller closure: no third-party TLS library to ship, patch, or track CVEs for on Windows. The cost is accepted explicitly — Linux keeps its own TLS stack, so the two targets do not share one implementation. W1 inherits this decision and does not remake it |
 | omit `libva`, `libdrm` | Linux-only by construction |
 | **pin the MSYS2 toolchain** | see §7.4 |
 
@@ -951,13 +955,15 @@ Open risks, ranked:
    container runtime. W2 must implement a daemonless digest-pinned OCI pull;
    until it does, the payload crosses a boundary the production path will not
    have.
-5. **Schannel versus OpenSSL (§7.3).** An open W1 decision. Choosing Schannel
-   diverges the TLS stack between Linux and Windows; choosing OpenSSL keeps one
-   implementation and one more component in the Windows closure.
-6. **Worst-case shutdown.** §2.6 measures a floor with no transcode running. A
+5. **Worst-case shutdown.** §2.6 measures a floor with no transcode running. A
    stop timeout derived from it would truncate a live transcode.
-7. **Virtual account and network storage (§9.2).** Sufficient for local media;
+6. **Virtual account and network storage (§9.2).** Sufficient for local media;
    an SMB library needs a documented domain-identity deviation.
+
+Schannel versus OpenSSL is **decided, not a residual risk**: §7.3 records
+`--enable-schannel`, evidenced by upstream's own native Windows build script at
+the pinned commit and corroborated by the spike's `bcrypt`-only, no-OpenSSL
+import closure.
 
 ---
 
