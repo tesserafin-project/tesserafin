@@ -316,15 +316,47 @@ for root_spec in "deb:${WORK}/deb/usr/lib/tesserafin/ffmpeg:${WORK}/deb/usr/shar
     done
 done
 
-# Nothing anywhere expects the F0 development prefix. build-in-container.sh uses
-# /opt/tesserafin-ffmpeg as a dependency staging prefix; a packaged artifact that
-# still referenced it would be a build that leaked its scaffolding.
-opt_refs="$(grep -rla '/opt/tesserafin-ffmpeg' "${WORK}/deb/usr/lib" "${WORK}/rpm/usr/lib" \
-                 "${TGZ_ROOT}/lib" 2>/dev/null || true)"
-if [[ -n "${opt_refs}" ]]; then
-    fail "an installed file still references /opt/tesserafin-ffmpeg: ${opt_refs}"
+# Nothing may DEPEND on the F0 build prefix. build-in-container.sh stages the
+# dependencies at /opt/tesserafin-ffmpeg inside the builder, so several accepted
+# binaries carry that prefix as a compiled-in default CONFIG SEARCH PATH:
+# fontconfig's cachedir and conf.d, OpenSSL's engines-3, the libmfx dispatcher's
+# lookup list, and libva.conf. Those are optional, ignore-if-missing lookups —
+# not load-bearing paths — and they are bytes of the ACCEPTED runtime, which this
+# work must not change.
+#
+# So the assertion is the one that actually matters: nothing is INSTALLED under
+# that prefix, no RPATH or RUNPATH names it, and the encoder runs with the prefix
+# absent. A string in a config-search list is not a dependency; a search path in
+# RUNPATH would be.
+opt_installed="$(find "${WORK}/deb" "${WORK}/rpm" "${TGZ_ROOT}" -path '*opt/tesserafin-ffmpeg*' -print 2>/dev/null || true)"
+if [[ -n "${opt_installed}" ]]; then
+    fail "a packaged file is installed under /opt/tesserafin-ffmpeg: ${opt_installed}"
 else
-    pass "no installed file expects anything under /opt/tesserafin-ffmpeg"
+    pass "no packaged file is installed under /opt/tesserafin-ffmpeg"
+fi
+
+opt_rpath=0
+while IFS= read -r elf; do
+    [[ -n "${elf}" ]] || continue
+    if readelf -d "${elf}" 2>/dev/null | grep -E '\((RPATH|RUNPATH)\)' | grep -q '/opt/tesserafin-ffmpeg'; then
+        fail "$(basename "${elf}") has /opt/tesserafin-ffmpeg in its RPATH/RUNPATH"
+        opt_rpath=$((opt_rpath + 1))
+    fi
+done < <(find "${WORK}/deb/usr/lib/tesserafin/ffmpeg" "${WORK}/rpm/usr/lib/tesserafin/ffmpeg" \
+              "${TGZ_ROOT}/lib/tesserafin/ffmpeg" -type f 2>/dev/null)
+if [[ "${opt_rpath}" -eq 0 ]]; then
+    pass "no packaged ELF names /opt/tesserafin-ffmpeg in RPATH or RUNPATH"
+fi
+
+# The decisive check: does it run where the prefix does not exist? On a machine
+# that has it, this proves nothing and says so rather than passing quietly.
+if [[ -e /opt/tesserafin-ffmpeg ]]; then
+    echo "  note: /opt/tesserafin-ffmpeg exists on THIS machine, so 'runs without it'"
+    echo "        cannot be demonstrated here. The hosted runners have no such path."
+elif "${WORK}/deb/usr/lib/tesserafin/ffmpeg/bin/ffmpeg" -hide_banner -version >/dev/null 2>&1; then
+    pass "the packaged encoder runs on a machine with no /opt/tesserafin-ffmpeg at all"
+else
+    fail "the packaged encoder does not run without /opt/tesserafin-ffmpeg present"
 fi
 
 # --- 6. licensing closure ----------------------------------------------------
@@ -380,12 +412,41 @@ fi
 
 # Capability drift: the runtime must remain free of nonfree components and of
 # FDK AAC. Read from the capability record the runtime itself produced.
+#
+# The manifest's buildConfiguration records the configure line, which NAMES both
+# --disable-nonfree and --disable-libfdk-aac. A grep for the bare strings would
+# therefore fail on the very evidence that they are switched off. What is checked
+# instead: the two disable flags are present, and no ENABLED encoder, decoder or
+# filter is an FDK or otherwise nonfree one.
 cap="${WORK}/deb/usr/share/tesserafin/ffmpeg/capability.json"
 if [[ -f "${cap}" ]]; then
-    if grep -qiE 'libfdk|nonfree' "${cap}"; then
-        fail "the capability manifest reports a nonfree component or FDK AAC: $(grep -oiE 'libfdk[a-z_]*|nonfree' "${cap}" | sort -u | tr '\n' ' ')"
+    # Wrapped in `if`, not followed by a `$?` test: under `set -e` a failing
+    # python3 would abort this script before the test could run, turning a
+    # finding into a crash.
+    if python3 - "${cap}" <<'PY'
+import json, re, sys
+cap = json.load(open(sys.argv[1]))
+config = " ".join(cap.get("buildConfiguration", []))
+problems = []
+for flag in ("--disable-nonfree", "--disable-libfdk-aac"):
+    if flag not in config:
+        problems.append(f"the build configuration does not carry {flag}")
+for flag in ("--enable-nonfree", "--enable-libfdk-aac"):
+    if flag in config:
+        problems.append(f"the build configuration carries {flag}")
+bad = re.compile(r"fdk|nonfree", re.I)
+for kind in ("encoders", "decoders", "filters", "protocols", "hwaccels"):
+    hits = [x for x in cap.get(kind, []) if bad.search(x)]
+    if hits:
+        problems.append(f"{kind} include a nonfree/FDK entry: {hits}")
+for p in problems:
+    print(f"  FAIL: {p}", file=sys.stderr)
+raise SystemExit(1 if problems else 0)
+PY
+    then
+        pass "nonfree and FDK AAC are disabled in the build configuration, and no capability is one"
     else
-        pass "no nonfree component and no FDK AAC in the capability manifest"
+        fail "nonfree or FDK AAC capability drift in the installed capability manifest"
     fi
 else
     fail "no capability manifest installed"

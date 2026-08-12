@@ -507,9 +507,15 @@ on any specific GPU.
 
 ## 8b. AMD VAAPI package integration
 
-Performed against a **real package artifact**, not the staging tree: the package
-is extracted or installed, and the `ffmpeg` executable inside it is the one
-invoked. A complete `h264_vaapi` transcode is run on the AMD render node, and the
+`ci/package/accept-vaapi.sh` performs this, against a **real package artifact**
+rather than the staging tree: the `.deb` is unpacked and the `ffmpeg` executable
+inside it is the one invoked. The transcode itself is delegated to
+`ci/ffmpeg/accept-hardware.sh`, the F0 script that already classifies a crash
+against a controlled failure and refuses to record a claim it did not observe.
+
+It runs where a render node exists and **defers** where none does — absence of a
+GPU is a deferral, never a pass. The hosted runners have no GPU, so this is local
+evidence by construction. A complete `h264_vaapi` transcode is run on the AMD render node, and the
 output is verified to be genuine H.264 with the expected frame count and duration
 and to decode back cleanly.
 
