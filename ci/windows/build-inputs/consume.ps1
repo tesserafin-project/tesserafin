@@ -148,6 +148,10 @@ if ($packages.Count -ne $lock.packageCount) {
 
 $bash = Join-Path $MsysRoot 'usr\bin\bash.exe'
 if (-not (Test-Path -LiteralPath $bash)) { Stop-Hard "no bash at $bash" }
+$pacman = Join-Path $MsysRoot 'usr\bin\pacman.exe'
+if (-not (Test-Path -LiteralPath $pacman)) {
+    Stop-Hard "no pacman at $pacman; '$MsysRoot' is not an MSYS2 installation"
+}
 
 $posixDir = (& $bash -lc "cygpath -u '$($bundleDir -replace '\\', '/')'").Trim()
 if ($LASTEXITCODE -ne 0) { Stop-Hard "cygpath exited $LASTEXITCODE" }

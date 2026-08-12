@@ -12,7 +12,9 @@
   "layerSize": 409610240,
   "lockSha256": "e837666886bc9499ea8adb0c939e4db58e740156e3730120527faad936755615",
   "packageCount": 246,
-  "deliveredPaths": 499,
+  "deliveredFiles": 499,
+  "manifestListedPaths": 498,
+  "$pathsComment": "499 files are delivered in the layer; manifest.sha256 lists the other 498 because it cannot list itself. The two-build comparison diffs manifest.sha256, so it reports 498.",
   "published": false,
   "publishedNote": "NOT PUBLISHED. W1-R-A implements and validates only. The GHCR package does not exist until W1-R-B dispatches the publisher from trusted master and verifies the stored manifest."
 }

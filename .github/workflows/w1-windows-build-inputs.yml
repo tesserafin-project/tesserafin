@@ -273,6 +273,7 @@ jobs:
       # relying on what an action happened to preinstall. `update: false` and no
       # `install:` list: this action must not resolve anything.
       - uses: msys2/setup-msys2@e9898307ac31d1a803454791be09ab9973336e1c # v2
+        id: msys2
         with:
           msystem: CLANG64
           update: false
@@ -292,9 +293,15 @@ jobs:
       - name: Install from local files only, with every mirror removed
         shell: pwsh
         run: |
+          # The MSYS2 root is taken from the action's own output. Deriving it
+          # from `bash.exe` on PATH resolves to Git for Windows' bash, whose
+          # tree has no etc/pacman.d at all -- which is exactly how the first
+          # hosted run failed, and correctly: the script refuses to report a
+          # no-upstream proof it could not actually perform.
           ./ci/windows/build-inputs/install-locked.ps1 `
             -BundleDir (Join-Path $env:RUNNER_TEMP 'bundle') `
-            -EvidenceDir (Join-Path $env:RUNNER_TEMP 'w1r-evidence')
+            -EvidenceDir (Join-Path $env:RUNNER_TEMP 'w1r-evidence') `
+            -MsysRoot '${{ steps.msys2.outputs.msys2-location }}'
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ always() }}
