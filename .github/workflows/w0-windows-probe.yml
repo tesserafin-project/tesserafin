@@ -1,0 +1,324 @@
+# W0 native Windows probe (#234).
+#
+# THIS IS NOT A DISTRIBUTION WORKFLOW. It builds no Tesserafin Windows package,
+# publishes nothing, signs nothing, pushes to no registry and creates no release.
+# Everything it produces is short-retention probe evidence for the W0 architecture
+# document, and W0 evidence is never a production input.
+#
+# It is deliberately NOT wired into master's required status checks. It exists to
+# answer, on a real native Windows x64 host, the questions docs/distribution/
+# W0-windows-server.md has to answer from measurement rather than from preference.
+#
+# The Windows leg of the existing `Tests` workflow cannot supply the server test
+# verdict on its own: that matrix runs with fail-fast, macOS currently fails
+# OpenApiXmlDocumentationOrderTests on master, and the Windows leg is cancelled
+# before it finishes. `windows-tests` below runs the identical command so the
+# verdict exists; it is reported as W0 evidence, not as a `Tests` result.
+
+name: W0 Windows Probe
+
+on:
+  push:
+    branches: ['w0/**']
+  pull_request:
+    branches: [master]
+    paths:
+      - 'ci/windows/w0/**'
+      - '.github/workflows/w0-windows-probe.yml'
+      - 'docs/distribution/W0-windows-server.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SDK_VERSION: "10.0.x"
+  # Must equal ffmpeg.commit in ci/ffmpeg/components.json and F0_UPSTREAM_COMMIT
+  # in ci/package/pins.env. Asserted by the spike, not assumed.
+  FFMPEG_COMMIT: d4590e12452f94d40e413caecb34b08de608353b
+
+jobs:
+  # ── The Web payload boundary ────────────────────────────────────────────────
+  #
+  # ci/package/assemble-payload.sh obtains the bundled Tesserafin Web payload by
+  # `docker create` + `docker cp` from a LINUX OCI image. A windows-latest runner
+  # cannot run Linux containers, so the Linux packaging path is not reusable as
+  # written. This job proves the payload can still be delivered to Windows WITHOUT
+  # weakening provenance: it is extracted here, verified against the same
+  # WEB_PAYLOAD_SHA256 the Linux packages verify, and handed over by digest.
+  #
+  # In production (W2) the equivalent step is a daemonless digest-pinned OCI pull
+  # on the Windows host itself. Using an Actions artifact HERE is acceptable only
+  # because this is probe evidence; #234 forbids an expiring artifact from ever
+  # becoming a production input.
+  web-payload:
+    name: Web payload (digest-verified)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      digest: ${{ steps.extract.outputs.digest }}
+      expected: ${{ steps.extract.outputs.expected }}
+      matches: ${{ steps.extract.outputs.matches }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Extract and verify the pinned Web payload
+        id: extract
+        run: |
+          set -euo pipefail
+          # shellcheck source=/dev/null
+          source ci/package/lib.sh
+          pkg_load_pins
+
+          echo "web assets image : ${WEB_ASSETS_IMAGE}"
+          echo "web commit       : ${WEB_VCS_REF}"
+
+          work="$(mktemp -d)"
+          docker pull --quiet "${WEB_ASSETS_IMAGE}" >/dev/null
+          cid="$(docker create "${WEB_ASSETS_IMAGE}" /bin/true)"
+          mkdir -p "${work}/web" "${work}/licenses"
+          docker cp "${cid}:/web/."       "${work}/web/"      >/dev/null
+          docker cp "${cid}:/licenses/."  "${work}/licenses/" >/dev/null
+          docker cp "${cid}:/metadata/web-revision.json" "${work}/web-revision.json" >/dev/null
+          docker rm -f "${cid}" >/dev/null
+
+          revision="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["revision"])' "${work}/web-revision.json")"
+          epoch="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["sourceDateEpoch"])' "${work}/web-revision.json")"
+          [[ "${revision}" == "${WEB_VCS_REF}" ]] || {
+            echo "web provenance mismatch: payload says '${revision}', pin says '${WEB_VCS_REF}'" >&2
+            exit 1
+          }
+
+          find "${work}/web" -type d -exec chmod 0755 {} +
+          find "${work}/web" -type f -exec chmod 0644 {} +
+          digest="$(pkg_tree_digest "${work}/web" "${epoch}")"
+
+          echo "digest=${digest}"       >> "$GITHUB_OUTPUT"
+          echo "expected=${WEB_PAYLOAD_SHA256}" >> "$GITHUB_OUTPUT"
+          if [[ "${digest}" == "${WEB_PAYLOAD_SHA256}" ]]; then
+            echo "matches=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "matches=false" >> "$GITHUB_OUTPUT"
+            echo "W0 HARD STOP: Web payload digest ${digest} != pinned ${WEB_PAYLOAD_SHA256}" >&2
+            exit 1
+          fi
+
+          mkdir -p artifacts/w0-web
+          cp -a "${work}/web/."      artifacts/w0-web/
+          mkdir -p artifacts/w0-web-licenses
+          cp -a "${work}/licenses/." artifacts/w0-web-licenses/
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: w0-web-payload
+          path: artifacts/
+          retention-days: 1
+
+  # ── Phase 1 ─────────────────────────────────────────────────────────────────
+  baseline:
+    name: Native Windows baseline
+    runs-on: windows-latest
+    needs: web-payload
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: ${{ env.SDK_VERSION }}
+
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/Directory.Packages.props') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: w0-web-payload
+          path: ${{ runner.temp }}\w0-web
+
+      - name: Run the baseline probe
+        shell: pwsh
+        run: |
+          $work = Join-Path $env:RUNNER_TEMP 'w0-work'
+          $evidence = Join-Path $env:RUNNER_TEMP 'w0-evidence'
+          New-Item -ItemType Directory -Force -Path $work, $evidence | Out-Null
+          ./ci/windows/w0/probe-baseline.ps1 `
+            -RepoRoot $PWD `
+            -WorkRoot $work `
+            -EvidenceDir $evidence `
+            -HeadSha $env:GITHUB_SHA `
+            -WebPayloadDir (Join-Path $env:RUNNER_TEMP 'w0-web\w0-web')
+
+      - name: Summarise
+        if: ${{ always() }}
+        shell: pwsh
+        run: |
+          $file = Join-Path $env:RUNNER_TEMP 'w0-evidence\baseline.json'
+          if (Test-Path $file) {
+            $facts = (Get-Content $file -Raw | ConvertFrom-Json).facts
+            "| fact | bucket |", "| --- | --- |" | Add-Content $env:GITHUB_STEP_SUMMARY
+            foreach ($f in $facts) { "| $($f.id) | $($f.bucket) |" | Add-Content $env:GITHUB_STEP_SUMMARY }
+          }
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ always() }}
+        with:
+          name: w0-evidence-baseline
+          path: ${{ runner.temp }}\w0-evidence
+          retention-days: 3
+
+  # ── Phases 2 and 3 ──────────────────────────────────────────────────────────
+  #
+  # One job on purpose: the installer experiment installs the same disposable
+  # Generic Host spike the service probe builds, and an installer experiment that
+  # installed a DIFFERENT payload would not be measuring the same lifecycle.
+  service-and-installer:
+    name: Service boundary and installer lifecycle
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: ${{ env.SDK_VERSION }}
+
+      - name: Publish the server for the SCM probe
+        shell: pwsh
+        run: |
+          $publish = Join-Path $env:RUNNER_TEMP 'w0-publish'
+          dotnet publish Tesserafin.Server/Tesserafin.Server.csproj `
+            --configuration Release --runtime win-x64 --self-contained true --output $publish
+
+      - name: Windows Service boundary probe
+        shell: pwsh
+        run: |
+          $evidence = Join-Path $env:RUNNER_TEMP 'w0-evidence'
+          New-Item -ItemType Directory -Force -Path $evidence | Out-Null
+          ./ci/windows/w0/probe-service.ps1 `
+            -PublishDir (Join-Path $env:RUNNER_TEMP 'w0-publish') `
+            -WorkRoot (Join-Path $env:RUNNER_TEMP 'w0-work') `
+            -EvidenceDir $evidence `
+            -HeadSha $env:GITHUB_SHA
+
+      - name: Installer lifecycle experiment
+        shell: pwsh
+        run: |
+          ./ci/windows/w0/probe-installer.ps1 `
+            -WorkRoot (Join-Path $env:RUNNER_TEMP 'w0-work') `
+            -EvidenceDir (Join-Path $env:RUNNER_TEMP 'w0-evidence') `
+            -HeadSha $env:GITHUB_SHA
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ always() }}
+        with:
+          name: w0-evidence-service-installer
+          path: ${{ runner.temp }}\w0-evidence
+          retention-days: 3
+
+  # ── Phase 4 ─────────────────────────────────────────────────────────────────
+  ffmpeg-spike:
+    name: Native Windows FFmpeg source-build spike
+    runs-on: windows-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      # Pinned by the SAME commit the pinned upstream tree itself pins in
+      # .github/workflows/_meta_win_clang_portable.yaml, so the spike runs the
+      # upstream mechanism rather than an approximation of it.
+      - uses: msys2/setup-msys2@e9898307ac31d1a803454791be09ab9973336e1c # v2
+        with:
+          update: true
+          msystem: CLANG64
+          install: >-
+            git
+            make
+            diffutils
+            quilt
+            python
+            mingw-w64-clang-x86_64-toolchain
+            mingw-w64-clang-x86_64-nasm
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Feasibility spike from the pinned source
+        env:
+          FFMPEG_COMMIT: ${{ env.FFMPEG_COMMIT }}
+        run: |
+          export EVIDENCE_DIR="$(cygpath -u "${RUNNER_TEMP}")/w0-ffmpeg-evidence"
+          export WORK_DIR="$(cygpath -u "${RUNNER_TEMP}")/w0-ffmpeg"
+          bash ci/windows/w0/spike-ffmpeg.sh
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ always() }}
+        with:
+          name: w0-evidence-ffmpeg
+          path: ${{ runner.temp }}\w0-ffmpeg-evidence
+          retention-days: 3
+
+  # ── The Windows test verdict master's `Tests` matrix cannot currently give ───
+  windows-tests:
+    name: Server test suite on native Windows
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: ${{ env.SDK_VERSION }}
+
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/Directory.Packages.props') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      # Identical to the command ci-tests.yml runs, so the answer is comparable.
+      - name: Run DotNet CLI Tests
+        run: >
+          dotnet test Tesserafin.sln
+          --configuration Release
+          --filter 'Category!=Smoke'
+          --verbosity minimal
+
+  # ── Static analysis and unit tests for the probe harness itself ─────────────
+  probe-selftest:
+    name: Probe harness analysis and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: PSScriptAnalyzer and Pester
+        shell: pwsh
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module PSScriptAnalyzer -RequiredVersion 1.24.0 -Force -Scope CurrentUser
+          Install-Module Pester -RequiredVersion 5.7.1 -Force -Scope CurrentUser -SkipPublisherCheck
+
+          $findings = Invoke-ScriptAnalyzer -Path ./ci/windows/w0 -Recurse `
+            -Severity Error, Warning `
+            -ExcludeRule PSAvoidUsingWriteHost, PSUseShouldProcessForStateChangingFunctions
+          $findings | Format-Table -AutoSize | Out-String | Write-Host
+          if ($findings) { throw "PSScriptAnalyzer reported $($findings.Count) finding(s)." }
+
+          $config = New-PesterConfiguration
+          $config.Run.Path = './ci/windows/w0/tests'
+          $config.Output.Verbosity = 'Detailed'
+          $config.Run.Exit = $true
+          Invoke-Pester -Configuration $config
+
+      - name: Shell lint the spike
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends shellcheck
+          shellcheck ci/windows/w0/spike-ffmpeg.sh
