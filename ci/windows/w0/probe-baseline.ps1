@@ -34,7 +34,13 @@ param(
     # The digest-verified Tesserafin Web payload, extracted by the Linux leg.
     # Absent on purpose exercises the "missing Web payload" negative control.
     [Parameter()]
-    [string] $WebPayloadDir = ''
+    [string] $WebPayloadDir = '',
+
+    # ffmpeg.exe / ffprobe.exe produced by the W0 native source-build spike.
+    # Absent on purpose exercises the no-encoder control, which on this image is
+    # simply the default: the runner ships no FFmpeg at all.
+    [Parameter()]
+    [string] $FfmpegDir = ''
 )
 
 Set-StrictMode -Version Latest
@@ -161,9 +167,10 @@ function Invoke-ServerRun {
     try {
         # Start-Process joins -ArgumentList with spaces and quotes NOTHING, so a
         # path containing a space arrives at the server split in two. The first
-        # run of this probe truncated 'Program Files Etè\...' to 'Program' and
-        # the server died in BaseApplicationPaths.CheckOrCreateMarker on a marker
-        # it had written into the wrong directory. Quoting each element is the
+        # run of this probe truncated the accented 'Program Files ...' leaf at
+        # its first space, and the server died in
+        # BaseApplicationPaths.CheckOrCreateMarker on a marker it had written
+        # into the wrong directory. Quoting each element is the
         # fix; the paths under test never contain a quote themselves.
         $quoted = @($arguments | ForEach-Object { '"' + $_ + '"' })
         $process = Start-Process -FilePath $Exe -ArgumentList $quoted -PassThru `
@@ -353,29 +360,57 @@ if (-not $selfContained.selfContained) {
 
 # -- 3. FFmpeg discovery, as an explicit pair -----------------------------------
 
+# What the RUNNER has, asked before anything is arranged. On win25-vs2026 the
+# answer is nothing, and that single fact is why FfmpegException makes the stock
+# Windows server unstartable out of the box.
 $runnerFfmpeg = (Get-Command ffmpeg.exe -ErrorAction SilentlyContinue)?.Source
 
-# Isolated copy under a name the PATH cannot supply, so "the requested binary was
-# actually selected" is answerable rather than merely plausible.
+# The encoder the probe REQUESTS lives in its own directory, outside PATH, so
+# "the requested binary was actually selected" is answerable rather than merely
+# plausible: a PATH fallback would record a different string and fail.
 $ffmpegHome = Join-Path $WorkRoot 'w0-requested-ffmpeg'
 $requestedFfmpeg = Join-Path $ffmpegHome 'ffmpeg.exe'
-if ($runnerFfmpeg) {
-    New-Item -ItemType Directory -Force -Path $ffmpegHome | Out-Null
+New-Item -ItemType Directory -Force -Path $ffmpegHome | Out-Null
+
+$ffmpegOrigin = 'none'
+if ($FfmpegDir -and (Test-Path -LiteralPath (Join-Path $FfmpegDir 'ffmpeg.exe'))) {
+    Copy-Item -LiteralPath (Join-Path $FfmpegDir 'ffmpeg.exe') -Destination $requestedFfmpeg -Force
+    $spikeFfprobe = Join-Path $FfmpegDir 'ffprobe.exe'
+    if (Test-Path -LiteralPath $spikeFfprobe) {
+        Copy-Item -LiteralPath $spikeFfprobe -Destination (Join-Path $ffmpegHome 'ffprobe.exe') -Force
+    }
+    $ffmpegOrigin = 'w0-native-spike'
+} elseif ($runnerFfmpeg) {
     Copy-Item -LiteralPath $runnerFfmpeg -Destination $requestedFfmpeg -Force
-    $runnerFfprobe = (Get-Command ffprobe.exe -ErrorAction SilentlyContinue)?.Source
-    if ($runnerFfprobe) { Copy-Item -LiteralPath $runnerFfprobe -Destination (Join-Path $ffmpegHome 'ffprobe.exe') -Force }
+    $ffmpegOrigin = 'runner-preinstalled'
 }
 
-Add-W0Fact -Evidence $evidence -Id 'ffmpeg.hostsupplied' -Bucket 'test-host-dependency' `
-    -Detail ("The ONLY ffmpeg on this host is the one the GitHub runner image preinstalls at " +
-             "'$runnerFfmpeg'. Every baseline start below that succeeds does so because of it. " +
-             "This is an UNACCEPTABLE baseline dependency and is recorded as one: Tesserafin owns " +
-             "no Windows FFmpeg runtime yet (W1). Nothing in this probe may be read as evidence " +
-             "that a Tesserafin Windows FFmpeg exists.") `
+$ffmpegVersion = if (Test-Path -LiteralPath $requestedFfmpeg) {
+    (& $requestedFfmpeg -hide_banner -version 2>&1 | Select-Object -First 1)
+} else { $null }
+
+Add-W0Fact -Evidence $evidence -Id 'ffmpeg.provenance' `
+    -Bucket $(if ($ffmpegOrigin -eq 'w0-native-spike') { 'working' }
+              elseif ($ffmpegOrigin -eq 'runner-preinstalled') { 'test-host-dependency' }
+              else { 'missing' }) `
+    -Detail ("The runner image supplies NO ffmpeg: Get-Command ffmpeg.exe resolved to " +
+             "'$runnerFfmpeg'. Since FfmpegException is fatal at startup, that alone makes the " +
+             "stock Windows server unstartable out of the box, and it is why W1 is a blocking " +
+             "deliverable rather than a refinement. The encoder used below came from " +
+             "'$ffmpegOrigin' -- the W0 native source-build spike, compiled on a Windows runner " +
+             "from the pinned upstream commit -- which keeps the whole chain inside W0 and inside " +
+             "the pin instead of depending on whatever an image happened to preinstall. It is " +
+             "still NOT the accepted Tesserafin Windows runtime: it is bounded by " +
+             "--disable-autodetect and carries none of the required component closure. W1 owns " +
+             "the real one.") `
     -Data @{
-        runnerFfmpeg = $runnerFfmpeg
+        runnerFfmpeg  = $runnerFfmpeg
+        origin        = $ffmpegOrigin
         requestedCopy = $requestedFfmpeg
-        version = if ($runnerFfmpeg) { (& $runnerFfmpeg -version 2>&1 | Select-Object -First 1) } else { $null }
+        version       = $ffmpegVersion
+        sha256        = if (Test-Path -LiteralPath $requestedFfmpeg) {
+            (Get-FileHash -LiteralPath $requestedFfmpeg -Algorithm SHA256).Hash.ToLowerInvariant()
+        } else { $null }
     }
 
 # -- 4. Startup from a hostile path, with isolated state ------------------------
@@ -526,7 +561,7 @@ $required = @(
     'publish.selfcontained'
     'control.architecture'
     'control.selfcontained'
-    'ffmpeg.hostsupplied'
+    'ffmpeg.provenance'
     'startup.hostilepath'
     'startup.relocated'
     'control.pathdependent'
