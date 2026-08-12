@@ -61,6 +61,7 @@ function Remove-InstalledProbe {
     Start-Sleep -Seconds 2
     & sc.exe delete $serviceName *>&1 | Out-Null
     if (Test-Path -LiteralPath $installRoot) { Remove-Item -Recurse -Force -LiteralPath $installRoot -ErrorAction SilentlyContinue }
+    [Environment]::SetEnvironmentVariable('W0_SENTINEL', $null, 'Machine')
 }
 
 # -- Disposable payload: the same Generic Host spike the service probe measured --
@@ -234,6 +235,15 @@ function New-ProbeMsi {
 
 Remove-InstalledProbe
 
+# The disposable host writes a lifecycle marker, and where it writes it is the
+# whole experiment. Point it at the retained-data directory rather than at
+# AppContext.BaseDirectory: a service that has to write next to its own binaries
+# is a service that needs write access to %ProgramFiles%, which is exactly the
+# design this distribution rejects. The machine-scoped variable is read by the
+# SCM when it creates the process, so it must be set before any start attempt.
+New-Item -ItemType Directory -Force -Path $dataRoot | Out-Null
+[Environment]::SetEnvironmentVariable('W0_SENTINEL', (Join-Path $dataRoot 'lifecycle.log'), 'Machine')
+
 $msiV1 = Join-Path $WorkRoot 'w0probe-1.0.0.msi'
 $msiV2 = Join-Path $WorkRoot 'w0probe-1.1.0.msi'
 $wixFacts.build1 = New-ProbeMsi -Version '1.0.0' -OutputPath $msiV1
@@ -278,26 +288,38 @@ $lifecycle.installedFilePresent = Test-Path -LiteralPath (Join-Path $installRoot
 #     to execute from %ProgramFiles%. Measured in two phases so the ACL grant is
 #     shown to be the thing that makes the difference, rather than assumed.
 $lifecycle.startBeforeGrant = (& sc.exe start $serviceName 2>&1 | Out-String).Trim()
-Start-Sleep -Seconds 5
+Start-Sleep -Seconds 8
 $lifecycle.runningBeforeGrant = ((& sc.exe query $serviceName 2>&1 | Out-String) -match 'RUNNING')
 & sc.exe stop $serviceName *>&1 | Out-Null
 Start-Sleep -Seconds 2
 
-$grantResult = @{}
-try {
-    $acl = Get-Acl -LiteralPath $installRoot
-    $acl.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new(
-        "NT SERVICE\$serviceName", 'ReadAndExecute', 'ContainerInherit,ObjectInherit', 'None', 'Allow'))
-    Set-Acl -LiteralPath $installRoot -AclObject $acl
-    $grantResult.granted = $true
-} catch {
-    $grantResult.granted = $false
-    $grantResult.error = $_.Exception.Message
+function Grant-ServiceAccess {
+    param(
+        [Parameter(Mandatory)] [string] $Path,
+        [Parameter(Mandatory)] [string] $Rights
+    )
+    try {
+        $acl = Get-Acl -LiteralPath $Path
+        $acl.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new(
+            "NT SERVICE\$serviceName", $Rights, 'ContainerInherit,ObjectInherit', 'None', 'Allow'))
+        Set-Acl -LiteralPath $Path -AclObject $acl
+        return @{ path = $Path; rights = $Rights; granted = $true }
+    } catch {
+        return @{ path = $Path; rights = $Rights; granted = $false; error = $_.Exception.Message }
+    }
 }
-$lifecycle.aclGrant = $grantResult
+
+# Both halves of the section 9.3 split, granted together and recorded
+# separately: read and execute where the binaries live, modify where the state
+# lives. The first hosted attempt granted only the former and the service still
+# failed 1053, which is what showed the write grant to be the load-bearing one.
+$lifecycle.aclGrant = @(
+    Grant-ServiceAccess -Path $installRoot -Rights 'ReadAndExecute'
+    Grant-ServiceAccess -Path $dataRoot    -Rights 'Modify'
+)
 
 $lifecycle.startAfterGrant = (& sc.exe start $serviceName 2>&1 | Out-String).Trim()
-Start-Sleep -Seconds 5
+Start-Sleep -Seconds 8
 $lifecycle.runningAfterGrant = ((& sc.exe query $serviceName 2>&1 | Out-String) -match 'RUNNING')
 $lifecycle.aclGrantIsWhatMattered = (-not $lifecycle.runningBeforeGrant) -and $lifecycle.runningAfterGrant
 

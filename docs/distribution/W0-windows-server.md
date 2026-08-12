@@ -677,17 +677,30 @@ is created by the SCM with the service and removed with it, so an installer can
 grant per-machine least-privilege ACLs without inventing, storing or rotating a
 password.
 
-**The measured consequence, which is easy to get wrong:** a virtual service
-account is not a member of `Users`, so it inherits **no** right to read or
-execute anything under `%ProgramFiles%`. A service registered there under such
-an account fails to start with error 1920 until the installer grants it read and
-execute explicitly. The installer experiment demonstrates exactly this — the same
-executable, under the same kind of account, starts happily from a permissive
-path in the portable-ZIP candidate and refuses to start from `%ProgramFiles%`
-until the grant is applied.
+**The measured consequence, and the first guess was wrong.** Starting the
+service inside the MSI transaction failed with error 1920, which rolled the whole
+install back to 1603. The obvious explanation — a virtual service account is not
+a member of `Users`, so it inherits no right to execute from `%ProgramFiles%` —
+was tested by granting read and execute on the install directory and starting
+again. **It still failed, with 1053.** `aclGrantIsWhatMattered` came back
+`false`, which is exactly what a two-phase experiment is for.
 
-**W4 therefore cannot rely on inherited ACLs.** Every grant in §9.3 is
-load-bearing, including the read-and-execute one that looks redundant. `LocalService` is rejected because it is shared with unrelated
+What actually broke it was the *write* side. The service process wanted to write
+a file next to its own binaries, and a correctly locked-down `%ProgramFiles%`
+does not allow that — nor should it. The fix is the design, not an exception to
+it: the process writes to the retained-data directory, and the installer grants
+`Modify` **there**.
+
+The general rule this establishes for W3 and W4:
+
+* the service must never need to write inside `%ProgramFiles%`, and W3 must
+  ensure nothing in the startup path does — a log sink, a marker file or a
+  scratch file defaulting to `AppContext.BaseDirectory` will fail exactly this
+  way, and it will fail *only* in the installed configuration, never in a
+  developer's build tree;
+* **W4 cannot rely on inherited ACLs at all.** Both grants in §9.3 are
+  load-bearing, and the `Modify` grant on `%ProgramData%` is the one that
+  decides whether the service starts. `LocalService` is rejected because it is shared with unrelated
 services; `LocalSystem` is rejected outright as administrator-equivalent; a
 managed local user is rejected because it introduces a credential the installer
 would have to create and the operator would have to maintain.

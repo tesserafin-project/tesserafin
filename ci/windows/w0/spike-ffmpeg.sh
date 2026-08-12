@@ -164,6 +164,17 @@ fi
 
 encoded_bytes="$(stat -c %s "${smoke_dir}/smoke.mp4" 2>/dev/null || echo 0)"
 
+# -- Keep the binaries --------------------------------------------------------
+#
+# The baseline probe needs an FFmpeg to start the server at all, and a
+# windows-latest runner ships none. Handing it the one built HERE, from the
+# pinned source by a native toolchain, is strictly better evidence than handing
+# it whatever a runner image happened to preinstall: the whole chain stays
+# inside W0 and inside the pin. It is still NOT the accepted runtime.
+mkdir -p "${EVIDENCE_DIR}/bin"
+cp ffmpeg.exe ffprobe.exe "${EVIDENCE_DIR}/bin/"
+ls -l "${EVIDENCE_DIR}/bin/"
+
 # ── Verdict ───────────────────────────────────────────────────────────────────
 
 cat > "${EVIDENCE_DIR}/ffmpeg-spike.json" <<EOF
