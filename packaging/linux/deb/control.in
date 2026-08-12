@@ -1,0 +1,27 @@
+Package: tesserafin-server
+Version: @DEB_VERSION@
+Architecture: @DEB_ARCH@
+Maintainer: Tesserafin Project <https://github.com/tesserafin-project/tesserafin>
+Installed-Size: @INSTALLED_SIZE_KB@
+Depends: libc6, libstdc++6, libgcc-s1, libfontconfig1, fonts-dejavu-core, libicu76 | libicu74 | libicu72 | libicu71 | libicu70 | libicu67, libssl3t64 | libssl3 | libssl1.1
+Section: video
+Priority: optional
+Homepage: https://github.com/tesserafin-project/tesserafin
+Description: Tesserafin media server
+ Tesserafin is a self-hosted media server. This package installs the server
+ application, the bundled Tesserafin Web client and a systemd service that runs
+ it as the unprivileged "tesserafin" user.
+ .
+ The application payload is a self-contained .NET build, so no system .NET
+ runtime is required. The Tesserafin FFmpeg runtime, built from source at a
+ pinned commit, is bundled with its own shared libraries and is the only encoder
+ the service uses; it never falls back to an ffmpeg found on $PATH.
+ .
+ The server is GPL-2.0-or-later. The bundled FFmpeg runtime is GPL-3.0-or-later.
+ See /usr/share/doc/tesserafin-server/copyright for the per-component breakdown,
+ and /usr/share/doc/tesserafin-server/FFMPEG-CORRESPONDING-SOURCE.txt for the
+ corresponding-source archive distributed alongside this package.
+ .
+ Server commit: @VCS_REF@
+ Bundled Tesserafin Web commit: @WEB_VCS_REF@
+ FFmpeg runtime: @F0_BUILD_REVISION@ (@F0_UPSTREAM_COMMIT@)

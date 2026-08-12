@@ -1,0 +1,43 @@
+# Licence index — Tesserafin Server @VERSION@ (@RID@)
+
+This archive contains **three separately licensed works**. They are listed
+separately because they are separate: bundling a GPL-3.0-or-later media runtime
+alongside a GPL-2.0-or-later server does not relicense the server, and stating
+one licence for the whole archive would misdescribe both.
+
+| Component | Paths | Licence | Text |
+| --- | --- | --- | --- |
+| Tesserafin server | `lib/tesserafin/` (excluding `ffmpeg/`), `bin/tesserafin` | GPL-2.0-or-later | `LICENSE` |
+| Tesserafin FFmpeg runtime | `lib/tesserafin/ffmpeg/`, `share/tesserafin/ffmpeg/` | GPL-3.0-or-later | `licenses/ffmpeg/` |
+| Tesserafin Web client | `share/tesserafin/web/` | GPL-2.0-or-later plus its recorded dependency licences | `share/tesserafin/web-licenses/` |
+
+## The server — GPL-2.0-or-later
+
+Built from `https://github.com/tesserafin-project/tesserafin.git` at commit
+`@VCS_REF@`. The complete text is in `LICENSE` at the root of this archive.
+
+## The FFmpeg runtime — GPL-3.0-or-later
+
+Build revision `@F0_BUILD_REVISION@`, built from source at
+`@F0_UPSTREAM_REPOSITORY@` commit `@F0_UPSTREAM_COMMIT@`.
+
+FFmpeg is configured with `--enable-gpl` and `--enable-version3`, which makes the
+runtime **as a whole** GPL-3.0-or-later. It contains no nonfree component and no
+FDK AAC.
+
+The licence text of every statically linked component is in `licenses/ffmpeg/`,
+collected from the actual source trees rather than transcribed. The component
+inventory with versions, licences and source locations is in
+`share/tesserafin/ffmpeg/sbom.cdx.json`; the source baseline is in
+`share/tesserafin/ffmpeg/SOURCE.json`; the third-party notices are in
+`share/tesserafin/ffmpeg/THIRD_PARTY_NOTICES.md`.
+
+The complete corresponding source is distributed **alongside** this archive, not
+inside it. `FFMPEG-CORRESPONDING-SOURCE.txt` gives its exact filename and
+SHA-256.
+
+## The web client
+
+Built from `https://github.com/tesserafin-project/tesserafin-web.git` at commit
+`@WEB_VCS_REF@`. Its own third-party dependency licences are reproduced verbatim
+under `share/tesserafin/web-licenses/` and are not restated here.

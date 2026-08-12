@@ -1,0 +1,70 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: Tesserafin
+Source: https://github.com/tesserafin-project/tesserafin
+
+Comment: This package bundles three separately licensed works. They are listed
+ here as separate stanzas because they are separate: bundling a GPL-3.0-or-later
+ media runtime alongside a GPL-2.0-or-later server does not relicense the server,
+ and stating one licence for the whole package would misdescribe both.
+ .
+ The complete corresponding source for the bundled FFmpeg runtime is distributed
+ as a separate archive alongside this package; see
+ /usr/share/doc/tesserafin-server/FFMPEG-CORRESPONDING-SOURCE.txt for its exact
+ filename and SHA-256.
+
+Files: *
+Copyright: Tesserafin Project contributors
+License: GPL-2.0-or-later
+Comment: The Tesserafin server application, its systemd unit and its
+ configuration. Built from server source at the commit recorded in the package
+ description and in the artifact provenance manifest. Full text at
+ @SERVER_LICENSE_PATH@.
+
+Files: usr/lib/tesserafin/ffmpeg/*
+ usr/share/tesserafin/ffmpeg/*
+ usr/share/licenses/tesserafin-server/ffmpeg/*
+Copyright: the FFmpeg authors and the authors of every statically linked component
+License: GPL-3.0-or-later
+Comment: The Tesserafin FFmpeg runtime, build revision @F0_BUILD_REVISION@,
+ built from source at @F0_UPSTREAM_REPOSITORY@ commit @F0_UPSTREAM_COMMIT@ with
+ --enable-gpl and --enable-version3, which makes the runtime as a whole
+ GPL-3.0-or-later. It contains no nonfree component and no FDK AAC.
+ .
+ The per-component licence texts collected from the actual source trees are
+ installed under @FFMPEG_LICENSE_PATH@; the component inventory, its licences and
+ its source locations are in usr/share/tesserafin/ffmpeg/sbom.cdx.json and
+ usr/share/tesserafin/ffmpeg/SOURCE.json; the third-party notices are in
+ usr/share/tesserafin/ffmpeg/THIRD_PARTY_NOTICES.md.
+
+Files: usr/share/tesserafin/web/*
+Copyright: the Tesserafin Web contributors and the authors of its dependencies
+License: GPL-2.0-or-later and the licences recorded in usr/share/tesserafin/web-licenses/
+Comment: The bundled Tesserafin Web client, built from tesserafin-web commit
+ @WEB_VCS_REF@. Its own third-party dependency licences are installed verbatim
+ under usr/share/tesserafin/web-licenses/ and are not restated here.
+
+License: GPL-2.0-or-later
+ This program is free software; you can redistribute it and/or modify it under
+ the terms of the GNU General Public License as published by the Free Software
+ Foundation; either version 2 of the License, or (at your option) any later
+ version.
+ .
+ This program is distributed in the hope that it will be useful, but WITHOUT ANY
+ WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+ PARTICULAR PURPOSE. See the GNU General Public License for more details.
+ .
+ The complete text is installed at @SERVER_LICENSE_PATH@. On Debian systems the
+ GPL version 2 is also at /usr/share/common-licenses/GPL-2.
+
+License: GPL-3.0-or-later
+ This runtime is free software; you can redistribute it and/or modify it under
+ the terms of the GNU General Public License as published by the Free Software
+ Foundation; either version 3 of the License, or (at your option) any later
+ version.
+ .
+ It is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ PURPOSE. See the GNU General Public License for more details.
+ .
+ The complete texts, per component, are installed under @FFMPEG_LICENSE_PATH@. On
+ Debian systems the GPL version 3 is also at /usr/share/common-licenses/GPL-3.

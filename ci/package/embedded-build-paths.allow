@@ -1,0 +1,28 @@
+# Upstream build paths that are baked into third-party dependency assemblies.
+#
+# Some NuGet packages are compiled by their own maintainers with a PDB path
+# embedded in the assembly. Those bytes arrive as a build INPUT — they are
+# identical in the container image and in every artifact built from the same
+# restore — and this packaging has no way to rewrite them.
+#
+# They are therefore enumerated here EXACTLY, one `<file name> <absolute path>`
+# pair per line, and ci/package/verify-artifacts.sh fails on anything else. The
+# list is closed on purpose: a dependency upgrade that changes a path, or a new
+# dependency that embeds one, fails the gate and gets looked at.
+#
+# This file can never excuse a first-party path. ci/package/lib.sh refuses to
+# load an entry that names Tesserafin, so a leak from this build cannot be
+# spelled as an allowance.
+#
+# `/home/runner/...` here belongs to the UPSTREAM project's own GitHub Actions
+# workspace, not to this build. That collision is precisely why the gate matches
+# full paths instead of the `${HOME}` prefix.
+#
+# Verified identical for linux-x64 and linux-arm64.
+
+BDInfo.dll                        /home/bond/dev/BDInfo/src/BDInfo/obj/Release/net6.0/BDInfo.pdb
+BlurHashSharp.dll                 /home/bond/dev/BlurHashSharp/src/BlurHashSharp/obj/Release/net8.0/BlurHashSharp.pdb
+BlurHashSharp.SkiaSharp.dll       /home/bond/dev/BlurHashSharp/src/BlurHashSharp.SkiaSharp/obj/Release/net8.0/BlurHashSharp.SkiaSharp.pdb
+Jellyfin.XmlTv.dll                /home/bond/dev/Jellyfin.XmlTv/src/Jellyfin.XmlTv/obj/Release/net10.0/Jellyfin.XmlTv.pdb
+NEbml.Core.dll                    /home/runner/work/NEbml/NEbml/Src/Core/obj/Release/netstandard2.0/NEbml.Core.pdb
+prometheus-net.DotNetRuntime.dll  /home/runner/work/prometheus-net.DotNetRuntime/prometheus-net.DotNetRuntime/src/prometheus-net.DotNetRuntime/obj/Release/net6.0/prometheus-net.DotNetRuntime.pdb

@@ -1,0 +1,25 @@
+#!/bin/sh
+# Tesserafin Server — Debian pre-removal.
+#
+# Stops the service on removal only. On an upgrade the service is left running
+# and postinst restarts it onto the new payload.
+set -e
+
+case "$1" in
+    remove|deconfigure)
+        if [ -d /run/systemd/system ]; then
+            systemctl stop tesserafin.service >/dev/null 2>&1 || true
+            systemctl disable tesserafin.service >/dev/null 2>&1 || true
+        fi
+        ;;
+
+    upgrade|failed-upgrade)
+        ;;
+
+    *)
+        echo "prerm called with unknown argument '$1'" >&2
+        exit 1
+        ;;
+esac
+
+exit 0
