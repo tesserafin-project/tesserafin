@@ -1,0 +1,18 @@
+{
+  "$comment": "The reviewed identity of the Windows build-input bundle (#236, W1-R). The publisher is TOLD what it may push; it does not publish whatever it happens to have built. W1-R-B compares the digest a trusted master build produces against this value and refuses on any difference, then verifies that the registry stored these exact manifest bytes. Regenerating the lock necessarily changes these digests — that is the point: a new toolchain is a new bundle and a new identity, never a mutation of this one.",
+  "schemaVersion": 1,
+  "registry": "ghcr.io",
+  "repository": "tesserafin-project/windows-ffmpeg-build-inputs",
+  "reference": "ghcr.io/tesserafin-project/windows-ffmpeg-build-inputs@sha256:f8df21b2cc7ee239643d9096501f6f50bbf01223e5626a97fdb7d4f9b9e1277e",
+  "manifestDigest": "sha256:f8df21b2cc7ee239643d9096501f6f50bbf01223e5626a97fdb7d4f9b9e1277e",
+  "manifestSize": 1276,
+  "configDigest": "sha256:c6219ce936a350d85672a682afe4eb5b235c06a0f39d003400a74c983c2a5135",
+  "configSize": 452,
+  "layerDigest": "sha256:2dda83e70ac52ea3702773dee6efc8b613aab64e9b05b8749da34d9d88814416",
+  "layerSize": 409610240,
+  "lockSha256": "e837666886bc9499ea8adb0c939e4db58e740156e3730120527faad936755615",
+  "packageCount": 246,
+  "deliveredPaths": 499,
+  "published": false,
+  "publishedNote": "NOT PUBLISHED. W1-R-A implements and validates only. The GHCR package does not exist until W1-R-B dispatches the publisher from trusted master and verifies the stored manifest."
+}

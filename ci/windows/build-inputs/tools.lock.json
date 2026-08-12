@@ -1,0 +1,23 @@
+{
+  "$comment": "Auxiliary tools used to publish and consume the Windows build-input bundle (#236, W1-R). Every entry is pinned by exact version AND sha256 and is verified before use. A runner-preinstalled registry client is never accepted: its identity is whatever the image happens to carry that week, which is the same rolling-input problem this whole mechanism exists to remove.",
+  "schemaVersion": 1,
+  "tools": {
+    "oras": {
+      "version": "1.3.3",
+      "why": "pushes and pulls the exact precomputed OCI manifest bytes. `oras manifest push` is used rather than `oras push`, because the latter constructs its own manifest and would inject org.opencontainers.image.created.",
+      "license": "Apache-2.0",
+      "platforms": {
+        "linux-amd64": {
+          "url": "https://github.com/oras-project/oras/releases/download/v1.3.3/oras_1.3.3_linux_amd64.tar.gz",
+          "archiveSha256": "9ce999f8d2de03fc03968b29d743077a58783e545e5eaa53917ca177352d0e59",
+          "binary": "oras"
+        },
+        "windows-amd64": {
+          "url": "https://github.com/oras-project/oras/releases/download/v1.3.3/oras_1.3.3_windows_amd64.zip",
+          "archiveSha256": "30ca213a565a450de33001dae83053db53c221e6674c5233dc3406b686657969",
+          "binary": "oras.exe"
+        }
+      }
+    }
+  }
+}
