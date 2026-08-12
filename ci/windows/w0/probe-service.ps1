@@ -30,6 +30,17 @@ Import-Module (Join-Path $PSScriptRoot 'W0Probe.psm1') -Force
 
 $evidence = New-W0Evidence -Probe 'service' -HeadSha $HeadSha
 
+# Evidence is worth more than a clean stack. A probe that dies half way through
+# still measured something, and losing that forces a whole hosted run to be
+# repeated to learn what was already known. `break` rethrows, so the job still
+# fails; it just fails with a ledger attached.
+trap {
+    if ($null -ne $evidence) {
+        Save-W0Evidence -Evidence $evidence -Path (Join-Path $EvidenceDir 'service.json') | Out-Null
+    }
+    break
+}
+
 function Invoke-Sc {
     param([Parameter(Mandatory)] [string[]] $Arguments)
     $output = & sc.exe @Arguments 2>&1 | Out-String
@@ -181,8 +192,14 @@ sealed class Marker : IHostedService
 '@ | Set-Content -LiteralPath (Join-Path $probeDir 'Program.cs') -Encoding utf8NoBOM
 
 $spikePublish = Join-Path $probeDir 'publish'
+# PublishSingleFile so the installer experiment that follows can carry the whole
+# host as ONE file. A hand-picked subset of a multi-file self-contained publish
+# does not run, and an installer whose service fails to start would be measuring
+# the payload rather than the installer.
 & dotnet publish (Join-Path $probeDir 'w0servicehost.csproj') `
-    --configuration Release --runtime win-x64 --self-contained true --output $spikePublish *>&1 |
+    --configuration Release --runtime win-x64 --self-contained true `
+    -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
+    --output $spikePublish *>&1 |
     Tee-Object -FilePath (Join-Path $EvidenceDir 'servicehost-spike-publish.log') | Out-Null
 $spikePublishExit = $LASTEXITCODE
 

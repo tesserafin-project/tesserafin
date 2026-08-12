@@ -45,6 +45,17 @@ Import-Module (Join-Path $PSScriptRoot 'W0Probe.psm1') -Force
 
 $evidence = New-W0Evidence -Probe 'baseline' -HeadSha $HeadSha
 
+# Evidence is worth more than a clean stack. A probe that dies half way through
+# still measured something, and losing that forces a whole hosted run to be
+# repeated to learn what was already known. `break` rethrows, so the job still
+# fails; it just fails with a ledger attached.
+trap {
+    if ($null -ne $evidence) {
+        Save-W0Evidence -Evidence $evidence -Path (Join-Path $EvidenceDir 'baseline.json') | Out-Null
+    }
+    break
+}
+
 # -- Helpers --------------------------------------------------------------------
 
 function Get-FreeTcpPort {
@@ -108,6 +119,25 @@ function Invoke-ServerRun {
     $port = Get-FreeTcpPort
     $baseUrl = "http://127.0.0.1:$port"
 
+    # The server does not take its listening port from Kestrel configuration or
+    # from an environment variable: ApplicationHost reads
+    # NetworkConfiguration.InternalHttpPort, which the configuration manager
+    # persists as <configdir>/network.xml (store key "network", default 8096).
+    # Seeding that file is therefore the only way to give each run its own port,
+    # and each run needs its own so a socket still held by the previous server
+    # cannot be misread as "this build does not start". Auto-discovery and UPnP
+    # are off because a probe must not broadcast on the runner's network.
+    @"
+<?xml version="1.0" encoding="utf-8"?>
+<NetworkConfiguration xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <InternalHttpPort>$port</InternalHttpPort>
+  <PublicHttpPort>$port</PublicHttpPort>
+  <EnableHttps>false</EnableHttps>
+  <AutoDiscovery>false</AutoDiscovery>
+  <EnableUPnP>false</EnableUPnP>
+</NetworkConfiguration>
+"@ | Set-Content -LiteralPath (Join-Path $dirs.config 'network.xml') -Encoding utf8NoBOM
+
     $arguments = @(
         '--datadir',   $dirs.data
         '--configdir', $dirs.config
@@ -125,9 +155,6 @@ function Invoke-ServerRun {
         $previousEnvironment[$key] = [Environment]::GetEnvironmentVariable($key)
         [Environment]::SetEnvironmentVariable($key, $EnvironmentOverride[$key])
     }
-    $previousUrls = $env:TESSERAFIN_Kestrel__Endpoints__Http__Url
-    $env:TESSERAFIN_Kestrel__Endpoints__Http__Url = $baseUrl
-
     try {
         $process = Start-Process -FilePath $Exe -ArgumentList $arguments -PassThru `
             -RedirectStandardOutput $stdout -RedirectStandardError $stderr -NoNewWindow
@@ -190,15 +217,15 @@ function Invoke-ServerRun {
 
         $result.stopSeconds = [math]::Round($stopWatch.Elapsed.TotalSeconds, 1)
         $result.exitCode = $process.ExitCode
-        if (Test-Path -LiteralPath $stdout) { $result.stdoutTail = (Get-Content -LiteralPath $stdout -Tail 40 -Raw) }
-        if (Test-Path -LiteralPath $stderr) { $result.stderrTail = (Get-Content -LiteralPath $stderr -Tail 40 -Raw) }
+        # -Raw and -Tail cannot be combined; join the tail lines instead.
+        if (Test-Path -LiteralPath $stdout) { $result.stdoutTail = ((Get-Content -LiteralPath $stdout -Tail 40) -join "`n") }
+        if (Test-Path -LiteralPath $stderr) { $result.stderrTail = ((Get-Content -LiteralPath $stderr -Tail 40) -join "`n") }
 
         return $result
     } finally {
         foreach ($key in $previousEnvironment.Keys) {
             [Environment]::SetEnvironmentVariable($key, $previousEnvironment[$key])
         }
-        $env:TESSERAFIN_Kestrel__Endpoints__Http__Url = $previousUrls
     }
 }
 
