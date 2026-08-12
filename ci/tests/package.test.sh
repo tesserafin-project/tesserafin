@@ -129,6 +129,54 @@ else
 fi
 rm -rf "${DRIFT_DIR}"
 
+# Regression control. The reproducibility guard was first written to refuse the
+# --reuse FLAG under PKG_REPRO=1. build-all.sh always passes --reuse, so that
+# refused the legitimate case too and both hosted reproducibility jobs died in
+# twenty seconds without building anything. The guard belongs where reuse would
+# actually happen — inside the branch that adopts an existing runtime — not on
+# the flag.
+#
+# The "flag is accepted" half is asserted STATICALLY. Invoking the adapter with
+# an empty output directory would prove it by starting a real 25-minute FFmpeg
+# build, and this suite is pure logic on purpose.
+echo "== the reproducibility guard refuses reuse, not the flag"
+if grep -qE '^\s*if \[\[ "\$\{REUSE\}" -eq 1 && "\$\{PKG_REPRO:-0\}" == "1" \]\]' \
+        "${REPO_ROOT}/ci/package/ffmpeg-runtime.sh"; then
+    bad "PKG_REPRO=1 rejects the --reuse flag at argument level, so no reproducibility build can start"
+else
+    ok "PKG_REPRO=1 does not reject the --reuse flag itself"
+fi
+if awk '/^if \[\[ "\$\{REUSE\}" -eq 1 && -f/,/^else$/' "${REPO_ROOT}/ci/package/ffmpeg-runtime.sh" \
+     | grep -q 'PKG_REPRO'; then
+    ok "the guard lives inside the branch that would adopt an existing runtime"
+else
+    bad "no PKG_REPRO guard in the reuse branch: a reproducibility rebuild could adopt a runtime it did not build"
+fi
+
+# The refusal itself is exercised for real, because this path exits before any
+# build: a directory that already looks like a packaged runtime.
+REUSE_DIR="$(mktemp -d)"
+mkdir -p "${REUSE_DIR}/pkg/tesserafin-ffmpeg-${F0_BUILD_REVISION}-linux-x64/bin"
+: > "${REUSE_DIR}/pkg/tesserafin-ffmpeg-${F0_BUILD_REVISION}-linux-x64/bin/ffmpeg"
+: > "${REUSE_DIR}/pkg/${F0_SOURCE_ARCHIVE}"
+reuse_out="$( PKG_REPRO=1 "${REPO_ROOT}/ci/package/ffmpeg-runtime.sh" --rid linux-x64 \
+                --out "${REUSE_DIR}" --reuse 2>&1 || true )"
+if grep -q 'PKG_REPRO=1 is set: the reproducibility side must build its own' <<<"${reuse_out}"; then
+    ok "PKG_REPRO=1 refuses to adopt a runtime that already exists"
+else
+    bad "PKG_REPRO=1 adopted a pre-existing runtime: an independent rebuild could reuse one"
+fi
+# And without PKG_REPRO the same directory IS reused, which is what lets one
+# freshly built runtime feed all three formats in a single job.
+reuse_out="$( "${REPO_ROOT}/ci/package/ffmpeg-runtime.sh" --rid linux-x64 \
+                --out "${REUSE_DIR}" --reuse 2>&1 || true )"
+if grep -q 'reusing the runtime already built' <<<"${reuse_out}"; then
+    ok "without PKG_REPRO the runtime is reused across the three formats"
+else
+    bad "the runtime is not reused within a build: the three formats would each rebuild it"
+fi
+rm -rf "${REUSE_DIR}"
+
 echo "== the negative gate rejects a reintroduced portable asset"
 GATE_DIR="$(mktemp -d)"
 cp -a "${REPO_ROOT}/ci" "${REPO_ROOT}/packaging" "${REPO_ROOT}/docs" "${REPO_ROOT}/.github" "${GATE_DIR}/" 2>/dev/null

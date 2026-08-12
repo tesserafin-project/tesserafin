@@ -59,14 +59,6 @@ pkg_deb_arch "${RID}" >/dev/null   # validates the runtime identifier
 
 pkg_load_pins
 
-# --reuse lets the .deb, the .rpm and the portable archive for ONE architecture
-# share ONE freshly built runtime within a single job. It must never reach the
-# reproducibility path: an independent rebuild that reuses anything has not
-# rebuilt. PKG_REPRO=1 makes that structural rather than a matter of care.
-if [[ "${REUSE}" -eq 1 && "${PKG_REPRO:-0}" == "1" ]]; then
-    pkg_die "--reuse is refused under PKG_REPRO=1: the reproducibility side must rebuild the runtime"
-fi
-
 # FF_INCREMENTAL keeps a dependency prefix across runs. It is a development
 # convenience in F0 and is meaningless — worse, misleading — in anything that
 # produces evidence, so it is refused outright here rather than passed through.
@@ -93,6 +85,17 @@ esac
 # 1. Build, or reuse a complete runtime this job already built
 # =============================================================================
 if [[ "${REUSE}" -eq 1 && -f "${RT}/bin/ffmpeg" && -f "${SRC_ARCHIVE}" ]]; then
+    # --reuse lets the .deb, the .rpm and the portable archive for ONE
+    # architecture share ONE freshly built runtime within a single job. What it
+    # must never do is let a reproducibility rebuild adopt a runtime it did not
+    # build: an independent rebuild that reuses anything has not rebuilt.
+    #
+    # So PKG_REPRO=1 refuses reuse HERE — where reuse would actually happen —
+    # rather than refusing the flag itself. Refusing the flag also rejected the
+    # legitimate case, because build-all.sh always passes --reuse and, on a fresh
+    # --out, there is nothing to reuse and it builds from source anyway.
+    [[ "${PKG_REPRO:-0}" != "1" ]] || pkg_die \
+        "a runtime already exists at ${PKG} and PKG_REPRO=1 is set: the reproducibility side must build its own"
     pkg_log "reusing the runtime already built in ${PKG} for ${RID}"
 else
     pkg_log "building the accepted FFmpeg runtime ${F0_BUILD_REVISION} for ${RID}"
@@ -120,10 +123,17 @@ fi
 # 2. The package-side contract
 # =============================================================================
 FAILURES=0
+# Everything this section reports goes to STDERR. Its stdout is reserved for the
+# one line callers consume — the packaged runtime directory — because build-all.sh
+# reads it with `$( ... | tail -1 )`. Reporting on stdout made the whole
+# accepted-runtime verdict vanish into that command substitution: the gate still
+# ran and still failed the build when it should, but a reviewer reading the
+# hosted log saw no evidence that it had run at all.
 fail() { echo "  FAIL: $*" >&2; FAILURES=$((FAILURES + 1)); }
-pass() { echo "  ok  : $*"; }
+pass() { echo "  ok  : $*" >&2; }
+note() { echo "$*" >&2; }
 
-echo "== accepted-runtime contract (${RID})"
+note "== accepted-runtime contract (${RID})"
 
 # 2a. Revision and upstream commit, read back from what was actually produced.
 #     SOURCE.json is written by F0 from the manifest, so this closes the loop
@@ -279,11 +289,11 @@ elif [[ "${baseline_state}" == "current" ]]; then
         if [[ "${derived_ok}" -eq 1 && "${PKG_ALLOW_COMPRESSOR_DRIFT:-0}" == "1" ]]; then
             pass "ffmpeg, ffprobe and capability.json reproduce the accepted baseline byte for byte"
             pass "corresponding source is content-identical to the accepted archive (decompressed stream ${actual_stream})"
-            echo "  note: the compressed .tar.zst container and the four files quoting its digest"
-            echo "        differ, which is a zstd-build difference between this host and the runner"
-            echo "        that produced the baseline. Accepted here only because"
-            echo "        PKG_ALLOW_COMPRESSOR_DRIFT=1 was set explicitly. Moved paths:"
-            sed 's/^/          /' <<<"${moved}"
+            note "  note: the compressed .tar.zst container and the four files quoting its digest"
+            note "        differ, which is a zstd-build difference between this host and the runner"
+            note "        that produced the baseline. Accepted here only because"
+            note "        PKG_ALLOW_COMPRESSOR_DRIFT=1 was set explicitly. Moved paths:"
+            sed 's/^/          /' <<<"${moved}" >&2
         elif [[ "${derived_ok}" -eq 1 ]]; then
             fail "delivered digests differ from the accepted baseline. The difference is confined to the compressed corresponding-source container and the four files quoting it (decompressed stream matches ${actual_stream}), but this build did not set PKG_ALLOW_COMPRESSOR_DRIFT=1, so it is treated as drift:"$'\n'"${moved}"
         else
@@ -294,16 +304,16 @@ else
     # Not a pass and not a failure. ci/ffmpeg/** has moved, so the baseline no
     # longer describes these inputs; enforcing it would be enforcing a stale
     # oracle, and skipping quietly would hide that the comparison did not happen.
-    echo "  note: ci/ffmpeg tree is ${baseline_state} relative to F0_ACCEPTED_CI_TREE;"
-    echo "        the accepted digest baseline does not describe these inputs and was NOT enforced."
-    echo "        Rebuilt digests for ${RID}:"
-    sed 's/^/          /' <<<"${delivered}"
+    note "  note: ci/ffmpeg tree is ${baseline_state} relative to F0_ACCEPTED_CI_TREE;"
+    note "        the accepted digest baseline does not describe these inputs and was NOT enforced."
+    note "        Rebuilt digests for ${RID}:"
+    sed 's/^/          /' <<<"${delivered}" >&2
 fi
 
-echo
+note ""
 if [[ "${FAILURES}" -gt 0 ]]; then
     echo "FFMPEG RUNTIME: FAIL — ${FAILURES} check(s) failed" >&2
     exit 1
 fi
-echo "FFMPEG RUNTIME: PASS — ${F0_BUILD_REVISION} ${RID}"
+note "FFMPEG RUNTIME: PASS — ${F0_BUILD_REVISION} ${RID}"
 printf '%s\n' "${PKG}"
