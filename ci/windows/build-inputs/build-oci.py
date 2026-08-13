@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 
 import bundle
+import signing
 
 
 def main() -> int:
@@ -62,7 +63,20 @@ def main() -> int:
         shutil.rmtree(args.out)
     args.out.mkdir(parents=True)
 
-    summary = bundle.build_oci_layout(args.bundle, args.out, lock, lock_sha256)
+    # The trust root is read back from the BUNDLE, not from the repository, and
+    # is re-hashed here: an OCI layout whose config claims a signing root the
+    # layer does not carry would be unverifiable by a consumer that only has
+    # the artifact.
+    trust_root = signing.load_trust_root(args.bundle / "trust")
+    if trust_root["_sha256"] != metadata["trustRootSha256"]:
+        raise bundle.BundleError(
+            f"bundle.json records trustRootSha256 {metadata['trustRootSha256']}, "
+            f"but the bundled trust root hashes to {trust_root['_sha256']}"
+        )
+
+    summary = bundle.build_oci_layout(
+        args.bundle, args.out, lock, lock_sha256, trust_root["_sha256"]
+    )
 
     recomputed = bundle.read_manifest_digest(args.out)
     if recomputed != summary["manifestDigest"]:
@@ -78,6 +92,6 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         sys.exit(main())
-    except bundle.BundleError as error:
+    except (bundle.BundleError, signing.SignatureError) as error:
         print(f"W1-R OCI HARD STOP: {error}", file=sys.stderr)
         sys.exit(1)

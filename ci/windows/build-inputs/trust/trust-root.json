@@ -1,0 +1,66 @@
+{
+  "$comment": [
+    "The root of trust for MSYS2 package signatures (#236, W1-R-B §2.2).",
+    "",
+    "WHAT THIS DECIDES, AND WHAT IT DOES NOT.",
+    "The committed lock is the INTEGRITY decision: an archive is admitted only if",
+    "its SHA-256 equals the reviewed value, and no signature can change that.",
+    "This trust root is the ATTRIBUTION decision: it proves the exact bytes the",
+    "lock names were signed by an MSYS2 packager we accept, rather than merely",
+    "matching a digest somebody recorded from the same compromised mirror.",
+    "Both must hold. Neither substitutes for the other.",
+    "",
+    "WHY IT IS THIS SMALL.",
+    "Every one of the 246 locked archives is signed by exactly one key. Pinning",
+    "the whole 12-key MSYS2 keyring would accept eleven signers that sign nothing",
+    "here, including four that msys2-revoked revokes. The allowlist is therefore",
+    "the measured signer set, not the published keyring: a package signed by a",
+    "different MSYS2 packager fails closed and has to be re-reviewed.",
+    "",
+    "HOW THE MATERIAL WAS DERIVED.",
+    "From the msys2-keyring package named below -- which is itself a member of",
+    "the lock, so its bytes are digest-pinned by the same mechanism as every",
+    "other archive -- by extracting usr/share/pacman/keyrings/msys2.gpg,",
+    "importing it into an empty GnuPG home, and exporting the accepted",
+    "fingerprint alone:",
+    "",
+    "  tar --zstd -xOf <keyring>.pkg.tar.zst usr/share/pacman/keyrings/msys2.gpg \\",
+    "    | gpg --homedir <empty> --import",
+    "  gpg --homedir <empty> --export --armor \\",
+    "      --export-options export-minimal <fingerprint> > msys2-signing-keys.asc",
+    "",
+    "keyFileSha256 is checked on every use, so the committed bytes are the",
+    "decision rather than whatever a re-derivation happens to produce."
+  ],
+  "keyFile": "msys2-signing-keys.asc",
+  "keyFileSha256": "1c32ec73f6a89c09f5cd0b23d59727ebc671946e2cf2f3710f61326dee16a49c",
+  "keyFileBytes": 3179,
+  "acceptedFingerprints": [
+    "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+  ],
+  "acceptedSigners": [
+    {
+      "fingerprint": "5F944B027F7FE2091985AA2EFA11531AA0AA7F57",
+      "uid": "Christoph Reiter (MSYS2 development key) <reiter.christoph@gmail.com>",
+      "expires": null,
+      "revokedByKeyring": false,
+      "signsLockedPackages": 246
+    }
+  ],
+  "provenance": {
+    "package": "msys2-keyring",
+    "version": "1~20260214-1",
+    "repository": "msys",
+    "filename": "msys2-keyring-1~20260214-1-any.pkg.tar.zst",
+    "sha256": "c93044188c49f6f75e6f75709017ffa9234c2bdd8fe7c6a4c47d62a9cd8bfb1f",
+    "member": "usr/share/pacman/keyrings/msys2.gpg",
+    "inLock": true,
+    "revokedList": "usr/share/pacman/keyrings/msys2-revoked",
+    "revokedFingerprints": [
+      "123D4D51A1793859C2BE916BBBE514E53E0D0813",
+      "B19514FB53EB3668471B296E794DCF97F93FC717",
+      "909F9599D1A2046B21FAEB3C4DF3B7664CA56930",
+      "C65EC8966983541D52B97A16D595C9AB2C51581E"
+    ]
+  }
+}

@@ -1,11 +1,11 @@
 {
-  "compressedBytes": 406886665,
+  "compressedBytes": 406892137,
   "ffmpeg": {
     "buildRevision": "7.1.4-tesserafin.1",
     "source": "ci/ffmpeg/components.json, asserted equal to ci/package/pins.env",
     "upstreamCommit": "d4590e12452f94d40e413caecb34b08de608353b"
   },
-  "installedBytes": 2695179178,
+  "installedBytes": 2695191191,
   "mingwPackagePrefix": "mingw-w64-clang-x86_64",
   "msystem": "CLANG64",
   "packageCount": 246,
@@ -1049,7 +1049,7 @@
     },
     {
       "architecture": "x86_64",
-      "compressedBytes": 2699820,
+      "compressedBytes": 2697631,
       "depends": [
         "bzip2",
         "libassuan",
@@ -1068,11 +1068,11 @@
         "pinentry",
         "zlib"
       ],
-      "filename": "gnupg-2.4.9-1-x86_64.pkg.tar.zst",
+      "filename": "gnupg-2.4.9-3-x86_64.pkg.tar.zst",
       "groups": [],
-      "installedBytes": 11551805,
+      "installedBytes": 11546671,
       "license": [
-        "GPL"
+        "spdx:GPL-3.0-or-later"
       ],
       "name": "gnupg",
       "provides": [
@@ -1080,10 +1080,10 @@
         "gnupg2=2.4.9"
       ],
       "repository": "msys",
-      "sha256": "cd95fe16cc87700372549294a21f35b4adeed8bf57451cd2147e7f82f9e582eb",
-      "signatureUrl": "https://repo.msys2.org/msys/x86_64/gnupg-2.4.9-1-x86_64.pkg.tar.zst.sig",
-      "url": "https://repo.msys2.org/msys/x86_64/gnupg-2.4.9-1-x86_64.pkg.tar.zst",
-      "version": "2.4.9-1"
+      "sha256": "ff78c8391e894c53ad0e3054f1e885e34f22072ad7f8578cd199e0d5657592b2",
+      "signatureUrl": "https://repo.msys2.org/msys/x86_64/gnupg-2.4.9-3-x86_64.pkg.tar.zst.sig",
+      "url": "https://repo.msys2.org/msys/x86_64/gnupg-2.4.9-3-x86_64.pkg.tar.zst",
+      "version": "2.4.9-3"
     },
     {
       "architecture": "x86_64",
@@ -1431,11 +1431,11 @@
     },
     {
       "architecture": "x86_64",
-      "compressedBytes": 63199,
+      "compressedBytes": 63072,
       "depends": [
         "gcc-libs"
       ],
-      "filename": "libexpat-2.8.2-1-x86_64.pkg.tar.zst",
+      "filename": "libexpat-2.8.3-1-x86_64.pkg.tar.zst",
       "groups": [
         "libraries"
       ],
@@ -1446,30 +1446,30 @@
       "name": "libexpat",
       "provides": [],
       "repository": "msys",
-      "sha256": "e5d4a947b2b39aa9c5e9233165470fc78e670b679cafda801a2f41c36714dded",
-      "signatureUrl": "https://repo.msys2.org/msys/x86_64/libexpat-2.8.2-1-x86_64.pkg.tar.zst.sig",
-      "url": "https://repo.msys2.org/msys/x86_64/libexpat-2.8.2-1-x86_64.pkg.tar.zst",
-      "version": "2.8.2-1"
+      "sha256": "64c5ec4d2239a6b93784208e38209317e3738cc21afc30dff48d77d1a55ce631",
+      "signatureUrl": "https://repo.msys2.org/msys/x86_64/libexpat-2.8.3-1-x86_64.pkg.tar.zst.sig",
+      "url": "https://repo.msys2.org/msys/x86_64/libexpat-2.8.3-1-x86_64.pkg.tar.zst",
+      "version": "2.8.3-1"
     },
     {
       "architecture": "x86_64",
-      "compressedBytes": 36132,
+      "compressedBytes": 37793,
       "depends": [],
-      "filename": "libffi-3.7.1-1-x86_64.pkg.tar.zst",
+      "filename": "libffi-3.8.0-1-x86_64.pkg.tar.zst",
       "groups": [
         "libraries"
       ],
-      "installedBytes": 53601,
+      "installedBytes": 55573,
       "license": [
         "spdx:MIT"
       ],
       "name": "libffi",
       "provides": [],
       "repository": "msys",
-      "sha256": "d33024a6839127a13db1d0331e3c08b3b80488a111c7ad6b1694a9a02b55b8f2",
-      "signatureUrl": "https://repo.msys2.org/msys/x86_64/libffi-3.7.1-1-x86_64.pkg.tar.zst.sig",
-      "url": "https://repo.msys2.org/msys/x86_64/libffi-3.7.1-1-x86_64.pkg.tar.zst",
-      "version": "3.7.1-1"
+      "sha256": "e0a21ae5ee3f0ce1ff3f446ea2c95ad462803081014aecfa8fc1cd22bc4df187",
+      "signatureUrl": "https://repo.msys2.org/msys/x86_64/libffi-3.8.0-1-x86_64.pkg.tar.zst.sig",
+      "url": "https://repo.msys2.org/msys/x86_64/libffi-3.8.0-1-x86_64.pkg.tar.zst",
+      "version": "3.8.0-1"
     },
     {
       "architecture": "x86_64",
@@ -1973,26 +1973,26 @@
     },
     {
       "architecture": "x86_64",
-      "compressedBytes": 70056,
+      "compressedBytes": 72764,
       "depends": [
         "libidn2",
         "libunistring"
       ],
-      "filename": "libpsl-0.21.5-3-x86_64.pkg.tar.zst",
+      "filename": "libpsl-0.23.2-1-x86_64.pkg.tar.zst",
       "groups": [
         "libraries"
       ],
-      "installedBytes": 115245,
+      "installedBytes": 118819,
       "license": [
         "spdx:MIT"
       ],
       "name": "libpsl",
       "provides": [],
       "repository": "msys",
-      "sha256": "0ae7c9259b1d46a269fad1729cbd68eb71d0573cae0fbc28a4becd352447d5eb",
-      "signatureUrl": "https://repo.msys2.org/msys/x86_64/libpsl-0.21.5-3-x86_64.pkg.tar.zst.sig",
-      "url": "https://repo.msys2.org/msys/x86_64/libpsl-0.21.5-3-x86_64.pkg.tar.zst",
-      "version": "0.21.5-3"
+      "sha256": "749014f86a1ae5f5a5adccec518e0296a03a838db9874aa9803dffaa8d30abc8",
+      "signatureUrl": "https://repo.msys2.org/msys/x86_64/libpsl-0.23.2-1-x86_64.pkg.tar.zst.sig",
+      "url": "https://repo.msys2.org/msys/x86_64/libpsl-0.23.2-1-x86_64.pkg.tar.zst",
+      "version": "0.23.2-1"
     },
     {
       "architecture": "x86_64",
@@ -2948,21 +2948,21 @@
     },
     {
       "architecture": "any",
-      "compressedBytes": 50376,
+      "compressedBytes": 51575,
       "depends": [],
-      "filename": "mingw-w64-clang-x86_64-libffi-3.7.1-1-any.pkg.tar.zst",
+      "filename": "mingw-w64-clang-x86_64-libffi-3.8.0-1-any.pkg.tar.zst",
       "groups": [],
-      "installedBytes": 136742,
+      "installedBytes": 136669,
       "license": [
         "spdx:MIT"
       ],
       "name": "mingw-w64-clang-x86_64-libffi",
       "provides": [],
       "repository": "clang64",
-      "sha256": "6fbf0e725e4cda45b51cad719956d177bb2afef4f98ecba1fcdbe66d3afccc08",
-      "signatureUrl": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-libffi-3.7.1-1-any.pkg.tar.zst.sig",
-      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-libffi-3.7.1-1-any.pkg.tar.zst",
-      "version": "3.7.1-1"
+      "sha256": "4d27339b52eabae86a1dff79cf432191ad8dd6acfa653b1179b12490234c66a6",
+      "signatureUrl": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-libffi-3.8.0-1-any.pkg.tar.zst.sig",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-libffi-3.8.0-1-any.pkg.tar.zst",
+      "version": "3.8.0-1"
     },
     {
       "architecture": "any",
@@ -4402,7 +4402,7 @@
     },
     {
       "architecture": "x86_64",
-      "compressedBytes": 1210607,
+      "compressedBytes": 1212827,
       "depends": [
         "heimdal",
         "libedit",
@@ -4410,21 +4410,21 @@
         "libfido2",
         "openssl"
       ],
-      "filename": "openssh-10.4p1-1-x86_64.pkg.tar.zst",
+      "filename": "openssh-10.5p1-1-x86_64.pkg.tar.zst",
       "groups": [
         "net-utils"
       ],
-      "installedBytes": 7770398,
+      "installedBytes": 7782072,
       "license": [
         "spdx:LicenseRef-OpenSSH"
       ],
       "name": "openssh",
       "provides": [],
       "repository": "msys",
-      "sha256": "778592d988c4d99bfcd76ad0293b4e6a065fdfc877a291cb2f7dba2a41a1cd5a",
-      "signatureUrl": "https://repo.msys2.org/msys/x86_64/openssh-10.4p1-1-x86_64.pkg.tar.zst.sig",
-      "url": "https://repo.msys2.org/msys/x86_64/openssh-10.4p1-1-x86_64.pkg.tar.zst",
-      "version": "10.4p1-1"
+      "sha256": "48f16972010a505f0f54b71a38a52c21f8341bb50bf6760b1e1ee0a68148ec4f",
+      "signatureUrl": "https://repo.msys2.org/msys/x86_64/openssh-10.5p1-1-x86_64.pkg.tar.zst.sig",
+      "url": "https://repo.msys2.org/msys/x86_64/openssh-10.5p1-1-x86_64.pkg.tar.zst",
+      "version": "10.5p1-1"
     },
     {
       "architecture": "x86_64",
@@ -5729,17 +5729,18 @@
       "version": "1.5.7-1"
     }
   ],
+  "providerOverrides": [],
   "repositoryDatabases": {
     "clang64": {
-      "bytes": 576897,
+      "bytes": 576822,
       "filename": "clang64.db",
-      "sha256": "5567022cac5f804039a611f748f732c89c73a21e79b34a5ec3d94592743f7cbd",
+      "sha256": "40455f861a9131e8e24f4faf1feafe94e5e568e4271972cf0d16025a18a5f1f4",
       "url": "https://repo.msys2.org/mingw/clang64/clang64.db"
     },
     "msys": {
-      "bytes": 482633,
+      "bytes": 483747,
       "filename": "msys.db",
-      "sha256": "0ee1aadf34f45cd7431d6f8bce9312e92cb5307ab3a41a849bf17bf2b42d6556",
+      "sha256": "c65f1853a0d0a6cfaa8ce51018fbe6c55eef62e2e36c9c9297ff2af2d6b075c7",
       "url": "https://repo.msys2.org/msys/x86_64/msys.db"
     }
   },

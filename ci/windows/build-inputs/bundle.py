@@ -117,6 +117,7 @@ def build_oci_layout(
     out_dir: Path,
     lock: dict,
     lock_sha256: str,
+    trust_root_sha256: str,
 ) -> dict:
     """Build a digest-addressed OCI layout. Returns the descriptor summary.
 
@@ -142,6 +143,10 @@ def build_oci_layout(
         "ffmpegBuildRevision": lock["ffmpeg"]["buildRevision"],
         "lockSchemaVersion": lock["schemaVersion"],
         "lockSha256": lock_sha256,
+        # The signing root the archives were authenticated against. It is part
+        # of the artifact's identity: a bundle admitted under a different
+        # allowlist is a different artifact, even if every archive matches.
+        "trustRootSha256": trust_root_sha256,
         "packageCount": lock["packageCount"],
         "compressedBytes": lock["compressedBytes"],
         "installedBytes": lock["installedBytes"],
@@ -182,6 +187,7 @@ def build_oci_layout(
                 "upstreamCommit"
             ],
             "dev.tesserafin.buildinputs.lockSha256": lock_sha256,
+            "dev.tesserafin.buildinputs.trustRootSha256": trust_root_sha256,
             "dev.tesserafin.buildinputs.packageCount": str(lock["packageCount"]),
         },
     }
@@ -199,6 +205,7 @@ def build_oci_layout(
         "manifestDigest": f"sha256:{manifest_digest}",
         "manifestSize": len(manifest_bytes),
         "lockSha256": lock_sha256,
+        "trustRootSha256": trust_root_sha256,
     }
     (out_dir / "descriptor.json").write_bytes(canonical_json(summary))
     return summary
@@ -228,7 +235,9 @@ def load_layer_index(layer: Path) -> Dict[str, str]:
     return index
 
 
-def write_bundle_metadata(bundle_root: Path, lock_bytes: bytes, databases: dict) -> str:
+def write_bundle_metadata(
+    bundle_root: Path, lock_bytes: bytes, databases: dict, trust_root_sha256: str
+) -> str:
     """Write `bundle.json` and `manifest.sha256`. Returns the lock sha256."""
     lock_sha256 = hashlib.sha256(lock_bytes).hexdigest()
     lock = json.loads(lock_bytes)
@@ -242,6 +251,7 @@ def write_bundle_metadata(bundle_root: Path, lock_bytes: bytes, databases: dict)
         "lockSchemaVersion": lock["schemaVersion"],
         "packageCount": lock["packageCount"],
         "repositoryDatabases": databases,
+        "trustRootSha256": trust_root_sha256,
         "sourceDateEpoch": SOURCE_DATE_EPOCH,
         "notes": (
             "Build inputs only. Contains no FFmpeg binary, no Tesserafin server "

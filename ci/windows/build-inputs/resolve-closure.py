@@ -37,6 +37,7 @@ import json
 import re
 import subprocess
 import sys
+import tempfile
 import urllib.request
 from pathlib import Path
 
@@ -198,21 +199,39 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo-root", required=True, type=Path)
     parser.add_argument("--out", required=True, type=Path)
+    parser.add_argument(
+        "--databases-out",
+        type=Path,
+        default=Path(__file__).resolve().parent / "databases",
+    )
     args = parser.parse_args()
 
     commit, revision = read_pins(args.repo_root)
 
     install_set, workflow_digest, workflow_path = workflow_install_set(commit)
-    build_tools, recipes, recipe_digests = recipe_build_tools(
-        commit, Path(args.out).parent / "recipes"
-    )
+    # The recipes are read, hashed and thrown away. They are upstream's files,
+    # they are recorded in the lock by SHA-256, and a copy of them in the tree
+    # would be an unreviewed second source of truth.
+    with tempfile.TemporaryDirectory(prefix="w1r-recipes-") as scratch:
+        build_tools, recipes, recipe_digests = recipe_build_tools(
+            commit, Path(scratch)
+        )
 
     roots = sorted(set(install_set) | set(build_tools) | {"base-devel"})
+
+    # The databases are WRITTEN to the tree beside the lock, not merely hashed.
+    # MSYS2 republishes them several times a day and keeps no snapshot of an
+    # older one, so a lock that only records their digest expires within hours
+    # of being reviewed. The lock and the databases it was resolved from are one
+    # reviewable change.
+    database_dir = args.databases_out
+    database_dir.mkdir(parents=True, exist_ok=True)
 
     databases = {}
     parsed = {}
     for repo, filename in DATABASES.items():
         raw = fetch(MSYS2_BASE[repo] + filename)
+        (database_dir / filename).write_bytes(raw)
         databases[repo] = {
             "filename": filename,
             "url": MSYS2_BASE[repo] + filename,
