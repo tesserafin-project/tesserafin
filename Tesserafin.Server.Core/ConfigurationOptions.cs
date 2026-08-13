@@ -21,7 +21,13 @@ namespace Tesserafin.Server.Core
             { SqliteCacheSizeKey, "20000" },
             { FfmpegSkipValidationKey, bool.FalseString },
             { FfmpegImgExtractPerfTradeoffKey, bool.FalseString },
-            { DetectNetworkChangeKey, bool.TrueString }
+            { DetectNetworkChangeKey, bool.TrueString },
+
+            // Secure bootstrap mode is OFF by default and nothing in the product turns it on: no
+            // installer, package, container image or wizard step sets it. An existing installation
+            // therefore keeps exactly the bind derivation it has today. Activation is an explicit
+            // operator act (tesserafin-project/tesserafin#242).
+            { SecureBootstrapKey, bool.FalseString }
         };
     }
 }

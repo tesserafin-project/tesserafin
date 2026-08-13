@@ -12,6 +12,7 @@ using Tesserafin.Common.Configuration;
 using Tesserafin.Controller.Extensions;
 using Tesserafin.Model.Net;
 using Tesserafin.Server.Helpers;
+using Tesserafin.Server.Net;
 
 namespace Tesserafin.Server.Extensions;
 
@@ -77,8 +78,22 @@ public static class WebHostBuilderExtensions
         WebHostBuilderContext builderContext,
         KestrelServerOptions options)
     {
+        // Secure bootstrap mode (#242). The ONE place the constraint is applied, deliberately here
+        // rather than in either caller: this method is the only path to `options.Listen`, and both
+        // the pre-startup setup server and the main Kestrel host call it — on every start and on
+        // every restart, because each rebuilds its host rather than reusing one. Applying it before
+        // the loop below means no wildcard, LAN or public address can reach `Listen`, whatever the
+        // network configuration says and whatever the wizard has since written to network.xml.
+        var bindAddresses = addresses;
+        if (SecureBootstrap.IsEnabled(startupConfig))
+        {
+            bindAddresses = SecureBootstrap.ConstrainToLoopback(addresses);
+            logger.LogInformation(
+                "Secure bootstrap is active: every HTTP listener is confined to loopback. This is not public access, and the server is not reachable from another host until an operator configures one deliberately.");
+        }
+
         bool flagged = false;
-        foreach (var netAdd in addresses)
+        foreach (var netAdd in bindAddresses)
         {
             var address = netAdd.Address;
             logger.LogInformation("Kestrel is listening on {Address}", address.Equals(IPAddress.IPv6Any) ? "all interfaces" : address);

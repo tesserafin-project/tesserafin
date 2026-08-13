@@ -75,6 +75,27 @@ namespace Tesserafin.Controller.Extensions
         public const string DetectNetworkChangeKey = "DetectNetworkChange";
 
         /// <summary>
+        /// The key for a setting that constrains every HTTP listener the server opens — the
+        /// pre-startup setup server included — to loopback, for the whole life of the process.
+        /// </summary>
+        /// <remarks>
+        /// This is the activation switch for secure bootstrap mode (RFC
+        /// tesserafin-project/tesserafin#241, slice R0-B). It is read from the startup
+        /// configuration, which is built at <c>Program.StartApp</c> BEFORE the setup server binds
+        /// its first socket, so the answer is known before anything can be reached. It is
+        /// deliberately NOT part of <c>network.xml</c>: the startup wizard writes that file, and an
+        /// unauthenticated caller inside the first-time-setup window must not be able to widen the
+        /// server's own bind. Set it with <c>TESSERAFIN_network__secureBootstrap=true</c> or from
+        /// the startup configuration file; unset it and the ordinary bind derivation returns
+        /// unchanged on the next start.
+        ///
+        /// The mode is a binding constraint and nothing else. It does not make a server publicly
+        /// reachable, does not obtain a certificate, and is not evidence of publication readiness;
+        /// that question belongs to the publication-readiness evaluator in Tesserafin.Server.
+        /// </remarks>
+        public const string SecureBootstrapKey = "network:secureBootstrap";
+
+        /// <summary>
         /// Gets a value indicating whether the application should host static web content from the <see cref="IConfiguration"/>.
         /// </summary>
         /// <param name="configuration">The configuration to retrieve the value from.</param>
@@ -146,5 +167,19 @@ namespace Tesserafin.Controller.Extensions
         /// <returns>The sqlite cache size.</returns>
         public static int? GetSqliteCacheSize(this IConfiguration configuration)
             => configuration.GetValue<int?>(SqliteCacheSizeKey);
+
+        /// <summary>
+        /// Gets a value indicating whether secure bootstrap mode is active from the <see cref="IConfiguration" />.
+        /// </summary>
+        /// <remarks>
+        /// This is the single activation predicate for the mode. Every listener the server opens
+        /// reaches its decision through this method rather than re-reading
+        /// <see cref="SecureBootstrapKey"/>, so the setup server and the main server can never
+        /// disagree about whether the mode is on.
+        /// </remarks>
+        /// <param name="configuration">The configuration to read the setting from.</param>
+        /// <returns><c>true</c> if every listener must be constrained to loopback, otherwise <c>false</c>.</returns>
+        public static bool UseSecureBootstrap(this IConfiguration configuration)
+            => configuration.GetValue<bool>(SecureBootstrapKey);
     }
 }
