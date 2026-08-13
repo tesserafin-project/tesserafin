@@ -867,6 +867,90 @@ def signing_controls(work: Path) -> None:
         record("control.committed-trust-root-loads", False, str(error))
 
 
+def installed_set_control(work: Path, name: str, observation: str, expect_fragment: str) -> None:
+    """Rule on one synthetic `pacman -Qi` observation against the fixture lock.
+
+    A hosted Windows job cannot be asked to stage a runner image carrying an
+    undeclared package, or a locked package at the wrong version, on demand.
+    The ruling therefore lives in `installed-set.py`, takes the observation as
+    data, and is exercised here against exactly those situations.
+    """
+    directory = work / name
+    directory.mkdir(parents=True, exist_ok=True)
+    lock, _ = base_lock()
+    lock_path = write_lock(directory, lock)
+    observed = directory / "observed.txt"
+    observed.write_text(observation, encoding="utf-8")
+
+    result = run_validator(
+        "installed-set.py", "--lock", str(lock_path), "--observed", str(observed)
+    )
+    output = result.stdout + result.stderr
+    if expect_fragment == "":
+        record(
+            name,
+            result.returncode == 0,
+            output.strip().replace("\n", " ")[:160] or "accepted",
+        )
+        return
+    ok = result.returncode != 0 and expect_fragment in output
+    record(name, ok, output.strip().splitlines()[-1][:200] if output.strip() else "no output")
+
+
+EXACT_OBSERVATION = "alpha|1.0-1|x86_64\nbeta|2.0-1|x86_64\ngamma|3.0-1|any\n"
+
+
+def installed_set_controls(work: Path) -> None:
+    installed_set_control(
+        work, "control.installed-set-equal-to-the-lock", EXACT_OBSERVATION, ""
+    )
+    installed_set_control(
+        work,
+        "control.preexisting-package-outside-the-lock",
+        EXACT_OBSERVATION + "vendor-telemetry|1.0-1|x86_64\n",
+        "the lock does not name",
+    )
+    installed_set_control(
+        work,
+        "control.locked-package-at-the-wrong-version",
+        "alpha|1.0-2|x86_64\nbeta|2.0-1|x86_64\ngamma|3.0-1|any\n",
+        "a version the lock does not name",
+    )
+    installed_set_control(
+        work,
+        "control.unexpected-architecture",
+        "alpha|1.0-1|aarch64\nbeta|2.0-1|x86_64\ngamma|3.0-1|any\n",
+        "unexpected architecture",
+    )
+    installed_set_control(
+        work,
+        "control.missing-locked-package",
+        "alpha|1.0-1|x86_64\nbeta|2.0-1|x86_64\n",
+        "are not installed",
+    )
+    installed_set_control(
+        work,
+        "control.package-introduced-after-installation",
+        EXACT_OBSERVATION + "perl|5.40-1|x86_64\n",
+        "the lock does not name",
+    )
+    installed_set_control(
+        work,
+        "control.same-package-listed-twice",
+        EXACT_OBSERVATION + "alpha|1.0-1|x86_64\n",
+        "listed twice",
+    )
+    installed_set_control(
+        work,
+        "control.unparsable-installed-listing",
+        "alpha 1.0-1 x86_64\n",
+        "is not `name|version|architecture`",
+    )
+    installed_set_control(
+        work, "control.empty-installed-listing", "\n\n", "the observation is empty"
+    )
+
+
 def prohibited_pacman_control(repo_root: Path) -> None:
     """No tracked W1-R script may invoke live pacman resolution."""
     offenders = []
@@ -1075,6 +1159,7 @@ def main() -> int:
             record("control.trusted-master-accepted", False, str(error))
 
         signing_controls(work)
+        installed_set_controls(work)
         vercmp_control()
         collision_control()
         provider_resolution_controls()
