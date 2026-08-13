@@ -206,10 +206,18 @@ if ($runtime.Count -eq 1) {
         Stop-Hard "phase 2 reused the phase 1 shell (pid $phase1Pid); the runtime would not have been replaced under it"
     }
 
+    # `uname -r` reports the runtime's UPSTREAM version and the Cygwin commit it
+    # was built from -- `3.6.10-8fbd9808.x86_64` -- not pacman's pkgrel, so only
+    # the upstream component can be compared with the locked `3.6.10-2`. That
+    # comparison alone would not distinguish a reinstall from the copy that was
+    # already there; what does is the combination of a shell pid that did not
+    # exist during phase 1, the `pacman -Q` below, and the check further down
+    # that the msys-2.0.dll now on disk is byte for byte the packaged one.
+    $upstream = $runtimeVersion.Split('-')[0]
     $unameRelease = [string]($probe | Where-Object { $_ -match '^\d+\.' } | Select-Object -First 1)
     if (-not $unameRelease) { Stop-Hard 'the phase 2 probe reported no `uname -r`' }
-    if (-not $unameRelease.StartsWith($runtimeVersion)) {
-        Stop-Hard "phase 2 runs on MSYS2 runtime '$unameRelease', the lock names $runtimeVersion"
+    if (-not $unameRelease.StartsWith("$upstream-") -and $unameRelease -ne $upstream) {
+        Stop-Hard "phase 2 runs on MSYS2 runtime '$unameRelease', the lock names $runtimeVersion (upstream $upstream)"
     }
     $queried = [string]($probe | Where-Object { $_ -match '^msys2-runtime\s' } | Select-Object -First 1)
     if ($queried -ne "msys2-runtime $runtimeVersion") {
