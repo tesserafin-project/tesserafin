@@ -67,6 +67,11 @@ if ($name -ne $canonical) {
 }
 
 New-Item -ItemType Directory -Force -Path $WorkDir, $EvidenceDir | Out-Null
+# Written before anything can fail, so a refusal still leaves evidence of what
+# was asked for rather than an empty directory.
+[ordered]@{ probe = 'w1r-consume-request'; reference = $Reference; digest = $digest } |
+    ConvertTo-Json | Set-Content -LiteralPath (Join-Path $EvidenceDir 'consume-request.json') -Encoding utf8NoBOM
+
 $pullDir = Join-Path $WorkDir 'pull'
 if (Test-Path -LiteralPath $pullDir) { Remove-Item -LiteralPath $pullDir -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $pullDir | Out-Null
@@ -76,22 +81,34 @@ Write-Host "pulling $Reference"
 & $OrasPath pull $Reference --output $pullDir
 if ($LASTEXITCODE -ne 0) { Stop-Hard "oras pull exited $LASTEXITCODE" }
 
-$manifestJson = & $OrasPath manifest fetch $Reference
+# `--output` to a FILE, never a captured stdout. PowerShell hands a native
+# command's output back as an array of decoded LINES; re-encoding that and
+# hashing it produced
+#
+#     the registry returned manifest sha256:33c60634... for a request pinned
+#     to sha256:cff23b74...
+#
+# against a registry that was holding the reviewed bytes exactly -- the same
+# bytes the publisher had already read back and compared successfully. A digest
+# check that reports the shell's line handling as a registry substitution is
+# worse than no check: it accuses the wrong component. The bytes are now hashed
+# where they landed, untouched.
+$manifestPath = Join-Path $WorkDir 'manifest.json'
+& $OrasPath manifest fetch $Reference --output $manifestPath
 if ($LASTEXITCODE -ne 0) { Stop-Hard "oras manifest fetch exited $LASTEXITCODE" }
 
-$manifestBytes = [System.Text.Encoding]::UTF8.GetBytes($manifestJson)
-$sha = [System.Security.Cryptography.SHA256]::Create()
-$fetchedDigest = 'sha256:' + (($sha.ComputeHash($manifestBytes) | ForEach-Object { $_.ToString('x2') }) -join '')
+$fetchedDigest = 'sha256:' + (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($fetchedDigest -ne $digest) {
     Stop-Hard "the registry returned manifest $fetchedDigest for a request pinned to $digest"
 }
+Copy-Item -LiteralPath $manifestPath -Destination (Join-Path $EvidenceDir 'registry-manifest.json') -Force
 
 $layerTar = Join-Path $pullDir 'msys2-build-inputs.tar'
 if (-not (Test-Path -LiteralPath $layerTar)) {
     Stop-Hard "the pulled artifact does not contain msys2-build-inputs.tar"
 }
 
-$manifest = $manifestJson | ConvertFrom-Json
+$manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
 $layerDigest = $manifest.layers[0].digest
 $actualLayer = 'sha256:' + (Get-FileHash -LiteralPath $layerTar -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actualLayer -ne $layerDigest) {
