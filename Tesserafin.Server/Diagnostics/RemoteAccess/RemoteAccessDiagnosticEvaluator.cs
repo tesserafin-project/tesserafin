@@ -82,13 +82,32 @@ public static class RemoteAccessDiagnosticEvaluator
                 Add(findings, RemoteAccessDiagnosticCode.BackendWildcardBound, DiagnosticConfidence.Observed, DiagnosticSeverity.High);
                 break;
 
-            case BackendBindPosture.ExplicitAddresses:
+            case BackendBindPosture.ExplicitPrivateAddresses:
                 Add(findings, RemoteAccessDiagnosticCode.BackendLanBound, DiagnosticConfidence.Observed, DiagnosticSeverity.Advisory);
+                break;
+
+            case BackendBindPosture.ExplicitGloballyRoutableAddresses:
+                // A deliberately chosen public address is still a public address. It is narrower
+                // than a wildcard in intent only, not in what the socket will accept.
+                Add(findings, RemoteAccessDiagnosticCode.BackendGloballyRoutableBound, DiagnosticConfidence.Observed, DiagnosticSeverity.High);
                 break;
 
             default:
                 Add(findings, RemoteAccessDiagnosticCode.BackendExposureUnknown, DiagnosticConfidence.Unknown, DiagnosticSeverity.Advisory);
                 break;
+        }
+
+        // The only conclusion the bind set supports on its own. Secure bootstrap plus a loopback
+        // bind constrains the backend's socket and nothing else: the firewall, the name, the
+        // certificate and any on-host proxy are all untouched by this fact, and a reader who takes
+        // it for more than it says has made exactly the error #241 catalogues.
+        if (backend.Posture == BackendBindPosture.LoopbackOnly)
+        {
+            Add(findings, RemoteAccessDiagnosticCode.BackendStructurallyConstrained, DiagnosticConfidence.Derived, DiagnosticSeverity.Informational);
+        }
+        else if (backend.Posture is BackendBindPosture.Wildcard or BackendBindPosture.ExplicitGloballyRoutableAddresses)
+        {
+            Add(findings, RemoteAccessDiagnosticCode.BackendPotentiallyPublic, DiagnosticConfidence.Derived, DiagnosticSeverity.High);
         }
 
         if (backend.UnixSocketConfigured)
@@ -100,7 +119,9 @@ public static class RemoteAccessDiagnosticEvaluator
     private static void AddListenerFindings(RemoteAccessDiagnosticSnapshot snapshot, List<RemoteAccessFinding> findings)
     {
         var anyObserved = false;
-        var anyUnavailable = false;
+        var anyDenied = false;
+        var anyUnsupported = false;
+        var anyFailed = false;
 
         foreach (var observation in snapshot.Listeners)
         {
@@ -130,15 +151,37 @@ public static class RemoteAccessDiagnosticEvaluator
                         DiagnosticSeverity.Informational);
                     break;
 
+                // The three ways of not knowing are kept apart all the way to the report. A denial
+                // is something an operator can grant, a missing platform facility is something
+                // they cannot, and an unexplained failure is something they should look at — one
+                // shared code would advise all three of them identically and usefully to none.
+                case ListenerObservationOutcome.InspectionDenied:
+                    anyDenied = true;
+                    break;
+
+                case ListenerObservationOutcome.Unsupported:
+                    anyUnsupported = true;
+                    break;
+
                 default:
-                    anyUnavailable = true;
+                    anyFailed = true;
                     break;
             }
         }
 
-        if (anyUnavailable)
+        if (anyDenied)
         {
-            Add(findings, RemoteAccessDiagnosticCode.ListenerInspectionUnavailable, DiagnosticConfidence.Unknown, DiagnosticSeverity.Advisory);
+            Add(findings, RemoteAccessDiagnosticCode.ListenerInspectionDenied, DiagnosticConfidence.Unknown, DiagnosticSeverity.Advisory);
+        }
+
+        if (anyUnsupported)
+        {
+            Add(findings, RemoteAccessDiagnosticCode.ListenerInspectionUnsupported, DiagnosticConfidence.Unknown, DiagnosticSeverity.Advisory);
+        }
+
+        if (anyFailed)
+        {
+            Add(findings, RemoteAccessDiagnosticCode.ListenerInspectionFailed, DiagnosticConfidence.Unknown, DiagnosticSeverity.Advisory);
         }
 
         if (anyObserved)
@@ -170,6 +213,13 @@ public static class RemoteAccessDiagnosticEvaluator
             if (configuredCount > 1)
             {
                 Add(findings, RemoteAccessDiagnosticCode.MultipleKnownProxiesConfigured, DiagnosticConfidence.Observed, DiagnosticSeverity.Advisory);
+            }
+            else if (trust.ParsedKnownProxyCount == configuredCount)
+            {
+                // Exactly one peer, and the server's own parser took it. The narrowest trust
+                // boundary the configuration can express — which is a statement about the
+                // configuration, not about the proxy actually being there.
+                Add(findings, RemoteAccessDiagnosticCode.SingleKnownProxyNormalized, DiagnosticConfidence.Observed, DiagnosticSeverity.Informational);
             }
         }
 
@@ -366,6 +416,14 @@ public static class RemoteAccessDiagnosticEvaluator
 
     private static void AddAddressFamilyFindings(RemoteAccessDiagnosticSnapshot snapshot, List<RemoteAccessFinding> findings)
     {
+        // An unstated policy is reported whatever the lookup did. A family nobody decided about is
+        // the one whose firewall nobody checked, and a successful lookup for the other family must
+        // not make that question disappear.
+        if (snapshot.Input.PublishIPv4 is null || snapshot.Input.PublishIPv6 is null)
+        {
+            Add(findings, RemoteAccessDiagnosticCode.IpFamilyPolicyUnresolved, DiagnosticConfidence.Unknown, DiagnosticSeverity.Advisory);
+        }
+
         if (snapshot.Dns.Outcome != DnsLookupOutcome.Answered)
         {
             return;
@@ -382,12 +440,12 @@ public static class RemoteAccessDiagnosticEvaluator
         // The families are judged independently and the results are OR-ed, never AND-ed. A correct
         // IPv4 result must not conceal an IPv6 one: the operator who publishes IPv4, forgets the
         // IPv6 firewall and is told everything agrees is the exact person this rule protects.
-        var ipv4Disagrees = snapshot.Input.PublishIPv4 != hasIPv4;
-        var ipv6Disagrees = snapshot.Input.PublishIPv6 != hasIPv6;
+        var ipv4Disagrees = snapshot.Input.PublishIPv4 is { } publishIPv4 && publishIPv4 != hasIPv4;
+        var ipv6Disagrees = snapshot.Input.PublishIPv6 is { } publishIPv6 && publishIPv6 != hasIPv6;
 
         if (ipv4Disagrees || ipv6Disagrees)
         {
-            Add(findings, RemoteAccessDiagnosticCode.IpFamilyPolicyDisagreement, DiagnosticConfidence.Contradictory, DiagnosticSeverity.High);
+            Add(findings, RemoteAccessDiagnosticCode.IpFamilyPolicyContradicted, DiagnosticConfidence.Contradictory, DiagnosticSeverity.High);
         }
     }
 

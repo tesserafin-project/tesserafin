@@ -58,14 +58,29 @@ public sealed class ServerNetworkPostureSourceTests
     public void ConcreteNonLoopbackAddressesAreExplicit()
     {
         var result = ServerNetworkPostureSource.ClassifyBindSet(new[] { Ip("192.168.1.10") });
-        Assert.Equal(BackendBindPosture.ExplicitAddresses, result);
+        Assert.Equal(BackendBindPosture.ExplicitPrivateAddresses, result);
     }
 
     [Fact]
     public void AMixOfLoopbackAndLanIsExplicitRatherThanLoopbackOnly()
     {
         var result = ServerNetworkPostureSource.ClassifyBindSet(new[] { Ip("127.0.0.1"), Ip("192.168.1.10") });
-        Assert.Equal(BackendBindPosture.ExplicitAddresses, result);
+        Assert.Equal(BackendBindPosture.ExplicitPrivateAddresses, result);
+    }
+
+    [Fact]
+    public void AnExplicitGloballyRoutableAddressIsNotReportedAsALanBind()
+    {
+        var result = ServerNetworkPostureSource.ClassifyBindSet(new[] { Ip("203.0.113.7") });
+        Assert.Equal(BackendBindPosture.ExplicitGloballyRoutableAddresses, result);
+    }
+
+    [Fact]
+    public void OneGloballyRoutableAddressDecidesAMixedSet()
+    {
+        // The most exposed listener in the set is what the set offers, exactly as for a wildcard.
+        var result = ServerNetworkPostureSource.ClassifyBindSet(new[] { Ip("127.0.0.1"), Ip("192.168.1.10"), Ip("203.0.113.7") });
+        Assert.Equal(BackendBindPosture.ExplicitGloballyRoutableAddresses, result);
     }
 
     [Fact]
