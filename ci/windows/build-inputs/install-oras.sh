@@ -15,8 +15,19 @@ dest="${2:?destination directory required}"
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 lock="${here}/tools.lock.json"
 
+# `tr -d '\r'` is not defensive tidying. On a Windows runner this script runs
+# under Git for Windows' bash while `python3` is native Windows Python, which
+# opens stdout in TEXT mode and terminates the line with CRLF. The carriage
+# return then rides along on the LAST field, and the failure surfaces at the
+# very end as
+#
+#     install: cannot stat '/tmp/tmp.AB3gPnArLz/oras.exe'$'\r'
+#
+# which reads like a missing file rather than a line ending. The linux-amd64
+# path never saw it, so the windows-amd64 platform was broken from the day it
+# was written until the first job actually asked for it.
 read -r url expected binary < <(
-  python3 - "$lock" "$platform" <<'PY'
+  python3 - "$lock" "$platform" <<'PY' | tr -d '\r'
 import json, sys
 lock = json.load(open(sys.argv[1]))
 try:
@@ -47,4 +58,5 @@ case "$archive" in
 esac
 
 install -m 0755 "${work}/${binary}" "${dest}/${binary}"
-echo "oras pinned $(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["tools"]["oras"]["version"])' "$lock") verified and installed at ${dest}/${binary}"
+version="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["tools"]["oras"]["version"])' "$lock" | tr -d '\r')"
+echo "oras pinned ${version} verified and installed at ${dest}/${binary}"
