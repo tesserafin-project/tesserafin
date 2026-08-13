@@ -311,10 +311,110 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
+  # ── The publication PROTOCOL, rehearsed against a local registry ───────────
+  #
+  # Until this job existed, the registry path was the only part of W1-R that had
+  # never been executed: it would have run for the first time against GHCR, with
+  # `packages: write`, on trusted master. It now runs first here, against an
+  # ephemeral OCI Distribution registry on the runner's own loopback, through the
+  # SAME ci/windows/build-inputs/oci-protocol.sh the publisher calls — so the
+  # rehearsal is the performance, minus the destination.
+  #
+  # This job is granted nothing beyond `contents: read` and publishes nothing.
+  registry:
+    name: Registry protocol against a local registry
+    needs: [lock]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    services:
+      registry:
+        # Pinned by immutable digest, like every other image this repository runs.
+        image: registry@sha256:1be55279f18a2fe1a74edf2664cac61c1bea305b7b4642dab412e7affdcb3e33
+        ports:
+          - 5000:5000
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ env.W1R_EVIDENCE_SHA }}
+          persist-credentials: false
+
+      - name: Assert the evidence SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          [ "${actual}" = "${W1R_EVIDENCE_SHA}" ] || {
+            echo "W1-R HARD STOP: standing in ${actual}." >&2; exit 1; }
+
+      - name: Install the pinned ORAS
+        run: ./ci/windows/build-inputs/install-oras.sh linux-amd64 "${RUNNER_TEMP}/bin"
+
+      - name: Build the reviewed bundle and its OCI layout
+        env:
+          LC_ALL: C
+          TZ: UTC
+        run: |
+          set -euo pipefail
+          python3 ci/windows/build-inputs/ingest.py \
+            --lock ci/windows/build-inputs/msys2-lock.json \
+            --out "${RUNNER_TEMP}/bundle"
+          python3 ci/windows/build-inputs/build-oci.py \
+            --bundle "${RUNNER_TEMP}/bundle" \
+            --out "${RUNNER_TEMP}/oci" \
+            | tee "${RUNNER_TEMP}/descriptor.json"
+
+      - name: Refuse to rehearse anything but the reviewed digest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, os, sys
+          sys.path.insert(0, "ci/windows/build-inputs")
+          import contract
+          temp = os.environ["RUNNER_TEMP"]
+          built = "sha256:" + hashlib.sha256(
+              open(f"{temp}/oci/manifest.json", "rb").read()
+          ).hexdigest()
+          expected = json.load(open("ci/windows/build-inputs/expected-digest.json"))
+          contract.assert_expected_digest(expected["manifestDigest"], built)
+          print(f"this run built the reviewed digest {built}")
+          PY
+
+      - name: Push, read back and verify, with every negative control
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="${RUNNER_TEMP}/bin:${PATH}"
+          mkdir -p "${RUNNER_TEMP}/w1r-evidence"
+          ./ci/windows/build-inputs/registry-controls.sh \
+            --oci "${RUNNER_TEMP}/oci" \
+            --registry localhost:5000 \
+            --work "${RUNNER_TEMP}/registry-work" \
+            | tee "${RUNNER_TEMP}/w1r-evidence/registry-controls.txt"
+
+      - name: Collect the registry evidence
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          out="${RUNNER_TEMP}/w1r-evidence"
+          mkdir -p "${out}"
+          cp "${RUNNER_TEMP}/descriptor.json" "${out}/descriptor.json" || true
+          cp "${RUNNER_TEMP}/registry-work/pulled/manifest.json" "${out}/registry-manifest.json" || true
+          cp "${RUNNER_TEMP}/registry-work/pulled/signatures.json" "${out}/registry-signatures.json" || true
+          printf '%s\n' "${W1R_EVIDENCE_SHA}" > "${out}/evidence-sha.txt"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ always() }}
+        with:
+          name: w1r-evidence-registry
+          path: ${{ runner.temp }}/w1r-evidence
+          if-no-files-found: error
+          retention-days: 3
+
   # ── PUBLICATION. Never runs on a pull request. Not executed in W1-R-A. ──────
   publish:
     name: Publish the reviewed bundle to GHCR (master only)
-    needs: [compare, windows-install]
+    needs: [compare, windows-install, registry]
     if: >-
       github.event_name == 'workflow_dispatch' &&
       inputs.publish &&
@@ -382,6 +482,10 @@ jobs:
           print(f"this run built the reviewed digest {built}")
           PY
 
+      # From here on the publisher runs ci/windows/build-inputs/oci-protocol.sh,
+      # which is the same file the `registry` job rehearses against a local
+      # registry. A second implementation for the real destination would be the
+      # one implementation nothing had ever exercised.
       - name: Push the exact manifest bytes
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -389,32 +493,30 @@ jobs:
           set -euo pipefail
           export PATH="${RUNNER_TEMP}/bin:${PATH}"
           printf '%s' "${GHCR_TOKEN}" | oras login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+          ./ci/windows/build-inputs/oci-protocol.sh push \
+            --oci "${RUNNER_TEMP}/oci" \
+            --repo ghcr.io/tesserafin-project/windows-ffmpeg-build-inputs
 
-          repo="ghcr.io/tesserafin-project/windows-ffmpeg-build-inputs"
-          descriptor="${RUNNER_TEMP}/oci/descriptor.json"
-          layer="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["layerDigest"])' "${descriptor}")"
-          config="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["configDigest"])' "${descriptor}")"
-
-          # Blobs first, then the manifest — a manifest referencing a blob the
-          # registry does not hold is rejected, which is the ordering we want.
-          oras blob push "${repo}" "${RUNNER_TEMP}/oci/blobs/sha256/${layer#sha256:}"
-          oras blob push "${repo}" "${RUNNER_TEMP}/oci/blobs/sha256/${config#sha256:}"
-
-          # `oras manifest push` and NEVER `oras push`: the latter constructs a
-          # manifest of its own and would inject a created timestamp.
-          oras manifest push "${repo}@$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["manifestDigest"])' "${descriptor}")" \
-            --media-type application/vnd.oci.image.manifest.v1+json \
-            "${RUNNER_TEMP}/oci/manifest.json"
-
-      - name: Read it back by digest and compare byte for byte
+      - name: Read it back by digest, compare byte for byte, verify as a consumer
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           export PATH="${RUNNER_TEMP}/bin:${PATH}"
-          digest="$(python3 -c 'import json;print(json.load(open("ci/windows/build-inputs/expected-digest.json"))["manifestDigest"])')"
-          oras manifest fetch "ghcr.io/tesserafin-project/windows-ffmpeg-build-inputs@${digest}" \
-            > "${RUNNER_TEMP}/registry-manifest.json"
-          cmp "${RUNNER_TEMP}/registry-manifest.json" "${RUNNER_TEMP}/oci/manifest.json" \
-            || { echo "W1-R HARD STOP: the registry stored different manifest bytes." >&2; exit 1; }
+          ./ci/windows/build-inputs/oci-protocol.sh verify \
+            --oci "${RUNNER_TEMP}/oci" \
+            --repo ghcr.io/tesserafin-project/windows-ffmpeg-build-inputs \
+            --out "${RUNNER_TEMP}/published" \
+            | tee "${RUNNER_TEMP}/published-verification.txt"
           echo "the registry holds the reviewed manifest, byte for byte"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ always() }}
+        with:
+          name: w1r-evidence-publication
+          path: |
+            ${{ runner.temp }}/published-verification.txt
+            ${{ runner.temp }}/published/manifest.json
+            ${{ runner.temp }}/published/signatures.json
+          if-no-files-found: error
+          retention-days: 30
