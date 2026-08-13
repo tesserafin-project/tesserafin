@@ -43,6 +43,39 @@ public sealed class RemoteAccessDiagnosticStructuralTests
     private static readonly string[] _verdictWords = { "Ready", "Healthy", "Reachable", "Working" };
 
     /// <summary>
+    /// Anything that would put the layer behind an HTTP route.
+    /// </summary>
+    private static readonly Regex _httpBinding = new(
+        @"(ApiController|ControllerBase|\[Route|\[Http(Get|Post|Put|Delete|Patch|Head|Options)|MapGet\s*\(|MapPost\s*\(|MapControllers|IEndpointRouteBuilder|ProducesResponseType|FromQuery|FromBody|FromRoute)",
+        RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// Anything that would make the layer run without a caller asking it to.
+    /// </summary>
+    private static readonly Regex _selfStartingApi = new(
+        @"(IHostedService|BackgroundService|IStartupFilter|IServerEntryPoint|IScheduledTask|new\s+Timer\b|PeriodicTimer|Task\.Run\s*\(|ThreadPool\.QueueUserWorkItem)",
+        RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// The layer's own type names, as a future caller or a contract would spell them.
+    /// </summary>
+    private static readonly string[] _layerTypeNames =
+    {
+        "RemoteAccessDiagnosticCollector",
+        "RemoteAccessDiagnosticEvaluator",
+        "RemoteAccessDiagnosticReport",
+        "RemoteAccessDiagnosticSnapshot",
+        "RemoteAccessDiagnosticCode",
+        "RemoteAccessFinding",
+        "DiagnosticConfidence",
+        "PublicationPolicyInput",
+        "BackendPostureObservation",
+        "ProxyTrustObservation",
+        "PortListenerObservation",
+        "ClassifiedAddress"
+    };
+
+    /// <summary>
     /// Names allowed to contain a verdict word because they name a thing, not a claim.
     /// </summary>
     /// <remarks>
@@ -90,6 +123,32 @@ public sealed class RemoteAccessDiagnosticStructuralTests
         Assert.True(Directory.Exists(root), $"Expected the diagnostic layer at '{root}'.");
 
         var files = Directory.GetFiles(root, "*.cs", SearchOption.AllDirectories);
+        Assert.NotEmpty(files);
+        return files;
+    }
+
+    /// <summary>
+    /// Every server-side source file that is not part of the diagnostic layer.
+    /// </summary>
+    /// <remarks>
+    /// Build output is excluded: a generated file under <c>obj/</c> is not something a reviewer
+    /// can be held to, and including it would make the gate depend on whether anyone had built.
+    /// </remarks>
+    private static IReadOnlyList<string> ServerSourceFilesOutsideTheLayer()
+    {
+        var root = RepositoryRoot();
+        var layer = Path.Combine(root, "Tesserafin.Server", "Diagnostics", "RemoteAccess");
+
+        var files = new[] { "Tesserafin.Server", "Tesserafin.Api", "Tesserafin.Server.Core" }
+            .Select(project => Path.Combine(root, project))
+            .Where(Directory.Exists)
+            .SelectMany(project => Directory.GetFiles(project, "*.cs", SearchOption.AllDirectories))
+            .Where(path => !path.StartsWith(layer, StringComparison.Ordinal))
+            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+            .ToList();
+
+        // A gate that silently inspected nothing would report green.
         Assert.NotEmpty(files);
         return files;
     }
@@ -349,5 +408,99 @@ public sealed class RemoteAccessDiagnosticStructuralTests
         Assert.True(
             offenders.Count == 0,
             $"These diagnostic sources reach into the R0-B readiness evidence: {string.Join(", ", offenders)}");
+    }
+
+    // ------------------------------------------------- the deferred HTTP contract
+
+    [Fact]
+    public void NothingInTheLayerBindsToHttp()
+    {
+        // R1-A ships the engine and no way to call it over HTTP. The endpoint is R1-P, because it
+        // moves openapi/openapi.json and the SDK-provenance gate refuses a moved contract whose
+        // web pin was not regenerated with it.
+        var offenders = new List<string>();
+
+        foreach (var file in LayerSourceFiles())
+        {
+            var code = WithoutCommentLines(File.ReadAllText(file));
+            var match = _httpBinding.Match(code);
+            if (match.Success)
+            {
+                offenders.Add($"{Path.GetFileName(file)} ({match.Value})");
+            }
+        }
+
+        Assert.True(
+            offenders.Count == 0,
+            $"These diagnostic sources bind to HTTP, which R1-A defers to R1-P: {string.Join(", ", offenders)}");
+    }
+
+    [Fact]
+    public void NothingOutsideTheLayerReachesTheEngine()
+    {
+        // The engine is unreferenced on purpose. Nothing constructs it, nothing registers it and
+        // nothing starts it, so no route and no boot path can reach it in this slice.
+        var offenders = new List<string>();
+
+        foreach (var file in ServerSourceFilesOutsideTheLayer())
+        {
+            var code = WithoutCommentLines(File.ReadAllText(file));
+            foreach (var name in _layerTypeNames)
+            {
+                if (code.Contains(name, StringComparison.Ordinal))
+                {
+                    offenders.Add($"{Path.GetFileName(file)} ({name})");
+                }
+            }
+        }
+
+        Assert.True(
+            offenders.Count == 0,
+            $"These sources outside the diagnostic layer reference it: {string.Join(", ", offenders)}");
+    }
+
+    [Fact]
+    public void TheCanonicalContractNamesNothingFromTheLayer()
+    {
+        // The R1-A boundary, asserted against the contract itself rather than against intent.
+        // "EnableRemoteAccess" and its siblings predate this work and are not diagnostic types,
+        // which is why the layer's own type names are matched rather than the words "remote access".
+        var contract = Path.Combine(RepositoryRoot(), "openapi", "openapi.json");
+        Assert.True(File.Exists(contract), $"Expected the canonical contract at '{contract}'.");
+
+        var text = File.ReadAllText(contract);
+        Assert.NotEmpty(text);
+
+        var offenders = _layerTypeNames
+            .Concat(Enum.GetNames<RemoteAccessDiagnosticCode>().Where(n => n.Length > 6))
+            .Where(name => text.Contains(name, StringComparison.Ordinal))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        Assert.True(
+            offenders.Count == 0,
+            $"openapi/openapi.json names the diagnostic layer, so the contract moved: {string.Join(", ", offenders)}");
+    }
+
+    [Fact]
+    public void NothingInTheLayerCollectsOnItsOwn()
+    {
+        // No hosted service, no timer, no background loop. Collection happens when a caller asks
+        // for it and never because the server started.
+        var offenders = new List<string>();
+
+        foreach (var file in LayerSourceFiles())
+        {
+            var code = WithoutCommentLines(File.ReadAllText(file));
+            var match = _selfStartingApi.Match(code);
+            if (match.Success)
+            {
+                offenders.Add($"{Path.GetFileName(file)} ({match.Value})");
+            }
+        }
+
+        Assert.True(
+            offenders.Count == 0,
+            $"These diagnostic sources start work without a caller: {string.Join(", ", offenders)}");
     }
 }
