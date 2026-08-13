@@ -17,6 +17,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -34,6 +35,7 @@ LOCK_REQUIRED = {
     "ffmpeg",
     "rootProvenance",
     "roots",
+    "providerOverrides",
     "repositoryDatabases",
     "packageCount",
     "compressedBytes",
@@ -56,6 +58,7 @@ PACKAGE_REQUIRED = {
     "url",
     "signatureUrl",
 }
+OVERRIDE_REQUIRED = {"virtual", "package", "constraint", "reason"}
 DATABASE_REQUIRED = {"filename", "url", "sha256", "bytes"}
 
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -83,6 +86,11 @@ def check_keys(where: str, value: dict, required: set) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--lock", required=True, type=Path)
+    parser.add_argument(
+        "--databases",
+        type=Path,
+        default=Path(__file__).resolve().parent / "databases",
+    )
     args = parser.parse_args()
 
     lock = json.loads(args.lock.read_text())
@@ -98,12 +106,39 @@ def main() -> int:
     if lock["msystem"] != "CLANG64":
         raise msys2db.LockError(f"unexpected msystem {lock['msystem']!r}")
 
+    # Every provider override the closure USED is transcribed into the lock, so
+    # a reviewer of the lock alone can see which ambiguities were decided by
+    # hand and on what grounds. An empty list is the normal case and says the
+    # closure contained no ambiguity at all.
+    for entry in lock["providerOverrides"]:
+        check_keys("providerOverrides[]", entry, OVERRIDE_REQUIRED)
+        if entry["virtual"] in {package["name"] for package in lock["packages"]}:
+            raise msys2db.LockError(
+                f"providerOverrides: {entry['virtual']!r} is a real package in this "
+                "closure and can never need an override"
+            )
+
     for repo, record in lock["repositoryDatabases"].items():
         check_keys(f"repositoryDatabases.{repo}", record, DATABASE_REQUIRED)
         if repo not in ALLOWED_REPOSITORIES:
             raise msys2db.LockError(f"unknown repository identity {repo!r}")
         if not SHA256.match(record["sha256"]):
             raise msys2db.LockError(f"repositoryDatabases.{repo}: malformed sha256")
+
+        # The database the lock was resolved from is part of the reviewed
+        # change and must be committed beside it, byte for byte.
+        committed = args.databases / record["filename"]
+        if not committed.is_file():
+            raise msys2db.LockError(
+                f"repositoryDatabases.{repo}: {record['filename']} is not committed "
+                f"under {args.databases}"
+            )
+        actual = hashlib.sha256(committed.read_bytes()).hexdigest()
+        if actual != record["sha256"]:
+            raise msys2db.LockError(
+                f"repositoryDatabases.{repo}: the committed {record['filename']} "
+                f"hashes to {actual}, the lock records {record['sha256']}"
+            )
 
     names: set = set()
     filenames: set = set()

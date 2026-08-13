@@ -20,6 +20,7 @@ import argparse
 import copy
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -30,6 +31,7 @@ from pathlib import Path
 import bundle
 import contract
 import msys2db
+import signing
 
 HERE = Path(__file__).resolve().parent
 
@@ -99,12 +101,13 @@ def base_lock() -> tuple:
         },
         "rootProvenance": {"fixture": True},
         "roots": ["alpha"],
+        "providerOverrides": [],
         "repositoryDatabases": {
             "msys": {
                 "filename": "msys.db",
                 "url": "https://repo.msys2.org/msys/x86_64/msys.db",
-                "sha256": "0" * 64,
-                "bytes": 1,
+                "sha256": hashlib.sha256(FIXTURE_DB).hexdigest(),
+                "bytes": len(FIXTURE_DB),
             }
         },
         "packageCount": len(packages),
@@ -115,8 +118,14 @@ def base_lock() -> tuple:
     return lock, payloads
 
 
+FIXTURE_DB = b"fixture-db"
+
+
 def write_lock(directory: Path, lock: dict) -> Path:
-    directory.mkdir(parents=True, exist_ok=True)
+    """Write a fixture lock and the fixture database it declares beside it."""
+    databases = directory / "databases"
+    databases.mkdir(parents=True, exist_ok=True)
+    (databases / "msys.db").write_bytes(FIXTURE_DB)
     path = directory / "lock.json"
     path.write_bytes(bundle.canonical_json(lock))
     return path
@@ -128,11 +137,18 @@ def make_bundle(directory: Path, lock: dict, payloads: dict) -> Path:
         (root / sub).mkdir(parents=True, exist_ok=True)
     for package in lock["packages"]:
         (root / "packages" / package["filename"]).write_bytes(payloads[package["name"]])
-    (root / "databases" / "msys.db").write_bytes(b"fixture-db")
+    (root / "databases" / "msys.db").write_bytes(FIXTURE_DB)
     (root / "licenses" / "licenses.json").write_bytes(bundle.canonical_json({}))
     lock_bytes = bundle.canonical_json(lock)
     (root / "msys2-lock.json").write_bytes(lock_bytes)
-    bundle.write_bundle_metadata(root, lock_bytes, {"msys": {"filename": "msys.db"}})
+    trust = root / "trust"
+    trust.mkdir(parents=True, exist_ok=True)
+    for name in ("trust-root.json", "msys2-signing-keys.asc"):
+        shutil.copyfile(HERE / "trust" / name, trust / name)
+    trust_sha = hashlib.sha256((trust / "msys2-signing-keys.asc").read_bytes()).hexdigest()
+    bundle.write_bundle_metadata(
+        root, lock_bytes, {"msys": {"filename": "msys.db"}}, trust_sha
+    )
     return root
 
 
@@ -143,7 +159,9 @@ def lock_control(work: Path, name: str, mutate, expect_fragment: str) -> None:
     lock, _ = base_lock()
     mutate(lock)
     path = write_lock(work / name, lock)
-    result = run_validator("verify-lock.py", "--lock", str(path))
+    result = run_validator(
+        "verify-lock.py", "--lock", str(path), "--databases", str(path.parent / "databases")
+    )
     message = (result.stderr + result.stdout).strip()
     ok = result.returncode != 0 and expect_fragment in message
     record(
@@ -157,7 +175,9 @@ def lock_control(work: Path, name: str, mutate, expect_fragment: str) -> None:
 def undamaged_lock_control(work: Path) -> None:
     lock, _ = base_lock()
     path = write_lock(work / "undamaged", lock)
-    result = run_validator("verify-lock.py", "--lock", str(path))
+    result = run_validator(
+        "verify-lock.py", "--lock", str(path), "--databases", str(path.parent / "databases")
+    )
     record(
         "control.undamaged-lock-passes",
         result.returncode == 0,
@@ -585,6 +605,268 @@ def collision_control() -> None:
     record("control.cross-database-name-collision", False, "a collision was merged silently")
 
 
+# ── signature-verification controls (W1-R-B §2.2) ──────────────────────────
+#
+# These run against throwaway keys generated here, never against the real MSYS2
+# signing key. What is under test is the DECISION PROCEDURE — which status lines
+# are refused, whether the allowlist is honoured, whether an ambient keyring can
+# influence the outcome — and a fixture can express damage (a bad signature, an
+# unaccepted signer) that cannot responsibly be produced with real material.
+# The real key is exercised by the ingest job, which verifies all 246 archives.
+
+
+def gpg_home(work: Path, name: str) -> Path:
+    home = work / name
+    home.mkdir(parents=True, exist_ok=True)
+    home.chmod(0o700)
+    return home
+
+
+def gpg(home: Path, *arguments: str, check: bool = True) -> subprocess.CompletedProcess:
+    result = subprocess.run(
+        [
+            signing.find_gpg(),
+            "--homedir",
+            str(home),
+            "--batch",
+            "--no-tty",
+            "--quiet",
+            "--pinentry-mode",
+            "loopback",
+            "--passphrase",
+            "",
+            *arguments,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if check and result.returncode != 0:
+        raise RuntimeError(f"gpg {arguments}: {result.stderr.strip()}")
+    return result
+
+
+def make_signer(work: Path, label: str) -> tuple:
+    """Generate a throwaway signing key. Returns `(home, fingerprint)`."""
+    home = gpg_home(work, f"signer-{label}")
+    gpg(home, "--quick-generate-key", f"W1R Control {label} <{label}@example.invalid>",
+        "ed25519", "sign", "0")
+    listing = gpg(home, "--list-keys", "--with-colons").stdout
+    fingerprint = next(
+        line.split(":")[9] for line in listing.splitlines() if line.startswith("fpr:")
+    )
+    return home, fingerprint
+
+
+def make_trust_dir(work: Path, name: str, home: Path, fingerprints) -> Path:
+    """Write a fixture trust root holding `home`'s key under `fingerprints`."""
+    trust = work / name
+    trust.mkdir(parents=True, exist_ok=True)
+    armoured = gpg(
+        home, "--export", "--armor", "--export-options", "export-minimal"
+    ).stdout.encode("utf-8")
+    (trust / "msys2-signing-keys.asc").write_bytes(armoured)
+    (trust / "trust-root.json").write_bytes(
+        bundle.canonical_json(
+            {
+                "keyFile": "msys2-signing-keys.asc",
+                "keyFileSha256": hashlib.sha256(armoured).hexdigest(),
+                "keyFileBytes": len(armoured),
+                "acceptedFingerprints": list(fingerprints),
+            }
+        )
+    )
+    return trust
+
+
+def signature_control(name: str, call, expect_fragment: str) -> None:
+    try:
+        call()
+    except signing.SignatureError as error:
+        ok = expect_fragment in str(error)
+        record(name, ok, str(error)[:200] if ok else f"wrong refusal: {error}")
+        return
+    record(name, False, "a signature check accepted something it had to refuse")
+
+
+def signing_controls(work: Path) -> None:
+    root = work / "signing"
+    root.mkdir(parents=True, exist_ok=True)
+
+    accepted_home, accepted_fpr = make_signer(root, "accepted")
+    other_home, other_fpr = make_signer(root, "unaccepted")
+    trust = make_trust_dir(root, "trust", accepted_home, [accepted_fpr])
+
+    payload = root / "alpha-1.0-1-x86_64.pkg.tar.zst"
+    payload.write_bytes(b"alpha-package-bytes")
+    good_sig = root / "good.sig"
+    gpg(accepted_home, "--detach-sign", "--output", str(good_sig), str(payload))
+    other_sig = root / "other.sig"
+    gpg(other_home, "--detach-sign", "--output", str(other_sig), str(payload))
+
+    def verify(trust_dir: Path, archive: Path, signature: Path) -> str:
+        with signing.Verifier(trust_dir) as verifier:
+            return verifier.verify(archive, signature)
+
+    # The undamaged case, so a verifier that simply refuses everything cannot
+    # score a green run.
+    try:
+        fingerprint = verify(trust, payload, good_sig)
+        record(
+            "control.accepted-signature-verifies",
+            fingerprint == accepted_fpr,
+            f"VALIDSIG {fingerprint}",
+        )
+    except signing.SignatureError as error:
+        record("control.accepted-signature-verifies", False, str(error))
+
+    corrupted = root / "corrupted-1.0-1-x86_64.pkg.tar.zst"
+    corrupted.write_bytes(b"alpha-package-bytez")
+    signature_control(
+        "control.signature-over-corrupted-package",
+        lambda: verify(trust, corrupted, good_sig),
+        "BADSIG",
+    )
+
+    damaged_sig = root / "damaged.sig"
+    raw = bytearray(good_sig.read_bytes())
+    raw[-1] ^= 0xFF
+    damaged_sig.write_bytes(bytes(raw))
+    signature_control(
+        "control.corrupted-signature",
+        lambda: verify(trust, payload, damaged_sig),
+        "BADSIG",
+    )
+
+    signature_control(
+        "control.missing-signature",
+        lambda: verify(trust, payload, root / "absent.sig"),
+        "no detached signature",
+    )
+
+    # The signature IS valid; the key is simply not one we accept. Because the
+    # hermetic home holds exactly the allowlist, GnuPG cannot even check it and
+    # reports ERRSIG (no public key) — which is a refusal, not an "unknown".
+    signature_control(
+        "control.valid-signature-from-an-unaccepted-key",
+        lambda: verify(trust, payload, other_sig),
+        "ERRSIG",
+    )
+
+    # And the fingerprint allowlist is asserted independently of that, so a
+    # VALIDSIG whose signer is not on the list is refused even if some future
+    # change let a second key into the keyring.
+    def validsig_outside_the_allowlist() -> None:
+        with signing.Verifier(trust) as verifier:
+            verifier.accepted = {"1" * 40}
+            verifier.verify(payload, good_sig)
+
+    signature_control(
+        "control.validsig-from-a-fingerprint-outside-the-allowlist",
+        validsig_outside_the_allowlist,
+        "not an accepted MSYS2 signing key",
+    )
+
+    # An allowlist naming a fingerprint the key file does not carry: the two
+    # halves of the trust root must agree, or neither is load-bearing.
+    widened = make_trust_dir(root, "widened", accepted_home, [accepted_fpr, other_fpr])
+    signature_control(
+        "control.altered-fingerprint-allowlist",
+        lambda: verify(widened, payload, good_sig),
+        "do not equal the accepted allowlist",
+    )
+
+    unknown = make_trust_dir(root, "unknown-fpr", accepted_home, ["0" * 40])
+    signature_control(
+        "control.unknown-fingerprint-in-the-allowlist",
+        lambda: verify(unknown, payload, good_sig),
+        "do not equal the accepted allowlist",
+    )
+
+    tampered = make_trust_dir(root, "tampered", accepted_home, [accepted_fpr])
+    key_path = tampered / "msys2-signing-keys.asc"
+    key_path.write_bytes(key_path.read_bytes() + b"\n")
+    signature_control(
+        "control.altered-trusted-key-bytes",
+        lambda: verify(tampered, payload, good_sig),
+        "The signing material has been altered.",
+    )
+
+    swapped = make_trust_dir(root, "swapped", accepted_home, [accepted_fpr])
+    replacement = gpg(
+        other_home, "--export", "--armor", "--export-options", "export-minimal"
+    ).stdout.encode("utf-8")
+    record_path = swapped / "trust-root.json"
+    updated = json.loads(record_path.read_text())
+    updated["keyFileSha256"] = hashlib.sha256(replacement).hexdigest()
+    updated["keyFileBytes"] = len(replacement)
+    (swapped / "msys2-signing-keys.asc").write_bytes(replacement)
+    record_path.write_bytes(bundle.canonical_json(updated))
+    signature_control(
+        "control.substituted-trusted-key",
+        lambda: verify(swapped, payload, other_sig),
+        "do not equal the accepted allowlist",
+    )
+
+    # The ambient keyring must be unreachable. `other_home` holds the
+    # unaccepted key and is pointed at through every variable GnuPG honours; a
+    # verifier that consulted it would accept `other_sig`.
+    inherited = {
+        "GNUPGHOME": str(other_home),
+        "GPG_AGENT_INFO": str(other_home),
+    }
+    previous = {key: os.environ.get(key) for key in inherited}
+    os.environ.update(inherited)
+    try:
+        # GNUPGHOME points at a keyring that DOES hold the unaccepted key. A
+        # verifier that consulted it would return VALIDSIG; this one still has
+        # no public key for the signature and refuses.
+        signature_control(
+            "control.ambient-keyring-cannot-be-consulted",
+            lambda: verify(trust, payload, other_sig),
+            "ERRSIG",
+        )
+        # And the accepted key still verifies with GNUPGHOME hijacked, so the
+        # control above is not passing merely because gpg broke.
+        try:
+            fingerprint = verify(trust, payload, good_sig)
+            record(
+                "control.hermetic-home-survives-a-hijacked-gnupghome",
+                fingerprint == accepted_fpr,
+                f"VALIDSIG {fingerprint}",
+            )
+        except signing.SignatureError as error:
+            record("control.hermetic-home-survives-a-hijacked-gnupghome", False, str(error))
+    finally:
+        for key, value in previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+    # An empty allowlist would refuse everything, which is not verification.
+    empty = make_trust_dir(root, "empty", accepted_home, [])
+    signature_control(
+        "control.empty-fingerprint-allowlist",
+        lambda: verify(empty, payload, good_sig),
+        "accepts no fingerprints",
+    )
+
+    # The real committed trust root must be loadable and must name exactly the
+    # signer the lock's packages carry.
+    try:
+        real = signing.load_trust_root(HERE / "trust")
+        accepted = set(real["acceptedFingerprints"])
+        declared = {entry["fingerprint"] for entry in real["acceptedSigners"]}
+        record(
+            "control.committed-trust-root-loads",
+            accepted == declared and bool(accepted),
+            f"accepts {sorted(accepted)}, sha256 {real['_sha256']}",
+        )
+    except signing.SignatureError as error:
+        record("control.committed-trust-root-loads", False, str(error))
+
+
 def prohibited_pacman_control(repo_root: Path) -> None:
     """No tracked W1-R script may invoke live pacman resolution."""
     offenders = []
@@ -792,6 +1074,7 @@ def main() -> int:
         except contract.ContractError as error:
             record("control.trusted-master-accepted", False, str(error))
 
+        signing_controls(work)
         vercmp_control()
         collision_control()
         provider_resolution_controls()
