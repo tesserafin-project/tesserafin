@@ -68,11 +68,27 @@ public sealed class RemoteAccessDiagnosticStructuralTests
         "RemoteAccessDiagnosticCode",
         "RemoteAccessFinding",
         "DiagnosticConfidence",
+        "DiagnosticSeverity",
         "PublicationPolicyInput",
         "BackendPostureObservation",
+        "BackendBindPosture",
         "ProxyTrustObservation",
         "PortListenerObservation",
-        "ClassifiedAddress"
+        "ListenerObservationOutcome",
+        "ClassifiedAddress",
+        "AddressClassifier",
+        "AddressClass",
+        "HostnameInput",
+        "DnsObservation",
+        "DnsLookupOutcome",
+        "ServerNetworkPostureSource",
+        "SystemLocalAddressSource",
+        "SystemTcpListenerSource",
+        "SystemHostnameResolver",
+        "ILocalAddressSource",
+        "ITcpListenerSource",
+        "IHostnameResolver",
+        "INetworkPostureSource"
     };
 
     /// <summary>
