@@ -34,7 +34,7 @@ public enum RemoteAccessDiagnosticCode
     /// <summary>A configured listener resolves to a wildcard address, so it accepts on every interface.</summary>
     BackendWildcardBound = 11,
 
-    /// <summary>Listeners are bound to explicit non-loopback local addresses.</summary>
+    /// <summary>Listeners are bound to explicit private or link-local addresses.</summary>
     BackendLanBound = 12,
 
     /// <summary>A Unix domain socket is configured for the backend.</summary>
@@ -42,6 +42,26 @@ public enum RemoteAccessDiagnosticCode
 
     /// <summary>The effective bind posture could not be determined.</summary>
     BackendExposureUnknown = 14,
+
+    /// <summary>
+    /// Listeners are bound to explicit globally routable addresses. Kept apart from
+    /// <see cref="BackendLanBound"/> because binding a public address is a different decision from
+    /// binding a LAN one, and reporting both as "explicit" would hide the difference.
+    /// </summary>
+    BackendGloballyRoutableBound = 15,
+
+    /// <summary>
+    /// The backend cannot itself accept a connection arriving from off-host. This is a statement
+    /// about the socket only; it is not a statement that the host, the name or the path to it is
+    /// secure, and nothing about the firewall or an on-host proxy follows from it.
+    /// </summary>
+    BackendStructurallyConstrained = 16,
+
+    /// <summary>
+    /// The backend's own socket would accept a connection arriving from off-host. Whether one can
+    /// arrive is a firewall and routing question this layer cannot answer.
+    /// </summary>
+    BackendPotentiallyPublic = 17,
 
     /// <summary>A TCP listener was observed on port 80.</summary>
     ListenerObservedOnPort80 = 20,
@@ -55,11 +75,21 @@ public enum RemoteAccessDiagnosticCode
     /// <summary>No TCP listener was observed on port 443. This is not a statement that the port is free.</summary>
     NoListenerObservedOnPort443 = 23,
 
-    /// <summary>Listener inspection was denied, unsupported, or failed.</summary>
-    ListenerInspectionUnavailable = 24,
+    /// <summary>The operating system refused the listener listing.</summary>
+    ListenerInspectionDenied = 24,
 
     /// <summary>Something is already listening on 80 or 443. Which product it is, is not knowable from here.</summary>
     PossibleExistingIngressOwner = 25,
+
+    /// <summary>This platform offers no read-only way to list listeners.</summary>
+    ListenerInspectionUnsupported = 26,
+
+    /// <summary>
+    /// The listing failed for a reason that is neither denial nor lack of support. Kept apart from
+    /// the other two because an operator can act on a denial and on a missing platform facility,
+    /// and can act on neither if all three arrive under one name.
+    /// </summary>
+    ListenerInspectionFailed = 27,
 
     /// <summary>No known proxy is configured, so forwarded headers are discarded entirely.</summary>
     KnownProxiesAbsent = 30,
@@ -84,6 +114,9 @@ public enum RemoteAccessDiagnosticCode
     /// local. See tesserafin-project/tesserafin#241 §1.5.
     /// </summary>
     SameHostProxyLoopbackTrustTrapPossible = 36,
+
+    /// <summary>Exactly one known proxy is configured and the server's own parser accepted it.</summary>
+    SingleKnownProxyNormalized = 37,
 
     /// <summary>No hostname was supplied, so nothing about naming could be examined.</summary>
     HostnameNotProvided = 40,
@@ -137,7 +170,14 @@ public enum RemoteAccessDiagnosticCode
     CgNatNotDeterminable = 65,
 
     /// <summary>The declared IPv4 and IPv6 publication policy is not satisfiable by what was observed.</summary>
-    IpFamilyPolicyDisagreement = 66,
+    IpFamilyPolicyContradicted = 66,
+
+    /// <summary>
+    /// The caller did not state a publication policy for one or both families. Unstated is its own
+    /// answer here; it must never be read as "no", because a family nobody decided about is exactly
+    /// the one whose firewall nobody checked.
+    /// </summary>
+    IpFamilyPolicyUnresolved = 67,
 
     /// <summary>Whether anything outside this host can reach it was not established, and cannot be from here.</summary>
     ExternalReachabilityUnverified = 90,

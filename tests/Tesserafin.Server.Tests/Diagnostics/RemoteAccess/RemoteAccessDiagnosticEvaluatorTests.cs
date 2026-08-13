@@ -38,8 +38,8 @@ public sealed class RemoteAccessDiagnosticEvaluatorTests
         DnsLookupOutcome dnsOutcome = DnsLookupOutcome.NotAttempted,
         string[]? dnsAddresses = null,
         string? hostname = null,
-        bool publishIPv4 = true,
-        bool publishIPv6 = false)
+        bool? publishIPv4 = true,
+        bool? publishIPv6 = false)
     {
         var proxies = knownProxies ?? Array.Empty<string>();
         var answers = (dnsAddresses ?? Array.Empty<string>()).Select(IPAddress.Parse).ToList();
@@ -96,8 +96,54 @@ public sealed class RemoteAccessDiagnosticEvaluatorTests
     [Fact]
     public void ExplicitLanBindIsReported()
     {
-        var report = RemoteAccessDiagnosticEvaluator.Evaluate(Snapshot(posture: BackendBindPosture.ExplicitAddresses));
+        var report = RemoteAccessDiagnosticEvaluator.Evaluate(Snapshot(posture: BackendBindPosture.ExplicitPrivateAddresses));
         Assert.True(report.Has(RemoteAccessDiagnosticCode.BackendLanBound));
+        Assert.False(report.Has(RemoteAccessDiagnosticCode.BackendGloballyRoutableBound));
+    }
+
+    [Fact]
+    public void ExplicitGloballyRoutableBindIsReportedSeparatelyAndAsHigh()
+    {
+        var report = RemoteAccessDiagnosticEvaluator.Evaluate(Snapshot(posture: BackendBindPosture.ExplicitGloballyRoutableAddresses));
+
+        var finding = report.Findings.Single(f => f.Code == RemoteAccessDiagnosticCode.BackendGloballyRoutableBound);
+        Assert.Equal(DiagnosticSeverity.High, finding.Severity);
+        Assert.False(report.Has(RemoteAccessDiagnosticCode.BackendLanBound));
+    }
+
+    [Fact]
+    public void SecureBootstrapWithLoopbackOnlyProvesBackendConstraintAndNothingElse()
+    {
+        // Rule 10. The socket is constrained; the firewall, the name, the certificate and any
+        // on-host proxy are all exactly as unknown as they were before.
+        var report = RemoteAccessDiagnosticEvaluator.Evaluate(
+            Snapshot(secureBootstrap: true, posture: BackendBindPosture.LoopbackOnly));
+
+        var finding = report.Findings.Single(f => f.Code == RemoteAccessDiagnosticCode.BackendStructurallyConstrained);
+        Assert.Equal(DiagnosticConfidence.Derived, finding.Confidence);
+        Assert.False(report.Has(RemoteAccessDiagnosticCode.BackendPotentiallyPublic));
+        Assert.True(report.Has(RemoteAccessDiagnosticCode.ExternalReachabilityUnverified));
+        Assert.True(report.Has(RemoteAccessDiagnosticCode.FirewallStateUnknown));
+    }
+
+    [Theory]
+    [InlineData(BackendBindPosture.Wildcard)]
+    [InlineData(BackendBindPosture.ExplicitGloballyRoutableAddresses)]
+    public void ASocketThatWouldAcceptOffHostIsReportedAsPotentiallyPublic(BackendBindPosture posture)
+    {
+        var report = RemoteAccessDiagnosticEvaluator.Evaluate(Snapshot(posture: posture));
+
+        Assert.True(report.Has(RemoteAccessDiagnosticCode.BackendPotentiallyPublic));
+        Assert.False(report.Has(RemoteAccessDiagnosticCode.BackendStructurallyConstrained));
+    }
+
+    [Fact]
+    public void AnUnknownBindPostureIsNeitherConstrainedNorPubliclyExposed()
+    {
+        var report = RemoteAccessDiagnosticEvaluator.Evaluate(Snapshot(posture: BackendBindPosture.Unknown));
+
+        Assert.False(report.Has(RemoteAccessDiagnosticCode.BackendStructurallyConstrained));
+        Assert.False(report.Has(RemoteAccessDiagnosticCode.BackendPotentiallyPublic));
     }
 
     [Fact]
@@ -149,12 +195,10 @@ public sealed class RemoteAccessDiagnosticEvaluatorTests
         Assert.False(report.Has(RemoteAccessDiagnosticCode.PossibleExistingIngressOwner));
 
         // Neither vocabulary offers a way to say a port is free — not the finding codes and not
-        // the per-port outcomes, since a new outcome is the easier place to slip one in.
-        // "ListenerInspectionUnavailable" is about the inspection rather than the port, which is
-        // why it is excluded by name rather than by a looser substring.
+        // the per-port outcomes, since a new outcome is the easier place to slip one in. No name
+        // is exempted: the whole vocabulary has to survive the substring.
         var vocabulary = Enum.GetNames<RemoteAccessDiagnosticCode>()
             .Concat(Enum.GetNames<ListenerObservationOutcome>())
-            .Where(n => !string.Equals(n, nameof(RemoteAccessDiagnosticCode.ListenerInspectionUnavailable), StringComparison.Ordinal))
             .ToArray();
 
         Assert.DoesNotContain(vocabulary, n => n.Contains("Available", StringComparison.OrdinalIgnoreCase));
@@ -163,16 +207,38 @@ public sealed class RemoteAccessDiagnosticEvaluatorTests
     }
 
     [Theory]
-    [InlineData(ListenerObservationOutcome.InspectionDenied)]
-    [InlineData(ListenerObservationOutcome.Unsupported)]
-    [InlineData(ListenerObservationOutcome.Unknown)]
-    public void AFailedInspectionIsReportedAsUnknownNotAsAbsence(ListenerObservationOutcome outcome)
+    [InlineData(ListenerObservationOutcome.InspectionDenied, RemoteAccessDiagnosticCode.ListenerInspectionDenied)]
+    [InlineData(ListenerObservationOutcome.Unsupported, RemoteAccessDiagnosticCode.ListenerInspectionUnsupported)]
+    [InlineData(ListenerObservationOutcome.Unknown, RemoteAccessDiagnosticCode.ListenerInspectionFailed)]
+    public void AFailedInspectionIsReportedAsUnknownNotAsAbsence(ListenerObservationOutcome outcome, RemoteAccessDiagnosticCode expected)
     {
         var report = RemoteAccessDiagnosticEvaluator.Evaluate(Snapshot(port80: outcome, port443: outcome));
 
-        Assert.True(report.Has(RemoteAccessDiagnosticCode.ListenerInspectionUnavailable));
+        var finding = report.Findings.Single(f => f.Code == expected);
+        Assert.Equal(DiagnosticConfidence.Unknown, finding.Confidence);
         Assert.False(report.Has(RemoteAccessDiagnosticCode.NoListenerObservedOnPort80));
         Assert.False(report.Has(RemoteAccessDiagnosticCode.NoListenerObservedOnPort443));
+    }
+
+    [Fact]
+    public void TheThreeWaysOfNotSeeingAListenerStayApart()
+    {
+        // A denial an operator can grant, a platform that cannot answer, and an unexplained
+        // failure call for three different actions. Collapsing them advises none of them.
+        var denied = RemoteAccessDiagnosticEvaluator.Evaluate(Snapshot(port80: ListenerObservationOutcome.InspectionDenied));
+        var unsupported = RemoteAccessDiagnosticEvaluator.Evaluate(Snapshot(port80: ListenerObservationOutcome.Unsupported));
+        var failed = RemoteAccessDiagnosticEvaluator.Evaluate(Snapshot(port80: ListenerObservationOutcome.Unknown));
+
+        Assert.True(denied.Has(RemoteAccessDiagnosticCode.ListenerInspectionDenied));
+        Assert.False(denied.Has(RemoteAccessDiagnosticCode.ListenerInspectionUnsupported));
+        Assert.False(denied.Has(RemoteAccessDiagnosticCode.ListenerInspectionFailed));
+
+        Assert.True(unsupported.Has(RemoteAccessDiagnosticCode.ListenerInspectionUnsupported));
+        Assert.False(unsupported.Has(RemoteAccessDiagnosticCode.ListenerInspectionDenied));
+
+        Assert.True(failed.Has(RemoteAccessDiagnosticCode.ListenerInspectionFailed));
+        Assert.False(failed.Has(RemoteAccessDiagnosticCode.ListenerInspectionDenied));
+        Assert.False(failed.Has(RemoteAccessDiagnosticCode.ListenerInspectionUnsupported));
     }
 
     // ------------------------------------------------------------- proxy trust
@@ -182,6 +248,37 @@ public sealed class RemoteAccessDiagnosticEvaluatorTests
     {
         var report = RemoteAccessDiagnosticEvaluator.Evaluate(Snapshot());
         Assert.True(report.Has(RemoteAccessDiagnosticCode.KnownProxiesAbsent));
+    }
+
+    [Fact]
+    public void OneAcceptedKnownProxyIsReportedAsNormalized()
+    {
+        var report = RemoteAccessDiagnosticEvaluator.Evaluate(Snapshot(knownProxies: new[] { "127.0.0.1" }));
+
+        Assert.True(report.Has(RemoteAccessDiagnosticCode.SingleKnownProxyNormalized));
+        Assert.False(report.Has(RemoteAccessDiagnosticCode.MultipleKnownProxiesConfigured));
+        Assert.False(report.Has(RemoteAccessDiagnosticCode.KnownProxiesMalformed));
+    }
+
+    [Fact]
+    public void OneRejectedKnownProxyIsNotReportedAsNormalized()
+    {
+        // A single entry the parser threw away is not a narrow trust boundary; it is no trust
+        // boundary, wearing the shape of one.
+        var report = RemoteAccessDiagnosticEvaluator.Evaluate(
+            Snapshot(knownProxies: new[] { "not-an-address" }, parsedProxies: 0));
+
+        Assert.True(report.Has(RemoteAccessDiagnosticCode.KnownProxiesMalformed));
+        Assert.False(report.Has(RemoteAccessDiagnosticCode.SingleKnownProxyNormalized));
+    }
+
+    [Fact]
+    public void TwoKnownProxiesAreNotReportedAsASingleNormalizedOne()
+    {
+        var report = RemoteAccessDiagnosticEvaluator.Evaluate(Snapshot(knownProxies: new[] { "127.0.0.1", "10.0.0.5" }));
+
+        Assert.True(report.Has(RemoteAccessDiagnosticCode.MultipleKnownProxiesConfigured));
+        Assert.False(report.Has(RemoteAccessDiagnosticCode.SingleKnownProxyNormalized));
     }
 
     [Fact]
@@ -458,7 +555,7 @@ public sealed class RemoteAccessDiagnosticEvaluatorTests
             publishIPv4: true,
             publishIPv6: true));
 
-        var finding = report.Findings.Single(f => f.Code == RemoteAccessDiagnosticCode.IpFamilyPolicyDisagreement);
+        var finding = report.Findings.Single(f => f.Code == RemoteAccessDiagnosticCode.IpFamilyPolicyContradicted);
         Assert.Equal(DiagnosticConfidence.Contradictory, finding.Confidence);
         Assert.Equal(DiagnosticSeverity.High, finding.Severity);
     }
@@ -473,7 +570,7 @@ public sealed class RemoteAccessDiagnosticEvaluatorTests
             publishIPv4: true,
             publishIPv6: false));
 
-        Assert.True(report.Has(RemoteAccessDiagnosticCode.IpFamilyPolicyDisagreement));
+        Assert.True(report.Has(RemoteAccessDiagnosticCode.IpFamilyPolicyContradicted));
     }
 
     [Fact]
@@ -486,7 +583,38 @@ public sealed class RemoteAccessDiagnosticEvaluatorTests
             publishIPv4: true,
             publishIPv6: true));
 
-        Assert.False(report.Has(RemoteAccessDiagnosticCode.IpFamilyPolicyDisagreement));
+        Assert.False(report.Has(RemoteAccessDiagnosticCode.IpFamilyPolicyContradicted));
+        Assert.False(report.Has(RemoteAccessDiagnosticCode.IpFamilyPolicyUnresolved));
+    }
+
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData(true, null)]
+    [InlineData(null, null)]
+    public void AnUnstatedFamilyPolicyIsReportedRatherThanReadAsNo(bool? publishIPv4, bool? publishIPv6)
+    {
+        var report = RemoteAccessDiagnosticEvaluator.Evaluate(Snapshot(
+            publishIPv4: publishIPv4,
+            publishIPv6: publishIPv6));
+
+        var finding = report.Findings.Single(f => f.Code == RemoteAccessDiagnosticCode.IpFamilyPolicyUnresolved);
+        Assert.Equal(DiagnosticConfidence.Unknown, finding.Confidence);
+    }
+
+    [Fact]
+    public void AnUnstatedFamilyPolicySurvivesASuccessfulLookupForTheOtherFamily()
+    {
+        // Rule 12 again, from the other direction: a clean IPv4 answer must not close the IPv6
+        // question that nobody ever opened.
+        var report = RemoteAccessDiagnosticEvaluator.Evaluate(Snapshot(
+            hostname: "media.example.org",
+            dnsOutcome: DnsLookupOutcome.Answered,
+            dnsAddresses: new[] { "203.0.113.7" },
+            publishIPv4: true,
+            publishIPv6: null));
+
+        Assert.True(report.Has(RemoteAccessDiagnosticCode.DnsResultContainsIPv4));
+        Assert.True(report.Has(RemoteAccessDiagnosticCode.IpFamilyPolicyUnresolved));
     }
 
     // ----------------------------------------------------- permanent exclusions

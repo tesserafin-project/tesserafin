@@ -14,9 +14,16 @@ public enum BackendBindPosture
     /// <summary>At least one derived bind address is a wildcard, so every interface is accepted on.</summary>
     Wildcard = 2,
 
-    /// <summary>Bound to explicit non-loopback local addresses.</summary>
-    ExplicitAddresses = 3,
+    /// <summary>Bound to explicit non-loopback addresses, none of them globally routable.</summary>
+    ExplicitPrivateAddresses = 3,
 
     /// <summary>The bind set could not be derived.</summary>
-    Unknown = 4
+    Unknown = 4,
+
+    /// <summary>
+    /// At least one explicit bind address is globally routable. Distinguished from
+    /// <see cref="ExplicitPrivateAddresses"/> because the socket's own reach differs, and a
+    /// diagnostic that reported both as "explicit" would conceal the more exposed of the two.
+    /// </summary>
+    ExplicitGloballyRoutableAddresses = 5
 }

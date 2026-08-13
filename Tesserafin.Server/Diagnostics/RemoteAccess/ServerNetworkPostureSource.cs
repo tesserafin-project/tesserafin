@@ -123,6 +123,7 @@ public sealed class ServerNetworkPostureSource : INetworkPostureSource
         }
 
         var allLoopback = true;
+        var anyGloballyRoutable = false;
 
         foreach (var entry in bindSet)
         {
@@ -134,8 +135,19 @@ public sealed class ServerNetworkPostureSource : INetworkPostureSource
             }
 
             allLoopback &= IPAddress.IsLoopback(address);
+
+            // One globally routable entry decides the answer for the same reason one wildcard
+            // does: the most exposed listener in the set is what the set actually offers.
+            anyGloballyRoutable |= AddressClassifier.Classify(address) == AddressClass.GloballyRoutable;
         }
 
-        return allLoopback ? BackendBindPosture.LoopbackOnly : BackendBindPosture.ExplicitAddresses;
+        if (allLoopback)
+        {
+            return BackendBindPosture.LoopbackOnly;
+        }
+
+        return anyGloballyRoutable
+            ? BackendBindPosture.ExplicitGloballyRoutableAddresses
+            : BackendBindPosture.ExplicitPrivateAddresses;
     }
 }
