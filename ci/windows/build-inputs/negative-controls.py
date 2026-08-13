@@ -951,6 +951,119 @@ def installed_set_controls(work: Path) -> None:
     )
 
 
+class FakeResponse:
+    def __init__(self, url: str, payload: bytes):
+        self.status = 200
+        self._url = url
+        self._payload = payload
+
+    def geturl(self) -> str:
+        return self._url
+
+    def read(self) -> bytes:
+        return self._payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        return False
+
+
+def ingest_retry_controls() -> None:
+    """A TRANSPORT failure is retried; a CONTENT decision never is.
+
+    Repeating a content decision until it changes its mind is how a fail-closed
+    gate becomes a flaky one, so the distinction is worth a control rather than
+    a comment.
+    """
+    import urllib.error
+
+    import ingest
+
+    url = "https://repo.msys2.org/msys/x86_64/alpha-1.0-1-x86_64.pkg.tar.zst"
+    original_urlopen = ingest.urllib.request.urlopen
+    original_sleep = ingest.time.sleep
+    ingest.time.sleep = lambda _seconds: None
+    try:
+        attempts = {"n": 0}
+
+        def flaky(request, timeout=None):
+            attempts["n"] += 1
+            if attempts["n"] < 3:
+                raise urllib.error.HTTPError(url, 503, "Service Unavailable", None, None)
+            return FakeResponse(url, b"payload")
+
+        ingest.urllib.request.urlopen = flaky
+        try:
+            payload = ingest.fetch(url, "alpha-1.0-1-x86_64.pkg.tar.zst")
+            record(
+                "control.transient-http-503-is-retried",
+                payload == b"payload" and attempts["n"] == 3,
+                f"succeeded on attempt {attempts['n']}",
+            )
+        except ingest.IngestError as error:
+            record("control.transient-http-503-is-retried", False, str(error))
+
+        attempts["n"] = 0
+
+        def always_503(request, timeout=None):
+            attempts["n"] += 1
+            raise urllib.error.HTTPError(url, 503, "Service Unavailable", None, None)
+
+        ingest.urllib.request.urlopen = always_503
+        try:
+            ingest.fetch(url, "alpha-1.0-1-x86_64.pkg.tar.zst")
+            record("control.persistent-http-503-fails-closed", False, "accepted a failure")
+        except ingest.IngestError as error:
+            record(
+                "control.persistent-http-503-fails-closed",
+                attempts["n"] == ingest.RETRY_ATTEMPTS,
+                f"{attempts['n']} attempts, then: {error}",
+            )
+
+        # The budget, not just the attempt count: five attempts against a
+        # connection that stalls for the full socket timeout each time would
+        # spend minutes on ONE archive.
+        attempts["n"] = 0
+        original_deadline = ingest.RETRY_DEADLINE
+        ingest.RETRY_DEADLINE = 0.0
+        try:
+            ingest.fetch(url, "alpha-1.0-1-x86_64.pkg.tar.zst")
+            record("control.retry-budget-is-bounded", False, "accepted a failure")
+        except ingest.IngestError as error:
+            record("control.retry-budget-is-bounded", attempts["n"] == 1, str(error))
+        finally:
+            ingest.RETRY_DEADLINE = original_deadline
+
+        attempts["n"] = 0
+
+        def wrong_filename(request, timeout=None):
+            attempts["n"] += 1
+            return FakeResponse(
+                "https://repo.msys2.org/msys/x86_64/alpha-9.9-9-x86_64.pkg.tar.zst",
+                b"payload",
+            )
+
+        ingest.urllib.request.urlopen = wrong_filename
+        try:
+            ingest.fetch(url, "alpha-1.0-1-x86_64.pkg.tar.zst")
+            record(
+                "control.redirect-to-another-filename-is-not-retried",
+                False,
+                "accepted a response naming a different file",
+            )
+        except ingest.IngestError as error:
+            record(
+                "control.redirect-to-another-filename-is-not-retried",
+                attempts["n"] == 1,
+                f"refused after {attempts['n']} attempt: {error}",
+            )
+    finally:
+        ingest.urllib.request.urlopen = original_urlopen
+        ingest.time.sleep = original_sleep
+
+
 def prohibited_pacman_control(repo_root: Path) -> None:
     """No tracked W1-R script may invoke live pacman resolution."""
     offenders = []
@@ -1160,6 +1273,7 @@ def main() -> int:
 
         signing_controls(work)
         installed_set_controls(work)
+        ingest_retry_controls()
         vercmp_control()
         collision_control()
         provider_resolution_controls()
