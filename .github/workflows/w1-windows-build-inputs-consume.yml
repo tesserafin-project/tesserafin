@@ -1,0 +1,168 @@
+# Consume the published Windows build inputs by exact digest (#236, W1-R-B §10).
+#
+# This is the proof that the retained bundle is USABLE, run after publication and
+# separately from the machinery that produced it. It is also the shape a future
+# W1-A2 FFmpeg build takes: a digest, `packages: read`, `GITHUB_TOKEN`, no PAT and
+# no repository secret.
+#
+# It publishes nothing, deletes nothing and is granted `packages: write` nowhere.
+
+name: W1 Windows Build Inputs — Consume
+
+on:
+  workflow_dispatch:
+    inputs:
+      digest:
+        description: 'The accepted manifest digest (sha256:...)'
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.digest }}
+  cancel-in-progress: false
+
+env:
+  REPOSITORY: ghcr.io/tesserafin-project/windows-ffmpeg-build-inputs
+
+jobs:
+  # ── The real consumer, on a clean hosted Windows runner ─────────────────────
+  consume:
+    name: Consume by digest on a clean Windows runner
+    runs-on: windows-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      # Job level, read only. This is the entire permission model W1-A2 needs.
+      packages: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Assert the reference is digest-pinned and authorised
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, sys
+          sys.path.insert(0, "ci/windows/build-inputs")
+          import contract
+          reference = f"{os.environ['REPOSITORY']}@{os.environ['DIGEST']}"
+          contract.parse_reference(reference)
+          print(f"accepted reference {reference}")
+          PY
+        env:
+          DIGEST: ${{ inputs.digest }}
+
+      # A bare MSYS2. `update: false` and no `install:` list: this runner must
+      # not resolve anything, so whatever ends up installed came from the bundle.
+      - uses: msys2/setup-msys2@e9898307ac31d1a803454791be09ab9973336e1c # v2
+        id: msys2
+        with:
+          msystem: CLANG64
+          update: false
+          release: false
+
+      - name: Install the pinned ORAS
+        shell: bash
+        run: ./ci/windows/build-inputs/install-oras.sh windows-amd64 "${RUNNER_TEMP}/bin"
+
+      - name: Authenticate with GITHUB_TOKEN only
+        shell: bash
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          printf '%s' "${GHCR_TOKEN}" |
+            "${RUNNER_TEMP}/bin/oras.exe" login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+
+      # Pull by digest, verify every OCI and internal digest, verify every
+      # package signature against the trust root that travelled in the layer,
+      # install through local `pacman -U` with the forced runtime reinstall, and
+      # require the prefix to hold exactly the locked set.
+      - name: Pull, verify and install
+        shell: pwsh
+        run: |
+          ./ci/windows/build-inputs/consume.ps1 `
+            -Reference "$env:REPOSITORY@${{ inputs.digest }}" `
+            -MsysRoot '${{ steps.msys2.outputs.msys2-location }}' `
+            -WorkDir (Join-Path $env:RUNNER_TEMP 'w1r-consume') `
+            -EvidenceDir (Join-Path $env:RUNNER_TEMP 'w1r-evidence') `
+            -OrasPath (Join-Path $env:RUNNER_TEMP 'bin\oras.exe')
+
+      - name: Report the toolchain and lock identities
+        if: ${{ always() }}
+        shell: pwsh
+        run: |
+          $evidence = Join-Path $env:RUNNER_TEMP 'w1r-evidence\consume.json'
+          if (Test-Path -LiteralPath $evidence) {
+            Get-Content -LiteralPath $evidence -Raw | Write-Host
+            "``````json`n$(Get-Content -LiteralPath $evidence -Raw)`n``````" |
+              Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          }
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ always() }}
+        with:
+          name: w1r-evidence-consume
+          path: ${{ runner.temp }}/w1r-evidence
+          if-no-files-found: error
+          retention-days: 30
+
+  # ── The same pull with NO credentials at all ───────────────────────────────
+  #
+  # `contents: read` and nothing else, no login, no PAT, no repository secret.
+  # If this passes, the future W1-A2 does not even need `packages: read`; if it
+  # fails, the job above establishes what the minimum actually is. Either answer
+  # is recorded rather than assumed.
+  anonymous:
+    name: Pull by digest with no credentials
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Install the pinned ORAS
+        run: ./ci/windows/build-inputs/install-oras.sh linux-amd64 "${RUNNER_TEMP}/bin"
+
+      - name: Fetch the manifest and both blobs anonymously
+        shell: bash
+        env:
+          DIGEST: ${{ inputs.digest }}
+        run: |
+          set -euo pipefail
+          export PATH="${RUNNER_TEMP}/bin:${PATH}"
+          out="${RUNNER_TEMP}/anonymous"
+          mkdir -p "${out}"
+          oras manifest fetch "${REPOSITORY}@${DIGEST}" > "${out}/manifest.json"
+
+          actual="sha256:$(sha256sum "${out}/manifest.json" | cut -d' ' -f1)"
+          [ "${actual}" = "${DIGEST}" ] || {
+            echo "W1-R HARD STOP: anonymous fetch returned ${actual}, asked for ${DIGEST}" >&2
+            exit 1; }
+
+          layer="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["layers"][0]["digest"])' "${out}/manifest.json")"
+          config="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["config"]["digest"])' "${out}/manifest.json")"
+          oras blob fetch "${REPOSITORY}@${config}" --output "${out}/config.json"
+          oras blob fetch "${REPOSITORY}@${layer}" --output "${out}/layer.tar"
+
+          check_blob() {
+            local expected="$1" path="$2" got
+            got="sha256:$(sha256sum "${path}" | cut -d' ' -f1)"
+            [ "${got}" = "${expected}" ] || {
+              echo "W1-R HARD STOP: ${path} hashes to ${got}, expected ${expected}" >&2
+              exit 1; }
+            echo "${path##*/}: ${got}"
+          }
+          check_blob "${config}" "${out}/config.json"
+          check_blob "${layer}" "${out}/layer.tar"
+          echo "anonymous pull by digest succeeded: no token, no PAT, no secret"
