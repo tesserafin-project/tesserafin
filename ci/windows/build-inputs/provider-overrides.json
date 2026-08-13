@@ -1,0 +1,14 @@
+{
+  "$comment": [
+    "Reviewed provider overrides for the Windows FFmpeg build-input closure (#236).",
+    "A virtual %PROVIDES% name with two or more COMPATIBLE providers stops the",
+    "resolution; it can only be resolved here, by a human naming the virtual, the",
+    "real package and the version constraint the decision applies to.",
+    "An override that is missing, stale, incompatible, unused or names something",
+    "unknown fails the resolution -- see negative-controls.py.",
+    "This list is EMPTY on purpose: the reviewed closure of 246 packages contains",
+    "no ambiguous virtual dependency. It is not a placeholder for future entries;",
+    "if one ever becomes necessary, adding it is a reviewed change to the lock."
+  ],
+  "overrides": []
+}

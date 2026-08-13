@@ -221,12 +221,15 @@ def main() -> int:
         }
         parsed[repo] = msys2db.parse(raw, repo)
 
-    packages, provides, groups = msys2db.index(parsed["msys"], parsed["clang64"])
-    closure = msys2db.resolve(roots, packages, provides, groups)
+    overrides_path = args.repo_root / "ci/windows/build-inputs/provider-overrides.json"
+    overrides = json.loads(overrides_path.read_text())["overrides"]
+
+    catalogue = msys2db.index(parsed["msys"], parsed["clang64"])
+    closure, used_overrides = msys2db.resolve(roots, catalogue, overrides)
 
     entries = []
     for name in closure:
-        record = dict(packages[name])
+        record = dict(catalogue.packages[name])
         record["url"] = MSYS2_BASE[record["repository"]] + record["filename"]
         # The signature is admitted separately by ingest.sh, which records
         # whether MSYS2 actually publishes one for this exact filename.
@@ -262,6 +265,7 @@ def main() -> int:
             },
         },
         "roots": roots,
+        "providerOverrides": used_overrides,
         "repositoryDatabases": databases,
         "packageCount": len(entries),
         "compressedBytes": sum(entry["compressedBytes"] for entry in entries),

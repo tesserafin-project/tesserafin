@@ -276,43 +276,313 @@ def contract_control(name: str, call, expect_fragment: str) -> None:
     record(name, False, "the contract accepted something it must refuse")
 
 
-def real_package_beats_virtual_provides_control() -> None:
-    """A real package must win its own name against another's %PROVIDES%.
+# ── provider-resolution controls (W1-R-B §2.1) ─────────────────────────────
+#
+# The rule under test is not "a real package wins its own name" alone. It is
+# the whole decision procedure: a real name wins, a single compatible provider
+# is taken, two compatible providers STOP, and only a reviewed override in
+# authoritative metadata may resolve the stop. Every one of those branches has
+# a control, and so does the property that none of it depends on order.
 
-    This is not hypothetical. `base` depends on `msys2-runtime`, and the
-    compatibility package `msys2-runtime-3.3` declares
-    `provides: msys2-runtime=3.3.6`. A resolver that lets whichever package it
-    visits first take the name pulled the OLDER runtime into the closure, and
-    installing it downgraded the runtime out from under the running MSYS2.
-    """
-    real = {
-        "msys2-runtime": {
-            "repository": "msys", "name": "msys2-runtime", "version": "3.6.10-2",
-            "architecture": "x86_64", "filename": "msys2-runtime-3.6.10-2-x86_64.pkg.tar.zst",
-            "sha256": "0" * 64, "compressedBytes": 1, "installedBytes": 1,
-            "license": [], "depends": [], "provides": [], "groups": [],
-        },
-        "msys2-runtime-3.3": {
-            "repository": "msys", "name": "msys2-runtime-3.3", "version": "3.3.6-16",
-            "architecture": "x86_64", "filename": "msys2-runtime-3.3-3.3.6-16-x86_64.pkg.tar.zst",
-            "sha256": "0" * 64, "compressedBytes": 1, "installedBytes": 1,
-            "license": [], "depends": [], "provides": ["msys2-runtime=3.3.6"], "groups": [],
-        },
-        "base": {
-            "repository": "msys", "name": "base", "version": "1-1",
-            "architecture": "any", "filename": "base-1-1-any.pkg.tar.zst",
-            "sha256": "0" * 64, "compressedBytes": 1, "installedBytes": 1,
-            "license": [], "depends": ["msys2-runtime"], "provides": [], "groups": [],
-        },
+
+def db_entry(name: str, version: str, **overrides) -> dict:
+    record_ = {
+        "repository": "msys",
+        "name": name,
+        "version": version,
+        "architecture": "x86_64",
+        "filename": f"{name}-{version}-x86_64.pkg.tar.zst",
+        "sha256": "0" * 64,
+        "compressedBytes": 1,
+        "installedBytes": 1,
+        "license": [],
+        "depends": [],
+        "provides": [],
+        "groups": [],
     }
-    packages, provides, groups = msys2db.index(real)
-    closure = msys2db.resolve(["base"], packages, provides, groups)
-    ok = "msys2-runtime" in closure and "msys2-runtime-3.3" not in closure
-    record(
-        "control.real-package-beats-virtual-provides",
-        ok,
-        f"closure={closure}",
+    record_.update(overrides)
+    return record_
+
+
+# `base` depends on `msys2-runtime`, and the compatibility package
+# `msys2-runtime-3.3` declares `provides: msys2-runtime=3.3.6`. A resolver that
+# lets whichever package it visits first take the name pulled the OLDER runtime
+# into the closure, and installing it downgraded the runtime out from under the
+# running MSYS2. Measured on a hosted runner, not hypothetical.
+RUNTIME_DB = {
+    "msys2-runtime": db_entry("msys2-runtime", "3.6.10-2"),
+    "msys2-runtime-3.3": db_entry(
+        "msys2-runtime-3.3", "3.3.6-16", provides=["msys2-runtime=3.3.6"]
+    ),
+    "base": db_entry("base", "1-1", depends=["msys2-runtime"]),
+}
+
+# One virtual name, one provider.
+UNIQUE_DB = {
+    "openbsd-netcat": db_entry("openbsd-netcat", "1.219-1", provides=["netcat"]),
+    "netcat-user": db_entry("netcat-user", "1-1", depends=["netcat"]),
+}
+
+# One virtual name, two equally compatible providers. Nothing in the data says
+# which one is meant, and that is the point.
+AMBIGUOUS_DB = {
+    "openbsd-netcat": db_entry("openbsd-netcat", "1.219-1", provides=["netcat"]),
+    "gnu-netcat": db_entry("gnu-netcat", "0.7.1-1", provides=["netcat"]),
+    "netcat-user": db_entry("netcat-user", "1-1", depends=["netcat"]),
+}
+
+# A versioned dependency against providers that state their version.
+VERSIONED_DB = {
+    "wx-3.2": db_entry("wx-3.2", "3.2.8-1", provides=["wxwidgets=3.2.8"]),
+    "wx-3.3": db_entry("wx-3.3", "3.3.1-1", provides=["wxwidgets=3.3.1"]),
+    "wx-user": db_entry("wx-user", "1-1", depends=["wxwidgets>=3.3"]),
+}
+
+# An UNVERSIONED provides cannot answer a versioned dependency: it makes no
+# claim about which version it is.
+UNVERSIONED_DB = {
+    "autoconf-wrapper": db_entry("autoconf-wrapper", "20260320-1", provides=["autoconf"]),
+    "autoconf-user": db_entry("autoconf-user", "1-1", depends=["autoconf>=2.69"]),
+}
+
+NETCAT_OVERRIDE = {
+    "virtual": "netcat",
+    "package": "openbsd-netcat",
+    "constraint": "",
+    "reason": "fixture",
+}
+
+
+def resolver_control(name: str, database: dict, roots, overrides, check) -> None:
+    """Run the resolver over a fixture and hand the outcome to `check`.
+
+    `check(closure, error)` receives exactly one of the two.
+    """
+    try:
+        closure, _ = msys2db.resolve(roots, msys2db.index(database), overrides)
+    except msys2db.LockError as error:
+        ok, detail = check(None, error)
+    else:
+        ok, detail = check(closure, None)
+    record(name, ok, detail)
+
+
+def expect_stop(fragment: str):
+    def check(closure, error):
+        if error is None:
+            return False, f"accepted a closure it had to refuse: {closure}"
+        return fragment in str(error), str(error)
+
+    return check
+
+
+def expect_closure(*expected: str):
+    wanted = sorted(expected)
+
+    def check(closure, error):
+        if error is not None:
+            return False, f"refused a resolvable closure: {error}"
+        return closure == wanted, f"closure={closure}"
+
+    return check
+
+
+def provider_resolution_controls() -> None:
+    resolver_control(
+        "control.real-package-beats-virtual-provider",
+        RUNTIME_DB,
+        ["base"],
+        [],
+        expect_closure("base", "msys2-runtime"),
     )
+    resolver_control(
+        "control.unique-virtual-provider-resolves",
+        UNIQUE_DB,
+        ["netcat-user"],
+        [],
+        expect_closure("netcat-user", "openbsd-netcat"),
+    )
+    resolver_control(
+        "control.ambiguous-virtual-providers-stop",
+        AMBIGUOUS_DB,
+        ["netcat-user"],
+        [],
+        expect_stop("no reviewed provider override"),
+    )
+    resolver_control(
+        "control.ambiguity-resolved-by-reviewed-override",
+        AMBIGUOUS_DB,
+        ["netcat-user"],
+        [NETCAT_OVERRIDE],
+        expect_closure("netcat-user", "openbsd-netcat"),
+    )
+    resolver_control(
+        "control.override-naming-an-unknown-package",
+        AMBIGUOUS_DB,
+        ["netcat-user"],
+        [dict(NETCAT_OVERRIDE, package="nc-from-nowhere")],
+        expect_stop("not a package in the repositories"),
+    )
+    resolver_control(
+        "control.override-naming-a-non-provider",
+        AMBIGUOUS_DB,
+        ["netcat-user"],
+        [dict(NETCAT_OVERRIDE, package="netcat-user")],
+        expect_stop("does not provide"),
+    )
+    resolver_control(
+        "control.override-for-an-unknown-virtual",
+        AMBIGUOUS_DB,
+        ["netcat-user"],
+        [dict(NETCAT_OVERRIDE, virtual="telnet")],
+        expect_stop("nothing in the repositories provides"),
+    )
+    resolver_control(
+        "control.override-shadowing-a-real-package",
+        AMBIGUOUS_DB,
+        ["netcat-user"],
+        [dict(NETCAT_OVERRIDE, virtual="gnu-netcat", package="gnu-netcat")],
+        expect_stop("always wins its own name"),
+    )
+    resolver_control(
+        "control.override-missing-a-field",
+        AMBIGUOUS_DB,
+        ["netcat-user"],
+        [{"virtual": "netcat", "package": "openbsd-netcat"}],
+        expect_stop("is missing: constraint, reason"),
+    )
+    # Stale: the constraint the override answers is not the one being asked, so
+    # the ambiguity is still unresolved AND the override is unused.
+    resolver_control(
+        "control.override-with-the-wrong-constraint",
+        AMBIGUOUS_DB,
+        ["netcat-user"],
+        [dict(NETCAT_OVERRIDE, constraint=">=1.0")],
+        expect_stop("no reviewed provider override"),
+    )
+    resolver_control(
+        "control.unused-override",
+        UNIQUE_DB,
+        ["netcat-user"],
+        [NETCAT_OVERRIDE],
+        expect_stop("no dependency in this closure needed"),
+    )
+    # Version constraints decide compatibility, so only one provider qualifies
+    # and no override is needed or permitted.
+    resolver_control(
+        "control.version-constraint-selects-one-provider",
+        VERSIONED_DB,
+        ["wx-user"],
+        [],
+        expect_closure("wx-3.3", "wx-user"),
+    )
+    resolver_control(
+        "control.override-selecting-an-incompatible-provider",
+        VERSIONED_DB,
+        ["wx-user"],
+        [
+            {
+                "virtual": "wxwidgets",
+                "package": "wx-3.2",
+                "constraint": ">=3.3",
+                "reason": "fixture",
+            }
+        ],
+        expect_stop("no dependency in this closure needed"),
+    )
+    resolver_control(
+        "control.unversioned-provides-cannot-answer-a-constraint",
+        UNVERSIONED_DB,
+        ["autoconf-user"],
+        [],
+        expect_stop("nothing in the repositories satisfies"),
+    )
+    resolver_control(
+        "control.alternation-in-a-dependency-is-refused",
+        {"a": db_entry("a", "1-1", depends=["b|c"]), "b": db_entry("b", "1-1")},
+        ["a"],
+        [],
+        expect_stop("which pacman does not define"),
+    )
+
+
+def order_independence_control(database: dict, roots, name: str) -> None:
+    """Reversing every order that exists must not change the closure.
+
+    The three orders a resolver could accidentally depend on are the order the
+    databases are merged in, the order `%PROVIDES%` appears inside a `desc`,
+    and the order the roots are given in. All three are reversed at once.
+    """
+    forward = msys2db.index(database)
+    reversed_db = {
+        name_: dict(entry, provides=list(reversed(entry["provides"])))
+        for name_, entry in reversed(list(database.items()))
+    }
+    backward = msys2db.index(reversed_db)
+    try:
+        one, _ = msys2db.resolve(roots, forward, [NETCAT_OVERRIDE])
+        two, _ = msys2db.resolve(list(reversed(list(roots))), backward, [NETCAT_OVERRIDE])
+    except msys2db.LockError as error:
+        record(name, False, f"resolution failed: {error}")
+        return
+    record(name, one == two, f"forward={one} reversed={two}")
+
+
+# Differential vectors taken from the real `vercmp` shipped with pacman 7.1.0
+# (`docker run archlinux vercmp`). They are the cases a plausible but wrong
+# implementation gets wrong, so they are recorded rather than described.
+VERCMP_VECTORS = [
+    ("1.0.0", "1.0.0", 0),
+    ("1.0.1", "1.0.0", 1),
+    ("1.0", "1.0.0", -1),
+    ("1.10", "1.9", 1),
+    ("1.0a", "1.0", -1),
+    ("1.0a", "1.0b", -1),
+    ("1.0alpha", "1.0", -1),
+    ("1.0", "1.0-1", 0),
+    ("1.0-1", "1.0-2", -1),
+    ("1:1.0", "2.0", 1),
+    ("1.0~rc1", "1.0", 1),
+    ("1.0~rc1", "1.0~rc2", -1),
+    ("1~20260214-1", "1", 1),
+    ("2.0", "2.0~beta", -1),
+    ("1.0~", "1.0", 1),
+    ("1.0", "1.0~", -1),
+    ("20260320-1", "20260319-1", 1),
+    ("1.5", "1.5.1", -1),
+    ("a", "1", -1),
+    ("9+x86-9", "9~0.007", -1),
+    ("007-alpha-x86-1", "0:007~2+20260320+20260320-3", -1),
+    ("3.6.10-2", "3.3.6-16", 1),
+]
+
+
+def vercmp_control() -> None:
+    wrong = [
+        (a, b, expected, msys2db.vercmp(a, b))
+        for a, b, expected in VERCMP_VECTORS
+        if msys2db.vercmp(a, b) != expected
+    ]
+    record(
+        "control.vercmp-matches-pacman",
+        not wrong,
+        f"{len(VERCMP_VECTORS)} vectors agree with pacman 7.1.0"
+        if not wrong
+        else f"disagreements: {wrong}",
+    )
+
+
+def collision_control() -> None:
+    """Two databases declaring the same name must stop, not last-one-wins."""
+    try:
+        msys2db.index(
+            {"same": db_entry("same", "1-1")},
+            {"same": dict(db_entry("same", "2-1"), repository="clang64")},
+        )
+    except msys2db.LockError as error:
+        record("control.cross-database-name-collision", "declared by both" in str(error), str(error))
+        return
+    record("control.cross-database-name-collision", False, "a collision was merged silently")
 
 
 def prohibited_pacman_control(repo_root: Path) -> None:
@@ -522,7 +792,12 @@ def main() -> int:
         except contract.ContractError as error:
             record("control.trusted-master-accepted", False, str(error))
 
-        real_package_beats_virtual_provides_control()
+        vercmp_control()
+        collision_control()
+        provider_resolution_controls()
+        order_independence_control(
+            AMBIGUOUS_DB, ["netcat-user"], "control.resolution-is-order-independent"
+        )
         prohibited_pacman_control(args.repo_root)
     finally:
         shutil.rmtree(work, ignore_errors=True)
