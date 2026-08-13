@@ -85,6 +85,7 @@ jobs:
       # install through local `pacman -U` with the forced runtime reinstall, and
       # require the prefix to hold exactly the locked set.
       - name: Pull, verify and install
+        id: consume
         shell: pwsh
         run: |
           ./ci/windows/build-inputs/consume.ps1 `
@@ -105,8 +106,12 @@ jobs:
               Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
           }
 
+      # Only when the consumer actually ran. `if-no-files-found: error` is kept
+      # deliberately -- a consumer that ran and produced no evidence is a
+      # finding -- but a job that failed BEFORE it could produce any would
+      # otherwise report that same error and bury its real cause.
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: ${{ always() }}
+        if: ${{ always() && steps.consume.conclusion != 'skipped' }}
         with:
           name: w1r-evidence-consume
           path: ${{ runner.temp }}/w1r-evidence
