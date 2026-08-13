@@ -36,6 +36,8 @@ import hashlib
 import json
 import shutil
 import sys
+import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -43,14 +45,28 @@ import bundle
 import signing
 
 USER_AGENT = "tesserafin-w1r-ingest"
-TIMEOUT = 300
+
+# A SOCKET timeout, not a transfer budget: it bounds how long a stalled
+# connection may produce nothing, and a package that has stopped sending for two
+# minutes is not going to finish.
+TIMEOUT = 120
+
+# Transport-level retry only. See `fetch`. The deadline matters as much as the
+# attempt count: five attempts against a connection that stalls for the full
+# socket timeout each time would spend ten minutes on ONE archive, and 246 of
+# those would blow through any job timeout while looking like progress.
+RETRY_ATTEMPTS = 5
+RETRY_INITIAL_DELAY = 2.0
+RETRY_MAX_DELAY = 30.0
+RETRY_DEADLINE = 420.0
+RETRYABLE_STATUS = frozenset({408, 425, 429, 500, 502, 503, 504})
 
 
 class IngestError(Exception):
     """Fail-closed condition. Never caught to continue."""
 
 
-def fetch(url: str, expect_filename: str) -> bytes:
+def fetch_once(url: str, expect_filename: str) -> bytes:
     """Fetch `url`, refusing a response whose final URL names a different file.
 
     A digest check alone would catch corrupted bytes but not a mirror that
@@ -69,6 +85,55 @@ def fetch(url: str, expect_filename: str) -> bytes:
                 f"{expect_filename!r}"
             )
         return response.read()
+
+
+def fetch(url: str, expect_filename: str) -> bytes:
+    """`fetch_once`, retried on a TRANSPORT failure and on nothing else.
+
+    Ingesting 246 archives from one host is enough requests that a 503 or a
+    dropped connection is an ordinary event rather than a surprise — W1-R-B
+    watched four concurrent runs stall on exactly that. An unretried transport
+    error would fail the publisher on trusted master and invite a rerun, which
+    is a worse habit than a bounded backoff.
+
+    What is NOT retried: a response naming a different file, a digest that does
+    not match the lock, a signature that does not verify. Those are content
+    decisions, and repeating a content decision until it changes its mind is how
+    a fail-closed gate becomes a flaky one.
+    """
+    delay = RETRY_INITIAL_DELAY
+    deadline = time.monotonic() + RETRY_DEADLINE
+    for attempt in range(1, RETRY_ATTEMPTS + 1):
+        last = attempt == RETRY_ATTEMPTS or time.monotonic() >= deadline
+        try:
+            return fetch_once(url, expect_filename)
+        except IngestError:
+            raise
+        except urllib.error.HTTPError as error:
+            if error.code not in RETRYABLE_STATUS or last:
+                raise IngestError(f"{url}: HTTP {error.code} {error.reason}") from error
+            after = error.headers.get("Retry-After") if error.headers else None
+            wait = float(after) if after and after.isdigit() else delay
+            reason = f"HTTP {error.code}"
+        except (urllib.error.URLError, TimeoutError, OSError) as error:
+            if last:
+                raise IngestError(f"{url}: {error}") from error
+            wait = delay
+            reason = str(error)
+        if time.monotonic() + wait >= deadline:
+            raise IngestError(
+                f"{url}: {reason}, and the {RETRY_DEADLINE:.0f}s retry budget for "
+                "this archive is spent"
+            )
+        print(
+            f"  {expect_filename}: {reason}; retrying in {wait:.0f}s "
+            f"({attempt}/{RETRY_ATTEMPTS - 1})",
+            file=sys.stderr,
+            flush=True,
+        )
+        time.sleep(wait)
+        delay = min(delay * 2, RETRY_MAX_DELAY)
+    raise IngestError(f"{url}: exhausted {RETRY_ATTEMPTS} attempts")
 
 
 def main() -> int:
