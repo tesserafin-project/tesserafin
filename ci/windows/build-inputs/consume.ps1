@@ -10,7 +10,12 @@
       * the package must be the one W1-R authorised, and no other;
       * the pulled layer must match the digest the manifest declares;
       * every extracted path must match the bundle's own `manifest.sha256`;
-      * installation uses `pacman -U` over local files only.
+      * every package signature must verify against the trust root that
+        travelled inside the layer, not against the runner's own keyring;
+      * installation uses `pacman -U` over local files only, through the very
+        script the pull request gates, so the consumer and the proof cannot
+        drift apart;
+      * the prefix must end up holding exactly the locked package set.
 
     Before installing, EVERY MSYS2 mirror is removed from the installation. That
     is not tidiness: it is the proof. If the locked set were incomplete, or if
@@ -42,6 +47,8 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $true
+
+. (Join-Path (Split-Path -Parent $PSCommandPath) 'common.ps1')
 
 function Stop-Hard {
     param([string]$Message)
@@ -98,94 +105,62 @@ New-Item -ItemType Directory -Force -Path $bundleDir | Out-Null
 & tar -xf $layerTar -C $bundleDir
 if ($LASTEXITCODE -ne 0) { Stop-Hard "tar extraction exited $LASTEXITCODE" }
 
-$recorded = @{}
-foreach ($line in Get-Content -LiteralPath (Join-Path $bundleDir 'manifest.sha256')) {
-    if ($line -match '^(?<sha>[0-9a-f]{64})\s\s(?<path>.+)$') {
-        $recorded[$Matches['path']] = $Matches['sha']
-    }
-}
-if ($recorded.Count -eq 0) { Stop-Hard "the bundle carries no manifest.sha256 entries" }
+$lockPath = Join-Path $bundleDir 'msys2-lock.json'
+if (-not (Test-Path -LiteralPath $lockPath)) { Stop-Hard 'the pulled bundle carries no msys2-lock.json' }
+$lock = Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json
+$lockSha = (Get-FileHash -LiteralPath $lockPath -Algorithm SHA256).Hash.ToLowerInvariant()
 
-$actualPaths = Get-ChildItem -LiteralPath $bundleDir -Recurse -File |
-    ForEach-Object { $_.FullName.Substring($bundleDir.Length + 1).Replace('\', '/') } |
-    Where-Object { $_ -ne 'manifest.sha256' }
+$scriptDir = Split-Path -Parent $PSCommandPath
+$python = Get-PythonPath
 
-$missing = @($recorded.Keys | Where-Object { $actualPaths -notcontains $_ })
-$extra = @($actualPaths | Where-Object { -not $recorded.ContainsKey($_) })
-if ($missing.Count -gt 0) { Stop-Hard "missing bundle path(s): $($missing -join ', ')" }
-if ($extra.Count -gt 0) { Stop-Hard "undeclared bundle path(s): $($extra -join ', ')" }
+# ── 4. Authenticate every signature against the trust root that TRAVELLED ────
+#
+# The bundle carries `trust/`, the layer digest is pinned by the manifest, and
+# the manifest digest is pinned by the reference — so the keys checked here are
+# the reviewed committed ones, reached without trusting the runner's ambient
+# GnuPG keyring or any keyserver. Attribution is decided before a single archive
+# is handed to pacman.
+$signatureEvidence = Join-Path $EvidenceDir 'consume-signatures.json'
+& $python (Join-Path $scriptDir 'signing.py') `
+    --bundle $bundleDir --trust (Join-Path $bundleDir 'trust') |
+    Tee-Object -FilePath $signatureEvidence
+if ($LASTEXITCODE -ne 0) { Stop-Hard "signature verification exited $LASTEXITCODE" }
+$signatures = Get-Content -LiteralPath $signatureEvidence -Raw | ConvertFrom-Json
 
-foreach ($path in $recorded.Keys) {
-    $full = Join-Path $bundleDir ($path -replace '/', '\')
-    $hash = (Get-FileHash -LiteralPath $full -Algorithm SHA256).Hash.ToLowerInvariant()
-    if ($hash -ne $recorded[$path]) {
-        Stop-Hard "$path hashes to $hash, the bundle records $($recorded[$path])"
-    }
-}
+# ── 5. Install through the SAME path the pull request proves ─────────────────
+#
+# Not a second implementation. `install-locked.ps1` empties every mirror,
+# verifies the bundle against its own manifest.sha256, forces the phase-one
+# msys2-runtime reinstall, restarts the shell, installs the rest and requires the
+# prefix to hold exactly the locked set. A consumer that re-implemented any of
+# that would be a consumer nothing had gated.
+$installEvidence = Join-Path $EvidenceDir 'install'
+& (Join-Path $scriptDir 'install-locked.ps1') `
+    -BundleDir $bundleDir -EvidenceDir $installEvidence -MsysRoot $MsysRoot
+if ($LASTEXITCODE -ne 0) { Stop-Hard "install-locked.ps1 exited $LASTEXITCODE" }
 
-$lock = Get-Content -LiteralPath (Join-Path $bundleDir 'msys2-lock.json') -Raw | ConvertFrom-Json
-$lockSha = (Get-FileHash -LiteralPath (Join-Path $bundleDir 'msys2-lock.json') -Algorithm SHA256).Hash.ToLowerInvariant()
-
-# ── 4. Remove every mirror, so a dynamic resolution CANNOT silently succeed ──
-$mirrorDir = Join-Path $MsysRoot 'etc\pacman.d'
-$removedMirrors = @()
-if (Test-Path -LiteralPath $mirrorDir) {
-    foreach ($file in Get-ChildItem -LiteralPath $mirrorDir -Filter 'mirrorlist*' -File) {
-        $removedMirrors += $file.Name
-        Set-Content -LiteralPath $file.FullName -Value @(
-            '# Emptied by ci/windows/build-inputs/consume.ps1 (#236, W1-R).',
-            '# W1 installs from locally verified package files only. A mirror here',
-            '# would let a missing lock entry be silently resolved upstream.'
-        ) -Encoding utf8NoBOM
-    }
-}
-
-# ── 5. Install from local files only ────────────────────────────────────────
-$packages = Get-ChildItem -LiteralPath (Join-Path $bundleDir 'packages') -Filter '*.pkg.tar.zst' -File
-if ($packages.Count -ne $lock.packageCount) {
-    Stop-Hard "$($packages.Count) archives present, the lock declares $($lock.packageCount)"
-}
-
-$bash = Join-Path $MsysRoot 'usr\bin\bash.exe'
-if (-not (Test-Path -LiteralPath $bash)) { Stop-Hard "no bash at $bash" }
-$pacman = Join-Path $MsysRoot 'usr\bin\pacman.exe'
-if (-not (Test-Path -LiteralPath $pacman)) {
-    Stop-Hard "no pacman at $pacman; '$MsysRoot' is not an MSYS2 installation"
-}
-
-$posixDir = (& $bash -lc "cygpath -u '$($bundleDir -replace '\\', '/')'").Trim()
-if ($LASTEXITCODE -ne 0) { Stop-Hard "cygpath exited $LASTEXITCODE" }
-
-# `-U` with explicit local files. There is deliberately no `-S` and no `-Syu`
-# anywhere in this file: those are the PROHIBITED live-resolution paths.
-$install = "pacman -U --noconfirm --needed --overwrite '*' $posixDir/packages/*.pkg.tar.zst"
-& $bash -lc $install
-if ($LASTEXITCODE -ne 0) { Stop-Hard "pacman -U exited $LASTEXITCODE" }
-
-# ── 6. Every installed package must belong to the lock ──────────────────────
-$installed = & $bash -lc "pacman -Qq" | Where-Object { $_ }
-if ($LASTEXITCODE -ne 0) { Stop-Hard "pacman -Qq exited $LASTEXITCODE" }
-$lockNames = @($lock.packages | ForEach-Object { $_.name })
-$unexpected = @($installed | Where-Object { $lockNames -notcontains $_ })
+$install = Get-Content -LiteralPath (Join-Path $installEvidence 'install-locked.json') -Raw |
+    ConvertFrom-Json
 
 $evidence = [ordered]@{
-    probe            = 'w1r-consume'
-    reference        = $Reference
-    manifestDigest   = $digest
-    layerDigest      = $layerDigest
-    lockSha256       = $lockSha
-    packageCount     = $lock.packageCount
-    archivesPresent  = $packages.Count
-    installedCount   = @($installed).Count
-    notInLock        = $unexpected
-    mirrorsEmptied   = $removedMirrors
+    probe             = 'w1r-consume'
+    reference         = $Reference
+    manifestDigest    = $digest
+    layerDigest       = $layerDigest
+    lockSha256        = $lockSha
+    trustRootSha256   = $signatures.trustRootSha256
+    signaturesVerified = $signatures.verified
+    acceptedFingerprints = $signatures.acceptedFingerprints
+    packageCount      = $lock.packageCount
+    installedPackages = $install.installedAfter
+    installedSetEqualsLock = $install.installedSetEqualsLock
+    runtimeReinstall  = $install.runtimeReinstall
+    mirrorsEmptied    = $install.mirrorsEmptied
     upstreamConsulted = $false
-    pacmanMode       = 'pacman -U over local files only'
+    pacmanMode        = 'pacman -U over local files only'
+    tagUsed           = $false
 }
 $evidence | ConvertTo-Json -Depth 6 |
     Set-Content -LiteralPath (Join-Path $EvidenceDir 'consume.json') -Encoding utf8NoBOM
 
-Write-Host "installed $($installed.Count) packages from $($packages.Count) locked archives, no mirror configured"
-if ($unexpected.Count -gt 0) {
-    Write-Host "note: $($unexpected.Count) package(s) were already present in the base image and are not in the lock: $($unexpected -join ', ')"
-}
+Write-Host "consumed ${Reference}: $($signatures.verified) signatures verified, $($install.installedAfter) packages installed, set equal to the lock"
