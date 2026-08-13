@@ -92,6 +92,59 @@ def find_gpg() -> str:
     )
 
 
+class PathNamespace:
+    """Translate this interpreter's paths into the ones the chosen gpg reads.
+
+    On a hosted Windows runner the gpg that exists before MSYS2's own `gnupg`
+    package is installed is Git for Windows', which is an MSYS binary: it reads
+    `C:\\Users\\RUNNER~1\\...` as a RELATIVE POSIX path and silently prefixes the
+    working directory, so `--homedir` lands somewhere that does not exist. The
+    interpreter running this file, meanwhile, is native Windows Python and hands
+    out exactly those paths. Every path argument therefore crosses a namespace
+    boundary and every one of them has to be translated -- `--homedir`, the key
+    file, the signature and the archive alike. Fixing only the first turns the
+    next failure into a missing `VALIDSIG`, which reads like a signature finding
+    rather than a path bug.
+
+    The translator is `cygpath` from the SAME `usr/bin` as the selected gpg, so
+    it shares that gpg's mount table. When there is no such sibling the gpg is
+    native and paths pass through unchanged.
+    """
+
+    def __init__(self, gpg: str):
+        sibling = Path(gpg).with_name("cygpath.exe")
+        self.cygpath: Optional[Path] = sibling if sibling.is_file() else None
+        # Reported in the summary. A `null` translator next to an MSYS gpg is the
+        # signature of this bug returning under a different disguise, so it is
+        # evidence rather than an internal detail.
+        self.description = str(self.cygpath) if self.cygpath else "none (native paths)"
+        # Directories, not files: four lookups instead of one per archive.
+        self._directories: Dict[str, str] = {}
+
+    def __call__(self, path: Path) -> str:
+        if self.cygpath is None:
+            return str(path)
+        path = Path(path)
+        parent = str(path.parent)
+        if parent not in self._directories:
+            result = subprocess.run(
+                [str(self.cygpath), "-u", parent],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if result.returncode != 0:
+                raise SignatureError(
+                    f"cygpath could not translate {parent!r} into the namespace "
+                    f"of {self.cygpath}: {result.stderr.strip()}"
+                )
+            translated = result.stdout.strip()
+            if not translated:
+                raise SignatureError(f"cygpath returned nothing for {parent!r}")
+            self._directories[parent] = translated.rstrip("/")
+        return f"{self._directories[parent]}/{path.name}"
+
+
 def load_trust_root(trust_dir: Path) -> dict:
     """Read and validate `trust-root.json` and the key bytes it pins."""
     root_path = trust_dir / "trust-root.json"
@@ -138,12 +191,13 @@ class Verifier:
         self.root = load_trust_root(Path(trust_dir))
         self.accepted = set(self.root["acceptedFingerprints"])
         self.gpg = find_gpg()
+        self.native_path = PathNamespace(self.gpg)
         self.home: Optional[Path] = None
 
     def __enter__(self) -> "Verifier":
         self.home = Path(tempfile.mkdtemp(prefix="w1r-gnupg-"))
         os.chmod(self.home, 0o700)
-        self._run(["--import", str(self.root["_keyPath"])])
+        self._run(["--import", self.native_path(self.root["_keyPath"])])
 
         held = self._imported_fingerprints()
         if held != self.accepted:
@@ -172,7 +226,7 @@ class Verifier:
         command = [
             self.gpg,
             "--homedir",
-            str(self.home),
+            self.native_path(self.home),
             "--no-default-keyring",
             "--no-options",
             "--batch",
@@ -213,7 +267,15 @@ class Verifier:
                 f"{archive.name}: no detached signature. MSYS2 signs every package; "
                 "an unsigned archive is not admitted."
             )
-        result = self._run(["--status-fd", "1", "--verify", str(signature), str(archive)])
+        result = self._run(
+            [
+                "--status-fd",
+                "1",
+                "--verify",
+                self.native_path(signature),
+                self.native_path(archive),
+            ]
+        )
         status = [
             line[len("[GNUPG:] ") :]
             for line in result.stdout.splitlines()
@@ -268,6 +330,8 @@ def verify_bundle(bundle_root: Path, trust_dir: Path = DEFAULT_TRUST) -> dict:
             "signers": dict(sorted(signers.items())),
             "trustRootSha256": verifier.root["_sha256"],
             "acceptedFingerprints": sorted(verifier.accepted),
+            "gpg": verifier.gpg,
+            "pathTranslator": verifier.native_path.description,
         }
     if summary["verified"] != lock["packageCount"]:
         raise SignatureError(
