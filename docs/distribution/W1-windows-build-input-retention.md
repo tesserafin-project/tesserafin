@@ -205,14 +205,27 @@ reviewed manifest digest, the run rebuilds the bundle on the trusted runner, and
 Nothing is pushed on a mismatch. After pushing, the manifest is read back by
 digest and compared byte for byte with what was pushed.
 
-`environment: windows-build-input-publication` is declared on the publisher.
-**W1-R-B must create that environment with required reviewers before the first
-dispatch.** GitHub would otherwise auto-create it unprotected on first use, which
-would be simulating approval rather than obtaining it.
+`environment: windows-build-input-publication` is declared on the publisher and
+was **created explicitly** by W1-R-B, before any dispatch — GitHub would
+otherwise auto-create it unprotected on first use, which would be simulating
+approval rather than obtaining it. Its policy, read back through the API:
 
-## 9. Three things the hosted runs found
+| setting | value |
+| --- | --- |
+| required reviewers | `all3f0r1` (the only account with access) |
+| `prevent_self_review` | `false` — see the limitation in §11 |
+| deployment branches | protected branches only; no custom policy |
+| protected branches in this repository | `master`, and only `master` |
+| environment secrets / variables | none |
+| wait timer | none |
 
-Both were found by a check refusing rather than by a build going quietly wrong.
+The deployment therefore pauses for a human before the publisher runs, and the
+only branch it can ever run from is `master`.
+
+## 9. What the hosted runs found
+
+Every one of these was found by a check refusing, rather than by a build going
+quietly wrong.
 
 **Git for Windows' bash is not MSYS2's.** The installer originally derived the
 MSYS2 root from `bash.exe` on PATH. On a hosted runner that resolves to Git for
@@ -255,6 +268,121 @@ across all three runs while the lock was wrong. Reproducibility says two builds
 agree, not that what they agree on is correct. **Only the native install found
 this.**
 
+**The gpg on a Windows runner reads a Windows path as a relative POSIX one.**
+Signature verification died before it verified anything:
+
+```
+gpg: keyblock resource '/d/a/tesserafin/tesserafin/C:\Users\RUNNER~1\...\pubring.kbx':
+No such file or directory
+```
+
+The gpg present before MSYS2's own `gnupg` package is installed — and installing
+it is exactly what this gate guards — is Git for Windows', an MSYS binary. The
+interpreter handing it paths is native Windows Python, so `--homedir`, the key
+file, the signature and the archive all cross a namespace boundary. Translating
+only the first would have turned the next failure into a missing `VALIDSIG`,
+which reads like a signature finding rather than a path bug. The translator is
+`cygpath` from the same `usr/bin` as the selected gpg, and both are reported in
+the summary, because a null translator beside an MSYS gpg is the same bug wearing
+a different disguise.
+
+**`--needed` made the runtime phase a no-op.** See §9c: the phase that exists to
+replace the runtime printed `skipping` and did nothing, on every runner whose
+image already carried the locked version.
+
+## 9a. Attribution: the signing root of trust
+
+The lock's SHA-256 answers *are these the bytes we reviewed?*. It cannot answer
+*did MSYS2 produce them?* — a lock generated against a compromised mirror would
+be internally consistent and wrong. Those are two different decisions and this
+repository makes both, separately:
+
+* **the committed lock is the integrity decision.** An archive is admitted only
+  if its SHA-256 equals the reviewed value;
+* **the signature is the attribution decision.** It proves those exact bytes were
+  signed by an MSYS2 packager we accept.
+
+Neither substitutes for the other. A valid signature never admits an archive
+whose digest disagrees with the lock, and a matching digest never admits an
+archive whose signature does not verify. Verification happens **before** an
+archive enters the bundle.
+
+`trust/msys2-signing-keys.asc` is the accepted signing material, pinned as exact
+bytes; `trust/trust-root.json` records its provenance, its SHA-256, its length
+and the accepted fingerprints. `signing.py` runs GnuPG in a throwaway home with
+`--no-default-keyring`, no keyserver, no auto key location and no dirmngr, and
+strips every inherited `GNUPG*`/`GPG*` variable from the child environment — the
+runner's ambient keyring cannot make a signature verify. After import, the
+fingerprints GnuPG actually holds must **equal** the allowlist, not merely
+include it, so editing either the key bytes or the list narrows nothing open.
+
+Acceptance is positive: a `VALIDSIG` whose fingerprint is in the allowlist.
+`BADSIG`, `ERRSIG`, `EXPSIG`, `EXPKEYSIG`, `REVKEYSIG`, `NO_PUBKEY`, a missing
+signature file, an unparsable signature, and a zero exit with no `VALIDSIG` at
+all are each refusals.
+
+## 9b. The build prefix holds exactly the locked set
+
+"Everything the lock names is installed" is also satisfied by a prefix carrying
+an undeclared compiler. An undeclared package can influence the FFmpeg build
+while appearing in no lock, no bundle and no published provenance — and *looks
+harmless* is not a property this repository can check, whereas *is in the
+reviewed lock* is.
+
+After installation the prefix must hold **exactly** the locked set: same names,
+same versions, same architectures. A future runner image that quietly gains a
+package fails here. Pre-existing packages are acceptable only as members of the
+lock at the locked version, which after `pacman -U` over every locked archive is
+a statement about what the transaction achieved rather than a courtesy extended
+to the base image.
+
+The ruling lives in `installed-set.py` rather than in the PowerShell that
+collects the observation, so it can be exercised on Linux against the failures a
+hosted Windows job cannot stage on demand.
+
+## 9c. The runtime replacement is forced, every run
+
+The phase-one transaction deliberately carries **no** `--needed`. With it, a
+runner whose MSYS2 already holds the locked runtime printed
+
+```
+warning: msys2-runtime-3.6.10-2 is up to date -- skipping
+```
+
+and the phase that exists to replace `msys-2.0.dll` never ran. It would have been
+exercised only by the accident of an outdated runner image and would have rotted
+silently the day the image caught up.
+
+The proof recorded each run: pacman's own transaction line (`skipping` is refused
+by name), the phase-one and phase-two shell pids — which differ, because the old
+runtime went with the process that mapped it — `uname -r` and `pacman -Q` taken
+in that new process before it installs anything, and afterwards a check that the
+`msys-2.0.dll` on disk is byte for byte the packaged one and that the file list
+pacman records equals the archive's members. `pacman -Qkk` is deliberately not
+the check: it would only prove pacman agrees with itself.
+
+## 9d. The registry protocol is rehearsed before it is performed
+
+The publication path was, until W1-R-B, the only part of W1-R never executed: it
+would have run for the first time against GHCR, with `packages: write`, on
+trusted `master`.
+
+`oci-protocol.sh` is that path, as one implementation, and the `registry` job
+runs it against an ephemeral OCI Distribution registry — pinned by immutable
+digest — on the runner's loopback, with no `packages: write` and no external
+publication. Push the layer blob, push the config blob, push the exact reviewed
+manifest bytes addressed by digest, read back by digest, compare bytes, compare
+config and layer digests **and sizes**, re-hash the blobs that came back, then run
+the ordinary consumer verification over the pulled content. Submitting the same
+digest twice is idempotent.
+
+Thirteen controls cover the ways the round trip can go wrong: a manifest whose
+blobs the registry does not hold, bytes submitted under a digest that is not
+their own, a tag (nothing is ever tagged, so a tag resolves to nothing), a
+different repository name, a rewritten manifest, an altered or truncated layer,
+an altered or absent config, and a reviewed descriptor claiming a size the bytes
+do not have.
+
 ## 10. Update and revocation
 
 An existing bundle is **never mutated**. If W1 later needs another package, or a
@@ -278,12 +406,15 @@ provenance already names.
 
 ## 11. Known limitations
 
-* **Signature verification is presence-and-integrity, not trust.** All 246
-  detached signatures are fetched, hashed and carried in the bundle, but they are
-  not verified against the MSYS2 keyring: doing so would require pinning that
-  keyring, which is itself an MSYS2 package with the same retention problem.
-  Integrity rests on the SHA-256 in the reviewed lock. Recorded as W1 follow-up
-  work rather than claimed.
+* **The publication environment has one eligible reviewer, and it is the owner.**
+  `windows-build-input-publication` requires a human approval before the
+  publisher runs, and `all3f0r1` is the only account with access to give it. GitHub
+  permits that approval — `prevent_self_review` is `false`, because with a single
+  eligible reviewer setting it `true` would make the deployment unapprovable
+  rather than more separated. This is a deliberate pause for a human decision,
+  and it is **not** separation of duties. It becomes separation of duties the day
+  a second maintainer exists, by adding them as a reviewer and flipping
+  `prevent_self_review`.
 * **GHCR is retention under organisation control, not a third-party archive.**
   It is non-expiring and repository-linked, which upstream MSYS2 is not, but it
   depends on the organisation continuing to exist and on nobody deleting the
@@ -293,16 +424,22 @@ provenance already names.
 * **The lock is a snapshot of a moving repository.** Regenerating it later will
   produce different versions, which is why regeneration is a reviewed change
   producing a new digest, never an in-place refresh.
-* **W1-R-A publishes nothing.** Until W1-R-B dispatches the publisher from master
-  and verifies the stored manifest, the retention claim is *designed and proven
-  reproducible*, not *in effect*.
+* **The pull request publishes nothing.** Until the publisher is dispatched from
+  `master`, the human reviewer approves the deployment and the stored manifest is
+  read back, the retention claim is *designed and proven reproducible*, not
+  *in effect*.
+* **The local registry is not GHCR.** The rehearsal proves the protocol, the
+  ordering, the byte comparison and the refusals against a conformant OCI
+  Distribution implementation. It cannot prove GHCR's own behaviour — token
+  scoping, package linkage and visibility are exercised only by the real
+  publication and the post-publication consumer run.
 
 ## 12. Sequence
 
 | loop | does |
 | --- | --- |
-| **W1-R-A** (this) | implements and validates in a draft PR. The GHCR package does not exist at the end of it. |
-| **W1-R-B** | reviews and merges, creates the protected environment, dispatches the publisher from `master`, verifies the stored digest and records it. |
+| **W1-R-A** | implemented and validated in a draft PR. The GHCR package did not exist at the end of it. |
+| **W1-R-B** (this) | repairs provider ambiguity, signature authentication, exact installed-set equality and the forced runtime replacement; rehearses the registry protocol locally; creates the protected environment; merges; dispatches the publisher from `master`; verifies the stored digest and records it. |
 | **W1-A2** | resumes the FFmpeg runtime build, consuming that digest and only that digest. |
 
 [#236]: https://github.com/tesserafin-project/tesserafin/issues/236
