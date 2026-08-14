@@ -237,11 +237,12 @@ ok "server contract matches its lock (sha256 $LOCKED_SHA)"
 INNER="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/verify-web-provenance.sh"
 [ -x "$INNER" ] || die_indeterminate "ci/verify-web-provenance.sh is missing or not executable"
 
-set +e
+# This script deliberately does not run under `set -e` (see the header): every check here reports
+# its own failure with a specific message, and a bare non-zero exit would replace all of them with
+# silence. So capture the delegate's status explicitly rather than toggling errexit around it.
 "$INNER" --web "$WEB" --server-repo "$SERVER_REPO" --server-commit "$SERVER_COMMIT" \
     | tee "$WORKDIR/web-provenance.log"
 INNER_RC="${PIPESTATUS[0]}"
-set -e
 case "$INNER_RC" in
     0) : ;;
     2) die_indeterminate "ci/verify-web-provenance.sh could not answer the question (exit 2)" ;;
