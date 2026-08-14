@@ -87,3 +87,13 @@ jobs:
           SERVER_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
           CONTROLS_DIR: ${{ runner.temp }}/sdk-provenance-controls
         run: ./ci/tests/sdk-provenance.test.sh
+
+      # Synthetic histories (C4-LH, #246). The controls above mutate the real pair, which is
+      # always in the one state where everything agrees; these build throwaway repositories in
+      # order to stage the states it can never be in — above all a web pin whose sourceCommit is
+      # NOT an ancestor of the server commit under test but whose canonical contract bytes are
+      # identical, which is what GitHub produces every time it squashes or rebases onto a branch
+      # with `required_linear_history`. That pin must fail under provenance schema 1 and pass only
+      # under the complete schema 2. No network, no remote ref, no repository setting.
+      - name: Synthetic-history controls for the content-addressed verifier
+        run: ./ci/tests/web-provenance-fixtures.test.sh
