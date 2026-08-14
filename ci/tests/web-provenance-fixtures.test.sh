@@ -216,7 +216,7 @@ expect() {
             printf '%s\n' "$out" | tail -3 >&2
             return
         fi
-        if ! printf '%s' "$out" | grep -qF "$fragment"; then
+        if ! grep -qF -- "$fragment" <<<"$out"; then
             error "control '$name' passed but did not report '$fragment'"
             printf '%s\n' "$out" | tail -5 >&2
             return
@@ -233,7 +233,7 @@ expect() {
             printf '%s\n' "$out" | tail -3 >&2
             return
         fi
-        if ! printf '%s' "$out" | grep -qF "$fragment"; then
+        if ! grep -qF -- "$fragment" <<<"$out"; then
             error "control '$name' failed for the wrong reason (expected to mention: $fragment)"
             printf '%s\n' "$out" | tail -3 >&2
             return
@@ -451,7 +451,7 @@ if [ "$rc" -eq 0 ]; then
     error "control '20 verification dependency unavailable' PASSED; a missing tool must never be a pass"
 elif [ "$rc" -ne 2 ]; then
     error "control '20 verification dependency unavailable' exited $rc, expected 2 (INDETERMINATE)"
-elif ! printf '%s' "$out" | grep -qF "is not on PATH"; then
+elif ! grep -qF -- "is not on PATH" <<<"$out"; then
     error "control '20 verification dependency unavailable' failed for the wrong reason"
     printf '%s\n' "$out" | tail -3 >&2
 else
