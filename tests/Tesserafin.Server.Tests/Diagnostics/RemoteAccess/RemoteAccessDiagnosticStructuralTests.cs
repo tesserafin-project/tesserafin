@@ -452,53 +452,6 @@ public sealed class RemoteAccessDiagnosticStructuralTests
     }
 
     [Fact]
-    public void NothingOutsideTheLayerReachesTheEngine()
-    {
-        // The engine is unreferenced on purpose. Nothing constructs it, nothing registers it and
-        // nothing starts it, so no route and no boot path can reach it in this slice.
-        var offenders = new List<string>();
-
-        foreach (var file in ServerSourceFilesOutsideTheLayer())
-        {
-            var code = WithoutCommentLines(File.ReadAllText(file));
-            foreach (var name in _layerTypeNames)
-            {
-                if (code.Contains(name, StringComparison.Ordinal))
-                {
-                    offenders.Add($"{Path.GetFileName(file)} ({name})");
-                }
-            }
-        }
-
-        Assert.True(
-            offenders.Count == 0,
-            $"These sources outside the diagnostic layer reference it: {string.Join(", ", offenders)}");
-    }
-
-    [Fact]
-    public void TheCanonicalContractNamesNothingFromTheLayer()
-    {
-        // The R1-A boundary, asserted against the contract itself rather than against intent.
-        // "EnableRemoteAccess" and its siblings predate this work and are not diagnostic types,
-        // which is why the layer's own type names are matched rather than the words "remote access".
-        var contract = Path.Combine(RepositoryRoot(), "openapi", "openapi.json");
-        Assert.True(File.Exists(contract), $"Expected the canonical contract at '{contract}'.");
-
-        var text = File.ReadAllText(contract);
-        Assert.NotEmpty(text);
-
-        var offenders = _layerTypeNames
-            .Concat(Enum.GetNames<RemoteAccessDiagnosticCode>().Where(n => n.Length > 6))
-            .Where(name => text.Contains(name, StringComparison.Ordinal))
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
-
-        Assert.True(
-            offenders.Count == 0,
-            $"openapi/openapi.json names the diagnostic layer, so the contract moved: {string.Join(", ", offenders)}");
-    }
-
-    [Fact]
     public void NothingInTheLayerCollectsOnItsOwn()
     {
         // No hosted service, no timer, no background loop. Collection happens when a caller asks
@@ -519,4 +472,17 @@ public sealed class RemoteAccessDiagnosticStructuralTests
             offenders.Count == 0,
             $"These diagnostic sources start work without a caller: {string.Join(", ", offenders)}");
     }
+
+    // ------------------------------------------------- the HTTP contract, now that it exists
+    //
+    // Two gates used to live here: NothingOutsideTheLayerReachesTheEngine and
+    // TheCanonicalContractNamesNothingFromTheLayer. They existed to forbid R1-P while R1-A shipped
+    // alone — nothing could reach the engine, and the contract could not name it. R1-P (#248) makes
+    // both false by design, so they are REPLACED rather than deleted, by narrower permanent gates in
+    // RemoteAccessApiBoundaryTests: the engine is still unreachable except from an explicit
+    // three-file allowlist, and the contract must name the dedicated wire models and never the
+    // internal namespace, report or snapshot.
+    //
+    // NothingInTheLayerBindsToHttp above is deliberately untouched. The API layer lives outside this
+    // directory precisely so the engine keeps its own permanent no-HTTP gate.
 }
