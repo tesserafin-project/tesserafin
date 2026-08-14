@@ -29,6 +29,13 @@ public sealed class RemoteAccessDiagnosticsRuntimeTests
     private const string Route = "/System/RemoteAccess/Diagnostics";
     private static readonly TimeSpan _budget = TimeSpan.FromSeconds(30);
 
+    // Small, separate and documented. The cancellation test must finish - pass or fail - inside
+    // the sum of these, which is an order of magnitude below any harness timeout.
+    private static readonly TimeSpan _enterBudget = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan _observeBudget = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan _exitBudget = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan _settleBudget = TimeSpan.FromSeconds(5);
+
     private static StringContent Body(string? hostname)
     {
         var hostnameJson = hostname is null ? "null" : $"\"{hostname}\"";
@@ -45,6 +52,23 @@ public sealed class RemoteAccessDiagnosticsRuntimeTests
         return client;
     }
 
+    /// <summary>
+    /// Cancelling the HTTP request must cancel the hostname lookup inside the collector.
+    /// </summary>
+    /// <remarks>
+    /// EVERY WAIT IS BOUNDED AND THE RESOLVER IS ALWAYS RELEASED. The first version of this test
+    /// polled a flag for thirty seconds and only released the resolver on the success path, so a
+    /// controller that propagated <c>CancellationToken.None</c> left the resolver parked forever:
+    /// the request stayed in flight, host shutdown waited for it, and a broken propagation
+    /// presented as a hung testhost rather than a failed assertion. A gate that can only fail by
+    /// hanging is not a gate.
+    ///
+    /// The structure below records four separate facts - whether the propagated token could cancel
+    /// at all, whether cancellation was observed, whether the resolver left, and whether the request
+    /// settled - releases the resolver in a finally regardless, and only then asserts. Under
+    /// <c>CancellationToken.None</c> the first two are false and the test fails on a named
+    /// assertion within seconds.
+    /// </remarks>
     [Fact]
     public async Task CancellingTheHttpRequestCancelsTheHostnameLookup()
     {
@@ -53,43 +77,65 @@ public sealed class RemoteAccessDiagnosticsRuntimeTests
         {
             var client = await ElevatedAsync(factory);
 
-            // The resolver will enter and then park until released — or until the caller's token
-            // fires, which is the property under test.
+            // The resolver parks here until the test releases it - which the test always does -
+            // or until the caller's token fires, which is the property under test.
             var gate = new SemaphoreSlim(0);
             factory.Resolver.HoldUntilReleased = gate;
 
             using var caller = new CancellationTokenSource();
             var inFlight = client.PostAsync(Route, Body("cancel-me.example"), caller.Token);
 
-            // 1-2. The request really did reach the resolver. Without this the rest would pass
-            //      vacuously against a request that never got that far.
-            Assert.True(
-                await factory.Resolver.Entered.WaitAsync(_budget, TestContext.Current.CancellationToken),
-                "the request never reached the resolver");
+            bool entered;
+            var tokenCanBeCanceled = false;
+            var observedCancellation = false;
+            bool resolverExited;
+            bool requestSettled;
 
-            // 3-4. Still pending, then the caller hangs up.
-            Assert.False(inFlight.IsCompleted);
-            await caller.CancelAsync();
-
-            // 5. The client sees the cancellation.
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => inFlight);
-
-            // ...and so did the resolver: the token was propagated all the way through
-            // CollectAsync into the lookup, rather than being accepted and dropped.
-            var deadline = DateTime.UtcNow + _budget;
-            while (!factory.Resolver.ObservedCancellation && DateTime.UtcNow < deadline)
+            try
             {
-                await Task.Delay(25, TestContext.Current.CancellationToken);
+                // 1. The request really did reach the resolver. Without this the rest would pass
+                //    vacuously against a request that never got that far.
+                entered = await factory.Resolver.Entered.WaitAsync(_enterBudget, TestContext.Current.CancellationToken);
+                Assert.True(entered, "the request never reached the resolver");
+
+                // 2. What the controller actually handed down. CancellationToken.None cannot cancel,
+                //    so this separates "propagated the request token" from "propagated nothing"
+                //    without waiting for a cancellation that may never arrive.
+                tokenCanBeCanceled = factory.Resolver.LastTokenCanBeCanceled;
+
+                // 3. Still pending, then the caller hangs up.
+                Assert.False(inFlight.IsCompleted);
+                await caller.CancelAsync();
+
+                // 4. Bounded, signal-driven: no polling, no elapsed-time assertion.
+                observedCancellation = await factory.Resolver.CancellationObserved.WaitAsync(
+                    _observeBudget, TestContext.Current.CancellationToken);
+            }
+            finally
+            {
+                // ALWAYS. A resolver left parked would hold the collector's semaphore and hang
+                // disposal, which is exactly how the previous version failed.
+                factory.Resolver.HoldUntilReleased = null;
+                gate.Release(16);
+
+                resolverExited = await factory.Resolver.Exited.WaitAsync(_exitBudget, TestContext.Current.CancellationToken);
+                requestSettled = await SettledAsync(inFlight, _settleBudget);
             }
 
-            Assert.True(factory.Resolver.ObservedCancellation, "the resolver never observed cancellation");
+            Assert.True(
+                tokenCanBeCanceled,
+                "the resolver received a token that can never be cancelled: the request's token was not propagated");
+            Assert.True(
+                observedCancellation,
+                "the resolver never observed cancellation: the caller hung up and the lookup did not find out");
+            Assert.True(resolverExited, "the resolver never left after being released");
+            Assert.True(requestSettled, "the cancelled request never settled");
 
-            // 7-8. Release the gate and prove the endpoint still works: a cancelled request must
-            //      not have left the collector's semaphore held, which would deadlock every
-            //      subsequent caller.
-            factory.Resolver.HoldUntilReleased = null;
-            gate.Release(10);
+            // 5. The client saw the cancellation too.
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => inFlight);
 
+            // 6. A cancelled request must not have left the collector's semaphore held, which would
+            //    deadlock every subsequent caller.
             using var after = await client.PostAsync(Route, Body(null), TestContext.Current.CancellationToken);
             Assert.Equal(HttpStatusCode.OK, after.StatusCode);
         }
@@ -97,6 +143,27 @@ public sealed class RemoteAccessDiagnosticsRuntimeTests
         {
             await factory.DisposeAsync().ConfigureAwait(true);
         }
+    }
+
+    /// <summary>Waits, with a bound, for a request to settle in any way at all.</summary>
+    private static async Task<bool> SettledAsync(Task<HttpResponseMessage> inFlight, TimeSpan budget)
+    {
+        var completed = await Task.WhenAny(inFlight, Task.Delay(budget)).ConfigureAwait(false);
+        if (!ReferenceEquals(completed, inFlight))
+        {
+            return false;
+        }
+
+        try
+        {
+            (await inFlight.ConfigureAwait(false)).Dispose();
+        }
+        catch (Exception)
+        {
+            // Cancelled or faulted both count as settled; which one it was is asserted separately.
+        }
+
+        return true;
     }
 
     [Fact]

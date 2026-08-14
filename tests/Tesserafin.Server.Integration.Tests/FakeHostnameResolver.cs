@@ -32,29 +32,60 @@ public sealed class FakeHostnameResolver : IHostnameResolver
     /// <summary>Gets a value indicating whether the resolver observed cancellation.</summary>
     public bool ObservedCancellation { get; private set; }
 
+    /// <summary>Gets a signal set when the resolver observes cancellation.</summary>
+    /// <remarks>
+    /// A SIGNAL, NOT A POLL. The cancellation test used to spin on <see cref="ObservedCancellation"/>
+    /// until a deadline; with a token that never cancels that spin simply burned its budget and left
+    /// the resolver parked, which is how a broken propagation turned into a hung testhost instead of
+    /// a failed assertion.
+    /// </remarks>
+    public SemaphoreSlim CancellationObserved { get; } = new(0);
+
+    /// <summary>Gets a signal set when the resolver leaves, however it leaves.</summary>
+    public SemaphoreSlim Exited { get; } = new(0);
+
+    /// <summary>Gets a value indicating whether the last token handed to the resolver could ever cancel.</summary>
+    /// <remarks>
+    /// <c>CancellationToken.None.CanBeCanceled</c> is false, so this alone separates "the controller
+    /// propagated the request's token" from "the controller propagated nothing" - without waiting
+    /// for a cancellation that, in the broken case, can never arrive.
+    /// </remarks>
+    public bool LastTokenCanBeCanceled { get; private set; }
+
     public IReadOnlyList<IPAddress> Answer { get; set; } = new[] { IPAddress.Parse("203.0.113.10") };
 
     public async Task<DnsObservation> ResolveAsync(string normalizedHostname, CancellationToken cancellationToken)
     {
         _requested.Add(normalizedHostname);
+        LastTokenCanBeCanceled = cancellationToken.CanBeCanceled;
         Entered.Release();
 
-        if (HoldUntilReleased is not null)
+        try
         {
-            try
+            if (HoldUntilReleased is not null)
             {
-                await HoldUntilReleased.WaitAsync(cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    await HoldUntilReleased.WaitAsync(cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    // Recorded rather than swallowed: "the caller went away and the resolver found out"
+                    // is the property the cancellation test exists to prove.
+                    ObservedCancellation = true;
+                    CancellationObserved.Release();
+                    throw;
+                }
             }
-            catch (OperationCanceledException)
-            {
-                // Recorded rather than swallowed: "the caller went away and the resolver found out"
-                // is the property the cancellation test exists to prove.
-                ObservedCancellation = true;
-                throw;
-            }
-        }
 
-        cancellationToken.ThrowIfCancellationRequested();
-        return new DnsObservation(normalizedHostname, DnsLookupOutcome.Answered, Answer);
+            cancellationToken.ThrowIfCancellationRequested();
+            return new DnsObservation(normalizedHostname, DnsLookupOutcome.Answered, Answer);
+        }
+        finally
+        {
+            // However this call leaves - answered, cancelled or released by the test - the test can
+            // wait for the exit with a bound instead of guessing.
+            Exited.Release();
+        }
     }
 }

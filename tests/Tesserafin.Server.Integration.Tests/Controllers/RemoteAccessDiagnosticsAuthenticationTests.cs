@@ -65,9 +65,13 @@ public sealed class RemoteAccessDiagnosticsAuthenticationTests
     public async Task FirstTimeSetupGrant_DoesNotSatisfyRequiresElevation()
     {
         // Startup is deliberately left INCOMPLETE, so the pre-onboarding grant is live. It exists
-        // to let the wizard configure a server that has no administrator yet — it satisfies the
-        // FirstTimeSetup* policies and nothing else. If it ever reached RequiresElevation, an
-        // un-onboarded server would hand its network posture to an anonymous caller.
+        // to let the wizard configure a server that has no administrator yet.
+        //
+        // STRUCTURAL PROOF, NOT A POLICY DISCRIMINATOR. FirstTimeSetupHandler applies that grant
+        // only to endpoints marked [FirstTimeSetupEndpoint] and only to tokenless requests, so an
+        // anonymous caller is refused here whatever FirstTimeSetup* policy the endpoint were given.
+        // That is the property this case pins - the grant provably cannot leak to an unmarked
+        // endpoint - and it is why the discriminating case below uses a de-elevated user instead.
         var factory = new RemoteAccessDiagnosticsApplicationFactory();
         try
         {
@@ -157,6 +161,55 @@ public sealed class RemoteAccessDiagnosticsAuthenticationTests
             // only requires an authenticated user, which is what separates 403 from 401 here.
             using var stillAuthenticated = await client.GetAsync("/Users/Me", TestContext.Current.CancellationToken);
             Assert.Equal(HttpStatusCode.OK, stillAuthenticated.StatusCode);
+        }
+        finally
+        {
+            await factory.DisposeAsync().ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    public async Task FirstTimeSetupOrDefaultGrant_DoesNotReachTheDiagnostics()
+    {
+        // THE DISCRIMINATOR. A caller that genuinely satisfies a FirstTimeSetup* policy and just as
+        // genuinely fails RequiresElevation, proven in that order against the real pipeline.
+        //
+        // WHY NOT THE ANONYMOUS PRE-ONBOARDING GRANT. FirstTimeSetupHandler only applies that grant
+        // when the endpoint carries [FirstTimeSetupEndpoint] AND the request presented no token.
+        // Diagnostics carries no such marking and must not acquire one, so an anonymous caller is
+        // refused whichever FirstTimeSetup* policy the endpoint were given - which makes an
+        // anonymous request unable to tell the two policies apart.
+        //
+        // A de-elevated user can. FirstTimeSetupRequirement(requireAdmin: false) - the requirement
+        // behind Policies.FirstTimeSetupOrDefault - succeeds for any caller in the User role, while
+        // RequiresElevation is a claims policy that demands the Administrator role outright.
+        var factory = new RemoteAccessDiagnosticsApplicationFactory();
+        try
+        {
+            using var client = factory.CreateClient();
+            client.DefaultRequestHeaders.AddAuthHeader(await factory.AdminTokenAsync(client));
+
+            var userManager = factory.Services.GetRequiredService<IUserManager>();
+            var user = userManager.GetUsers().First();
+            user.SetPermission(PermissionKind.IsAdministrator, false);
+            user.SetPermission(PermissionKind.IsDisabled, false);
+            await userManager.UpdateUserAsync(user);
+
+            // GRANT PROOF, FIRST AND SEPARATELY. LocalizationController is real production code
+            // carrying [Authorize(Policy = Policies.FirstTimeSetupOrDefault)]; this caller answers
+            // there, so the grant is live for it. The policy is not re-implemented here - the test
+            // asks the real one.
+            using var granted = await client.GetAsync("/Localization/Options", TestContext.Current.CancellationToken);
+            Assert.Equal(HttpStatusCode.OK, granted.StatusCode);
+
+            var collectedBefore = factory.Addresses.CallCount;
+
+            using var response = await client.PostAsync(Route, Body(), TestContext.Current.CancellationToken);
+
+            // The same caller, the same host, one request apart: refused here, and never collected.
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+            Assert.Equal(collectedBefore, factory.Addresses.CallCount);
+            Assert.Equal(0, factory.Resolver.CallCount);
         }
         finally
         {
