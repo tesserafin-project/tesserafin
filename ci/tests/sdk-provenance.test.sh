@@ -106,6 +106,32 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# run_positive_control <name> <expected message fragment> [verifier args...]
+#
+# Most controls here prove the gate says no. Since C4-LH (#246) one property is proved by it
+# saying YES: a web pin whose sourceCommit is not an ancestor of the commit under test, but whose
+# canonical contract bytes are identical, is exactly what a squash or rebase merge produces and
+# must be ACCEPTED under provenance schema 2. A gate that rejected it would put the repository
+# back in the state where a contract change cannot be landed green at all.
+run_positive_control() {
+    local name="$1" fragment="$2"; shift 2
+    local out rc
+    out=$("$VERIFIER" --workdir "$CONTROLS_DIR/wd-$name" "$@" 2>&1)
+    rc=$?
+    rm -rf "$CONTROLS_DIR/wd-$name"
+    if [ "$rc" -ne 0 ]; then
+        error "positive control '$name' was REJECTED (exit $rc); it must be accepted"
+        printf '%s\n' "$out" | tail -5 >&2
+        failures=$((failures + 1)); return
+    fi
+    if ! printf '%s' "$out" | grep -qF "$fragment"; then
+        error "positive control '$name' passed but did not report '$fragment'"
+        printf '%s\n' "$out" | tail -5 >&2
+        failures=$((failures + 1)); return
+    fi
+    note "control '$name': accepted as expected ($fragment)"
+}
+
 # run_control <name> <expected exit> <expected message fragment> [verifier args...]
 run_control() {
     local name="$1" expected_rc="$2" fragment="$3"; shift 3
@@ -135,6 +161,11 @@ run_control() {
 # not an immutable pin, and a lock naming a repository nobody can read is an
 # access failure, which must be red and never skipped.
 # --------------------------------------------------------------------------
+
+# The web pull request head that #246 itself was squashed away from — used by
+# control 14 below.
+jq --arg c "45d0b3e86dc2c7587bd4be012b75c712e300f915" '.webCommit = $c' "$REAL_LOCK" \
+    > "$CONTROLS_DIR/prhead.json"
 
 # 1. Abbreviated commit — an abbreviated pin is not immutable.
 jq --arg c "${WEB_COMMIT:0:7}" '.webCommit = $c' "$REAL_LOCK" > "$CONTROLS_DIR/abbrev.json"
@@ -230,12 +261,23 @@ else
     failures=$((failures + 1))
 fi
 
-# 12. A web sourceCommit that is NOT an ancestor of the commit under test.
+# 12. A web sourceCommit that is NOT an ancestor of the commit under test —
+#     which, since #246, the gate must ACCEPT rather than reject.
+#
 #     Built without touching the web repository or the contract: a commit that
 #     carries the analysed commit's TREE but hangs off the repository's root
 #     commit, so nothing on master's history can be an ancestor of it. The tree
-#     is identical, so neither the contract-lock assertion nor the version
-#     assertion can fire first — only the ancestry one.
+#     is identical, so the canonical contract is byte-identical at both ends and
+#     every content proof holds; the ONLY thing that differs is ancestry.
+#
+#     That is precisely the shape a squash or rebase merge produces on a branch
+#     with `required_linear_history`, and the real pair lock now names a
+#     provenance-schema-2 web commit, so the correct outcome is
+#     CONTENT_EQUIVALENT_NON_ANCESTOR and exit 0. The schema-1 behaviour this
+#     control used to assert is not gone: it is proved on both a simulated-rebase
+#     and a simulated-squash fixture in ci/tests/web-provenance-fixtures.test.sh
+#     (controls 04 and 04b), against deterministic local histories rather than
+#     against whatever the real pin happens to be today.
 ROOT_COMMIT="$(git -C "$REPO_ROOT" rev-list --max-parents=0 "$SERVER_COMMIT" 2>/dev/null | tail -1)"
 if [ -n "$ROOT_COMMIT" ] && scratch_worktree "$SERVER_COMMIT" nonancestral; then
     wt="$WT_PATH"
@@ -246,16 +288,33 @@ if [ -n "$ROOT_COMMIT" ] && scratch_worktree "$SERVER_COMMIT" nonancestral; then
         git -C "$REPO_ROOT" commit-tree "$SERVER_COMMIT^{tree}" -p "$ROOT_COMMIT" \
             -m 'control: the analysed tree on a sibling history' 2>/dev/null)"
     if [ -n "$nonanc_commit" ]; then
-        run_control non-ancestral-source-commit 1 "is NOT an ancestor of" \
+        run_positive_control content-equivalent-non-ancestor \
+            "ancestry=CONTENT_EQUIVALENT_NON_ANCESTOR" \
             --server-repo "$wt" --lock "$REAL_LOCK" --server-commit "$nonanc_commit"
     else
-        error "control 'non-ancestral-source-commit' could not craft its synthetic commit"
+        error "control 'content-equivalent-non-ancestor' could not craft its synthetic commit"
         failures=$((failures + 1))
     fi
 else
-    error "control 'non-ancestral-source-commit' could not resolve a root commit"
+    error "control 'content-equivalent-non-ancestor' could not resolve a root commit"
     failures=$((failures + 1))
 fi
+
+# 14. A pair lock naming a PULL REQUEST HEAD instead of the merge it became.
+#
+#     This is the failure the merged-commit check exists for, and it is not
+#     hypothetical: `45d0b3e86dc2c7587bd4be012b75c712e300f915` is the head of
+#     tesserafin-web#151, the pull request that introduced provenance schema 2.
+#     It is a real, resolvable commit that checks out perfectly and whose every
+#     content proof would pass — its tree is byte-identical to the squash merge
+#     that landed it. The only thing wrong with it is that squashing left it off
+#     `main`, so it names a commit no released web build was ever built from.
+#
+#     A commit SHA is immutable; being MERGED is not a property of the SHA, and
+#     nothing else in this gate would have noticed.
+run_control pair-lock-names-a-pull-request-head 1 "is not an ancestor of" \
+    --server-repo "$REPO_ROOT" --lock "$CONTROLS_DIR/prhead.json" \
+    --server-commit "$SERVER_COMMIT"
 
 # --------------------------------------------------------------------------
 # Group 4 — the verdict vocabulary. "The question was not answered" (2) must be
