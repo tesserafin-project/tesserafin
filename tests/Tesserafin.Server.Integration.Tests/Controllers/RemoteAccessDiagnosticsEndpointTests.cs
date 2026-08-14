@@ -160,6 +160,56 @@ public sealed class RemoteAccessDiagnosticsEndpointTests : IClassFixture<RemoteA
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
+    [Theory]
+    [InlineData("""{"IPv4Policy": 0, "IPv6Policy": "Unspecified"}""")]
+    [InlineData("""{"IPv4Policy": 1, "IPv6Policy": "Unspecified"}""")]
+    [InlineData("""{"IPv4Policy": 2, "IPv6Policy": "Unspecified"}""")]
+    [InlineData("""{"IPv4Policy": "Unspecified", "IPv6Policy": 0}""")]
+    [InlineData("""{"IPv4Policy": "Unspecified", "IPv6Policy": 1}""")]
+    [InlineData("""{"IPv4Policy": "Unspecified", "IPv6Policy": 2}""")]
+    public async Task ANumericFamilyPolicyIsRejectedAndNeverCollects(string body)
+    {
+        // THE CONTRACT PUBLISHES NAMES, SO THE RUNTIME MUST REQUIRE NAMES. Every value here is a
+        // VALID in-range ordinal - 0, 1 and 2 are exactly Unspecified, DoNotPublish and Publish -
+        // which is what makes this a wire-vocabulary test rather than a range test: accepting them
+        // would mean the endpoint has a second, unpublished vocabulary in which "1" means "do not
+        // publish" and a caller reading the contract could never know it.
+        //
+        // Raw JSON on purpose. A typed client would serialise the enum by name and never put a
+        // number on the wire, so the test would prove nothing about what the server accepts.
+        var client = await ElevatedAdminAsync();
+        var addressesBefore = _factory.Addresses.CallCount;
+        var resolverBefore = _factory.Resolver.CallCount;
+
+        using var response = await client.PostAsync(
+            Route, new StringContent(body, Encoding.UTF8, "application/json"), TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(addressesBefore, _factory.Addresses.CallCount);
+        Assert.Equal(resolverBefore, _factory.Resolver.CallCount);
+    }
+
+    [Theory]
+    [InlineData("Unspecified")]
+    [InlineData("DoNotPublish")]
+    [InlineData("Publish")]
+    public async Task EveryPublishedFamilyPolicyNameIsStillAccepted(string name)
+    {
+        // The other half of the same boundary: rejecting numbers must not narrow the published
+        // vocabulary. All three names keep working, so a failure of the test above is specific.
+        var client = await ElevatedAdminAsync();
+
+        using var response = await client.PostAsync(
+            Route,
+            new StringContent(
+                $$"""{"Hostname": null, "IPv4Policy": "{{name}}", "IPv6Policy": "{{name}}"}""",
+                Encoding.UTF8,
+                "application/json"),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
     [Fact]
     public async Task TheResponseIsJsonAndIsNeverStored()
     {
