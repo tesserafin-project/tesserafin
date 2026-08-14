@@ -36,8 +36,10 @@ using Tesserafin.Data.Enums;
 using Tesserafin.Database.Implementations.Enums;
 using Tesserafin.Extensions.Json;
 using Tesserafin.Model.Entities;
+using Tesserafin.Server.Api.RemoteAccess;
 using Tesserafin.Server.Configuration;
 using Tesserafin.Server.Core;
+using Tesserafin.Server.Diagnostics.RemoteAccess;
 using Tesserafin.Server.Filters;
 using AuthenticationSchemes = Tesserafin.Api.Constants.AuthenticationSchemes;
 
@@ -145,6 +147,15 @@ namespace Tesserafin.Server.Extensions
                 // Clear app parts to avoid other assemblies being picked up
                 .ConfigureApplicationPartManager(a => a.ApplicationParts.Clear())
                 .AddApplicationPart(typeof(StartupController).Assembly)
+
+                // R1-P (#248): the remote-access diagnostics controller lives in THIS assembly,
+                // not in Tesserafin.Api. The reference direction is
+                // Tesserafin.Server -> Tesserafin.Server.Core -> Tesserafin.Api, and the R1-A
+                // engine it calls lives here, so a controller in Tesserafin.Api would have to
+                // reference back and close a cycle. Registering this assembly as an application
+                // part is the same mechanism the plugin loop below already uses, and it is
+                // required because ApplicationParts.Clear() above removes everything.
+                .AddApplicationPart(typeof(RemoteAccessDiagnosticsController).Assembly)
                 .AddJsonOptions(options =>
                 {
                     // Update all properties that are set in JsonDefaults
@@ -172,6 +183,43 @@ namespace Tesserafin.Server.Extensions
             }
 
             return mvcBuilder.AddControllersAsServices();
+        }
+
+        /// <summary>
+        /// Registers the R1-A remote-access diagnostic engine and its production observation
+        /// sources (R1-P, #248).
+        /// </summary>
+        /// <param name="serviceCollection">The service collection.</param>
+        /// <returns>The updated service collection.</returns>
+        /// <remarks>
+        /// THE COLLECTOR IS A SINGLETON, AND THAT IS THE POINT. Its one-at-a-time invariant is a
+        /// <c>SemaphoreSlim</c> field on the instance, so a scoped or transient registration would
+        /// hand every request its own semaphore and serialise nothing — the invariant would still
+        /// be there in the source and mean nothing at runtime. Collection reads interface tables,
+        /// listening sockets and configuration; running several at once is exactly what the
+        /// invariant exists to prevent.
+        ///
+        /// A singleton is legitimate here because every dependency below is itself a singleton:
+        /// the two system sources are stateless, the resolver holds only a timeout, and
+        /// <see cref="ServerNetworkPostureSource"/> takes configuration and network managers that
+        /// are already registered as singletons. Nothing scoped is captured.
+        /// </remarks>
+        public static IServiceCollection AddRemoteAccessDiagnostics(this IServiceCollection serviceCollection)
+        {
+            serviceCollection.AddSingleton<ILocalAddressSource, SystemLocalAddressSource>();
+            serviceCollection.AddSingleton<ITcpListenerSource, SystemTcpListenerSource>();
+
+            // The single bounded lookup R1-A defines. The timeout is the engine's own budget, not
+            // a request timeout: the caller's cancellation token is propagated separately and
+            // stops the lookup earlier if the request goes away.
+            serviceCollection.AddSingleton<IHostnameResolver>(
+                _ => new SystemHostnameResolver(TimeSpan.FromSeconds(5)));
+
+            serviceCollection.AddSingleton<INetworkPostureSource, ServerNetworkPostureSource>();
+            serviceCollection.TryAddSingleton(TimeProvider.System);
+            serviceCollection.AddSingleton<RemoteAccessDiagnosticCollector>();
+
+            return serviceCollection;
         }
 
         internal static void ConfigureForwardHeaders(NetworkConfiguration config, ForwardedHeadersOptions options)

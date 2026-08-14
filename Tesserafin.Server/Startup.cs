@@ -88,6 +88,11 @@ namespace Tesserafin.Server
 
             services.AddTesserafinApiAuthorization();
 
+            // R1-P (#248): the R1-A remote-access diagnostic engine and its production sources.
+            // Registered here rather than inside AddTesserafinApi so that the HTTP surface and the
+            // engine's own composition stay separable in review.
+            services.AddRemoteAccessDiagnostics();
+
             var productHeader = new ProductInfoHeaderValue(
                 _serverApplicationHost.Name.Replace(' ', '-'),
                 _serverApplicationHost.ApplicationVersionString);
