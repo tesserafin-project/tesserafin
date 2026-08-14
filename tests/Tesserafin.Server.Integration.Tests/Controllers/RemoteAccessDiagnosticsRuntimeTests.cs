@@ -69,6 +69,7 @@ public sealed class RemoteAccessDiagnosticsRuntimeTests
     /// <c>CancellationToken.None</c> the first two are false and the test fails on a named
     /// assertion within seconds.
     /// </remarks>
+    /// <returns>A task that completes when the case has finished.</returns>
     [Fact]
     public async Task CancellingTheHttpRequestCancelsTheHostnameLookup()
     {

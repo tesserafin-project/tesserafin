@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 
 namespace Tesserafin.Server.Api.RemoteAccess.Models;
 
@@ -14,6 +15,11 @@ namespace Tesserafin.Server.Api.RemoteAccess.Models;
 /// The hostname travels in the body and nowhere else. It is not a route value and not a query
 /// parameter, because a hostname in a URL is written to access logs, proxy logs and browser
 /// history by parties that never agreed to hold it.
+///
+/// Both family policies carry <see cref="NamedRemoteAccessPublicationPolicyConverter"/> so that the
+/// runtime accepts exactly the vocabulary the contract publishes - names, never ordinals. The
+/// converter is attached here rather than configured globally: the global JSON options belong to
+/// every API in the server, and this endpoint does not get to change them.
 /// </remarks>
 public sealed class RemoteAccessDiagnosticsRequestDto
 {
@@ -36,11 +42,13 @@ public sealed class RemoteAccessDiagnosticsRequestDto
     /// Gets or sets the caller's intention for IPv4. Required.
     /// </summary>
     [Required]
+    [JsonConverter(typeof(NamedRemoteAccessPublicationPolicyConverter))]
     public RemoteAccessPublicationPolicy? IPv4Policy { get; set; }
 
     /// <summary>
     /// Gets or sets the caller's intention for IPv6. Required.
     /// </summary>
     [Required]
+    [JsonConverter(typeof(NamedRemoteAccessPublicationPolicyConverter))]
     public RemoteAccessPublicationPolicy? IPv6Policy { get; set; }
 }
