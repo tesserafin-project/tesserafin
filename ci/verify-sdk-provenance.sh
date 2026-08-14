@@ -13,6 +13,31 @@
 #   the canonical contract at the commit the web pin NAMES is byte-identical to
 #   the canonical contract at the server commit being analysed.
 #
+# PROVENANCE SCHEMA 2 (C4-LH, #246). This gate used to additionally require the
+# web pin's `sourceCommit` to be a git ANCESTOR of the commit under test. On a
+# branch with `required_linear_history` that is unsatisfiable for a contract
+# change: before the merge the only commit carrying the new canonical bytes is on
+# the pull request branch, and every merge method such a branch permits rewrites
+# its SHA, so the pin is non-ancestral the moment it lands. The protocol demanded
+# a state GitHub cannot produce.
+#
+# Schema 2 replaces ancestry with CONTENT. The web generator consumes exactly one
+# thing from this repository — the canonical `openapi/openapi.json` bytes — so two
+# server commits carrying byte-identical locked canonical contracts produce a
+# byte-identical transport boundary regardless of commit identity. `sourceCommit`
+# remains mandatory audit evidence: it must exist, resolve here, be a full SHA,
+# and both its canonical bytes and its contract lock must match.
+#
+# This is not the old rule with a hole in it. A schema-2 pin proves strictly more
+# than a schema-1 pin ever did — the recorded canonical digest, the source
+# repository, the contract lock at the pinned commit, the transform pipeline
+# version, the generator identity and a manifest of every generated file, all
+# recomputed from bytes rather than read as assertions. Schema 1 keeps its
+# ancestry requirement exactly as written; a schema-1 non-ancestor still fails.
+#
+# Those per-byte proofs live in `ci/verify-web-provenance.sh`, which this script
+# calls on the checkout it cloned. See the header there for why they are split.
+#
 # NO CROSS-REPOSITORY CREDENTIAL. The sibling repository is cloned over
 # anonymous HTTPS — no PAT, no deploy key, no GitHub App, no custom secret, and
 # not even $GITHUB_TOKEN. Both repositories are public; if that ever stops being
@@ -130,11 +155,37 @@ if ! GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/true GIT_CONFIG_GLOBAL=/dev/null \
 fi
 ok "cloned $CLONE_URL anonymously (no PAT, no deploy key, no App, no GITHUB_TOKEN)"
 
+# Captured BEFORE the checkout below detaches HEAD: the branch a fresh clone lands on is the
+# repository's default branch, and is the fallback for the merged-commit check further down.
+WEB_CLONED_BRANCH="$(git -C "$WEB" rev-parse --abbrev-ref HEAD 2>/dev/null)"
+[ "$WEB_CLONED_BRANCH" = "HEAD" ] && WEB_CLONED_BRANCH=""
+
 git -C "$WEB" cat-file -e "$WEB_COMMIT^{commit}" 2>/dev/null \
     || die_fail "webCommit $WEB_COMMIT does not exist in $WEB_REPOSITORY"
 git -C "$WEB" -c advice.detachedHead=false checkout --quiet "$WEB_COMMIT" \
     || die_fail "cannot check out $WEB_COMMIT in the web clone"
 ok "web checkout at $WEB_COMMIT"
+
+# The locked commit must be MERGED, not merely reachable. A pull request head is a real commit
+# that resolves and checks out perfectly, so every content proof below would pass against one —
+# and then the web repository squashes or rebases the branch, the head stops being on `main`, and
+# the pair is locked to a commit no released web build was ever built from. Requiring the lock to
+# name a commit on the web default branch is what makes "final merge commit" mean something.
+#
+# Read from `origin/HEAD` rather than a hard-coded name, so a default-branch rename is a clone-time
+# fact rather than a silent skip. The branch the clone checked out is the same answer by a
+# different route and is used only if `origin/HEAD` is somehow absent — never a hard-coded "main",
+# because a wrong branch name here would compare against nothing and pass everything.
+WEB_DEFAULT="$(git -C "$WEB" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null)"
+if [ -z "$WEB_DEFAULT" ] && [ -n "$WEB_CLONED_BRANCH" ]; then
+    WEB_DEFAULT="origin/$WEB_CLONED_BRANCH"
+fi
+[ -n "$WEB_DEFAULT" ] || die_indeterminate "cannot resolve the web repository's default branch"
+git -C "$WEB" rev-parse --verify --quiet "refs/remotes/$WEB_DEFAULT^{commit}" >/dev/null \
+    || die_indeterminate "the web repository's default branch $WEB_DEFAULT does not resolve in the clone"
+git -C "$WEB" merge-base --is-ancestor "$WEB_COMMIT" "refs/remotes/$WEB_DEFAULT" 2>/dev/null \
+    || die_fail "webCommit $WEB_COMMIT is not an ancestor of $WEB_DEFAULT — the lock names a commit that is not merged (a pull request head, or a branch that was squashed away). Pin the final merge commit."
+ok "webCommit is merged into $WEB_DEFAULT"
 
 # --------------------------------------------------------------------------
 # 3. Server contract against its own lock.
@@ -143,7 +194,6 @@ CONTRACT_LOCK="$SERVER_REPO/openapi/contract.lock.json"
 [ -f "$CONTRACT_LOCK" ] || die_fail "openapi/contract.lock.json is missing from the server checkout"
 LOCKED_SPEC_PATH="$(jq -r '.spec // "openapi/openapi.json"' "$CONTRACT_LOCK")"
 LOCKED_SHA="$(jq -r '.sha256 // empty' "$CONTRACT_LOCK")"
-LOCKED_VERSION="$(jq -r '.version // empty' "$CONTRACT_LOCK")"
 [ -n "$LOCKED_SHA" ] || die_fail "openapi/contract.lock.json records no sha256"
 
 ACTUAL_CONTRACT_SHA="$(git -C "$SERVER_REPO" show "$SERVER_COMMIT:$LOCKED_SPEC_PATH" 2>/dev/null | sha256sum | cut -d' ' -f1)"
@@ -153,63 +203,63 @@ ACTUAL_CONTRACT_SHA="$(git -C "$SERVER_REPO" show "$SERVER_COMMIT:$LOCKED_SPEC_P
 ok "server contract matches its lock (sha256 $LOCKED_SHA)"
 
 # --------------------------------------------------------------------------
-# 4. The web pin's provenance, read from the web checkout.
-# --------------------------------------------------------------------------
-VERSION_JSON="$WEB/src/lib/tesserafin-sdk/spec/version.json"
-PINNED_SPEC="$WEB/src/lib/tesserafin-sdk/spec/openapi.json"
-GENERATED_DIR="$WEB/src/lib/tesserafin-sdk/generated"
-[ -f "$VERSION_JSON" ] || die_fail "web checkout has no src/lib/tesserafin-sdk/spec/version.json"
-[ -f "$PINNED_SPEC" ]  || die_fail "web checkout has no src/lib/tesserafin-sdk/spec/openapi.json"
-[ -d "$GENERATED_DIR" ] || die_fail "web checkout has no src/lib/tesserafin-sdk/generated/ tree"
-jq -e . "$VERSION_JSON" >/dev/null 2>&1 || die_fail "web spec/version.json is not valid JSON"
-
-SOURCE_COMMIT="$(jq -r '.sourceCommit // empty' "$VERSION_JSON")"
-SPEC_SHA="$(jq -r '.specSha256 // empty' "$VERSION_JSON")"
-PIN_VERSION="$(jq -r '.version // empty' "$VERSION_JSON")"
-
-for field in sourceCommit specSha256 version; do
-    jq -e --arg f "$field" 'has($f) and (.[$f] != null)' "$VERSION_JSON" >/dev/null \
-        || die_fail "web spec/version.json records no $field"
-done
-case "$SOURCE_COMMIT" in
-    *[!0-9a-f]* | "") die_fail "web sourceCommit '$SOURCE_COMMIT' is not lowercase hexadecimal" ;;
-esac
-[ "${#SOURCE_COMMIT}" -eq 40 ] \
-    || die_fail "web sourceCommit '$SOURCE_COMMIT' is ${#SOURCE_COMMIT} characters; an abbreviated commit cannot be resolved unambiguously"
-
-ACTUAL_SPEC_SHA="$(sha256sum "$PINNED_SPEC" | cut -d' ' -f1)"
-[ "$ACTUAL_SPEC_SHA" = "$SPEC_SHA" ] \
-    || die_fail "web pinned spec is sha256 $ACTUAL_SPEC_SHA but version.json records $SPEC_SHA — the pinned spec was edited by hand"
-ok "web pin: sourceCommit $SOURCE_COMMIT, specSha256 verified against the bytes on disk"
-
-if [ -n "$LOCKED_VERSION" ] && [ "$PIN_VERSION" != "$LOCKED_VERSION" ]; then
-    die_fail "web version.json records version '$PIN_VERSION' but the server contract lock records '$LOCKED_VERSION'"
-fi
-ok "version.json version '$PIN_VERSION' agrees with the server contract lock"
-
-# --------------------------------------------------------------------------
-# 5. THE MISSING PROPERTY. The pin must resolve in the server repository, be an
-#    ancestor of the commit under test, and name a commit whose canonical
-#    contract is byte-identical to the one under test.
+# 4-5. Every property that is a function of the two checkouts' BYTES, delegated
+#      to ci/verify-web-provenance.sh.
 #
-#    Being BEHIND is not by itself a failure: pinning an older contract on
-#    purpose is legitimate, and moving the pin merely because it is behind would
-#    be a change with no provenance reason. Being behind a contract that has
-#    MOVED is a failure.
+# WHY DELEGATED. Those proofs have to be exercised as negative controls against
+# deliberately broken web checkouts — a hand-edited generated file, an injected
+# one, a mismatched digest, a pin from a different repository. Doing that here
+# would mean giving THIS script a way to be pointed at a web checkout somebody
+# hands it, and the reason this script is worth anything is that it cannot be
+# aimed anywhere: it derives the web commit from the lock and clones it itself.
+# So the aiming stays here and the proofs move next door, where the fixture
+# suite can call them on synthetic repositories directly. Neither half can be
+# weakened without the other noticing.
+#
+# WHAT IT PROVES, in both schemas: the pinned mirror matches its own recorded
+# digest; `sourceCommit` is a full SHA that resolves in this server repository;
+# the canonical contract there is byte-identical to the one under test; the
+# recorded spec version agrees with the contract lock.
+#
+# Schema 1 additionally requires `sourceCommit` to be an ANCESTOR of the commit
+# under test, exactly as this script always did.
+#
+# Schema 2 replaces that ancestry requirement with content, and pays for it: the
+# recorded `canonicalSpecSha256` must equal the canonical digest at BOTH commits,
+# the contract lock at the pinned commit must name the same bytes, the metadata
+# key set is closed, the source repository is checked, the transform pipeline
+# version must be one this gate knows, the generator identity must match the web
+# checkout's own pins, and every file under `generated/` must match a manifest
+# recomputed here from the bytes on disk. Ancestry is still computed and is
+# reported as ANCESTOR or CONTENT_EQUIVALENT_NON_ANCESTOR; the label never
+# shortens the list of proofs.
 # --------------------------------------------------------------------------
-git -C "$SERVER_REPO" cat-file -e "$SOURCE_COMMIT^{commit}" 2>/dev/null \
-    || die_fail "web sourceCommit $SOURCE_COMMIT does not resolve in the server repository"
-git -C "$SERVER_REPO" merge-base --is-ancestor "$SOURCE_COMMIT" "$SERVER_COMMIT" 2>/dev/null \
-    || die_fail "web sourceCommit $SOURCE_COMMIT is NOT an ancestor of $SERVER_COMMIT — the pin names a commit that is not on this history"
+INNER="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/verify-web-provenance.sh"
+[ -x "$INNER" ] || die_indeterminate "ci/verify-web-provenance.sh is missing or not executable"
 
-PIN_CONTRACT_SHA="$(git -C "$SERVER_REPO" show "$SOURCE_COMMIT:$LOCKED_SPEC_PATH" 2>/dev/null | sha256sum | cut -d' ' -f1)"
-[ -n "$PIN_CONTRACT_SHA" ] || die_fail "cannot read $LOCKED_SPEC_PATH at the pinned commit $SOURCE_COMMIT"
-if [ "$PIN_CONTRACT_SHA" != "$ACTUAL_CONTRACT_SHA" ]; then
-    BEHIND="$(git -C "$SERVER_REPO" rev-list --count "$SOURCE_COMMIT..$SERVER_COMMIT" 2>/dev/null || echo '?')"
-    die_fail "the canonical contract MOVED after the web pin: sha256 $PIN_CONTRACT_SHA at $SOURCE_COMMIT versus $ACTUAL_CONTRACT_SHA at $SERVER_COMMIT ($BEHIND commits apart). Regenerate the web SDK against the current contract and re-pin; do not move the lock without regenerating."
-fi
+set +e
+"$INNER" --web "$WEB" --server-repo "$SERVER_REPO" --server-commit "$SERVER_COMMIT" \
+    | tee "$WORKDIR/web-provenance.log"
+INNER_RC="${PIPESTATUS[0]}"
+set -e
+case "$INNER_RC" in
+    0) : ;;
+    2) die_indeterminate "ci/verify-web-provenance.sh could not answer the question (exit 2)" ;;
+    *) die_fail "ci/verify-web-provenance.sh rejected this pair (exit $INNER_RC) — see the output above" ;;
+esac
+
+RESULT_LINE="$(grep -m1 '^web-provenance: result ' "$WORKDIR/web-provenance.log")"
+SCHEMA="$(printf '%s' "$RESULT_LINE" | sed -n 's/.*schema=\([^ ]*\).*/\1/p')"
+ANCESTRY="$(printf '%s' "$RESULT_LINE" | sed -n 's/.*ancestry=\([^ ]*\).*/\1/p')"
+[ -n "$SCHEMA" ] && [ -n "$ANCESTRY" ] \
+    || die_indeterminate "ci/verify-web-provenance.sh reported no machine-readable result line"
+
+VERSION_JSON="$WEB/src/lib/tesserafin-sdk/spec/version.json"
+GENERATED_DIR="$WEB/src/lib/tesserafin-sdk/generated"
+SOURCE_COMMIT="$(jq -r '.sourceCommit' "$VERSION_JSON")"
+SPEC_SHA="$(jq -r '.specSha256' "$VERSION_JSON")"
 BEHIND="$(git -C "$SERVER_REPO" rev-list --count "$SOURCE_COMMIT..$SERVER_COMMIT" 2>/dev/null || echo '?')"
-ok "canonical contract is byte-identical at the pin and at the commit under test ($BEHIND commits apart, contract unchanged)"
+ok "web provenance verified under schema $SCHEMA (ancestry: $ANCESTRY, $BEHIND commits apart)"
 
 # --------------------------------------------------------------------------
 # 6. Transform equality, SDK regeneration and generated-tree drift, executed by
@@ -243,6 +293,8 @@ GENERATED_COUNT="$(find "$GENERATED_DIR" -type f | wc -l | tr -d ' ')"
 cat <<EOF
 
 sdk-provenance: VERIFIED
+  provenance schema      $SCHEMA
+  ancestry               $ANCESTRY
   server commit          $SERVER_COMMIT
   server contract sha256 $ACTUAL_CONTRACT_SHA
   web repository         $WEB_REPOSITORY
