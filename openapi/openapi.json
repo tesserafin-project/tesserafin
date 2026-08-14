@@ -12450,6 +12450,557 @@
         },
         "type": "object"
       },
+      "RemoteAccessBackendBindPosture": {
+        "description": "How the backend\u0027s listening addresses are constrained. Mirrors \u0060BackendBindPosture\u0060.",
+        "enum": [
+          "None",
+          "LoopbackOnly",
+          "Wildcard",
+          "ExplicitPrivateAddresses",
+          "Unknown",
+          "ExplicitGloballyRoutableAddresses"
+        ],
+        "type": "string"
+      },
+      "RemoteAccessBackendObservationDto": {
+        "additionalProperties": false,
+        "description": "What the server\u0027s own listening configuration looks like.",
+        "properties": {
+          "InternalHttpPort": {
+            "description": "Gets or sets the internal HTTP port.",
+            "format": "int32",
+            "type": "integer"
+          },
+          "InternalHttpsPort": {
+            "description": "Gets or sets the internal HTTPS port.",
+            "format": "int32",
+            "type": "integer"
+          },
+          "Posture": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RemoteAccessBackendBindPosture"
+              }
+            ],
+            "description": "Gets or sets how the backend\u0027s listening addresses are constrained.",
+            "enum": [
+              "None",
+              "LoopbackOnly",
+              "Wildcard",
+              "ExplicitPrivateAddresses",
+              "Unknown",
+              "ExplicitGloballyRoutableAddresses"
+            ]
+          },
+          "SecureBootstrapActive": {
+            "description": "Gets or sets a value indicating whether secure bootstrap is active.",
+            "type": "boolean"
+          },
+          "UnixSocketConfigured": {
+            "description": "Gets or sets a value indicating whether a unix socket is configured.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "RemoteAccessDiagnosticsReportDto": {
+        "additionalProperties": false,
+        "description": "Everything the server can observe about its own remote-access posture, and nothing it cannot.",
+        "properties": {
+          "Backend": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RemoteAccessBackendObservationDto"
+              }
+            ],
+            "description": "Gets or sets the server\u0027s own listening posture."
+          },
+          "CollectedAt": {
+            "description": "Gets or sets when collection happened.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "Dns": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RemoteAccessDnsObservationDto"
+              }
+            ],
+            "description": "Gets or sets what resolving the proposed hostname produced."
+          },
+          "Findings": {
+            "description": "Gets or sets the findings, in the engine\u0027s stable order.",
+            "items": {
+              "$ref": "#/components/schemas/RemoteAccessFindingDto"
+            },
+            "type": "array"
+          },
+          "Input": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RemoteAccessPolicyInputDto"
+              }
+            ],
+            "description": "Gets or sets the question, as the server understood it."
+          },
+          "Listeners": {
+            "description": "Gets or sets what was observed on the ingress ports.",
+            "items": {
+              "$ref": "#/components/schemas/RemoteAccessListenerObservationDto"
+            },
+            "type": "array"
+          },
+          "LocalAddresses": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RemoteAccessLocalAddressCensusDto"
+              }
+            ],
+            "description": "Gets or sets the census of the host\u0027s own addresses."
+          },
+          "ProxyTrust": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RemoteAccessProxyTrustObservationDto"
+              }
+            ],
+            "description": "Gets or sets the forwarded-header and known-proxy agreement."
+          },
+          "SchemaVersion": {
+            "description": "Gets or sets the version of this report\u0027s shape.",
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "RemoteAccessDiagnosticsRequestDto": {
+        "additionalProperties": false,
+        "description": "The question an administrator is asking the remote-access diagnostics.",
+        "properties": {
+          "Hostname": {
+            "description": "Gets or sets the hostname the administrator proposes to publish, if any.",
+            "nullable": true,
+            "type": "string"
+          },
+          "IPv4Policy": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RemoteAccessPublicationPolicy"
+              }
+            ],
+            "description": "Gets or sets the caller\u0027s intention for IPv4. Required.",
+            "enum": [
+              "Unspecified",
+              "DoNotPublish",
+              "Publish"
+            ]
+          },
+          "IPv6Policy": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RemoteAccessPublicationPolicy"
+              }
+            ],
+            "description": "Gets or sets the caller\u0027s intention for IPv6. Required.",
+            "enum": [
+              "Unspecified",
+              "DoNotPublish",
+              "Publish"
+            ]
+          }
+        },
+        "required": [
+          "IPv4Policy",
+          "IPv6Policy"
+        ],
+        "type": "object"
+      },
+      "RemoteAccessDnsObservationDto": {
+        "additionalProperties": false,
+        "description": "What resolving the proposed hostname produced.",
+        "properties": {
+          "AddressCount": {
+            "description": "Gets or sets how many addresses were returned.",
+            "format": "int32",
+            "type": "integer"
+          },
+          "ContainsIPv4": {
+            "description": "Gets or sets a value indicating whether any returned address is IPv4.",
+            "type": "boolean"
+          },
+          "ContainsIPv6": {
+            "description": "Gets or sets a value indicating whether any returned address is IPv6.",
+            "type": "boolean"
+          },
+          "NormalizedHostname": {
+            "description": "Gets or sets the hostname as normalised, or null if none was usable.",
+            "nullable": true,
+            "type": "string"
+          },
+          "Outcome": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RemoteAccessDnsOutcome"
+              }
+            ],
+            "description": "Gets or sets what the lookup produced.",
+            "enum": [
+              "None",
+              "NotAttempted",
+              "Answered",
+              "NoAddressRecords",
+              "TimedOut",
+              "Cancelled",
+              "ResolverFailure"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "RemoteAccessDnsOutcome": {
+        "description": "What the hostname lookup produced. Mirrors \u0060DnsLookupOutcome\u0060.",
+        "enum": [
+          "None",
+          "NotAttempted",
+          "Answered",
+          "NoAddressRecords",
+          "TimedOut",
+          "Cancelled",
+          "ResolverFailure"
+        ],
+        "type": "string"
+      },
+      "RemoteAccessFindingCode": {
+        "description": "The diagnostic vocabulary, as the contract spells it.",
+        "enum": [
+          "None",
+          "SecureBootstrapActive",
+          "SecureBootstrapInactive",
+          "BackendLoopbackOnly",
+          "BackendWildcardBound",
+          "BackendLanBound",
+          "BackendUnixSocketConfigured",
+          "BackendExposureUnknown",
+          "BackendGloballyRoutableBound",
+          "BackendStructurallyConstrained",
+          "BackendPotentiallyPublic",
+          "ListenerObservedOnPort80",
+          "NoListenerObservedOnPort80",
+          "ListenerObservedOnPort443",
+          "NoListenerObservedOnPort443",
+          "ListenerInspectionDenied",
+          "PossibleExistingIngressOwner",
+          "ListenerInspectionUnsupported",
+          "ListenerInspectionFailed",
+          "KnownProxiesAbsent",
+          "KnownProxiesMalformed",
+          "MultipleKnownProxiesConfigured",
+          "ForwardedHeadersDisabled",
+          "ForwardedHeadersEnabledConsistently",
+          "ForwardedHeaderTrustInconsistent",
+          "SameHostProxyLoopbackTrustTrapPossible",
+          "SingleKnownProxyNormalized",
+          "HostnameNotProvided",
+          "HostnameSyntacticallyInvalid",
+          "DnsLookupSucceeded",
+          "DnsNoAddressRecords",
+          "DnsLookupTimedOut",
+          "DnsLookupFailed",
+          "DnsLookupCancelled",
+          "DnsResultContainsIPv4",
+          "DnsResultContainsIPv6",
+          "DnsAddressMatchesLocalGlobalAddress",
+          "DnsAddressMatchesNoLocalAddress",
+          "PrivateAddressingObserved",
+          "SharedAddressSpaceObserved",
+          "DirectPublicAddressPossible",
+          "NatOrUpstreamProxyPossiblyRequired",
+          "CgNatSignalObserved",
+          "CgNatNotDeterminable",
+          "IpFamilyPolicyContradicted",
+          "IpFamilyPolicyUnresolved",
+          "ExternalReachabilityUnverified",
+          "CertificateReadinessUnverified",
+          "FirewallStateUnknown",
+          "RouterMappingUnknown"
+        ],
+        "type": "string"
+      },
+      "RemoteAccessFindingConfidence": {
+        "description": "How much weight a finding carries. Mirrors the internal \u0060DiagnosticConfidence\u0060.",
+        "enum": [
+          "None",
+          "Observed",
+          "Derived",
+          "Unverified",
+          "Unknown",
+          "Contradictory"
+        ],
+        "type": "string"
+      },
+      "RemoteAccessFindingDto": {
+        "additionalProperties": false,
+        "description": "One thing the server can say, and how strongly it can say it.",
+        "properties": {
+          "Code": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RemoteAccessFindingCode"
+              }
+            ],
+            "description": "Gets or sets what was found.",
+            "enum": [
+              "None",
+              "SecureBootstrapActive",
+              "SecureBootstrapInactive",
+              "BackendLoopbackOnly",
+              "BackendWildcardBound",
+              "BackendLanBound",
+              "BackendUnixSocketConfigured",
+              "BackendExposureUnknown",
+              "BackendGloballyRoutableBound",
+              "BackendStructurallyConstrained",
+              "BackendPotentiallyPublic",
+              "ListenerObservedOnPort80",
+              "NoListenerObservedOnPort80",
+              "ListenerObservedOnPort443",
+              "NoListenerObservedOnPort443",
+              "ListenerInspectionDenied",
+              "PossibleExistingIngressOwner",
+              "ListenerInspectionUnsupported",
+              "ListenerInspectionFailed",
+              "KnownProxiesAbsent",
+              "KnownProxiesMalformed",
+              "MultipleKnownProxiesConfigured",
+              "ForwardedHeadersDisabled",
+              "ForwardedHeadersEnabledConsistently",
+              "ForwardedHeaderTrustInconsistent",
+              "SameHostProxyLoopbackTrustTrapPossible",
+              "SingleKnownProxyNormalized",
+              "HostnameNotProvided",
+              "HostnameSyntacticallyInvalid",
+              "DnsLookupSucceeded",
+              "DnsNoAddressRecords",
+              "DnsLookupTimedOut",
+              "DnsLookupFailed",
+              "DnsLookupCancelled",
+              "DnsResultContainsIPv4",
+              "DnsResultContainsIPv6",
+              "DnsAddressMatchesLocalGlobalAddress",
+              "DnsAddressMatchesNoLocalAddress",
+              "PrivateAddressingObserved",
+              "SharedAddressSpaceObserved",
+              "DirectPublicAddressPossible",
+              "NatOrUpstreamProxyPossiblyRequired",
+              "CgNatSignalObserved",
+              "CgNatNotDeterminable",
+              "IpFamilyPolicyContradicted",
+              "IpFamilyPolicyUnresolved",
+              "ExternalReachabilityUnverified",
+              "CertificateReadinessUnverified",
+              "FirewallStateUnknown",
+              "RouterMappingUnknown"
+            ]
+          },
+          "Confidence": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RemoteAccessFindingConfidence"
+              }
+            ],
+            "description": "Gets or sets how the server knows it.",
+            "enum": [
+              "None",
+              "Observed",
+              "Derived",
+              "Unverified",
+              "Unknown",
+              "Contradictory"
+            ]
+          },
+          "Severity": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RemoteAccessFindingSeverity"
+              }
+            ],
+            "description": "Gets or sets how much attention it deserves.",
+            "enum": [
+              "None",
+              "Informational",
+              "Advisory",
+              "High"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "RemoteAccessFindingSeverity": {
+        "description": "How much attention a finding deserves. Mirrors the internal \u0060DiagnosticSeverity\u0060.",
+        "enum": [
+          "None",
+          "Informational",
+          "Advisory",
+          "High"
+        ],
+        "type": "string"
+      },
+      "RemoteAccessListenerObservationDto": {
+        "additionalProperties": false,
+        "description": "Whether something is already listening on the ingress ports.",
+        "properties": {
+          "Outcome": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RemoteAccessListenerOutcome"
+              }
+            ],
+            "description": "Gets or sets what the inspection produced.",
+            "enum": [
+              "None",
+              "ObservedListener",
+              "NoListenerObserved",
+              "InspectionDenied",
+              "Unsupported",
+              "Unknown"
+            ]
+          },
+          "Port": {
+            "description": "Gets or sets the inspected port.",
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "RemoteAccessListenerOutcome": {
+        "description": "What inspecting a port produced. Mirrors \u0060ListenerObservationOutcome\u0060.",
+        "enum": [
+          "None",
+          "ObservedListener",
+          "NoListenerObserved",
+          "InspectionDenied",
+          "Unsupported",
+          "Unknown"
+        ],
+        "type": "string"
+      },
+      "RemoteAccessLocalAddressCensusDto": {
+        "additionalProperties": false,
+        "description": "A census of the host\u0027s own addresses, by class.",
+        "properties": {
+          "GloballyRoutableCount": {
+            "description": "Gets or sets how many globally routable addresses were observed.",
+            "format": "int32",
+            "type": "integer"
+          },
+          "LinkLocalCount": {
+            "description": "Gets or sets how many link-local addresses were observed.",
+            "format": "int32",
+            "type": "integer"
+          },
+          "LoopbackCount": {
+            "description": "Gets or sets how many loopback addresses were observed.",
+            "format": "int32",
+            "type": "integer"
+          },
+          "MulticastCount": {
+            "description": "Gets or sets how many multicast addresses were observed.",
+            "format": "int32",
+            "type": "integer"
+          },
+          "OtherCount": {
+            "description": "Gets or sets how many addresses fell into no other class.",
+            "format": "int32",
+            "type": "integer"
+          },
+          "PrivateCount": {
+            "description": "Gets or sets how many private addresses were observed.",
+            "format": "int32",
+            "type": "integer"
+          },
+          "SharedAddressSpaceCount": {
+            "description": "Gets or sets how many shared-address-space (RFC 6598) addresses were observed.",
+            "format": "int32",
+            "type": "integer"
+          },
+          "UnspecifiedCount": {
+            "description": "Gets or sets how many unspecified addresses were observed.",
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "RemoteAccessPolicyInputDto": {
+        "additionalProperties": false,
+        "description": "The publication policy, echoed back as the server understood it.",
+        "properties": {
+          "Hostname": {
+            "description": "Gets or sets the hostname as the server understood it, or null if none was usable.",
+            "nullable": true,
+            "type": "string"
+          },
+          "IPv4Policy": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RemoteAccessPublicationPolicy"
+              }
+            ],
+            "description": "Gets or sets the IPv4 intention the server understood.",
+            "enum": [
+              "Unspecified",
+              "DoNotPublish",
+              "Publish"
+            ]
+          },
+          "IPv6Policy": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RemoteAccessPublicationPolicy"
+              }
+            ],
+            "description": "Gets or sets the IPv6 intention the server understood.",
+            "enum": [
+              "Unspecified",
+              "DoNotPublish",
+              "Publish"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "RemoteAccessProxyTrustObservationDto": {
+        "additionalProperties": false,
+        "description": "Whether forwarded headers and the configured proxy list agree with each other.",
+        "properties": {
+          "ConfiguredKnownProxyCount": {
+            "description": "Gets or sets how many known proxies are configured.",
+            "format": "int32",
+            "type": "integer"
+          },
+          "ForwardedHeadersEnabled": {
+            "description": "Gets or sets a value indicating whether forwarded headers are enabled.",
+            "type": "boolean"
+          },
+          "ParsedKnownProxyCount": {
+            "description": "Gets or sets how many of them parsed as addresses.",
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "RemoteAccessPublicationPolicy": {
+        "description": "How the caller intends to publish one IP family.",
+        "enum": [
+          "Unspecified",
+          "DoNotPublish",
+          "Publish"
+        ],
+        "type": "string"
+      },
       "RemoteImageInfo": {
         "additionalProperties": false,
         "description": "Class RemoteImageInfo.",
@@ -59664,6 +60215,125 @@
         ]
       }
     },
+    "/System/RemoteAccess/Diagnostics": {
+      "post": {
+        "description": "POST, with the hostname in the body \u2014 never in the route and never in the query string. A\nhostname in a URL is copied into access logs, proxy logs and browser history by parties who\nnever agreed to hold it, and there is no way to un-log it afterwards.\n            \nAn unusable hostname is answered, not rejected. Absent produces\n\u0060HostnameNotProvided\u0060; syntactically invalid produces\n\u0060HostnameSyntacticallyInvalid\u0060 and never reaches the resolver. Both are HTTP 200,\nbecause \u0022what you typed cannot be a hostname\u0022 is the diagnostic an operator came here for,\nnot a transport failure to be handed back as a 400.",
+        "operationId": "CollectRemoteAccessDiagnostics",
+        "requestBody": {
+          "content": {
+            "application/*\u002Bjson": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/RemoteAccessDiagnosticsRequestDto"
+                  }
+                ],
+                "description": "The question an administrator is asking the remote-access diagnostics."
+              }
+            },
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/RemoteAccessDiagnosticsRequestDto"
+                  }
+                ],
+                "description": "The question an administrator is asking the remote-access diagnostics."
+              }
+            },
+            "text/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/RemoteAccessDiagnosticsRequestDto"
+                  }
+                ],
+                "description": "The question an administrator is asking the remote-access diagnostics."
+              }
+            }
+          },
+          "description": "The publication intent to diagnose against.",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemoteAccessDiagnosticsReportDto"
+                }
+              }
+            },
+            "description": "The report was collected."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "The request body was malformed or a family policy was missing or unrecognised."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "The caller is not authenticated."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "The caller is not an elevated administrator."
+          },
+          "503": {
+            "content": {
+              "text/html": {}
+            },
+            "description": "The server is currently starting or is temporarily not available.",
+            "headers": {
+              "Message": {
+                "allowEmptyValue": true,
+                "description": "A short plain-text reason why the server is not available.",
+                "schema": {
+                  "format": "text",
+                  "type": "string"
+                }
+              },
+              "Retry-After": {
+                "allowEmptyValue": true,
+                "description": "A hint for when to retry the operation in full seconds.",
+                "schema": {
+                  "format": "int32",
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "CustomAuthentication": [
+              "RequiresElevation"
+            ]
+          }
+        ],
+        "summary": "Collects a read-only remote-access diagnostic report.",
+        "tags": [
+          "RemoteAccessDiagnostics"
+        ]
+      }
+    },
     "/System/Restart": {
       "post": {
         "operationId": "RestartApplication",
@@ -67853,6 +68523,9 @@
     },
     {
       "name": "Session"
+    },
+    {
+      "name": "RemoteAccessDiagnostics"
     },
     {
       "name": "RemoteImage"

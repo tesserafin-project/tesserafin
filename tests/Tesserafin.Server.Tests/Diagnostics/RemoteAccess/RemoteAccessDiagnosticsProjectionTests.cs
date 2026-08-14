@@ -104,13 +104,36 @@ public sealed class RemoteAccessDiagnosticsProjectionTests
     [InlineData(typeof(DiagnosticSeverity), typeof(RemoteAccessFindingSeverity))]
     [InlineData(typeof(BackendBindPosture), typeof(RemoteAccessBackendBindPosture))]
     [InlineData(typeof(ListenerObservationOutcome), typeof(RemoteAccessListenerOutcome))]
-    [InlineData(typeof(AddressClass), typeof(RemoteAccessAddressClass))]
     [InlineData(typeof(DnsLookupOutcome), typeof(RemoteAccessDnsOutcome))]
     public void EveryInternalEnumHasAMatchingWireEnum(Type internalEnum, Type wireEnum)
     {
         Assert.Equal(
             Enum.GetNames(internalEnum).OrderBy(n => n, StringComparer.Ordinal),
             Enum.GetNames(wireEnum).OrderBy(n => n, StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void TheCensusHasExactlyOneCounterPerAddressClass()
+    {
+        // There is deliberately NO wire enum mirroring AddressClass: the contract exposes a census
+        // of counts, because the classes decide every topology finding and the addresses decide
+        // none. That leaves a gap a name-parity test would have caught and this one closes — every
+        // internal class must have somewhere to be counted, so adding one without extending the
+        // census fails here instead of silently vanishing from the report.
+        var counters = typeof(RemoteAccessLocalAddressCensusDto)
+            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Select(p => p.Name)
+            .ToHashSet(StringComparer.Ordinal);
+        Assert.NotEmpty(counters);
+
+        var missing = Enum.GetNames<AddressClass>()
+            .Where(n => !string.Equals(n, nameof(AddressClass.None), StringComparison.Ordinal))
+            .Where(n => !counters.Contains($"{n}Count"))
+            .ToList();
+
+        Assert.True(missing.Count == 0, $"Address classes with no census counter: {string.Join(", ", missing)}");
+        // And no counter that counts nothing.
+        Assert.Equal(Enum.GetNames<AddressClass>().Length - 1, counters.Count);
     }
 
     [Fact]
