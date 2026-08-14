@@ -126,7 +126,9 @@ run_positive_control() {
     fi
     if ! printf '%s' "$out" | grep -qF "$fragment"; then
         error "positive control '$name' passed but did not report '$fragment'"
-        printf '%s\n' "$out" | tail -5 >&2
+        # The WHOLE output, not a tail: this control failing means the gate accepted the pin but
+        # classified it as something else, and the classification lines are in the middle.
+        printf '%s\n' "$out" | grep -a 'provenance' >&2
         failures=$((failures + 1)); return
     fi
     note "control '$name': accepted as expected ($fragment)"
