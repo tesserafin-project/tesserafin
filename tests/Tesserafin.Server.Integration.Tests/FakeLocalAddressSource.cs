@@ -16,9 +16,20 @@ namespace Tesserafin.Server.Integration.Tests;
 public sealed class FakeLocalAddressSource : ILocalAddressSource
 {
     private int _concurrent;
+    private int _calls;
 
     /// <summary>Gets the highest number of collections observed inside the source at once.</summary>
     public int MaxObservedConcurrency { get; private set; }
+
+    /// <summary>
+    /// Gets how many times collection entered this source.
+    /// </summary>
+    /// <remarks>
+    /// The collector reads local addresses unconditionally at the start of every collection, so
+    /// this is a faithful "was the collector entered" counter — which is what the rejection tests
+    /// need. A rejected caller must leave it at zero.
+    /// </remarks>
+    public int CallCount => _calls;
 
     /// <summary>Gets a signal set on entry.</summary>
     public SemaphoreSlim Entered { get; } = new(0);
@@ -28,6 +39,7 @@ public sealed class FakeLocalAddressSource : ILocalAddressSource
 
     public IReadOnlyList<IPAddress> GetUnicastAddresses()
     {
+        Interlocked.Increment(ref _calls);
         var now = Interlocked.Increment(ref _concurrent);
         MaxObservedConcurrency = Math.Max(MaxObservedConcurrency, now);
         Entered.Release();
