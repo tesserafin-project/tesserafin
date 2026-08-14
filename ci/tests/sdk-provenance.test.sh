@@ -124,7 +124,7 @@ run_positive_control() {
         printf '%s\n' "$out" | tail -5 >&2
         failures=$((failures + 1)); return
     fi
-    if ! printf '%s' "$out" | grep -qF "$fragment"; then
+    if ! grep -qF -- "$fragment" <<<"$out"; then
         error "positive control '$name' passed but did not report '$fragment'"
         # The WHOLE output, not a tail: this control failing means the gate accepted the pin but
         # classified it as something else, and the classification lines are in the middle.
@@ -150,7 +150,7 @@ run_control() {
         printf '%s\n' "$out" | tail -3 >&2
         failures=$((failures + 1)); return
     fi
-    if ! printf '%s' "$out" | grep -qF "$fragment"; then
+    if ! grep -qF -- "$fragment" <<<"$out"; then
         error "negative control '$name' failed for the wrong reason (expected to mention: $fragment)"
         printf '%s\n' "$out" | tail -3 >&2
         failures=$((failures + 1)); return
@@ -339,7 +339,7 @@ out=$(PATH="$CONTROLS_DIR/minbin" "$VERIFIER" \
 rc=$?
 PATH="$PATH_BACKUP"
 rm -rf "$CONTROLS_DIR/wd-notool"
-if ! printf '%s' "$out" | grep -qF "required tool 'jq' is not on PATH"; then
+if ! grep -qF -- "required tool 'jq' is not on PATH" <<<"$out"; then
     error "negative control 'missing-tool' did not report the missing tool"
     printf '%s\n' "$out" | tail -3 >&2
     failures=$((failures + 1))
@@ -362,7 +362,7 @@ if ! git -C "$REPO_ROOT" diff --exit-code --quiet; then
     git -C "$REPO_ROOT" status --porcelain >&2
     failures=$((failures + 1))
 fi
-if git -C "$REPO_ROOT" worktree list --porcelain | grep -qF "$CONTROLS_DIR"; then
+if grep -qF -- "$CONTROLS_DIR" <<<"$(git -C "$REPO_ROOT" worktree list --porcelain)"; then
     error "the negative controls left a scratch worktree registered"
     git -C "$REPO_ROOT" worktree list >&2
     failures=$((failures + 1))
