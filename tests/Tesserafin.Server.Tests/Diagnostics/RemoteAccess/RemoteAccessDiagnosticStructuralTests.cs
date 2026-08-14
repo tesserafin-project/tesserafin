@@ -57,41 +57,6 @@ public sealed class RemoteAccessDiagnosticStructuralTests
         RegexOptions.CultureInvariant);
 
     /// <summary>
-    /// The layer's own type names, as a future caller or a contract would spell them.
-    /// </summary>
-    private static readonly string[] _layerTypeNames =
-    {
-        "RemoteAccessDiagnosticCollector",
-        "RemoteAccessDiagnosticEvaluator",
-        "RemoteAccessDiagnosticReport",
-        "RemoteAccessDiagnosticSnapshot",
-        "RemoteAccessDiagnosticCode",
-        "RemoteAccessFinding",
-        "DiagnosticConfidence",
-        "DiagnosticSeverity",
-        "PublicationPolicyInput",
-        "BackendPostureObservation",
-        "BackendBindPosture",
-        "ProxyTrustObservation",
-        "PortListenerObservation",
-        "ListenerObservationOutcome",
-        "ClassifiedAddress",
-        "AddressClassifier",
-        "AddressClass",
-        "HostnameInput",
-        "DnsObservation",
-        "DnsLookupOutcome",
-        "ServerNetworkPostureSource",
-        "SystemLocalAddressSource",
-        "SystemTcpListenerSource",
-        "SystemHostnameResolver",
-        "ILocalAddressSource",
-        "ITcpListenerSource",
-        "IHostnameResolver",
-        "INetworkPostureSource"
-    };
-
-    /// <summary>
     /// Names allowed to contain a verdict word because they name a thing, not a claim.
     /// </summary>
     /// <remarks>

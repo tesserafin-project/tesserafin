@@ -71,6 +71,20 @@ public sealed class RemoteAccessDiagnosticsApplicationFactory : TesserafinApplic
         }
     }
 
+    /// <summary>
+    /// Releases the token gate along with the host.
+    /// </summary>
+    /// <param name="disposing">Whether managed state is being released.</param>
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _tokenGate.Dispose();
+        }
+
+        base.Dispose(disposing);
+    }
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         base.ConfigureWebHost(builder);
