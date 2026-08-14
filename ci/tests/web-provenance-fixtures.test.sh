@@ -382,7 +382,7 @@ expect '15 extra generated file injected' RED 'present but unlisted' \
 # every other. It is caught one layer up instead, by regeneration — `generate-tesserafin-sdk.mjs`
 # clears `generated/` before generating, so the injected file is deleted and the web repository's
 # own freshness gate reports the deletion. That is deliberate division of labour, not a gap: see
-# break control C4LH-B08 in the pull request body for the run that proves it red.
+# break control C4LH-BW1 in the web pull request body for the run that proves it red.
 
 W_MANIFEST_SHA="$(make_web manifest-digest 2 "$C2" "$CONTRACT_B_SHA")"
 patch_version "$W_MANIFEST_SHA" '.generatedManifestSha256 = "3333333333333333333333333333333333333333333333333333333333333333"'
