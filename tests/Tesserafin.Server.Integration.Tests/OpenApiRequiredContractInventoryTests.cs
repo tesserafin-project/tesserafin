@@ -36,8 +36,14 @@ namespace Tesserafin.Server.Integration.Tests
         /// 27 before the content pack surface. The four content pack request and response schemas
         /// each declare a required member of their own, which is additive and does not touch any
         /// existing schema's <c>required</c> array.
+        ///
+        /// 31 before R1-P (#248). <c>RemoteAccessDiagnosticsRequestDto</c> declares
+        /// <c>IPv4Policy</c> and <c>IPv6Policy</c> required through explicit <c>[Required]</c>
+        /// attributes, which is the same additive shape: a census of the schemas outside the
+        /// namespace shows exactly one addition and no removal, and no existing schema's
+        /// <c>required</c> array differs from the frozen base.
         /// </remarks>
-        private const int RequiredOutsideNamespace = 31;
+        private const int RequiredOutsideNamespace = 32;
 
         /// <summary>
         /// The 29 members, across 13 schemas, that are primary-constructor parameters of
