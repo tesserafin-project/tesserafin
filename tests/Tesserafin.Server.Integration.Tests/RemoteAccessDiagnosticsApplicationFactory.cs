@@ -58,6 +58,8 @@ public sealed class RemoteAccessDiagnosticsApplicationFactory : TesserafinApplic
     /// shared fixture makes every test after the first fail for a reason that has nothing to do
     /// with the endpoint. One token, obtained through the canonical header path, reused.
     /// </remarks>
+    /// <param name="client">A client for this factory's host, used to complete startup once.</param>
+    /// <returns>The cached elevated-administrator access token.</returns>
     public async Task<string> AdminTokenAsync(HttpClient client)
     {
         await _tokenGate.WaitAsync().ConfigureAwait(false);
