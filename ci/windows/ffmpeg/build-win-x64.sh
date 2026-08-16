@@ -129,7 +129,7 @@ apply_component_patches() { # <component-name> <dir>
         [[ -f "${PATCH_DIR}/${patch}" ]] \
             || ff_die "patches/series.txt names ${patch}, which does not exist"
         ff_log "  patching ${name} with ${patch}"
-        patch -p1 --forward --no-backup-if-mismatch -F0 -d "${dir}" -i "${PATCH_DIR}/${patch}" \
+        patch -p1 --binary --forward --no-backup-if-mismatch -F0 -d "${dir}" -i "${PATCH_DIR}/${patch}" \
             || ff_die "component patch ${patch} did not apply cleanly to ${name}"
         count=$((count + 1))
     done < "${PATCH_SERIES}"
@@ -433,7 +433,17 @@ rm -rf "${FFSRC}"; cp -a "${CACHE}/git/jellyfin-ffmpeg" "${FFSRC}"
         # --forward and -F0: a patch that only applies approximately is a patch
         # applying to the wrong place. The series is pinned by the same commit as
         # the tree, so anything but a clean apply means the pin moved.
-        patch -p1 --forward --no-backup-if-mismatch -F0 -i "debian/patches/${p}" \
+        # --binary: the fork's .gitattributes marks tests/ref/fate/* as -text,
+        # so several reference files legitimately contain CRLF bytes. GNU patch
+        # on MSYS2 then refuses an LF-context hunk against them with
+        #
+        #     Hunk #1 FAILED at 33 (different line endings).
+        #
+        # which stopped 0059 on the runner while all 95 applied on Linux.
+        # --binary makes patch treat both sides as bytes, which is what the
+        # attribute already says they are. Verified to be a no-op on Linux: the
+        # tree after applying all 95 with and without it hashes identically.
+        patch -p1 --binary --forward --no-backup-if-mismatch -F0 -i "debian/patches/${p}" \
             >> "${OUT}/patches.log" 2>&1 \
             || { tail -20 "${OUT}/patches.log" >&2; ff_die "patch ${p} did not apply cleanly"; }
         applied=$((applied + 1))
