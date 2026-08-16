@@ -53,6 +53,27 @@ esac
 
 ff_load_manifest
 
+# Python on Windows translates '\n' to '\r\n' on text stdout, and `$(...)` strips
+# trailing NEWLINES but not the carriage return in front of them. So every value
+# ff_load_manifest read through a `python3 -c` command substitution arrives here
+# as "7.1.4-tesserafin.1<CR>" — which then becomes a staging directory with a
+# carriage return in its name, and a runtime archive nobody can find.
+#
+# Stripped here rather than in ci/ffmpeg/lib.sh: that file belongs to the Linux
+# runtimes, where the behaviour does not exist, and W1-A2 must leave it
+# byte-identical.
+ff_strip_cr() { printf '%s' "${1//$'\r'/}"; }
+FF_BUILD_REVISION="$(ff_strip_cr "${FF_BUILD_REVISION}")"
+FF_FFMPEG_COMMIT="$(ff_strip_cr "${FF_FFMPEG_COMMIT}")"
+FF_FFMPEG_REPO="$(ff_strip_cr "${FF_FFMPEG_REPO}")"
+FF_FFMPEG_BASELINE="$(ff_strip_cr "${FF_FFMPEG_BASELINE}")"
+export FF_BUILD_REVISION FF_FFMPEG_COMMIT FF_FFMPEG_REPO FF_FFMPEG_BASELINE
+for v in "${FF_BUILD_REVISION}" "${FF_FFMPEG_COMMIT}" "${FF_FFMPEG_BASELINE}"; do
+    [[ "${v}" == *$'\r'* ]] && ff_die "a manifest value still carries a carriage return: ${v@Q}"
+done
+[[ "${FF_FFMPEG_COMMIT}" =~ ^[0-9a-f]{40}$ ]] \
+    || ff_die "the FFmpeg commit read from the manifest is not a 40-character SHA: ${FF_FFMPEG_COMMIT@Q}"
+
 SOURCE_DATE_EPOCH="$(ff_source_date_epoch)"
 export SOURCE_DATE_EPOCH
 export LC_ALL=C LANG=C TZ=UTC
@@ -141,6 +162,9 @@ sys.exit(0)
 RECIPES=(zlib expat x264 x265 svt-av1 dav1d libvpx lame opus libogg libvorbis
          zimg freetype harfbuzz fribidi fontconfig libunibreak libass
          nv-codec-headers libvpl amf-headers)
+# `tr -d '\r'` for the reason given above: without it every name arrives as
+# "zlib<CR>", matches nothing in RECIPES, and this gate reports that the script
+# has no recipe for any of the 21 components it in fact builds.
 mapfile -t EXPECTED < <(python3 -c '
 import json, sys
 manifest, arch = sys.argv[1:3]
@@ -148,7 +172,7 @@ for c in json.load(open(manifest))["components"]:
     allowed = c.get("architectures")
     if allowed is None or arch in allowed:
         print(c["name"])
-' "${FF_COMPONENTS}" "${ARCH}")
+' "${FF_COMPONENTS}" "${ARCH}" | tr -d '\r')
 missing=()
 for want in "${EXPECTED[@]}"; do
     found=0

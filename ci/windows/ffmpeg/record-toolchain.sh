@@ -27,9 +27,12 @@ OUT="${1:?usage: record-toolchain.sh <toolchain.json> [runner.json]}"
 RUNNER_OUT="${2:-$(dirname "${OUT}")/runner.json}"
 mkdir -p "$(dirname "${OUT}")" "$(dirname "${RUNNER_OUT}")"
 
+# `tr -d '\r'`: clang, cmake and ninja are native Windows programs and end their
+# lines with CRLF, so without this every recorded version would carry a trailing
+# carriage return into the delivered provenance as a literal \r escape.
 version_of() { # <command> [args...]
     if command -v "$1" >/dev/null 2>&1; then
-        "$@" 2>&1 | head -1
+        "$@" 2>&1 | head -1 | tr -d '\r'
     else
         printf 'ABSENT\n'
     fi

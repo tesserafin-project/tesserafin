@@ -572,6 +572,36 @@ def run_controls(c: Controls, tmp: Path) -> None:
     c.assert_true("no live-resolution or precompiled-runtime acquisition in the "
                   f"{len(owned)} owned files", not hits, "; ".join(hits))
 
+    # ── 8. Windows Python writes CRLF ──────────────────────────────────────
+    #
+    # Python on Windows translates '\n' to '\r\n' on text stdout, and `$(...)`
+    # strips trailing NEWLINES but not the carriage return in front of them. The
+    # first native build read every component name as "zlib<CR>", matched none of
+    # them against its own recipe list, and reported that it had no recipe for
+    # any of the 21 components it builds. The same contamination would have put a
+    # carriage return in the staging directory's name.
+    #
+    # This is a class, not an incident: it applies to every command substitution
+    # that captures Python output in a shell that runs on the runner. A local
+    # control can catch it, and only a local control can — the failure is
+    # invisible on Linux.
+    crlf_scanned = [HERE / "build-win-x64.sh", HERE / "record-toolchain.sh",
+                    REPO_ROOT / ".github/workflows/w1-windows-ffmpeg-runtime.yml"]
+    unguarded = []
+    for path in crlf_scanned:
+        if not path.is_file():
+            continue
+        text = path.read_text(errors="replace")
+        for m in re.finditer(r"[$<]\(python3?\b", text):
+            window = text[m.start(): m.start() + 400]
+            if "tr -d" not in window:
+                line = text[: m.start()].count("\n") + 1
+                unguarded.append(f"{path.name}:{line}")
+    c.assert_true(
+        "every Python command substitution that runs on Windows strips CR",
+        not unguarded,
+        "unguarded at " + ", ".join(unguarded))
+
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
