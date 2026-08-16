@@ -1,5 +1,5 @@
 {
   "$comment": "Immutable server-to-web pair lock (C4, #97/#164). webCommit is ALWAYS a full 40-character commit SHA — never a branch name, never a tag. ci/verify-sdk-provenance.sh refuses anything else. Moving this lock is a deliberate act with a recorded provenance reason, not maintenance.",
   "webRepository": "tesserafin-project/tesserafin-web",
-  "webCommit": "e92babdc1a25c7af589d5c0def0403910194d30e"
+  "webCommit": "ade4fa527d4f34173fac5ab5e17cd1b7f1f01044"
 }
