@@ -469,8 +469,21 @@ rm -rf "${FFSRC}"; cp -a "${CACHE}/git/jellyfin-ffmpeg" "${FFSRC}"
     # the path it maps away straight back into the shipped binary. FFmpeg builds
     # in-tree and its __FILE__ values are already relative.
     FF_CFLAGS="-O2 -g0 -I${PREFIX}/include"
+    # FFmpeg's configure does NOT read $CC, $AR or $STRIP from the environment:
+    # they are CMDLINE_SET options and it defaults cc to `gcc`. CLANG64 is a pure
+    # LLVM environment with no gcc at all, so without these the very first probe
+    # reports
+    #
+    #     gcc is unable to create an executable file.
+    #
+    # after every component has already been built. Naming the toolchain here
+    # also puts it verbatim into what -buildconf reports, so the delivered
+    # build-configuration.txt states which compiler produced the binary.
     ./configure \
         "${FLAGS[@]}" \
+        --cc=clang --cxx=clang++ --ld=clang++ \
+        --ar=llvm-ar --nm=llvm-nm --ranlib=llvm-ranlib --strip=llvm-strip \
+        --windres=llvm-windres \
         --extra-version="tesserafin.1" \
         --pkg-config-flags=--static \
         --extra-cflags="${FF_CFLAGS}" \
@@ -485,13 +498,16 @@ rm -rf "${FFSRC}"; cp -a "${CACHE}/git/jellyfin-ffmpeg" "${FFSRC}"
             #
             # The sentinel is the trick: options are processed in order, so a run
             # that dies on the sentinel proves the flag before it was accepted.
+            # Captured into a variable, NOT piped into grep -q. `set -o pipefail`
+            # is in force, grep -q exits as soon as it matches, configure dies of
+            # SIGPIPE, and the pipeline returns 141 — so the piped form reported
+            # every flag as rejected and hid the real failure underneath a wall
+            # of false ones. It did exactly that on run 7.
             ff_log "asking configure about each flag individually"
             for f in "${FLAGS[@]}"; do
                 [[ "${f}" == --prefix=* ]] && continue
-                if ! ./configure "${f}" --enable-zzz-not-a-real-option 2>&1 \
-                        | grep -q 'zzz-not-a-real-option'; then
-                    ff_log "  REJECTED: ${f}"
-                fi
+                probe="$(./configure "${f}" --enable-zzz-not-a-real-option 2>&1 || true)"
+                [[ "${probe}" == *zzz-not-a-real-option* ]] || ff_log "  REJECTED: ${f}"
             done
             ff_die "FFmpeg configure failed"
         }
