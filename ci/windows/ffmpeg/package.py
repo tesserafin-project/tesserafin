@@ -515,6 +515,29 @@ def main(argv: list[str] | None = None) -> int:
     (out / "pe-closure.json").write_text(
         json.dumps(closure, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
 
+    # Component patches, read from the committed series rather than from
+    # whatever the build happened to do. Recorded with digests so a reviewer can
+    # tell that the patch in the tree is the patch that ran.
+    component_patches = []
+    series_path = HERE / "patches/series.txt"
+    if series_path.is_file():
+        for line in series_path.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split(None, 2)
+            if len(parts) < 2:
+                continue
+            component, patch_name = parts[0], parts[1]
+            patch_path = HERE / "patches" / patch_name
+            component_patches.append({
+                "component": component,
+                "patch": f"ci/windows/ffmpeg/patches/{patch_name}",
+                "sha256": sha256_file(patch_path),
+                "scope": "build system only",
+                "reason": parts[2] if len(parts) > 2 else "",
+            })
+
     consume = json.loads(Path(args.consume_evidence).read_text())
     toolchain = json.loads(Path(args.toolchain).read_text())
     series = (cache / "git/jellyfin-ffmpeg/debian/patches/series").read_text().split()
@@ -551,6 +574,7 @@ def main(argv: list[str] | None = None) -> int:
             "seriesSha256": hashlib.sha256(
                 (cache / "git/jellyfin-ffmpeg/debian/patches/series").read_bytes()).hexdigest(),
         },
+        "componentPatches": component_patches,
         "components": [
             {"name": c["name"], "license": c.get("license", ""),
              "sourceType": c["sourceType"],

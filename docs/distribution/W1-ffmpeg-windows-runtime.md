@@ -163,6 +163,28 @@ declared platform.
   unchanged by name, pin, licence and order.
 * `amf-headers` and `libvpl` are now `linux-x64` + `win-x64`.
 
+### Component patches
+
+Two frozen things can disagree. The component source pins are frozen by
+`components.json`; the toolchain is frozen by the 246-package MSYS2 lock. Where a
+pinned source cannot be configured by the pinned toolchain, the gap is closed by
+a patch in `ci/windows/ffmpeg/patches/`, listed in `series.txt` with its reason,
+applied with `patch -p1 --forward -F0`, and recorded in the delivered provenance
+with its SHA-256 — never by loosening a pin.
+
+The rule is **build system only**. No patch there may touch codec, filter or
+protocol source; a change to what the runtime computes belongs in a component pin
+or in the FFmpeg fork series, where the existing gates can see it.
+`verify-runtime.py` requires the provenance to describe exactly the series in the
+tree, digests included, so "patched" cannot come to mean "some patch, once".
+
+| Component | Why |
+| --- | --- |
+| x265 3.6 | CMake 4.4.2 refuses `cmake_policy(SET CMP0025 OLD)` and `CMP0054 OLD` outright — those policies were removed, not deprecated — and refuses `cmake_minimum_required (VERSION 2.8.8)`, since compatibility below 3.5 is gone. The patch sets both to NEW, raises the floor to 3.5 and moves the call before `project()`. Nothing under `source/common`, `source/encoder` or `source/x265.cpp` is touched. |
+
+The Linux runtimes take none of these: their builder image carries cmake 3.18,
+where every pinned component configures unmodified.
+
 ---
 
 ## 6. What is delivered

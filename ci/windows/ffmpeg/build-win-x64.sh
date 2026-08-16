@@ -114,6 +114,28 @@ export PKG_CONFIG_PATH="${PREFIX}/lib/pkgconfig:${PREFIX}/share/pkgconfig"
 export PATH="${PREFIX}/bin:${PATH}"
 J="${FF_JOBS}"
 
+PATCH_DIR="${HERE}/patches"
+PATCH_SERIES="${PATCH_DIR}/series.txt"
+
+# Applied by unpack() and gitsrc(), so no recipe can forget them and no
+# component can be patched without the series naming it. See patches/series.txt
+# for what may live there: build system only.
+apply_component_patches() { # <component-name> <dir>
+    local name="$1" dir="$2" component patch rest count=0
+    [[ -f "${PATCH_SERIES}" ]] || return 0
+    while read -r component patch rest; do
+        [[ -n "${component}" && "${component}" != \#* ]] || continue
+        [[ "${component}" == "${name}" ]] || continue
+        [[ -f "${PATCH_DIR}/${patch}" ]] \
+            || ff_die "patches/series.txt names ${patch}, which does not exist"
+        ff_log "  patching ${name} with ${patch}"
+        patch -p1 --forward --no-backup-if-mismatch -F0 -d "${dir}" -i "${PATCH_DIR}/${patch}" \
+            || ff_die "component patch ${patch} did not apply cleanly to ${name}"
+        count=$((count + 1))
+    done < "${PATCH_SERIES}"
+    [[ "${count}" -eq 0 ]] || ff_log "  ${count} component patch(es) applied to ${name}"
+}
+
 unpack() { # <component-name> -> echoes the unpacked directory
     local name="$1" archive dir
     archive="$(find "${CACHE}/archives" -maxdepth 1 -name "${name}-*" -print -quit)"
@@ -121,6 +143,7 @@ unpack() { # <component-name> -> echoes the unpacked directory
     dir="${BUILDROOT}/${name}"
     rm -rf "${dir}"; mkdir -p "${dir}"
     tar --extract --file "${archive}" --directory "${dir}" --strip-components=1
+    apply_component_patches "${name}" "${dir}" >&2
     printf '%s\n' "${dir}"
 }
 
@@ -128,6 +151,7 @@ gitsrc() { # <component-name> -> echoes a writable copy of the pinned checkout
     local name="$1" dir="${BUILDROOT}/${1}"
     rm -rf "${dir}"
     cp -a "${CACHE}/git/${name}" "${dir}"
+    apply_component_patches "${name}" "${dir}" >&2
     printf '%s\n' "${dir}"
 }
 
@@ -182,6 +206,23 @@ done
 [[ "${#missing[@]}" -eq 0 ]] \
     || ff_die "components.json makes these win-x64-applicable but this script has no recipe: ${missing[*]}"
 ff_log "${#EXPECTED[@]} win-x64 components, all with recipes"
+
+# Every component patch must name a component this runtime actually builds, and
+# every named file must exist. A patch for a component that is not built is
+# either a leftover or a misspelling, and both read as "patched" in the
+# provenance while changing nothing.
+patch_count=0
+while read -r component patch _rest; do
+    [[ -n "${component}" && "${component}" != \#* ]] || continue
+    found=0
+    for want in "${EXPECTED[@]}"; do [[ "${want}" == "${component}" ]] && { found=1; break; }; done
+    [[ "${found}" -eq 1 ]] \
+        || ff_die "patches/series.txt patches '${component}', which is not a win-x64 component"
+    [[ -f "${PATCH_DIR}/${patch}" ]] \
+        || ff_die "patches/series.txt names ${patch}, which does not exist"
+    patch_count=$((patch_count + 1))
+done < "${PATCH_SERIES}"
+ff_log "${patch_count} component patch(es) declared"
 
 # =============================================================================
 # base
