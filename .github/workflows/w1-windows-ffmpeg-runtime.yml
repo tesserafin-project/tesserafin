@@ -175,7 +175,7 @@ jobs:
         shell: msys2 {0}
         run: |
           set -euo pipefail
-          revision="$(python3 -c 'import json;print(json.load(open("ci/ffmpeg/components.json"))["buildRevision"])')"
+          revision="$(python3 -c 'import json;print(json.load(open("ci/ffmpeg/components.json"))["buildRevision"])' | tr -d '\r')"
           python3 ci/windows/ffmpeg/package.py \
             --stage "/c/tf-ffout/tesserafin-ffmpeg-${revision}-win-x64" \
             --cache /c/tf-ffsrc \
@@ -188,7 +188,7 @@ jobs:
         shell: msys2 {0}
         run: |
           set -euo pipefail
-          revision="$(python3 -c 'import json;print(json.load(open("ci/ffmpeg/components.json"))["buildRevision"])')"
+          revision="$(python3 -c 'import json;print(json.load(open("ci/ffmpeg/components.json"))["buildRevision"])' | tr -d '\r')"
           python3 ci/windows/ffmpeg/verify-runtime.py \
             --delivered /c/tf-delivered \
             --stage "/c/tf-ffout/tesserafin-ffmpeg-${revision}-win-x64" \
