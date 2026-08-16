@@ -24,8 +24,14 @@
 #
 # There is deliberately no --enable-lto, for the reason the Linux file gives:
 # LTO partitioning depends on job count and link order and is the single largest
-# threat to bit-for-bit reproducibility. --disable-lto is stated outright here
-# because two independent runners have to agree on the bytes.
+# threat to bit-for-bit reproducibility, and two independent runners have to
+# agree on the bytes.
+#
+# Its ABSENCE is the whole statement: FFmpeg's configure accepts `--enable-lto`
+# and has no `--disable-lto` at all, so stating the negative form is not a
+# stronger guarantee, it is an unknown option that stops the build. The gate
+# ci/ffmpeg/verify-components.sh refuses `--enable-lto` appearing here, which is
+# the check that can actually fail.
 
 # The prefix is a drive-root path, NOT the MSYS2 root and NOT the workspace.
 # cmake and meson are native Windows programs, so MSYS2 rewrites a POSIX path
@@ -47,7 +53,6 @@
 --enable-version3
 --disable-shared
 --enable-static
---disable-lto
 
 # Threading. w32threads is the operating system's own primitive and needs no
 # runtime library; pthreads would pull libwinpthread into the closure for
