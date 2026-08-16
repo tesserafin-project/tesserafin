@@ -86,6 +86,17 @@ SESSION_MANAGER = "Tesserafin.Server.Core/Session/SessionManager.cs"
 server: dict[str, dict] = {}
 
 # --- 1. the query-string credential itself -----------------------------------------------
+# The set of query keys the general authorization path is allowed to read. This is a GATE, not a
+# description. The whole #153-A0 boundary rests on AuthorizationContext never learning a third key:
+# if it ever reads `playbackCapability`, a capability becomes a general-API credential and every
+# scope, item and expiry binding downstream turns into decoration. No behavioural test can catch
+# that on its own — a capability presented to /Items is refused today because it is not a device
+# token, so it would go on being refused for the wrong reason while the boundary was gone.
+ALLOWED_AUTHORIZATION_QUERY_KEYS = {"ApiKey", "api_key"}
+
+_observed_keys = set(re.findall(r'queryString\["([^"]+)"\]', read(AUTH_CONTEXT)))
+_unexpected_keys = sorted(_observed_keys - ALLOWED_AUTHORIZATION_QUERY_KEYS)
+
 server["query-credential-acceptance"] = {
     "classification": "general-api",
     "why": (
@@ -93,7 +104,10 @@ server["query-credential-acceptance"] = {
         "EVERY endpoint, not only media. This is the privilege defect: the same value that "
         "plays a file also drives the general API."
     ),
-    "hits": grep(AUTH_CONTEXT, r'queryString\["(ApiKey|api_key)"\]'),
+    "hits": grep(AUTH_CONTEXT, r'queryString\["[^"]+"\]'),
+    "allowedKeys": sorted(ALLOWED_AUTHORIZATION_QUERY_KEYS),
+    "observedKeys": sorted(_observed_keys),
+    "unexpectedKeys": _unexpected_keys,
 }
 
 # --- 2/3. direct stream + universal ------------------------------------------------------
@@ -282,13 +296,25 @@ report = {
 empty = [f"server.{k}" for k, v in server.items() if not v["hits"]]
 empty += [f"web.{k}" for k, v in web.items() if not v["hits"]]
 report["emptyCategories"] = empty
-report["ok"] = not empty
+report["unexpectedAuthorizationQueryKeys"] = _unexpected_keys
+report["ok"] = not empty and not _unexpected_keys
 
 print(json.dumps(report, indent=2))
 
 for side in ("server", "web"):
     for k, v in report[side].items():
         print(f"{side:7} {k:34} {v['classification']:26} {len(v['hits']):4} hit(s)", file=sys.stderr)
+if _unexpected_keys:
+    print(
+        "\nFAIL: AuthorizationContext reads query key(s) it must never read: "
+        + ", ".join(_unexpected_keys)
+        + ". The general authorization path may read only "
+        + ", ".join(sorted(ALLOWED_AUTHORIZATION_QUERY_KEYS))
+        + " — a third key makes the #153 credential a general-API credential.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
 if empty:
     print(f"\nFAIL: {len(empty)} category resolved to zero hits: {', '.join(empty)}", file=sys.stderr)
     sys.exit(1)
