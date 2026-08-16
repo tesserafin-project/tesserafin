@@ -110,7 +110,20 @@ export CXXFLAGS="${CFLAGS}"
 # -static resolves libc++, libunwind and libwinpthread into the image, so the
 # delivered closure is the operating system's own DLLs and nothing else.
 export LDFLAGS="-static -Wl,--no-insert-timestamp"
-export PKG_CONFIG_PATH="${PREFIX}/lib/pkgconfig:${PREFIX}/share/pkgconfig"
+# pkgconf is a NATIVE Windows program and PKG_CONFIG_PATH is an environment
+# variable, not an argument. MSYS2 rewrites POSIX-looking arguments when it execs
+# a native binary, but it does not rewrite the environment (PATH aside), so
+# "/c/tesserafin-ffmpeg/lib/pkgconfig" reaches pkgconf verbatim and means nothing
+# to it. Every package then reports as absent, and FFmpeg's configure blames the
+# first one it happens to check:
+#
+#     ERROR: x265 not found using pkg-config
+#
+# The separator is ';' for the same reason: a Windows build of pkgconf splits on
+# ';', and ':' would be read as part of the drive letter.
+PKG_CONFIG_LIB_DIR="$(cygpath -m "${PREFIX}/lib/pkgconfig")"
+PKG_CONFIG_SHARE_DIR="$(cygpath -m "${PREFIX}/share/pkgconfig")"
+export PKG_CONFIG_PATH="${PKG_CONFIG_LIB_DIR};${PKG_CONFIG_SHARE_DIR}"
 export PATH="${PREFIX}/bin:${PATH}"
 J="${FF_JOBS}"
 
@@ -453,6 +466,24 @@ if leftovers="$(grep -lE -- '-l(stdc\+\+|gcc_s|gcc|rt|dl)([[:space:]]|$)' "${PRE
     [[ -z "${leftovers}" ]] || ff_die "these pkg-config files still name a GNU-only runtime: ${leftovers}"
 fi
 
+# Ask pkg-config directly, before FFmpeg does. Its answer here is unambiguous;
+# FFmpeg's is not — configure reports "<library> not found using pkg-config"
+# whether the package is missing, the path is unreadable or the link test failed,
+# and those have nothing to do with each other.
+ff_log "pkg-config sees:"
+pkgconfig_missing=()
+# lame is absent from this list on purpose: it ships no .pc file at all, and
+# FFmpeg detects it with a plain link test rather than through pkg-config.
+for mod in x264 x265 SvtAv1Enc dav1d vpx opus vorbis zimg libass freetype2 fontconfig harfbuzz fribidi vpl; do
+    if version="$(pkg-config --modversion "${mod}" 2>/dev/null)"; then
+        ff_log "  ${mod} ${version}"
+    else
+        pkgconfig_missing+=("${mod}")
+    fi
+done
+[[ "${#pkgconfig_missing[@]}" -eq 0 ]] \
+    || ff_die "pkg-config cannot see: ${pkgconfig_missing[*]} (PKG_CONFIG_PATH=${PKG_CONFIG_PATH})"
+
 # =============================================================================
 # FFmpeg
 # =============================================================================
@@ -532,6 +563,14 @@ rm -rf "${FFSRC}"; cp -a "${CACHE}/git/jellyfin-ffmpeg" "${FFSRC}"
         --extra-ldflags="-static -Wl,--no-insert-timestamp -L${PREFIX}/lib" \
         > "${OUT}/configure.log" 2>&1 || {
             tail -80 "${OUT}/configure.log" >&2
+            # configure.log holds the verdict; ffbuild/config.log holds the
+            # REASON — the failing compile or link command and its output.
+            # Without this the log says "<library> not found using pkg-config"
+            # and every distinct cause looks identical.
+            if [[ -f ffbuild/config.log ]]; then
+                ff_log "last 60 lines of ffbuild/config.log"
+                tail -60 ffbuild/config.log >&2
+            fi
             # configure dies on the FIRST option it does not recognise, roughly
             # thirty minutes into a clean build, and names only that one. Ask it
             # about every flag individually before giving up, so one round trip
