@@ -453,7 +453,15 @@ while IFS= read -r pc; do
     # separator with the first match and leaves the second behind. Measured, not
     # feared — one pass over x265's real .pc leaves `-lgcc -lgcc -ldl`.
     for _ in 1 2 3 4; do
-        sed -i -E 's/-lstdc\+\+/-lc++/g; s/(^|[[:space:]])-l(gcc_s|gcc|rt|dl)([[:space:]]|$)/\1\3/g' "${pc}"
+        # `-l-l:libunwind.a` is not a typo here, it is what x265 3.6 writes.
+        # Its pkg-config generator prefixes "-l" to every entry of
+        # CMAKE_CXX_IMPLICIT_LINK_LIBRARIES, and on CLANG64 one of those entries
+        # is already the linker argument `-l:libunwind.a`. lld then reports
+        #
+        #     unable to find library -l-l:libunwind.a
+        #
+        # and FFmpeg reports the whole component as not found.
+        sed -i -E 's/-l-l/-l/g; s/-lstdc\+\+/-lc++/g; s/(^|[[:space:]])-l(gcc_s|gcc|rt|dl)([[:space:]]|$)/\1\3/g' "${pc}"
     done
     sed -i -E 's/[[:space:]]+/ /g; s/[[:space:]]+$//' "${pc}"
     after="$(sha256sum "${pc}" | cut -d' ' -f1)"
@@ -462,7 +470,7 @@ done < <(find "${PREFIX}/lib/pkgconfig" "${PREFIX}/share/pkgconfig" -name '*.pc'
 
 # A leftover reference is a link failure thirty minutes later, reported against
 # the wrong library, so it stops the build here instead.
-if leftovers="$(grep -lE -- '-l(stdc\+\+|gcc_s|gcc|rt|dl)([[:space:]]|$)' "${PREFIX}"/lib/pkgconfig/*.pc 2>/dev/null)"; then
+if leftovers="$(grep -lE -- '(-l-l|-l(stdc\+\+|gcc_s|gcc|rt|dl)([[:space:]]|$))' "${PREFIX}"/lib/pkgconfig/*.pc 2>/dev/null)"; then
     [[ -z "${leftovers}" ]] || ff_die "these pkg-config files still name a GNU-only runtime: ${leftovers}"
 fi
 
