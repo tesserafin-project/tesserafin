@@ -77,13 +77,22 @@ def check_evidence(evidence: dict) -> None:
     for field, want, message in (
         ("installedSetEqualsLock", True,
          "the installed set is not exactly the locked set"),
-        ("mirrorsEmptied", True,
-         "the mirrors were not emptied, so live pacman resolution was still possible"),
         ("upstreamConsulted", False, "upstream was consulted"),
         ("tagUsed", False, "a tag was used somewhere in the acquisition"),
     ):
         if evidence.get(field) is not want:
             raise Refusal(f"{message} ({field}={evidence.get(field)!r})")
+
+    # `mirrorsEmptied` is the LIST of mirrorlist files install-locked.ps1
+    # emptied, not a flag — it reports `["mirrorlist.mingw", "mirrorlist.msys"]`.
+    # The names are not hardcoded here: that script empties every `mirrorlist*`
+    # it finds and hard-stops when it finds none, so the property that matters is
+    # that the list is non-empty. Naming the two files MSYS2 ships today would
+    # turn a future third mirrorlist into a passing check that emptied only two.
+    mirrors = evidence.get("mirrorsEmptied")
+    if not isinstance(mirrors, (list, bool)) or mirrors is False or not mirrors:
+        raise Refusal("the mirrors were not emptied, so live pacman resolution "
+                      f"was still possible (mirrorsEmptied={mirrors!r})")
 
     if "pacman -U" not in str(evidence.get("pacmanMode", "")):
         raise Refusal(f"pacmanMode is {evidence.get('pacmanMode')!r}; only "

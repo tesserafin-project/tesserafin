@@ -426,7 +426,11 @@ def run_controls(c: Controls, tmp: Path) -> None:
         "packageCount": ACCEPTED["packageCount"],
         "installedPackages": ACCEPTED["packageCount"],
         "installedSetEqualsLock": True,
-        "mirrorsEmptied": True,
+        # The real consumer reports the LIST of mirrorlist files it emptied, so
+        # the fixture reports one too. A fixture that used a boolean here would
+        # have let a gate that only accepts booleans pass every control and then
+        # refuse the first real build — which is exactly what happened.
+        "mirrorsEmptied": ["mirrorlist.mingw", "mirrorlist.msys"],
         "upstreamConsulted": False,
         "tagUsed": False,
         "pacmanMode": "pacman -U over local files only",
@@ -443,6 +447,13 @@ def run_controls(c: Controls, tmp: Path) -> None:
 
     c.expect_acceptance("the accepted build inputs",
                         [inputs, "--consume-evidence", evidence("good")])
+    # The decisive positive control: not a fixture this file invented, but the
+    # consume.json a real hosted Windows runner wrote while pulling the accepted
+    # digest. Every synthetic control above agrees with whatever shape this file
+    # imagines; only this one disagrees with the consumer when the two drift.
+    c.expect_acceptance("build-input evidence observed on a hosted runner",
+                        [inputs, "--consume-evidence",
+                         str(HERE / "testdata/consume-observed.json")])
     c.expect_refusal("a WRONG LAYER digest",
                      [inputs, "--consume-evidence",
                       evidence("layer", layerDigest="sha256:" + "2" * 64)],
@@ -476,6 +487,10 @@ def run_controls(c: Controls, tmp: Path) -> None:
     c.expect_refusal("mirrors that were NOT emptied",
                      [inputs, "--consume-evidence",
                       evidence("mirrors", mirrorsEmptied=False)],
+                     "mirrors were not emptied")
+    c.expect_refusal("an EMPTY list of emptied mirrors",
+                     [inputs, "--consume-evidence",
+                      evidence("mirrors-empty", mirrorsEmptied=[])],
                      "mirrors were not emptied")
     c.expect_refusal("upstream having been consulted",
                      [inputs, "--consume-evidence",
