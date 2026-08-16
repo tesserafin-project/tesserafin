@@ -1,0 +1,23 @@
+# Component patches for the win-x64 runtime (W1-A2 / #236).
+#
+# Format: <component> <patch file> <reason>
+# Comments and blank lines are ignored. Applied in the order listed, with
+# `patch -p1 --forward -F0`: zero fuzz, because a patch that only applies
+# approximately is a patch applying to the wrong place.
+#
+# These exist because two frozen things disagree. The component source pins are
+# frozen by ci/ffmpeg/components.json and the toolchain is frozen by the
+# 246-package MSYS2 lock W1-R retained, and neither may move. Where a pinned
+# source cannot be configured by the pinned toolchain, the gap is closed here —
+# visibly, in a reviewable diff, recorded in the delivered provenance with its
+# SHA-256, and never by loosening a pin.
+#
+# The rule for what may live here: BUILD SYSTEM ONLY. No patch in this file may
+# touch codec, filter or protocol source. A change to what the runtime computes
+# belongs in the component pin or in the FFmpeg fork series, where the existing
+# gates can see it.
+#
+# The Linux runtimes take none of these: their builder image carries cmake 3.18,
+# where every pinned component configures unmodified.
+
+x265 x265-cmake4-policies.patch CMake 4.4.2 in the locked MSYS2 set refuses `cmake_policy(SET CMP0025 OLD)` and `cmake_policy(SET CMP0054 OLD)` outright — those policies were removed, not deprecated — and refuses `cmake_minimum_required (VERSION 2.8.8)` because compatibility below 3.5 is gone. The patch sets both policies to NEW, raises the floor to 3.5 and moves the call before `project()`, which is where CMake has always wanted it. No file under source/common, source/encoder or source/x265.cpp is touched. Verified by configuring and compiling the pinned x265 3.6 tarball with the patch applied.

@@ -150,6 +150,27 @@ def synth_pe(machine: int = IMAGE_FILE_MACHINE_AMD64, magic: int = 0x20B,
     return headers + section_data
 
 
+def _declared_component_patches() -> list[dict]:
+    """The component-patch series as the packager would record it."""
+    series = HERE / "patches/series.txt"
+    out = []
+    if series.is_file():
+        for line in series.read_text().splitlines():
+            line = line.strip()
+            if line and not line.startswith("#"):
+                parts = line.split(None, 2)
+                if len(parts) >= 2:
+                    out.append({
+                        "component": parts[0],
+                        "patch": f"ci/windows/ffmpeg/patches/{parts[1]}",
+                        "sha256": hashlib.sha256(
+                            (HERE / "patches" / parts[1]).read_bytes()).hexdigest(),
+                        "scope": "build system only",
+                        "reason": parts[2] if len(parts) > 2 else "",
+                    })
+    return out
+
+
 def build_delivered_fixture(root: Path) -> Path:
     """A structurally complete delivered set that the gate accepts.
 
@@ -227,6 +248,7 @@ def build_delivered_fixture(root: Path) -> Path:
             "tagUsed": False,
         },
         "patches": {"seriesLength": 95, "applied": 95, "excluded": [], "fuzz": 0},
+        "componentPatches": _declared_component_patches(),
         "runtime": {"archive": "runtime/tesserafin-ffmpeg-win-x64.zip",
                     "sha256": hashlib.sha256(archive.read_bytes()).hexdigest()},
         "correspondingSource": {
@@ -364,6 +386,26 @@ def run_controls(c: Controls, tmp: Path) -> None:
     blob.write_bytes(blob.read_bytes() + b"\x00")
     c.expect_refusal("a CORRUPTED delivered path", [verify, "--delivered", str(d)],
                      "does not match")
+
+    # A component patch is a source modification, so the provenance must
+    # describe the exact bytes that ran. These two controls are what stops
+    # "patched" in a provenance file from meaning "some patch, once".
+    d = fresh("patch-digest")
+    prov = json.loads((d / "provenance.json").read_text())
+    if prov["componentPatches"]:
+        prov["componentPatches"][0]["sha256"] = "9" * 64
+        (d / "provenance.json").write_text(json.dumps(prov, indent=2, sort_keys=True) + "\n")
+        write_sums(d)
+        c.expect_refusal("a component patch digest that is not the tree's",
+                         [verify, "--delivered", str(d)], "provenance records")
+
+        d = fresh("patch-missing")
+        prov = json.loads((d / "provenance.json").read_text())
+        prov["componentPatches"] = []
+        (d / "provenance.json").write_text(json.dumps(prov, indent=2, sort_keys=True) + "\n")
+        write_sums(d)
+        c.expect_refusal("a build that dropped a declared component patch",
+                         [verify, "--delivered", str(d)], "component patches")
 
     # ── 2. wrong-architecture and non-deterministic PE ─────────────────────
     for tag, machine, label in (("arm64", IMAGE_FILE_MACHINE_ARM64, "arm64"),

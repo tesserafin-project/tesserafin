@@ -312,6 +312,39 @@ def check_delivered_set(gate: Gate, delivered: Path) -> None:
     else:
         gate.ok("provenance binds 95/95 patches, zero fuzz")
 
+    # Component patches: the provenance must describe exactly the series in the
+    # tree, digests included. A build that applied a patch the repository does
+    # not carry, or carried one it did not apply, is not the build this pull
+    # request reviews.
+    series_path = HERE / "patches/series.txt"
+    declared = []
+    if series_path.is_file():
+        for line in series_path.read_text().splitlines():
+            line = line.strip()
+            if line and not line.startswith("#"):
+                parts = line.split(None, 2)
+                if len(parts) >= 2:
+                    declared.append((parts[0], parts[1]))
+    recorded = prov.get("componentPatches")
+    if recorded is None:
+        gate.fail("provenance records no componentPatches list")
+    elif len(recorded) != len(declared):
+        gate.fail(f"provenance records {len(recorded)} component patches, "
+                  f"the series declares {len(declared)}")
+    else:
+        for (component, name), entry in zip(declared, recorded):
+            if entry.get("component") != component or not entry.get("patch", "").endswith(name):
+                gate.fail(f"provenance patch entry {entry.get('patch')} does not "
+                          f"match the series entry {component}/{name}")
+                continue
+            actual = sha256_file(HERE / "patches" / name)
+            if entry.get("sha256") != actual:
+                gate.fail(f"{name} hashes to {actual[:16]}…, provenance records "
+                          f"{str(entry.get('sha256'))[:16]}…")
+        if not gate.failures:
+            gate.ok(f"{len(declared)} component patch(es), each matching the "
+                    "committed series by digest")
+
     # Every win-x64 component must appear in the SBOM, in the notices, and have a
     # licence text delivered.
     manifest = json.loads((REPO_ROOT / "ci/ffmpeg/components.json").read_text())
