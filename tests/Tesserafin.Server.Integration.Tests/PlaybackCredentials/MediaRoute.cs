@@ -13,6 +13,7 @@ namespace Tesserafin.Server.Integration.Tests.PlaybackCredentials;
 /// <param name="Path">The concrete path, already bound to the fixture's item and media source.</param>
 /// <param name="ItemBound">Whether the route names an item.</param>
 /// <param name="MediaSourceBound">Whether the route names a media source.</param>
+/// <param name="PlaySessionBound">Whether the route exposes a playSessionId query parameter.</param>
 /// <param name="Evidence">What the positive case can prove.</param>
 public sealed record MediaRoute(
     string Name,
@@ -22,6 +23,7 @@ public sealed record MediaRoute(
     string Path,
     bool ItemBound,
     bool MediaSourceBound,
+    bool PlaySessionBound,
     MediaRouteEvidence Evidence)
 {
     /// <summary>
