@@ -1,0 +1,66 @@
+# DLLs the win-x64 runtime may import without delivering them (W1-A2 / #236).
+#
+# The Linux analogue is ci/ffmpeg/allowed-dt-needed.txt and the rule is the same:
+# a dependency is acceptable only when it is part of the operating system the
+# runtime declares support for. Everything else must be DELIVERED beside the
+# binary or the runtime is not self-contained on a clean machine.
+#
+# One name per line, lowercase, comments ignored. `api-ms-win-*` is matched as a
+# prefix: it is the Universal CRT's API-set contract layer, which is part of
+# Windows 10 and later and is resolved by the loader, not by a file on disk.
+#
+# Anything NOT here — libwinpthread-1.dll, libc++.dll, libunwind.dll,
+# libgcc_s_seh-1.dll, msys-2.0.dll, libssl-3-x64.dll, libcrypto-3-x64.dll — is
+# either an MSYS2 runtime leak or a TLS provider this runtime does not use, and
+# ci/windows/ffmpeg/verify-runtime.py refuses it.
+
+# --- core Win32 ---
+kernel32.dll
+kernelbase.dll
+ntdll.dll
+advapi32.dll
+user32.dll
+gdi32.dll
+shell32.dll
+shlwapi.dll
+ole32.dll
+oleaut32.dll
+rpcrt4.dll
+combase.dll
+imm32.dll
+version.dll
+psapi.dll
+setupapi.dll
+cfgmgr32.dll
+winmm.dll
+powrprof.dll
+
+# --- C runtime ---
+# The Universal CRT ships with Windows 10 and later. msvcrt.dll is the legacy
+# system CRT mingw-w64 links against by default.
+msvcrt.dll
+ucrtbase.dll
+api-ms-win-
+
+# --- networking and TLS ---
+ws2_32.dll
+iphlpapi.dll
+# Schannel. This is the runtime's ONLY TLS provider and its presence is asserted
+# positively, not merely tolerated.
+secur32.dll
+crypt32.dll
+bcrypt.dll
+
+# --- graphics and media, all shipped with Windows ---
+d3d9.dll
+d3d11.dll
+d3d12.dll
+dxgi.dll
+dxva2.dll
+mfplat.dll
+mf.dll
+mfuuid.dll
+evr.dll
+avicap32.dll
+strmiids.dll
+uuid.dll
