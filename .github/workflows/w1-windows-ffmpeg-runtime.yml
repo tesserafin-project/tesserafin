@@ -157,17 +157,31 @@ jobs:
         shell: msys2 {0}
         run: ./ci/windows/ffmpeg/record-toolchain.sh "${RUNNER_TEMP}/w1a2-inputs/toolchain.json"
 
-      - name: Fetch every pinned source
+      # The shim makes Python write LF. ci/ffmpeg/fetch-sources.sh belongs to the
+      # Linux runtimes and must stay byte-identical, but its component table puts
+      # the mirror list last, so on Windows every last mirror arrives with a
+      # carriage return glued to it and curl rejects the URL. That stays
+      # invisible until a primary host fails — which freedesktop.org does
+      # routinely, with HTTP 418, to shared CI address space.
+      - name: Make Python write LF for the scripts W1-A2 may not edit
         shell: msys2 {0}
         run: |
           set -euo pipefail
           command -v python3 >/dev/null 2>&1 || ln -sf "$(command -v python)" /usr/bin/python3
+          ./ci/windows/ffmpeg/install-python-shim.sh /c/tf-shims
+
+      - name: Fetch every pinned source
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          export PATH="/c/tf-shims:${PATH}"
           ./ci/ffmpeg/fetch-sources.sh --cache /c/tf-ffsrc
 
       - name: Build the runtime natively
         shell: msys2 {0}
         run: |
           set -euo pipefail
+          export PATH="/c/tf-shims:${PATH}"
           ./ci/windows/ffmpeg/build-win-x64.sh --cache /c/tf-ffsrc --out /c/tf-ffout
 
       - name: Package the delivered set
@@ -175,6 +189,7 @@ jobs:
         shell: msys2 {0}
         run: |
           set -euo pipefail
+          export PATH="/c/tf-shims:${PATH}"
           revision="$(python3 -c 'import json;print(json.load(open("ci/ffmpeg/components.json"))["buildRevision"])' | tr -d '\r')"
           python3 ci/windows/ffmpeg/package.py \
             --stage "/c/tf-ffout/tesserafin-ffmpeg-${revision}-win-x64" \
@@ -188,6 +203,7 @@ jobs:
         shell: msys2 {0}
         run: |
           set -euo pipefail
+          export PATH="/c/tf-shims:${PATH}"
           revision="$(python3 -c 'import json;print(json.load(open("ci/ffmpeg/components.json"))["buildRevision"])' | tr -d '\r')"
           python3 ci/windows/ffmpeg/verify-runtime.py \
             --delivered /c/tf-delivered \
