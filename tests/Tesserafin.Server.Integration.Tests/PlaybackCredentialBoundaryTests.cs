@@ -18,7 +18,7 @@ namespace Tesserafin.Server.Integration.Tests;
 /// <c>PlaybackCredentialServiceTests</c>, the route table in <c>MediaBoundaryStructuralTests</c>,
 /// and what remains for a live pipeline is the question neither of those can answer: does a real
 /// request carrying a real capability actually get refused by the real authorization stack on an
-/// endpoint that is not media?
+/// endpoint that is not media.
 /// </remarks>
 public sealed class PlaybackCredentialBoundaryTests : IClassFixture<TesserafinApplicationFactory>
 {

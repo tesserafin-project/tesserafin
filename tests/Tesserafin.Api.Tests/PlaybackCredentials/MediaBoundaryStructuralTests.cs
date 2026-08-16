@@ -29,7 +29,7 @@ public class MediaBoundaryStructuralTests
 {
     private static Assembly ApiAssembly => typeof(BaseTesserafinApiController).Assembly;
 
-    /// <summary>The routes the phase-0 inventory classified as playback media or auxiliary media.</summary>
+    /// <summary>Gets the routes the phase-0 inventory classified as playback media or auxiliary media.</summary>
     public static IReadOnlyList<(string Controller, string Action, PlaybackCapabilityScope Scope)> Declared { get; } = new[]
     {
         ("VideosController", "GetVideoStream", PlaybackCapabilityScope.Media),
