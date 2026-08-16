@@ -46,6 +46,19 @@ public interface IPlaybackCredentialService
     PlaybackCapabilityRenewal RenewCapability(Guid capabilityId, string sessionId);
 
     /// <summary>
+    /// Resolves a presented capability without asking anything about the route.
+    /// </summary>
+    /// <param name="presentedValue">The raw value from the request, or null.</param>
+    /// <returns>Existence, expiry and revocation only.</returns>
+    /// <remarks>
+    /// This is what the authentication layer can honestly decide. Scope, item and media source
+    /// depend on the route being called, which authentication cannot see, so they belong to the
+    /// action filter and not here. Splitting the two is what stops the authentication layer from
+    /// having to guess a demand and accidentally accepting a mismatch.
+    /// </remarks>
+    PlaybackCapabilityValidation ResolveCapability(string? presentedValue);
+
+    /// <summary>
     /// Validates a presented capability against what a route demands.
     /// </summary>
     /// <param name="presentedValue">The raw value from the request, or null.</param>

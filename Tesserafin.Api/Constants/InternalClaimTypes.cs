@@ -39,4 +39,33 @@ public static class InternalClaimTypes
     /// Is Api Key.
     /// </summary>
     public const string IsApiKey = "Tesserafin-IsApiKey";
+
+    /// <summary>
+    /// The public identifier of the playback capability that authenticated this request. Present
+    /// only on a principal produced by the playback-capability scheme, which is what tells the
+    /// media authorization handler and the scope filter which kind of principal they are looking at.
+    /// Never the secret.
+    /// </summary>
+    public const string PlaybackCapabilityId = "Tesserafin-PlaybackCapabilityId";
+
+    /// <summary>
+    /// One claim per scope the authenticating capability carries.
+    /// </summary>
+    public const string PlaybackCapabilityScope = "Tesserafin-PlaybackCapabilityScope";
+
+    /// <summary>
+    /// The item the authenticating capability is bound to, absent for a scope that is not
+    /// item-bound.
+    /// </summary>
+    public const string PlaybackCapabilityItemId = "Tesserafin-PlaybackCapabilityItemId";
+
+    /// <summary>
+    /// The media source the authenticating capability is bound to, when it names one.
+    /// </summary>
+    public const string PlaybackCapabilityMediaSourceId = "Tesserafin-PlaybackCapabilityMediaSourceId";
+
+    /// <summary>
+    /// The play session the authenticating capability is bound to.
+    /// </summary>
+    public const string PlaybackCapabilityPlaySessionId = "Tesserafin-PlaybackCapabilityPlaySessionId";
 }

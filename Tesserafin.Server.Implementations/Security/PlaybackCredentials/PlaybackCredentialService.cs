@@ -152,7 +152,7 @@ public sealed class PlaybackCredentialService : IPlaybackCredentialService
     }
 
     /// <inheritdoc />
-    public PlaybackCapabilityValidation ValidateCapability(string? presentedValue, PlaybackCapabilityDemand demand)
+    public PlaybackCapabilityValidation ResolveCapability(string? presentedValue)
     {
         if (string.IsNullOrEmpty(presentedValue))
         {
@@ -183,6 +183,31 @@ public sealed class PlaybackCredentialService : IPlaybackCredentialService
             return Refused(PlaybackCapabilityFailure.Expired);
         }
 
+        return new PlaybackCapabilityValidation(
+            true,
+            PlaybackCapabilityFailure.None,
+            entry.CapabilityId,
+            entry.UserId,
+            entry.SessionId,
+            entry.PlaySessionId);
+
+        static PlaybackCapabilityValidation Refused(PlaybackCapabilityFailure failure)
+            => new(false, failure, Guid.Empty, Guid.Empty, null, null);
+    }
+
+    /// <inheritdoc />
+    public PlaybackCapabilityValidation ValidateCapability(string? presentedValue, PlaybackCapabilityDemand demand)
+    {
+        var resolved = ResolveCapability(presentedValue);
+        if (!resolved.IsValid)
+        {
+            return resolved;
+        }
+
+        // ResolveCapability proved the value is live; only the route-dependent bindings are left,
+        // and they are checked here because only the route knows them.
+        var entry = _capabilitiesById[resolved.CapabilityId];
+
         if (!entry.Scopes.Contains(demand.Scope))
         {
             return Refused(PlaybackCapabilityFailure.ScopeMismatch);
@@ -207,10 +232,10 @@ public sealed class PlaybackCredentialService : IPlaybackCredentialService
             return Refused(PlaybackCapabilityFailure.MediaSourceMismatch);
         }
 
-        return new PlaybackCapabilityValidation(true, PlaybackCapabilityFailure.None, entry.UserId, entry.SessionId, entry.PlaySessionId);
+        return resolved;
 
         static PlaybackCapabilityValidation Refused(PlaybackCapabilityFailure failure)
-            => new(false, failure, Guid.Empty, null, null);
+            => new(false, failure, Guid.Empty, Guid.Empty, null, null);
     }
 
     /// <inheritdoc />
