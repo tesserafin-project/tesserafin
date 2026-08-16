@@ -99,4 +99,15 @@ public static class Policies
     /// Policy name for accessing content pack management.
     /// </summary>
     public const string ContentPackManagement = "ContentPackManagement";
+
+    /// <summary>
+    /// Policy name for delivering media bytes (#153).
+    /// </summary>
+    /// <remarks>
+    /// The ONLY policy that accepts a playback capability, and it is carried by media routes and
+    /// nothing else. A general API endpoint keeps the default policy, which names one
+    /// authentication scheme and will never select the capability scheme, so a capability cannot
+    /// reach it however valid it is.
+    /// </remarks>
+    public const string MediaDelivery = "MediaDelivery";
 }

@@ -22,6 +22,8 @@ using Tesserafin.Api.Auth.AnonymousLanAccessPolicy;
 using Tesserafin.Api.Auth.DefaultAuthorizationPolicy;
 using Tesserafin.Api.Auth.FirstTimeSetupPolicy;
 using Tesserafin.Api.Auth.LocalAccessOrRequiresElevationPolicy;
+using Tesserafin.Api.Auth.MediaDeliveryPolicy;
+using Tesserafin.Api.Auth.PlaybackCapabilityPolicy;
 using Tesserafin.Api.Auth.SyncPlayAccessPolicy;
 using Tesserafin.Api.Auth.UserPermissionPolicy;
 using Tesserafin.Api.Constants;
@@ -32,6 +34,7 @@ using Tesserafin.Api.Playback;
 using Tesserafin.Common.Api;
 using Tesserafin.Common.Net;
 using Tesserafin.Controller.MediaEncoding;
+using Tesserafin.Controller.Net.PlaybackCredentials;
 using Tesserafin.Data.Enums;
 using Tesserafin.Database.Implementations.Enums;
 using Tesserafin.Extensions.Json;
@@ -41,6 +44,7 @@ using Tesserafin.Server.Configuration;
 using Tesserafin.Server.Core;
 using Tesserafin.Server.Diagnostics.RemoteAccess;
 using Tesserafin.Server.Filters;
+using Tesserafin.Server.Implementations.Security.PlaybackCredentials;
 using AuthenticationSchemes = Tesserafin.Api.Constants.AuthenticationSchemes;
 
 namespace Tesserafin.Server.Extensions
@@ -64,6 +68,7 @@ namespace Tesserafin.Server.Extensions
             serviceCollection.AddSingleton<IAuthorizationHandler, AnonymousLanAccessHandler>();
             serviceCollection.AddSingleton<IAuthorizationHandler, SyncPlayAccessHandler>();
             serviceCollection.AddSingleton<IAuthorizationHandler, LocalAccessOrRequiresElevationHandler>();
+            serviceCollection.AddSingleton<IAuthorizationHandler, MediaDeliveryHandler>();
 
             return serviceCollection.AddAuthorizationCore(options =>
             {
@@ -89,6 +94,18 @@ namespace Tesserafin.Server.Extensions
                 options.AddPolicy(Policies.SubtitleManagement, new UserPermissionRequirement(PermissionKind.EnableSubtitleManagement));
                 options.AddPolicy(Policies.LyricManagement, new UserPermissionRequirement(PermissionKind.EnableLyricManagement));
                 options.AddPolicy(Policies.ContentPackManagement, new UserPermissionRequirement(PermissionKind.EnableContentPackManagement));
+                // The ONE policy that accepts a playback capability. Every other policy names a
+                // single authentication scheme and will never select the capability scheme, which
+                // is what makes "a capability cannot authenticate the general API" structural
+                // rather than a rule somebody has to remember on each new controller.
+                options.AddPolicy(
+                    Policies.MediaDelivery,
+                    policy => policy
+                        .AddAuthenticationSchemes(
+                            AuthenticationSchemes.CustomAuthentication,
+                            AuthenticationSchemes.PlaybackCapability)
+                        .AddRequirements(new MediaDeliveryRequirement()));
+
                 options.AddPolicy(
                     Policies.RequiresElevation,
                     policy => policy.AddAuthenticationSchemes(AuthenticationSchemes.CustomAuthentication)
@@ -104,7 +121,8 @@ namespace Tesserafin.Server.Extensions
         public static AuthenticationBuilder AddCustomAuthentication(this IServiceCollection serviceCollection)
         {
             return serviceCollection.AddAuthentication(AuthenticationSchemes.CustomAuthentication)
-                .AddScheme<AuthenticationSchemeOptions, CustomAuthenticationHandler>(AuthenticationSchemes.CustomAuthentication, null);
+                .AddScheme<AuthenticationSchemeOptions, CustomAuthenticationHandler>(AuthenticationSchemes.CustomAuthentication, null)
+                .AddScheme<AuthenticationSchemeOptions, PlaybackCapabilityAuthenticationHandler>(AuthenticationSchemes.PlaybackCapability, null);
         }
 
         /// <summary>
@@ -183,6 +201,23 @@ namespace Tesserafin.Server.Extensions
             }
 
             return mvcBuilder.AddControllersAsServices();
+        }
+
+        /// <summary>
+        /// Adds the #153 playback capability and WebSocket ticket store to the service collection.
+        /// </summary>
+        /// <param name="serviceCollection">The service collection.</param>
+        /// <returns>The updated service collection.</returns>
+        public static IServiceCollection AddPlaybackCredentials(this IServiceCollection serviceCollection)
+        {
+            serviceCollection.TryAddSingleton(TimeProvider.System);
+            serviceCollection.AddSingleton<IRandomSecretSource, CryptoRandomSecretSource>();
+
+            // Singleton because the store IS the state. A scoped or transient service would give
+            // every request its own empty dictionary and validate nothing at all — the same shape
+            // of mistake as a per-request semaphore that serialises nothing.
+            serviceCollection.AddSingleton<IPlaybackCredentialService, PlaybackCredentialService>();
+            return serviceCollection;
         }
 
         /// <summary>
