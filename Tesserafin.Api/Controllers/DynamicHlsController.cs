@@ -16,10 +16,12 @@ using Tesserafin.Api.Attributes;
 using Tesserafin.Api.Extensions;
 using Tesserafin.Api.Helpers;
 using Tesserafin.Api.Models.StreamingDtos;
+using Tesserafin.Common.Api;
 using Tesserafin.Common.Configuration;
 using Tesserafin.Controller.Configuration;
 using Tesserafin.Controller.Library;
 using Tesserafin.Controller.MediaEncoding;
+using Tesserafin.Controller.Net.PlaybackCredentials;
 using Tesserafin.Controller.Streaming;
 using Tesserafin.Data.Enums;
 using Tesserafin.Extensions;
@@ -38,7 +40,7 @@ namespace Tesserafin.Api.Controllers;
 /// Dynamic hls controller.
 /// </summary>
 [Route("")]
-[Authorize]
+[Authorize(Policy = Policies.MediaDelivery)]
 [ApiExplorerSettings(IgnoreApi = true)]
 public class DynamicHlsController : BaseTesserafinApiController
 {
@@ -170,6 +172,7 @@ public class DynamicHlsController : BaseTesserafinApiController
     [HttpGet("Videos/{itemId}/live.m3u8")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesPlaylistFile]
+    [RequiresPlaybackCapability(PlaybackCapabilityScope.Media, "itemId", "mediaSourceId")]
     public async Task<ActionResult> GetLiveHlsStream(
         [FromRoute, Required] Guid itemId,
         [FromQuery][RegularExpression(EncodingHelper.ContainerValidationRegexStr)] string? container,
@@ -400,6 +403,7 @@ public class DynamicHlsController : BaseTesserafinApiController
     [HttpHead("Videos/{itemId}/master.m3u8", Name = "HeadMasterHlsVideoPlaylist")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesPlaylistFile]
+    [RequiresPlaybackCapability(PlaybackCapabilityScope.Media, "itemId", "mediaSourceId")]
     public async Task<ActionResult> GetMasterHlsVideoPlaylist(
         [FromRoute, Required] Guid itemId,
         [FromQuery] bool? @static,
@@ -573,6 +577,7 @@ public class DynamicHlsController : BaseTesserafinApiController
     [HttpHead("Audio/{itemId}/master.m3u8", Name = "HeadMasterHlsAudioPlaylist")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesPlaylistFile]
+    [RequiresPlaybackCapability(PlaybackCapabilityScope.Media, "itemId", "mediaSourceId")]
     public async Task<ActionResult> GetMasterHlsAudioPlaylist(
         [FromRoute, Required] Guid itemId,
         [FromQuery] bool? @static,
@@ -740,6 +745,7 @@ public class DynamicHlsController : BaseTesserafinApiController
     [HttpGet("Videos/{itemId}/main.m3u8")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesPlaylistFile]
+    [RequiresPlaybackCapability(PlaybackCapabilityScope.Media, "itemId", "mediaSourceId")]
     public async Task<ActionResult> GetVariantHlsVideoPlaylist(
         [FromRoute, Required] Guid itemId,
         [FromQuery] bool? @static,
@@ -909,6 +915,7 @@ public class DynamicHlsController : BaseTesserafinApiController
     [HttpGet("Audio/{itemId}/main.m3u8")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesPlaylistFile]
+    [RequiresPlaybackCapability(PlaybackCapabilityScope.Media, "itemId", "mediaSourceId")]
     public async Task<ActionResult> GetVariantHlsAudioPlaylist(
         [FromRoute, Required] Guid itemId,
         [FromQuery] bool? @static,
@@ -1082,6 +1089,7 @@ public class DynamicHlsController : BaseTesserafinApiController
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesVideoFile]
     [SuppressMessage("Microsoft.Performance", "CA1801:ReviewUnusedParameters", MessageId = "playlistId", Justification = "Imported from ServiceStack")]
+    [RequiresPlaybackCapability(PlaybackCapabilityScope.Media, "itemId", "mediaSourceId")]
     public async Task<ActionResult> GetHlsVideoSegment(
         [FromRoute, Required] Guid itemId,
         [FromRoute, Required] string playlistId,
@@ -1264,6 +1272,7 @@ public class DynamicHlsController : BaseTesserafinApiController
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesAudioFile]
     [SuppressMessage("Microsoft.Performance", "CA1801:ReviewUnusedParameters", MessageId = "playlistId", Justification = "Imported from ServiceStack")]
+    [RequiresPlaybackCapability(PlaybackCapabilityScope.Media, "itemId", "mediaSourceId")]
     public async Task<ActionResult> GetHlsAudioSegment(
         [FromRoute, Required] Guid itemId,
         [FromRoute, Required] string playlistId,

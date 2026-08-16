@@ -24,6 +24,7 @@ using Tesserafin.Controller.Events.Authentication;
 using Tesserafin.Controller.Events.Session;
 using Tesserafin.Controller.Library;
 using Tesserafin.Controller.Net;
+using Tesserafin.Controller.Net.PlaybackCredentials;
 using Tesserafin.Controller.Session;
 using Tesserafin.Controller.Sorting;
 using Tesserafin.Data;
@@ -64,6 +65,8 @@ namespace Tesserafin.Server.Core.Session
         private readonly IItemQueryService _itemQueryService;
         private readonly IItemSortService _itemSortService;
         private readonly CancellationTokenRegistration _shutdownCallback;
+        private readonly IPlaybackCredentialService _credentialService;
+
         private readonly ConcurrentDictionary<string, SessionInfo> _activeConnections
             = new(StringComparer.OrdinalIgnoreCase);
 
@@ -94,6 +97,7 @@ namespace Tesserafin.Server.Core.Session
         /// <param name="hostApplicationLifetime">Instance of <see cref="IHostApplicationLifetime"/> interface.</param>
         /// <param name="itemQueryService">Instance of <see cref="IItemQueryService"/> interface.</param>
         /// <param name="itemSortService">Instance of <see cref="IItemSortService"/> interface.</param>
+        /// <param name="credentialService">Instance of the <see cref="IPlaybackCredentialService"/> interface.</param>
         public SessionManager(
             ILogger<SessionManager> logger,
             IEventManager eventManager,
@@ -109,7 +113,8 @@ namespace Tesserafin.Server.Core.Session
             IMediaSourceManager mediaSourceManager,
             IHostApplicationLifetime hostApplicationLifetime,
             IItemQueryService itemQueryService,
-            IItemSortService itemSortService)
+            IItemSortService itemSortService,
+            IPlaybackCredentialService credentialService)
         {
             _logger = logger;
             _eventManager = eventManager;
@@ -126,6 +131,7 @@ namespace Tesserafin.Server.Core.Session
             _shutdownCallback = hostApplicationLifetime.ApplicationStopping.Register(OnApplicationStopping);
             _itemQueryService = itemQueryService;
             _itemSortService = itemSortService;
+            _credentialService = credentialService;
 
             _deviceManager.DeviceOptionsUpdated += OnDeviceManagerDeviceOptionsUpdated;
         }
@@ -216,6 +222,13 @@ namespace Tesserafin.Server.Core.Session
 
         private async ValueTask OnSessionEnded(SessionInfo info)
         {
+            // The single revocation seam for #153 credentials, and it covers three of the four
+            // required paths at once: logout and device deletion both end their sessions here, and
+            // RevokeUserTokens (the password-change path) reaches it by calling Logout per device.
+            // Hooking one place rather than three is what keeps a future logout path from silently
+            // leaving live capabilities behind.
+            _credentialService.RevokeSession(info.Id);
+
             EventHelper.QueueEventIfNotNull(
                 SessionEnded,
                 this,
@@ -1065,6 +1078,14 @@ namespace Tesserafin.Server.Core.Session
 
             var session = GetSession(info.SessionId);
 
+            // ONLY this play session's capabilities. A user watching two things at once keeps the
+            // other one playing, which is the entire reason a capability binds to a play session
+            // rather than to a user.
+            if (!string.IsNullOrEmpty(info.PlaySessionId))
+            {
+                _credentialService.RevokePlaySession(info.PlaySessionId);
+            }
+
             session.StopAutomaticProgress();
 
             if (info.PositionTicks.HasValue && info.PositionTicks.Value < 0)
@@ -1774,6 +1795,10 @@ namespace Tesserafin.Server.Core.Session
             CheckDisposed();
 
             _logger.LogInformation("Logging out access token {0}", device.AccessToken);
+
+            // Also by device, not only by session: a ticket minted seconds before the session was
+            // torn down would otherwise outlive the device it was issued to.
+            _credentialService.RevokeDevice(device.DeviceId);
 
             await _deviceManager.DeleteDevice(device).ConfigureAwait(false);
 

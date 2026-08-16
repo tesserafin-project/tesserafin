@@ -8,9 +8,11 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Tesserafin.Api.Attributes;
 using Tesserafin.Api.Helpers;
+using Tesserafin.Common.Api;
 using Tesserafin.Common.Configuration;
 using Tesserafin.Controller.Configuration;
 using Tesserafin.Controller.MediaEncoding;
+using Tesserafin.Controller.Net.PlaybackCredentials;
 using Tesserafin.Model.IO;
 using Tesserafin.Model.Net;
 
@@ -57,6 +59,7 @@ public class HlsSegmentController : BaseTesserafinApiController
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesAudioFile]
     [SuppressMessage("Microsoft.Performance", "CA1801:ReviewUnusedParameters", MessageId = "itemId", Justification = "Required for ServiceStack")]
+    [RequiresPlaybackCapability(PlaybackCapabilityScope.Media, "itemId", null)]
     public ActionResult GetHlsAudioSegmentLegacy([FromRoute, Required] string itemId, [FromRoute, Required] string segmentId)
     {
         // TODO: Deprecate with new iOS app
@@ -80,7 +83,8 @@ public class HlsSegmentController : BaseTesserafinApiController
     /// <response code="200">Hls video playlist returned.</response>
     /// <returns>A <see cref="FileStreamResult"/> containing the playlist.</returns>
     [HttpGet("Videos/{itemId}/hls/{playlistId}/stream.m3u8")]
-    [Authorize]
+    [Authorize(Policy = Policies.MediaDelivery)]
+    [RequiresPlaybackCapability(PlaybackCapabilityScope.Media, "itemId", "mediaSourceId")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesPlaylistFile]
     [SuppressMessage("Microsoft.Performance", "CA1801:ReviewUnusedParameters", MessageId = "itemId", Justification = "Required for ServiceStack")]
@@ -134,6 +138,7 @@ public class HlsSegmentController : BaseTesserafinApiController
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesVideoFile]
     [SuppressMessage("Microsoft.Performance", "CA1801:ReviewUnusedParameters", MessageId = "itemId", Justification = "Required for ServiceStack")]
+    [RequiresPlaybackCapability(PlaybackCapabilityScope.Media, "itemId", null)]
     public ActionResult GetHlsVideoSegmentLegacy(
         [FromRoute, Required] string itemId,
         [FromRoute, Required] string playlistId,

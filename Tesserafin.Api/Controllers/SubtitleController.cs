@@ -24,6 +24,7 @@ using Tesserafin.Controller.Configuration;
 using Tesserafin.Controller.Entities;
 using Tesserafin.Controller.Library;
 using Tesserafin.Controller.MediaEncoding;
+using Tesserafin.Controller.Net.PlaybackCredentials;
 using Tesserafin.Controller.Providers;
 using Tesserafin.Controller.Subtitles;
 using Tesserafin.Model.Entities;
@@ -208,6 +209,7 @@ public class SubtitleController : BaseTesserafinApiController
     [HttpGet("Videos/{routeItemId}/{routeMediaSourceId}/Subtitles/{routeIndex}/Stream.{routeFormat}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesFile("text/*")]
+    [RequiresPlaybackCapability(PlaybackCapabilityScope.Subtitles, "routeItemId", "routeMediaSourceId")]
     public async Task<ActionResult> GetSubtitle(
         [FromRoute, Required] Guid routeItemId,
         [FromRoute, Required] string routeMediaSourceId,
@@ -295,6 +297,7 @@ public class SubtitleController : BaseTesserafinApiController
     [HttpGet("Videos/{routeItemId}/{routeMediaSourceId}/Subtitles/{routeIndex}/{routeStartPositionTicks}/Stream.{routeFormat}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesFile("text/*")]
+    [RequiresPlaybackCapability(PlaybackCapabilityScope.Subtitles, "routeItemId", "routeMediaSourceId")]
     public Task<ActionResult> GetSubtitleWithTicks(
         [FromRoute, Required] Guid routeItemId,
         [FromRoute, Required] string routeMediaSourceId,
@@ -336,7 +339,8 @@ public class SubtitleController : BaseTesserafinApiController
     /// <response code="404">Item not found.</response>
     /// <returns>A <see cref="FileContentResult"/> with the HLS subtitle playlist.</returns>
     [HttpGet("Videos/{itemId}/{mediaSourceId}/Subtitles/{index}/subtitles.m3u8")]
-    [Authorize]
+    [Authorize(Policy = Policies.MediaDelivery)]
+    [RequiresPlaybackCapability(PlaybackCapabilityScope.Subtitles, "itemId", "mediaSourceId")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesPlaylistFile]
@@ -495,7 +499,8 @@ public class SubtitleController : BaseTesserafinApiController
     /// <response code="200">Information retrieved.</response>
     /// <returns>An array of <see cref="FontFile"/> with the available font files.</returns>
     [HttpGet("FallbackFont/Fonts")]
-    [Authorize]
+    [Authorize(Policy = Policies.MediaDelivery)]
+    [RequiresPlaybackCapability(PlaybackCapabilityScope.Fonts)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public IEnumerable<FontFile> GetFallbackFontList()
     {
@@ -546,7 +551,8 @@ public class SubtitleController : BaseTesserafinApiController
     /// <response code="200">Fallback font file retrieved.</response>
     /// <returns>The fallback font file.</returns>
     [HttpGet("FallbackFont/Fonts/{name}")]
-    [Authorize]
+    [Authorize(Policy = Policies.MediaDelivery)]
+    [RequiresPlaybackCapability(PlaybackCapabilityScope.Fonts)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesFile("font/*")]
     public ActionResult GetFallbackFont([FromRoute, Required] string name)

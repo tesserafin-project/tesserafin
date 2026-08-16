@@ -12,6 +12,7 @@ using Tesserafin.Common.Extensions;
 using Tesserafin.Controller.Entities;
 using Tesserafin.Controller.Library;
 using Tesserafin.Controller.MediaEncoding;
+using Tesserafin.Controller.Net.PlaybackCredentials;
 
 namespace Tesserafin.Api.Controllers;
 
@@ -51,6 +52,7 @@ public class VideoAttachmentsController : BaseTesserafinApiController
     [ProducesFile(MediaTypeNames.Application.Octet)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [RequiresPlaybackCapability(PlaybackCapabilityScope.Attachments, "videoId", "mediaSourceId")]
     public async Task<ActionResult> GetAttachment(
         [FromRoute, Required] Guid videoId,
         [FromRoute, Required] string mediaSourceId,

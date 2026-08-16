@@ -21,6 +21,7 @@ using Tesserafin.Controller.Dto;
 using Tesserafin.Controller.Entities;
 using Tesserafin.Controller.Library;
 using Tesserafin.Controller.MediaEncoding;
+using Tesserafin.Controller.Net.PlaybackCredentials;
 using Tesserafin.Controller.Streaming;
 using Tesserafin.Extensions;
 using Tesserafin.Model.Dlna;
@@ -315,6 +316,7 @@ public class VideosController : BaseTesserafinApiController
     [HttpHead("{itemId}/stream", Name = "HeadVideoStream")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesVideoFile]
+    [RequiresPlaybackCapability(PlaybackCapabilityScope.Media, "itemId", "mediaSourceId")]
     public async Task<ActionResult> GetVideoStream(
         [FromRoute, Required] Guid itemId,
         [FromQuery][RegularExpression(EncodingHelper.ContainerValidationRegexStr)] string? container,
@@ -553,6 +555,7 @@ public class VideosController : BaseTesserafinApiController
     [HttpHead("{itemId}/stream.{container}", Name = "HeadVideoStreamByContainer")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesVideoFile]
+    [RequiresPlaybackCapability(PlaybackCapabilityScope.Media, "itemId", "mediaSourceId")]
     public Task<ActionResult> GetVideoStreamByContainer(
         [FromRoute, Required] Guid itemId,
         [FromRoute, Required][RegularExpression(EncodingHelper.ContainerValidationRegexStr)] string container,

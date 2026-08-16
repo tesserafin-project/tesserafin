@@ -8,8 +8,10 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Tesserafin.Api.Attributes;
 using Tesserafin.Api.Extensions;
+using Tesserafin.Common.Api;
 using Tesserafin.Controller.Entities;
 using Tesserafin.Controller.Library;
+using Tesserafin.Controller.Net.PlaybackCredentials;
 using Tesserafin.Controller.Trickplay;
 using Tesserafin.Model;
 
@@ -19,7 +21,7 @@ namespace Tesserafin.Api.Controllers;
 /// Trickplay controller.
 /// </summary>
 [Route("")]
-[Authorize]
+[Authorize(Policy = Policies.MediaDelivery)]
 [Tags("TrickPlay")]
 public class TrickplayController : BaseTesserafinApiController
 {
@@ -51,6 +53,7 @@ public class TrickplayController : BaseTesserafinApiController
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesPlaylistFile]
+    [RequiresPlaybackCapability(PlaybackCapabilityScope.Trickplay, "itemId", "mediaSourceId")]
     public async Task<ActionResult> GetTrickplayHlsPlaylist(
         [FromRoute, Required] Guid itemId,
         [FromRoute, Required] int width,
@@ -80,6 +83,7 @@ public class TrickplayController : BaseTesserafinApiController
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesImageFile]
+    [RequiresPlaybackCapability(PlaybackCapabilityScope.Trickplay, "itemId", "mediaSourceId")]
     public async Task<ActionResult> GetTrickplayTileImage(
         [FromRoute, Required] Guid itemId,
         [FromRoute, Required] int width,
