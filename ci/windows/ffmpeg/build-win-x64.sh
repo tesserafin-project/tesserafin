@@ -476,7 +476,25 @@ rm -rf "${FFSRC}"; cp -a "${CACHE}/git/jellyfin-ffmpeg" "${FFSRC}"
         --extra-cflags="${FF_CFLAGS}" \
         --extra-cxxflags="${FF_CFLAGS}" \
         --extra-ldflags="-static -Wl,--no-insert-timestamp -L${PREFIX}/lib" \
-        > "${OUT}/configure.log" 2>&1 || { tail -80 "${OUT}/configure.log" >&2; ff_die "FFmpeg configure failed"; }
+        > "${OUT}/configure.log" 2>&1 || {
+            tail -80 "${OUT}/configure.log" >&2
+            # configure dies on the FIRST option it does not recognise, roughly
+            # thirty minutes into a clean build, and names only that one. Ask it
+            # about every flag individually before giving up, so one round trip
+            # reports the whole list instead of one flag per round trip.
+            #
+            # The sentinel is the trick: options are processed in order, so a run
+            # that dies on the sentinel proves the flag before it was accepted.
+            ff_log "asking configure about each flag individually"
+            for f in "${FLAGS[@]}"; do
+                [[ "${f}" == --prefix=* ]] && continue
+                if ! ./configure "${f}" --enable-zzz-not-a-real-option 2>&1 \
+                        | grep -q 'zzz-not-a-real-option'; then
+                    ff_log "  REJECTED: ${f}"
+                fi
+            done
+            ff_die "FFmpeg configure failed"
+        }
     make -j"${J}" > "${OUT}/make.log" 2>&1 || { tail -80 "${OUT}/make.log" >&2; ff_die "FFmpeg build failed"; }
     make install DESTDIR="${WORK}" >> "${OUT}/make.log" 2>&1
 )
