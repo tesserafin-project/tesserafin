@@ -413,6 +413,47 @@ if arch_allows amf-headers && step amf-headers; then
 fi
 
 # =============================================================================
+# Normalise the pkg-config files for a libc++ / mingw environment
+# =============================================================================
+# Every C++ component writes the GNU/Linux runtime into its .pc file. x265 3.6
+# emits
+#
+#     Libs.private: -lstdc++ -lm -lgcc_s -lgcc -lrt -ldl
+#
+# and CLANG64 has none of stdc++, gcc_s, rt or dl. With
+# --pkg-config-flags=--static FFmpeg link-tests those libraries, the test fails,
+# and configure reports
+#
+#     ERROR: x265 not found using pkg-config
+#
+# which names the library rather than the four that are actually missing.
+#
+# The substitution is narrow and stated: the C++ runtime is renamed to the one
+# this environment has, and four GNU-only libraries whose symbols live in the
+# Windows CRT are dropped. Nothing is added, and no .pc gains a library it did
+# not ask for.
+ff_log "normalising pkg-config files for libc++"
+while IFS= read -r pc; do
+    before="$(sha256sum "${pc}" | cut -d' ' -f1)"
+    # Repeated to a fixed point, not applied once: adjacent entries share the
+    # space between them, so a single pass over `-lgcc_s -lgcc` consumes the
+    # separator with the first match and leaves the second behind. Measured, not
+    # feared — one pass over x265's real .pc leaves `-lgcc -lgcc -ldl`.
+    for _ in 1 2 3 4; do
+        sed -i -E 's/-lstdc\+\+/-lc++/g; s/(^|[[:space:]])-l(gcc_s|gcc|rt|dl)([[:space:]]|$)/\1\3/g' "${pc}"
+    done
+    sed -i -E 's/[[:space:]]+/ /g; s/[[:space:]]+$//' "${pc}"
+    after="$(sha256sum "${pc}" | cut -d' ' -f1)"
+    [[ "${before}" == "${after}" ]] || ff_log "  rewrote $(basename "${pc}")"
+done < <(find "${PREFIX}/lib/pkgconfig" "${PREFIX}/share/pkgconfig" -name '*.pc' 2>/dev/null | sort)
+
+# A leftover reference is a link failure thirty minutes later, reported against
+# the wrong library, so it stops the build here instead.
+if leftovers="$(grep -lE -- '-l(stdc\+\+|gcc_s|gcc|rt|dl)([[:space:]]|$)' "${PREFIX}"/lib/pkgconfig/*.pc 2>/dev/null)"; then
+    [[ -z "${leftovers}" ]] || ff_die "these pkg-config files still name a GNU-only runtime: ${leftovers}"
+fi
+
+# =============================================================================
 # FFmpeg
 # =============================================================================
 FFSRC="${BUILDROOT}/ffmpeg"
