@@ -644,6 +644,35 @@ def run_controls(c: Controls, tmp: Path) -> None:
         not unguarded,
         "unguarded at " + ", ".join(unguarded))
 
+    # The other half of the same class. ci/ffmpeg/fetch-sources.sh reads a Python
+    # table and W1-A2 may not edit it, so the only defence is the shim being on
+    # PATH in the step that calls it. Without that, the last mirror of every
+    # component carries a carriage return and curl rejects the URL — invisible
+    # until a primary host fails, which is exactly when the mirror is needed.
+    workflow = REPO_ROOT / ".github/workflows/w1-windows-ffmpeg-runtime.yml"
+    shimmed = True
+    detail = ""
+    if workflow.is_file():
+        text = workflow.read_text()
+        for m in re.finditer(r"\./ci/ffmpeg/fetch-sources\.sh", text):
+            line_start = text.rfind("\n", 0, m.start()) + 1
+            if text[line_start:m.start()].lstrip().startswith("#"):
+                continue  # the prose explaining the shim is not an invocation
+            # Only the enclosing STEP counts, not a fixed window of characters:
+            # each step is a fresh shell, so a PATH export in the step above does
+            # not reach this one. A 600-character lookback accepted exactly that
+            # and made this control inert.
+            step_start = max(text.rfind("\n      - name:", 0, m.start()),
+                             text.rfind("\n      - uses:", 0, m.start()))
+            block = text[step_start if step_start > 0 else 0: m.start()]
+            if "/c/tf-shims" not in block:
+                shimmed = False
+                detail = (f"fetch-sources.sh is called at line "
+                          f"{text[:m.start()].count(chr(10)) + 1} without the "
+                          f"python shim on PATH")
+    c.assert_true("the Linux-owned fetcher runs with the LF python shim on PATH",
+                  shimmed, detail)
+
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
