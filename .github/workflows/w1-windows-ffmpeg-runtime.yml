@@ -171,6 +171,7 @@ jobs:
           ./ci/windows/ffmpeg/build-win-x64.sh --cache /c/tf-ffsrc --out /c/tf-ffout
 
       - name: Package the delivered set
+        id: package
         shell: msys2 {0}
         run: |
           set -euo pipefail
@@ -218,8 +219,14 @@ jobs:
           fi
           cp -r "${RUNNER_TEMP}/w1a2-inputs" "${RUNNER_TEMP}/w1a2-acceptance/inputs" || true
 
+      # Only when packaging actually ran. `if-no-files-found: error` is kept
+      # deliberately — a packaging step that succeeded and delivered nothing is a
+      # finding — but a job that failed BEFORE packaging would otherwise report
+      # that same error and bury its real cause. The first run of this workflow
+      # failed at the build-input gate and reported "no files were found",
+      # which is true and says nothing.
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: ${{ always() }}
+        if: ${{ always() && steps.package.conclusion == 'success' }}
         with:
           name: w1a2-delivered-${{ matrix.host }}
           path: C:\tf-delivered
