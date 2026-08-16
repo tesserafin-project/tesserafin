@@ -213,26 +213,46 @@ public sealed class PlaybackCredentialService : IPlaybackCredentialService
             return Refused(PlaybackCapabilityFailure.ScopeMismatch);
         }
 
-        // Item and media source are checked only for a scope that carries them. Fonts deliberately
-        // has neither, and demanding one here would make a font capability impossible to satisfy.
-        if (entry.ItemId is not null && demand.ItemId is not null && !entry.ItemId.Value.Equals(demand.ItemId.Value))
+        // EXACT, IN BOTH DIRECTIONS. A binding states which request the capability is for, so the
+        // capability and the route have to agree about whether there is one at all. Comparing only
+        // when both sides named something made "this route names no item" indistinguishable from
+        // "any item will do": a capability minted for one item then satisfied every route that did
+        // not name one, which is every route an attacker would pick.
+        //
+        // Fonts needs no exemption. It is item-less because a Fonts capability is minted without an
+        // item and the font routes name none — both sides null, which agrees. Exempting it instead
+        // would let a font capability carry an item that nothing ever checked.
+        if (!GuidsAgree(entry.ItemId, demand.ItemId))
         {
             return Refused(PlaybackCapabilityFailure.ItemMismatch);
         }
 
-        if (entry.ItemId is null && demand.ItemId is not null && demand.Scope != PlaybackCapabilityScope.Fonts)
-        {
-            return Refused(PlaybackCapabilityFailure.ItemMismatch);
-        }
-
-        if (entry.MediaSourceId is not null
-            && demand.MediaSourceId is not null
-            && !string.Equals(entry.MediaSourceId, demand.MediaSourceId, StringComparison.Ordinal))
+        if (!StringsAgree(entry.MediaSourceId, demand.MediaSourceId))
         {
             return Refused(PlaybackCapabilityFailure.MediaSourceMismatch);
         }
 
+        // Only a MISMATCH refuses here, unlike item and media source. A route that exposes
+        // playSessionId does not oblige the client to send it, and refusing its absence would turn
+        // an optional query parameter into a required one on routes that have never required it.
+        // The asymmetry is deliberate and is written down in the contract.
+        if (demand.PlaySessionId is not null
+            && !string.Equals(entry.PlaySessionId, demand.PlaySessionId, StringComparison.Ordinal))
+        {
+            return Refused(PlaybackCapabilityFailure.PlaySessionMismatch);
+        }
+
         return resolved;
+
+        static bool GuidsAgree(Guid? bound, Guid? demanded)
+            => bound is null
+                ? demanded is null
+                : demanded is not null && bound.Value.Equals(demanded.Value);
+
+        static bool StringsAgree(string? bound, string? demanded)
+            => bound is null
+                ? demanded is null
+                : demanded is not null && string.Equals(bound, demanded, StringComparison.Ordinal);
 
         static PlaybackCapabilityValidation Refused(PlaybackCapabilityFailure failure)
             => new(false, failure, Guid.Empty, Guid.Empty, null, null);

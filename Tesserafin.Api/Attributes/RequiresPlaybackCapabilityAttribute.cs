@@ -31,6 +31,7 @@ public sealed class RequiresPlaybackCapabilityAttribute : Attribute, IAsyncAutho
     private readonly PlaybackCapabilityScope _scope;
     private readonly string? _itemRouteKey;
     private readonly string? _mediaSourceRouteKey;
+    private readonly string? _playSessionRouteKey;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="RequiresPlaybackCapabilityAttribute"/> class.
@@ -38,14 +39,17 @@ public sealed class RequiresPlaybackCapabilityAttribute : Attribute, IAsyncAutho
     /// <param name="scope">The single scope this route demands.</param>
     /// <param name="itemRouteKey">The route or query key naming the item, if the route names one.</param>
     /// <param name="mediaSourceRouteKey">The route or query key naming the media source, if the route names one.</param>
+    /// <param name="playSessionRouteKey">The query key naming the play session, if the route exposes one.</param>
     public RequiresPlaybackCapabilityAttribute(
         PlaybackCapabilityScope scope,
         string? itemRouteKey = null,
-        string? mediaSourceRouteKey = null)
+        string? mediaSourceRouteKey = null,
+        string? playSessionRouteKey = null)
     {
         _scope = scope;
         _itemRouteKey = itemRouteKey;
         _mediaSourceRouteKey = mediaSourceRouteKey;
+        _playSessionRouteKey = playSessionRouteKey;
     }
 
     /// <summary>
@@ -65,6 +69,11 @@ public sealed class RequiresPlaybackCapabilityAttribute : Attribute, IAsyncAutho
     /// </summary>
     public string? MediaSourceRouteKey => _mediaSourceRouteKey;
 
+    /// <summary>
+    /// Gets the query key naming the play session, or null for a route that exposes none.
+    /// </summary>
+    public string? PlaySessionRouteKey => _playSessionRouteKey;
+
     /// <inheritdoc />
     public System.Threading.Tasks.Task OnAuthorizationAsync(AuthorizationFilterContext context)
     {
@@ -81,7 +90,11 @@ public sealed class RequiresPlaybackCapabilityAttribute : Attribute, IAsyncAutho
         var credentialService = context.HttpContext.RequestServices.GetRequiredService<IPlaybackCredentialService>();
         var validation = credentialService.ValidateCapability(
             presented,
-            new PlaybackCapabilityDemand(_scope, ReadGuid(context, _itemRouteKey), ReadString(context, _mediaSourceRouteKey)));
+            new PlaybackCapabilityDemand(
+                _scope,
+                ReadGuid(context, _itemRouteKey),
+                ReadString(context, _mediaSourceRouteKey),
+                ReadString(context, _playSessionRouteKey)));
 
         if (!validation.IsValid)
         {

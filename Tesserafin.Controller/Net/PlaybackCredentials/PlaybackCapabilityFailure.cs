@@ -67,5 +67,12 @@ public enum PlaybackCapabilityFailure
     /// Renewal was attempted after expiry. An expired capability is not resurrectable; the client
     /// mints a new one with its durable token.
     /// </summary>
-    RenewalAfterExpiry = 10
+    RenewalAfterExpiry = 10,
+
+    /// <summary>
+    /// The capability is live but the request names a different play session. Distinct from
+    /// <see cref="SessionMismatch"/>, which is about the authenticated session that owns the
+    /// capability rather than the playback the request claims to belong to.
+    /// </summary>
+    PlaySessionMismatch = 11
 }

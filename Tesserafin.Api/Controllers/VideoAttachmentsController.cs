@@ -3,11 +3,13 @@ using System.ComponentModel.DataAnnotations;
 using System.Net.Mime;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Tesserafin.Api.Attributes;
 using Tesserafin.Api.Extensions;
 using Tesserafin.Api.Helpers;
+using Tesserafin.Common.Api;
 using Tesserafin.Common.Extensions;
 using Tesserafin.Controller.Entities;
 using Tesserafin.Controller.Library;
@@ -49,8 +51,10 @@ public class VideoAttachmentsController : BaseTesserafinApiController
     /// <response code="404">Video or attachment not found.</response>
     /// <returns>An <see cref="FileStreamResult"/> containing the attachment stream on success, or a <see cref="NotFoundResult"/> if the attachment could not be found.</returns>
     [HttpGet("{videoId}/{mediaSourceId}/Attachments/{index}")]
+    [Authorize(Policy = Policies.MediaDelivery)]
     [ProducesFile(MediaTypeNames.Application.Octet)]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [RequiresPlaybackCapability(PlaybackCapabilityScope.Attachments, "videoId", "mediaSourceId")]
     public async Task<ActionResult> GetAttachment(

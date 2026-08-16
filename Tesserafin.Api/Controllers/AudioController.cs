@@ -2,11 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Tesserafin.Api.Attributes;
 using Tesserafin.Api.Helpers;
 using Tesserafin.Api.Models.StreamingDtos;
+using Tesserafin.Common.Api;
 using Tesserafin.Controller.MediaEncoding;
 using Tesserafin.Controller.Net.PlaybackCredentials;
 using Tesserafin.Controller.Streaming;
@@ -88,9 +90,11 @@ public class AudioController : BaseTesserafinApiController
     /// <returns>A <see cref="FileResult"/> containing the audio file.</returns>
     [HttpGet("{itemId}/stream", Name = "GetAudioStream")]
     [HttpHead("{itemId}/stream", Name = "HeadAudioStream")]
+    [Authorize(Policy = Policies.MediaDelivery)]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesAudioFile]
-    [RequiresPlaybackCapability(PlaybackCapabilityScope.Media, "itemId", "mediaSourceId")]
+    [RequiresPlaybackCapability(PlaybackCapabilityScope.Media, "itemId", "mediaSourceId", "playSessionId")]
     public async Task<ActionResult> GetAudioStream(
         [FromRoute, Required] Guid itemId,
         [FromQuery][RegularExpression(EncodingHelper.ContainerValidationRegexStr)] string? container,
@@ -253,9 +257,11 @@ public class AudioController : BaseTesserafinApiController
     /// <returns>A <see cref="FileResult"/> containing the audio file.</returns>
     [HttpGet("{itemId}/stream.{container}", Name = "GetAudioStreamByContainer")]
     [HttpHead("{itemId}/stream.{container}", Name = "HeadAudioStreamByContainer")]
+    [Authorize(Policy = Policies.MediaDelivery)]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesAudioFile]
-    [RequiresPlaybackCapability(PlaybackCapabilityScope.Media, "itemId", "mediaSourceId")]
+    [RequiresPlaybackCapability(PlaybackCapabilityScope.Media, "itemId", "mediaSourceId", "playSessionId")]
     public async Task<ActionResult> GetAudioStreamByContainer(
         [FromRoute, Required] Guid itemId,
         [FromRoute, Required][RegularExpression(EncodingHelper.ContainerValidationRegexStr)] string container,

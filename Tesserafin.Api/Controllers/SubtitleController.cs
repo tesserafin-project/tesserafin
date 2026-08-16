@@ -207,7 +207,9 @@ public class SubtitleController : BaseTesserafinApiController
     /// <response code="200">File returned.</response>
     /// <returns>A <see cref="FileContentResult"/> with the subtitle file.</returns>
     [HttpGet("Videos/{routeItemId}/{routeMediaSourceId}/Subtitles/{routeIndex}/Stream.{routeFormat}")]
+    [Authorize(Policy = Policies.MediaDelivery)]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesFile("text/*")]
     [RequiresPlaybackCapability(PlaybackCapabilityScope.Subtitles, "routeItemId", "routeMediaSourceId")]
     public async Task<ActionResult> GetSubtitle(
@@ -295,7 +297,9 @@ public class SubtitleController : BaseTesserafinApiController
     /// <response code="200">File returned.</response>
     /// <returns>A <see cref="FileContentResult"/> with the subtitle file.</returns>
     [HttpGet("Videos/{routeItemId}/{routeMediaSourceId}/Subtitles/{routeIndex}/{routeStartPositionTicks}/Stream.{routeFormat}")]
+    [Authorize(Policy = Policies.MediaDelivery)]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesFile("text/*")]
     [RequiresPlaybackCapability(PlaybackCapabilityScope.Subtitles, "routeItemId", "routeMediaSourceId")]
     public Task<ActionResult> GetSubtitleWithTicks(
