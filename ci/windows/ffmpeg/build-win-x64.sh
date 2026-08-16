@@ -1,0 +1,426 @@
+#!/usr/bin/env bash
+# The Tesserafin win-x64 FFmpeg runtime build (W1-A2 / #236).
+#
+# Runs INSIDE an MSYS2 CLANG64 shell whose /clang64 prefix holds exactly the
+# 246-package set W1-R retained and installed with `pacman -U` from local files.
+# This script never installs a package, never contacts a mirror and never
+# downloads a compiled artifact: the toolchain is an INPUT, which is what makes
+# bit-for-bit reproducibility reachable at all.
+#
+# Usage: ci/windows/ffmpeg/build-win-x64.sh --cache DIR --out DIR
+#
+# Determinism rules, identical in intent to the Linux runtime:
+#   * SOURCE_DATE_EPOCH from the pinned FFmpeg baseline, never the clock;
+#   * -ffile-prefix-map so no build path is embedded;
+#   * -Wl,--no-insert-timestamp, because a PE header carries a build time where
+#     an ELF carries a build-id, and two runners will never share a clock;
+#   * a FIXED job count, because parallelism must not be an input;
+#   * LC_ALL=C and TZ=UTC so no locale or zone leaks into generated files;
+#   * fixed absolute paths, never mktemp.
+
+set -euo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# One definition of "reproducible" for both operating systems: the epoch, the
+# manifest reader and the deterministic-tar helper are the Linux runtime's.
+# shellcheck source=ci/ffmpeg/lib.sh
+source "${HERE}/../../ffmpeg/lib.sh"
+
+WIN_FLAGS_FILE="${WIN_FLAGS_FILE:-${HERE}/ffmpeg-configure.win-x64.txt}"
+ARCH="win-x64"
+
+CACHE=""; OUT=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --cache) CACHE="$2"; shift 2 ;;
+        --out)   OUT="$2"; shift 2 ;;
+        *) ff_die "unknown argument: $1" ;;
+    esac
+done
+[[ -d "${CACHE}" ]] || ff_die "--cache must be an existing source cache"
+[[ -n "${OUT}" ]]   || ff_die "--out is required"
+[[ -f "${WIN_FLAGS_FILE}" ]] || ff_die "missing ${WIN_FLAGS_FILE}"
+
+# ── the environment must be the one W1-R installed ───────────────────────────
+[[ "${MSYSTEM:-}" == "CLANG64" ]] \
+    || ff_die "MSYSTEM is '${MSYSTEM:-unset}'; this build is only accepted from an MSYS2 CLANG64 shell"
+[[ "$(uname -m)" == "x86_64" ]] \
+    || ff_die "this host is $(uname -m); win-x64 must be built natively on x86_64"
+case "$(uname -s)" in
+    CLANG64*|MINGW64*|MSYS*) : ;;
+    *) ff_die "uname -s is '$(uname -s)'; this is not a native Windows MSYS2 shell. Wine and cross-builds are not accepted evidence" ;;
+esac
+
+ff_load_manifest
+
+SOURCE_DATE_EPOCH="$(ff_source_date_epoch)"
+export SOURCE_DATE_EPOCH
+export LC_ALL=C LANG=C TZ=UTC
+
+# See the prefix comment in ffmpeg-configure.win-x64.txt: this path is a drive
+# root in both its POSIX and its Windows form, so nothing that bakes it in leaks
+# a workspace, a runner or an MSYS2 installation.
+PREFIX="$(grep -oE '^--prefix=.*' "${WIN_FLAGS_FILE}" | head -1 | cut -d= -f2-)"
+[[ "${PREFIX}" == /c/* ]] || ff_die "the win-x64 prefix must be a drive-root path, got '${PREFIX}'"
+export PREFIX
+BUILDROOT=/c/tf-ffbuild
+WORK=/c/tf-ffinstall
+
+if [[ "${FF_INCREMENTAL:-0}" == "1" ]]; then
+    ff_log "INCREMENTAL build: completed components are reused. Not valid for reproducibility evidence."
+else
+    rm -rf "${BUILDROOT}" "${WORK}" "${PREFIX}"
+fi
+mkdir -p "${PREFIX}/.stamps" "${BUILDROOT}" "${WORK}" "${OUT}"
+
+# clang, not gcc: CLANG64 is a pure LLVM environment and there is no gcc in the
+# locked set. The linker is LLD through the clang driver.
+export CC=clang CXX=clang++ AR=llvm-ar NM=llvm-nm RANLIB=llvm-ranlib STRIP=llvm-strip
+export WINDRES=llvm-windres
+# llvm-ar writes deterministic archives (zeroed mtime/uid/gid) by default; stated
+# so a toolchain that changed that default fails here rather than silently.
+export ARFLAGS=Drc
+
+MAP="-ffile-prefix-map=${BUILDROOT}=. -ffile-prefix-map=${CACHE}=. -ffile-prefix-map=${PREFIX}=."
+export CFLAGS="-O2 -g0 ${MAP}"
+export CXXFLAGS="${CFLAGS}"
+# --no-insert-timestamp is the PE analogue of --build-id=none: without it the
+# COFF header carries the moment of the link and two runners can never agree.
+# -static resolves libc++, libunwind and libwinpthread into the image, so the
+# delivered closure is the operating system's own DLLs and nothing else.
+export LDFLAGS="-static -Wl,--no-insert-timestamp"
+export PKG_CONFIG_PATH="${PREFIX}/lib/pkgconfig:${PREFIX}/share/pkgconfig"
+export PATH="${PREFIX}/bin:${PATH}"
+J="${FF_JOBS}"
+
+unpack() { # <component-name> -> echoes the unpacked directory
+    local name="$1" archive dir
+    archive="$(find "${CACHE}/archives" -maxdepth 1 -name "${name}-*" -print -quit)"
+    [[ -n "${archive}" ]] || ff_die "no fetched archive for ${name}"
+    dir="${BUILDROOT}/${name}"
+    rm -rf "${dir}"; mkdir -p "${dir}"
+    tar --extract --file "${archive}" --directory "${dir}" --strip-components=1
+    printf '%s\n' "${dir}"
+}
+
+gitsrc() { # <component-name> -> echoes a writable copy of the pinned checkout
+    local name="$1" dir="${BUILDROOT}/${1}"
+    rm -rf "${dir}"
+    cp -a "${CACHE}/git/${name}" "${dir}"
+    printf '%s\n' "${dir}"
+}
+
+step() {
+    local stamp="${PREFIX}/.stamps/${1// /_}"
+    if [[ "${FF_INCREMENTAL:-0}" == "1" && -e "${stamp}" ]]; then
+        ff_log "skipping $1 (already built)"; return 1
+    fi
+    ff_log "building $1"; return 0
+}
+done_step() { touch "${PREFIX}/.stamps/${1// /_}"; }
+
+# Which components belong to win-x64 is read from ci/ffmpeg/components.json, not
+# repeated here. A component the manifest restricts to Linux cannot be built by
+# adding a recipe below; it has to be reclassified in the manifest first, where
+# the gate can see it.
+arch_allows() { # <component-name>
+    python3 -c '
+import json, sys
+manifest, name, arch = sys.argv[1:4]
+for c in json.load(open(manifest))["components"]:
+    if c["name"] == name:
+        allowed = c.get("architectures")
+        sys.exit(0 if allowed is None or arch in allowed else 1)
+sys.exit(0)
+' "${FF_COMPONENTS}" "$1" "${ARCH}" \
+        || { ff_log "skipping $1 (not built for ${ARCH})"; return 1; }
+}
+
+# Refuses a component the manifest says belongs here but this file has no recipe
+# for, so widening the manifest cannot quietly narrow the runtime.
+RECIPES=(zlib expat x264 x265 svt-av1 dav1d libvpx lame opus libogg libvorbis
+         zimg freetype harfbuzz fribidi fontconfig libunibreak libass
+         nv-codec-headers libvpl amf-headers)
+mapfile -t EXPECTED < <(python3 -c '
+import json, sys
+manifest, arch = sys.argv[1:3]
+for c in json.load(open(manifest))["components"]:
+    allowed = c.get("architectures")
+    if allowed is None or arch in allowed:
+        print(c["name"])
+' "${FF_COMPONENTS}" "${ARCH}")
+missing=()
+for want in "${EXPECTED[@]}"; do
+    found=0
+    for have in "${RECIPES[@]}"; do [[ "${want}" == "${have}" ]] && { found=1; break; }; done
+    [[ "${found}" -eq 1 ]] || missing+=("${want}")
+done
+[[ "${#missing[@]}" -eq 0 ]] \
+    || ff_die "components.json makes these win-x64-applicable but this script has no recipe: ${missing[*]}"
+ff_log "${#EXPECTED[@]} win-x64 components, all with recipes"
+
+# =============================================================================
+# base
+# =============================================================================
+if step zlib; then
+    d="$(unpack zlib)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --static \
+        && make -j"${J}" && make install )
+    done_step zlib
+fi
+
+if step expat; then
+    d="$(unpack expat)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --disable-shared --enable-static \
+        --without-docbook --without-examples --without-tests && make -j"${J}" && make install )
+    done_step expat
+fi
+
+# =============================================================================
+# video codecs
+# =============================================================================
+if step x264; then
+    d="$(gitsrc x264)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --enable-static --enable-pic \
+        --disable-cli --disable-opencl && make -j"${J}" && make install )
+    done_step x264
+fi
+
+if step x265; then
+    # Ninja explicitly: the generator is an input, and MSYS2's cmake picks a
+    # different default depending on which of make and ninja it finds first.
+    d="$(unpack x265)"; ( cd "${d}/source" && cmake -S . -B build -G Ninja \
+        -DCMAKE_INSTALL_PREFIX="${PREFIX}" -DCMAKE_BUILD_TYPE=Release \
+        -DENABLE_SHARED=OFF -DENABLE_CLI=OFF -DENABLE_PIC=ON \
+        && cmake --build build -j"${J}" && cmake --install build )
+    done_step x265
+fi
+
+if step svt-av1; then
+    d="$(unpack svt-av1)"; ( cd "${d}" && cmake -S . -B build -G Ninja \
+        -DCMAKE_INSTALL_PREFIX="${PREFIX}" -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_SHARED_LIBS=OFF -DBUILD_APPS=OFF -DBUILD_TESTING=OFF \
+        && cmake --build build -j"${J}" && cmake --install build )
+    done_step svt-av1
+fi
+
+if step dav1d; then
+    d="$(unpack dav1d)"; ( cd "${d}" && meson setup build --prefix="${PREFIX}" --libdir=lib \
+        --buildtype=release --default-library=static -Denable_tools=false -Denable_tests=false \
+        && ninja -C build -j"${J}" && ninja -C build install )
+    done_step dav1d
+fi
+
+if step libvpx; then
+    # --target is stated rather than autodetected: libvpx's detector reads
+    # `uname` and would classify this shell as a generic gnu target, which
+    # selects the wrong assembler ABI for Win64.
+    d="$(unpack libvpx)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" \
+        --target=x86_64-win64-gcc --disable-shared --enable-static \
+        --enable-pic --disable-examples --disable-tools --disable-docs --disable-unit-tests \
+        --enable-vp8 --enable-vp9 \
+        && make -j"${J}" && make install )
+    done_step libvpx
+fi
+
+# =============================================================================
+# audio
+# =============================================================================
+if step lame; then
+    d="$(unpack lame)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --disable-shared --enable-static \
+        --enable-nasm --disable-frontend && make -j"${J}" && make install )
+    done_step lame
+fi
+
+if step opus; then
+    d="$(unpack opus)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --disable-shared --enable-static \
+        --disable-doc --disable-extra-programs && make -j"${J}" && make install )
+    done_step opus
+fi
+
+if step libogg; then
+    d="$(unpack libogg)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --disable-shared --enable-static \
+        && make -j"${J}" && make install )
+    done_step libogg
+fi
+
+if step libvorbis; then
+    d="$(unpack libvorbis)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --disable-shared --enable-static \
+        --disable-docs --disable-examples --disable-oggtest && make -j"${J}" && make install )
+    done_step libvorbis
+fi
+
+# =============================================================================
+# filters: zimg and the subtitle stack
+# =============================================================================
+if step zimg; then
+    d="$(gitsrc zimg)"; ( cd "${d}" && ./autogen.sh \
+        && ./configure --prefix="${PREFIX}" --disable-shared --enable-static \
+        && make -j"${J}" && make install )
+    done_step zimg
+fi
+
+# Same two-pass dance as the Linux runtime, and for the same reason: freetype and
+# harfbuzz are mutually dependent and libass needs the shaping-aware freetype.
+if step "freetype (pass 1, no harfbuzz)"; then
+    d="$(unpack freetype)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --disable-shared --enable-static \
+        --with-harfbuzz=no --with-brotli=no --with-bzip2=no --with-png=no && make -j"${J}" && make install )
+    done_step "freetype (pass 1, no harfbuzz)"
+fi
+
+if step harfbuzz; then
+    d="$(unpack harfbuzz)"; ( cd "${d}" && meson setup build --prefix="${PREFIX}" --libdir=lib \
+        --buildtype=release --default-library=static \
+        -Dfreetype=enabled -Dglib=disabled -Dgobject=disabled -Dcairo=disabled -Dicu=disabled \
+        -Dtests=disabled -Ddocs=disabled -Dbenchmark=disabled -Dutilities=disabled \
+        && ninja -C build -j"${J}" && ninja -C build install )
+    done_step harfbuzz
+fi
+
+if step "freetype (pass 2, with harfbuzz)"; then
+    d="$(unpack freetype)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --disable-shared --enable-static \
+        --with-harfbuzz=yes --with-brotli=no --with-bzip2=no --with-png=no && make -j"${J}" && make install )
+    done_step "freetype (pass 2, with harfbuzz)"
+fi
+
+if step fribidi; then
+    d="$(unpack fribidi)"; ( cd "${d}" && meson setup build --prefix="${PREFIX}" --libdir=lib \
+        --buildtype=release --default-library=static -Ddocs=false -Dtests=false -Dbin=false \
+        && ninja -C build -j"${J}" && ninja -C build install )
+    # A static fribidi on Windows needs FRIBIDI_LIB_STATIC in its consumers'
+    # cflags, or every fribidi symbol is emitted as a DLL import and the link
+    # fails with undefined references that name no missing library.
+    sed -i 's/^Cflags:/Cflags: -DFRIBIDI_LIB_STATIC/' "${PREFIX}/lib/pkgconfig/fribidi.pc"
+    done_step fribidi
+fi
+
+if step fontconfig; then
+    d="$(unpack fontconfig)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" \
+        --disable-shared --enable-static --disable-docs --disable-nls \
+        --with-expat="${PREFIX}" && make -j"${J}" && make install )
+    done_step fontconfig
+fi
+
+if step libunibreak; then
+    d="$(unpack libunibreak)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --disable-shared --enable-static \
+        && make -j"${J}" && make install )
+    done_step libunibreak
+fi
+
+if step libass; then
+    # The system font provider on Windows is DirectWrite, which libass reaches
+    # through the OS. Unlike the Linux runtime this is NOT disabled: fontconfig
+    # is still built and used, and DirectWrite is a second provider that costs
+    # no delivered dependency.
+    d="$(unpack libass)"; ( cd "${d}" && ./configure --prefix="${PREFIX}" --disable-shared --enable-static \
+        --enable-libunibreak && make -j"${J}" && make install )
+    done_step libass
+fi
+
+# =============================================================================
+# hardware SDKs. Headers and dispatchers only; no runtime claim is made here.
+# =============================================================================
+if step nv-codec-headers; then
+    d="$(gitsrc nv-codec-headers)"; ( cd "${d}" && make PREFIX="${PREFIX}" install )
+    done_step nv-codec-headers
+fi
+
+if arch_allows libvpl && step libvpl; then
+    d="$(unpack libvpl)"; ( cd "${d}" && cmake -S . -B build -G Ninja \
+        -DCMAKE_INSTALL_PREFIX="${PREFIX}" \
+        -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTS=OFF -DBUILD_EXAMPLES=OFF \
+        -DINSTALL_EXAMPLE_CODE=OFF && cmake --build build -j"${J}" && cmake --install build )
+    # The dispatcher is C++; a C consumer linking it statically needs the C++
+    # runtime named. CLANG64 is a libc++ environment, not libstdc++.
+    printf 'Libs.private: -lc++\n' >> "${PREFIX}/lib/pkgconfig/vpl.pc"
+    done_step libvpl
+fi
+
+if arch_allows amf-headers && step amf-headers; then
+    d="$(gitsrc amf-headers)"; mkdir -p "${PREFIX}/include/AMF"
+    cp -a "${d}/amf/public/include/." "${PREFIX}/include/AMF/"
+    done_step amf-headers
+fi
+
+# =============================================================================
+# FFmpeg
+# =============================================================================
+FFSRC="${BUILDROOT}/ffmpeg"
+mapfile -t FLAGS < <(grep -hvE '^\s*(#|$)' "${WIN_FLAGS_FILE}")
+
+if step "FFmpeg ${FF_FFMPEG_BASELINE} (${FF_BUILD_REVISION}) win-x64"; then
+rm -rf "${FFSRC}"; cp -a "${CACHE}/git/jellyfin-ffmpeg" "${FFSRC}"
+
+# The fork ships its 95 changes as a quilt series rather than pre-applied.
+# Unlike the Linux runtime, win-x64 applies ALL 95 — see
+# docs/distribution/W1-ffmpeg-windows-runtime.md for why, and for the four
+# independent layers that keep FDK AAC out of this runtime without 0029.
+(
+    cd "${FFSRC}"
+    applied=0
+    while read -r p; do
+        [[ -n "${p}" ]] || continue
+        # --forward and -F0: a patch that only applies approximately is a patch
+        # applying to the wrong place. The series is pinned by the same commit as
+        # the tree, so anything but a clean apply means the pin moved.
+        patch -p1 --forward --no-backup-if-mismatch -F0 -i "debian/patches/${p}" \
+            >> "${OUT}/patches.log" 2>&1 \
+            || { tail -20 "${OUT}/patches.log" >&2; ff_die "patch ${p} did not apply cleanly"; }
+        applied=$((applied + 1))
+    done < debian/patches/series
+    series_length="$(grep -cvE '^\s*$' debian/patches/series)"
+    [[ "${applied}" -eq "${series_length}" ]] \
+        || ff_die "applied ${applied} of ${series_length} patches; win-x64 takes the whole series"
+    [[ "${applied}" -eq 95 ]] \
+        || ff_die "the series is ${applied} patches; the frozen premise names 95"
+    ff_log "applied ${applied}/${series_length} fork patches, zero fuzz"
+
+    # The series having run is not the same as the series having landed.
+    grep -q 'tonemapx' libavfilter/allfilters.c \
+        || ff_die "the patch series applied but tonemapx is absent: the fork baseline did not land"
+    grep -q 'alphasrc' libavfilter/allfilters.c \
+        || ff_die "the patch series applied but alphasrc is absent: the fork baseline did not land"
+    printf '%s\n' "${applied}" > "${OUT}/patches-applied.txt"
+)
+(
+    cd "${FFSRC}"
+    # Deliberately NOT ${CFLAGS}: FFmpeg records its configure line verbatim and
+    # echoes it from -buildconf, so every -ffile-prefix-map argument would put
+    # the path it maps away straight back into the shipped binary. FFmpeg builds
+    # in-tree and its __FILE__ values are already relative.
+    FF_CFLAGS="-O2 -g0 -I${PREFIX}/include"
+    ./configure \
+        "${FLAGS[@]}" \
+        --extra-version="tesserafin.1" \
+        --pkg-config-flags=--static \
+        --extra-cflags="${FF_CFLAGS}" \
+        --extra-cxxflags="${FF_CFLAGS}" \
+        --extra-ldflags="-static -Wl,--no-insert-timestamp -L${PREFIX}/lib" \
+        > "${OUT}/configure.log" 2>&1 || { tail -80 "${OUT}/configure.log" >&2; ff_die "FFmpeg configure failed"; }
+    make -j"${J}" > "${OUT}/make.log" 2>&1 || { tail -80 "${OUT}/make.log" >&2; ff_die "FFmpeg build failed"; }
+    make install DESTDIR="${WORK}" >> "${OUT}/make.log" 2>&1
+)
+    done_step "FFmpeg ${FF_FFMPEG_BASELINE} (${FF_BUILD_REVISION}) win-x64"
+fi
+
+# =============================================================================
+# stage the runtime
+# =============================================================================
+STAGE="${OUT}/tesserafin-ffmpeg-${FF_BUILD_REVISION}-${ARCH}"
+rm -rf "${STAGE}"; mkdir -p "${STAGE}/bin"
+# ${WORK} is a DESTDIR, so the installed tree sits under it at the prefix path.
+INSTALLED="${WORK}${PREFIX}"
+[[ -d "${INSTALLED}/bin" ]] || ff_die "nothing was installed at ${INSTALLED}"
+for exe in ffmpeg ffprobe; do
+    install -m 0755 "${INSTALLED}/bin/${exe}.exe" "${STAGE}/bin/${exe}.exe"
+done
+# llvm-strip, not the host strip: the only binutils in the locked set is the MSYS
+# one, which does not understand a CLANG64 PE.
+llvm-strip --strip-unneeded "${STAGE}/bin/ffmpeg.exe" "${STAGE}/bin/ffprobe.exe"
+
+# Anything else the install produced that is not one of the two programs is
+# reported, not silently dropped: a shared DLL appearing here would mean the
+# static link did not hold and the delivered closure is incomplete.
+extra="$(find "${INSTALLED}/bin" -maxdepth 1 -type f ! -name 'ffmpeg.exe' ! -name 'ffprobe.exe' -printf '%f\n' | sort || true)"
+[[ -z "${extra}" ]] || ff_log "note: install produced additional files in bin: ${extra}"
+printf '%s\n' "${extra}" > "${OUT}/install-extra-files.txt"
+
+ff_log "staged $(du -sh "${STAGE}" | cut -f1) at ${STAGE}"
+printf '%s\n' "${STAGE}"
