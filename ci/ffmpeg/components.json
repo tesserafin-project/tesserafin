@@ -1,6 +1,12 @@
 {
   "$comment": "Immutable source pins and licence classification for the Tesserafin FFmpeg runtime (F0, issue #229). Every sha256 was computed from bytes fetched from the recorded URL; every git component is pinned to a resolved commit. ci/ffmpeg/verify-components.sh gates this file.",
   "buildRevision": "7.1.4-tesserafin.1",
+  "$platformComment": "The runtime identifiers this manifest may classify a component against. A component with no 'architectures' key is applicable to EVERY platform listed here, so adding a platform widens the unrestricted components by construction — which is why every component that is not portable now says so explicitly. ci/ffmpeg/verify-components.sh refuses an 'architectures' value outside this list.",
+  "platforms": [
+    "linux-x64",
+    "linux-arm64",
+    "win-x64"
+  ],
   "ffmpeg": {
     "project": "jellyfin/jellyfin-ffmpeg",
     "baseline": "v7.1.4-3",
@@ -20,8 +26,10 @@
       "ref": "v1.5.0",
       "commit": "afed28d37aca1938da2eedc50599bb3535a987ec",
       "architectures": [
-        "linux-x64"
-      ]
+        "linux-x64",
+        "win-x64"
+      ],
+      "architectureComment": "AMF is an AMD x86-64 stack on both operating systems it targets; upstream's builder disables it on arm64, where enabling it fails the build rather than widening the runtime."
     },
     {
       "name": "dav1d",
@@ -115,7 +123,12 @@
       "sizeBytes": 471664,
       "mirrors": [
         "https://ftp.osuosl.org/pub/blfs/conglomeration/libdrm/libdrm-2.4.114.tar.xz"
-      ]
+      ],
+      "architectures": [
+        "linux-x64",
+        "linux-arm64"
+      ],
+      "architectureComment": "DRM is a Linux kernel interface. Stated explicitly rather than left unrestricted so that declaring win-x64 in 'platforms' cannot silently make it Windows-applicable."
     },
     {
       "name": "libogg",
@@ -145,7 +158,12 @@
       "sourceType": "tar",
       "url": "https://github.com/intel/libva/archive/refs/tags/2.24.1.tar.gz",
       "sha256": "0b4a3649ee8d683b9cce2ef094df4fb039d276c0cef7e49337c43d3b297b9f42",
-      "sizeBytes": 306278
+      "sizeBytes": 306278,
+      "architectures": [
+        "linux-x64",
+        "linux-arm64"
+      ],
+      "architectureComment": "VAAPI is the Linux video-acceleration interface; Windows uses DXVA2/D3D11VA/D3D12VA/QSV instead."
     },
     {
       "name": "libvorbis",
@@ -168,8 +186,10 @@
       "sha256": "1c740e2b58f7853f56b618bdb7d4a7e5d37f8c1a9b30105a0b79ba80873e1cbd",
       "sizeBytes": 12952887,
       "architectures": [
-        "linux-x64"
-      ]
+        "linux-x64",
+        "win-x64"
+      ],
+      "architectureComment": "oneVPL targets Intel GPUs on x86-64; upstream disables it on arm64. The win-x64 runtime reaches Quick Sync through the same dispatcher."
     },
     {
       "name": "libvpx",
@@ -196,7 +216,12 @@
       "sourceType": "git",
       "repository": "https://github.com/KhronosGroup/OpenCL-Headers.git",
       "ref": "v2024.05.08",
-      "commit": "8275634cf9ec31b6484c2e6be756237cb583999d"
+      "commit": "8275634cf9ec31b6484c2e6be756237cb583999d",
+      "architectures": [
+        "linux-x64",
+        "linux-arm64"
+      ],
+      "architectureComment": "OpenCL is a named gap in the win-x64 runtime (W1-A2), not an oversight: the *_opencl filters are absent there and the Windows hardware surface is DXVA2/D3D11VA/D3D12VA/AMF/QSV/NVENC. Recorded the same way libplacebo is in 'excluded'."
     },
     {
       "name": "opencl-icd-loader",
@@ -206,7 +231,12 @@
       "repository": "https://github.com/KhronosGroup/OpenCL-ICD-Loader.git",
       "ref": "v2024.05.08",
       "commit": "861b68b290e76d08e7241608479c16431f529945",
-      "refComment": "annotated tag v2024.05.08 (object 59363628\u2026) peeled to its commit"
+      "refComment": "annotated tag v2024.05.08 (object 59363628\u2026) peeled to its commit",
+      "architectures": [
+        "linux-x64",
+        "linux-arm64"
+      ],
+      "architectureComment": "Follows opencl-headers: no OpenCL surface in the win-x64 runtime, so no ICD loader is linked there."
     },
     {
       "name": "openssl",
@@ -215,7 +245,12 @@
       "sourceType": "tar",
       "url": "https://github.com/openssl/openssl/releases/download/openssl-3.0.15/openssl-3.0.15.tar.gz",
       "sha256": "23c666d0edf20f14249b3d8f0368acaee9ab585b09e1de82107c66e1f3ec9533",
-      "sizeBytes": 15318633
+      "sizeBytes": 15318633,
+      "architectures": [
+        "linux-x64",
+        "linux-arm64"
+      ],
+      "architectureComment": "The win-x64 runtime takes TLS from Schannel, the operating system's own provider, so no OpenSSL is fetched, built, linked or shipped there. Restricting the component is what makes that provable from the manifest rather than only from the configure line."
     },
     {
       "name": "opus",
@@ -296,7 +331,7 @@
     "libne10": "superseded by compiler intrinsics on aarch64",
     "rkmpp": "Rockchip SBC codepath; outside the declared linux-x64/linux-arm64 support matrix",
     "rkrga": "Rockchip SBC codepath; outside the declared support matrix",
-    "mingw / dxva / schannel / mfx / x11 / xorg-macros": "Windows or X11 targets; Tesserafin ships headless Linux",
+    "mingw / dxva / schannel / mfx / x11 / xorg-macros": "Excluded as SOURCE COMPONENTS on every platform, which is not the same as excluding the capability. The Windows-side pieces — the mingw-w64 toolchain and CRT, the DXVA2/D3D11VA/D3D12VA headers and Schannel — are not built from source by any Tesserafin runtime: on win-x64 (W1-A2) they arrive inside the digest-pinned, signature-verified MSYS2 CLANG64 package set that W1-R retained, and are enabled through ci/windows/ffmpeg/ffmpeg-configure.win-x64.txt. libmfx is superseded by libvpl, and X11 is excluded outright because Tesserafin ships headless on every platform.",
     "libplacebo + vulkan-headers + shaderc + glslang + SPIRV-Tools + SPIRV-Headers": "DEFERRED, NOT UNNEEDED. EncoderValidator._requiredFilters names 'libplacebo', so this is a real capability gap against the container image: Vulkan tone-mapping is unavailable and the server falls back to tonemap_vaapi / tonemap_opencl / the software tonemapx path. It is deferred from build revision 7.1.4-tesserafin.1 because the shader-toolchain subtree is the largest single source-closure and reproducibility risk in the component set. Tracked as a named gap in docs/distribution/F0-ffmpeg-runtime.md, not silently dropped."
   }
 }
