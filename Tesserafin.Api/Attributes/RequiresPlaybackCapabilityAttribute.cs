@@ -48,6 +48,13 @@ public sealed class RequiresPlaybackCapabilityAttribute : Attribute, IAsyncAutho
         _mediaSourceRouteKey = mediaSourceRouteKey;
     }
 
+    /// <summary>
+    /// Gets the single scope this route demands. Public so the boundary can be asserted route by
+    /// route without booting a server: "a capability reaches media and nothing else" is a property
+    /// of the route table, and a request-level test can only sample it.
+    /// </summary>
+    public PlaybackCapabilityScope Scope => _scope;
+
     /// <inheritdoc />
     public System.Threading.Tasks.Task OnAuthorizationAsync(AuthorizationFilterContext context)
     {
