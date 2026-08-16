@@ -23,13 +23,31 @@ on:
         description: 'The exact commit to build and prove (full 40-character SHA)'
         type: string
         required: true
+  # GitHub only offers workflow_dispatch for a workflow that is present on the
+  # DEFAULT branch. Measured, not assumed: dispatching this file while it existed
+  # only on the W1-A2 branch answered
+  #
+  #     POST .../workflows/w1-windows-ffmpeg-runtime.yml/dispatches -> 404
+  #
+  # so until it lands on master the dispatch route cannot produce evidence at
+  # all. This trigger is scoped to the single branch that owns the work, and it
+  # weakens nothing about the proof: the same two clean native runners, the same
+  # `contents: read`, the same absence of any publication job, and github.sha is
+  # every bit as immutable as a hand-typed evidence SHA.
+  push:
+    branches:
+      - w1/windows-ffmpeg-runtime-a2
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ inputs.sha }}
+  group: ${{ github.workflow }}-${{ inputs.sha || github.sha }}
   cancel-in-progress: false
+
+env:
+  # The one commit this run builds and proves, whichever trigger started it.
+  EVIDENCE_SHA: ${{ inputs.sha || github.sha }}
 
 jobs:
   # ── Cheap controls first. They run on Linux in about a minute and refuse a
@@ -41,7 +59,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          ref: ${{ inputs.sha }}
+          ref: ${{ env.EVIDENCE_SHA }}
           persist-credentials: false
 
       # A branch can move between dispatch and checkout. Without this, the
@@ -51,8 +69,8 @@ jobs:
         run: |
           set -euo pipefail
           head="$(git rev-parse HEAD)"
-          [ "${head}" = "${{ inputs.sha }}" ] || {
-            echo "W1-A2 HARD STOP: checked out ${head}, dispatched for ${{ inputs.sha }}" >&2
+          [ "${head}" = "${{ env.EVIDENCE_SHA }}" ] || {
+            echo "W1-A2 HARD STOP: checked out ${head}, asked for ${{ env.EVIDENCE_SHA }}" >&2
             exit 1; }
           echo "building and proving ${head}"
 
@@ -86,7 +104,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          ref: ${{ inputs.sha }}
+          ref: ${{ env.EVIDENCE_SHA }}
           persist-credentials: false
 
       - name: Assert the checkout is the exact evidence SHA
@@ -94,8 +112,8 @@ jobs:
         run: |
           set -euo pipefail
           head="$(git rev-parse HEAD)"
-          [ "${head}" = "${{ inputs.sha }}" ] || {
-            echo "W1-A2 HARD STOP: checked out ${head}, dispatched for ${{ inputs.sha }}" >&2
+          [ "${head}" = "${{ env.EVIDENCE_SHA }}" ] || {
+            echo "W1-A2 HARD STOP: checked out ${head}, asked for ${{ env.EVIDENCE_SHA }}" >&2
             exit 1; }
 
       # A bare MSYS2. `update: false`, `release: false`, no `install:` list and
@@ -163,7 +181,7 @@ jobs:
             --out /c/tf-delivered \
             --consume-evidence "$(cygpath -u "${RUNNER_TEMP}")/w1a2-inputs/consume.json" \
             --toolchain "$(cygpath -u "${RUNNER_TEMP}")/w1a2-inputs/toolchain.json" \
-            --repo-sha "${{ inputs.sha }}"
+            --repo-sha "${{ env.EVIDENCE_SHA }}"
 
       - name: Verify the delivered set
         shell: msys2 {0}
@@ -225,7 +243,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          ref: ${{ inputs.sha }}
+          ref: ${{ env.EVIDENCE_SHA }}
           persist-credentials: false
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1

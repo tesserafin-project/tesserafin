@@ -222,6 +222,17 @@ two clean native `windows-latest` runners, each pulling the same digest
 independently with no cache anywhere, and `compare-hosts.py` requires the same
 path set, then the same content, then the same archive bytes.
 
+That workflow carries two triggers. `workflow_dispatch` takes an exact evidence
+SHA and is the intended long-term route. It is unusable before the file reaches
+master: GitHub only offers `workflow_dispatch` for a workflow present on the
+default branch, and dispatching this one from the W1-A2 branch answered `404`.
+So the workflow also runs on `push` to `w1/windows-ffmpeg-runtime-a2` alone. That
+trigger weakens nothing — the same two clean native runners, the same
+`contents: read`, the same absence of any publication job — and `github.sha` is
+as immutable as a hand-typed SHA. Both routes resolve to one `EVIDENCE_SHA`, and
+every job asserts that its checkout is exactly that commit, because a branch can
+move between the trigger and the checkout.
+
 **Permanent negative controls** (33) refuse: missing, added, renamed and
 corrupted paths — inside one delivered set and between two hosts; arm64, x86 and
 PE32 images; a PE carrying a link timestamp; an embedded build-host path in UTF-8
