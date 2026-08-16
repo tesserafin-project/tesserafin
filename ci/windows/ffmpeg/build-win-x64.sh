@@ -259,7 +259,15 @@ if step x265; then
 fi
 
 if step svt-av1; then
+    # CMAKE_POLICY_VERSION_MINIMUM, not a patch: SVT-AV1 itself declares 3.16,
+    # but it vendors third_party/cpuinfo (2.8.12) and its clog dependency (3.1),
+    # and cmake 4.4.2 refuses both. This is CMake's own documented escape hatch
+    # for exactly that situation, and it raises a floor rather than changing what
+    # any CMakeLists says — which is why it is preferred here over patching two
+    # vendored subprojects the pin does not otherwise touch. x265 could not use
+    # it: that one also sets removed policies to OLD, which no flag can relax.
     d="$(unpack svt-av1)"; ( cd "${d}" && cmake -S . -B build -G Ninja \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
         -DCMAKE_INSTALL_PREFIX="${PREFIX}" -DCMAKE_BUILD_TYPE=Release \
         -DBUILD_SHARED_LIBS=OFF -DBUILD_APPS=OFF -DBUILD_TESTING=OFF \
         && cmake --build build -j"${J}" && cmake --install build )
