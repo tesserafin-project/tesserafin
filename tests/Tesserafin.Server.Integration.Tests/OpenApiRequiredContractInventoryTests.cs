@@ -42,8 +42,14 @@ namespace Tesserafin.Server.Integration.Tests
         /// attributes, which is the same additive shape: a census of the schemas outside the
         /// namespace shows exactly one addition and no removal, and no existing schema's
         /// <c>required</c> array differs from the frozen base.
+        ///
+        /// 32 before #153-A0. <c>PlaybackCapabilityRequestDto</c> declares <c>PlaySessionId</c> and
+        /// <c>Scopes</c> required through explicit <c>[Required]</c> attributes — again the additive
+        /// shape: one addition, no removal, and no existing schema's <c>required</c> array moves.
+        /// The census is deliberately a single number rather than a list, so an addition has to be
+        /// noticed and accounted for here rather than sliding in unremarked.
         /// </remarks>
-        private const int RequiredOutsideNamespace = 32;
+        private const int RequiredOutsideNamespace = 33;
 
         /// <summary>
         /// The 29 members, across 13 schemas, that are primary-constructor parameters of
