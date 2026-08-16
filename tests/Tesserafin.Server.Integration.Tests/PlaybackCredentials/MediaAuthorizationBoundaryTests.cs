@@ -272,16 +272,27 @@ public sealed class MediaAuthorizationBoundaryTests
     }
 
     /// <summary>
-    /// A capability minted for another media source does not reach this one.
+    /// A capability minted for a different playback entirely — another item and that item's own
+    /// media source — does not reach this one.
     /// </summary>
+    /// <remarks>
+    /// The sharper case, same item and a foreign media source, cannot be built through HTTP any
+    /// more: item 3's minting checks refuse a media source that does not belong to the item it is
+    /// paired with, so no such capability can exist. That leaves the delivery-side media-source
+    /// rule without a request-level fixture, which is why the four exact-binding permutations are
+    /// asserted directly against the validator in <c>PlaybackCredentialServiceTests</c>. Two of
+    /// them do survive at this level and are asserted here:
+    /// <see cref="A_media_source_bound_capability_is_refused_where_the_route_names_no_media_source"/>
+    /// and <see cref="An_unbound_capability_is_refused_where_the_route_names_a_media_source"/>.
+    /// </remarks>
     /// <param name="routeName">The route under test.</param>
     /// <returns>A task.</returns>
     [Theory]
     [MemberData(nameof(MediaSourceBoundRoutes))]
-    public async Task A_capability_bound_to_another_media_source_is_refused(string routeName)
+    public async Task A_capability_minted_for_a_different_playback_is_refused(string routeName)
     {
         var route = Route(routeName);
-        var capability = await _fixture.MintAsync([route.Scope], _fixture.ItemId, _fixture.OtherMediaSourceId);
+        var capability = await _fixture.MintAsync([route.Scope], _fixture.OtherItemId, _fixture.OtherMediaSourceId);
 
         using var client = _fixture.AnonymousClient();
         var (status, body) = await MediaBoundaryFixture.SendAsync(
@@ -289,7 +300,7 @@ public sealed class MediaAuthorizationBoundaryTests
             route.Method,
             route.WithQuery("playbackCapability", Uri.EscapeDataString(capability.Value)));
 
-        AssertRefused(status, body, route, "a capability bound to a different media source");
+        AssertRefused(status, body, route, "a capability minted for a different item and media source");
     }
 
     /// <summary>
@@ -355,18 +366,19 @@ public sealed class MediaAuthorizationBoundaryTests
     public async Task A_capability_for_the_wrong_scope_is_refused(string routeName)
     {
         var route = Route(routeName);
-        var wrongScope = route.Scope == PlaybackCapabilityScope.Fonts
-            ? PlaybackCapabilityScope.Trickplay
-            : PlaybackCapabilityScope.Fonts;
 
-        // Bound exactly as the route is, so scope is the ONLY thing that differs — except on the
-        // font routes, where the substitute scope is item-bound by contract and cannot be minted
-        // without an item. Scope is compared before item and media source, so the refusal there is
-        // still attributable to scope.
+        // An item-bound substitute, so the capability can be minted with the SAME binding shape the
+        // route names and scope is the only thing that differs. Fonts is never the substitute: it
+        // is item-less by contract, so a Fonts capability would differ in binding as well as in
+        // scope and the refusal would no longer be attributable.
+        var wrongScope = route.Scope == PlaybackCapabilityScope.Media
+            ? PlaybackCapabilityScope.Subtitles
+            : PlaybackCapabilityScope.Media;
+
         var capability = await _fixture.MintAsync(
             [wrongScope],
-            route.ItemBound || wrongScope != PlaybackCapabilityScope.Fonts ? _fixture.ItemId : null,
-            route.MediaSourceBound ? _fixture.MediaSourceId : null);
+            _fixture.ItemId,
+            route.MediaSourceBound && route.Scope != PlaybackCapabilityScope.Fonts ? _fixture.MediaSourceId : null);
 
         using var client = _fixture.AnonymousClient();
         var (status, body) = await MediaBoundaryFixture.SendAsync(

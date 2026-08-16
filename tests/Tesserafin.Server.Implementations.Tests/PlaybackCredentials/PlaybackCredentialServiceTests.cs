@@ -56,6 +56,17 @@ public class PlaybackCredentialServiceTests
         string? mediaSourceId = "source-a")
         => new(scope, itemId ?? ItemA, mediaSourceId);
 
+    /// <summary>
+    /// A genuinely item-less, source-less request. <see cref="Request"/> cannot express one: its
+    /// <c>itemId ?? ItemA</c> quietly substitutes an item for a caller that asked for none, which
+    /// is how the font tests came to be minting item-BOUND font capabilities and asserting they
+    /// were accepted. Exact binding surfaced that; the helper is what made it invisible.
+    /// </summary>
+    /// <param name="playSessionId">The play session to bind to.</param>
+    /// <returns>An item-less font request.</returns>
+    private static PlaybackCapabilityRequest FontRequest(string playSessionId = "play-a")
+        => new(UserA, "session-a", "device-a", playSessionId, null, null, new[] { PlaybackCapabilityScope.Fonts });
+
     // ---------------------------------------------------------------- minting and entropy
 
     [Fact]
@@ -125,7 +136,7 @@ public class PlaybackCredentialServiceTests
     {
         // The "narrowed further" case. A fallback font belongs to no item, so a font capability
         // that had to name one would either be impossible to mint or would name an unrelated item.
-        var grant = _service.MintCapability(Request(itemId: null, mediaSourceId: null, scopes: PlaybackCapabilityScope.Fonts));
+        var grant = _service.MintCapability(FontRequest());
 
         var validation = _service.ValidateCapability(
             grant.Value,
@@ -137,7 +148,7 @@ public class PlaybackCredentialServiceTests
     [Fact]
     public void A_font_capability_grants_no_media()
     {
-        var grant = _service.MintCapability(Request(itemId: null, mediaSourceId: null, scopes: PlaybackCapabilityScope.Fonts));
+        var grant = _service.MintCapability(FontRequest());
 
         var validation = _service.ValidateCapability(grant.Value, Demand());
 
@@ -146,14 +157,91 @@ public class PlaybackCredentialServiceTests
     }
 
     [Fact]
-    public void A_media_capability_is_accepted_when_the_route_names_no_media_source()
+    public void A_capability_that_names_no_media_source_reaches_a_route_that_names_none()
     {
-        // HLS segment routes name an item but no media source. The capability's own binding is
-        // still checked against the item; a null demand means "this route does not name one",
-        // never "any media source will do".
-        var grant = _service.MintCapability(Request());
+        // The legacy HLS segment routes name an item and no media source. A capability minted the
+        // same way agrees with them, and that is the ONLY capability shape they accept.
+        var grant = _service.MintCapability(Request(mediaSourceId: null));
 
         Assert.True(_service.ValidateCapability(grant.Value, Demand(mediaSourceId: null)).IsValid);
+    }
+
+    // ------------------------------------------------- exact binding, all four permutations
+    //
+    // Two of these cannot be reached over HTTP any more, because the minting checks refuse to
+    // issue a capability whose media source does not belong to its item. They are asserted here
+    // instead, against the validator directly, so the rule has evidence at the level it lives at.
+    // See MediaAuthorizationBoundaryTests for the two that do survive at request level.
+
+    [Fact]
+    public void A_bound_item_is_refused_where_the_demand_names_none()
+    {
+        var grant = _service.MintCapability(Request());
+
+        var validation = _service.ValidateCapability(grant.Value, Demand(itemId: Guid.Empty) with { ItemId = null });
+
+        Assert.False(validation.IsValid);
+        Assert.Equal(PlaybackCapabilityFailure.ItemMismatch, validation.Failure);
+    }
+
+    [Fact]
+    public void An_unbound_item_is_refused_where_the_demand_names_one()
+    {
+        var grant = _service.MintCapability(FontRequest());
+
+        var validation = _service.ValidateCapability(
+            grant.Value,
+            new PlaybackCapabilityDemand(PlaybackCapabilityScope.Fonts, ItemA, null));
+
+        Assert.False(validation.IsValid);
+        Assert.Equal(PlaybackCapabilityFailure.ItemMismatch, validation.Failure);
+    }
+
+    [Fact]
+    public void A_bound_media_source_is_refused_where_the_demand_names_none()
+    {
+        var grant = _service.MintCapability(Request());
+
+        var validation = _service.ValidateCapability(grant.Value, Demand(mediaSourceId: null));
+
+        Assert.False(validation.IsValid);
+        Assert.Equal(PlaybackCapabilityFailure.MediaSourceMismatch, validation.Failure);
+    }
+
+    [Fact]
+    public void An_unbound_media_source_is_refused_where_the_demand_names_one()
+    {
+        var grant = _service.MintCapability(Request(mediaSourceId: null));
+
+        var validation = _service.ValidateCapability(grant.Value, Demand());
+
+        Assert.False(validation.IsValid);
+        Assert.Equal(PlaybackCapabilityFailure.MediaSourceMismatch, validation.Failure);
+    }
+
+    [Fact]
+    public void A_mismatched_play_session_is_refused_where_the_route_exposes_one()
+    {
+        var grant = _service.MintCapability(Request());
+
+        var validation = _service.ValidateCapability(
+            grant.Value,
+            Demand() with { PlaySessionId = "play-b" });
+
+        Assert.False(validation.IsValid);
+        Assert.Equal(PlaybackCapabilityFailure.PlaySessionMismatch, validation.Failure);
+    }
+
+    [Fact]
+    public void A_matching_play_session_is_accepted_and_an_absent_one_is_not_demanded()
+    {
+        // Asymmetric on purpose, and the asymmetry is the assertion: the route may expose
+        // playSessionId without the client sending it, and refusing that absence would make an
+        // optional query parameter mandatory on routes that have never required it.
+        var grant = _service.MintCapability(Request());
+
+        Assert.True(_service.ValidateCapability(grant.Value, Demand() with { PlaySessionId = "play-a" }).IsValid);
+        Assert.True(_service.ValidateCapability(grant.Value, Demand()).IsValid);
     }
 
     // ---------------------------------------------------------------- the refused paths
