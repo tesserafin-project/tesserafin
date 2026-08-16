@@ -8,6 +8,7 @@ using Tesserafin.Api.Attributes;
 using Tesserafin.Api.Helpers;
 using Tesserafin.Api.Models.StreamingDtos;
 using Tesserafin.Controller.MediaEncoding;
+using Tesserafin.Controller.Net.PlaybackCredentials;
 using Tesserafin.Controller.Streaming;
 using Tesserafin.Model.Dlna;
 
@@ -89,6 +90,7 @@ public class AudioController : BaseTesserafinApiController
     [HttpHead("{itemId}/stream", Name = "HeadAudioStream")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesAudioFile]
+    [RequiresPlaybackCapability(PlaybackCapabilityScope.Media, "itemId", "mediaSourceId")]
     public async Task<ActionResult> GetAudioStream(
         [FromRoute, Required] Guid itemId,
         [FromQuery][RegularExpression(EncodingHelper.ContainerValidationRegexStr)] string? container,
@@ -253,6 +255,7 @@ public class AudioController : BaseTesserafinApiController
     [HttpHead("{itemId}/stream.{container}", Name = "HeadAudioStreamByContainer")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesAudioFile]
+    [RequiresPlaybackCapability(PlaybackCapabilityScope.Media, "itemId", "mediaSourceId")]
     public async Task<ActionResult> GetAudioStreamByContainer(
         [FromRoute, Required] Guid itemId,
         [FromRoute, Required][RegularExpression(EncodingHelper.ContainerValidationRegexStr)] string container,

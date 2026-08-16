@@ -10,6 +10,7 @@ using Tesserafin.Controller.Drawing;
 using Tesserafin.Controller.Dto;
 using Tesserafin.Controller.Events;
 using Tesserafin.Controller.Library;
+using Tesserafin.Controller.Net.PlaybackCredentials;
 using Tesserafin.Controller.Session;
 using Tesserafin.Controller.Sorting;
 using Tesserafin.Database.Implementations.Entities;
@@ -39,7 +40,8 @@ public class SessionManagerTests
             Mock.Of<IMediaSourceManager>(),
             Mock.Of<IHostApplicationLifetime>(),
             Mock.Of<IItemQueryService>(),
-            Mock.Of<IItemSortService>());
+            Mock.Of<IItemSortService>(),
+            Mock.Of<IPlaybackCredentialService>());
 
         await Assert.ThrowsAsync(exceptionType, () => sessionManager.GetAuthorizationToken(
             new User("test", "default", "default"),
@@ -68,7 +70,8 @@ public class SessionManagerTests
             Mock.Of<IMediaSourceManager>(),
             Mock.Of<IHostApplicationLifetime>(),
             Mock.Of<IItemQueryService>(),
-            Mock.Of<IItemSortService>());
+            Mock.Of<IItemSortService>(),
+            Mock.Of<IPlaybackCredentialService>());
 
         await Assert.ThrowsAsync(exceptionType, () => sessionManager.AuthenticateNewSessionInternal(authenticationRequest, false));
     }

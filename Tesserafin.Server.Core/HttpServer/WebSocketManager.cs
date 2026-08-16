@@ -11,33 +11,51 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Tesserafin.Common.Extensions;
+using Tesserafin.Controller.Library;
 using Tesserafin.Controller.Net;
+using Tesserafin.Controller.Net.PlaybackCredentials;
 
 namespace Tesserafin.Server.Core.HttpServer
 {
     public class WebSocketManager : IWebSocketManager
     {
+        /// <summary>
+        /// The query key a single-use WebSocket ticket travels in (#153).
+        /// </summary>
+        /// <remarks>
+        /// Deliberately not <c>api_key</c>. A ticket is consumed here and nowhere else, so it can
+        /// authenticate an upgrade and cannot authenticate an HTTP request of any kind — media or
+        /// general — because no HTTP path reads this key.
+        /// </remarks>
+        public const string TicketQueryKey = "webSocketTicket";
+
         private readonly IWebSocketListener[] _webSocketListeners;
         private readonly IAuthService _authService;
         private readonly ILogger<WebSocketManager> _logger;
         private readonly ILoggerFactory _loggerFactory;
+        private readonly IPlaybackCredentialService _credentialService;
+        private readonly IUserManager _userManager;
 
         public WebSocketManager(
             IAuthService authService,
             IEnumerable<IWebSocketListener> webSocketListeners,
             ILogger<WebSocketManager> logger,
-            ILoggerFactory loggerFactory)
+            ILoggerFactory loggerFactory,
+            IPlaybackCredentialService credentialService,
+            IUserManager userManager)
         {
             _webSocketListeners = webSocketListeners.ToArray();
             _authService = authService;
             _logger = logger;
             _loggerFactory = loggerFactory;
+            _credentialService = credentialService;
+            _userManager = userManager;
         }
 
         /// <inheritdoc />
         public async Task WebSocketRequestHandler(HttpContext context)
         {
-            var authorizationInfo = await _authService.Authenticate(context.Request).ConfigureAwait(false);
+            var authorizationInfo = await AuthenticateUpgrade(context).ConfigureAwait(false);
             if (!authorizationInfo.IsAuthenticated)
             {
                 throw new SecurityException("Token is required");
@@ -83,6 +101,42 @@ namespace Tesserafin.Server.Core.HttpServer
                     context.Response.StatusCode = 500;
                 }
             }
+        }
+
+        /// <summary>
+        /// Authenticates a WebSocket upgrade, preferring a single-use ticket over the durable token.
+        /// </summary>
+        /// <remarks>
+        /// A PRESENTED TICKET IS NEVER ALLOWED TO FALL BACK. If a ticket is present and refused —
+        /// unknown, expired, revoked or already consumed — this returns an unauthenticated result
+        /// rather than trying the durable token. Falling back would mean a replayed ticket quietly
+        /// succeeding whenever the client also happened to send its session token, which is exactly
+        /// the silent-fallback failure the contract forbids.
+        ///
+        /// Consumption happens HERE, before the socket is accepted, not after a successful upgrade.
+        /// Consuming on success only would leave the ticket replayable by racing the handshake.
+        /// </remarks>
+        private async Task<AuthorizationInfo> AuthenticateUpgrade(HttpContext context)
+        {
+            var presentedTicket = context.Request.Query[TicketQueryKey].ToString();
+            if (string.IsNullOrEmpty(presentedTicket))
+            {
+                return await _authService.Authenticate(context.Request).ConfigureAwait(false);
+            }
+
+            var consumed = _credentialService.ConsumeWebSocketTicket(presentedTicket);
+            if (!consumed.IsValid)
+            {
+                return new AuthorizationInfo { IsAuthenticated = false };
+            }
+
+            return new AuthorizationInfo
+            {
+                IsAuthenticated = true,
+                User = _userManager.GetUserById(consumed.UserId),
+                DeviceId = consumed.DeviceId,
+                IsApiKey = false
+            };
         }
 
         /// <summary>

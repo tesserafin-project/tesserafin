@@ -12,10 +12,12 @@ using Tesserafin.Api.Attributes;
 using Tesserafin.Api.Helpers;
 using Tesserafin.Api.ModelBinders;
 using Tesserafin.Api.Models.StreamingDtos;
+using Tesserafin.Common.Api;
 using Tesserafin.Common.Extensions;
 using Tesserafin.Controller.Entities;
 using Tesserafin.Controller.Library;
 using Tesserafin.Controller.MediaEncoding;
+using Tesserafin.Controller.Net.PlaybackCredentials;
 using Tesserafin.Controller.Streaming;
 using Tesserafin.Data.Enums;
 using Tesserafin.Extensions;
@@ -95,7 +97,8 @@ public class UniversalAudioController : BaseTesserafinApiController
     /// <returns>A <see cref="Task"/> containing the audio file.</returns>
     [HttpGet("Audio/{itemId}/universal")]
     [HttpHead("Audio/{itemId}/universal", Name = "HeadUniversalAudioStream")]
-    [Authorize]
+    [Authorize(Policy = Policies.MediaDelivery)]
+    [RequiresPlaybackCapability(PlaybackCapabilityScope.Media, "itemId", "mediaSourceId")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status302Found)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
