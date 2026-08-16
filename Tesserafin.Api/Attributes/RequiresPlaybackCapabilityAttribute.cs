@@ -55,6 +55,16 @@ public sealed class RequiresPlaybackCapabilityAttribute : Attribute, IAsyncAutho
     /// </summary>
     public PlaybackCapabilityScope Scope => _scope;
 
+    /// <summary>
+    /// Gets the route or query key naming the item, or null for a route that names none.
+    /// </summary>
+    public string? ItemRouteKey => _itemRouteKey;
+
+    /// <summary>
+    /// Gets the route or query key naming the media source, or null for a route that names none.
+    /// </summary>
+    public string? MediaSourceRouteKey => _mediaSourceRouteKey;
+
     /// <inheritdoc />
     public System.Threading.Tasks.Task OnAuthorizationAsync(AuthorizationFilterContext context)
     {
