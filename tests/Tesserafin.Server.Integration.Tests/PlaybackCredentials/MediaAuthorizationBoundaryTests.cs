@@ -46,6 +46,12 @@ public sealed class MediaAuthorizationBoundaryTests
             .Where(route => route.ItemBound)
             .Select(route => new object[] { route.Name });
 
+    public static IEnumerable<object[]> PlaySessionBoundRoutes()
+        => MediaRouteCatalog
+            .For(Guid.Empty, string.Empty, MediaBoundaryFixture.SubtitleStreamIndex)
+            .Where(route => route.PlaySessionBound)
+            .Select(route => new object[] { route.Name });
+
     public static IEnumerable<object[]> MediaSourceBoundRoutes()
         => MediaRouteCatalog
             .For(Guid.Empty, string.Empty, MediaBoundaryFixture.SubtitleStreamIndex)
@@ -352,6 +358,60 @@ public sealed class MediaAuthorizationBoundaryTests
             route.WithQuery("playbackCapability", Uri.EscapeDataString(capability.Value)));
 
         AssertRefused(status, body, route, "a capability bound to no media source on a route that names one");
+    }
+
+    /// <summary>
+    /// The eleven routes that expose <c>playSessionId</c> compare it. A capability is bound to one
+    /// playback; naming a different one in the URL is a claim about somebody else's.
+    /// </summary>
+    /// <remarks>
+    /// The positive half runs first and is not decoration: the demand is only read when the request
+    /// carries the parameter, so a wiring bug that never read it at all would pass the refusal
+    /// assertion for the wrong reason. Absence is deliberately NOT a refusal — see
+    /// <see cref="PlaybackCapabilityDemand"/> — and the third assertion pins that down, because a
+    /// later "tighten this up" would silently make an optional query parameter mandatory.
+    /// </remarks>
+    /// <param name="routeName">The route under test.</param>
+    /// <returns>A task.</returns>
+    [Theory]
+    [MemberData(nameof(PlaySessionBoundRoutes))]
+    public async Task A_capability_bound_to_another_play_session_is_refused(string routeName)
+    {
+        var route = Route(routeName);
+        const string Owned = "r1-owned-play-session";
+
+        var capability = await _fixture.MintAsync(
+            [route.Scope],
+            _fixture.ItemId,
+            route.MediaSourceBound ? _fixture.MediaSourceId : null,
+            Owned);
+
+        var withCapability = route.WithQuery("playbackCapability", Uri.EscapeDataString(capability.Value));
+
+        using (var matching = _fixture.AnonymousClient())
+        {
+            var (status, _) = await MediaBoundaryFixture.SendAsync(
+                matching,
+                route.Method,
+                withCapability + "&playSessionId=" + Owned);
+
+            AssertReachedTheAction(status, route, "a capability naming its own play session");
+        }
+
+        using (var absent = _fixture.AnonymousClient())
+        {
+            var (status, _) = await MediaBoundaryFixture.SendAsync(absent, route.Method, withCapability);
+
+            AssertReachedTheAction(status, route, "a request that named no play session at all");
+        }
+
+        using var client = _fixture.AnonymousClient();
+        var (refused, body) = await MediaBoundaryFixture.SendAsync(
+            client,
+            route.Method,
+            withCapability + "&playSessionId=someone-elses-playback");
+
+        AssertRefused(refused, body, route, "a capability bound to a different play session");
     }
 
     /// <summary>

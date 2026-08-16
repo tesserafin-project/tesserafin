@@ -1,6 +1,6 @@
 {
   "algorithm": "sha256",
-  "sha256": "7d3f2a571269b156c7ee194469579e455b5fae962dcce970a82b505107f86354",
+  "sha256": "c2cd19d46b41fef5720e0866dc36c258679fa695e114536556826bae535c3ba7",
   "spec": "openapi/openapi.json",
   "version": "1.0.0"
 }

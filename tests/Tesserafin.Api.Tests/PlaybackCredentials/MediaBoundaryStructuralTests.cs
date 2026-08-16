@@ -48,6 +48,12 @@ public class MediaBoundaryStructuralTests
         ("HlsSegmentController", "GetHlsAudioSegmentLegacy", PlaybackCapabilityScope.Media),
         ("HlsSegmentController", "GetHlsVideoSegmentLegacy", PlaybackCapabilityScope.Media),
         ("SubtitleController", "GetSubtitle", PlaybackCapabilityScope.Subtitles),
+
+        // A0's roster omitted this one. It carried [RequiresPlaybackCapability] and no policy, so
+        // it never showed up as an offender below and the theory above never asked whether it had
+        // the attribute at all — the omission was invisible in both directions. Gating it in R1 is
+        // what made the gap visible.
+        ("SubtitleController", "GetSubtitleWithTicks", PlaybackCapabilityScope.Subtitles),
         ("SubtitleController", "GetSubtitlePlaylist", PlaybackCapabilityScope.Subtitles),
         ("SubtitleController", "GetFallbackFontList", PlaybackCapabilityScope.Fonts),
         ("SubtitleController", "GetFallbackFont", PlaybackCapabilityScope.Fonts),
