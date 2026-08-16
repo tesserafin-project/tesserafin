@@ -9117,6 +9117,122 @@
         },
         "type": "object"
       },
+      "PlaybackCapabilityDto": {
+        "additionalProperties": false,
+        "description": "A minted playback capability.",
+        "properties": {
+          "CapabilityId": {
+            "description": "Gets or sets the public identifier. Renewal is addressed by this, not by the secret, so the\nsecret never travels a second time. Safe to log.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "ExpiresAt": {
+            "description": "Gets or sets when the capability stops being accepted.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "IssuedAt": {
+            "description": "Gets or sets when the capability was issued.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "ItemId": {
+            "description": "Gets or sets the bound item, when the scopes are item-bound.",
+            "format": "uuid",
+            "nullable": true,
+            "type": "string"
+          },
+          "MediaSourceId": {
+            "description": "Gets or sets the bound media source, when the scopes are item-bound.",
+            "nullable": true,
+            "type": "string"
+          },
+          "PlaySessionId": {
+            "description": "Gets or sets the bound play session.",
+            "type": "string"
+          },
+          "Scopes": {
+            "description": "Gets or sets the kinds of media this capability may fetch.",
+            "items": {
+              "$ref": "#/components/schemas/PlaybackCapabilityScope"
+            },
+            "type": "array"
+          },
+          "Value": {
+            "description": "Gets or sets the secret to present on media requests. Sensitive despite being short-lived:\nshort-lived is not non-sensitive.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "PlaybackCapabilityRenewalDto": {
+        "additionalProperties": false,
+        "description": "The result of extending a capability\u0027s expiry.",
+        "properties": {
+          "CapabilityId": {
+            "description": "Gets or sets the capability that was renewed.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "ExpiresAt": {
+            "description": "Gets or sets the new expiry.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "IssuedAt": {
+            "description": "Gets or sets the original issue time, which renewal does not move.",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "PlaybackCapabilityRequestDto": {
+        "additionalProperties": false,
+        "description": "Asks the server to mint a playback capability.",
+        "properties": {
+          "ItemId": {
+            "description": "Gets or sets the item whose media this capability may fetch. Omitted only for a scope that\nis not item-bound, which today means Tesserafin.Controller.Net.PlaybackCredentials.PlaybackCapabilityScope.Fonts.",
+            "format": "uuid",
+            "nullable": true,
+            "type": "string"
+          },
+          "MediaSourceId": {
+            "description": "Gets or sets the media source within that item.",
+            "nullable": true,
+            "type": "string"
+          },
+          "PlaySessionId": {
+            "description": "Gets or sets the play session this capability belongs to. Ending that play session revokes\nthis capability and no other.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "Scopes": {
+            "description": "Gets or sets the kinds of media this capability may fetch. Must name at least one; a\ncapability with no scope would grant nothing.",
+            "items": {
+              "$ref": "#/components/schemas/PlaybackCapabilityScope"
+            },
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "PlaySessionId",
+          "Scopes"
+        ],
+        "type": "object"
+      },
+      "PlaybackCapabilityScope": {
+        "description": "The kind of media a playback capability may fetch.",
+        "enum": [
+          "Media",
+          "Subtitles",
+          "Attachments",
+          "Trickplay",
+          "Fonts"
+        ],
+        "type": "string"
+      },
       "PlaybackDecisionAudioCodecCapability": {
         "additionalProperties": false,
         "description": "An audio codec a client can decode, and the limits within which it can decode it.",
@@ -18809,6 +18925,32 @@
         ],
         "type": "object"
       },
+      "WebSocketTicketDto": {
+        "additionalProperties": false,
+        "description": "A minted single-use WebSocket ticket.",
+        "properties": {
+          "ExpiresAt": {
+            "description": "Gets or sets when the ticket stops being accepted. Seconds after issue, not minutes.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "IssuedAt": {
+            "description": "Gets or sets when the ticket was issued.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "TicketId": {
+            "description": "Gets or sets the public identifier. Safe to log.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "Value": {
+            "description": "Gets or sets the secret to present on the upgrade request.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "XbmcMetadataOptions": {
         "additionalProperties": false,
         "properties": {
@@ -23548,6 +23690,7 @@
         "security": [
           {
             "CustomAuthentication": [
+              "MediaDelivery",
               "DefaultAuthorization"
             ]
           }
@@ -23799,6 +23942,7 @@
         "security": [
           {
             "CustomAuthentication": [
+              "MediaDelivery",
               "DefaultAuthorization"
             ]
           }
@@ -28375,6 +28519,7 @@
         "security": [
           {
             "CustomAuthentication": [
+              "MediaDelivery",
               "DefaultAuthorization"
             ]
           }
@@ -28445,6 +28590,7 @@
         "security": [
           {
             "CustomAuthentication": [
+              "MediaDelivery",
               "DefaultAuthorization"
             ]
           }
@@ -47741,6 +47887,205 @@
         ]
       }
     },
+    "/Playback/Capabilities": {
+      "post": {
+        "operationId": "MintPlaybackCapability",
+        "requestBody": {
+          "content": {
+            "application/*\u002Bjson": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/PlaybackCapabilityRequestDto"
+                  }
+                ],
+                "description": "Asks the server to mint a playback capability."
+              }
+            },
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/PlaybackCapabilityRequestDto"
+                  }
+                ],
+                "description": "Asks the server to mint a playback capability."
+              }
+            },
+            "text/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/PlaybackCapabilityRequestDto"
+                  }
+                ],
+                "description": "Asks the server to mint a playback capability."
+              }
+            }
+          },
+          "description": "The item, media source, play session and scopes to bind to.",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackCapabilityDto"
+                }
+              }
+            },
+            "description": "The capability was minted. Its value is in the body and appears nowhere else."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "No scope was requested, or an item-bound scope was requested without an item."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "The caller is not authenticated."
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "503": {
+            "content": {
+              "text/html": {}
+            },
+            "description": "The server is currently starting or is temporarily not available.",
+            "headers": {
+              "Message": {
+                "allowEmptyValue": true,
+                "description": "A short plain-text reason why the server is not available.",
+                "schema": {
+                  "format": "text",
+                  "type": "string"
+                }
+              },
+              "Retry-After": {
+                "allowEmptyValue": true,
+                "description": "A hint for when to retry the operation in full seconds.",
+                "schema": {
+                  "format": "int32",
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "CustomAuthentication": [
+              "DefaultAuthorization"
+            ]
+          }
+        ],
+        "summary": "Mints a playback capability bound to the caller\u0027s session and play session.",
+        "tags": [
+          "PlaybackCredentials"
+        ]
+      }
+    },
+    "/Playback/Capabilities/{capabilityId}/Renew": {
+      "post": {
+        "description": "The renewal window is the capability\u0027s final minutes. Renewing earlier is refused, because a\nclient that could renew from the moment of issue would chain a short-lived credential into a\ndurable one with extra steps \u2014 which is the property this whole design removes.\n            \nRenewal after expiry is refused outright rather than silently minting a replacement. An\nexpired capability is not resurrectable; the client mints a new one with its durable token.",
+        "operationId": "RenewPlaybackCapability",
+        "parameters": [
+          {
+            "description": "The public identifier returned when the capability was minted.",
+            "in": "path",
+            "name": "capabilityId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackCapabilityRenewalDto"
+                }
+              }
+            },
+            "description": "The expiry moved."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Renewal was attempted before the renewal window opened."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "The caller is not authenticated, or the capability is unknown, expired or not theirs."
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "503": {
+            "content": {
+              "text/html": {}
+            },
+            "description": "The server is currently starting or is temporarily not available.",
+            "headers": {
+              "Message": {
+                "allowEmptyValue": true,
+                "description": "A short plain-text reason why the server is not available.",
+                "schema": {
+                  "format": "text",
+                  "type": "string"
+                }
+              },
+              "Retry-After": {
+                "allowEmptyValue": true,
+                "description": "A hint for when to retry the operation in full seconds.",
+                "schema": {
+                  "format": "int32",
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "CustomAuthentication": [
+              "DefaultAuthorization"
+            ]
+          }
+        ],
+        "summary": "Extends a capability\u0027s expiry, without rotating or re-returning its secret.",
+        "tags": [
+          "PlaybackCredentials"
+        ]
+      }
+    },
     "/Playback/Sessions": {
       "post": {
         "operationId": "CreatePlaybackSession",
@@ -65180,6 +65525,7 @@
         "security": [
           {
             "CustomAuthentication": [
+              "MediaDelivery",
               "DefaultAuthorization"
             ]
           }
@@ -65300,6 +65646,7 @@
         "security": [
           {
             "CustomAuthentication": [
+              "MediaDelivery",
               "DefaultAuthorization"
             ]
           }
@@ -67468,6 +67815,7 @@
         "security": [
           {
             "CustomAuthentication": [
+              "MediaDelivery",
               "DefaultAuthorization"
             ]
           }
@@ -67904,6 +68252,72 @@
         "summary": "Get video attachment.",
         "tags": [
           "Video"
+        ]
+      }
+    },
+    "/WebSocket/Tickets": {
+      "post": {
+        "description": "Header-authenticated by the durable session token, like every other minting call. The ticket\nis consumed by the upgrade handshake that follows immediately, which is why its life is\nmeasured in seconds.",
+        "operationId": "MintWebSocketTicket",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebSocketTicketDto"
+                }
+              }
+            },
+            "description": "The ticket was minted. Its value is in the body and appears nowhere else."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "The caller is not authenticated."
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "503": {
+            "content": {
+              "text/html": {}
+            },
+            "description": "The server is currently starting or is temporarily not available.",
+            "headers": {
+              "Message": {
+                "allowEmptyValue": true,
+                "description": "A short plain-text reason why the server is not available.",
+                "schema": {
+                  "format": "text",
+                  "type": "string"
+                }
+              },
+              "Retry-After": {
+                "allowEmptyValue": true,
+                "description": "A hint for when to retry the operation in full seconds.",
+                "schema": {
+                  "format": "int32",
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "CustomAuthentication": [
+              "DefaultAuthorization"
+            ]
+          }
+        ],
+        "summary": "Mints a WebSocket ticket bound to the caller\u0027s session and device.",
+        "tags": [
+          "WebSocketTickets"
         ]
       }
     },
@@ -68516,6 +68930,9 @@
       "name": "Person"
     },
     {
+      "name": "PlaybackCredentials"
+    },
+    {
       "name": "Playback"
     },
     {
@@ -68568,6 +68985,9 @@
     },
     {
       "name": "Video"
+    },
+    {
+      "name": "WebSocketTickets"
     },
     {
       "name": "Year"
