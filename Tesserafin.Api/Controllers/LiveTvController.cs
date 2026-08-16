@@ -1115,8 +1115,17 @@ public class LiveTvController : BaseTesserafinApiController
     /// An <see cref="OkResult"/> containing the recording stream on success,
     /// or a <see cref="NotFoundResult"/> if recording not found.
     /// </returns>
+    // DELIBERATELY NOT Policies.MediaDelivery. This route was anonymous for the same reason the
+    // direct-stream routes were — no [Authorize] and no fallback policy — and it has to stop being
+    // anonymous. But it carries no [RequiresPlaybackCapability], because #153-A0's capability
+    // scopes do not model a live recording. Giving it the media scheme without a demand to narrow
+    // against would let a capability minted for any unrelated item authenticate it unnarrowed,
+    // which trades one hole for a worse one. It gets the ordinary durable-token policy, and
+    // migrating Live TV delivery onto capabilities is left to the phase that models it.
     [HttpGet("LiveRecordings/{recordingId}/stream")]
+    [Authorize]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesVideoFile]
     public ActionResult GetLiveRecordingFile([FromRoute, Required] string recordingId)
@@ -1142,8 +1151,11 @@ public class LiveTvController : BaseTesserafinApiController
     /// An <see cref="OkResult"/> containing the channel stream on success,
     /// or a <see cref="NotFoundResult"/> if stream not found.
     /// </returns>
+    // Same disposition as GetLiveRecordingFile above.
     [HttpGet("LiveStreamFiles/{streamId}/stream.{container}")]
+    [Authorize]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesVideoFile]
     public ActionResult GetLiveStreamFile(

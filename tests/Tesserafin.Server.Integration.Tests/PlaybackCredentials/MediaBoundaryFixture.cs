@@ -245,18 +245,37 @@ public sealed class MediaBoundaryFixture : IAsyncLifetime
     }
 
     /// <summary>
-    /// Mints the capability a route is supposed to accept: its own scope, this fixture's item, and
-    /// this fixture's media source, except for <c>Fonts</c>, which is item-less by contract.
+    /// Mints exactly the capability a route is supposed to accept: its own scope, and the item and
+    /// media source THAT ROUTE names — not the fixture's, the route's.
     /// </summary>
+    /// <remarks>
+    /// Binding to more than the route names is not harmless. Once binding is compared exactly, a
+    /// capability carrying a media source is refused on the three legacy routes that name none, and
+    /// a test that always minted a source-bound capability would go on passing its revocation and
+    /// wrong-item cases there — refused by the media-source rule, for a reason unrelated to the
+    /// property each of those tests claims to prove.
+    /// </remarks>
     /// <param name="route">The route to mint for.</param>
     /// <returns>The minted capability.</returns>
-    public Task<PlaybackCapabilityDto> MintForAsync(MediaRoute route)
+    public Task<PlaybackCapabilityDto> MintForAsync(MediaRoute route) => MintForAsync(route, DurableHeaderClient);
+
+    /// <summary>
+    /// Mints for a route through a caller-chosen session.
+    /// </summary>
+    /// <param name="route">The route to mint for.</param>
+    /// <param name="clientFactory">Produces the authenticated client to mint through.</param>
+    /// <returns>The minted capability.</returns>
+    public async Task<PlaybackCapabilityDto> MintForAsync(MediaRoute route, Func<HttpClient> clientFactory)
     {
         ArgumentNullException.ThrowIfNull(route);
+        ArgumentNullException.ThrowIfNull(clientFactory);
 
-        return route.Scope == PlaybackCapabilityScope.Fonts
-            ? MintAsync([PlaybackCapabilityScope.Fonts], null, null)
-            : MintAsync([route.Scope], ItemId, MediaSourceId);
+        using var client = clientFactory();
+        return await MintWithAsync(
+            client,
+            [route.Scope],
+            route.ItemBound ? ItemId : null,
+            route.MediaSourceBound ? MediaSourceId : null).ConfigureAwait(false);
     }
 
     /// <summary>

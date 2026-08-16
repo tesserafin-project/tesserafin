@@ -198,9 +198,11 @@ public sealed class MediaAuthorizationBoundaryTests
         var token = await _fixture.AuthenticateAsync(deviceId);
 
         using var owner = _fixture.ClientFor(deviceId, token);
-        var capability = route.Scope == PlaybackCapabilityScope.Fonts
-            ? await MediaBoundaryFixture.MintWithAsync(owner, [PlaybackCapabilityScope.Fonts], null, null)
-            : await MediaBoundaryFixture.MintWithAsync(owner, [route.Scope], _fixture.ItemId, _fixture.MediaSourceId);
+        var capability = await MediaBoundaryFixture.MintWithAsync(
+            owner,
+            [route.Scope],
+            route.ItemBound ? _fixture.ItemId : null,
+            route.MediaSourceBound ? _fixture.MediaSourceId : null);
 
         using (var logout = await owner.PostAsync("/Sessions/Logout", content: null, TestContext.Current.CancellationToken))
         {
@@ -255,7 +257,10 @@ public sealed class MediaAuthorizationBoundaryTests
     public async Task A_capability_bound_to_another_item_is_refused(string routeName)
     {
         var route = Route(routeName);
-        var capability = await _fixture.MintAsync([route.Scope], _fixture.OtherItemId, _fixture.OtherMediaSourceId);
+        var capability = await _fixture.MintAsync(
+            [route.Scope],
+            _fixture.OtherItemId,
+            route.MediaSourceBound ? _fixture.OtherMediaSourceId : null);
 
         using var client = _fixture.AnonymousClient();
         var (status, body) = await MediaBoundaryFixture.SendAsync(
@@ -354,9 +359,14 @@ public sealed class MediaAuthorizationBoundaryTests
             ? PlaybackCapabilityScope.Trickplay
             : PlaybackCapabilityScope.Fonts;
 
-        var capability = wrongScope == PlaybackCapabilityScope.Fonts
-            ? await _fixture.MintAsync([PlaybackCapabilityScope.Fonts], null, null)
-            : await _fixture.MintAsync([wrongScope], _fixture.ItemId, _fixture.MediaSourceId);
+        // Bound exactly as the route is, so scope is the ONLY thing that differs — except on the
+        // font routes, where the substitute scope is item-bound by contract and cannot be minted
+        // without an item. Scope is compared before item and media source, so the refusal there is
+        // still attributable to scope.
+        var capability = await _fixture.MintAsync(
+            [wrongScope],
+            route.ItemBound || wrongScope != PlaybackCapabilityScope.Fonts ? _fixture.ItemId : null,
+            route.MediaSourceBound ? _fixture.MediaSourceId : null);
 
         using var client = _fixture.AnonymousClient();
         var (status, body) = await MediaBoundaryFixture.SendAsync(

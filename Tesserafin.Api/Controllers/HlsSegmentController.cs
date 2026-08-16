@@ -52,11 +52,16 @@ public class HlsSegmentController : BaseTesserafinApiController
     /// <param name="segmentId">The segment id.</param>
     /// <response code="200">Hls audio segment returned.</response>
     /// <returns>A <see cref="FileStreamResult"/> containing the audio stream.</returns>
-    // Can't require authentication just yet due to seeing some requests come from Chrome without full query string
-    // [Authenticated]
+    // The upstream comment this replaced said authentication could not be required "just yet due to
+    // seeing some requests come from Chrome without full query string". Its sibling route
+    // Audio/{itemId}/hls1/{playlistId}/{segmentId}.{container} has carried Policies.MediaDelivery
+    // throughout, from the same players, so the exemption outlived whatever it was for. Measured
+    // against master, this route served a segment to a caller presenting no credential at all.
     [HttpGet("Audio/{itemId}/hls/{segmentId}/stream.mp3", Name = "GetHlsAudioSegmentLegacyMp3")]
     [HttpGet("Audio/{itemId}/hls/{segmentId}/stream.aac", Name = "GetHlsAudioSegmentLegacyAac")]
+    [Authorize(Policy = Policies.MediaDelivery)]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesAudioFile]
     [SuppressMessage("Microsoft.Performance", "CA1801:ReviewUnusedParameters", MessageId = "itemId", Justification = "Required for ServiceStack")]
     [RequiresPlaybackCapability(PlaybackCapabilityScope.Media, "itemId", null)]
@@ -131,10 +136,12 @@ public class HlsSegmentController : BaseTesserafinApiController
     /// <response code="200">Hls video segment returned.</response>
     /// <response code="404">Hls segment not found.</response>
     /// <returns>A <see cref="FileStreamResult"/> containing the video segment.</returns>
-    // Can't require authentication just yet due to seeing some requests come from Chrome without full query string
-    // [Authenticated]
+    // Same disposition as GetHlsAudioSegmentLegacy above: the exemption outlived its reason, and
+    // the route served video segments anonymously until this change.
     [HttpGet("Videos/{itemId}/hls/{playlistId}/{segmentId}.{segmentContainer}")]
+    [Authorize(Policy = Policies.MediaDelivery)]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesVideoFile]
     [SuppressMessage("Microsoft.Performance", "CA1801:ReviewUnusedParameters", MessageId = "itemId", Justification = "Required for ServiceStack")]
