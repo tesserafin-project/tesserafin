@@ -8,7 +8,7 @@ namespace Tesserafin.Server.Integration.Tests.PlaybackCredentials;
 /// real.
 /// </summary>
 [CollectionDefinition(Name)]
-public sealed class MintingCollection : ICollectionFixture<MintingFixture>
+public sealed class MintingSuite : ICollectionFixture<MintingFixture>
 {
     /// <summary>The collection name.</summary>
     public const string Name = "R1 playback capability minting";

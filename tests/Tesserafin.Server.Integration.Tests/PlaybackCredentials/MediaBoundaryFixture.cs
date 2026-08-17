@@ -46,6 +46,8 @@ public sealed class MediaBoundaryFixture : IAsyncLifetime
     /// <summary>The device id the fixture's own session uses.</summary>
     public const string PrimaryDeviceId = "r1-primary-device";
 
+    private static readonly byte[] _mediaBytes = CreateDeterministicPayload();
+
     private string _workDirectory = string.Empty;
     private string _userName = string.Empty;
     private string _password = string.Empty;
@@ -68,11 +70,16 @@ public sealed class MediaBoundaryFixture : IAsyncLifetime
     /// <summary>Gets the other item's media source id.</summary>
     public string OtherMediaSourceId => OtherItemId.ToString("N", CultureInfo.InvariantCulture);
 
-    /// <summary>Gets the exact bytes on disk behind <see cref="ItemId"/>.</summary>
-    public byte[] MediaBytes { get; } = CreateDeterministicPayload();
-
     /// <summary>Gets every media route, bound to this fixture.</summary>
     public IReadOnlyList<MediaRoute> Routes { get; private set; } = [];
+
+    /// <summary>
+    /// Gets a copy of the exact bytes on disk behind <see cref="ItemId"/>. A method, not a
+    /// property: CA1819 is an error here, and handing every caller the same mutable array would
+    /// let one test corrupt the expectation every other test compares against.
+    /// </summary>
+    /// <returns>The fixture's media payload.</returns>
+    public byte[] GetMediaBytes() => (byte[])_mediaBytes.Clone();
 
     /// <inheritdoc />
     public async ValueTask InitializeAsync()
@@ -309,7 +316,7 @@ public sealed class MediaBoundaryFixture : IAsyncLifetime
     private Guid SeedItem(ILibraryManager libraryManager, IMediaStreamRepository mediaStreamRepository, string fileName, string name)
     {
         var mediaPath = Path.Combine(_workDirectory, fileName);
-        File.WriteAllBytes(mediaPath, MediaBytes);
+        File.WriteAllBytes(mediaPath, _mediaBytes);
         var subtitlePath = EndToEndMediaFixtures.CreateExternalSrt(_workDirectory, Path.GetFileNameWithoutExtension(fileName) + ".srt");
 
         return LibraryItemSeeder.SeedVideo(
