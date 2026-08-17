@@ -50,27 +50,10 @@ namespace Tesserafin.Api.Auth
                     return AuthenticateResult.NoResult();
                 }
 
-                var role = UserRoles.User;
-                if (authorizationInfo.IsApiKey
-                    || (authorizationInfo.User?.HasPermission(PermissionKind.IsAdministrator) ?? false))
-                {
-                    role = UserRoles.Administrator;
-                }
-
-                var claims = new[]
-                {
-                    new Claim(ClaimTypes.Name, authorizationInfo.User?.Username ?? string.Empty),
-                    new Claim(ClaimTypes.Role, role),
-                    new Claim(InternalClaimTypes.UserId, authorizationInfo.UserId.ToString("N", CultureInfo.InvariantCulture)),
-                    new Claim(InternalClaimTypes.DeviceId, authorizationInfo.DeviceId ?? string.Empty),
-                    new Claim(InternalClaimTypes.Device, authorizationInfo.Device ?? string.Empty),
-                    new Claim(InternalClaimTypes.Client, authorizationInfo.Client ?? string.Empty),
-                    new Claim(InternalClaimTypes.Version, authorizationInfo.Version ?? string.Empty),
-                    new Claim(InternalClaimTypes.Token, authorizationInfo.Token),
-                    new Claim(InternalClaimTypes.IsApiKey, authorizationInfo.IsApiKey.ToString(CultureInfo.InvariantCulture))
-                };
-
-                var identity = new ClaimsIdentity(claims, Scheme.Name);
+                // The claim list is NOT written here. It is written once, in
+                // AuthorizationInfoPrincipal, and shared with the WebSocket ticket upgrade path so
+                // that the two cannot drift. See that type for why a copy is not acceptable.
+                var identity = AuthorizationInfoPrincipal.CreateIdentity(authorizationInfo, Scheme.Name);
                 var principal = new ClaimsPrincipal(identity);
                 var ticket = new AuthenticationTicket(principal, Scheme.Name);
 
