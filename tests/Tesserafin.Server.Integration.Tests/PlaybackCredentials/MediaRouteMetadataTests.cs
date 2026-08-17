@@ -34,7 +34,7 @@ namespace Tesserafin.Server.Integration.Tests.PlaybackCredentials;
 /// protects. <c>ApiExplorerSettings</c> hides an endpoint from the explorer; it does not hide it
 /// from routing.
 /// </remarks>
-[Collection(MediaBoundaryCollection.Name)]
+[Collection(MediaBoundarySuite.Name)]
 public sealed class MediaRouteMetadataTests
 {
     private readonly MediaBoundaryFixture _fixture;

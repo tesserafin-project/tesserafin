@@ -25,7 +25,7 @@ namespace Tesserafin.Server.Integration.Tests.PlaybackCredentials;
 /// halves matter: a 200 carrying an error page would be a refusal by status alone, and a 401 that
 /// still streamed the file would be a refusal by nothing at all.
 /// </remarks>
-[Collection(MediaBoundaryCollection.Name)]
+[Collection(MediaBoundarySuite.Name)]
 public sealed class MediaAuthorizationBoundaryTests
 {
     private readonly MediaBoundaryFixture _fixture;
@@ -151,7 +151,7 @@ public sealed class MediaAuthorizationBoundaryTests
         if (route.Evidence == MediaRouteEvidence.Bytes && route.Scope == PlaybackCapabilityScope.Media)
         {
             Assert.Equal(HttpStatusCode.OK, status);
-            Assert.Equal(_fixture.MediaBytes, body);
+            Assert.Equal(_fixture.GetMediaBytes(), body);
         }
     }
 
@@ -495,8 +495,9 @@ public sealed class MediaAuthorizationBoundaryTests
             status is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden,
             $"[{route.MediaClass}] {route.Method} {route.Path} answered {(int)status} to {what}. Expected 401 or 403.");
 
+        var media = _fixture.GetMediaBytes();
         Assert.False(
-            body.Length == _fixture.MediaBytes.Length && body.SequenceEqual(_fixture.MediaBytes),
+            body.Length == media.Length && body.SequenceEqual(media),
             $"[{route.MediaClass}] {route.Method} {route.Path} returned the fixture's media bytes to {what}.");
     }
 

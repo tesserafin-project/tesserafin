@@ -22,7 +22,7 @@ namespace Tesserafin.Server.Integration.Tests.PlaybackCredentials;
 /// so <c>DefaultAuthorizationHandler</c> re-evaluates both on every delivery request, for a
 /// capability principal as much as for a durable token.
 /// </remarks>
-[Collection(MintingCollection.Name)]
+[Collection(MintingSuite.Name)]
 public sealed class PlaybackCapabilityMintingTests
 {
     private readonly MintingFixture _fixture;
