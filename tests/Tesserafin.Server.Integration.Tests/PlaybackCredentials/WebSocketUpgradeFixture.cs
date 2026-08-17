@@ -16,6 +16,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Tesserafin.Api.Models.PlaybackCredentialDtos;
 using Tesserafin.Api.Models.StartupDtos;
 using Tesserafin.Controller.Net;
+using Tesserafin.Controller.Net.PlaybackCredentials;
+using Tesserafin.Controller.Session;
 using Tesserafin.Extensions.Json;
 using Tesserafin.Server.Core.Session;
 using Xunit;
@@ -198,6 +200,172 @@ public sealed class WebSocketUpgradeFixture : IAsyncLifetime
         }.Uri;
 
         return await client.ConnectAsync(uri, TestContext.Current.CancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Opens the real socket with a query string and a verbatim authorization header, so a case can
+    /// make the request claim a client, version and device the ticket does not name (#153-A0-R3).
+    /// </summary>
+    /// <param name="query">The query string, without the leading '?'.</param>
+    /// <param name="authorizationHeader">The complete header value, or null for none.</param>
+    /// <returns>The connected socket.</returns>
+    public async Task<WebSocket> ConnectWithHeaderAsync(string? query, string? authorizationHeader)
+    {
+        var client = Factory.Server.CreateWebSocketClient();
+        if (authorizationHeader is not null)
+        {
+            client.ConfigureRequest = request => request.Headers.Authorization = authorizationHeader;
+        }
+
+        var uri = new UriBuilder(Factory.Server.BaseAddress)
+        {
+            Scheme = "ws",
+            Path = "websocket",
+            Query = query ?? string.Empty
+        }.Uri;
+
+        return await client.ConnectAsync(uri, TestContext.Current.CancellationToken).ConfigureAwait(false);
+    }
+
+    // -------------------------------------------------------------------------------------
+    // #153-A0-R3: live-session redemption and principal parity.
+    // -------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The authorization header, with every field the session key is built from under the caller's
+    /// control.
+    /// </summary>
+    /// <param name="deviceId">The device id.</param>
+    /// <param name="token">The durable token, or null for none.</param>
+    /// <param name="client">The client name.</param>
+    /// <param name="device">The device name.</param>
+    /// <param name="version">The application version.</param>
+    /// <returns>The header value.</returns>
+    /// <remarks>
+    /// <c>MediaBoundaryFixture.AuthorizationHeader</c> varies only the device id, so it can prove
+    /// that a ticket ignores a lying device but cannot say anything about a lying client or version
+    /// — and a session is keyed on client and device id, with the version carried alongside. R3
+    /// needs all three to move independently.
+    /// </remarks>
+    public static string AuthorizationHeader(string deviceId, string? token, string client, string device, string version)
+    {
+        var header = $"MediaBrowser Client=\"{client}\", DeviceId=\"{deviceId}\", Device=\"{device}\", Version=\"{version}\"";
+        return token is null ? header : header + $", Token=\"{token}\"";
+    }
+
+    /// <summary>
+    /// Gets a service out of the running server.
+    /// </summary>
+    /// <typeparam name="T">The service type.</typeparam>
+    /// <returns>The service.</returns>
+    public T Service<T>()
+        where T : notnull
+        => Factory.Services.GetRequiredService<T>();
+
+    /// <summary>
+    /// Gets the recorder that observes every accepted upgrade.
+    /// </summary>
+    /// <returns>The recorder.</returns>
+    public UpgradeRecorder Recorder() => Factory.Recorder;
+
+    /// <summary>
+    /// A stable snapshot of the live sessions.
+    /// </summary>
+    /// <returns>The sessions.</returns>
+    /// <remarks>
+    /// <c>ISessionManager.Sessions</c> projects a live <see cref="System.Collections.Concurrent.ConcurrentDictionary{TKey,TValue}"/>
+    /// through <c>OrderByDescending</c>, so enumerating it while another connection is opening
+    /// throws. The same hazard the fixture's <see cref="Watchlist"/> already retries around.
+    /// </remarks>
+    public IReadOnlyList<SessionInfo> Sessions()
+    {
+        var manager = Service<ISessionManager>();
+        while (true)
+        {
+            try
+            {
+                return manager.Sessions.ToArray();
+            }
+            catch (InvalidOperationException)
+            {
+                // Mutated mid-enumeration; retry.
+            }
+        }
+    }
+
+    /// <summary>
+    /// The single live session belonging to one device, or null.
+    /// </summary>
+    /// <param name="deviceId">The device id.</param>
+    /// <returns>The session, or null.</returns>
+    public SessionInfo? SessionForDevice(string deviceId)
+        => Sessions().FirstOrDefault(
+            session => string.Equals(session.DeviceId, deviceId, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Mints a WebSocket ticket through the real credential service, with the binding stated
+    /// directly rather than derived from an authenticated request.
+    /// </summary>
+    /// <param name="userId">The user to bind to.</param>
+    /// <param name="sessionId">The session to bind to.</param>
+    /// <param name="deviceId">The device to bind to.</param>
+    /// <returns>The ticket value.</returns>
+    /// <remarks>
+    /// WHY THIS SEAM IS LEGITIMATE. <c>POST /WebSocket/Tickets</c> derives all three fields from an
+    /// authenticated request, so by construction it can only ever mint a ticket whose session, user
+    /// and device already agree with each other and with a live session. That is exactly why it
+    /// cannot exercise the guards R3 adds. This mints through the same singleton
+    /// <see cref="IPlaybackCredentialService"/> the upgrade path consumes from — the store is real,
+    /// the ticket is real, the consumption is real. Only the binding is chosen.
+    ///
+    /// The service is registered <c>AddSingleton</c>, so a ticket minted here is the same ticket the
+    /// upgrade later consumes. A scoped registration would have made every one of these cases refuse
+    /// for the wrong reason — at consumption, as an unknown value — and left the matching controls
+    /// inert.
+    /// </remarks>
+    public string MintTicketDirectly(Guid userId, string sessionId, string deviceId)
+        => Service<IPlaybackCredentialService>()
+            .MintWebSocketTicket(new WebSocketTicketRequest(userId, sessionId, deviceId))
+            .Value;
+
+    /// <summary>
+    /// Creates a second user and signs it in on its own device, producing a live session that can
+    /// be torn about without disturbing the fixture's own.
+    /// </summary>
+    /// <param name="deviceId">The device to sign the new user in on.</param>
+    /// <returns>The new user's id and that session's durable token.</returns>
+    public async Task<(Guid UserId, string Token)> CreateUserSessionAsync(string deviceId)
+    {
+        var password = "r3-" + Guid.NewGuid().ToString("N");
+        var name = "r3-user-" + Guid.NewGuid().ToString("N")[..8];
+
+        using var admin = ClientFor(PrimaryDeviceId, DurableToken);
+        using var created = await admin.PostAsJsonAsync(
+            "/Users/New",
+            new { Name = name, Password = password },
+            JsonDefaults.Options,
+            TestContext.Current.CancellationToken).ConfigureAwait(false);
+
+        Assert.Equal(HttpStatusCode.OK, created.StatusCode);
+
+        using var document = JsonDocument.Parse(
+            await created.Content.ReadAsStringAsync(TestContext.Current.CancellationToken).ConfigureAwait(false));
+        var userId = Guid.Parse(document.RootElement.GetProperty("Id").GetString()!);
+
+        using var client = Factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/Users/AuthenticateByName");
+        request.Headers.TryAddWithoutValidation(
+            AuthHelper.AuthHeaderName,
+            MediaBoundaryFixture.AuthorizationHeader(deviceId, null));
+        request.Content = JsonContent.Create(new { Username = name, Pw = password }, options: JsonDefaults.Options);
+
+        using var response = await client.SendAsync(request, TestContext.Current.CancellationToken).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+
+        using var authenticated = JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken).ConfigureAwait(false));
+
+        return (userId, authenticated.RootElement.GetProperty("AccessToken").GetString()!);
     }
 
     /// <summary>
