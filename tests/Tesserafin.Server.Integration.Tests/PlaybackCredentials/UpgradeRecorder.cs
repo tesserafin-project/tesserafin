@@ -62,22 +62,4 @@ public sealed class UpgradeRecorder : IWebSocketListener
 
         return Task.CompletedTask;
     }
-
-    /// <summary>
-    /// One claim, reduced to the pair the parity comparison is about.
-    /// </summary>
-    /// <param name="Type">The claim type.</param>
-    /// <param name="Value">The claim value.</param>
-    public sealed record ClaimRecord(string Type, string Value);
-
-    /// <summary>
-    /// One accepted upgrade.
-    /// </summary>
-    /// <param name="Claims">The claims the principal carried, in issue order.</param>
-    /// <param name="AuthenticationType">The identity's authentication type, i.e. the scheme.</param>
-    /// <param name="AuthorizationInfo">The authorization the connection was built with.</param>
-    public sealed record AcceptedUpgrade(
-        IReadOnlyList<ClaimRecord> Claims,
-        string? AuthenticationType,
-        AuthorizationInfo? AuthorizationInfo);
 }
