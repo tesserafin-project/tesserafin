@@ -1,4 +1,4 @@
-# Playback credential server contract (#153-A0)
+# Playback credential server contract (#153-A0, revised by A0-R1)
 
 The authoritative server-side contract for the two credentials that replace the durable session
 token in playback and WebSocket URLs. The decision that produced it — candidates A through D, and
@@ -155,6 +155,123 @@ Both stores are in-memory, singleton, and die with the process.
   that.** If multi-instance is ever wanted, sessions and capabilities have to move together, and
   that is a different change with a different review.
 
+## Binding is compared exactly (R1)
+
+A0 compared the item and the media source only when the capability **and** the route both named
+one. That made "this route names no item" indistinguishable from "any item will do": a capability
+minted for one item satisfied every route that did not name one, which is every route an attacker
+would pick. R1 compares both directions.
+
+| capability | route demands | verdict |
+|---|---|---|
+| item X | item X | accept |
+| item X | item Y | reject, `ItemMismatch` |
+| item X | no item | **reject**, `ItemMismatch` |
+| no item | item Y | reject, `ItemMismatch` |
+| no item | no item | accept |
+| source S | source S | accept |
+| source S | source T | reject, `MediaSourceMismatch` |
+| source S | no source | **reject**, `MediaSourceMismatch` |
+| no source | source T | **reject**, `MediaSourceMismatch` |
+| no source | no source | accept |
+
+The three rows in bold are the ones A0 accepted.
+
+`Fonts` needs no exemption from this. It is item-less because a font capability is minted without
+an item and the font routes name none — both sides null, which agrees. Exempting it instead would
+let a font capability carry an item that nothing ever checked.
+
+**A consequence worth stating.** Three routes name no media source —
+`/Videos/{itemId}/hls/{playlistId}/{segmentId}.{segmentContainer}` and the two
+`/Audio/{itemId}/hls/{segmentId}/stream.{mp3,aac}` legacy routes. A capability bound to a media
+source is refused there, and a capability bound to none is refused everywhere else. One capability
+therefore cannot serve both families; a client that needs both mints two. Nothing consumes
+capabilities yet, so this costs nothing today, and it is the price of a binding that means what it
+says.
+
+**Play session is deliberately asymmetric.** Eleven endpoints expose a `playSessionId` query
+parameter, and on those the capability's play session is compared to it:
+
+| request | verdict |
+|---|---|
+| names the capability's own play session | accept |
+| names a different play session | reject, `PlaySessionMismatch` |
+| names none | accept |
+
+Absence is not a refusal, unlike item and media source. Those routes have never obliged a client to
+send the parameter, and refusing its absence would turn an optional query parameter into a
+mandatory one on routes that predate this design entirely. The stricter reading — reject on absence
+too — was considered and not taken for that reason; it is recorded here so that a later "tighten
+this up" is a decision rather than a discovery.
+
+## What minting proves (R1)
+
+`StreamingHelpers.GetStreamingState` reads the user id off the principal and then never asks
+whether that user may see the item. No library restriction, no blocked tag and no media-source
+ownership check runs anywhere on the delivery path. **Whatever a capability is permitted to name at
+minting is what it can fetch for its whole lifetime**, so minting is the only place those
+restrictions can hold at all.
+
+| checked | how |
+|---|---|
+| the item exists and this user may see it | `IItemAccessService.GetVisibleItemById` — the same predicate `MediaInfoController` uses for `PlaybackInfo`, so parental and library restrictions are that call and not a second implementation of it |
+| the media source belongs to that item | it must appear in the item's own `GetPlaybackMediaSources` |
+| the play session is the caller's | if a transcoding job carries it, that job's device must be the caller's device |
+| the scopes are real | `Enum.IsDefined` on every member; model binding otherwise accepts any integer |
+| the scope set is satisfiable | `Fonts` may not appear beside an item-bound scope, and may not carry an item |
+
+A play session the server has never heard of is the ordinary direct-play case: the client chose the
+identifier and no transcoding job carries it. There is nothing to compare it against, so minting
+accepts it and the binding is enforced at delivery.
+
+**Remote access and the parental schedule are not re-checked at minting, on purpose.**
+`MediaDeliveryRequirement` subclasses `DefaultAuthorizationRequirement`, so
+`DefaultAuthorizationHandler` re-evaluates both on every delivery request — for a capability
+principal exactly as for a durable token, because the capability's identity carries the owning
+user's id and the ordinary `UserRoles.User` role. Checking them twice is how two code paths drift
+into disagreeing about who may watch what.
+
+**Refusals are 404, never 403.** "You may not see this item" and "there is no such item" have to be
+indistinguishable, or the endpoint becomes an oracle for which items exist on a server the caller
+cannot browse. A test asserts the two response bodies are identical once the framework's
+per-request `traceId` is normalised out.
+
+## Every media route requires authorization (R1)
+
+A0 wired the capability attribute onto every media route but added `Policies.MediaDelivery` only
+where an `[Authorize]` already existed, on the grounds that requiring it elsewhere would reject
+requests that succeed today. Measured against `origin/master`, the requests it would have rejected
+were requests carrying no credential at all:
+
+```
+GET /Videos/{id}/stream?static=true   -> 200, the source file byte for byte
+GET /Audio/{id}/stream?static=true    -> 200, the source file byte for byte
+Range: bytes=0-15                     -> 206
+HEAD                                  -> 200, the real Content-Length
+GET /Videos/{id}/{ms}/Subtitles/2/Stream.vtt -> 200, the real cue text
+```
+
+Fourteen endpoints were anonymous: both direct video routes and both direct audio routes in their
+`GET` and `HEAD` forms, the two legacy HLS segment families, both subtitle stream routes and the
+attachment route. All fourteen now require `Policies.MediaDelivery`. A client presenting the durable
+token in the `ApiKey` query parameter is unaffected — `AuthorizationContext` reads that key before
+the endpoint is known — and the suite asserts that route by route, in the header and in the query
+string.
+
+`MediaRouteMetadataTests` asserts the roster against `EndpointDataSource` rather than against
+controller `MethodInfo`, because reflection cannot see policy as the routing layer composes it and
+cannot enumerate the endpoints one method expands into. It is also what sees the fourteen
+`ApiExplorerSettings(IgnoreApi = true)` HLS endpoints, which appear nowhere in `openapi/openapi.json`:
+**the OpenAPI diff is not the list of routes the capability protects.**
+
+**Live TV is closed but not migrated.** `/LiveTv/LiveRecordings/{recordingId}/stream` and
+`/LiveTv/LiveStreamFiles/{streamId}/stream.{container}` were anonymous for the same reason and now
+carry plain `[Authorize]` — the ordinary durable-token policy, **not** `Policies.MediaDelivery`.
+The capability scopes do not model a live recording, and handing those routes the media
+authentication scheme with no `[RequiresPlaybackCapability]` demand to narrow against would let a
+capability minted for an unrelated item authenticate them unnarrowed. Migrating Live TV delivery
+onto capabilities belongs to the phase that models it.
+
 ## Error vocabulary
 
 Deterministic, mapped one-to-one, and never echoing any part of a presented value.
@@ -163,8 +280,8 @@ Playback capability — HTTP 401 unless noted:
 `PlaybackCapabilityMissing`, `PlaybackCapabilityUnknown`, `PlaybackCapabilityExpired`,
 `PlaybackCapabilityRevoked`, `PlaybackCapabilityScopeMismatch` (403),
 `PlaybackCapabilityItemMismatch` (403), `PlaybackCapabilityMediaSourceMismatch` (403),
-`PlaybackCapabilitySessionMismatch` (403), `PlaybackCapabilityRenewalTooEarly` (400),
-`PlaybackCapabilityRenewalAfterExpiry` (401).
+`PlaybackCapabilitySessionMismatch` (403), `PlaybackCapabilityPlaySessionMismatch` (403),
+`PlaybackCapabilityRenewalTooEarly` (400), `PlaybackCapabilityRenewalAfterExpiry` (401).
 
 WebSocket ticket — HTTP 401: `WebSocketTicketMissing`, `WebSocketTicketUnknown`,
 `WebSocketTicketExpired`, `WebSocketTicketAlreadyUsed`, `WebSocketTicketSessionMismatch`,
@@ -203,3 +320,6 @@ nothing. Randomness is behind its own injectable boundary for the same reason.
 
 No web runtime migration. No replacement of the web URL builders. No live WebSocket consumer switch.
 No removal of the legacy query-token path. No claim that #153 is closed.
+
+R1 does not change that list. It closes a disclosure that predates A0 and makes the bindings mean
+what they say; the durable token is still accepted in media URLs, and #153 stays open.
