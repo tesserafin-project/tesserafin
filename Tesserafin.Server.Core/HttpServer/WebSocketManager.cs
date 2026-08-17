@@ -7,13 +7,17 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Net.WebSockets;
+using System.Security.Claims;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using Tesserafin.Api.Constants;
 using Tesserafin.Common.Extensions;
 using Tesserafin.Controller.Library;
 using Tesserafin.Controller.Net;
 using Tesserafin.Controller.Net.PlaybackCredentials;
+using Tesserafin.Controller.Session;
+using Tesserafin.Data;
 
 namespace Tesserafin.Server.Core.HttpServer
 {
@@ -35,6 +39,7 @@ namespace Tesserafin.Server.Core.HttpServer
         private readonly ILoggerFactory _loggerFactory;
         private readonly IPlaybackCredentialService _credentialService;
         private readonly IUserManager _userManager;
+        private readonly ISessionManager _sessionManager;
 
         public WebSocketManager(
             IAuthService authService,
@@ -42,7 +47,8 @@ namespace Tesserafin.Server.Core.HttpServer
             ILogger<WebSocketManager> logger,
             ILoggerFactory loggerFactory,
             IPlaybackCredentialService credentialService,
-            IUserManager userManager)
+            IUserManager userManager,
+            ISessionManager sessionManager)
         {
             _webSocketListeners = webSocketListeners.ToArray();
             _authService = authService;
@@ -50,6 +56,7 @@ namespace Tesserafin.Server.Core.HttpServer
             _loggerFactory = loggerFactory;
             _credentialService = credentialService;
             _userManager = userManager;
+            _sessionManager = sessionManager;
         }
 
         /// <inheritdoc />
@@ -130,13 +137,69 @@ namespace Tesserafin.Server.Core.HttpServer
                 return new AuthorizationInfo { IsAuthenticated = false };
             }
 
-            return new AuthorizationInfo
+            // The ticket names the session it was minted for, and that session already knows its
+            // client, version and device name. Reuse them rather than inventing new ones: a session
+            // is identified downstream by (deviceId, client, version), so guessing here would make
+            // the socket join a DIFFERENT session from the one the ticket is bound to.
+            var boundSession = _sessionManager.Sessions.FirstOrDefault(
+                session => string.Equals(session.Id, consumed.SessionId, StringComparison.Ordinal));
+
+            var authorizationInfo = new AuthorizationInfo
             {
                 IsAuthenticated = true,
                 User = _userManager.GetUserById(consumed.UserId),
                 DeviceId = consumed.DeviceId,
+                Device = boundSession?.DeviceName,
+                Client = boundSession?.Client,
+                Version = boundSession?.ApplicationVersion,
+
+                // Never the ticket. It is consumed, it is not a bearer credential any more, and
+                // putting it here would publish it into the principal's claims and from there into
+                // anything that logs them.
+                Token = string.Empty,
                 IsApiKey = false
             };
+
+            // WHY THE PRINCIPAL IS SET AND NOT JUST RETURNED. Every WebSocket listener resolves its
+            // session from context.User, not from this AuthorizationInfo —
+            // SessionWebSocketListener.ProcessWebSocketConnectedAsync calls
+            // RequestHelpers.GetSession(httpContext), which reads the user id, client, version,
+            // device id and device name off the principal. A ticket upgrade that leaves the
+            // principal anonymous therefore authenticates the handshake and then produces a socket
+            // that is accepted and immediately torn down when the listener cannot resolve it. The
+            // durable-token path does not hit this because the authentication middleware has
+            // already populated the principal by the time the upgrade runs.
+            context.User = BuildTicketPrincipal(authorizationInfo);
+
+            return authorizationInfo;
+        }
+
+        /// <summary>
+        /// Builds the principal a ticket-authenticated upgrade runs under, carrying the same
+        /// internal claims <c>CustomAuthenticationHandler</c> issues for a durable token so that
+        /// every downstream reader sees one consistent identity.
+        /// </summary>
+        /// <param name="authorizationInfo">The identity the consumed ticket resolved to.</param>
+        /// <returns>The principal.</returns>
+        private static ClaimsPrincipal BuildTicketPrincipal(AuthorizationInfo authorizationInfo)
+        {
+            var claims = new[]
+            {
+                new Claim(ClaimTypes.Name, authorizationInfo.User?.Username ?? string.Empty),
+                new Claim(ClaimTypes.Role, authorizationInfo.User is not null
+                    && authorizationInfo.User.HasPermission(Database.Implementations.Enums.PermissionKind.IsAdministrator)
+                        ? UserRoles.Administrator
+                        : UserRoles.User),
+                new Claim(InternalClaimTypes.UserId, authorizationInfo.User?.Id.ToString("N", CultureInfo.InvariantCulture) ?? string.Empty),
+                new Claim(InternalClaimTypes.DeviceId, authorizationInfo.DeviceId ?? string.Empty),
+                new Claim(InternalClaimTypes.Device, authorizationInfo.Device ?? string.Empty),
+                new Claim(InternalClaimTypes.Client, authorizationInfo.Client ?? string.Empty),
+                new Claim(InternalClaimTypes.Version, authorizationInfo.Version ?? string.Empty),
+                new Claim(InternalClaimTypes.Token, string.Empty),
+                new Claim(InternalClaimTypes.IsApiKey, false.ToString(CultureInfo.InvariantCulture))
+            };
+
+            return new ClaimsPrincipal(new ClaimsIdentity(claims, TicketQueryKey));
         }
 
         /// <summary>
