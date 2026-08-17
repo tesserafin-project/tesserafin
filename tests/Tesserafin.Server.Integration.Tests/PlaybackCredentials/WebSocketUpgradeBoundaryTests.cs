@@ -209,9 +209,17 @@ public sealed class WebSocketUpgradeBoundaryTests
     }
 
     /// <summary>
-    /// One successful upgrade, then nothing. The ticket is consumed by the handshake, not by the
-    /// session, so closing the socket does not give it back.
+    /// One successful upgrade, then nothing — while the first socket is still OPEN.
     /// </summary>
+    /// <remarks>
+    /// The replay happens before the first socket closes, and that ordering is the whole test.
+    /// Written the other way round — connect, close, then replay — it passes against a store with
+    /// NO single-use guarantee at all, because closing the socket ends the session and
+    /// <c>SessionManager.OnSessionEnded</c> revokes the session's tickets. Control T1 found exactly
+    /// that: replacing the atomic <c>TryRemove</c> with a non-consuming lookup left the
+    /// close-then-replay version green. Holding the socket open removes revocation from the picture
+    /// and leaves consumption as the only thing that can refuse the second attempt.
+    /// </remarks>
     /// <returns>A task.</returns>
     [Fact]
     public async Task A_ticket_is_accepted_once_and_refused_on_replay()
@@ -219,12 +227,19 @@ public sealed class WebSocketUpgradeBoundaryTests
         var ticket = await _fixture.MintTicketAsync();
 
         var socket = await _fixture.ConnectWithTicketAsync(ticket.Value);
-        Assert.Equal(WebSocketState.Open, socket.State);
-        await _fixture.CloseAndDrainAsync(socket);
+        try
+        {
+            Assert.Equal(WebSocketState.Open, socket.State);
 
-        await AssertRefusedAsync(
-            () => _fixture.ConnectWithTicketAsync(ticket.Value),
-            "a replayed ticket, after its socket had been closed");
+            await AssertRefusedAsync(
+                () => _fixture.ConnectWithTicketAsync(ticket.Value),
+                "a replayed ticket, while its first socket is still open",
+                expectedWatchlist: 1);
+        }
+        finally
+        {
+            await _fixture.CloseAndDrainAsync(socket);
+        }
     }
 
     /// <summary>
@@ -455,14 +470,18 @@ public sealed class WebSocketUpgradeBoundaryTests
     private async Task<string> ReplayedTicketAsync()
     {
         var ticket = await _fixture.MintTicketAsync();
+
+        // Consumed and then released, so the value is spent. The caller asserts the refusal while
+        // presenting a valid durable token, and that assertion is about fallback rather than about
+        // why the ticket is dead, so closing here is fine.
         var socket = await _fixture.ConnectWithTicketAsync(ticket.Value);
         await _fixture.CloseAndDrainAsync(socket);
         return ticket.Value;
     }
 
-    private async Task AssertRefusedAsync(Func<Task<WebSocket>> connect, string what)
+    private async Task AssertRefusedAsync(Func<Task<WebSocket>> connect, string what, int? expectedWatchlist = null)
     {
-        var before = _fixture.Watchlist().Count;
+        var before = expectedWatchlist ?? _fixture.Watchlist().Count;
 
         WebSocket? socket = null;
         try
