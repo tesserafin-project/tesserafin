@@ -28,6 +28,12 @@ namespace Tesserafin.Server.Integration.Tests.PlaybackCredentials;
 [Collection(WebSocketUpgradeSuite.Name)]
 public sealed class WebSocketUpgradeBoundaryTests
 {
+    /// <summary>
+    /// Every case is bounded. A mutation that leaves the upgrade half-open — control T2 accepts the
+    /// socket before authenticating — must FAIL the control, and a hung control is not a result.
+    /// </summary>
+    private const int TestTimeoutMs = 60_000;
+
     private static readonly TimeSpan _settle = TimeSpan.FromSeconds(10);
 
     private readonly WebSocketUpgradeFixture _fixture;
@@ -46,7 +52,7 @@ public sealed class WebSocketUpgradeBoundaryTests
     /// user and device the TICKET names — not whatever the request claims.
     /// </summary>
     /// <returns>A task.</returns>
-    [Fact]
+    [Fact(Timeout = TestTimeoutMs)]
     public async Task A_ticket_alone_opens_a_socket_the_server_associates_with_the_ticket_owner()
     {
         var ticket = await _fixture.MintTicketAsync();
@@ -78,7 +84,7 @@ public sealed class WebSocketUpgradeBoundaryTests
     /// not distinguish the two.
     /// </summary>
     /// <returns>A task.</returns>
-    [Fact]
+    [Fact(Timeout = TestTimeoutMs)]
     public async Task An_accepted_ticket_socket_exchanges_a_real_message()
     {
         var ticket = await _fixture.MintTicketAsync();
@@ -102,7 +108,7 @@ public sealed class WebSocketUpgradeBoundaryTests
     /// the ticket path by breaking the path every client uses today.
     /// </summary>
     /// <returns>A task.</returns>
-    [Fact]
+    [Fact(Timeout = TestTimeoutMs)]
     public async Task A_durable_token_upgrade_still_works()
     {
         var socket = await _fixture.ConnectWithDurableTokenAsync(_fixture.DurableToken);
@@ -124,11 +130,11 @@ public sealed class WebSocketUpgradeBoundaryTests
     // Refusals. Each asserts the listener never saw a connection.
     // -------------------------------------------------------------------------------------
 
-    [Fact]
+    [Fact(Timeout = TestTimeoutMs)]
     public async Task No_credential_is_refused_before_the_socket_is_accepted()
         => await AssertRefusedAsync(() => _fixture.ConnectAsync(query: null), "a request presenting no credential at all");
 
-    [Fact]
+    [Fact(Timeout = TestTimeoutMs)]
     public async Task An_unknown_ticket_is_refused_before_the_socket_is_accepted()
         => await AssertRefusedAsync(
             () => _fixture.ConnectWithTicketAsync("not-a-ticket"),
@@ -138,7 +144,7 @@ public sealed class WebSocketUpgradeBoundaryTests
     /// Expiry is decided by the clock the validator reads. Nothing here sleeps.
     /// </summary>
     /// <returns>A task.</returns>
-    [Fact]
+    [Fact(Timeout = TestTimeoutMs)]
     public async Task An_expired_ticket_is_refused()
     {
         var ticket = await _fixture.MintTicketAsync();
@@ -166,7 +172,7 @@ public sealed class WebSocketUpgradeBoundaryTests
     /// so the rest of the suite keeps its own.
     /// </summary>
     /// <returns>A task.</returns>
-    [Fact]
+    [Fact(Timeout = TestTimeoutMs)]
     public async Task A_ticket_whose_owning_session_was_logged_out_is_refused()
     {
         var deviceId = "r2-revoked-" + Guid.NewGuid().ToString("N");
@@ -188,7 +194,7 @@ public sealed class WebSocketUpgradeBoundaryTests
     /// Deleting the device revokes its tickets by the same seam.
     /// </summary>
     /// <returns>A task.</returns>
-    [Fact]
+    [Fact(Timeout = TestTimeoutMs)]
     public async Task A_ticket_whose_device_was_deleted_is_refused()
     {
         var deviceId = "r2-deleted-" + Guid.NewGuid().ToString("N");
@@ -221,7 +227,7 @@ public sealed class WebSocketUpgradeBoundaryTests
     /// and leaves consumption as the only thing that can refuse the second attempt.
     /// </remarks>
     /// <returns>A task.</returns>
-    [Fact]
+    [Fact(Timeout = TestTimeoutMs)]
     public async Task A_ticket_is_accepted_once_and_refused_on_replay()
     {
         var ticket = await _fixture.MintTicketAsync();
@@ -252,7 +258,7 @@ public sealed class WebSocketUpgradeBoundaryTests
     /// it fails.
     /// </remarks>
     /// <returns>A task.</returns>
-    [Fact]
+    [Fact(Timeout = TestTimeoutMs)]
     public async Task Two_simultaneous_upgrades_with_one_ticket_yield_exactly_one_socket()
     {
         var ticket = await _fixture.MintTicketAsync();
@@ -294,7 +300,7 @@ public sealed class WebSocketUpgradeBoundaryTests
     /// does not re-attribute the socket. The header is not what decides.
     /// </summary>
     /// <returns>A task.</returns>
-    [Fact]
+    [Fact(Timeout = TestTimeoutMs)]
     public async Task A_ticket_binds_its_own_device_even_when_the_request_claims_another()
     {
         var otherToken = await _fixture.AuthenticateAsync(WebSocketUpgradeFixture.OtherDeviceId);
@@ -326,7 +332,7 @@ public sealed class WebSocketUpgradeBoundaryTests
     /// </summary>
     /// <param name="kind">Which flavour of bad ticket to present.</param>
     /// <returns>A task.</returns>
-    [Theory]
+    [Theory(Timeout = TestTimeoutMs)]
     [InlineData("unknown")]
     [InlineData("expired")]
     [InlineData("replayed")]
@@ -351,7 +357,7 @@ public sealed class WebSocketUpgradeBoundaryTests
     /// <param name="path">The HTTP route to try.</param>
     /// <param name="key">The query key to smuggle it into.</param>
     /// <returns>A task.</returns>
-    [Theory]
+    [Theory(Timeout = TestTimeoutMs)]
     [InlineData("/Items", "webSocketTicket")]
     [InlineData("/Items", "ApiKey")]
     [InlineData("/Items", "api_key")]
@@ -379,7 +385,7 @@ public sealed class WebSocketUpgradeBoundaryTests
     /// structured state value, not a scope, not an exception.
     /// </summary>
     /// <returns>A task.</returns>
-    [Fact]
+    [Fact(Timeout = TestTimeoutMs)]
     public async Task No_tesserafin_log_line_ever_carries_a_ticket_value()
     {
         _fixture.Factory.Logs.Clear();
@@ -422,7 +428,7 @@ public sealed class WebSocketUpgradeBoundaryTests
     /// fails HERE, with this explanation attached, instead of quietly starting to log credentials.
     /// </remarks>
     /// <returns>A task.</returns>
-    [Fact]
+    [Fact(Timeout = TestTimeoutMs)]
     public async Task The_framework_request_log_carries_the_ticket_and_is_suppressed_in_production()
     {
         _fixture.Factory.Logs.Clear();
