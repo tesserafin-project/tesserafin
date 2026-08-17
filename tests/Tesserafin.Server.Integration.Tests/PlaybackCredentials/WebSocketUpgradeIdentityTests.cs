@@ -383,7 +383,7 @@ public sealed class WebSocketUpgradeIdentityTests
 
         _fixture.Recorder().Clear();
         var durableSocket = await _fixture.ConnectWithDurableTokenAsync(token, deviceId);
-        UpgradeRecorder.AcceptedUpgrade durable;
+        AcceptedUpgrade durable;
         try
         {
             durable = Assert.Single(await WaitForAcceptedAsync(1));
@@ -400,7 +400,7 @@ public sealed class WebSocketUpgradeIdentityTests
 
         _fixture.Recorder().Clear();
         var ticketSocket = await _fixture.ConnectWithTicketAsync(ticket.Value, deviceId: deviceId);
-        UpgradeRecorder.AcceptedUpgrade viaTicket;
+        AcceptedUpgrade viaTicket;
         try
         {
             viaTicket = Assert.Single(await WaitForAcceptedAsync(1));
@@ -443,7 +443,7 @@ public sealed class WebSocketUpgradeIdentityTests
 
     // -------------------------------------------------------------------------------------
 
-    private static void AssertExactClaimShape(UpgradeRecorder.AcceptedUpgrade upgrade, string what)
+    private static void AssertExactClaimShape(AcceptedUpgrade upgrade, string what)
     {
         var byType = upgrade.Claims
             .GroupBy(claim => claim.Type, StringComparer.Ordinal)
@@ -457,10 +457,10 @@ public sealed class WebSocketUpgradeIdentityTests
         }
     }
 
-    private static string ValueOf(UpgradeRecorder.AcceptedUpgrade upgrade, string type)
+    private static string ValueOf(AcceptedUpgrade upgrade, string type)
         => upgrade.Claims.Single(claim => string.Equals(claim.Type, type, StringComparison.Ordinal)).Value;
 
-    private async Task<IReadOnlyList<UpgradeRecorder.AcceptedUpgrade>> WaitForAcceptedAsync(int expected)
+    private async Task<IReadOnlyList<AcceptedUpgrade>> WaitForAcceptedAsync(int expected)
     {
         var deadline = DateTime.UtcNow + _settle;
         while (true)
