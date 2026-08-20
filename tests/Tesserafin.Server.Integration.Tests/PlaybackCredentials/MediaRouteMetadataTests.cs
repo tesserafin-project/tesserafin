@@ -71,7 +71,10 @@ public sealed class MediaRouteMetadataTests
             ["GET /Videos/{itemId}/hls1/{playlistId}/{segmentId}.{container}"] = (PlaybackCapabilityScope.Media, "itemId", "mediaSourceId", "playSessionId"),
             ["GET /Audio/{itemId}/hls1/{playlistId}/{segmentId}.{container}"] = (PlaybackCapabilityScope.Media, "itemId", "mediaSourceId", "playSessionId"),
             ["GET /Videos/{itemId}/hls/{playlistId}/stream.m3u8"] = (PlaybackCapabilityScope.Media, "itemId", "mediaSourceId", null),
-            ["GET /Videos/{itemId}/hls/{playlistId}/{segmentId}.{segmentContainer}"] = (PlaybackCapabilityScope.Media, "itemId", null, null),
+            // #153-LTV-S1: the media source is read from the request here, as it already is on the
+            // legacy playlist route above. A null demand agrees only with a capability bound to no
+            // media source, which no Live TV transcode ever mints.
+            ["GET /Videos/{itemId}/hls/{playlistId}/{segmentId}.{segmentContainer}"] = (PlaybackCapabilityScope.Media, "itemId", "mediaSourceId", null),
             ["GET /Audio/{itemId}/hls/{segmentId}/stream.mp3"] = (PlaybackCapabilityScope.Media, "itemId", null, null),
             ["GET /Audio/{itemId}/hls/{segmentId}/stream.aac"] = (PlaybackCapabilityScope.Media, "itemId", null, null),
             ["GET /Videos/{routeItemId}/{routeMediaSourceId}/Subtitles/{routeIndex}/Stream.{routeFormat}"] = (PlaybackCapabilityScope.Subtitles, "routeItemId", "routeMediaSourceId", null),

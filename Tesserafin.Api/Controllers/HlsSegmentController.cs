@@ -145,7 +145,13 @@ public class HlsSegmentController : BaseTesserafinApiController
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesVideoFile]
     [SuppressMessage("Microsoft.Performance", "CA1801:ReviewUnusedParameters", MessageId = "itemId", Justification = "Required for ServiceStack")]
-    [RequiresPlaybackCapability(PlaybackCapabilityScope.Media, "itemId", null)]
+    // The media source is read from the request, exactly as `GetHlsPlaylistLegacy` above already
+    // does (#153-LTV-S1). It was `null`, and a null demand agrees only with a capability that is
+    // itself bound to no media source — so a client that mints one per media source, which is what
+    // the shipped web client does for a transcode, could never reach a single Live TV segment. The
+    // item binding still holds either way: this widens which capability satisfies the route, not
+    // which item it reaches.
+    [RequiresPlaybackCapability(PlaybackCapabilityScope.Media, "itemId", "mediaSourceId")]
     public ActionResult GetHlsVideoSegmentLegacy(
         [FromRoute, Required] string itemId,
         [FromRoute, Required] string playlistId,
