@@ -16,6 +16,8 @@ namespace Tesserafin.Api.Tests.Helpers;
 public class HlsManifestCredentialPropagatorTests
 {
     private const string Capability = "capability-under-test";
+    private const string PlaySession = "306f71094f36456f9d0dc6e7b12b8a6b";
+
     private const string MediaSource = "6d5da76e3955fd1005f75c496c371521";
 
     private static readonly Uri _origin = new("http://127.0.0.1:8096");
@@ -37,6 +39,75 @@ public class HlsManifestCredentialPropagatorTests
         Assert.Equal(
             "#EXTM3U\n#EXTINF:3.000000,\nhls/abc/abc0.ts?playbackCapability=capability-under-test&mediaSourceId=" + MediaSource + "\n",
             result);
+    }
+
+    /// <summary>
+    /// #153-LTV-R1. The legacy segment route demands the play session now, so every fragment uri
+    /// has to carry it or the client could not satisfy the demand at all.
+    /// </summary>
+    [Fact]
+    public void RelativeSegment_WithAPlaySessionBinding_CarriesItToo()
+    {
+        var result = HlsManifestCredentialPropagator.Propagate(
+            "hls/abc/abc0.ts\n", Capability, MediaSource, _origin, PlaySession);
+
+        Assert.Equal(
+            "hls/abc/abc0.ts?playbackCapability=capability-under-test&mediaSourceId=" + MediaSource
+            + "&playSessionId=" + PlaySession + "\n",
+            result);
+    }
+
+    /// <summary>
+    /// The fMP4 init map is a fragment like any other and must carry the same three parameters.
+    /// </summary>
+    [Fact]
+    public void ExtXMap_WithAPlaySessionBinding_CarriesItInsideItsQuotes()
+    {
+        var result = HlsManifestCredentialPropagator.Propagate(
+            "#EXT-X-MAP:URI=\"hls/abc/abc-1.mp4\"\n", Capability, MediaSource, _origin, PlaySession);
+
+        Assert.Equal(
+            "#EXT-X-MAP:URI=\"hls/abc/abc-1.mp4?playbackCapability=capability-under-test&mediaSourceId="
+            + MediaSource + "&playSessionId=" + PlaySession + "\"\n",
+            result);
+    }
+
+    /// <summary>
+    /// Omitted only when the capability genuinely has none — the one case where the route's demand
+    /// is null too and the two agree.
+    /// </summary>
+    [Fact]
+    public void AnItemOnlyCapability_EmitsNoPlaySessionAtAll()
+    {
+        var result = HlsManifestCredentialPropagator.Propagate("hls/abc/abc0.ts\n", Capability, null, _origin, null);
+
+        Assert.Equal("hls/abc/abc0.ts?playbackCapability=capability-under-test\n", result);
+        Assert.DoesNotContain("playSessionId", result, System.StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Exactly one of each key, on a uri that already carries a play session.
+    /// </summary>
+    [Fact]
+    public void APlaySessionAlreadyPresentAndIdentical_LeavesExactlyOne()
+    {
+        var result = HlsManifestCredentialPropagator.Propagate(
+            "hls/abc/abc0.ts?playSessionId=" + PlaySession + "\n", Capability, null, _origin, PlaySession);
+
+        Assert.Equal(1, CountOccurrences(result, "playSessionId="));
+    }
+
+    private static int CountOccurrences(string body, string needle)
+    {
+        var count = 0;
+        var index = body.IndexOf(needle, System.StringComparison.Ordinal);
+        while (index >= 0)
+        {
+            count++;
+            index = body.IndexOf(needle, index + needle.Length, System.StringComparison.Ordinal);
+        }
+
+        return count;
     }
 
     [Fact]

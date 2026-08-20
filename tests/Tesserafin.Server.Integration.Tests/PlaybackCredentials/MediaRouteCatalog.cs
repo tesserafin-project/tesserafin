@@ -48,7 +48,8 @@ public static class MediaRouteCatalog
             // the legacy playlist route above already did. The two audio segment routes below still
             // name none, so the "bound capability on a route that names no media source" property
             // keeps its witnesses.
-            new("hls legacy segment", "HLS segment", PlaybackCapabilityScope.Media, "GET", $"/Videos/{item}/hls/main/0.ts?mediaSourceId={mediaSourceId}", true, true, false, MediaRouteEvidence.Entry),
+            // #153-LTV-R1: and the play session, which was not named at all.
+            new("hls legacy segment", "HLS segment", PlaybackCapabilityScope.Media, "GET", $"/Videos/{item}/hls/main/0.ts?mediaSourceId={mediaSourceId}", true, true, true, MediaRouteEvidence.Entry),
             new("hls legacy audio mp3", "HLS segment", PlaybackCapabilityScope.Media, "GET", $"/Audio/{item}/hls/seg/stream.mp3", true, false, false, MediaRouteEvidence.Entry),
             new("hls legacy audio aac", "HLS segment", PlaybackCapabilityScope.Media, "GET", $"/Audio/{item}/hls/seg/stream.aac", true, false, false, MediaRouteEvidence.Entry),
             new("subtitle stream", "subtitle", PlaybackCapabilityScope.Subtitles, "GET", $"/Videos/{item}/{mediaSourceId}/Subtitles/{subtitle}/Stream.vtt", true, true, false, MediaRouteEvidence.Bytes),

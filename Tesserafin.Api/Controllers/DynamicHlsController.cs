@@ -362,7 +362,8 @@ public class DynamicHlsController : BaseTesserafinApiController
                 playlistText,
                 validated.Value,
                 validated.MediaSourceId,
-                new Uri($"{Request.Scheme}://{Request.Host}"));
+                new Uri($"{Request.Scheme}://{Request.Host}"),
+                validated.PlaySessionId);
 
             // The body now carries a credential. A shared cache holding it would hand one user's
             // capability to the next reader of the same url.
