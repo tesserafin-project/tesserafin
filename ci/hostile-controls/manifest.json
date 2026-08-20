@@ -1,0 +1,783 @@
+{
+  "$comment": "#153-LTV-R1. The hostile controls that defend the Live TV stack, versioned so anyone with a clone can replay them. LTV-R0 finding 4: the S0 and S1 rosters existed only as untracked python harnesses that hardcoded one worktree path and mutated it in place.",
+  "restoration": {
+    "rule": "byte-identical",
+    "measurement": "git write-tree is compared against the baseline after every control; any run whose tree does not match is downgraded to ERROR. The index is staged FOR REAL - `git add -A -n` is a dry run and would make the comparison vacuous, which is a defect the S1 harness shipped with."
+  },
+  "isolation": {
+    "rule": "temporary-worktree",
+    "detail": "The runner creates its own git worktree from the commit under test and never touches the user's worktree. Controls run serially, in the foreground: two concurrent background roster runs corrupted the S1 roster once already."
+  },
+  "grades": {
+    "PASS": "the gate was green and the control expected green",
+    "RED": "the gate failed, on the property the control names",
+    "INERT": "the mutation applied but the gate stayed green - the property is unprotected",
+    "ERROR": "the mutation did not apply, did not build, or the tree was not restored",
+    "HUNG": "the gate exceeded its timeout"
+  },
+  "controls": [
+    {
+      "id": "s0-positive-control",
+      "stage": "S0",
+      "historicalId": "positive-control",
+      "status": "REPLAYED",
+      "expect": "PASS",
+      "property": "the pipe selection suite and the S0 handoff inventory",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Controller.Tests/Tesserafin.Controller.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Controller.Tests.MediaEncoding.LiveTvDirectStreamInputTests",
+        "expectedTests": [
+          "Tesserafin.Controller.Tests.MediaEncoding.LiveTvDirectStreamInputTests"
+        ]
+      },
+      "mutations": []
+    },
+    {
+      "id": "s0-positive-control-rig",
+      "stage": "S0",
+      "historicalId": "positive-control-rig",
+      "status": "REPLAYED",
+      "expect": "PASS",
+      "property": "a real Live TV playback delivers decodable segments over pipe:0",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "rig",
+        "scenario": "s0-pipe-handoff",
+        "requires": [
+          "3 decodable segments",
+          "-i pipe:0",
+          "no LiveStreamFiles input",
+          "no ffmpeg exit code 8"
+        ]
+      },
+      "mutations": []
+    },
+    {
+      "id": "s0-restore-http-url",
+      "stage": "S0",
+      "historicalId": "restore-http-url",
+      "status": "REPLAYED",
+      "expect": "RED",
+      "property": "the ffmpeg input is pipe:0 and never the authorized url",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Controller.Tests/Tesserafin.Controller.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Controller.Tests.MediaEncoding.LiveTvDirectStreamInputTests.GetInputArgument_LiveStreamWithProvider_ReadsStdinAndNeverTheAuthorizedUrl",
+        "expectedTests": [
+          "Tesserafin.Controller.Tests.MediaEncoding.LiveTvDirectStreamInputTests.GetInputArgument_LiveStreamWithProvider_ReadsStdinAndNeverTheAuthorizedUrl"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Controller/MediaEncoding/EncodingHelper.cs",
+          "find": "        public static bool ReadsFromDirectStreamPipe(EncodingJobInfo state)\n            => state is StreamState { DirectStreamProvider: not null };",
+          "replace": "        public static bool ReadsFromDirectStreamPipe(EncodingJobInfo state)\n            => false;",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "s0-select-pipe-remove-pump",
+      "stage": "S0",
+      "historicalId": "select-pipe-remove-pump",
+      "status": "REPLAYED",
+      "expect": "RED",
+      "property": "the transcode manager actually feeds that stdin",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "rig",
+        "scenario": "s0-pipe-handoff",
+        "requires": [
+          "3 decodable segments",
+          "-i pipe:0",
+          "no LiveStreamFiles input",
+          "no ffmpeg exit code 8"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.MediaEncoding/Transcoding/TranscodeManager.cs",
+          "find": "            transcodingJob.DirectStreamPump = DirectStreamPump.Start(",
+          "replace": "            transcodingJob.DirectStreamPump = MutationDisabled(",
+          "count": 1
+        },
+        {
+          "file": "Tesserafin.MediaEncoding/Transcoding/TranscodeManager.cs",
+          "find": "    private void StartThrottler(StreamState state, TranscodingJob transcodingJob)",
+          "replace": "    private static DirectStreamPump? MutationDisabled(System.IO.Stream source, System.IO.Stream destination, ILogger logger, CancellationToken cancellationToken)\n    {\n        source.Dispose();\n        return null;\n    }\n\n    private void StartThrottler(StreamState state, TranscodingJob transcodingJob)",
+          "count": 1
+        }
+      ],
+      "note": "Graded on the RIG first, deliberately. The inventory gate reds on this mutation too - it looks for the string DirectStreamPump.Start - but a structural red proves only that a string moved. What has to be shown is that the real server stops producing decodable segments."
+    },
+    {
+      "id": "s0-force-pipe-without-provider",
+      "stage": "S0",
+      "historicalId": "force-pipe-without-provider",
+      "status": "REPLAYED",
+      "expect": "RED",
+      "property": "a media with no provider keeps the historical input path",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Controller.Tests/Tesserafin.Controller.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Controller.Tests.MediaEncoding.LiveTvDirectStreamInputTests",
+        "expectedTests": [
+          "Tesserafin.Controller.Tests.MediaEncoding.LiveTvDirectStreamInputTests"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Controller/MediaEncoding/EncodingHelper.cs",
+          "find": "        public static bool ReadsFromDirectStreamPipe(EncodingJobInfo state)\n            => state is StreamState { DirectStreamProvider: not null };",
+          "replace": "        public static bool ReadsFromDirectStreamPipe(EncodingJobInfo state)\n            => true;",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "s0-remove-pump-teardown",
+      "stage": "S0",
+      "historicalId": "remove-pump-teardown",
+      "status": "REPLAYED",
+      "expect": "RED",
+      "property": "the pump is stopped when the job ends",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Controller.Tests/Tesserafin.Controller.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Controller.Tests.MediaEncoding.TranscodingJobPumpTeardownTests",
+        "expectedTests": [
+          "Tesserafin.Controller.Tests.MediaEncoding.TranscodingJobPumpTeardownTests"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Controller/MediaEncoding/TranscodingJob.cs",
+          "find": "            DirectStreamPump?.StopAsync().GetAwaiter().GetResult();",
+          "replace": "            // mutation: the pump is left running",
+          "count": 1
+        },
+        {
+          "file": "Tesserafin.Controller/MediaEncoding/TranscodingJob.cs",
+          "find": "        DirectStreamPump?.DisposeAsync().AsTask().GetAwaiter().GetResult();",
+          "replace": "        // mutation: the pump is left running",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "s0-share-one-stream",
+      "stage": "S0",
+      "historicalId": "share-one-stream",
+      "status": "REPLAYED",
+      "expect": "RED",
+      "property": "two consumers get two independent readers",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.LiveTv.Tests/Tesserafin.LiveTv.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.LiveTv.Tests.LiveStreamConsumerIsolationTests",
+        "expectedTests": [
+          "Tesserafin.LiveTv.Tests.LiveStreamConsumerIsolationTests"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "src/Tesserafin.LiveTv/TunerHosts/LiveStream.cs",
+          "find": "        private readonly IConfigurationManager _configurationManager;",
+          "replace": "        private readonly IConfigurationManager _configurationManager;\n\n#pragma warning disable IDISP002, IDISP006\n        private Stream _sharedMutationStream;\n#pragma warning restore IDISP002, IDISP006",
+          "count": 1
+        },
+        {
+          "file": "src/Tesserafin.LiveTv/TunerHosts/LiveStream.cs",
+          "find": "        public Stream GetStream()\n        {\n            var stream = new FileStream(",
+          "replace": "        public Stream GetStream()\n        {\n            if (_sharedMutationStream is not null)\n            {\n                return _sharedMutationStream;\n            }\n\n            var stream = new FileStream(",
+          "count": 1
+        },
+        {
+          "file": "src/Tesserafin.LiveTv/TunerHosts/LiveStream.cs",
+          "find": "            bool seekFile = (DateTime.UtcNow - DateOpened).TotalSeconds > 10;",
+          "replace": "            _sharedMutationStream = stream;\n\n            bool seekFile = (DateTime.UtcNow - DateOpened).TotalSeconds > 10;",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "s0-allow-anonymous",
+      "stage": "S0",
+      "historicalId": "allow-anonymous",
+      "status": "REPLAYED",
+      "expect": "RED",
+      "property": "the endpoint ffmpeg no longer calls keeps its authorization",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Server.Tests/Tesserafin.Server.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Server.Tests.Authorization.LiveStreamFileAuthorizationTests",
+        "expectedTests": [
+          "Tesserafin.Server.Tests.Authorization.LiveStreamFileAuthorizationTests"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Controllers/LiveTvController.cs",
+          "find": "    [HttpGet(\"LiveStreamFiles/{streamId}/stream.{container}\")]\n    [Authorize]",
+          "replace": "    [HttpGet(\"LiveStreamFiles/{streamId}/stream.{container}\")]\n    [Microsoft.AspNetCore.Authorization.AllowAnonymous]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "s0-credential-in-arguments",
+      "stage": "S0",
+      "historicalId": "credential-in-arguments",
+      "status": "REPLAYED",
+      "expect": "RED",
+      "property": "no credential of any kind reaches the ffmpeg command line",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Controller.Tests/Tesserafin.Controller.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Controller.Tests.MediaEncoding.LiveTvDirectStreamInputTests.GetInputArgument_LiveStreamWithProvider_CarriesNoCredentialOfAnyKind",
+        "expectedTests": [
+          "Tesserafin.Controller.Tests.MediaEncoding.LiveTvDirectStreamInputTests.GetInputArgument_LiveStreamWithProvider_CarriesNoCredentialOfAnyKind"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Controller/MediaEncoding/EncodingHelper.cs",
+          "find": "                arg.Append(\" -i pipe:0\");",
+          "replace": "                arg.Append(\" -headers \").Append(\"\\\"X-Emby-Token: \" + state.MediaSource.LiveStreamId + \"\\\" \");\n                arg.Append(\" -i pipe:0\");",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "s1-positive-control",
+      "stage": "S1",
+      "historicalId": "positive-control",
+      "status": "REPLAYED",
+      "expect": "PASS",
+      "property": "the transformer and the proof-of-validation suites",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.Helpers.HlsManifestCredentialPropagatorTests|FullyQualifiedName~Tesserafin.Api.Tests.PlaybackCredentials.RequiresPlaybackCapabilityStashTests",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.Helpers.HlsManifestCredentialPropagatorTests",
+          "Tesserafin.Api.Tests.PlaybackCredentials.RequiresPlaybackCapabilityStashTests"
+        ]
+      },
+      "mutations": []
+    },
+    {
+      "id": "s1-positive-control-rig",
+      "stage": "S1",
+      "historicalId": "positive-control-rig",
+      "status": "REPLAYED",
+      "expect": "PASS",
+      "property": "a real Live TV playback delivers decodable fragments through the propagated capability",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "rig",
+        "scenario": "s1-manifest-propagation",
+        "requires": [
+          "live.m3u8 200",
+          "private, no-store",
+          "one capability per segment uri",
+          "decodable fragments"
+        ]
+      },
+      "mutations": []
+    },
+    {
+      "id": "s1-remove-the-propagator-call",
+      "stage": "S1",
+      "historicalId": "remove-the-propagator-call",
+      "status": "REPLAYED",
+      "expect": "RED",
+      "property": "the served playlist carries the capability into its segment uris",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "rig",
+        "scenario": "s1-manifest-propagation",
+        "requires": [
+          "everySegmentCarriesExactlyOneCapability"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Controllers/DynamicHlsController.cs",
+          "find": "            playlistText = HlsManifestCredentialPropagator.Propagate(",
+          "replace": "            playlistText = NotPropagated("
+        },
+        {
+          "file": "Tesserafin.Api/Controllers/DynamicHlsController.cs",
+          "find": "        return Content(playlistText, MimeTypes.GetMimeType(\"playlist.m3u8\"));\n    }\n\n    /// <summary>\n    /// Gets a video hls playlist stream.",
+          "replace": "        return Content(playlistText, MimeTypes.GetMimeType(\"playlist.m3u8\"));\n    }\n\n    private static string NotPropagated(string manifest, string value, string? mediaSourceId, Uri origin)\n        => manifest;\n\n    /// <summary>\n    /// Gets a video hls playlist stream."
+        }
+      ]
+    },
+    {
+      "id": "s1-stop-transforming-segment-lines",
+      "stage": "S1",
+      "historicalId": "stop-transforming-segment-lines",
+      "status": "REPLAYED",
+      "expect": "RED",
+      "property": "a segment line receives the capability",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.Helpers.HlsManifestCredentialPropagatorTests.RelativeSegmentWithNoQuery_GetsTheCapabilityAndTheMediaSource",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.Helpers.HlsManifestCredentialPropagatorTests.RelativeSegmentWithNoQuery_GetsTheCapabilityAndTheMediaSource"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Helpers/HlsManifestCredentialPropagator.cs",
+          "find": "        if (line[0] != '#')\n        {\n            return AppendParameters(line, parameters, origin);\n        }",
+          "replace": "        if (line[0] != '#')\n        {\n            return line;\n        }"
+        }
+      ]
+    },
+    {
+      "id": "s1-stop-handling-ext-x-map",
+      "stage": "S1",
+      "historicalId": "stop-handling-ext-x-map",
+      "status": "REPLAYED",
+      "expect": "RED",
+      "property": "the fMP4 init map receives the capability",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.Helpers.HlsManifestCredentialPropagatorTests.ExtXMap_IsRewrittenInsideItsQuotes",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.Helpers.HlsManifestCredentialPropagatorTests.ExtXMap_IsRewrittenInsideItsQuotes"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Helpers/HlsManifestCredentialPropagator.cs",
+          "find": "        if (line.StartsWith(MapTag, StringComparison.Ordinal))\n        {\n            return RewriteQuotedUri(line, parameters, origin);\n        }",
+          "replace": "        if (line.StartsWith(MapTag, StringComparison.Ordinal))\n        {\n            return line;\n        }"
+        }
+      ]
+    },
+    {
+      "id": "s1-drop-the-proof-of-validation",
+      "stage": "S1",
+      "historicalId": "drop-the-proof-of-validation",
+      "status": "SUPERSEDED",
+      "expect": "RED",
+      "property": "a validated capability is recorded as validated",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.PlaybackCredentials.RequiresPlaybackCapabilityStashTests",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.PlaybackCredentials.RequiresPlaybackCapabilityStashTests"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Attributes/RequiresPlaybackCapabilityAttribute.cs",
+          "find": "        context.HttpContext.Features.Set(new ValidatedPlaybackCapability(",
+          "replace": "        _ = new ValidatedPlaybackCapability("
+        }
+      ],
+      "supersededReason": "The historical anchor wrote the proof into HttpContext.Items under a static object key. #153-LTV-R1 Phase 2 replaced that mechanism with a typed request feature, on LTV-R0's finding that the Items arrangement was defended by nothing. The exact hunk cannot be reapplied because the line it edited no longer exists.",
+      "historicalMutations": [
+        {
+          "file": "Tesserafin.Api/Attributes/RequiresPlaybackCapabilityAttribute.cs",
+          "find": "        context.HttpContext.Items[ValidatedPlaybackCapability.ItemsKey] = new ValidatedPlaybackCapability(",
+          "replace": "        _ = new ValidatedPlaybackCapability("
+        }
+      ]
+    },
+    {
+      "id": "s1-read-the-query-instead-of-the-proof",
+      "stage": "S1",
+      "historicalId": "read-the-query-instead-of-the-proof",
+      "status": "SUPERSEDED",
+      "expect": "RED",
+      "property": "the propagated value comes from the validated result, not from the query",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "source",
+        "file": "Tesserafin.Api/Controllers/DynamicHlsController.cs",
+        "absentPattern": "Request\\.Query\\[\"playbackCapability\"\\]"
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Controllers/DynamicHlsController.cs",
+          "find": "                validated.Value,\n                validated.MediaSourceId,",
+          "replace": "                Request.Query[\"playbackCapability\"].ToString(),\n                Request.Query[\"mediaSourceId\"].ToString(),"
+        }
+      ],
+      "note": "Graded on SOURCE, deliberately. The attribute only validates a non-empty query value, so on this route the raw query and the validated stash always hold the same string: no behavioural test and no rig run can tell them apart.",
+      "supersededReason": "Same cause: the propagation call site was rewritten around PlaybackCapabilityProvenance in Phase 2, so the historical hunk's anchor is gone. The semantic replacement is the same mutation - feed the propagator a fresh, unvalidated query read - against the current call site. The behavioural counterpart LTV-R0 said did not exist is now r1-accept-a-query-with-no-validated-provenance.",
+      "historicalMutations": [
+        {
+          "file": "Tesserafin.Api/Controllers/DynamicHlsController.cs",
+          "find": "        var validated = ValidatedPlaybackCapability.From(HttpContext.Items);\n        if (validated is not null)\n        {\n            playlistText = HlsManifestCredentialPropagator.Propagate(\n                playlistText,\n                validated.Value,",
+          "replace": "        var validated = ValidatedPlaybackCapability.From(HttpContext.Items);\n        if (validated is not null)\n        {\n            playlistText = HlsManifestCredentialPropagator.Propagate(\n                playlistText,\n                Request.Query[\"playbackCapability\"].ToString(),"
+        }
+      ]
+    },
+    {
+      "id": "s1-enrich-external-uris-too",
+      "stage": "S1",
+      "historicalId": "enrich-external-uris-too",
+      "status": "REPLAYED",
+      "expect": "RED",
+      "property": "an external uri never receives the capability",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.Helpers.HlsManifestCredentialPropagatorTests.AbsoluteExternalUri_IsNeverEnriched|FullyQualifiedName~Tesserafin.Api.Tests.Helpers.HlsManifestCredentialPropagatorTests.ProtocolRelativeExternalUri_IsNeverEnriched|FullyQualifiedName~Tesserafin.Api.Tests.Helpers.HlsManifestCredentialPropagatorTests.ExternalUriInsideAnExtXMap_IsNeverEnriched",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.Helpers.HlsManifestCredentialPropagatorTests.AbsoluteExternalUri_IsNeverEnriched",
+          "Tesserafin.Api.Tests.Helpers.HlsManifestCredentialPropagatorTests.ProtocolRelativeExternalUri_IsNeverEnriched",
+          "Tesserafin.Api.Tests.Helpers.HlsManifestCredentialPropagatorTests.ExternalUriInsideAnExtXMap_IsNeverEnriched"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Helpers/HlsManifestCredentialPropagator.cs",
+          "find": "        if (uri.Length == 0 || IsExternal(uri, origin))",
+          "replace": "        if (uri.Length == 0)"
+        }
+      ]
+    },
+    {
+      "id": "s1-destroy-an-existing-query",
+      "stage": "S1",
+      "historicalId": "destroy-an-existing-query",
+      "status": "REPLAYED",
+      "expect": "RED",
+      "property": "an existing query survives untouched",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.Helpers.HlsManifestCredentialPropagatorTests.SegmentWithAnExistingQuery_KeepsItByteForByteAndAppendsOnce",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.Helpers.HlsManifestCredentialPropagatorTests.SegmentWithAnExistingQuery_KeepsItByteForByteAndAppendsOnce"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Helpers/HlsManifestCredentialPropagator.cs",
+          "find": "        var wroteAny = query.Length > 0;\n        builder.Append('?').Append(query);",
+          "replace": "        var wroteAny = false;\n        builder.Append('?');"
+        }
+      ]
+    },
+    {
+      "id": "s1-allow-two-capabilities",
+      "stage": "S1",
+      "historicalId": "allow-two-capabilities",
+      "status": "REPLAYED",
+      "expect": "RED",
+      "property": "one uri carries at most one playbackCapability",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.Helpers.HlsManifestCredentialPropagatorTests.CapabilityAlreadyPresentAndIdentical_LeavesExactlyOne",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.Helpers.HlsManifestCredentialPropagatorTests.CapabilityAlreadyPresentAndIdentical_LeavesExactlyOne"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Helpers/HlsManifestCredentialPropagator.cs",
+          "find": "                // Already exactly this value, exactly once. Adding it again would put two of them\n                // in one uri, which the contract forbids outright.\n                continue;\n",
+          "replace": "                // MUTATION: append a second, identical capability.\n"
+        }
+      ],
+      "note": "The mutation removes the skip, not the branch. Writing `if (false)` instead does not compile \u2014 the analyzers reject the unreachable body \u2014 and an ERROR grade would say nothing about the property."
+    },
+    {
+      "id": "s1-propagate-api-key",
+      "stage": "S1",
+      "historicalId": "propagate-api-key",
+      "status": "REPLAYED",
+      "expect": "RED",
+      "property": "no durable credential name is ever appended",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.Helpers.HlsManifestCredentialPropagatorTests.NoDurableCredentialNameEverAppears",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.Helpers.HlsManifestCredentialPropagatorTests.NoDurableCredentialNameEverAppears"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Helpers/HlsManifestCredentialPropagator.cs",
+          "find": "        \"api_key\",\n",
+          "replace": ""
+        },
+        {
+          "file": "Tesserafin.Api/Helpers/HlsManifestCredentialPropagator.cs",
+          "find": "        if (!string.IsNullOrEmpty(mediaSourceId))\n        {\n            parameters.Add(new(MediaSourceKey, mediaSourceId));\n        }",
+          "replace": "        if (!string.IsNullOrEmpty(mediaSourceId))\n        {\n            parameters.Add(new(MediaSourceKey, mediaSourceId));\n        }\n\n        parameters.Add(new(\"api_key\", capabilityValue));"
+        }
+      ],
+      "note": "Two edits on purpose. Adding the parameter alone makes the forbidden-name guard throw, which reds the test on an exception rather than on the named property."
+    },
+    {
+      "id": "s1-drop-private-no-store",
+      "stage": "S1",
+      "historicalId": "drop-private-no-store",
+      "status": "REPLAYED",
+      "expect": "RED",
+      "property": "a credential-bearing playlist response is private, no-store",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "rig",
+        "scenario": "s1-manifest-propagation",
+        "requires": [
+          "cacheControl is private, no-store"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Controllers/DynamicHlsController.cs",
+          "find": "            Response.Headers.CacheControl = \"private, no-store\";",
+          "replace": "            _ = \"private, no-store\";"
+        }
+      ]
+    },
+    {
+      "id": "r1-drop-item-job-comparison",
+      "stage": "R1",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "the item the route names is compared with the job's",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsSegmentOwnershipTests.TheItemInTheRoute_IsActuallyConsumed",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsSegmentOwnershipTests.TheItemInTheRoute_IsActuallyConsumed"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Controllers/HlsSegmentController.cs",
+          "find": "        if (!Guid.TryParse(itemId, out var routeItemId) || !routeItemId.Equals(binding.ItemId))",
+          "replace": "        if (!Guid.TryParse(itemId, out var routeItemId) || routeItemId.Equals(binding.ItemId) || true)"
+        }
+      ]
+    },
+    {
+      "id": "r1-drop-media-source-job-comparison",
+      "stage": "R1",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "the capability's media source is compared with the job's",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsSegmentOwnershipTests.AnItemOnlyCapability_CannotDowngradeAMediaSourceBoundJob",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsSegmentOwnershipTests.AnItemOnlyCapability_CannotDowngradeAMediaSourceBoundJob"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Controllers/HlsSegmentController.cs",
+          "find": "        if (!string.Equals(capability.MediaSourceId, binding.MediaSourceId, StringComparison.Ordinal))\n        {\n            return false;\n        }",
+          "replace": "        if (!string.Equals(capability.MediaSourceId, binding.MediaSourceId, StringComparison.Ordinal))\n        {\n            _ = binding.MediaSourceId;\n        }"
+        }
+      ]
+    },
+    {
+      "id": "r1-drop-play-session-job-comparison",
+      "stage": "R1",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "the capability's play session is compared with the job's",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsSegmentOwnershipTests.ACapabilityFromAnotherPlaySession_NeverReachesTheJobsSegments",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsSegmentOwnershipTests.ACapabilityFromAnotherPlaySession_NeverReachesTheJobsSegments"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Controllers/HlsSegmentController.cs",
+          "find": "        return string.IsNullOrEmpty(capability.PlaySessionId)\n            ? string.IsNullOrEmpty(binding.PlaySessionId)\n            : string.Equals(capability.PlaySessionId, binding.PlaySessionId, StringComparison.Ordinal);",
+          "replace": "        _ = binding.PlaySessionId;\n        return true;"
+        }
+      ]
+    },
+    {
+      "id": "r1-read-capability-from-the-query",
+      "stage": "R1",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "a propagated capability comes from the validated feature, never from the query",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.PlaybackCredentials.PlaybackCapabilityProvenanceTests.AHostileQuery_NeverBecomesTheSource|FullyQualifiedName~Tesserafin.Api.Tests.PlaybackCredentials.PlaybackCapabilityProvenanceTests.ThePropagatedBindings_ComeFromTheFeatureAndNotFromTheQuery",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.PlaybackCredentials.PlaybackCapabilityProvenanceTests.AHostileQuery_NeverBecomesTheSource",
+          "Tesserafin.Api.Tests.PlaybackCredentials.PlaybackCapabilityProvenanceTests.ThePropagatedBindings_ComeFromTheFeatureAndNotFromTheQuery"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Auth/PlaybackCapabilityPolicy/PlaybackCapabilityProvenance.cs",
+          "find": "        var validated = ValidatedPlaybackCapability.From(context);\n        if (validated is not null)",
+          "replace": "        var fromQuery = context.Request.Query[\"playbackCapability\"].ToString();\n        var validated = string.IsNullOrEmpty(fromQuery)\n            ? ValidatedPlaybackCapability.From(context)\n            : ValidatedPlaybackCapability.From(context) is { } real\n                ? real with { Value = fromQuery, MediaSourceId = context.Request.Query[\"mediaSourceId\"].ToString() }\n                : null;\n        if (validated is not null)"
+        }
+      ]
+    },
+    {
+      "id": "r1-accept-a-query-with-no-validated-provenance",
+      "stage": "R1",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "a capability presented with no validated provenance is refused, not ignored",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.PlaybackCredentials.PlaybackCapabilityProvenanceTests.AQueryCapabilityWithNoValidatedProvenance_IsRefused",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.PlaybackCredentials.PlaybackCapabilityProvenanceTests.AQueryCapabilityWithNoValidatedProvenance_IsRefused"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Auth/PlaybackCapabilityPolicy/PlaybackCapabilityProvenance.cs",
+          "find": "        return string.IsNullOrEmpty(presented)\n            ? PlaybackCapabilityProvenanceDecision.NothingToPropagate\n            : PlaybackCapabilityProvenanceDecision.Refuse;",
+          "replace": "        _ = presented;\n        return PlaybackCapabilityProvenanceDecision.NothingToPropagate;"
+        }
+      ]
+    },
+    {
+      "id": "r1-restore-the-ffprobe-http-auto-fetch",
+      "stage": "R1",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "the live-stream probe reads the tuner through its provider, not over HTTP",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "inventory",
+        "script": "ci/livetv-handoff-inventory.sh"
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Server.Core/Library/MediaSourceManager.cs",
+          "find": "                        .AddMediaInfoWithProbe(mediaSource, false, cacheKey, true, liveStream as IDirectStreamProvider, cancellationToken)",
+          "replace": "                        .AddMediaInfoWithProbe(mediaSource, false, cacheKey, true, null, cancellationToken)"
+        }
+      ],
+      "note": "Graded by the INVENTORY, deliberately and for a stated reason. The wiring this mutation removes is inside MediaSourceManager.OpenLiveStreamInternal, which cannot be reached without a tuner host and a real live stream; every unit test of the probe path calls LiveStreamHelper directly and would keep passing. The inventory category 'MediaSourceManager probe reader' goes empty and the script exits 1."
+    },
+    {
+      "id": "r1-restore-segment-id-only-resolution",
+      "stage": "R1",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "a segment file is never resolved from segmentId alone",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsSegmentOwnershipTests.ASegmentOfAnotherJob_IsNeverServed",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsSegmentOwnershipTests.ASegmentOfAnotherJob_IsNeverServed"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Controllers/HlsSegmentController.cs",
+          "find": "        if (!segmentId.StartsWith(binding.PlaylistId, StringComparison.Ordinal))\n        {\n            return NotFound(\"Hls segment not found.\");\n        }",
+          "replace": "        if (!segmentId.StartsWith(binding.PlaylistId, StringComparison.Ordinal))\n        {\n            _ = binding.PlaylistId;\n        }"
+        }
+      ]
+    },
+    {
+      "id": "r1-serve-a-file-after-the-binding-expired",
+      "stage": "R1",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "a file whose job is gone is refused, with no fallback to the historical resolution",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsSegmentOwnershipTests.WithNoServerSideJob_TheAnswerIsAClosedRefusal",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsSegmentOwnershipTests.WithNoServerSideJob_TheAnswerIsAClosedRefusal"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Controllers/HlsSegmentController.cs",
+          "find": "        var binding = _segmentBindings.ResolveByPlaylistId(playlistId);\n        if (binding is null)",
+          "replace": "        var binding = _segmentBindings.ResolveByPlaylistId(playlistId)\n            ?? new HlsSegmentBinding(playlistId, Guid.Empty, null, null, _serverConfigurationManager.GetTranscodePath(), _serverConfigurationManager.GetTranscodePath(), 0);\n        if (binding is null)"
+        }
+      ]
+    },
+    {
+      "id": "r1-positive-control",
+      "stage": "R1",
+      "status": "NEW",
+      "expect": "PASS",
+      "property": "every #153-LTV-R1 repair suite is green on an unmutated tree",
+      "timeoutSeconds": 1800,
+      "mutations": [],
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsSegmentOwnershipTests|FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.LiveTvSegmentPlaySessionBindingTests|FullyQualifiedName~Tesserafin.Api.Tests.PlaybackCredentials.PlaybackCapabilityProvenanceTests",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsSegmentOwnershipTests",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.LiveTvSegmentPlaySessionBindingTests",
+          "Tesserafin.Api.Tests.PlaybackCredentials.PlaybackCapabilityProvenanceTests"
+        ]
+      }
+    },
+    {
+      "id": "r1-positive-control-probe",
+      "stage": "R1",
+      "status": "NEW",
+      "expect": "PASS",
+      "property": "the piped probe suites are green on an unmutated tree",
+      "timeoutSeconds": 1800,
+      "mutations": [],
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Server.Implementations.Tests/Tesserafin.Server.Implementations.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Server.Implementations.Tests.LiveTvProbe.LiveStreamProbeInputTests",
+        "expectedTests": [
+          "Tesserafin.Server.Implementations.Tests.LiveTvProbe.LiveStreamProbeInputTests"
+        ]
+      }
+    }
+  ]
+}
