@@ -299,7 +299,7 @@
       "id": "s1-remove-the-propagator-call",
       "stage": "S1",
       "historicalId": "remove-the-propagator-call",
-      "status": "REPLAYED",
+      "status": "SUPERSEDED",
       "expect": "RED",
       "property": "the served playlist carries the capability into its segment uris",
       "timeoutSeconds": 1800,
@@ -319,9 +319,22 @@
         {
           "file": "Tesserafin.Api/Controllers/DynamicHlsController.cs",
           "find": "        return Content(playlistText, MimeTypes.GetMimeType(\"playlist.m3u8\"));\n    }\n\n    /// <summary>\n    /// Gets a video hls playlist stream.",
+          "replace": "        return Content(playlistText, MimeTypes.GetMimeType(\"playlist.m3u8\"));\n    }\n\n    private static string NotPropagated(string manifest, string value, string? mediaSourceId, Uri origin, string? playSessionId)\n        => manifest;\n\n    /// <summary>\n    /// Gets a video hls playlist stream."
+        }
+      ],
+      "historicalMutations": [
+        {
+          "file": "Tesserafin.Api/Controllers/DynamicHlsController.cs",
+          "find": "            playlistText = HlsManifestCredentialPropagator.Propagate(",
+          "replace": "            playlistText = NotPropagated("
+        },
+        {
+          "file": "Tesserafin.Api/Controllers/DynamicHlsController.cs",
+          "find": "        return Content(playlistText, MimeTypes.GetMimeType(\"playlist.m3u8\"));\n    }\n\n    /// <summary>\n    /// Gets a video hls playlist stream.",
           "replace": "        return Content(playlistText, MimeTypes.GetMimeType(\"playlist.m3u8\"));\n    }\n\n    private static string NotPropagated(string manifest, string value, string? mediaSourceId, Uri origin)\n        => manifest;\n\n    /// <summary>\n    /// Gets a video hls playlist stream."
         }
-      ]
+      ],
+      "supersededReason": "The historical hunk replaces the propagator call with a NotPropagated stub whose signature has four parameters. #153-LTV-R1 Phase 3 gave HlsManifestCredentialPropagator.Propagate a fifth, playSessionId, so the historical stub no longer compiles and the control graded ERROR rather than RED - measured, on the first rig run. The replacement is the same mutation with the stub's signature brought up to the current call."
     },
     {
       "id": "s1-stop-transforming-segment-lines",
