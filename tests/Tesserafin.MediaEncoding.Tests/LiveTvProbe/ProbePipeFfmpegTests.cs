@@ -50,6 +50,7 @@ public sealed class ProbePipeFfmpegTests
     /// is the normal case, since it reads only <c>-analyzeduration</c> worth of bytes and then
     /// closes its stdin. A pump that waited for end-of-stream would hang on a live tuner forever.
     /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
     [Fact]
     public async Task ThePump_StopsWhenFfprobeExitsAndLeavesNothingUnobserved()
     {
