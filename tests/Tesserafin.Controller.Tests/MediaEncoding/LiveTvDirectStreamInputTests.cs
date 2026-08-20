@@ -94,6 +94,36 @@ public class LiveTvDirectStreamInputTests
         Assert.DoesNotContain("pipe:0", args, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void GetInputModifier_LiveStreamWithProvider_DropsEveryHttpProtocolOption()
+    {
+        // ffmpeg resolves -user_agent and -referer against the input's protocol, and pipe: has
+        // none. Leaving them on makes it refuse the whole invocation:
+        //   "Option user_agent not found. Error opening input file pipe:0."
+        // and exit 8 - the same exit code as the 401 this branch is fixing, from a different cause.
+        var state = BuildLiveState(withProvider: true);
+        state.RemoteHttpHeaders["User-Agent"] = "Mozilla/5.0";
+        state.RemoteHttpHeaders["Referer"] = "http://example.invalid/";
+
+        var modifier = CreateHelper().GetInputModifier(state, new EncodingOptions(), null);
+
+        Assert.DoesNotContain("-user_agent", modifier, StringComparison.Ordinal);
+        Assert.DoesNotContain("-referer", modifier, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void GetInputModifier_NoProvider_KeepsTheHttpProtocolOptions()
+    {
+        var state = BuildLiveState(withProvider: false);
+        state.RemoteHttpHeaders["User-Agent"] = "Mozilla/5.0";
+        state.RemoteHttpHeaders["Referer"] = "http://example.invalid/";
+
+        var modifier = CreateHelper().GetInputModifier(state, new EncodingOptions(), null);
+
+        Assert.Contains("-user_agent", modifier, StringComparison.Ordinal);
+        Assert.Contains("-referer", modifier, StringComparison.Ordinal);
+    }
+
     private static StreamState BuildLiveState(bool withProvider)
     {
         var video = new MediaStream { Index = 0, Type = MediaStreamType.Video, Codec = "h264" };

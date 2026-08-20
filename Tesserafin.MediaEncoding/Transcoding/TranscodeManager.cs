@@ -758,10 +758,15 @@ public sealed class TranscodeManager : ITranscodeManager, IDisposable
     {
         if (state.MediaSource.RequiresOpening && string.IsNullOrWhiteSpace(state.Request.LiveStreamId))
         {
-            var liveStreamResponse = await _mediaSourceManager.OpenLiveStream(
+            // OpenLiveStreamInternal, not OpenLiveStream: this path opens the live stream itself
+            // because the request carried no liveStreamId, so StreamingHelpers never resolved a
+            // provider for it. Dropping the provider here would silently fall back to ffmpeg
+            // fetching the [Authorize]d LiveStreamFiles URL with no credential.
+            var (liveStreamResponse, directStreamProvider) = await _mediaSourceManager.OpenLiveStreamInternal(
                     new LiveStreamRequest { OpenToken = state.MediaSource.OpenToken },
                     cancellationTokenSource.Token)
                 .ConfigureAwait(false);
+            state.DirectStreamProvider = directStreamProvider;
             var encodingOptions = _serverConfigurationManager.GetEncodingOptions();
 
             _encodingHelper.AttachMediaSourceInfo(state, encodingOptions, liveStreamResponse.MediaSource, state.RequestedUrl);

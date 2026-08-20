@@ -1256,6 +1256,21 @@ namespace Tesserafin.Controller.MediaEncoding
         }
 
         /// <summary>
+        /// Whether ffmpeg reads this job from the server's own pipe rather than from a path or a
+        /// URL, because the server is already holding the live stream open.
+        /// </summary>
+        /// <param name="state">Encoding state.</param>
+        /// <returns>True when the input is stdin.</returns>
+        /// <remarks>
+        /// Selecting the pipe also removes every HTTP-protocol input option from the command line.
+        /// ffmpeg resolves those against the input's protocol, and <c>pipe:</c> has none: a live
+        /// stream's <c>-user_agent</c> makes ffmpeg refuse the whole invocation with
+        /// "Option user_agent not found. Error opening input file pipe:0." and exit 8.
+        /// </remarks>
+        public static bool ReadsFromDirectStreamPipe(EncodingJobInfo state)
+            => state is StreamState { DirectStreamProvider: not null };
+
+        /// <summary>
         /// Gets the input argument.
         /// </summary>
         /// <param name="state">Encoding state.</param>
@@ -1290,7 +1305,7 @@ namespace Tesserafin.Controller.MediaEncoding
                     .Append(concatFilePath)
                     .Append("\" ");
             }
-            else if (state is StreamState { DirectStreamProvider: not null })
+            else if (ReadsFromDirectStreamPipe(state))
             {
                 // A live stream the server already holds open. Its MediaSource.Path is the
                 // [Authorize]d /LiveTv/LiveStreamFiles/{id}/stream.ts URL, which ffmpeg - having no
@@ -7362,9 +7377,12 @@ namespace Tesserafin.Controller.MediaEncoding
                 inputModifier += " " + ffmpegProbeSizeArgument;
             }
 
+            // HTTP-protocol options are meaningless - and fatal - when the input is a pipe.
+            var readsFromPipe = ReadsFromDirectStreamPipe(state);
+
             var userAgentParam = GetUserAgentParam(state);
 
-            if (!string.IsNullOrEmpty(userAgentParam))
+            if (!readsFromPipe && !string.IsNullOrEmpty(userAgentParam))
             {
                 inputModifier += " " + userAgentParam;
             }
@@ -7373,7 +7391,7 @@ namespace Tesserafin.Controller.MediaEncoding
 
             var refererParam = GetRefererParam(state);
 
-            if (!string.IsNullOrEmpty(refererParam))
+            if (!readsFromPipe && !string.IsNullOrEmpty(refererParam))
             {
                 inputModifier += " " + refererParam;
             }
@@ -7467,7 +7485,7 @@ namespace Tesserafin.Controller.MediaEncoding
                 }
             }
 
-            if (state.MediaSource.RequiresLooping)
+            if (state.MediaSource.RequiresLooping && !readsFromPipe)
             {
                 inputModifier += " -stream_loop -1 -reconnect_at_eof 1 -reconnect_streamed 1 -reconnect_delay_max 2";
             }
