@@ -9,6 +9,7 @@ using Tesserafin.Api.Controllers;
 using Tesserafin.Common.Configuration;
 using Tesserafin.Controller.Configuration;
 using Tesserafin.Controller.MediaEncoding;
+using Tesserafin.Controller.Net.PlaybackCredentials;
 using Tesserafin.Model.Configuration;
 using Xunit;
 
@@ -192,7 +193,14 @@ public sealed class HlsSegmentOwnershipTests : IDisposable
     }
 
     private static ValidatedPlaybackCapability Capability(string? mediaSourceId, string? playSessionId)
-        => new("capability-value", Guid.NewGuid(), _itemA, mediaSourceId, playSessionId);
+        => new(
+            "capability-value",
+            Guid.NewGuid(),
+            _itemA,
+            mediaSourceId,
+            playSessionId,
+            PlaybackCapabilityScope.Media,
+            new PlaybackCapabilityValidation(true, PlaybackCapabilityFailure.None, Guid.NewGuid(), Guid.NewGuid(), "session", playSessionId));
 
     public void Dispose()
     {
@@ -266,7 +274,7 @@ public sealed class HlsSegmentOwnershipTests : IDisposable
 
         if (capability is not null)
         {
-            httpContext.Items[ValidatedPlaybackCapability.ItemsKey] = capability;
+            httpContext.Features.Set(capability);
         }
 
         var controller = new HlsSegmentController(configuration.Object, transcodeManager.Object, registry.Object)

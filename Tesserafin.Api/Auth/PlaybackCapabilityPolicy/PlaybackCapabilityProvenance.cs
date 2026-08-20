@@ -26,9 +26,25 @@ public static class PlaybackCapabilityProvenance
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        var validated = ValidatedPlaybackCapability.From(context.Items);
-        return validated is null
+        var validated = ValidatedPlaybackCapability.From(context);
+        if (validated is not null)
+        {
+            // Defence in depth. The feature is written on the accepted branch only, so an invalid
+            // one should be unreachable — and if it ever is reachable, the answer is a refusal
+            // rather than propagation of something that failed.
+            return validated.Validation.IsValid
+                ? PlaybackCapabilityProvenanceDecision.Propagate(validated)
+                : PlaybackCapabilityProvenanceDecision.Refuse;
+        }
+
+        // A capability was presented and NOTHING validated it. Serving the request would mean
+        // copying an unchecked, caller-controlled string into a response body, or answering from a
+        // route whose demand was never applied. LTV-R0's control M1 turned on exactly this gap
+        // being invisible: with the presentation silently ignored, "read the query" and "read the
+        // validated record" produced identical responses and no test could separate them.
+        var presented = context.Request.Query[PlaybackCapabilityAuthenticationHandler.QueryKey].ToString();
+        return string.IsNullOrEmpty(presented)
             ? PlaybackCapabilityProvenanceDecision.NothingToPropagate
-            : PlaybackCapabilityProvenanceDecision.Propagate(validated);
+            : PlaybackCapabilityProvenanceDecision.Refuse;
     }
 }

@@ -75,9 +75,11 @@ count_category "ValidatedPlaybackCapability record" \
     "Tesserafin.Api/Auth/PlaybackCapabilityPolicy/ValidatedPlaybackCapability.cs" \
     'public sealed record ValidatedPlaybackCapability'
 
-count_category "stash on the accepted branch" \
+# #153-LTV-R1: a typed request feature now, not an HttpContext.Items entry keyed by a static
+# object. LTV-R0's control M1 showed the Items arrangement was defended by nothing.
+count_category "validated provenance set on the accepted branch" \
     "Tesserafin.Api/Attributes/RequiresPlaybackCapabilityAttribute.cs" \
-    'context\.HttpContext\.Items\[ValidatedPlaybackCapability\.ItemsKey\] = new ValidatedPlaybackCapability'
+    'context\.HttpContext\.Features\.Set\(new ValidatedPlaybackCapability'
 
 # 2. The transformer exists and handles both observed uri forms.
 count_category "propagator entry point" \
@@ -96,6 +98,26 @@ count_category "unclassified uri refusal" \
 count_category "live playlist calls the propagator" \
     "Tesserafin.Api/Controllers/DynamicHlsController.cs" \
     'HlsManifestCredentialPropagator\.Propagate\('
+
+# #153-LTV-R1. LTV-R0's control M1 replaced the arguments below with a fresh
+# Request.Query["playbackCapability"] read and NOTHING in the repository went red: the category
+# above matches the call whatever is passed to it. These pin the arguments themselves, and the
+# behavioural gate is PlaybackCapabilityProvenanceTests.
+count_category "the propagated value comes from the validated provenance" \
+    "Tesserafin.Api/Controllers/DynamicHlsController.cs" \
+    'validated\.Value,'
+
+count_category "the propagated media source comes from the validated provenance" \
+    "Tesserafin.Api/Controllers/DynamicHlsController.cs" \
+    'validated\.MediaSourceId,'
+
+count_category "the source of a propagated capability is named in one place" \
+    "Tesserafin.Api/Auth/PlaybackCapabilityPolicy/PlaybackCapabilityProvenance.cs" \
+    'ValidatedPlaybackCapability\.From\(context\)'
+
+count_category "a presented capability nothing validated is refused" \
+    "Tesserafin.Api/Auth/PlaybackCapabilityPolicy/PlaybackCapabilityProvenance.cs" \
+    'PlaybackCapabilityProvenanceDecision\.Refuse'
 
 count_category "credential-bearing response is no-store" \
     "Tesserafin.Api/Controllers/DynamicHlsController.cs" \
