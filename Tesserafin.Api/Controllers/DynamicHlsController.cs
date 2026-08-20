@@ -13,6 +13,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Tesserafin.Api.Attributes;
+using Tesserafin.Api.Auth.PlaybackCapabilityPolicy;
 using Tesserafin.Api.Extensions;
 using Tesserafin.Api.Helpers;
 using Tesserafin.Api.Models.StreamingDtos;
@@ -337,6 +338,26 @@ public class DynamicHlsController : BaseTesserafinApiController
         }
 
         var playlistText = HlsHelpers.GetLivePlaylistText(playlistPath, state);
+
+        // #153-LTV-S1. ffmpeg wrote that file with `-hls_base_url "hls/{hash}/"`, so its segment
+        // uris are bare relative paths with no query at all — and the legacy route that serves them
+        // demands a capability. The client cannot add one: it never sees these uris until it reads
+        // this response. So the capability THIS request was authorized with is added here, to the
+        // response only. The file on disk, ffmpeg's argv, its environment and its logs are all
+        // untouched by construction.
+        var validated = ValidatedPlaybackCapability.From(HttpContext.Items);
+        if (validated is not null)
+        {
+            playlistText = HlsManifestCredentialPropagator.Propagate(
+                playlistText,
+                validated.Value,
+                validated.MediaSourceId,
+                new Uri($"{Request.Scheme}://{Request.Host}"));
+
+            // The body now carries a credential. A shared cache holding it would hand one user's
+            // capability to the next reader of the same url.
+            Response.Headers.CacheControl = "private, no-store";
+        }
 
         return Content(playlistText, MimeTypes.GetMimeType("playlist.m3u8"));
     }

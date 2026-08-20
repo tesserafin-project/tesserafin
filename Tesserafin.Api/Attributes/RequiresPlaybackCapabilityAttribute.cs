@@ -88,12 +88,14 @@ public sealed class RequiresPlaybackCapabilityAttribute : Attribute, IAsyncAutho
         }
 
         var credentialService = context.HttpContext.RequestServices.GetRequiredService<IPlaybackCredentialService>();
+        var itemId = ReadGuid(context, _itemRouteKey);
+        var mediaSourceId = ReadString(context, _mediaSourceRouteKey);
         var validation = credentialService.ValidateCapability(
             presented,
             new PlaybackCapabilityDemand(
                 _scope,
-                ReadGuid(context, _itemRouteKey),
-                ReadString(context, _mediaSourceRouteKey),
+                itemId,
+                mediaSourceId,
                 ReadString(context, _playSessionRouteKey)));
 
         if (!validation.IsValid)
@@ -102,7 +104,19 @@ public sealed class RequiresPlaybackCapabilityAttribute : Attribute, IAsyncAutho
             // answer the same way, so a caller cannot use the response to map what a capability is
             // bound to.
             context.Result = new UnauthorizedResult();
+            return System.Threading.Tasks.Task.CompletedTask;
         }
+
+        // ONLY on the accepted branch, and only after the check (#153-LTV-S1). A response that has
+        // to carry this capability onward — the Live TV HLS playlist — reads it from here rather
+        // than re-reading the query, so "this value was validated" is a fact the propagation path
+        // depends on instead of an assumption it makes.
+        context.HttpContext.Items[ValidatedPlaybackCapability.ItemsKey] = new ValidatedPlaybackCapability(
+            presented,
+            validation.CapabilityId,
+            itemId,
+            mediaSourceId,
+            validation.PlaySessionId);
 
         return System.Threading.Tasks.Task.CompletedTask;
     }

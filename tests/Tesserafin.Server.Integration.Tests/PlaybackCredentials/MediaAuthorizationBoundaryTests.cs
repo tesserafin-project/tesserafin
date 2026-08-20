@@ -58,6 +58,33 @@ public sealed class MediaAuthorizationBoundaryTests
             .Where(route => route.MediaSourceBound)
             .Select(route => new object[] { route.Name });
 
+    /// <summary>
+    /// Every media route that names its media source in the QUERY rather than in the path. Only
+    /// there does the caller get to choose the demand, which is the property
+    /// <see cref="ADifferentMediaSourceNamedInTheRequest_IsRefusedForTheSameItem"/> measures. A
+    /// path-bound route takes its demand from the route itself and changing it changes which
+    /// resource is addressed, not which demand is made.
+    /// </summary>
+    /// <returns>The route names.</returns>
+    public static IEnumerable<object[]> MediaSourceInQueryRoutes()
+        => MediaRouteCatalog
+            .For(Guid.Empty, string.Empty, MediaBoundaryFixture.SubtitleStreamIndex)
+            .Where(route => route.MediaSourceBound
+                && route.Scope == PlaybackCapabilityScope.Media
+                && route.Path.Contains("mediaSourceId=", StringComparison.Ordinal))
+            .Select(route => new object[] { route.Name });
+
+    /// <summary>
+    /// Every MEDIA route that names no media source. A Fonts route names none either, but for a
+    /// different reason - it is minted item-less - so it belongs to a different property.
+    /// </summary>
+    /// <returns>The route names.</returns>
+    public static IEnumerable<object[]> MediaSourceUnboundMediaRoutes()
+        => MediaRouteCatalog
+            .For(Guid.Empty, string.Empty, MediaBoundaryFixture.SubtitleStreamIndex)
+            .Where(route => !route.MediaSourceBound && route.Scope == PlaybackCapabilityScope.Media)
+            .Select(route => new object[] { route.Name });
+
     // ---------------------------------------------------------------------------------------
     // 1. No credential at all.
     // ---------------------------------------------------------------------------------------
@@ -315,10 +342,15 @@ public sealed class MediaAuthorizationBoundaryTests
     /// anything. A binding that only holds when the route bothers to state it is not a binding.
     /// </summary>
     /// <returns>A task.</returns>
-    [Fact]
-    public async Task A_media_source_bound_capability_is_refused_where_the_route_names_no_media_source()
+    /// <param name="routeName">The route under test.</param>
+    [Theory]
+    [MemberData(nameof(MediaSourceUnboundMediaRoutes))]
+    public async Task A_media_source_bound_capability_is_refused_where_the_route_names_no_media_source(string routeName)
     {
-        var route = Route("hls legacy segment");
+        // A Theory over every media route that names none, not one route by name (#153-LTV-S1).
+        // It was pinned to "hls legacy segment"; when that route started naming a media source the
+        // property would have lost its only subject silently.
+        var route = Route(routeName);
         Assert.False(route.MediaSourceBound, "This test needs a route that names no media source.");
 
         var capability = await _fixture.MintAsync([PlaybackCapabilityScope.Media], _fixture.ItemId, _fixture.MediaSourceId);
@@ -330,6 +362,52 @@ public sealed class MediaAuthorizationBoundaryTests
             route.WithQuery("playbackCapability", Uri.EscapeDataString(capability.Value)));
 
         AssertRefused(status, body, route, "a media-source-bound capability on a route that names no media source");
+    }
+
+    /// <summary>
+    /// #153-LTV-S1. The theory below must never run over an empty set. The legacy HLS video
+    /// segment route is the one this stage put there; if it ever stops naming a media source in
+    /// the query, the property loses its subject and this fails rather than passing vacuously.
+    /// </summary>
+    [Fact]
+    public void TheMediaSourceInQueryRoutes_AreNotEmpty()
+    {
+        var names = MediaSourceInQueryRoutes().Select(row => (string)row[0]).ToList();
+
+        Assert.NotEmpty(names);
+        Assert.Contains("hls legacy segment", names);
+    }
+
+    /// <summary>
+    /// #153-LTV-S1. A route that reads its media-source demand from the request lets the CALLER
+    /// choose the demand, so "it reads the query" and "it ignores the media source" look identical
+    /// unless a mismatch is measured. Same item, same live capability, a media source the
+    /// capability is not bound to: refused.
+    /// </summary>
+    /// <param name="routeName">The route under test.</param>
+    /// <returns>A task.</returns>
+    [Theory]
+    [MemberData(nameof(MediaSourceInQueryRoutes))]
+    public async Task ADifferentMediaSourceNamedInTheRequest_IsRefusedForTheSameItem(string routeName)
+    {
+        var route = Route(routeName);
+
+        var capability = await _fixture.MintAsync([route.Scope], _fixture.ItemId, _fixture.MediaSourceId);
+
+        // The media source is REPLACED, never appended: two `mediaSourceId` values would arrive as
+        // one comma-joined string, which refuses for a reason that has nothing to do with the
+        // binding under test.
+        var path = route
+            .WithQuery("playbackCapability", Uri.EscapeDataString(capability.Value))
+            .Replace("mediaSourceId=" + _fixture.MediaSourceId, "mediaSourceId=" + _fixture.OtherMediaSourceId, StringComparison.Ordinal);
+
+        Assert.Contains("mediaSourceId=" + _fixture.OtherMediaSourceId, path, StringComparison.Ordinal);
+        Assert.DoesNotContain("mediaSourceId=" + _fixture.MediaSourceId, path, StringComparison.Ordinal);
+
+        using var client = _fixture.AnonymousClient();
+        var (status, body) = await MediaBoundaryFixture.SendAsync(client, route.Method, path);
+
+        AssertRefused(status, body, route, "a capability bound to one media source while the request names another");
     }
 
     /// <summary>
