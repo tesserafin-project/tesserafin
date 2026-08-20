@@ -152,6 +152,11 @@ def gate_rig(worktree, gate, timeout, rig):
     code, log = run([rig, gate["scenario"], worktree], os.path.dirname(rig) or ".", timeout)
     if code == "TIMEOUT":
         return None, "TIMEOUT"
+    if code == 2:
+        # The adapter could not decide - the mutated tree did not build, or it produced no
+        # evidence. That is an ERROR to attribute, never a RED: grading a build failure as a
+        # proven property is exactly the false green this whole runner exists to prevent.
+        return None, "the rig could not decide (exit 2)\n" + log[-2000:]
     return code == 0, log[-2000:]
 
 
