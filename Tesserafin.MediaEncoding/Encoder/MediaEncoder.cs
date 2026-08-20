@@ -19,7 +19,9 @@ using Tesserafin.Common.Configuration;
 using Tesserafin.Common.Extensions;
 using Tesserafin.Controller.Configuration;
 using Tesserafin.Controller.Extensions;
+using Tesserafin.Controller.Library;
 using Tesserafin.Controller.MediaEncoding;
+using Tesserafin.Controller.Streaming;
 using Tesserafin.Data.Enums;
 using Tesserafin.Extensions;
 using Tesserafin.Extensions.Json;
@@ -504,6 +506,30 @@ namespace Tesserafin.MediaEncoding.Encoder
             var extractChapters = request.ExtractChapters;
             var extraArgs = GetExtraArguments(request);
 
+            // #153-LTV-R1. A request that carries a reader over the media is probed from that
+            // reader, over stdin. The alternative is what LTV-R0 measured on two rig runs: ffprobe
+            // opening MediaSourceInfo.Path, which for a live tuner source is the server's own
+            // [Authorize]d /LiveTv/LiveStreamFiles/** route, with no credential — one GET, one 401,
+            // and a media source published with Codec null / Index -1 on every stream.
+            //
+            // Same ownership and cancellation model as the transcode handoff (#153-LTV-S0): the
+            // pump is started before the output is consumed, is stopped when the process exits or
+            // the token is cancelled, and its fault is observed rather than left unhandled.
+            var reader = request.DirectStreamReader;
+            if (reader is not null)
+            {
+                return GetMediaInfoInternal(
+                    "pipe:0",
+                    request.MediaSource.Path,
+                    request.MediaSource.Protocol,
+                    extractChapters,
+                    extraArgs,
+                    request.MediaType == DlnaProfileType.Audio,
+                    request.MediaSource.VideoType,
+                    reader,
+                    cancellationToken);
+            }
+
             return GetMediaInfoInternal(
                 GetInputArgument(request.MediaSource.Path, request.MediaSource),
                 request.MediaSource.Path,
@@ -512,6 +538,7 @@ namespace Tesserafin.MediaEncoding.Encoder
                 extraArgs,
                 request.MediaType == DlnaProfileType.Audio,
                 request.MediaSource.VideoType,
+                null,
                 cancellationToken);
         }
 
@@ -541,14 +568,22 @@ namespace Tesserafin.MediaEncoding.Encoder
                 extraArgs += " -probesize " + ffmpegProbeSize;
             }
 
-            if (request.MediaSource.RequiredHttpHeaders.TryGetValue("User-Agent", out var userAgent))
+            // #153-LTV-R1. ffmpeg resolves protocol options against the INPUT's protocol, and
+            // `pipe:` has none: -user_agent on a pipe input makes it refuse the whole invocation
+            // with "Option user_agent not found." and exit 8. #153-LTV-S0 hit exactly this on the
+            // transcode side. A piped probe therefore carries no HTTP or RTSP option at all — and
+            // it does not need one, because it is not opening a network address.
+            if (request.DirectStreamReader is null)
             {
-                extraArgs += $" -user_agent \"{userAgent}\"";
-            }
+                if (request.MediaSource.RequiredHttpHeaders.TryGetValue("User-Agent", out var userAgent))
+                {
+                    extraArgs += $" -user_agent \"{userAgent}\"";
+                }
 
-            if (request.MediaSource.Protocol == MediaProtocol.Rtsp)
-            {
-                extraArgs += " -rtsp_transport tcp+udp -rtsp_flags prefer_tcp";
+                if (request.MediaSource.Protocol == MediaProtocol.Rtsp)
+                {
+                    extraArgs += " -rtsp_transport tcp+udp -rtsp_flags prefer_tcp";
+                }
             }
 
             return extraArgs;
@@ -592,6 +627,7 @@ namespace Tesserafin.MediaEncoding.Encoder
             string probeSizeArgument,
             bool isAudio,
             VideoType? videoType,
+            IDirectStreamProvider directStreamReader,
             CancellationToken cancellationToken)
         {
             var args = extractChapters
@@ -615,6 +651,10 @@ namespace Tesserafin.MediaEncoding.Encoder
                     // Must consume both or ffmpeg may hang due to deadlocks.
                     RedirectStandardOutput = true,
 
+                    // #153-LTV-R1. Only for a piped probe. Redirecting stdin unconditionally would
+                    // change every other probe's process shape for nothing.
+                    RedirectStandardInput = directStreamReader is not null,
+
                     FileName = _ffprobePath,
                     Arguments = args,
 
@@ -631,8 +671,51 @@ namespace Tesserafin.MediaEncoding.Encoder
             using (var processWrapper = new ProcessWrapper(process, this))
             {
                 StartProcess(processWrapper);
-                using var reader = process.StandardOutput;
-                await reader.BaseStream.CopyToAsync(memoryStream, cancellationToken).ConfigureAwait(false);
+
+                // #153-LTV-R1. A reader of its OWN: LiveStream.GetStream() constructs a new
+                // FileStream over the tuner's temp file on every call, so the probe never shares a
+                // Stream with the transcode and opening it does not open the tuner a second time.
+                // The pump is bounded by `probeCancellation`, which is cancelled in the finally
+                // below whatever happens, so ffprobe exiting on its own -- which it does, having
+                // read `-analyzeduration` worth of bytes -- never leaves the pump running.
+                DirectStreamPump pump = null;
+                CancellationTokenSource probeCancellation = null;
+                if (directStreamReader is not null)
+                {
+                    probeCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    pump = DirectStreamPump.Start(
+                        new ProgressiveFileStream(directStreamReader.GetStream()),
+                        process.StandardInput.BaseStream,
+                        _logger,
+                        probeCancellation.Token);
+                }
+
+                try
+                {
+                    using var reader = process.StandardOutput;
+                    await reader.BaseStream.CopyToAsync(memoryStream, cancellationToken).ConfigureAwait(false);
+                }
+                finally
+                {
+                    if (pump is not null)
+                    {
+                        // Bounded, and in this order: cancel first so a blocked read on a live
+                        // tuner file cannot hold the wait open, then observe the pump's completion
+                        // and its fault so neither is left unobserved, and only then dispose.
+                        await probeCancellation.CancelAsync().ConfigureAwait(false);
+                        await pump.StopAsync().ConfigureAwait(false);
+
+                        var fault = pump.Fault;
+                        if (fault is not null)
+                        {
+                            _logger.LogDebug(fault, "The live stream feeding ffprobe ended early");
+                        }
+
+                        await pump.DisposeAsync().ConfigureAwait(false);
+                        probeCancellation.Dispose();
+                    }
+                }
+
                 memoryStream.Seek(0, SeekOrigin.Begin);
                 InternalMediaInfoResult result;
                 try

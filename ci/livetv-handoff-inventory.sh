@@ -83,6 +83,35 @@ count_category "LiveTvController.GetLiveStreamFile" \
     "Tesserafin.Api/Controllers/LiveTvController.cs" \
     'GetLiveStreamFile'
 
+# #153-LTV-R1. The PROBE, not only the transcode. LTV-R0 measured that S0 routed the transcode
+# through pipe:0 and left ffprobe opening the [Authorize]d LiveStreamFiles url: one uncredentialed
+# GET, one 401, and a media source published with Codec null / Index -1.
+
+# 8. The live-stream open hands the probe the provider the tuner host returned.
+count_category "MediaSourceManager probe reader" \
+    "Tesserafin.Server.Core/Library/MediaSourceManager.cs" \
+    'AddMediaInfoWithProbe\(mediaSource, false, cacheKey, true, liveStream as IDirectStreamProvider'
+
+# 9. The helper forwards it onto the probe request rather than dropping it.
+count_category "LiveStreamHelper forwards the reader" \
+    "Tesserafin.Server.Core/Library/LiveStreamHelper.cs" \
+    'DirectStreamReader = directStreamReader'
+
+# 10. The encoder probes that reader over stdin instead of opening the path.
+count_category "MediaEncoder probes pipe:0" \
+    "Tesserafin.MediaEncoding/Encoder/MediaEncoder.cs" \
+    '"pipe:0",'
+
+# 11. And it feeds that stdin, with the same pump the transcode uses.
+count_category "MediaEncoder feeds the probe pipe" \
+    "Tesserafin.MediaEncoding/Encoder/MediaEncoder.cs" \
+    'pump = DirectStreamPump\.Start'
+
+# 12. A piped probe carries no protocol option, or ffprobe refuses the whole invocation.
+count_category "piped probe drops HTTP options" \
+    "Tesserafin.MediaEncoding/Encoder/MediaEncoder.cs" \
+    'if \(request\.DirectStreamReader is null\)'
+
 echo "========================================"
 if [ "$FAILED" -ne 0 ]; then
     echo "FAIL: $FAILED of $TOTAL inventory categories are empty."

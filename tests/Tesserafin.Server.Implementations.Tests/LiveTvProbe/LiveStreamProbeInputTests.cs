@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Tesserafin.Common.Configuration;
+using Tesserafin.Controller.Library;
 using Tesserafin.Controller.MediaEncoding;
 using Tesserafin.Model.Dto;
 using Tesserafin.Model.Entities;
@@ -47,8 +48,10 @@ public sealed class LiveStreamProbeInputTests
         var encoder = RecordingEncoder(recorded);
         var mediaSource = LiveTunerSource();
 
+        // Exactly the shape MediaSourceManager.OpenLiveStreamInternal uses: the provider the tuner
+        // host just returned, handed to the probe.
         await new LiveStreamHelper(encoder, NullLogger.Instance, Paths())
-            .AddMediaInfoWithProbe(mediaSource, isAudio: false, cacheKey: null, addProbeDelay: false, CancellationToken.None)
+            .AddMediaInfoWithProbe(mediaSource, isAudio: false, cacheKey: null, addProbeDelay: false, new FakeDirectStreamProvider(), CancellationToken.None)
             .ConfigureAwait(true);
 
         var probe = Assert.Single(recorded);
@@ -125,5 +128,15 @@ public sealed class LiveStreamProbeInputTests
         var paths = new Mock<IApplicationPaths>(MockBehavior.Loose);
         paths.SetupGet(p => p.CachePath).Returns(System.IO.Path.GetTempPath());
         return paths.Object;
+    }
+
+    /// <summary>
+    /// A reader that is not the transcode's. <c>LiveStream.GetStream()</c> constructs a new
+    /// <see cref="System.IO.FileStream"/> over the tuner's temp file on every call, so this models
+    /// the property that matters: each caller gets its own stream and the tuner is not reopened.
+    /// </summary>
+    private sealed class FakeDirectStreamProvider : IDirectStreamProvider
+    {
+        public System.IO.Stream GetStream() => new System.IO.MemoryStream();
     }
 }
