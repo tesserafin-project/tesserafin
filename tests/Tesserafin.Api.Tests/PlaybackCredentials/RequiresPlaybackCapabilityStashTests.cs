@@ -32,7 +32,7 @@ public class RequiresPlaybackCapabilityStashTests
 
         await attribute.OnAuthorizationAsync(context);
 
-        var stashed = ValidatedPlaybackCapability.From(context.HttpContext.Items);
+        var stashed = ValidatedPlaybackCapability.From(context.HttpContext);
         Assert.NotNull(stashed);
         Assert.Equal("presented-value", stashed!.Value);
         Assert.Equal(Guid.ParseExact(ItemId, "N"), stashed.ItemId);
@@ -50,7 +50,7 @@ public class RequiresPlaybackCapabilityStashTests
 
         await attribute.OnAuthorizationAsync(context);
 
-        Assert.Null(ValidatedPlaybackCapability.From(context.HttpContext.Items));
+        Assert.Null(ValidatedPlaybackCapability.From(context.HttpContext));
         Assert.IsType<UnauthorizedResult>(context.Result);
     }
 
@@ -63,7 +63,7 @@ public class RequiresPlaybackCapabilityStashTests
 
         await attribute.OnAuthorizationAsync(context);
 
-        Assert.Null(ValidatedPlaybackCapability.From(context.HttpContext.Items));
+        Assert.Null(ValidatedPlaybackCapability.From(context.HttpContext));
         Assert.Null(context.Result);
     }
 
@@ -75,7 +75,7 @@ public class RequiresPlaybackCapabilityStashTests
 
         await attribute.OnAuthorizationAsync(context);
 
-        var stashed = ValidatedPlaybackCapability.From(context.HttpContext.Items);
+        var stashed = ValidatedPlaybackCapability.From(context.HttpContext);
         Assert.NotNull(stashed);
         Assert.Null(stashed!.MediaSourceId);
     }

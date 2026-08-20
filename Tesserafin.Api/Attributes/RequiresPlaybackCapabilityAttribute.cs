@@ -111,12 +111,17 @@ public sealed class RequiresPlaybackCapabilityAttribute : Attribute, IAsyncAutho
         // to carry this capability onward — the Live TV HLS playlist — reads it from here rather
         // than re-reading the query, so "this value was validated" is a fact the propagation path
         // depends on instead of an assumption it makes.
-        context.HttpContext.Items[ValidatedPlaybackCapability.ItemsKey] = new ValidatedPlaybackCapability(
+        //
+        // #153-LTV-R1: a typed request FEATURE, not an HttpContext.Items entry. Retrieved by type
+        // rather than by a key, scoped to this HttpContext, and gone when it is.
+        context.HttpContext.Features.Set(new ValidatedPlaybackCapability(
             presented,
             validation.CapabilityId,
             itemId,
             mediaSourceId,
-            validation.PlaySessionId);
+            validation.PlaySessionId,
+            _scope,
+            validation));
 
         return System.Threading.Tasks.Task.CompletedTask;
     }
