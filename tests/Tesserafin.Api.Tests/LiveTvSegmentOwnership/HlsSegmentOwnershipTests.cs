@@ -4,12 +4,12 @@ using System.IO;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
+using Tesserafin.Api.Auth.PlaybackCapabilityPolicy;
 using Tesserafin.Api.Controllers;
 using Tesserafin.Common.Configuration;
 using Tesserafin.Controller.Configuration;
 using Tesserafin.Controller.MediaEncoding;
 using Tesserafin.Model.Configuration;
-using Tesserafin.Model.IO;
 using Xunit;
 
 namespace Tesserafin.Api.Tests.LiveTvSegmentOwnership;
@@ -34,6 +34,9 @@ public sealed class HlsSegmentOwnershipTests : IDisposable
 {
     private const string JobA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     private const string JobB = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    private const string JobMediaSource = "6d5da76e3955fd1005f75c496c371521";
+    private const string JobPlaySession = "306f71094f36456f9d0dc6e7b12b8a6b";
+
     private static readonly Guid _itemA = new("11111111111111111111111111111111");
     private static readonly Guid _itemB = new("22222222222222222222222222222222");
 
@@ -91,12 +94,105 @@ public sealed class HlsSegmentOwnershipTests : IDisposable
     [Fact]
     public void WithNoServerSideJob_TheAnswerIsAClosedRefusal()
     {
-        var result = Invoke(_itemA, playlistId: JobA, segmentId: JobA + "0", job: null);
+        var result = Invoke(_itemA, playlistId: JobA, segmentId: JobA + "0", jobIsGone: true);
 
         Assert.False(
             IsFileResultFor(result, JobA + "0.ts"),
             "the file was opened although no server-side job owns it.");
     }
+
+    /// <summary>
+    /// A capability bound to no media source must not stand in for one bound to the job's.
+    /// </summary>
+    [Fact]
+    public void AnItemOnlyCapability_CannotDowngradeAMediaSourceBoundJob()
+    {
+        var result = Invoke(
+            _itemA,
+            playlistId: JobA,
+            segmentId: JobA + "0",
+            jobMediaSourceId: JobMediaSource,
+            capability: Capability(mediaSourceId: null, playSessionId: JobPlaySession),
+            requestedMediaSourceId: JobMediaSource);
+
+        Assert.IsType<UnauthorizedResult>(result);
+    }
+
+    /// <summary>
+    /// A capability minted under another play session must not reach this job's segments, even
+    /// with the right item and the right media source.
+    /// </summary>
+    [Fact]
+    public void ACapabilityFromAnotherPlaySession_NeverReachesTheJobsSegments()
+    {
+        var result = Invoke(
+            _itemA,
+            playlistId: JobA,
+            segmentId: JobA + "0",
+            jobMediaSourceId: JobMediaSource,
+            jobPlaySessionId: JobPlaySession,
+            capability: Capability(JobMediaSource, playSessionId: "a-play-session-this-job-does-not-have"),
+            requestedMediaSourceId: JobMediaSource);
+
+        Assert.IsType<UnauthorizedResult>(result);
+    }
+
+    /// <summary>
+    /// The control for the two refusals above: the job's own capability still serves its own bytes.
+    /// </summary>
+    [Fact]
+    public void TheJobsOwnCapability_StillServesItsOwnSegment()
+    {
+        var result = Invoke(
+            _itemA,
+            playlistId: JobA,
+            segmentId: JobA + "0",
+            jobMediaSourceId: JobMediaSource,
+            jobPlaySessionId: JobPlaySession,
+            capability: Capability(JobMediaSource, JobPlaySession),
+            requestedMediaSourceId: JobMediaSource);
+
+        Assert.True(IsFileResultFor(result, JobA + "0.ts"));
+    }
+
+    /// <summary>
+    /// A caller-named media source that is not the job's is refused, and omitting it is not a way
+    /// around that.
+    /// </summary>
+    [Fact]
+    public void AMediaSourceThatIsNotTheJobs_IsRefusedAndOmittingItIsNoBetter()
+    {
+        Assert.IsType<UnauthorizedResult>(Invoke(
+            _itemA,
+            playlistId: JobA,
+            segmentId: JobA + "0",
+            jobMediaSourceId: JobMediaSource,
+            jobPlaySessionId: JobPlaySession,
+            capability: Capability(JobMediaSource, JobPlaySession),
+            requestedMediaSourceId: "a-media-source-this-job-does-not-have"));
+
+        Assert.IsType<UnauthorizedResult>(Invoke(
+            _itemA,
+            playlistId: JobA,
+            segmentId: JobA + "0",
+            jobMediaSourceId: JobMediaSource,
+            jobPlaySessionId: JobPlaySession,
+            capability: Capability(JobMediaSource, JobPlaySession)));
+    }
+
+    /// <summary>
+    /// A segment name that walks out of the job's directory is refused before any file is opened.
+    /// </summary>
+    [Fact]
+    public void ASegmentNameThatLeavesTheJobsRoot_IsRefused()
+    {
+        var result = Invoke(_itemA, playlistId: JobA, segmentId: JobA + "/../../escaped");
+
+        Assert.False(result is PhysicalFileResult);
+    }
+
+    private static ValidatedPlaybackCapability Capability(string? mediaSourceId, string? playSessionId)
+        => new("capability-value", Guid.NewGuid(), _itemA, mediaSourceId, playSessionId);
 
     public void Dispose()
     {
@@ -114,7 +210,15 @@ public sealed class HlsSegmentOwnershipTests : IDisposable
         => result is PhysicalFileResult physical
            && string.Equals(Path.GetFileName(physical.FileName), fileName, StringComparison.Ordinal);
 
-    private ActionResult Invoke(Guid itemId, string playlistId, string segmentId, TranscodingJob? job = null)
+    private ActionResult Invoke(
+        Guid itemId,
+        string playlistId,
+        string segmentId,
+        bool jobIsGone = false,
+        string? jobMediaSourceId = null,
+        string? jobPlaySessionId = null,
+        ValidatedPlaybackCapability? capability = null,
+        string? requestedMediaSourceId = null)
     {
         var configuration = new Mock<IServerConfigurationManager>(MockBehavior.Loose);
         configuration
@@ -124,28 +228,50 @@ public sealed class HlsSegmentOwnershipTests : IDisposable
             .SetupGet(c => c.CommonApplicationPaths)
             .Returns(Mock.Of<IApplicationPaths>());
 
-        var fileSystem = new Mock<IFileSystem>(MockBehavior.Loose);
-        fileSystem
-            .Setup(f => f.GetFilePaths(It.IsAny<string>(), It.IsAny<bool>()))
-            .Returns((string directory, bool _) => Directory.GetFiles(directory));
+        // The one job the server knows about: job A, started for item A. Everything the route is
+        // allowed to conclude has to come from here.
+        var binding = jobIsGone
+            ? null
+            : new HlsSegmentBinding(
+                JobA,
+                _itemA,
+                MediaSourceId: jobMediaSourceId,
+                PlaySessionId: jobPlaySessionId,
+                CanonicalRoot: Path.GetFullPath(_transcodePath),
+                CanonicalPlaylistPath: Path.GetFullPath(Path.Combine(_transcodePath, JobA + ".m3u8")),
+                Generation: 1);
+
+        var registry = new Mock<IHlsSegmentBindingRegistry>(MockBehavior.Loose);
+        registry
+            .Setup(r => r.ResolveByPlaylistId(JobA))
+            .Returns(binding);
 
         var transcodeManager = new Mock<ITranscodeManager>(MockBehavior.Loose);
         transcodeManager
             .Setup(t => t.OnTranscodeBeginRequest(It.IsAny<string>(), It.IsAny<TranscodingJobType>()))
-            .Returns(job);
+            .Returns((TranscodingJob?)null);
 
-        var controller = new HlsSegmentController(fileSystem.Object, configuration.Object, transcodeManager.Object)
+        var httpContext = new DefaultHttpContext
         {
-            ControllerContext = new Microsoft.AspNetCore.Mvc.ControllerContext
+            Request =
             {
-                HttpContext = new DefaultHttpContext
-                {
-                    Request =
-                    {
-                        Path = new PathString($"/Videos/{itemId:N}/hls/{playlistId}/{segmentId}.ts")
-                    }
-                }
+                Path = new PathString($"/Videos/{itemId:N}/hls/{playlistId}/{segmentId}.ts")
             }
+        };
+
+        if (requestedMediaSourceId is not null)
+        {
+            httpContext.Request.QueryString = QueryString.Create("mediaSourceId", requestedMediaSourceId);
+        }
+
+        if (capability is not null)
+        {
+            httpContext.Items[ValidatedPlaybackCapability.ItemsKey] = capability;
+        }
+
+        var controller = new HlsSegmentController(configuration.Object, transcodeManager.Object, registry.Object)
+        {
+            ControllerContext = new Microsoft.AspNetCore.Mvc.ControllerContext { HttpContext = httpContext }
         };
 
         return controller.GetHlsVideoSegmentLegacy(itemId.ToString("N"), playlistId, segmentId, "ts");

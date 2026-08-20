@@ -7,13 +7,13 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Tesserafin.Api.Attributes;
+using Tesserafin.Api.Auth.PlaybackCapabilityPolicy;
 using Tesserafin.Api.Helpers;
 using Tesserafin.Common.Api;
 using Tesserafin.Common.Configuration;
 using Tesserafin.Controller.Configuration;
 using Tesserafin.Controller.MediaEncoding;
 using Tesserafin.Controller.Net.PlaybackCredentials;
-using Tesserafin.Model.IO;
 using Tesserafin.Model.Net;
 
 namespace Tesserafin.Api.Controllers;
@@ -25,24 +25,24 @@ namespace Tesserafin.Api.Controllers;
 [ApiExplorerSettings(IgnoreApi = true)]
 public class HlsSegmentController : BaseTesserafinApiController
 {
-    private readonly IFileSystem _fileSystem;
     private readonly IServerConfigurationManager _serverConfigurationManager;
     private readonly ITranscodeManager _transcodeManager;
+    private readonly IHlsSegmentBindingRegistry _segmentBindings;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="HlsSegmentController"/> class.
     /// </summary>
-    /// <param name="fileSystem">Instance of the <see cref="IFileSystem"/> interface.</param>
     /// <param name="serverConfigurationManager">Instance of the <see cref="IServerConfigurationManager"/> interface.</param>
     /// <param name="transcodeManager">Instance of the <see cref="ITranscodeManager"/> interface.</param>
+    /// <param name="segmentBindings">Instance of the <see cref="IHlsSegmentBindingRegistry"/> interface.</param>
     public HlsSegmentController(
-        IFileSystem fileSystem,
         IServerConfigurationManager serverConfigurationManager,
-        ITranscodeManager transcodeManager)
+        ITranscodeManager transcodeManager,
+        IHlsSegmentBindingRegistry segmentBindings)
     {
-        _fileSystem = fileSystem;
         _serverConfigurationManager = serverConfigurationManager;
         _transcodeManager = transcodeManager;
+        _segmentBindings = segmentBindings;
     }
 
     /// <summary>
@@ -158,37 +158,98 @@ public class HlsSegmentController : BaseTesserafinApiController
         [FromRoute, Required] string segmentId,
         [FromRoute, Required] string segmentContainer)
     {
-        var file = string.Concat(segmentId, Path.GetExtension(Request.Path.Value.AsSpan()));
-        var transcodeFolderPath = _serverConfigurationManager.GetTranscodePath();
+        // #153-LTV-R1, LTV-R0 finding 2. Nothing below derives the file from the caller's
+        // parameters. The job is resolved from server state FIRST, the path is canonicalised
+        // against the root that job actually writes into, and route, validated capability and job
+        // are compared before anything is opened.
+        var binding = _segmentBindings.ResolveByPlaylistId(playlistId);
+        if (binding is null)
+        {
+            // Closed refusal, with no fallback to the historical resolution. A live job's segment
+            // files outlive it (#153-LTV-S0 measured 22 of them surviving a teardown); once the
+            // job is gone they are unreachable rather than served to whoever names them.
+            return NotFound("Hls segment not found.");
+        }
 
-        file = Path.GetFullPath(Path.Combine(transcodeFolderPath, file));
-        var fileDir = Path.GetDirectoryName(file);
-        if (string.IsNullOrEmpty(fileDir) || !fileDir.StartsWith(transcodeFolderPath, StringComparison.InvariantCulture))
+        if (!Guid.TryParse(itemId, out var routeItemId) || !routeItemId.Equals(binding.ItemId))
+        {
+            // itemId is consumed here, and this is the only place it ever was not.
+            return Unauthorized();
+        }
+
+        var provenance = PlaybackCapabilityProvenance.Resolve(HttpContext);
+        if (provenance.Outcome == PlaybackCapabilityProvenanceOutcome.Refuse)
+        {
+            return Unauthorized();
+        }
+
+        var capability = provenance.Capability;
+        if (capability is not null && !AgreesWithTheJob(capability, binding))
+        {
+            return Unauthorized();
+        }
+
+        if (!RequestedMediaSourceAgrees(binding))
+        {
+            return Unauthorized();
+        }
+
+        // ffmpeg was told to write this job's segments as "{playlistId}%d.{ext}", so a segment name
+        // that does not begin with the job's own playlist identifier is not this job's segment.
+        // This is what stops a capability for job A reaching job B's bytes: segmentId alone never
+        // names a file any more.
+        if (!segmentId.StartsWith(binding.PlaylistId, StringComparison.Ordinal))
+        {
+            return NotFound("Hls segment not found.");
+        }
+
+        var file = Path.GetFullPath(Path.Combine(
+            binding.CanonicalRoot,
+            string.Concat(segmentId, Path.GetExtension(Request.Path.Value.AsSpan()))));
+
+        if (!string.Equals(Path.GetDirectoryName(file), binding.CanonicalRoot, StringComparison.Ordinal))
         {
             return BadRequest("Invalid segment.");
         }
 
-        var normalizedPlaylistId = playlistId;
+        return GetFileResult(file, binding.CanonicalPlaylistPath);
+    }
 
-        var filePaths = _fileSystem.GetFilePaths(transcodeFolderPath);
-        // Add . to start of segment container for future use.
-        segmentContainer = segmentContainer.Insert(0, ".");
-        string? playlistPath = null;
-        foreach (var path in filePaths)
+    /// <summary>
+    /// Every binding the capability carries has to be the job's own. A capability bound to no media
+    /// source cannot stand in for one bound to the job's, and a capability minted under another
+    /// play session cannot reach this job's segments (#153-LTV-R1, LTV-R0 findings 2 and 5).
+    /// </summary>
+    private static bool AgreesWithTheJob(ValidatedPlaybackCapability capability, HlsSegmentBinding binding)
+    {
+        if (capability.ItemId is { } boundItem && !boundItem.Equals(binding.ItemId))
         {
-            var pathExtension = Path.GetExtension(path);
-            if ((string.Equals(pathExtension, segmentContainer, StringComparison.OrdinalIgnoreCase)
-                 || string.Equals(pathExtension, ".m3u8", StringComparison.OrdinalIgnoreCase))
-                && path.Contains(normalizedPlaylistId, StringComparison.OrdinalIgnoreCase))
-            {
-                playlistPath = path;
-                break;
-            }
+            return false;
         }
 
-        return playlistPath is null
-            ? NotFound("Hls segment not found.")
-            : GetFileResult(file, playlistPath);
+        if (!string.Equals(capability.MediaSourceId, binding.MediaSourceId, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        // The capability's own play session, taken from the validation result rather than from the
+        // url. LTV-R0 minted a capability under a play session the server had never issued and
+        // reached a segment with it: 200, 387 468 bytes. This is the comparison that was missing.
+        return string.IsNullOrEmpty(capability.PlaySessionId)
+            ? string.IsNullOrEmpty(binding.PlaySessionId)
+            : string.Equals(capability.PlaySessionId, binding.PlaySessionId, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A caller-named media source must be the job's. Naming none is allowed only for a job that
+    /// has none either, so the route cannot be downgraded by omitting the parameter.
+    /// </summary>
+    private bool RequestedMediaSourceAgrees(HlsSegmentBinding binding)
+    {
+        var requested = Request.Query["mediaSourceId"].ToString();
+        return string.IsNullOrEmpty(requested)
+            ? string.IsNullOrEmpty(binding.MediaSourceId)
+            : string.Equals(requested, binding.MediaSourceId, StringComparison.Ordinal);
     }
 
     private ActionResult GetFileResult(string path, string playlistPath)
