@@ -74,7 +74,10 @@ public sealed class MediaRouteMetadataTests
             // #153-LTV-S1: the media source is read from the request here, as it already is on the
             // legacy playlist route above. A null demand agrees only with a capability bound to no
             // media source, which no Live TV transcode ever mints.
-            ["GET /Videos/{itemId}/hls/{playlistId}/{segmentId}.{segmentContainer}"] = (PlaybackCapabilityScope.Media, "itemId", "mediaSourceId", null),
+            // #153-LTV-R1: the play-session key was null here, which made ValidateCapability skip
+            // its play-session comparison entirely. LTV-R0 reached a segment with a capability
+            // minted under a play session the server had never issued.
+            ["GET /Videos/{itemId}/hls/{playlistId}/{segmentId}.{segmentContainer}"] = (PlaybackCapabilityScope.Media, "itemId", "mediaSourceId", "playSessionId"),
             ["GET /Audio/{itemId}/hls/{segmentId}/stream.mp3"] = (PlaybackCapabilityScope.Media, "itemId", null, null),
             ["GET /Audio/{itemId}/hls/{segmentId}/stream.aac"] = (PlaybackCapabilityScope.Media, "itemId", null, null),
             ["GET /Videos/{routeItemId}/{routeMediaSourceId}/Subtitles/{routeIndex}/Stream.{routeFormat}"] = (PlaybackCapabilityScope.Subtitles, "routeItemId", "routeMediaSourceId", null),

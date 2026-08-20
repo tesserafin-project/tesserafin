@@ -44,6 +44,14 @@ public static class HlsManifestCredentialPropagator
     public const string MediaSourceKey = "mediaSourceId";
 
     /// <summary>
+    /// The play-session parameter every emitted uri carries when the capability has one
+    /// (#153-LTV-R1). The legacy segment route demands it, so a fragment uri that omitted it would
+    /// be refused — which is the point: LTV-R0 reached a segment with a capability minted under a
+    /// play session the server had never issued, because nothing on that route ever asked.
+    /// </summary>
+    public const string PlaySessionKey = "playSessionId";
+
+    /// <summary>
     /// The one tag whose <c>URI="…"</c> this path emits and this transformer rewrites.
     /// </summary>
     private const string MapTag = "#EXT-X-MAP:";
@@ -68,15 +76,16 @@ public static class HlsManifestCredentialPropagator
     /// <param name="capabilityValue">The validated capability value.</param>
     /// <param name="mediaSourceId">The media source the capability is bound to, or null.</param>
     /// <param name="origin">The origin the request arrived on, used to tell an external uri apart from a same-origin one.</param>
+    /// <param name="playSessionId">The play session the validated capability belongs to, or null when it has none.</param>
     /// <returns>The transformed manifest.</returns>
     /// <exception cref="InvalidOperationException">A uri already carries a different or duplicated capability, or the manifest names a uri form this transformer does not handle.</exception>
-    public static string Propagate(string manifest, string capabilityValue, string? mediaSourceId, Uri origin)
+    public static string Propagate(string manifest, string capabilityValue, string? mediaSourceId, Uri origin, string? playSessionId = null)
     {
         ArgumentNullException.ThrowIfNull(manifest);
         ArgumentException.ThrowIfNullOrEmpty(capabilityValue);
         ArgumentNullException.ThrowIfNull(origin);
 
-        var parameters = new List<KeyValuePair<string, string>>(2)
+        var parameters = new List<KeyValuePair<string, string>>(3)
         {
             new(CapabilityKey, capabilityValue)
         };
@@ -84,6 +93,13 @@ public static class HlsManifestCredentialPropagator
         if (!string.IsNullOrEmpty(mediaSourceId))
         {
             parameters.Add(new(MediaSourceKey, mediaSourceId));
+        }
+
+        // #153-LTV-R1. Omitted only when the capability genuinely has no play session, which is
+        // the one case where the route's demand is null too and the two agree.
+        if (!string.IsNullOrEmpty(playSessionId))
+        {
+            parameters.Add(new(PlaySessionKey, playSessionId));
         }
 
         foreach (var parameter in parameters)

@@ -151,7 +151,13 @@ public class HlsSegmentController : BaseTesserafinApiController
     // the shipped web client does for a transcode, could never reach a single Live TV segment. The
     // item binding still holds either way: this widens which capability satisfies the route, not
     // which item it reaches.
-    [RequiresPlaybackCapability(PlaybackCapabilityScope.Media, "itemId", "mediaSourceId")]
+    // #153-LTV-R1: and the play session, which was null. ValidateCapability guards its
+    // play-session comparison with `if (demand.PlaySessionId is not null && …)`, so a null demand
+    // skipped the check entirely and LTV-R0 reached a segment with a capability minted under a
+    // play session the server had never issued — 200, 387 468 bytes. The propagator now writes the
+    // play session into every fragment uri, so the client can satisfy the demand without the
+    // capability's binding ever being read off the wire.
+    [RequiresPlaybackCapability(PlaybackCapabilityScope.Media, "itemId", "mediaSourceId", "playSessionId")]
     public ActionResult GetHlsVideoSegmentLegacy(
         [FromRoute, Required] string itemId,
         [FromRoute, Required] string playlistId,

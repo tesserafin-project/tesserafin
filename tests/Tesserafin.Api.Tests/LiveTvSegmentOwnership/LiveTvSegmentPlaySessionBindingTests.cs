@@ -130,8 +130,10 @@ public sealed class LiveTvSegmentPlaySessionBindingTests
         {
             ["playbackCapability"] = presented,
             ["mediaSourceId"] = MediaSourceId,
-            ["playSessionId"] = presentedPlaySessionId,
-            ["PlaySessionId"] = presentedPlaySessionId
+            // Exactly one spelling. Request.Query is case-INSENSITIVE, so setting both
+            // `playSessionId` and `PlaySessionId` yields one comma-joined value and the route
+            // refuses for a reason that has nothing to do with the binding under test.
+            ["playSessionId"] = presentedPlaySessionId
         });
 
         var routeData = new RouteData();
