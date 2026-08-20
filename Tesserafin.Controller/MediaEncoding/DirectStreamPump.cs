@@ -202,6 +202,10 @@ public sealed class DirectStreamPump : IAsyncDisposable
         {
             ArrayPool<byte>.Shared.Return(buffer);
 
+            // One line per job, at Information: this is the only externally visible proof that the
+            // pumping task actually ended rather than being abandoned when its job was stopped.
+            _logger.LogInformation("Direct stream pump finished after {Bytes} bytes", BytesCopied);
+
             // Closing the consumer's input is what tells ffmpeg the stream ended, so it finalizes
             // its output instead of waiting forever.
             await DisposeQuietly(_destination).ConfigureAwait(false);
