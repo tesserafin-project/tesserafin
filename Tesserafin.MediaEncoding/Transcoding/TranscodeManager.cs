@@ -539,6 +539,25 @@ public sealed class TranscodeManager : ITranscodeManager, IDisposable
         _logger.LogDebug("Launched FFmpeg process");
         state.TranscodingJob = transcodingJob;
 
+        if (state.DirectStreamProvider is not null)
+        {
+            // The server already holds this live stream open. Feed ffmpeg the bytes over its
+            // standard input instead of letting it fetch the [Authorize]d LiveStreamFiles URL that
+            // SharedHttpStream publishes as MediaSource.Path - a child process has no session and
+            // would only ever be refused. EncodingHelper has already selected "-i pipe:0" for
+            // exactly this state. This must start before the "wait for the output file" loop below,
+            // or ffmpeg would be given nothing to read while that loop waits for its output.
+            //
+            // GetStream() is called once per ffmpeg process, so two concurrent consumers get two
+            // independent readers over the tuner's temp file and never share a Stream instance.
+            transcodingJob.CurrentAttempt!.StandardInputIsMediaPipe = true;
+            transcodingJob.DirectStreamPump = DirectStreamPump.Start(
+                new ProgressiveFileStream(state.DirectStreamProvider.GetStream()),
+                process.StandardInput.BaseStream,
+                _logger,
+                cancellationTokenSource.Token);
+        }
+
         // PR113b: raised only once Process.Start() has actually returned successfully - this is
         // the real, observed "ffmpeg launched" moment, not an approximation from some earlier step
         // (command-line build, resource acquisition) that could still fail before the process
@@ -566,6 +585,17 @@ public sealed class TranscodeManager : ITranscodeManager, IDisposable
         _logger.LogDebug("Waiting for the creation of {0}", ffmpegTargetFile);
         while (!File.Exists(ffmpegTargetFile) && !transcodingJob.HasExited)
         {
+            // A producer that dies before ffmpeg's first output must fail the job by name. Left to
+            // ffmpeg alone it looks like a slow start until the process happens to exit, and the
+            // real cause - the tuner - never appears in the error.
+            var pumpFault = transcodingJob.DirectStreamPump?.Fault;
+            if (pumpFault is not null)
+            {
+                OnTranscodeFailedToStart(outputPath, transcodingJobType, state);
+
+                throw new FfmpegException("The live stream feeding FFmpeg failed before any output was produced.", pumpFault);
+            }
+
             await Task.Delay(100, cancellationTokenSource.Token).ConfigureAwait(false);
         }
 

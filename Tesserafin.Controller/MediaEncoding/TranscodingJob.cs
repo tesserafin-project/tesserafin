@@ -160,6 +160,12 @@ public sealed class TranscodingJob : IDisposable
     public TranscodingSegmentCleaner? TranscodingSegmentCleaner { get; set; }
 
     /// <summary>
+    /// Gets or sets the pump feeding this job's ffmpeg process from a live stream provider, when
+    /// the input is stdin rather than a path or a URL. Null for every other job.
+    /// </summary>
+    public DirectStreamPump? DirectStreamPump { get; set; }
+
+    /// <summary>
     /// Gets or sets last ping date.
     /// </summary>
     public DateTime LastPingDate { get; set; }
@@ -263,6 +269,12 @@ public sealed class TranscodingJob : IDisposable
 #pragma warning disable CA1849 // Can't await in lock block
             TranscodingThrottler?.Stop().GetAwaiter().GetResult();
             TranscodingSegmentCleaner?.Stop();
+
+            // Stop the pump before the process. Closing stdin is the graceful stop for a piped job -
+            // ffmpeg sees EOF and finalizes its output - and it guarantees no write races against a
+            // process that is about to be killed. StopAsync is cancellation-driven and awaits the
+            // pump's own completion, so no pumping task outlives this call.
+            DirectStreamPump?.StopAsync().GetAwaiter().GetResult();
 #pragma warning restore CA1849
 
             CurrentAttempt?.Stop(_logger, Path);
@@ -289,6 +301,12 @@ public sealed class TranscodingJob : IDisposable
         // complete on disk. See PlaybackUrlContractEndToEndTests' Transcode_Hls_* scenario remarks for
         // how this was originally found.
         CurrentAttempt?.Dispose();
+#pragma warning disable CA1849 // Can't await in a synchronous Dispose
+        // Backstop for the paths that dispose a job without calling Stop() first - notably
+        // OnFfMpegProcessExited, which fires when ffmpeg ends on its own.
+        DirectStreamPump?.DisposeAsync().AsTask().GetAwaiter().GetResult();
+#pragma warning restore CA1849
+        DirectStreamPump = null;
         _killTimer?.Dispose();
         _killTimer = null;
         CancellationTokenSource?.Dispose();
