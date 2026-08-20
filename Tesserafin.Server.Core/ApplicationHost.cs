@@ -646,6 +646,13 @@ namespace Tesserafin.Server.Core
 
             serviceCollection.AddSingleton<ITranscodeManager, TranscodeManager>();
 
+            // #153-LTV-R1. The same instance, resolved through a narrower interface: the
+            // legacy HLS segment route asks who owns a playlist and nothing else, and the
+            // answer has to come from the live job list rather than from a second store
+            // that could fall out of step with it.
+            serviceCollection.AddSingleton<IHlsSegmentBindingRegistry>(
+                provider => (TranscodeManager)provider.GetRequiredService<ITranscodeManager>());
+
             // PR98 shadow mode: the concrete legacy planner and the v2 engine are both registered so
             // ShadowPlaybackSessionPlanner (the IPlaybackSessionPlanner actually resolved) can wrap
             // the legacy planner - which stays the source of truth - and run the v2 engine

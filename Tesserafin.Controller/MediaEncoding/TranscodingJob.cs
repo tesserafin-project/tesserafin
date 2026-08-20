@@ -32,6 +32,32 @@ public sealed class TranscodingJob : IDisposable
     public string? PlaySessionId { get; set; }
 
     /// <summary>
+    /// Gets or sets the item this job was started for (#153-LTV-R1).
+    /// </summary>
+    /// <remarks>
+    /// The job already carried the play session and the media source. It did not carry the item,
+    /// which is why the legacy HLS segment route had nothing to compare its <c>itemId</c> against
+    /// and simply did not read it.
+    /// </remarks>
+    public Guid ItemId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the media source identifier this job was started for (#153-LTV-R1).
+    /// </summary>
+    /// <remarks>
+    /// Taken from the request that started the job, not from <see cref="MediaSource"/>: the value
+    /// a capability is bound to is the one the client named, and for a live tuner source the two
+    /// can differ.
+    /// </remarks>
+    public string? MediaSourceId { get; set; }
+
+    /// <summary>
+    /// Gets or sets a number that increases with every job this process starts (#153-LTV-R1). It
+    /// distinguishes two jobs that happen to reuse one playlist identifier.
+    /// </summary>
+    public long Generation { get; set; }
+
+    /// <summary>
     /// Gets or sets the live stream identifier.
     /// </summary>
     public string? LiveStreamId { get; set; }

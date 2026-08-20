@@ -32,7 +32,7 @@ using Tesserafin.Model.Session;
 namespace Tesserafin.MediaEncoding.Transcoding;
 
 /// <inheritdoc cref="ITranscodeManager"/>
-public sealed class TranscodeManager : ITranscodeManager, IDisposable
+public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegistry, IDisposable
 {
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<TranscodeManager> _logger;
@@ -55,6 +55,10 @@ public sealed class TranscodeManager : ITranscodeManager, IDisposable
     });
 
     private readonly Version _maxFFmpegCkeyPauseSupported = new Version(6, 1);
+
+    // #153-LTV-R1. Monotonic across the process, so two jobs that reuse one playlist identifier
+    // are still distinguishable and a stale binding cannot be mistaken for a live one.
+    private long _jobGeneration;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TranscodeManager"/> class.
@@ -130,6 +134,49 @@ public sealed class TranscodeManager : ITranscodeManager, IDisposable
         {
             return _activeTranscodingJobs.FirstOrDefault(j => j.Type == type && string.Equals(j.Path, path, StringComparison.OrdinalIgnoreCase));
         }
+    }
+
+    /// <inheritdoc />
+    public HlsSegmentBinding? ResolveByPlaylistId(string playlistId)
+    {
+        if (string.IsNullOrEmpty(playlistId))
+        {
+            return null;
+        }
+
+        TranscodingJob? job;
+        lock (_activeTranscodingJobs)
+        {
+            // The playlist identifier IS the job's output file name without its extension: that is
+            // what DynamicHlsController passes to ffmpeg as `-hls_base_url "hls/{name}/"` and as
+            // the `-hls_segment_filename "{name}%d.{ext}"` prefix. Matching on it is therefore a
+            // server-side fact, not a guess about what the caller meant.
+            job = _activeTranscodingJobs.FirstOrDefault(j =>
+                j.Type == TranscodingJobType.Hls
+                && j.Path is not null
+                && string.Equals(Path.GetFileNameWithoutExtension(j.Path), playlistId, StringComparison.Ordinal));
+        }
+
+        if (job?.Path is null)
+        {
+            return null;
+        }
+
+        var canonicalPlaylistPath = Path.GetFullPath(job.Path);
+        var directory = Path.GetDirectoryName(canonicalPlaylistPath);
+        if (string.IsNullOrEmpty(directory))
+        {
+            return null;
+        }
+
+        return new HlsSegmentBinding(
+            Path.GetFileNameWithoutExtension(job.Path),
+            job.ItemId,
+            job.MediaSourceId,
+            job.PlaySessionId,
+            directory,
+            canonicalPlaylistPath,
+            job.Generation);
     }
 
     /// <inheritdoc />
@@ -684,7 +731,14 @@ public sealed class TranscodeManager : ITranscodeManager, IDisposable
                 Id = transcodingJobId,
                 PlaySessionId = playSessionId,
                 LiveStreamId = liveStreamId,
-                MediaSource = state.MediaSource
+                MediaSource = state.MediaSource,
+
+                // #153-LTV-R1. The binding the legacy HLS segment route compares against. Taken
+                // from the request that started the job, which is the same shape a capability is
+                // minted against, so the three-way comparison route/capability/job is meaningful.
+                ItemId = state.Request.Id,
+                MediaSourceId = state.Request.MediaSourceId,
+                Generation = Interlocked.Increment(ref _jobGeneration)
             };
 
             _activeTranscodingJobs.Add(job);
