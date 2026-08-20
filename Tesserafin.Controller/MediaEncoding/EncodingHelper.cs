@@ -17,6 +17,7 @@ using Microsoft.Extensions.Configuration;
 using Tesserafin.Common.Configuration;
 using Tesserafin.Controller.Extensions;
 using Tesserafin.Controller.IO;
+using Tesserafin.Controller.Streaming;
 using Tesserafin.Data;
 using Tesserafin.Data.Enums;
 using Tesserafin.Database.Implementations.Enums;
@@ -1288,6 +1289,16 @@ namespace Tesserafin.Controller.MediaEncoding
                 arg.Append(" -f concat -safe 0 -i \"")
                     .Append(concatFilePath)
                     .Append("\" ");
+            }
+            else if (state is StreamState { DirectStreamProvider: not null })
+            {
+                // A live stream the server already holds open. Its MediaSource.Path is the
+                // [Authorize]d /LiveTv/LiveStreamFiles/{id}/stream.ts URL, which ffmpeg - having no
+                // session, no api key and no user - can only fetch anonymously and be refused. Read
+                // the bytes off stdin instead; TranscodeManager pumps the provider into this
+                // process's standard input. See DirectStreamPump for why that is transport and not
+                // a new form of authorization.
+                arg.Append(" -i pipe:0");
             }
             else
             {

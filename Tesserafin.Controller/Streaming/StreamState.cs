@@ -51,10 +51,16 @@ public class StreamState : EncodingJobInfo, IDisposable
     public VideoRequestDto? VideoRequest => Request as VideoRequestDto;
 
     /// <summary>
-    /// Gets or sets the direct stream provider.
+    /// Gets or sets the direct stream provider: the already-open live stream this request is
+    /// reading, when there is one.
     /// </summary>
     /// <remarks>
-    /// Deprecated.
+    /// Load-bearing, not vestigial. Its presence is what selects <c>-i pipe:0</c> in
+    /// <see cref="Tesserafin.Controller.MediaEncoding.EncodingHelper.GetInputArgument"/> and what
+    /// makes <c>TranscodeManager.StartFfMpeg</c> pump the stream into ffmpeg's standard input,
+    /// instead of letting ffmpeg fetch the <c>[Authorize]</c>d
+    /// <c>/LiveTv/LiveStreamFiles/**</c> URL it has no credential for. See
+    /// <see cref="Tesserafin.Controller.MediaEncoding.DirectStreamPump"/>.
     /// </remarks>
     public IDirectStreamProvider? DirectStreamProvider { get; set; }
 
