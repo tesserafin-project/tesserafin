@@ -687,8 +687,15 @@ namespace Tesserafin.Server.Core.Library
                     // hack - these two values were taken from LiveTVMediaSourceProvider
                     string cacheKey = request.OpenToken;
 
+                    // #153-LTV-R1. The probe reads the tuner stream through the provider the tuner
+                    // host just handed us, exactly as the transcode does since #153-LTV-S0. Before
+                    // this it opened mediaSource.Path — the server's own [Authorize]d
+                    // /LiveTv/LiveStreamFiles/** route — with no credential, and was refused 401 on
+                    // every live channel, which is why the opened source carried Codec null and
+                    // Index -1. `liveStream as IDirectStreamProvider` is null for ExclusiveLiveStream,
+                    // and that path keeps the historical behaviour untouched.
                     await new LiveStreamHelper(_mediaEncoder, _logger, _appPaths)
-                        .AddMediaInfoWithProbe(mediaSource, false, cacheKey, true, cancellationToken)
+                        .AddMediaInfoWithProbe(mediaSource, false, cacheKey, true, liveStream as IDirectStreamProvider, cancellationToken)
                         .ConfigureAwait(false);
                 }
             }

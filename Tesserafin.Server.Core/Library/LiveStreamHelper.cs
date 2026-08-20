@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Tesserafin.Common.Configuration;
 using Tesserafin.Common.Extensions;
+using Tesserafin.Controller.Library;
 using Tesserafin.Controller.MediaEncoding;
 using Tesserafin.Extensions.Json;
 using Tesserafin.Model.Dlna;
@@ -35,7 +36,26 @@ namespace Tesserafin.Server.Core.Library
             _appPaths = appPaths;
         }
 
-        public async Task AddMediaInfoWithProbe(MediaSourceInfo mediaSource, bool isAudio, string? cacheKey, bool addProbeDelay, CancellationToken cancellationToken)
+        public Task AddMediaInfoWithProbe(MediaSourceInfo mediaSource, bool isAudio, string? cacheKey, bool addProbeDelay, CancellationToken cancellationToken)
+            => AddMediaInfoWithProbe(mediaSource, isAudio, cacheKey, addProbeDelay, null, cancellationToken);
+
+        /// <summary>
+        /// Probes a media source, reading the media from <paramref name="directStreamReader"/> when
+        /// one is supplied rather than opening <see cref="MediaSourceInfo.Path"/> (#153-LTV-R1).
+        /// </summary>
+        /// <param name="mediaSource">The media source to fill in.</param>
+        /// <param name="isAudio">Whether the source is audio.</param>
+        /// <param name="cacheKey">The media-info cache key, or null not to cache.</param>
+        /// <param name="addProbeDelay">Whether to wait before probing, as a live stream needs.</param>
+        /// <param name="directStreamReader">
+        /// A reader over the media itself. Supplied for a live tuner stream, whose
+        /// <see cref="MediaSourceInfo.Path"/> is the server's own <c>[Authorize]</c>d
+        /// <c>/LiveTv/LiveStreamFiles/**</c> route: sending ffprobe there produces exactly one
+        /// uncredentialed GET, which the server refuses 401 (LTV-R0 finding 1).
+        /// </param>
+        /// <param name="cancellationToken">The cancellation token.</param>
+        /// <returns>A task.</returns>
+        public async Task AddMediaInfoWithProbe(MediaSourceInfo mediaSource, bool isAudio, string? cacheKey, bool addProbeDelay, IDirectStreamProvider? directStreamReader, CancellationToken cancellationToken)
         {
             var originalRuntime = mediaSource.RunTimeTicks;
 
@@ -83,7 +103,8 @@ namespace Tesserafin.Server.Core.Library
                     {
                         MediaSource = mediaSource,
                         MediaType = isAudio ? DlnaProfileType.Audio : DlnaProfileType.Video,
-                        ExtractChapters = false
+                        ExtractChapters = false,
+                        DirectStreamReader = directStreamReader
                     },
                     cancellationToken).ConfigureAwait(false);
 
