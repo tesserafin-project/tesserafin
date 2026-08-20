@@ -345,9 +345,19 @@ public class DynamicHlsController : BaseTesserafinApiController
         // this response. So the capability THIS request was authorized with is added here, to the
         // response only. The file on disk, ffmpeg's argv, its environment and its logs are all
         // untouched by construction.
-        var validated = ValidatedPlaybackCapability.From(HttpContext.Items);
-        if (validated is not null)
+        // #153-LTV-R1. The source is named in exactly one place — PlaybackCapabilityProvenance —
+        // so "the propagated value came from a validated result" is a decision a test can reach
+        // rather than a line a reviewer has to read. LTV-R0's control M1 replaced the read below
+        // with Request.Query["playbackCapability"] and nothing in the repository went red.
+        var provenance = PlaybackCapabilityProvenance.Resolve(HttpContext);
+        if (provenance.Outcome == PlaybackCapabilityProvenanceOutcome.Refuse)
         {
+            return Unauthorized();
+        }
+
+        if (provenance.Outcome == PlaybackCapabilityProvenanceOutcome.Propagate)
+        {
+            var validated = provenance.Capability!;
             playlistText = HlsManifestCredentialPropagator.Propagate(
                 playlistText,
                 validated.Value,
