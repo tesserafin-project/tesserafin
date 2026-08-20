@@ -105,6 +105,13 @@ public sealed class HlsSegmentOwnershipTests : IDisposable
     /// <summary>
     /// A capability bound to no media source must not stand in for one bound to the job's.
     /// </summary>
+    /// <remarks>
+    /// The job is given the SAME play session the capability carries, deliberately. Without that,
+    /// this test refuses through the play-session comparison instead — the job's play session
+    /// would be null while the capability's is not — and the media-source comparison it is named
+    /// for is never reached. The `r1-drop-media-source-job-comparison` hostile control graded
+    /// INERT and is what exposed it: removing the media-source check left this test green.
+    /// </remarks>
     [Fact]
     public void AnItemOnlyCapability_CannotDowngradeAMediaSourceBoundJob()
     {
@@ -113,6 +120,7 @@ public sealed class HlsSegmentOwnershipTests : IDisposable
             playlistId: JobA,
             segmentId: JobA + "0",
             jobMediaSourceId: JobMediaSource,
+            jobPlaySessionId: JobPlaySession,
             capability: Capability(mediaSourceId: null, playSessionId: JobPlaySession),
             requestedMediaSourceId: JobMediaSource);
 

@@ -391,10 +391,10 @@
         {
           "file": "Tesserafin.Api/Attributes/RequiresPlaybackCapabilityAttribute.cs",
           "find": "        context.HttpContext.Features.Set(new ValidatedPlaybackCapability(",
-          "replace": "        _ = new ValidatedPlaybackCapability("
+          "replace": "        new Microsoft.AspNetCore.Http.Features.FeatureCollection().Set(new ValidatedPlaybackCapability("
         }
       ],
-      "supersededReason": "The historical anchor wrote the proof into HttpContext.Items under a static object key. #153-LTV-R1 Phase 2 replaced that mechanism with a typed request feature, on LTV-R0's finding that the Items arrangement was defended by nothing. The exact hunk cannot be reapplied because the line it edited no longer exists.",
+      "supersededReason": "The historical anchor wrote the proof into HttpContext.Items under a static object key. #153-LTV-R1 Phase 2 replaced that mechanism with a typed request feature, on LTV-R0's finding that the Items arrangement was defended by nothing. The exact hunk cannot be reapplied because the line it edited no longer exists. The replacement records the proof onto a throwaway FeatureCollection instead of the request's, so the request never carries it. Discarding the expression with `_ =` would leave the statement's parentheses unbalanced and break the build, which grades ERROR and proves nothing about the property.",
       "historicalMutations": [
         {
           "file": "Tesserafin.Api/Attributes/RequiresPlaybackCapabilityAttribute.cs",
@@ -739,9 +739,10 @@
         {
           "file": "Tesserafin.Api/Controllers/HlsSegmentController.cs",
           "find": "        var binding = _segmentBindings.ResolveByPlaylistId(playlistId);\n        if (binding is null)",
-          "replace": "        var binding = _segmentBindings.ResolveByPlaylistId(playlistId)\n            ?? new HlsSegmentBinding(playlistId, Guid.Empty, null, null, _serverConfigurationManager.GetTranscodePath(), _serverConfigurationManager.GetTranscodePath(), 0);\n        if (binding is null)"
+          "replace": "        var transcodePathForFallback = _serverConfigurationManager.GetTranscodePath();\n        var binding = _segmentBindings.ResolveByPlaylistId(playlistId)\n            ?? new HlsSegmentBinding(\n                segmentId,\n                Guid.TryParse(itemId, out var fallbackItemId) ? fallbackItemId : Guid.Empty,\n                Request.Query[\"mediaSourceId\"].ToString(),\n                null,\n                Path.GetFullPath(transcodePathForFallback),\n                Path.GetFullPath(transcodePathForFallback),\n                0);\n        if (binding is null)"
         }
-      ]
+      ],
+      "note": "The mutation must reconstruct the HISTORICAL resolution, not merely skip the null check. A fabricated binding carrying Guid.Empty is refused by the item comparison a few lines later, which leaves the gate green and grades INERT - measured, on the first roster run."
     },
     {
       "id": "r1-positive-control",
