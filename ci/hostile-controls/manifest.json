@@ -792,6 +792,30 @@
           "Tesserafin.Server.Implementations.Tests.LiveTvProbe.LiveStreamProbeInputTests"
         ]
       }
+    },
+    {
+      "id": "r1-drop-caller-named-media-source-comparison",
+      "stage": "R1",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "a media source the caller names must be the job's",
+      "timeoutSeconds": 1800,
+      "note": "Separate from r1-drop-media-source-job-comparison, which mutates the CAPABILITY's binding. After the S0 rig measurement forced the caller-named check to be relaxed to 'agree when named', that surviving half would otherwise be defended by one test and zero controls - the exact shape LTV-R0 built its sharpest criticism around.",
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Controllers/HlsSegmentController.cs",
+          "find": "        return string.Equals(requested, binding.MediaSourceId, StringComparison.Ordinal);\n    }",
+          "replace": "        _ = binding.MediaSourceId;\n        return true;\n    }"
+        }
+      ],
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsSegmentOwnershipTests.AMediaSourceThatIsNotTheJobs_IsRefused",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsSegmentOwnershipTests.AMediaSourceThatIsNotTheJobs_IsRefused"
+        ]
+      }
     }
   ]
 }

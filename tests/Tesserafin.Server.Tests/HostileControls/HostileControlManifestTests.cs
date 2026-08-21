@@ -42,7 +42,8 @@ public sealed class HostileControlManifestTests
         "r1-accept-a-query-with-no-validated-provenance",
         "r1-restore-the-ffprobe-http-auto-fetch",
         "r1-restore-segment-id-only-resolution",
-        "r1-serve-a-file-after-the-binding-expired"
+        "r1-serve-a-file-after-the-binding-expired",
+        "r1-drop-caller-named-media-source-comparison"
     };
 
     [Fact]
