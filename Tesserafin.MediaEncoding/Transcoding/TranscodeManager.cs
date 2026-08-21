@@ -144,19 +144,64 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
             return null;
         }
 
-        TranscodingJob? job;
-        lock (_activeTranscodingJobs)
+        // The playlist identifier IS the job's output file name without its extension: that is
+        // what DynamicHlsController passes to ffmpeg as `-hls_base_url "hls/{name}/"` and as
+        // the `-hls_segment_filename "{name}%d.{ext}"` prefix. Matching on it is therefore a
+        // server-side fact, not a guess about what the caller meant.
+        return Project(SelectHlsJob(j =>
+            string.Equals(Path.GetFileNameWithoutExtension(j.Path), playlistId, StringComparison.Ordinal)));
+    }
+
+    /// <inheritdoc />
+    public HlsSegmentBinding? ResolveBySegmentName(string segmentName)
+    {
+        if (string.IsNullOrEmpty(segmentName))
         {
-            // The playlist identifier IS the job's output file name without its extension: that is
-            // what DynamicHlsController passes to ffmpeg as `-hls_base_url "hls/{name}/"` and as
-            // the `-hls_segment_filename "{name}%d.{ext}"` prefix. Matching on it is therefore a
-            // server-side fact, not a guess about what the caller meant.
-            job = _activeTranscodingJobs.FirstOrDefault(j =>
-                j.Type == TranscodingJobType.Hls
-                && j.Path is not null
-                && string.Equals(Path.GetFileNameWithoutExtension(j.Path), playlistId, StringComparison.Ordinal));
+            return null;
         }
 
+        // #153-LTV-R3. The audio sibling route names no playlist, so the segment name is all there
+        // is to select a job with — and selecting is ALL it is used for. ffmpeg writes a job's
+        // segments as "{playlistId}%d.{ext}", so the owner is the job whose playlist identifier
+        // prefixes the name. The file itself is then built from that job's own canonical root by
+        // the caller of this method, never from the transcode folder plus this string.
+        return Project(SelectHlsJob(j =>
+        {
+            var jobPlaylistId = Path.GetFileNameWithoutExtension(j.Path);
+            return !string.IsNullOrEmpty(jobPlaylistId)
+                   && segmentName.StartsWith(jobPlaylistId, StringComparison.Ordinal);
+        }));
+    }
+
+    /// <inheritdoc />
+    public HlsSegmentBinding? ResolveByOutputPath(string outputPath)
+    {
+        if (string.IsNullOrEmpty(outputPath))
+        {
+            return null;
+        }
+
+        // #153-LTV-R3. DynamicHlsController already knows the path it would serve from; what it
+        // does not know is whose job writes it. The comparison is on the canonicalised path, so a
+        // job selected here is a job this server started, not a path a caller composed.
+        var canonical = Path.GetFullPath(outputPath);
+        return Project(SelectHlsJob(j =>
+            string.Equals(Path.GetFullPath(j.Path!), canonical, StringComparison.Ordinal)));
+    }
+
+    private TranscodingJob? SelectHlsJob(Func<TranscodingJob, bool> predicate)
+    {
+        lock (_activeTranscodingJobs)
+        {
+            return _activeTranscodingJobs.FirstOrDefault(j =>
+                j.Type == TranscodingJobType.Hls
+                && j.Path is not null
+                && predicate(j));
+        }
+    }
+
+    private static HlsSegmentBinding? Project(TranscodingJob? job)
+    {
         if (job?.Path is null)
         {
             return null;
@@ -171,6 +216,8 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
 
         return new HlsSegmentBinding(
             Path.GetFileNameWithoutExtension(job.Path),
+            job.UserId,
+            job.OwnerDeviceId,
             job.ItemId,
             job.MediaSourceId,
             job.PlaySessionId,
@@ -527,6 +574,7 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
             transcodingJobType,
             process,
             state.Request.DeviceId,
+            userId,
             state,
             cancellationTokenSource);
 
@@ -715,6 +763,7 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
         TranscodingJobType type,
         Process process,
         string? deviceId,
+        Guid ownerUserId,
         StreamState state,
         CancellationTokenSource cancellationTokenSource)
     {
@@ -738,6 +787,14 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
                 // minted against, so the three-way comparison route/capability/job is meaningful.
                 ItemId = state.Request.Id,
                 MediaSourceId = state.Request.MediaSourceId,
+
+                // #153-LTV-R3. The job's owner. `ownerUserId` is the `userId` argument
+                // StartFfMpeg is already given, which every call site fills from the validated
+                // principal; `state.OwnerDeviceId` is the token's own device claim. Neither is a
+                // query parameter, and `DeviceId` above - which is one - stays where it was so
+                // that session reporting and teardown keep their meaning.
+                UserId = ownerUserId,
+                OwnerDeviceId = state.OwnerDeviceId,
                 Generation = Interlocked.Increment(ref _jobGeneration)
             };
 

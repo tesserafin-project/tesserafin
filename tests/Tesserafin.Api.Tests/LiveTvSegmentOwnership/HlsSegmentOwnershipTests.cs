@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 using Tesserafin.Api.Auth.PlaybackCapabilityPolicy;
+using Tesserafin.Api.Constants;
 using Tesserafin.Api.Controllers;
 using Tesserafin.Common.Configuration;
 using Tesserafin.Controller.Configuration;
@@ -38,8 +40,11 @@ public sealed class HlsSegmentOwnershipTests : IDisposable
     private const string JobMediaSource = "6d5da76e3955fd1005f75c496c371521";
     private const string JobPlaySession = "306f71094f36456f9d0dc6e7b12b8a6b";
 
+    private const string OwnerDevice = "owner-device";
+
     private static readonly Guid _itemA = new("11111111111111111111111111111111");
     private static readonly Guid _itemB = new("22222222222222222222222222222222");
+    private static readonly Guid _ownerUserId = new("aaaaaaaa11114444888800000000cccc");
 
     private readonly string _transcodePath;
 
@@ -273,6 +278,8 @@ public sealed class HlsSegmentOwnershipTests : IDisposable
             ? null
             : new HlsSegmentBinding(
                 JobA,
+                UserId: _ownerUserId,
+                DeviceId: OwnerDevice,
                 _itemA,
                 MediaSourceId: jobMediaSourceId,
                 PlaySessionId: jobPlaySessionId,
@@ -290,12 +297,25 @@ public sealed class HlsSegmentOwnershipTests : IDisposable
             .Setup(t => t.OnTranscodeBeginRequest(It.IsAny<string>(), It.IsAny<TranscodingJobType>()))
             .Returns((TranscodingJob?)null);
 
+        // #153-LTV-R3: every invocation here is the job's OWNER. These tests are about which job
+        // a caller reaches, not about which caller reaches a job — that is HlsJobOwnershipTests —
+        // so the principal has to satisfy the ownership authorizer or every assertion below would
+        // pass for the wrong reason.
+        var identity = new ClaimsIdentity(
+            new[]
+            {
+                new Claim(InternalClaimTypes.UserId, _ownerUserId.ToString("N")),
+                new Claim(InternalClaimTypes.DeviceId, OwnerDevice)
+            },
+            "CustomAuthentication");
+
         var httpContext = new DefaultHttpContext
         {
             Request =
             {
                 Path = new PathString($"/Videos/{itemId:N}/hls/{playlistId}/{segmentId}.ts")
-            }
+            },
+            User = new ClaimsPrincipal(identity)
         };
 
         if (requestedMediaSourceId is not null)

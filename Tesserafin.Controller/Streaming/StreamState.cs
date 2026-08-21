@@ -133,6 +133,17 @@ public class StreamState : EncodingJobInfo, IDisposable
     public string? UserAgent { get; set; }
 
     /// <summary>
+    /// Gets or sets the device id of the validated token this request arrived on (#153-LTV-R3).
+    /// </summary>
+    /// <remarks>
+    /// <c>StreamingRequestDto.DeviceId</c> is a query parameter and is what the client
+    /// claims about itself. This is the <c>Tesserafin-DeviceId</c> claim, which the server issued
+    /// and validated. A transcoding job's owner is recorded from this, so that the segment routes
+    /// compare a validated claim against a validated claim rather than against a url.
+    /// </remarks>
+    public string? OwnerDeviceId { get; set; }
+
+    /// <summary>
     /// Gets or sets a value indicating whether to estimate the content length.
     /// </summary>
     public bool EstimateContentLength { get; set; }
