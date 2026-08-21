@@ -78,7 +78,12 @@ public static class StreamingHelpers
         {
             Request = streamingRequest,
             RequestedUrl = url,
-            UserAgent = httpRequest.Headers[HeaderNames.UserAgent]
+            UserAgent = httpRequest.Headers[HeaderNames.UserAgent],
+
+            // #153-LTV-R3. The one place a transcode's owning device is read, and it is read from
+            // the validated token, not from `streamingRequest.DeviceId`, which is a query
+            // parameter the caller controls.
+            OwnerDeviceId = httpContext.User.GetDeviceId()
         };
 
         var userId = httpContext.User.GetUserId();

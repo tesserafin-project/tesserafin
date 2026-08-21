@@ -52,6 +52,33 @@ public sealed class TranscodingJob : IDisposable
     public string? MediaSourceId { get; set; }
 
     /// <summary>
+    /// Gets or sets the user this job was started for (#153-LTV-R3).
+    /// </summary>
+    /// <remarks>
+    /// Taken from the validated principal of the request that started the transcode — the
+    /// <c>userId</c> argument <c>ITranscodeManager.StartFfMpeg</c> is already given, which every
+    /// call site fills from <c>HttpContext.User.GetUserId()</c>. It is never reconstructed from a
+    /// query parameter: a url may corroborate this binding, it may not create it.
+    ///
+    /// <see cref="Guid.Empty"/> means the job has no resolvable owner — an api-key principal
+    /// resolves to no user — and a job with no owner is reachable by nobody.
+    /// </remarks>
+    public Guid UserId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the device this job was started from, as the validated token names it
+    /// (#153-LTV-R3).
+    /// </summary>
+    /// <remarks>
+    /// Deliberately NOT <see cref="DeviceId"/>. That one is <c>state.Request.DeviceId</c>, a query
+    /// parameter: it is what the client says its device is, it drives session reporting and
+    /// <c>KillTranscodingJobs</c>, and changing its meaning would change teardown. This one is the
+    /// <c>Tesserafin-DeviceId</c> claim of the token that started the job, so comparing a caller's
+    /// claim against it compares two server-validated values.
+    /// </remarks>
+    public string? OwnerDeviceId { get; set; }
+
+    /// <summary>
     /// Gets or sets a number that increases with every job this process starts (#153-LTV-R1). It
     /// distinguishes two jobs that happen to reuse one playlist identifier.
     /// </summary>

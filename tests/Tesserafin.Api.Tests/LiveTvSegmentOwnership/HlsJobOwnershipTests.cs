@@ -330,6 +330,8 @@ public sealed class HlsJobOwnershipTests : IDisposable
             ? null
             : new HlsSegmentBinding(
                 JobA,
+                UserId: _ownerUserId,
+                DeviceId: OwnerDevice,
                 _itemA,
                 MediaSourceId: JobMediaSource,
                 PlaySessionId: JobPlaySession,
