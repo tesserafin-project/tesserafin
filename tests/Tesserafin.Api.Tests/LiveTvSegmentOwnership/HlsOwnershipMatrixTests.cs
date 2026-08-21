@@ -88,8 +88,19 @@ public sealed class HlsOwnershipMatrixTests : IDisposable
         /// <summary>Durable token, same user and same device as the job.</summary>
         DurableOwner,
 
-        /// <summary>Durable token belonging to a different user.</summary>
+        /// <summary>Durable token belonging to a different user, on a different device.</summary>
         DurableOtherUser,
+
+        /// <summary>
+        /// A different user whose token names the SAME device as the job's.
+        /// </summary>
+        /// <remarks>
+        /// Two people on one shared device — a family television, a browser profile handed over —
+        /// is the ordinary case, not a contrived one. This row exists because without it the
+        /// device comparison alone refuses every other-user row, and the hostile control that
+        /// deletes the USER comparison graded INERT: nothing separated the two checks.
+        /// </remarks>
+        DurableOtherUserSameDevice,
 
         /// <summary>The job's user, on a device the job was not started from.</summary>
         DurableOtherDevice,
@@ -147,6 +158,7 @@ public sealed class HlsOwnershipMatrixTests : IDisposable
     {
         new object[] { Row.DurableOwner, true },
         new object[] { Row.DurableOtherUser, false },
+        new object[] { Row.DurableOtherUserSameDevice, false },
         new object[] { Row.DurableOtherDevice, false },
         new object[] { Row.AdministratorWhoIsNotTheOwner, false },
         new object[] { Row.ApiKeyWithNoUser, false },
@@ -437,6 +449,7 @@ public sealed class HlsOwnershipMatrixTests : IDisposable
         var userId = row switch
         {
             Row.DurableOtherUser => _strangerUserId,
+            Row.DurableOtherUserSameDevice => _strangerUserId,
             Row.AdministratorWhoIsNotTheOwner => _strangerUserId,
             Row.ApiKeyWithNoUser => Guid.Empty,
             _ => _ownerUserId
@@ -453,6 +466,7 @@ public sealed class HlsOwnershipMatrixTests : IDisposable
         {
             Row.DurableOtherDevice => "some-other-device",
             Row.DurableOtherUser => "stranger-device",
+            Row.DurableOtherUserSameDevice => OwnerDevice,
             Row.AdministratorWhoIsNotTheOwner => "admin-device",
             Row.ApiKeyWithNoUser => null,
             _ when CapabilityFor(row) is not null => null,

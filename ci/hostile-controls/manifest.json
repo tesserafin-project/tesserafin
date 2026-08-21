@@ -519,7 +519,7 @@
           "replace": "                // MUTATION: append a second, identical capability.\n"
         }
       ],
-      "note": "The mutation removes the skip, not the branch. Writing `if (false)` instead does not compile \u2014 the analyzers reject the unreachable body \u2014 and an ERROR grade would say nothing about the property."
+      "note": "The mutation removes the skip, not the branch. Writing `if (false)` instead does not compile — the analyzers reject the unreachable body — and an ERROR grade would say nothing about the property."
     },
     {
       "id": "s1-propagate-api-key",
@@ -592,10 +592,11 @@
       "mutations": [
         {
           "file": "Tesserafin.Api/Controllers/HlsSegmentController.cs",
-          "find": "        if (!Guid.TryParse(itemId, out var routeItemId) || !routeItemId.Equals(binding.ItemId))",
-          "replace": "        if (!Guid.TryParse(itemId, out var routeItemId) || routeItemId.Equals(binding.ItemId) || true)"
+          "find": "        if (!Guid.TryParse(itemId, out var routeItemId) || !routeItemId.Equals(binding.ItemId))\n        {\n            // itemId is consumed here, and this is the only place it ever was not.",
+          "replace": "        if (!Guid.TryParse(itemId, out var routeItemId) || routeItemId.Equals(binding.ItemId) || true)\n        {\n            // itemId is consumed here, and this is the only place it ever was not."
         }
-      ]
+      ],
+      "note": "#153-LTV-R3 re-anchored: the same comparison now appears on three actions, so the anchor carries the video route own comment line to stay unique."
     },
     {
       "id": "r1-drop-media-source-job-comparison",
@@ -614,11 +615,12 @@
       },
       "mutations": [
         {
-          "file": "Tesserafin.Api/Controllers/HlsSegmentController.cs",
+          "file": "Tesserafin.Api/Auth/HlsJobOwnership/HlsJobOwnershipAuthorizer.cs",
           "find": "        if (!string.Equals(capability.MediaSourceId, binding.MediaSourceId, StringComparison.Ordinal))\n        {\n            return false;\n        }",
           "replace": "        if (!string.Equals(capability.MediaSourceId, binding.MediaSourceId, StringComparison.Ordinal))\n        {\n            _ = binding.MediaSourceId;\n        }"
         }
-      ]
+      ],
+      "note": "#153-LTV-R3 re-anchored: the capability comparisons moved out of the controller into the shared authorizer. Same line, same property, new home."
     },
     {
       "id": "r1-drop-play-session-job-comparison",
@@ -637,11 +639,12 @@
       },
       "mutations": [
         {
-          "file": "Tesserafin.Api/Controllers/HlsSegmentController.cs",
-          "find": "        return string.IsNullOrEmpty(capability.PlaySessionId)\n            ? string.IsNullOrEmpty(binding.PlaySessionId)\n            : string.Equals(capability.PlaySessionId, binding.PlaySessionId, StringComparison.Ordinal);",
-          "replace": "        _ = binding.PlaySessionId;\n        return true;"
+          "file": "Tesserafin.Api/Auth/HlsJobOwnership/HlsJobOwnershipAuthorizer.cs",
+          "find": "        var playSessionsAgree = string.IsNullOrEmpty(capability.PlaySessionId)\n            ? string.IsNullOrEmpty(binding.PlaySessionId)\n            : string.Equals(capability.PlaySessionId, binding.PlaySessionId, StringComparison.Ordinal);",
+          "replace": "        _ = binding.PlaySessionId;\n        var playSessionsAgree = true;"
         }
-      ]
+      ],
+      "note": "#153-LTV-R3 re-anchored into the shared authorizer, same as the media-source control."
     },
     {
       "id": "r1-read-capability-from-the-query",
@@ -741,21 +744,22 @@
       "property": "a file whose job is gone is refused, with no fallback to the historical resolution",
       "timeoutSeconds": 1800,
       "gate": {
-        "kind": "dotnet-test",
-        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
-        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsSegmentOwnershipTests.WithNoServerSideJob_TheAnswerIsAClosedRefusal",
-        "expectedTests": [
-          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsSegmentOwnershipTests.WithNoServerSideJob_TheAnswerIsAClosedRefusal"
-        ]
+        "kind": "inventory",
+        "script": "ci/hls-job-backed-route-inventory.sh"
       },
       "mutations": [
         {
           "file": "Tesserafin.Api/Controllers/HlsSegmentController.cs",
-          "find": "        var binding = _segmentBindings.ResolveByPlaylistId(playlistId);\n        if (binding is null)",
-          "replace": "        var transcodePathForFallback = _serverConfigurationManager.GetTranscodePath();\n        var binding = _segmentBindings.ResolveByPlaylistId(playlistId)\n            ?? new HlsSegmentBinding(\n                segmentId,\n                Guid.TryParse(itemId, out var fallbackItemId) ? fallbackItemId : Guid.Empty,\n                Request.Query[\"mediaSourceId\"].ToString(),\n                null,\n                Path.GetFullPath(transcodePathForFallback),\n                Path.GetFullPath(transcodePathForFallback),\n                0);\n        if (binding is null)"
+          "find": "    public HlsSegmentController(\n        ITranscodeManager transcodeManager,",
+          "replace": "    public HlsSegmentController(\n        IServerConfigurationManager serverConfigurationManager,\n        ITranscodeManager transcodeManager,"
+        },
+        {
+          "file": "Tesserafin.Api/Controllers/HlsSegmentController.cs",
+          "find": "        var file = Path.GetFullPath(Path.Combine(\n            binding.CanonicalRoot,\n            string.Concat(segmentId, Path.GetExtension(Request.Path.Value.AsSpan()))));\n\n        if (!string.Equals(Path.GetDirectoryName(file), binding.CanonicalRoot, StringComparison.Ordinal))\n        {\n            return BadRequest(\"Invalid segment.\");\n        }\n\n        return GetFileResult(file, binding.CanonicalPlaylistPath);",
+          "replace": "        var file = Path.GetFullPath(Path.Combine(\n            _serverConfigurationManager.GetTranscodePath(),\n            string.Concat(segmentId, Path.GetExtension(Request.Path.Value.AsSpan()))));\n\n        return GetFileResult(file, binding.CanonicalPlaylistPath);"
         }
       ],
-      "note": "The mutation must reconstruct the HISTORICAL resolution, not merely skip the null check. A fabricated binding carrying Guid.Empty is refused by the item comparison a few lines later, which leaves the gate green and grades INERT - measured, on the first roster run."
+      "note": "#153-LTV-R3 RE-GRADED, and the reason is a strengthening rather than a weakening. The historical fallback used to be a line a behavioural test could catch. It is now UNREPRESENTABLE in the controller: IServerConfigurationManager was removed from it, so the shared transcode folder cannot be named at all, and writing the fallback back in requires re-adding the dependency. That is what this mutation does, and the source gate is what refuses it. The behavioural half of the property is still held by WithNoServerSideJob_TheAnswerIsAClosedRefusal and by the matrix row OwnerWhoseJobIsGone, both of which stay green."
     },
     {
       "id": "r1-positive-control",
@@ -816,6 +820,274 @@
           "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsSegmentOwnershipTests.AMediaSourceThatIsNotTheJobs_IsRefused"
         ]
       }
+    },
+    {
+      "id": "r3-positive-control",
+      "stage": "R3",
+      "status": "NEW",
+      "expect": "PASS",
+      "property": "the whole Phase 4 ownership matrix, unmutated",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests"
+      },
+      "mutations": [],
+      "note": "Anti-vacuity for every RED below: if the matrix could not pass on an unmutated tree, a mutation turning it red would prove nothing."
+    },
+    {
+      "id": "r3-positive-control-inventory",
+      "stage": "R3",
+      "status": "NEW",
+      "expect": "PASS",
+      "property": "the job-backed route inventory and ownership gate, unmutated",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "inventory",
+        "script": "ci/hls-job-backed-route-inventory.sh"
+      },
+      "mutations": [],
+      "note": "Same, for the controls graded by the source gate."
+    },
+    {
+      "id": "r3-drop-user-comparison",
+      "stage": "R3",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "the caller user id is compared with the job owner",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests"
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Auth/HlsJobOwnership/HlsJobOwnershipAuthorizer.cs",
+          "find": "        if (callerUserId.IsEmpty() || !callerUserId.Equals(ownerUserId))",
+          "replace": "        if (callerUserId.IsEmpty() || (false && !callerUserId.Equals(ownerUserId)))"
+        }
+      ]
+    },
+    {
+      "id": "r3-drop-device-comparison",
+      "stage": "R3",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "the caller device is compared with the device the job was started from",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests"
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Auth/HlsJobOwnership/HlsJobOwnershipAuthorizer.cs",
+          "find": "        return !string.IsNullOrEmpty(callerDeviceId)\n               && string.Equals(callerDeviceId, ownerDeviceId, StringComparison.Ordinal);",
+          "replace": "        _ = ownerDeviceId;\n        return !string.IsNullOrEmpty(callerDeviceId);"
+        }
+      ]
+    },
+    {
+      "id": "r3-reintroduce-admin-bypass",
+      "stage": "R3",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "an administrator who does not own the job is refused like anyone else",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests"
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Auth/HlsJobOwnership/HlsJobOwnershipAuthorizer.cs",
+          "find": "        if (user.GetIsApiKey())\n        {\n            return false;\n        }",
+          "replace": "        if (user.IsInRole(UserRoles.Administrator))\n        {\n            return true;\n        }\n\n        if (user.GetIsApiKey())\n        {\n            return false;\n        }"
+        },
+        {
+          "file": "Tesserafin.Api/Auth/HlsJobOwnership/HlsJobOwnershipAuthorizer.cs",
+          "find": "using Tesserafin.Api.Auth.PlaybackCapabilityPolicy;",
+          "replace": "using Tesserafin.Api.Auth.PlaybackCapabilityPolicy;\nusing Tesserafin.Api.Constants;"
+        }
+      ]
+    },
+    {
+      "id": "r3-accept-api-key-without-user",
+      "stage": "R3",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "an api key, which resolves to no user, can never be a job owner",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests"
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Auth/HlsJobOwnership/HlsJobOwnershipAuthorizer.cs",
+          "find": "        if (user.GetIsApiKey())\n        {\n            return false;\n        }",
+          "replace": "        if (user.GetIsApiKey())\n        {\n            return true;\n        }"
+        }
+      ]
+    },
+    {
+      "id": "r3-remove-the-audio-route-authorizer",
+      "stage": "R3",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "the audio sibling refuses a caller who is not the job owner",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests"
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Auth/HlsJobOwnership/HlsJobOwnershipAuthorizer.cs",
+          "find": "    public HlsJobOwnershipDecision AuthorizeBySegmentName(HttpContext context, string segmentName)\n        => Decide(context, _bindings.ResolveBySegmentName(segmentName));",
+          "replace": "    public HlsJobOwnershipDecision AuthorizeBySegmentName(HttpContext context, string segmentName)\n        => _bindings.ResolveBySegmentName(segmentName) is { } unchecked_\n            ? HlsJobOwnershipDecision.Authorized(unchecked_)\n            : HlsJobOwnershipDecision.NoSuchJob();"
+        }
+      ],
+      "note": "The mutation removes the authorization from the AUDIO member itself rather than from the guard clause in the action. The first draft deleted `|| !decision.IsAuthorized` from the action and graded INERT, which is a fact about the design worth recording: a refused decision carries NO binding, so `decision.Binding is not { } binding` refuses on its own and the IsAuthorized clause is a second lock on the same door. Removing one lock is not removing the door — so the control now removes the door."
+    },
+    {
+      "id": "r3-remove-the-playlist-route-authorizer",
+      "stage": "R3",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "the legacy playlist route refuses a caller who is not the job owner (this member also serves the legacy video segment route, so the mutation removes the authorizer from both)",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsJobOwnershipTests.TheLegacyPlaylistRoute"
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Auth/HlsJobOwnership/HlsJobOwnershipAuthorizer.cs",
+          "find": "    public HlsJobOwnershipDecision AuthorizeByPlaylistId(HttpContext context, string playlistId)\n        => Decide(context, _bindings.ResolveByPlaylistId(playlistId));",
+          "replace": "    public HlsJobOwnershipDecision AuthorizeByPlaylistId(HttpContext context, string playlistId)\n        => _bindings.ResolveByPlaylistId(playlistId) is { } unchecked_\n            ? HlsJobOwnershipDecision.Authorized(unchecked_)\n            : HlsJobOwnershipDecision.NoSuchJob();"
+        }
+      ],
+      "note": "Same reasoning as the audio control. AuthorizeByPlaylistId is shared by the playlist and the video segment routes, so this mutation is wider than the mission words it; the gate filter names the playlist tests, which is where the mission asks for the evidence."
+    },
+    {
+      "id": "r3-resolve-from-segment-id-alone",
+      "stage": "R3",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "a segment name never names a file: it only selects a job",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "inventory",
+        "script": "ci/hls-job-backed-route-inventory.sh"
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Controllers/HlsSegmentController.cs",
+          "find": "    public HlsSegmentController(\n        ITranscodeManager transcodeManager,",
+          "replace": "    public HlsSegmentController(\n        IServerConfigurationManager serverConfigurationManager,\n        ITranscodeManager transcodeManager,"
+        },
+        {
+          "file": "Tesserafin.Api/Controllers/HlsSegmentController.cs",
+          "find": "        var file = Path.GetFullPath(Path.Combine(\n            binding.CanonicalRoot,\n            string.Concat(segmentId, Path.GetExtension(Request.Path.Value.AsSpan()))));\n\n        if (!string.Equals(Path.GetDirectoryName(file), binding.CanonicalRoot, StringComparison.Ordinal))\n        {\n            return BadRequest(\"Invalid segment.\");\n        }\n\n        return FileStreamResponseHelpers.GetStaticFileResult(file, MimeTypes.GetMimeType(file));",
+          "replace": "        var file = Path.GetFullPath(Path.Combine(\n            _serverConfigurationManager.GetTranscodePath(),\n            string.Concat(segmentId, Path.GetExtension(Request.Path.Value.AsSpan()))));\n\n        return FileStreamResponseHelpers.GetStaticFileResult(file, MimeTypes.GetMimeType(file));"
+        }
+      ],
+      "note": "Graded by the source gate: the gate asserts every Path.Combine in this controller is rooted in the binding canonical root, and that the controller cannot name the shared transcode folder at all."
+    },
+    {
+      "id": "r3-resolve-from-playlist-id-alone",
+      "stage": "R3",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "a playlist identifier never names a file: it only selects a job",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "inventory",
+        "script": "ci/hls-job-backed-route-inventory.sh"
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Controllers/HlsSegmentController.cs",
+          "find": "    public HlsSegmentController(\n        ITranscodeManager transcodeManager,",
+          "replace": "    public HlsSegmentController(\n        IServerConfigurationManager serverConfigurationManager,\n        ITranscodeManager transcodeManager,"
+        },
+        {
+          "file": "Tesserafin.Api/Controllers/HlsSegmentController.cs",
+          "find": "        var file = Path.GetFullPath(Path.Combine(\n            binding.CanonicalRoot,\n            string.Concat(playlistId, Path.GetExtension(Request.Path.Value.AsSpan()))));",
+          "replace": "        var file = Path.GetFullPath(Path.Combine(\n            _serverConfigurationManager.GetTranscodePath(),\n            string.Concat(playlistId, Path.GetExtension(Request.Path.Value.AsSpan()))));"
+        }
+      ],
+      "note": "Same gate, same reason, on the playlist action."
+    },
+    {
+      "id": "r3-open-the-file-before-authorizing",
+      "stage": "R3",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "the authorizer runs before anything touches the filesystem",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "inventory",
+        "script": "ci/hls-job-backed-route-inventory.sh"
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Controllers/DynamicHlsController.cs",
+          "find": "        var ownership = _jobOwnership.AuthorizeByOutputPath(HttpContext, playlistPath);\n        if (ownership.Outcome == HlsJobOwnershipOutcome.Refused)\n        {\n            state.Dispose();\n            return Unauthorized();\n        }",
+          "replace": "        var earlySegmentPath = GetSegmentPath(state, playlistPath, segmentId);\n        if (System.IO.File.Exists(earlySegmentPath))\n        {\n            return await GetSegmentResult(state, playlistPath, earlySegmentPath, EncodingHelper.GetSegmentFileExtension(state.Request.SegmentContainer), segmentId, null, cancellationToken).ConfigureAwait(false);\n        }\n\n        var ownership = _jobOwnership.AuthorizeByOutputPath(HttpContext, playlistPath);\n        if (ownership.Outcome == HlsJobOwnershipOutcome.Refused)\n        {\n            state.Dispose();\n            return Unauthorized();\n        }"
+        }
+      ],
+      "note": "The first draft inserted a File.Exists call the gate pattern did not match, and it graded INERT. That exposed a weaker gate than intended: the check compared the FIRST authorizer call in the controller with the FIRST filesystem access in the controller, and those sat in different methods, so a method could open first and still pass. The check is now scoped to each authorized method, and the mutation serves the segment outright before asking who owns it."
+    },
+    {
+      "id": "r3-grading-integrity-a-broken-build-is-never-red",
+      "stage": "R3",
+      "status": "NEW",
+      "expect": "ERROR",
+      "property": "a mutation that does not compile grades ERROR, never RED",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests"
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Auth/HlsJobOwnership/HlsJobOwnershipAuthorizer.cs",
+          "find": "        var callerUserId = capability?.Validation.UserId ?? user.GetUserId();",
+          "replace": "        var callerUserId = capability?.Validation.UserId ?? user.GetUserId(   // deliberately unbalanced"
+        }
+      ],
+      "note": "The counter-control the mission asks for. A gate that graded this RED would report a compiler error as a proven security property."
+    },
+    {
+      "id": "r3-grading-integrity-a-timeout-is-never-red",
+      "stage": "R3",
+      "status": "NEW",
+      "expect": "HUNG",
+      "property": "a gate that does not finish grades HUNG, never RED",
+      "timeoutSeconds": 1,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests"
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Auth/HlsJobOwnership/HlsJobOwnershipAuthorizer.cs",
+          "find": "        if (callerUserId.IsEmpty() || !callerUserId.Equals(ownerUserId))",
+          "replace": "        if (callerUserId.IsEmpty() || (false && !callerUserId.Equals(ownerUserId)))"
+        }
+      ],
+      "note": "The same mutation as r3-drop-user-comparison, given one second. It WOULD be RED with time to run, so grading it HUNG rather than RED is the runner refusing to award a verdict it did not actually observe."
     }
   ]
 }

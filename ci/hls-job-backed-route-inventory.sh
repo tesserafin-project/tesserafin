@@ -121,6 +121,42 @@ before() {
     fi
 }
 
+# before_in_method <label> <file> <method-signature-regex> <auth-regex> <filesystem-regex>
+# The ordering assertion, scoped to ONE method. A file-wide comparison is not enough: the first
+# authorizer call in a controller can sit in a different method from the first filesystem access,
+# and then the check passes while the method under test opens first. The region runs from the
+# method signature to the next member declaration.
+before_in_method() {
+    local label="$1" file="$2" sig="$3" auth="$4" fs="$5" stripped start next region la lb
+    CHECKS=$((CHECKS + 1))
+    if [ ! -f "$file" ]; then
+        fail "$label (missing file: $file)"
+        return
+    fi
+    stripped="$(code_only "$file")"
+    start="$(grep -n -E -- "$sig" "$stripped" 2>/dev/null | head -1 | cut -d: -f1)"
+    if [ -z "$start" ]; then
+        fail "$label (method /$sig/ not found in $file)"
+        return
+    fi
+    next="$(awk -v s="$start" 'NR > s && /^    (private|public|protected|internal) / { print NR; exit }' "$stripped")"
+    [ -n "$next" ] || next="$(wc -l < "$stripped")"
+    region="$STRIP_DIR/region.$$"
+    sed -n "${start},${next}p" "$stripped" > "$region"
+    la="$(grep -n -E -- "$auth" "$region" 2>/dev/null | head -1 | cut -d: -f1)"
+    lb="$(grep -n -E -- "$fs" "$region" 2>/dev/null | head -1 | cut -d: -f1)"
+    rm -f "$region"
+    if [ -z "$la" ]; then
+        fail "$label (no authorizer call in the method)"
+    elif [ -z "$lb" ]; then
+        fail "$label (no filesystem access in the method — the grep no longer matches)"
+    elif [ "$la" -ge "$lb" ]; then
+        fail "$label (authorizer at +$la, filesystem access at +$lb from the method start)"
+    else
+        ok "$label (authorizer +$la, first filesystem access +$lb)"
+    fi
+}
+
 echo "HLS job-backed route inventory (#153-LTV-R3)"
 echo "==========================================="
 echo
@@ -235,8 +271,11 @@ else
 fi
 
 # The authorizer runs before anything touches the filesystem. Line order is the assertion.
-before "dynamic: authorized before any file is opened" "$DYNAMIC" \
-    '_jobOwnership\.AuthorizeByOutputPath' 'System\.IO\.File\.Exists\(segmentPath\)'
+FS_ACCESS='System\.IO\.File\.Exists\(|GetSegmentPath\(|GetCurrentTranscodingIndex\(|new FileStream'
+before_in_method "dynamic segment: authorized before any file is opened" "$DYNAMIC" \
+    'private async Task<ActionResult> GetDynamicSegment' '_jobOwnership\.AuthorizeByOutputPath' "$FS_ACCESS"
+before_in_method "live playlist: authorized before any file is opened" "$DYNAMIC" \
+    'public async Task<ActionResult> GetLiveHlsStream' '_jobOwnership\.AuthorizeByOutputPath' "$FS_ACCESS"
 before "legacy: authorized before any path is built" "$LEGACY" \
     '_jobOwnership\.Authorize' 'Path\.Combine\('
 echo
