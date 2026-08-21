@@ -253,9 +253,23 @@ public class HlsSegmentController : BaseTesserafinApiController
     private bool RequestedMediaSourceAgrees(HlsSegmentBinding binding)
     {
         var requested = Request.Query["mediaSourceId"].ToString();
-        return string.IsNullOrEmpty(requested)
-            ? string.IsNullOrEmpty(binding.MediaSourceId)
-            : string.Equals(requested, binding.MediaSourceId, StringComparison.Ordinal);
+        if (string.IsNullOrEmpty(requested))
+        {
+            // Naming none is NOT a downgrade path, and requiring it would break a client that never
+            // had one to name. A capability's own media-source binding is compared with the job's
+            // unconditionally in AgreesWithTheJob - including null against non-null, which is the
+            // item-only downgrade the mission forbids - and a request carrying no capability at all
+            // is still pinned by the route's item, by the job's own segment prefix and by the
+            // canonical root, so it cannot reach another job's bytes either way.
+            //
+            // Measured: demanding the parameter refused every durable-token client whose playlist
+            // was never propagated. The #153-LTV-S0 rig scenario fetches its playlist with a durable
+            // token, so nothing propagates a capability into it, so its segment uris are bare - and
+            // every one of them answered 401 (playlist 200, four uris, three fetched, all 401).
+            return true;
+        }
+
+        return string.Equals(requested, binding.MediaSourceId, StringComparison.Ordinal);
     }
 
     private ActionResult GetFileResult(string path, string playlistPath)

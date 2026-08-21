@@ -165,11 +165,10 @@ public sealed class HlsSegmentOwnershipTests : IDisposable
     }
 
     /// <summary>
-    /// A caller-named media source that is not the job's is refused, and omitting it is not a way
-    /// around that.
+    /// A caller-named media source that is not the job's is refused.
     /// </summary>
     [Fact]
-    public void AMediaSourceThatIsNotTheJobs_IsRefusedAndOmittingItIsNoBetter()
+    public void AMediaSourceThatIsNotTheJobs_IsRefused()
     {
         Assert.IsType<UnauthorizedResult>(Invoke(
             _itemA,
@@ -179,14 +178,38 @@ public sealed class HlsSegmentOwnershipTests : IDisposable
             jobPlaySessionId: JobPlaySession,
             capability: Capability(JobMediaSource, JobPlaySession),
             requestedMediaSourceId: "a-media-source-this-job-does-not-have"));
+    }
 
-        Assert.IsType<UnauthorizedResult>(Invoke(
-            _itemA,
-            playlistId: JobA,
-            segmentId: JobA + "0",
-            jobMediaSourceId: JobMediaSource,
-            jobPlaySessionId: JobPlaySession,
-            capability: Capability(JobMediaSource, JobPlaySession)));
+    /// <summary>
+    /// Naming none is allowed, and it is not a way around the binding.
+    /// </summary>
+    /// <remarks>
+    /// This replaces an earlier assertion that omitting <c>mediaSourceId</c> was itself a refusal.
+    /// That was measured to be wrong on the #153-LTV-S0 rig scenario: a durable-token client
+    /// fetches a playlist nothing propagated a capability into, so its segment uris are bare, and
+    /// every fetch answered 401 — playlist 200, four uris, three fetched, all refused. The
+    /// downgrade the mission forbids is a <b>capability</b> downgrade, and that is compared
+    /// unconditionally in <c>AgreesWithTheJob</c>; a request carrying no capability is still pinned
+    /// by the route's item, the job's own segment prefix and the canonical root.
+    /// </remarks>
+    [Fact]
+    public void OmittingTheMediaSource_IsAllowedButBindsNothingExtra()
+    {
+        // A durable-token request: no capability at all, no media source named. It reaches its own
+        // job's segment.
+        Assert.True(IsFileResultFor(
+            Invoke(_itemA, playlistId: JobA, segmentId: JobA + "0", jobMediaSourceId: JobMediaSource, jobPlaySessionId: JobPlaySession),
+            JobA + "0.ts"));
+
+        // ...and it still cannot reach another job's segment, which is the property that matters.
+        Assert.False(IsFileResultFor(
+            Invoke(_itemA, playlistId: JobA, segmentId: JobB + "0", jobMediaSourceId: JobMediaSource, jobPlaySessionId: JobPlaySession),
+            JobB + "0.ts"));
+
+        // ...nor one belonging to another item.
+        Assert.False(IsFileResultFor(
+            Invoke(_itemB, playlistId: JobA, segmentId: JobA + "0", jobMediaSourceId: JobMediaSource, jobPlaySessionId: JobPlaySession),
+            JobA + "0.ts"));
     }
 
     /// <summary>
