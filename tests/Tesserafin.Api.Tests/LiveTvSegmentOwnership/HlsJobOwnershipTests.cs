@@ -4,11 +4,13 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
+using Tesserafin.Api.Auth.HlsJobOwnership;
 using Tesserafin.Api.Constants;
 using Tesserafin.Api.Controllers;
 using Tesserafin.Common.Configuration;
 using Tesserafin.Controller.Configuration;
 using Tesserafin.Controller.MediaEncoding;
+using Tesserafin.Controller.Session;
 using Tesserafin.Model.Configuration;
 using Xunit;
 
@@ -339,15 +341,27 @@ public sealed class HlsJobOwnershipTests : IDisposable
                 CanonicalPlaylistPath: Path.GetFullPath(Path.Combine(_transcodePath, JobA + ".m3u8")),
                 Generation: 1);
 
+        // The registry stands in for the live job list: job A exists (unless the test says it is
+        // gone) and nothing else does. Both lookups the routes use are wired, so the audio route
+        // is exercised through the same job selection the server would do.
         var registry = new Mock<IHlsSegmentBindingRegistry>(MockBehavior.Loose);
         registry.Setup(r => r.ResolveByPlaylistId(JobA)).Returns(binding);
+        registry
+            .Setup(r => r.ResolveBySegmentName(It.IsAny<string>()))
+            .Returns((string name) => name.StartsWith(JobA, StringComparison.Ordinal) ? binding : null);
 
         var transcodeManager = new Mock<ITranscodeManager>(MockBehavior.Loose);
         transcodeManager
             .Setup(t => t.OnTranscodeBeginRequest(It.IsAny<string>(), It.IsAny<TranscodingJobType>()))
             .Returns((TranscodingJob?)null);
 
-        return new HlsSegmentController(configuration.Object, transcodeManager.Object, registry.Object)
+        // The REAL authorizer over a mocked registry: the boundary under test is its logic, so
+        // substituting it would make every assertion here a statement about a mock.
+        var sessionManager = new Mock<ISessionManager>(MockBehavior.Loose);
+        sessionManager.SetupGet(m => m.Sessions).Returns(Array.Empty<SessionInfo>());
+        var authorizer = new HlsJobOwnershipAuthorizer(registry.Object, sessionManager.Object);
+
+        return new HlsSegmentController(configuration.Object, transcodeManager.Object, authorizer)
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext }
         };

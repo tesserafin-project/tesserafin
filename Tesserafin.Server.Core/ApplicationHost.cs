@@ -19,6 +19,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Prometheus.DotNetRuntime;
+using Tesserafin.Api.Auth.HlsJobOwnership;
 using Tesserafin.Api.Helpers;
 using Tesserafin.Common;
 using Tesserafin.Common.Configuration;
@@ -652,6 +653,11 @@ namespace Tesserafin.Server.Core
             // that could fall out of step with it.
             serviceCollection.AddSingleton<IHlsSegmentBindingRegistry>(
                 provider => (TranscodeManager)provider.GetRequiredService<ITranscodeManager>());
+
+            // #153-LTV-R3. The one authority every job-backed HLS resource is authorized through.
+            // Singleton, like the registry it reads: it holds no per-request state — the request
+            // is an argument, never a field.
+            serviceCollection.AddSingleton<IHlsJobOwnershipAuthorizer, HlsJobOwnershipAuthorizer>();
 
             // PR98 shadow mode: the concrete legacy planner and the v2 engine are both registered so
             // ShadowPlaybackSessionPlanner (the IPlaybackSessionPlanner actually resolved) can wrap
