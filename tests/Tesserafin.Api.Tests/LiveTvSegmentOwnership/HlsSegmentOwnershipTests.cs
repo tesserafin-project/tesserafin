@@ -4,7 +4,9 @@ using System.IO;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Tesserafin.Api.Auth.HlsJobOwnership;
 using Tesserafin.Api.Auth.PlaybackCapabilityPolicy;
 using Tesserafin.Api.Constants;
 using Tesserafin.Api.Controllers;
@@ -12,6 +14,7 @@ using Tesserafin.Common.Configuration;
 using Tesserafin.Controller.Configuration;
 using Tesserafin.Controller.MediaEncoding;
 using Tesserafin.Controller.Net.PlaybackCredentials;
+using Tesserafin.Controller.Session;
 using Tesserafin.Model.Configuration;
 using Xunit;
 
@@ -41,6 +44,7 @@ public sealed class HlsSegmentOwnershipTests : IDisposable
     private const string JobPlaySession = "306f71094f36456f9d0dc6e7b12b8a6b";
 
     private const string OwnerDevice = "owner-device";
+    private const string OwnerSession = "owner-session";
 
     private static readonly Guid _itemA = new("11111111111111111111111111111111");
     private static readonly Guid _itemB = new("22222222222222222222222222222222");
@@ -236,7 +240,7 @@ public sealed class HlsSegmentOwnershipTests : IDisposable
             mediaSourceId,
             playSessionId,
             PlaybackCapabilityScope.Media,
-            new PlaybackCapabilityValidation(true, PlaybackCapabilityFailure.None, Guid.NewGuid(), Guid.NewGuid(), "session", playSessionId));
+            new PlaybackCapabilityValidation(true, PlaybackCapabilityFailure.None, Guid.NewGuid(), _ownerUserId, OwnerSession, playSessionId));
 
     public void Dispose()
     {
@@ -297,6 +301,19 @@ public sealed class HlsSegmentOwnershipTests : IDisposable
             .Setup(t => t.OnTranscodeBeginRequest(It.IsAny<string>(), It.IsAny<TranscodingJobType>()))
             .Returns((TranscodingJob?)null);
 
+        // #153-LTV-R3. The capability path now compares the capability's session with the job's
+        // device, so the session the test capabilities are minted under has to exist and has to be
+        // the owner's device — otherwise every capability assertion here would pass through the
+        // session comparison instead of the one it is named for.
+        var sessionManager = new Mock<ISessionManager>(MockBehavior.Loose);
+        var ownerSession = new SessionInfo(sessionManager.Object, NullLogger.Instance)
+        {
+            Id = OwnerSession,
+            DeviceId = OwnerDevice,
+            UserId = _ownerUserId
+        };
+        sessionManager.SetupGet(m => m.Sessions).Returns(new[] { ownerSession });
+
         // #153-LTV-R3: every invocation here is the job's OWNER. These tests are about which job
         // a caller reaches, not about which caller reaches a job — that is HlsJobOwnershipTests —
         // so the principal has to satisfy the ownership authorizer or every assertion below would
@@ -328,7 +345,9 @@ public sealed class HlsSegmentOwnershipTests : IDisposable
             httpContext.Features.Set(capability);
         }
 
-        var controller = new HlsSegmentController(configuration.Object, transcodeManager.Object, registry.Object)
+        var authorizer = new HlsJobOwnershipAuthorizer(registry.Object, sessionManager.Object);
+
+        var controller = new HlsSegmentController(configuration.Object, transcodeManager.Object, authorizer)
         {
             ControllerContext = new Microsoft.AspNetCore.Mvc.ControllerContext { HttpContext = httpContext }
         };
