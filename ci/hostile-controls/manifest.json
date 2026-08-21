@@ -831,7 +831,12 @@
       "gate": {
         "kind": "dotnet-test",
         "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
-        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests"
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests.VideoSegmentFamily",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests.AudioSegmentFamily",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests.DynamicFamilyVerdict"
+        ]
       },
       "mutations": [],
       "note": "Anti-vacuity for every RED below: if the matrix could not pass on an unmutated tree, a mutation turning it red would prove nothing."
@@ -860,7 +865,12 @@
       "gate": {
         "kind": "dotnet-test",
         "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
-        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests"
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests.VideoSegmentFamily",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests.AudioSegmentFamily",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests.DynamicFamilyVerdict"
+        ]
       },
       "mutations": [
         {
@@ -880,7 +890,12 @@
       "gate": {
         "kind": "dotnet-test",
         "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
-        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests"
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests.VideoSegmentFamily",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests.AudioSegmentFamily",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests.DynamicFamilyVerdict"
+        ]
       },
       "mutations": [
         {
@@ -900,7 +915,12 @@
       "gate": {
         "kind": "dotnet-test",
         "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
-        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests"
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests.VideoSegmentFamily",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests.AudioSegmentFamily",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests.DynamicFamilyVerdict"
+        ]
       },
       "mutations": [
         {
@@ -925,7 +945,12 @@
       "gate": {
         "kind": "dotnet-test",
         "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
-        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests"
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests.VideoSegmentFamily",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests.AudioSegmentFamily",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests.DynamicFamilyVerdict"
+        ]
       },
       "mutations": [
         {
@@ -945,7 +970,12 @@
       "gate": {
         "kind": "dotnet-test",
         "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
-        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests"
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests.VideoSegmentFamily",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests.AudioSegmentFamily",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests.DynamicFamilyVerdict"
+        ]
       },
       "mutations": [
         {
@@ -966,7 +996,11 @@
       "gate": {
         "kind": "dotnet-test",
         "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
-        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsJobOwnershipTests.TheLegacyPlaylistRoute"
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsJobOwnershipTests.TheLegacyPlaylistRoute",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsJobOwnershipTests.TheLegacyPlaylistRoute_RefusesEveryCaller",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsJobOwnershipTests.TheLegacyPlaylistRoute_ResolvesNothingWhenNoJobOwnsThePlaylist"
+        ]
       },
       "mutations": [
         {
@@ -1057,7 +1091,12 @@
       "gate": {
         "kind": "dotnet-test",
         "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
-        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests"
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests.VideoSegmentFamily",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests.AudioSegmentFamily",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests.DynamicFamilyVerdict"
+        ]
       },
       "mutations": [
         {
@@ -1078,7 +1117,12 @@
       "gate": {
         "kind": "dotnet-test",
         "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
-        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests"
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests.VideoSegmentFamily",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests.AudioSegmentFamily",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests.DynamicFamilyVerdict"
+        ]
       },
       "mutations": [
         {
