@@ -13,6 +13,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Tesserafin.Api.Attributes;
+using Tesserafin.Api.Auth.HlsJobOwnership;
 using Tesserafin.Api.Auth.PlaybackCapabilityPolicy;
 using Tesserafin.Api.Extensions;
 using Tesserafin.Api.Helpers;
@@ -65,6 +66,7 @@ public class DynamicHlsController : BaseTesserafinApiController
     private readonly IDynamicHlsPlaylistGenerator _dynamicHlsPlaylistGenerator;
     private readonly DynamicHlsHelper _dynamicHlsHelper;
     private readonly IPlaybackSessionManager _playbackSessionManager;
+    private readonly IHlsJobOwnershipAuthorizer _jobOwnership;
     private readonly EncodingOptions _encodingOptions;
 
     /// <summary>
@@ -82,6 +84,7 @@ public class DynamicHlsController : BaseTesserafinApiController
     /// <param name="encodingHelper">Instance of <see cref="EncodingHelper"/>.</param>
     /// <param name="dynamicHlsPlaylistGenerator">Instance of <see cref="IDynamicHlsPlaylistGenerator"/>.</param>
     /// <param name="playbackSessionManager">Instance of the <see cref="IPlaybackSessionManager"/> interface.</param>
+    /// <param name="jobOwnership">Instance of the <see cref="IHlsJobOwnershipAuthorizer"/> interface.</param>
     public DynamicHlsController(
         ILibraryManager libraryManager,
         IUserManager userManager,
@@ -94,7 +97,8 @@ public class DynamicHlsController : BaseTesserafinApiController
         DynamicHlsHelper dynamicHlsHelper,
         EncodingHelper encodingHelper,
         IDynamicHlsPlaylistGenerator dynamicHlsPlaylistGenerator,
-        IPlaybackSessionManager playbackSessionManager)
+        IPlaybackSessionManager playbackSessionManager,
+        IHlsJobOwnershipAuthorizer jobOwnership)
     {
         _libraryManager = libraryManager;
         _userManager = userManager;
@@ -108,6 +112,7 @@ public class DynamicHlsController : BaseTesserafinApiController
         _encodingHelper = encodingHelper;
         _dynamicHlsPlaylistGenerator = dynamicHlsPlaylistGenerator;
         _playbackSessionManager = playbackSessionManager;
+        _jobOwnership = jobOwnership;
 
         _encodingOptions = serverConfigurationManager.GetEncodingOptions();
     }
@@ -295,6 +300,19 @@ public class DynamicHlsController : BaseTesserafinApiController
 
         TranscodingJob? job = null;
         var playlistPath = Path.ChangeExtension(state.OutputFilePath, ".m3u8");
+
+        // #153-LTV-R3. This path is MD5(mediaPath-userAgent-deviceId-playSessionId), and the
+        // device, the play session and the User-Agent all come from the caller: a second
+        // authenticated user replaying this url arrives at the same file. A live job that this
+        // caller does not own is a refusal, and a residual playlist whose job is gone is not
+        // served either — but a caller whose own job has been reaped may still start a new one.
+        var ownership = _jobOwnership.AuthorizeByOutputPath(HttpContext, playlistPath);
+        if (ownership.Outcome == HlsJobOwnershipOutcome.Refused
+            || (!ownership.IsAuthorized && System.IO.File.Exists(playlistPath)))
+        {
+            state.Dispose();
+            return Unauthorized();
+        }
 
         if (!System.IO.File.Exists(playlistPath))
         {
@@ -1487,13 +1505,32 @@ public class DynamicHlsController : BaseTesserafinApiController
 
         var playlistPath = Path.ChangeExtension(state.OutputFilePath, ".m3u8");
 
+        // #153-LTV-R3. This path is MD5(mediaPath-userAgent-deviceId-playSessionId): the device,
+        // the play session and the User-Agent all come from the caller, so a second authenticated
+        // user replaying this url arrives at the same file. The decision is taken here, once,
+        // before any file is named — the fMP4 init map is this same route at segmentId -1 and is
+        // covered by it too.
+        var ownership = _jobOwnership.AuthorizeByOutputPath(HttpContext, playlistPath);
+        if (ownership.Outcome == HlsJobOwnershipOutcome.Refused)
+        {
+            state.Dispose();
+            return Unauthorized();
+        }
+
+        // NoSuchJob is not authorization to read what is already on disk. A finished job's
+        // segments outlive it, and those are unreachable rather than served to whoever names them
+        // — so nothing below may return a pre-existing file unless a live job says this caller
+        // owns it. What NoSuchJob DOES still allow is starting a new transcode, which is how a
+        // client whose own job has been reaped resumes.
+        var mayServeWhatIsAlreadyThere = ownership.IsAuthorized;
+
         var segmentPath = GetSegmentPath(state, playlistPath, segmentId);
 
         var segmentExtension = EncodingHelper.GetSegmentFileExtension(state.Request.SegmentContainer);
 
         TranscodingJob? job;
 
-        if (System.IO.File.Exists(segmentPath))
+        if (mayServeWhatIsAlreadyThere && System.IO.File.Exists(segmentPath))
         {
             job = _transcodeManager.OnTranscodeBeginRequest(playlistPath, TranscodingJobType);
             _logger.LogDebug("returning {0} [it exists, try 1]", segmentPath);
@@ -1503,7 +1540,7 @@ public class DynamicHlsController : BaseTesserafinApiController
         using (await _transcodeManager.LockAsync(playlistPath, cancellationToken).ConfigureAwait(false))
         {
             var startTranscoding = false;
-            if (System.IO.File.Exists(segmentPath))
+            if (mayServeWhatIsAlreadyThere && System.IO.File.Exists(segmentPath))
             {
                 job = _transcodeManager.OnTranscodeBeginRequest(playlistPath, TranscodingJobType);
                 _logger.LogDebug("returning {0} [it exists, try 2]", segmentPath);

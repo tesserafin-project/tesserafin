@@ -794,7 +794,7 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
                 // query parameter, and `DeviceId` above - which is one - stays where it was so
                 // that session reporting and teardown keep their meaning.
                 UserId = ownerUserId,
-                OwnerDeviceId = state.OwnerDeviceId,
+                OwnerDeviceId = HlsJobOwnerDevice.Resolve(state.OwnerDeviceId, state.OwnerCapabilitySessionId, _sessionManager),
                 Generation = Interlocked.Increment(ref _jobGeneration)
             };
 

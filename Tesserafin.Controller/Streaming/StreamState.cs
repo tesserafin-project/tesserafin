@@ -144,6 +144,17 @@ public class StreamState : EncodingJobInfo, IDisposable
     public string? OwnerDeviceId { get; set; }
 
     /// <summary>
+    /// Gets or sets the session a validated playback capability on this request belongs to
+    /// (#153-LTV-R3).
+    /// </summary>
+    /// <remarks>
+    /// A capability principal carries no device claim, so this is how a transcode started under
+    /// one still records a device: <c>HlsJobOwnerDevice</c> turns the session into its device, on
+    /// both the recording side and the comparing side.
+    /// </remarks>
+    public string? OwnerCapabilitySessionId { get; set; }
+
+    /// <summary>
     /// Gets or sets a value indicating whether to estimate the content length.
     /// </summary>
     public bool EstimateContentLength { get; set; }

@@ -11,8 +11,6 @@ using Tesserafin.Api.Auth.HlsJobOwnership;
 using Tesserafin.Api.Auth.PlaybackCapabilityPolicy;
 using Tesserafin.Api.Helpers;
 using Tesserafin.Common.Api;
-using Tesserafin.Common.Configuration;
-using Tesserafin.Controller.Configuration;
 using Tesserafin.Controller.MediaEncoding;
 using Tesserafin.Controller.Net.PlaybackCredentials;
 using Tesserafin.Model.Net;
@@ -26,22 +24,22 @@ namespace Tesserafin.Api.Controllers;
 [ApiExplorerSettings(IgnoreApi = true)]
 public class HlsSegmentController : BaseTesserafinApiController
 {
-    private readonly IServerConfigurationManager _serverConfigurationManager;
     private readonly ITranscodeManager _transcodeManager;
     private readonly IHlsJobOwnershipAuthorizer _jobOwnership;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="HlsSegmentController"/> class.
     /// </summary>
-    /// <param name="serverConfigurationManager">Instance of the <see cref="IServerConfigurationManager"/> interface.</param>
     /// <param name="transcodeManager">Instance of the <see cref="ITranscodeManager"/> interface.</param>
     /// <param name="jobOwnership">Instance of the <see cref="IHlsJobOwnershipAuthorizer"/> interface.</param>
+    // #153-LTV-R3. IServerConfigurationManager is gone from this controller on purpose. It was
+    // here only to reach GetTranscodePath(), the flat folder every job shares, and every path this
+    // controller builds now comes from a job binding instead. Removing the dependency is what
+    // makes that structural rather than a convention: there is no longer a way to name the folder.
     public HlsSegmentController(
-        IServerConfigurationManager serverConfigurationManager,
         ITranscodeManager transcodeManager,
         IHlsJobOwnershipAuthorizer jobOwnership)
     {
-        _serverConfigurationManager = serverConfigurationManager;
         _transcodeManager = transcodeManager;
         _jobOwnership = jobOwnership;
     }
@@ -114,17 +112,47 @@ public class HlsSegmentController : BaseTesserafinApiController
     [SuppressMessage("Microsoft.Performance", "CA1801:ReviewUnusedParameters", MessageId = "itemId", Justification = "Required for ServiceStack")]
     public ActionResult GetHlsPlaylistLegacy([FromRoute, Required] string itemId, [FromRoute, Required] string playlistId)
     {
-        var file = string.Concat(playlistId, Path.GetExtension(Request.Path.Value.AsSpan()));
-        var transcodePath = _serverConfigurationManager.GetTranscodePath();
-        file = Path.GetFullPath(Path.Combine(transcodePath, file));
-        var fileDir = Path.GetDirectoryName(file);
-        if (string.IsNullOrEmpty(fileDir) || !fileDir.StartsWith(transcodePath, StringComparison.InvariantCulture)
+        // #153-LTV-R3. This route is UNREACHABLE and stays that way. Upstream jellyfin b176beb88e
+        // ("Reduce string allocations") rewrote the guard below and dropped its negation: the
+        // condition it replaced was `!Path.GetExtension(file).Equals(".m3u8", …)`. The route
+        // literal is `stream.m3u8`, so `Request.Path` always ends in `.m3u8`, so `file` always
+        // does, so the guard always fires. Every caller gets a 400.
+        //
+        // That is what makes #153-LTV-R2's finding R2-3 — "the playlist is resolved from
+        // playlistId alone" — correct as source reading and NOT exploitable: nobody obtains the
+        // playlist text, so no capability digest can leak through it. It is neither a bearer
+        // credential leak nor a text leak, and `TheLegacyPlaylistRoute_RefusesEveryCaller` pins
+        // that. Un-inverting the guard would OPEN a route that is currently closed, which is the
+        // opposite of this branch's direction, so it is deliberately not repaired here.
+        //
+        // What IS repaired: the action no longer names the shared transcode folder at all. It used
+        // to compose `Path.Combine(transcodeFolderPath, playlistId + extension)` before rejecting
+        // the request, so the resolution existed even though nothing reached it. Now the only path
+        // it could ever build comes from a job binding, and it never gets that far.
+        var decision = _jobOwnership.AuthorizeByPlaylistId(HttpContext, playlistId);
+        if (decision.Binding is not { } binding || !decision.IsAuthorized)
+        {
+            return decision.Outcome == HlsJobOwnershipOutcome.NoSuchJob
+                ? NotFound("Hls segment not found.")
+                : Unauthorized();
+        }
+
+        if (!Guid.TryParse(itemId, out var routeItemId) || !routeItemId.Equals(binding.ItemId))
+        {
+            return Unauthorized();
+        }
+
+        var file = Path.GetFullPath(Path.Combine(
+            binding.CanonicalRoot,
+            string.Concat(playlistId, Path.GetExtension(Request.Path.Value.AsSpan()))));
+
+        if (!string.Equals(Path.GetDirectoryName(file), binding.CanonicalRoot, StringComparison.Ordinal)
             || Path.GetExtension(file.AsSpan()).Equals(".m3u8", StringComparison.OrdinalIgnoreCase))
         {
             return BadRequest("Invalid segment.");
         }
 
-        return GetFileResult(file, file);
+        return GetFileResult(file, binding.CanonicalPlaylistPath);
     }
 
     /// <summary>
@@ -141,6 +169,20 @@ public class HlsSegmentController : BaseTesserafinApiController
         [FromQuery, Required] string deviceId,
         [FromQuery, Required] string playSessionId)
     {
+        // #153-LTV-R3. Both parameters are caller-named, and this used to act on whatever job they
+        // selected. That is not a disclosure — nothing is read and nothing is served — but it let
+        // any authenticated caller end anyone else's transcode. The job is resolved from server
+        // state first and the same owner comparison the byte routes use decides.
+        //
+        // A job this caller does not own answers exactly as one that never existed: 204, having
+        // done nothing. Distinguishing the two would turn this route into a probe for which play
+        // sessions are live.
+        var job = _transcodeManager.GetTranscodingJob(playSessionId);
+        if (job is null || !_jobOwnership.OwnsJob(HttpContext, job.UserId, job.OwnerDeviceId))
+        {
+            return NoContent();
+        }
+
         _transcodeManager.KillTranscodingJobs(deviceId, playSessionId, _ => true);
         return NoContent();
     }

@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Tesserafin.Api.Auth.PlaybackCapabilityPolicy;
@@ -59,6 +58,21 @@ public sealed class HlsJobOwnershipAuthorizer : IHlsJobOwnershipAuthorizer
     public HlsJobOwnershipDecision AuthorizeByOutputPath(HttpContext context, string outputPath)
         => Decide(context, _bindings.ResolveByOutputPath(outputPath));
 
+    /// <inheritdoc />
+    public bool OwnsJob(HttpContext context, Guid ownerUserId, string? ownerDeviceId)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (ownerUserId.IsEmpty() || string.IsNullOrEmpty(ownerDeviceId))
+        {
+            return false;
+        }
+
+        var provenance = PlaybackCapabilityProvenance.Resolve(context);
+        return provenance.Outcome != PlaybackCapabilityProvenanceOutcome.Refuse
+               && CallerIsTheOwner(context, provenance.Capability, ownerUserId, ownerDeviceId);
+    }
+
     private HlsJobOwnershipDecision Decide(HttpContext context, HlsSegmentBinding? binding)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -73,10 +87,10 @@ public sealed class HlsJobOwnershipAuthorizer : IHlsJobOwnershipAuthorizer
             return HlsJobOwnershipDecision.NoSuchJob();
         }
 
-        // STEP 2. A job with no resolvable owner belongs to nobody, and nobody can be it. This is
-        // reachable: an api-key principal resolves to Guid.Empty, so a transcode started by one is
-        // recorded ownerless, and every request for its output is refused.
-        if (binding.UserId.IsEmpty())
+        // STEP 2. A job with no resolvable owner belongs to nobody, and nobody can be it. Both
+        // halves are reachable: an api-key principal resolves to Guid.Empty, and a credential that
+        // names no device leaves the job device-less. An absent owner is not a wildcard.
+        if (binding.UserId.IsEmpty() || string.IsNullOrEmpty(binding.DeviceId))
         {
             return HlsJobOwnershipDecision.Refused();
         }
@@ -89,25 +103,28 @@ public sealed class HlsJobOwnershipAuthorizer : IHlsJobOwnershipAuthorizer
         }
 
         var capability = provenance.Capability;
-        if (capability is not null)
+        if (capability is not null && !CapabilityMatchesTheJob(capability, binding))
         {
-            // A presented capability is the whole decision. There is deliberately no `||` here.
-            return CapabilityMatchesTheJob(capability, binding)
-                ? HlsJobOwnershipDecision.Authorized(binding)
-                : HlsJobOwnershipDecision.Refused();
+            // A presented capability is the whole decision. There is deliberately no fallback to
+            // the durable path below: falling back would make an invalid capability strictly
+            // better than presenting none at all.
+            return HlsJobOwnershipDecision.Refused();
         }
 
-        return DurablePrincipalOwnsTheJob(context.User, binding)
+        // STEP 4. Who the caller is, resolved exactly as the job's own owner was recorded.
+        return CallerIsTheOwner(context, capability, binding.UserId, binding.DeviceId)
             ? HlsJobOwnershipDecision.Authorized(binding)
             : HlsJobOwnershipDecision.Refused();
     }
 
     /// <summary>
-    /// The durable-token path. The identity comes from the validated principal; a url parameter
-    /// may corroborate it elsewhere but never creates it here.
+    /// The identity comparison, shared by both credentials. It comes from the validated principal
+    /// and from the validation result; a url parameter may corroborate it elsewhere, never create
+    /// it here.
     /// </summary>
-    private bool DurablePrincipalOwnsTheJob(ClaimsPrincipal? user, HlsSegmentBinding binding)
+    private bool CallerIsTheOwner(HttpContext context, ValidatedPlaybackCapability? capability, Guid ownerUserId, string? ownerDeviceId)
     {
+        var user = context.User;
         if (user?.Identity is null || !user.Identity.IsAuthenticated)
         {
             return false;
@@ -121,28 +138,32 @@ public sealed class HlsJobOwnershipAuthorizer : IHlsJobOwnershipAuthorizer
             return false;
         }
 
-        var callerUserId = user.GetUserId();
-        if (callerUserId.IsEmpty() || !callerUserId.Equals(binding.UserId))
+        // On the capability path the user comes from the validation result rather than from a
+        // claim the request carries.
+        var callerUserId = capability?.Validation.UserId ?? user.GetUserId();
+        if (callerUserId.IsEmpty() || !callerUserId.Equals(ownerUserId))
         {
             return false;
         }
 
-        // The device claim of the token, against the device claim of the token that started the
-        // job. Both are server-issued. A job recorded without one cannot be matched by anyone: an
-        // absent device is not a wildcard.
-        var callerDeviceId = user.GetDeviceId();
-        if (string.IsNullOrEmpty(callerDeviceId) || string.IsNullOrEmpty(binding.DeviceId))
-        {
-            return false;
-        }
+        // The device, resolved by the SAME function that recorded the job's. A durable token has a
+        // device claim; a capability has none and is resolved through its session. Deriving it
+        // differently on the two sides would make a job unreachable by the client that started it.
+        var callerDeviceId = HlsJobOwnerDevice.Resolve(
+            user.GetDeviceId(),
+            capability?.Validation.SessionId,
+            _sessionManager);
 
-        return string.Equals(callerDeviceId, binding.DeviceId, StringComparison.Ordinal);
+        return !string.IsNullOrEmpty(callerDeviceId)
+               && string.Equals(callerDeviceId, ownerDeviceId, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// The capability path. Every binding the capability carries has to be the job's own.
+    /// The capability's own bindings, all of which have to be the job's. The user, the device and
+    /// the session are NOT compared here: those are identity, and identity is compared once, in
+    /// <see cref="CallerIsTheOwner"/>, for both credentials.
     /// </summary>
-    private bool CapabilityMatchesTheJob(ValidatedPlaybackCapability capability, HlsSegmentBinding binding)
+    private static bool CapabilityMatchesTheJob(ValidatedPlaybackCapability capability, HlsSegmentBinding binding)
     {
         // Defence in depth: the feature is written on the accepted branch only.
         if (!capability.Validation.IsValid)
@@ -187,24 +208,6 @@ public sealed class HlsJobOwnershipAuthorizer : IHlsJobOwnershipAuthorizer
             return false;
         }
 
-        // Session, and through it the device. The capability principal carries no device claim —
-        // the authentication handler does not mint one — so the device is reached the only way it
-        // can be: the session the capability belongs to has one, and it must be the device the job
-        // was started from. A capability whose session no longer exists matches nothing.
-        return SessionDeviceMatches(capability.Validation.SessionId, binding.DeviceId);
-    }
-
-    private bool SessionDeviceMatches(string? capabilitySessionId, string? jobDeviceId)
-    {
-        if (string.IsNullOrEmpty(capabilitySessionId) || string.IsNullOrEmpty(jobDeviceId))
-        {
-            return false;
-        }
-
-        var session = _sessionManager.Sessions
-            .FirstOrDefault(s => string.Equals(s.Id, capabilitySessionId, StringComparison.Ordinal));
-
-        return session is not null
-               && string.Equals(session.DeviceId, jobDeviceId, StringComparison.Ordinal);
+        return true;
     }
 }

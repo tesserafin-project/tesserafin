@@ -280,8 +280,23 @@ public sealed class HlsJobOwnershipTests : IDisposable
     [Fact]
     public void TheLegacyPlaylistRoute_RefusesEveryCaller()
     {
+        // The owner reaches the authorizer, is authorized, and is then stopped by the inverted
+        // guard itself — which is the measurement that R2-3 is unreachable rather than merely
+        // unauthorized. A stranger never gets that far.
         Assert.IsType<BadRequestObjectResult>(InvokePlaylist(_ownerUserId, OwnerDevice));
-        Assert.IsType<BadRequestObjectResult>(InvokePlaylist(_strangerUserId, "stranger-device"));
+        Assert.IsType<UnauthorizedResult>(InvokePlaylist(_strangerUserId, "stranger-device"));
+    }
+
+    /// <summary>
+    /// The playlist route no longer resolves anything from the shared transcode folder: with no
+    /// job owning the identifier, the answer is a closed refusal rather than a file.
+    /// </summary>
+    [Fact]
+    public void TheLegacyPlaylistRoute_ResolvesNothingWhenNoJobOwnsThePlaylist()
+    {
+        var result = InvokePlaylist(_ownerUserId, OwnerDevice, jobIsGone: true);
+
+        Assert.IsType<NotFoundObjectResult>(result);
     }
 
     // ---------------------------------------------------------------------------------------
@@ -361,7 +376,7 @@ public sealed class HlsJobOwnershipTests : IDisposable
         sessionManager.SetupGet(m => m.Sessions).Returns(Array.Empty<SessionInfo>());
         var authorizer = new HlsJobOwnershipAuthorizer(registry.Object, sessionManager.Object);
 
-        return new HlsSegmentController(configuration.Object, transcodeManager.Object, authorizer)
+        return new HlsSegmentController(transcodeManager.Object, authorizer)
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext }
         };
@@ -403,7 +418,7 @@ public sealed class HlsJobOwnershipTests : IDisposable
             .GetHlsAudioSegmentLegacy(_itemA.ToString("N"), segmentId);
     }
 
-    private ActionResult InvokePlaylist(Guid callerUserId, string callerDeviceId)
+    private ActionResult InvokePlaylist(Guid callerUserId, string callerDeviceId, bool jobIsGone = false)
     {
         var httpContext = new DefaultHttpContext
         {
@@ -411,7 +426,7 @@ public sealed class HlsJobOwnershipTests : IDisposable
             User = Principal(callerUserId, callerDeviceId, isApiKey: false, isAdministrator: false)
         };
 
-        return Controller(httpContext, jobIsGone: false)
+        return Controller(httpContext, jobIsGone)
             .GetHlsPlaylistLegacy(_itemA.ToString("N"), JobA);
     }
 
