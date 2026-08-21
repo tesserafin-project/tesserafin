@@ -1,3 +1,4 @@
+using System;
 using Microsoft.AspNetCore.Http;
 
 namespace Tesserafin.Api.Auth.HlsJobOwnership;
@@ -41,4 +42,20 @@ public interface IHlsJobOwnershipAuthorizer
     /// <param name="outputPath">The playlist path the controller resolved for this request.</param>
     /// <returns>The decision, carrying the binding it was made against.</returns>
     HlsJobOwnershipDecision AuthorizeByOutputPath(HttpContext context, string outputPath);
+
+    /// <summary>
+    /// Answers whether a caller owns a job, given the job's recorded owner.
+    /// </summary>
+    /// <remarks>
+    /// For the control plane rather than the data plane: <c>DELETE Videos/ActiveEncodings</c> acts
+    /// on a job's LIFETIME, not on its bytes, so it resolves no binding and opens nothing — but it
+    /// selects jobs by caller-named ids, so without this any authenticated caller could end
+    /// anyone's transcode. The identity comparison is the same one the byte routes use; only the
+    /// resource differs.
+    /// </remarks>
+    /// <param name="context">The request.</param>
+    /// <param name="ownerUserId">The job's recorded owner.</param>
+    /// <param name="ownerDeviceId">The job's recorded owning device.</param>
+    /// <returns>Whether the caller is that owner.</returns>
+    bool OwnsJob(HttpContext context, Guid ownerUserId, string? ownerDeviceId);
 }

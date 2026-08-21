@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Net.Http.Headers;
+using Tesserafin.Api.Auth.PlaybackCapabilityPolicy;
 using Tesserafin.Api.Extensions;
 using Tesserafin.Common.Configuration;
 using Tesserafin.Common.Extensions;
@@ -83,7 +84,8 @@ public static class StreamingHelpers
             // #153-LTV-R3. The one place a transcode's owning device is read, and it is read from
             // the validated token, not from `streamingRequest.DeviceId`, which is a query
             // parameter the caller controls.
-            OwnerDeviceId = httpContext.User.GetDeviceId()
+            OwnerDeviceId = httpContext.User.GetDeviceId(),
+            OwnerCapabilitySessionId = ValidatedPlaybackCapability.From(httpContext)?.Validation.SessionId
         };
 
         var userId = httpContext.User.GetUserId();

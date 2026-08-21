@@ -38,13 +38,32 @@ ok() {
     printf 'OK     %s\n' "$1"
 }
 
+# EVERY ASSERTION BELOW READS CODE, NOT PROSE.
+# This gate's own subject matter is things the source must NOT say - "GetTranscodePath",
+# "Path.Combine" - and those words also appear in the comments explaining why they are gone. A
+# grep over the raw file therefore fails on the explanation of the fix. Comment lines are blanked
+# (not deleted, so line numbers survive for the ordering checks) before anything is matched.
+STRIP_DIR="$(mktemp -d)"
+trap 'rm -rf "$STRIP_DIR"' EXIT
+
+code_only() {
+    local file="$1" stripped
+    stripped="$STRIP_DIR/$(printf '%s' "$file" | tr '/' '_')"
+    if [ ! -f "$stripped" ] && [ -f "$file" ]; then
+        # shellcheck disable=SC2016  # a sed script, not a string to expand.
+        sed -E 's_^[[:space:]]*(///|//|\*|/\*).*$__' "$file" > "$stripped"
+    fi
+    printf '%s' "$stripped"
+}
+
 # count <file> <extended-regex>
 # grep -c into a variable rather than `grep -q` in a pipeline: under `set -o pipefail` a `grep -q`
 # that matches early can exit 141 (SIGPIPE), which inverts the assertion it is standing in for.
 count() {
-    local file="$1" pattern="$2" n
+    local file="$1" pattern="$2" n stripped
     [ -f "$file" ] || { echo 0; return; }
-    n="$(grep -c -E -- "$pattern" "$file" 2>/dev/null || true)"
+    stripped="$(code_only "$file")"
+    n="$(grep -c -E -- "$pattern" "$stripped" 2>/dev/null || true)"
     echo "${n:-0}"
 }
 
@@ -73,6 +92,32 @@ absent() {
         fail "$label ($n forbidden match(es) for /$pattern/ in $file)"
     else
         ok "$label"
+    fi
+}
+
+# before <label> <file> <patternA> <patternB>
+# Asserts the FIRST match of A comes strictly before the first match of B. Both must exist: a
+# missing pattern is a failure, never a silent pass, because "the file never opens anything" and
+# "the grep stopped matching" look identical otherwise.
+before() {
+    local label="$1" file="$2" a="$3" b="$4" la lb
+    CHECKS=$((CHECKS + 1))
+    if [ ! -f "$file" ]; then
+        fail "$label (missing file: $file)"
+        return
+    fi
+    local stripped
+    stripped="$(code_only "$file")"
+    la="$(grep -n -E -- "$a" "$stripped" 2>/dev/null | head -1 | cut -d: -f1)"
+    lb="$(grep -n -E -- "$b" "$stripped" 2>/dev/null | head -1 | cut -d: -f1)"
+    if [ -z "$la" ]; then
+        fail "$label (no match for /$a/ in $file)"
+    elif [ -z "$lb" ]; then
+        fail "$label (no match for /$b/ in $file)"
+    elif [ "$la" -ge "$lb" ]; then
+        fail "$label (authorizer at line $la, filesystem access at line $lb)"
+    else
+        ok "$label (authorizer line $la, first filesystem access line $lb)"
     fi
 }
 
@@ -155,20 +200,45 @@ fi
 echo
 
 echo "-- 3. the ownership authorizer exists and every DATA-PLANE action goes through it"
-present "authorizer type"                 "Tesserafin.Api/Auth/HlsJobOwnership/HlsJobOwnershipAuthorizer.cs" 'class HlsJobOwnershipAuthorizer'
-present "authorizer interface"            "Tesserafin.Controller/MediaEncoding/IHlsJobOwnershipAuthorizer.cs" 'interface IHlsJobOwnershipAuthorizer'
-present "legacy video segment authorized" "$LEGACY"  '_jobOwnership\.Authorize'
-present "legacy audio segment authorized" "$LEGACY"  'ResolveBySegmentName'
-present "dynamic segment authorized"      "$DYNAMIC" '_jobOwnership\.Authorize'
-present "live playlist authorized"        "$DYNAMIC" '_jobOwnership\.Authorize'
+present "authorizer interface"            "Tesserafin.Api/Auth/HlsJobOwnership/IHlsJobOwnershipAuthorizer.cs" 'interface IHlsJobOwnershipAuthorizer'
+present "authorizer type"                 "Tesserafin.Api/Auth/HlsJobOwnership/HlsJobOwnershipAuthorizer.cs"  'class HlsJobOwnershipAuthorizer'
+present "shared device resolution"        "Tesserafin.Controller/MediaEncoding/HlsJobOwnerDevice.cs"          'class HlsJobOwnerDevice'
+present "legacy video segment authorized" "$LEGACY"  '_jobOwnership\.AuthorizeByPlaylistId'
+present "legacy audio segment authorized" "$LEGACY"  '_jobOwnership\.AuthorizeBySegmentName'
+present "dynamic segment authorized"      "$DYNAMIC" '_jobOwnership\.AuthorizeByOutputPath'
+present "recording side uses the shared resolution" "Tesserafin.MediaEncoding/Transcoding/TranscodeManager.cs" 'HlsJobOwnerDevice\.Resolve'
+present "comparing side uses the shared resolution" "Tesserafin.Api/Auth/HlsJobOwnership/HlsJobOwnershipAuthorizer.cs" 'HlsJobOwnerDevice\.Resolve'
 echo
 
 echo "-- 4. no DATA-PLANE action resolves a file from a caller-named id, and none bypasses"
 absent "legacy: no transcode-folder resolution left" "$LEGACY" 'GetTranscodePath\(\)'
+absent "legacy: cannot even name the shared folder"  "$LEGACY" 'IServerConfigurationManager'
 absent "legacy: no administrator bypass"             "$LEGACY" 'IsInRole\(|UserRoles\.Administrator'
 absent "legacy: no api-key bypass"                   "$LEGACY" 'GetIsApiKey\(\)'
 absent "dynamic: no administrator bypass"            "$DYNAMIC" 'UserRoles\.Administrator'
 absent "dynamic: no api-key bypass"                  "$DYNAMIC" 'GetIsApiKey\(\)'
+
+# Every path this controller builds is rooted in a binding it was handed, never in a folder it
+# looked up. Counting is the assertion: one Path.Combine per binding-rooted resolution.
+CHECKS=$((CHECKS + 1))
+LEGACY_CODE="$(code_only "$LEGACY")"
+COMBINES="$(count "$LEGACY" 'Path\.Combine\(')"
+# A Path.Combine whose FIRST argument is the binding's canonical root. Anything else is a path
+# built from something other than the job, which is the defect this whole branch exists to close.
+ROOTED="$(awk '/Path\.Combine\(/ { want = 1; next } want { if ($0 ~ /binding\.CanonicalRoot,/) n++; want = 0 } END { print n + 0 }' "$LEGACY_CODE")"
+if [ "$COMBINES" -eq 0 ]; then
+    fail "legacy: no path resolution found at all — the grep no longer matches the source"
+elif [ "$COMBINES" -ne "$ROOTED" ]; then
+    fail "legacy: $COMBINES Path.Combine call(s), $ROOTED of them rooted in binding.CanonicalRoot"
+else
+    ok "legacy: all $COMBINES path resolution(s) rooted in the job's canonical root"
+fi
+
+# The authorizer runs before anything touches the filesystem. Line order is the assertion.
+before "dynamic: authorized before any file is opened" "$DYNAMIC" \
+    '_jobOwnership\.AuthorizeByOutputPath' 'System\.IO\.File\.Exists\(segmentPath\)'
+before "legacy: authorized before any path is built" "$LEGACY" \
+    '_jobOwnership\.Authorize' 'Path\.Combine\('
 echo
 
 echo "-- 5. the binding carries the owner, and the owner is captured from the server, not a query"

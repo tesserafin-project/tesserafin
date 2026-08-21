@@ -347,7 +347,7 @@ public sealed class HlsSegmentOwnershipTests : IDisposable
 
         var authorizer = new HlsJobOwnershipAuthorizer(registry.Object, sessionManager.Object);
 
-        var controller = new HlsSegmentController(configuration.Object, transcodeManager.Object, authorizer)
+        var controller = new HlsSegmentController(transcodeManager.Object, authorizer)
         {
             ControllerContext = new Microsoft.AspNetCore.Mvc.ControllerContext { HttpContext = httpContext }
         };
