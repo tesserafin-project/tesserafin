@@ -1219,7 +1219,8 @@
         "expectedTests": [
           "Tesserafin.Api.Tests.LiveTvSegmentOwnership.AudioSegmentJobSelectionTests.ASegmentNameSelectsTheJobThatWritesIt_NotTheFirstJobInTheRegistry",
           "Tesserafin.Api.Tests.LiveTvSegmentOwnership.AudioSegmentJobSelectionTests.EachOwnerReachesTheirOwnJobsAudioSegment_WithThatJobsOwnBytes",
-          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.AudioSegmentJobSelectionTests.TheRegistryOrderChangesNothing"
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.AudioSegmentJobSelectionTests.TheRegistryOrderChangesNothing",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.AudioSegmentJobSelectionTests.ASegmentNameNoLiveJobWrites_ResolvesNothingAndServesNothing"
         ]
       },
       "mutations": [
@@ -1245,7 +1246,8 @@
         "expectedTests": [
           "Tesserafin.Api.Tests.LiveTvSegmentOwnership.AudioSegmentJobSelectionTests.ASegmentNameSelectsTheJobThatWritesIt_NotTheFirstJobInTheRegistry",
           "Tesserafin.Api.Tests.LiveTvSegmentOwnership.AudioSegmentJobSelectionTests.EachOwnerReachesTheirOwnJobsAudioSegment_WithThatJobsOwnBytes",
-          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.AudioSegmentJobSelectionTests.TheRegistryOrderChangesNothing"
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.AudioSegmentJobSelectionTests.TheRegistryOrderChangesNothing",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.AudioSegmentJobSelectionTests.ASegmentNameNoLiveJobWrites_ResolvesNothingAndServesNothing"
         ]
       },
       "mutations": [
@@ -1271,7 +1273,8 @@
         "expectedTests": [
           "Tesserafin.Api.Tests.LiveTvSegmentOwnership.AudioSegmentJobSelectionTests.ASegmentNameSelectsTheJobThatWritesIt_NotTheFirstJobInTheRegistry",
           "Tesserafin.Api.Tests.LiveTvSegmentOwnership.AudioSegmentJobSelectionTests.EachOwnerReachesTheirOwnJobsAudioSegment_WithThatJobsOwnBytes",
-          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.AudioSegmentJobSelectionTests.TheRegistryOrderChangesNothing"
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.AudioSegmentJobSelectionTests.TheRegistryOrderChangesNothing",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.AudioSegmentJobSelectionTests.ASegmentNameNoLiveJobWrites_ResolvesNothingAndServesNothing"
         ]
       },
       "mutations": [
@@ -1343,7 +1346,8 @@
         "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
         "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership",
         "expectedTests": [
-          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.DynamicHlsOwnershipCallSiteTests.ARefusedDecision_EndsTheRequestBeforeAnythingIsOpened"
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.DynamicHlsOwnershipCallSiteTests.ARefusedDecision_EndsTheRequestBeforeAnythingIsOpened",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.DynamicHlsOwnershipCallSiteTests.TheDynamicSegmentAction_AsksTheAuthorizerAboutThisRequestsOwnHttpContext"
         ]
       },
       "mutations": [

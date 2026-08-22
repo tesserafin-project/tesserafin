@@ -22,10 +22,17 @@ Usage:
 The runner creates its OWN git worktree from <rev> (default HEAD) and never writes to the
 worktree it was invoked from. Controls run serially, in the foreground.
 
+#153-LTV-R6 finding R6-1 is what the REPORTING half closes. A RED naming one declared test read
+exactly like a targeted RED even when nine other tests had failed alongside it: `classify_trx` named
+only the declared failures, and the console printed `detail.splitlines()[0]`. Every gate now returns
+a single-line HEADLINE that is printed in full, a `dotnet-test` gate also returns the counts and the
+FULL NAMES of every failure outside `expectedTests`, and a roster RED that carries an undeclared
+failure fails the run unless the control declares `allowUndeclaredFailures`.
+
 Unless `--no-self-test` is passed, a full roster run first replays
-ci/hostile-controls/counter-controls.json — eight situations whose classification is mandated —
-and refuses to report a roster result if any of them is classified differently. A roster whose
-grader has not been proven on that table is not evidence.
+ci/hostile-controls/counter-controls.json — ten situations whose classification is mandated — and
+refuses to report a roster result if any of them is classified differently. A roster whose grader
+has not been proven on that table is not evidence.
 
 Exit status: 0 only when the self-test held, every selected control matched its expectation, and
 every tree was restored byte-identically.
@@ -141,6 +148,41 @@ def validate_schema(control):
     return None
 
 
+def validate_undeclared_opt_out(control):
+    """`allowUndeclaredFailures` is the ONLY way a RED may keep a failure outside expectedTests.
+
+    It exists for the grader's own counter-control, whose whole subject is collateral damage. It is
+    a boolean, it is meaningless on a gate that runs no test, and the roster manifest sets it
+    nowhere — which is what makes the roster invariant (#153-LTV-R6 finding R6-1) worth anything.
+    """
+    if "allowUndeclaredFailures" not in control:
+        return None
+    if not isinstance(control["allowUndeclaredFailures"], bool):
+        return "schema: allowUndeclaredFailures must be a boolean"
+    if control["gate"].get("kind") != "dotnet-test":
+        return "schema: allowUndeclaredFailures is meaningless on a gate that runs no test"
+    return None
+
+
+def validate_expected_undeclared(control):
+    """`expectUndeclaredFailures` is how a counter-control PINS the R6-1 reporting itself.
+
+    Grading r6-4 RED proves nothing about the report: the grade was already right before R7. The
+    counter-control therefore also names the collateral it must SEE reported, and the runner
+    compares it against `unexpectedFailures`. Remove the reporting and this counter-control fails.
+    """
+    if "expectUndeclaredFailures" not in control:
+        return None
+    names = control["expectUndeclaredFailures"]
+    if not isinstance(names, list) or not names:
+        return "schema: expectUndeclaredFailures must be a non-empty list"
+    if any(not isinstance(name, str) or not name.strip() for name in names):
+        return "schema: every expectUndeclaredFailures entry must be a non-empty string"
+    if control["gate"].get("kind") != "dotnet-test":
+        return "schema: expectUndeclaredFailures is meaningless on a gate that runs no test"
+    return None
+
+
 def build(worktree, project, timeout):
     # The build ALWAYS runs before the gate. A gate that consults a previously compiled dll grades
     # a mutation the code under test never saw, and comes back INERT: the S1 harness graded
@@ -193,40 +235,76 @@ def read_trx(path):
     return results, summary
 
 
+def undeclared_block(unexpected, total_failures):
+    """The sentence a RED with collateral is not allowed to omit.
+
+    #153-LTV-R6 finding R6-1: `classify_trx` named only the failures a control DECLARES, so a
+    mutation that broke nine extra tests reported itself as a targeted RED. Every name, in full,
+    with its count and the run's total - a truncated list would reopen the same finding.
+    """
+    return (f"UNDECLARED FAILURES ({len(unexpected)} of {total_failures} total failure(s)): "
+            + "; ".join(unexpected))
+
+
 def classify_trx(results, summary, declared):
-    """The mission's four-valued classification, decided from the structured result alone."""
+    """The mission's four-valued classification, decided from the structured result alone.
+
+    Returns (verdict, headline, facts). `facts` is the machine-readable half that the console line
+    and the roster JSON both render, and it separates the five things a grade is made of: what the
+    control declared, how much of that really ran, which failures it claims, which failures it does
+    NOT claim, and how many failures there were altogether. A RED may keep collateral damage - the
+    runner must simply never let it read as targeted (#153-LTV-R6 finding R6-1).
+    """
+    failures = [name for name, outcome in results if outcome == "Failed"]
+    expected_failures = sorted(n for n in failures if any(covers(d, n) for d in declared))
+    unexpected = sorted(n for n in failures if not any(covers(d, n) for d in declared))
+    facts = {
+        "expectedTests": list(declared),
+        "expectedTestsExecuted": [],
+        "expectedFailures": expected_failures,
+        "unexpectedFailures": unexpected,
+        "totalFailures": len(failures),
+        "totalTests": len(results),
+    }
+
     if summary.get("aborted") or summary.get("error"):
-        return ERROR, f"the run aborted or errored before it could decide: {summary}"
+        return ERROR, f"the run aborted or errored before it could decide: {summary}", facts
     if not results:
-        return ERROR, "the filter matched no tests: the run produced no test result at all"
+        return ERROR, "the filter matched no tests: the run produced no test result at all", facts
 
     executed = {name for name, outcome in results if outcome != "NotExecuted"}
     for name in declared:
         matched = [n for n, _ in results if covers(name, n)]
         if not matched:
             return ERROR, (f"the declared deciding test '{name}' does not exist in the run "
-                           f"({len(results)} tests ran under this filter)")
+                           f"({len(results)} tests ran under this filter)"), facts
         if not any(n in executed for n in matched):
-            return ERROR, f"the declared deciding test '{name}' exists but was not executed"
+            return ERROR, f"the declared deciding test '{name}' exists but was not executed", facts
+        facts["expectedTestsExecuted"].append(name)
 
-    failures = [name for name, outcome in results if outcome == "Failed"]
     if not failures:
-        return GREEN, f"every declared deciding test ran and stayed green ({len(results)} tests)"
+        return GREEN, (f"every declared deciding test ran and stayed green "
+                       f"({len(declared)} declared, {len(results)} tests)"), facts
 
-    decisive = [name for name in failures if any(covers(d, name) for d in declared)]
-    if not decisive:
+    if not expected_failures:
         return ERROR, ("only tests OUTSIDE expectedTests failed, so nothing this control declares "
-                       "decisive was broken: " + "; ".join(sorted(failures)[:5]))
-    return RED, (f"{len(decisive)} declared deciding test(s) failed: "
-                 + "; ".join(sorted(decisive)[:5]))
+                       "decisive was broken: " + undeclared_block(unexpected, len(failures))), facts
+
+    headline = (f"{len(expected_failures)} of {len(declared)} declared deciding test(s) failed, "
+                f"{len(failures)} failure(s) in {len(results)} test(s): "
+                + "; ".join(expected_failures))
+    if unexpected:
+        headline += " | " + undeclared_block(unexpected, len(failures))
+    return RED, headline, facts
 
 
 def gate_dotnet_test(worktree, gate, timeout):
     code, log = build(worktree, gate["project"], timeout)
     if code == "TIMEOUT":
-        return HUNG, "TIMEOUT"
+        return HUNG, f"the build did not finish within {timeout}s", "TIMEOUT", None
     if code != 0:
-        return ERROR, "build failed\n" + log[-3000:]
+        return ERROR, "build failed: the mutated tree does not compile", \
+            "build failed\n" + log[-3000:], None
 
     results_dir = tempfile.mkdtemp(prefix="ltv-trx-")
     try:
@@ -237,18 +315,21 @@ def gate_dotnet_test(worktree, gate, timeout):
              "--results-directory", results_dir],
             worktree, timeout)
         if code == "TIMEOUT":
-            return HUNG, "TIMEOUT"
+            return HUNG, f"the test run did not finish within {timeout}s", "TIMEOUT", None
 
         trx = os.path.join(results_dir, "control.trx")
         if not os.path.exists(trx):
-            return ERROR, ("no TRX result was written: the run did not happen\n" + log[-3000:])
+            return ERROR, "no TRX result was written: the run did not happen", \
+                "no TRX result was written: the run did not happen\n" + log[-3000:], None
         results, summary = read_trx(trx)
         if results is None:
-            return ERROR, summary + "\n" + log[-2000:]
+            return ERROR, summary, summary + "\n" + log[-2000:], None
 
-        verdict, detail = classify_trx(results, summary, gate["expectedTests"])
+        verdict, headline, facts = classify_trx(results, summary, gate["expectedTests"])
         counts = {k: summary.get(k) for k in ("total", "executed", "passed", "failed")}
-        return verdict, f"{detail}\ntrx {counts}\n" + log[-1200:]
+        facts["trxFile"] = trx
+        facts["trxCounters"] = counts
+        return verdict, headline, f"{headline}\ntrx {counts}\n" + log[-1200:], facts
     finally:
         shutil.rmtree(results_dir, ignore_errors=True)
 
@@ -264,30 +345,42 @@ def gate_source(worktree, gate, timeout):
     with open(path, encoding="utf-8") as handle:
         body = handle.read()
     present = re.search(gate["absentPattern"], body) is not None
-    return (RED if present else GREEN), f"pattern {'present' if present else 'absent'} in {gate['file']}"
+    headline = f"pattern {'present' if present else 'absent'} in {gate['file']}"
+    return (RED if present else GREEN), headline, headline, None
+
+
+def first_line(log):
+    for line in log.splitlines():
+        if line.strip():
+            return line.strip()
+    return "(no output)"
 
 
 def gate_inventory(worktree, gate, timeout):
     code, log = run(["bash", gate["script"]], worktree, timeout)
     if code == "TIMEOUT":
-        return HUNG, "TIMEOUT"
-    return (GREEN if code == 0 else RED), log[-1500:]
+        return HUNG, f"{gate['script']} did not finish within {timeout}s", "TIMEOUT", None
+    headline = f"{gate['script']} exit {code}: {first_line(log)}"
+    return (GREEN if code == 0 else RED), headline, log[-1500:], None
 
 
 def gate_rig(worktree, gate, timeout, rig):
     if not rig:
-        return NO_RIG, (
-            f"scenario '{gate['scenario']}' needs a live rig; pass --rig <script>. "
-            f"Requires: {'; '.join(gate.get('requires', []))}")
+        missing = (f"scenario '{gate['scenario']}' needs a live rig; pass --rig <script>. "
+                   f"Requires: {'; '.join(gate.get('requires', []))}")
+        return NO_RIG, missing, missing, None
     code, log = run([rig, gate["scenario"], worktree], os.path.dirname(rig) or ".", timeout)
     if code == "TIMEOUT":
-        return HUNG, "TIMEOUT"
+        return HUNG, f"rig scenario '{gate['scenario']}' did not finish within {timeout}s", \
+            "TIMEOUT", None
     if code == 2:
         # The adapter could not decide - the mutated tree did not build, or it produced no
         # evidence. That is an ERROR to attribute, never a RED: grading a build failure as a
         # proven property is exactly the false green this whole runner exists to prevent.
-        return ERROR, "the rig could not decide (exit 2)\n" + log[-2000:]
-    return (GREEN if code == 0 else RED), log[-2000:]
+        return ERROR, f"rig scenario '{gate['scenario']}' could not decide (exit 2)", \
+            "the rig could not decide (exit 2)\n" + log[-2000:], None
+    headline = f"rig scenario '{gate['scenario']}' exit {code}: {first_line(log)}"
+    return (GREEN if code == 0 else RED), headline, log[-2000:], None
 
 
 def evaluate(worktree, gate, timeout, rig):
@@ -300,7 +393,7 @@ def evaluate(worktree, gate, timeout, rig):
         return gate_inventory(worktree, gate, timeout)
     if kind == "rig":
         return gate_rig(worktree, gate, timeout, rig)
-    return ERROR, f"schema: unknown gate kind '{kind}'"
+    return ERROR, f"schema: unknown gate kind '{kind}'", f"schema: unknown gate kind '{kind}'", None
 
 
 def grade(control, verdict):
@@ -319,6 +412,47 @@ def grade(control, verdict):
     return "RED" if verdict == RED else "INERT"
 
 
+def print_record(record):
+    """One aligned row per control, and then every field the grade was made of.
+
+    The row used to print `str(detail).splitlines()[0][:88]`. That is what #153-LTV-R6 finding R6-1
+    is: the counts and the names of the failures OUTSIDE `expectedTests` lived in `detail`'s later
+    lines, so a RED with nine extra failures printed as a targeted RED. The headline is now printed
+    in full, the counts on their own line, and every undeclared failure by its complete name.
+    """
+    pad = f"{'':15} {'':52} {'':9}"
+    print(f"{record['grade']:15} {record['id']:52} {record['seconds']:7.1f}s  "
+          f"{record.get('headline') or ''}", flush=True)
+    if record.get("totalFailures") is not None:
+        print(f"{pad} declared {len(record['expectedTestsExecuted'])}"
+              f"/{len(record['expectedTests'])} executed, "
+              f"{len(record['expectedFailures'])} declared failure(s), "
+              f"{len(record['unexpectedFailures'])} undeclared, "
+              f"{record['totalFailures']} failure(s) in {record['totalTests']} test(s)", flush=True)
+    if record.get("undeclaredReportingHeld") is not None:
+        print(f"{pad} undeclared-failure reporting: "
+              f"{'HELD' if record['undeclaredReportingHeld'] else 'FAILED'}", flush=True)
+    unexpected = record.get("unexpectedFailures") or []
+    if unexpected:
+        print(f"{pad} UNDECLARED FAILURES ({len(unexpected)} of {record['totalFailures']} "
+              f"total failure(s)):", flush=True)
+        for name in unexpected:
+            print(f"{pad}   - {name}", flush=True)
+
+
+def undeclared_rows(records):
+    """RED rows that kept a failure nothing declared - the #153-LTV-R6 finding R6-1 invariant.
+
+    A control may opt out with `allowUndeclaredFailures`, which only the grader's own collateral
+    counter-control does. Rows whose gate runs no test carry no `unexpectedFailures` field at all
+    and are not silently counted as clean.
+    """
+    return [r for r in records
+            if r["grade"] == "RED"
+            and r.get("unexpectedFailures")
+            and not r.get("allowUndeclaredFailures")]
+
+
 def replay(controls, worktree, baseline, rig, on_record=None):
     results = []
     for control in controls:
@@ -328,9 +462,14 @@ def replay(controls, worktree, baseline, rig, on_record=None):
         if "note" in control:
             record["note"] = control["note"]
 
-        invalid = validate_schema(control)
+        if control.get("allowUndeclaredFailures"):
+            record["allowUndeclaredFailures"] = True
+
+        invalid = (validate_schema(control) or validate_undeclared_opt_out(control)
+                   or validate_expected_undeclared(control))
         if invalid:
             record["grade"] = "ERROR"
+            record["headline"] = invalid
             record["detail"] = invalid
         else:
             failure = None
@@ -341,29 +480,51 @@ def replay(controls, worktree, baseline, rig, on_record=None):
 
             if failure:
                 record["grade"] = "ERROR"
+                record["headline"] = failure
                 record["detail"] = failure
             else:
+                facts = None
                 try:
-                    verdict, detail = evaluate(
+                    verdict, headline, detail, facts = evaluate(
                         worktree, control["gate"], control["timeoutSeconds"], rig)
                 except Exception:  # noqa: BLE001 - a grader that crashes must ERROR, never kill the run
                     verdict = ERROR
+                    headline = "the grader crashed"
                     detail = "the grader crashed\n" + traceback.format_exc()[-2000:]
                 record["verdict"] = verdict
+                record["headline"] = headline
                 record["detail"] = detail
+                if facts:
+                    record.update(facts)
                 record["grade"] = grade(control, verdict)
+                if facts and facts.get("trxCounters"):
+                    counters = facts["trxCounters"]
+                    record["totalsMatchTrx"] = (facts["totalFailures"] == counters["failed"]
+                                                and facts["totalTests"] == counters["total"])
+                    if not record["totalsMatchTrx"]:
+                        # The reported totals ARE the evidence; a report that disagrees with the
+                        # TRX it was read from cannot be trusted to have named the failures either.
+                        record["grade"] = "ERROR"
+                        record["headline"] = (
+                            f"the reported counts do not match the TRX summary: "
+                            f"{facts['totalFailures']} failure(s) in {facts['totalTests']} "
+                            f"test(s) vs {counters}")
+
+        if "expectUndeclaredFailures" in control:
+            record["undeclaredReportingHeld"] = (
+                sorted(record.get("unexpectedFailures") or [])
+                == sorted(control["expectUndeclaredFailures"]))
 
         revert(worktree)
         restored = tree_hash(worktree)
         record["restoredByteIdentically"] = restored == baseline
         if not record["restoredByteIdentically"]:
             record["grade"] = "ERROR"
+            record["headline"] = f"tree {restored} != baseline {baseline}"
             record["detail"] = f"tree {restored} != baseline {baseline}; {record.get('detail')}"
         record["seconds"] = round(time.time() - started, 1)
 
-        print(f"{record['grade']:15} {record['id']:52} {record['seconds']:7.1f}s  "
-              f"{str(record.get('detail')).splitlines()[0][:88] if record.get('detail') else ''}",
-              flush=True)
+        print_record(record)
         results.append(record)
         if on_record:
             on_record(results)
@@ -432,7 +593,9 @@ def main():
             payload["counterControls"] = counter_results
 
         misgraded = [r for r in counter_results
-                     if r["grade"] != r["expect"] or not r["restoredByteIdentically"]]
+                     if r["grade"] != r["expect"] or not r["restoredByteIdentically"]
+                     or r.get("undeclaredReportingHeld") is False
+                     or r.get("totalsMatchTrx") is False]
         payload["selfTest"] = ("skipped" if not run_self_test
                                else ("HELD" if not misgraded else "FAILED"))
         flush()
@@ -441,7 +604,10 @@ def main():
             print("\nThe grader misclassified "
                   f"{len(misgraded)} counter-control(s); the roster is NOT graded.", flush=True)
             for record in misgraded:
-                print(f"  {record['id']}: expected {record['expect']}, got {record['grade']}", flush=True)
+                print(f"  {record['id']}: expected {record['expect']}, got {record['grade']}"
+                      + ("" if record.get("undeclaredReportingHeld") is not False
+                         else "; the undeclared failures it must report were not reported: "
+                              f"got {record.get('unexpectedFailures')}"), flush=True)
         elif selected:
             print("\n--- roster ---", flush=True)
             results = replay(
@@ -468,6 +634,18 @@ def main():
         return all(r["grade"] == r["expect"] and r["restoredByteIdentically"]
                    for r in records if r["grade"] != "SKIPPED-NO-RIG")
 
+    # #153-LTV-R6 finding R6-1, made permanent: a RED that carries a failure outside its own
+    # expectedTests is a general breakage wearing a targeted grade. It is reported by name above and
+    # it fails the run here, on the roster AND on the counter-controls, unless the control opted out.
+    collateral = undeclared_rows(counter_results) + undeclared_rows(results)
+    payload["undeclaredFailureRows"] = [
+        {"id": r["id"], "unexpectedFailures": r["unexpectedFailures"]} for r in collateral]
+    flush()
+    if collateral:
+        print(f"\n{len(collateral)} RED row(s) kept a failure nothing declared:")
+        for record in collateral:
+            print(f"  {record['id']}: {undeclared_block(record['unexpectedFailures'], record['totalFailures'])}")
+
     unresolved = [r for r in results if r["grade"] == "SKIPPED-NO-RIG"]
     if unresolved:
         print(f"\n{len(unresolved)} control(s) were NOT graded: they need a rig. This run is incomplete.")
@@ -476,7 +654,8 @@ def main():
     elif selected:
         print("\nself-test: SKIPPED - this roster result is not admissible on its own.")
 
-    ok = matched(counter_results) and (not run_self_test or payload["selfTest"] == "HELD")
+    ok = (matched(counter_results) and not collateral
+          and (not run_self_test or payload["selfTest"] == "HELD"))
     if selected and not (run_self_test and payload["selfTest"] == "FAILED"):
         ok = ok and matched(results) and not unresolved
     elif selected:

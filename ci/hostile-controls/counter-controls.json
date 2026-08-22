@@ -219,6 +219,41 @@
         }
       ],
       "note": "An empty expectedTests is the shape F8's repair forbids: a dotnet-test control that names no deciding test cannot earn a RED. It is rejected before the mutation is applied, which is why this control restores byte-identically without ever building."
+    },
+    {
+      "id": "cc-10-a-declared-red-with-undeclared-collateral-is-reported-as-such",
+      "stage": "R7",
+      "status": "NEW",
+      "expect": "RED",
+      "allowUndeclaredFailures": true,
+      "property": "#153-LTV-R6 finding R6-1. One DECLARED deciding test fails and nine UNDECLARED tests fail with it. The grade stays RED - R6 ruled that legitimate - but the runner must SAY SO: the nine failures outside expectedTests are named in full in the structured result and on the console, with their count and the run's total, and the totals must match the TRX. Before R7 this row printed '1 declared deciding test(s) failed: ...' and nothing else, so a general breakage read exactly like a targeted RED. This is the ONLY control allowed to keep undeclared failures; every roster row is failed for them.",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.ActiveEncodingsOwnershipTests.TheOwnerIsKilledAndAStrangerIsNot_FromTheSameFixture"
+        ]
+      },
+      "expectUndeclaredFailures": [
+        "Tesserafin.Api.Tests.LiveTvSegmentOwnership.ActiveEncodingsOwnershipTests.ActiveEncodingsFamily(caller: AdministratorWhoIsNotTheOwner, mayEndTheJob: False)",
+        "Tesserafin.Api.Tests.LiveTvSegmentOwnership.ActiveEncodingsOwnershipTests.ActiveEncodingsFamily(caller: AnotherDevice, mayEndTheJob: False)",
+        "Tesserafin.Api.Tests.LiveTvSegmentOwnership.ActiveEncodingsOwnershipTests.ActiveEncodingsFamily(caller: AnotherUser, mayEndTheJob: False)",
+        "Tesserafin.Api.Tests.LiveTvSegmentOwnership.ActiveEncodingsOwnershipTests.ActiveEncodingsFamily(caller: AnotherUserOnTheOwnersDevice, mayEndTheJob: False)",
+        "Tesserafin.Api.Tests.LiveTvSegmentOwnership.ActiveEncodingsOwnershipTests.ActiveEncodingsFamily(caller: ApiKeyWithNoUser, mayEndTheJob: False)",
+        "Tesserafin.Api.Tests.LiveTvSegmentOwnership.ActiveEncodingsOwnershipTests.ActiveEncodingsFamily(caller: CapabilityFromAnotherDevicesSession, mayEndTheJob: False)",
+        "Tesserafin.Api.Tests.LiveTvSegmentOwnership.ActiveEncodingsOwnershipTests.ActiveEncodingsFamily(caller: CapabilityOfAnotherUser, mayEndTheJob: False)",
+        "Tesserafin.Api.Tests.LiveTvSegmentOwnership.ActiveEncodingsOwnershipTests.ActiveEncodingsFamily(caller: CapabilityWithNoValidatedProvenance, mayEndTheJob: False)",
+        "Tesserafin.Api.Tests.LiveTvSegmentOwnership.ActiveEncodingsOwnershipTests.ActiveEncodingsFamily(caller: NoCredentialAtAll, mayEndTheJob: False)"
+      ],
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Auth/HlsJobOwnership/HlsJobOwnershipAuthorizer.cs",
+          "find": "        var provenance = PlaybackCapabilityProvenance.Resolve(context);\n        return provenance.Outcome != PlaybackCapabilityProvenanceOutcome.Refuse\n               && CallerIsTheOwner(context, provenance.Capability, ownerUserId, ownerDeviceId);",
+          "replace": "        return true;"
+        }
+      ]
     }
   ]
 }
