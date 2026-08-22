@@ -55,6 +55,11 @@
 # gate — see the note printed in SUMMARY below and
 # docs/container/A7-server-web-release-pair.md.
 #
+# Issue #153-LTV-R9: the Live TV hostile-control grader proves itself here too, host-side, after the
+# container stage - ci/hostile-controls/prove-undeclared-reporting.py and
+# ci/hostile-controls/prove-schema-lockdown.py. Both are unconditional and both are folded into the
+# exit status. See the banner near the end of this script for what each one replays.
+#
 # Usage:
 #   ./ci/run.sh
 set -euo pipefail
@@ -137,6 +142,44 @@ set -e
 # to run repeatedly against the same checkout.
 banner "Restoring working tree ownership to $(id -u):$(id -g)"
 docker run --rm -v "$PWD":/repo "$IMAGE_TAG" chown -R "$(id -u):$(id -g)" /repo || true
+
+banner "Hostile-control grader self-proofs (#153-LTV-R7, #153-LTV-R9)"
+# Issue #153-LTV-R9: these two probes are the ONLY thing that proves the Live TV hostile-control
+# grader can still fail. Until R9 they existed in the tree and no permanent gate ran them, which is
+# the same defect one level up as the one they exist to close: evidence nobody replays.
+#
+#   prove-undeclared-reporting.py  runs cc-10 twice against the same tree - once through run.py as
+#                                  committed, once through a copy whose ONE mutated line drops the
+#                                  undeclared failures from the classification - and requires the
+#                                  second to FAIL while the grade stays RED. Remove the reporting
+#                                  #153-LTV-R6 finding R6-1 added and this goes red.
+#   prove-schema-lockdown.py       replays the eight situations of #153-LTV-R9 step 3: the R8 opt-out
+#                                  at either value, `expectUndeclaredFailures` on a roster line, any
+#                                  unknown key, that same list moved off cc-10, and cc-10's list
+#                                  amputated / padded / perturbed. All eight must be refused.
+#
+# They run on the HOST, not in the container: run.py creates its own detached git worktree from HEAD
+# and builds it with the host SDK, so a container would need the repository's git directory and a
+# second SDK for nothing. They mutate nothing in this checkout - every build happens under a
+# temporary worktree in $TMPDIR, which they remove - and they are graded against HEAD, so an
+# uncommitted change to ci/hostile-controls is not what they measure.
+#
+# There is deliberately no flag, environment variable or condition that skips either one: a gate the
+# caller can turn off is the finding, not the fix. Their exit status is folded into $STATUS below.
+set +e
+python3 "$REPO_ROOT/ci/hostile-controls/prove-undeclared-reporting.py"
+PROBE_UNDECLARED_STATUS=$?
+python3 "$REPO_ROOT/ci/hostile-controls/prove-schema-lockdown.py"
+PROBE_SCHEMA_STATUS=$?
+set -e
+
+echo ""
+echo "prove-undeclared-reporting.py exit ${PROBE_UNDECLARED_STATUS}"
+echo "prove-schema-lockdown.py exit ${PROBE_SCHEMA_STATUS}"
+if [ "$PROBE_UNDECLARED_STATUS" -ne 0 ] || [ "$PROBE_SCHEMA_STATUS" -ne 0 ]; then
+    echo "The hostile-control grader did not prove itself; this gate FAILS." >&2
+    STATUS=1
+fi
 
 END_TS=$(date +%s)
 ELAPSED=$((END_TS - START_TS))
