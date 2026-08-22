@@ -26,8 +26,18 @@ worktree it was invoked from. Controls run serially, in the foreground.
 exactly like a targeted RED even when nine other tests had failed alongside it: `classify_trx` named
 only the declared failures, and the console printed `detail.splitlines()[0]`. Every gate now returns
 a single-line HEADLINE that is printed in full, a `dotnet-test` gate also returns the counts and the
-FULL NAMES of every failure outside `expectedTests`, and a roster RED that carries an undeclared
-failure fails the run unless the control declares `allowUndeclaredFailures`.
+FULL NAMES of every failure outside `expectedTests`, and a RED that carries an undeclared failure
+fails the run. There is NO opt-out from that gate.
+
+#153-LTV-R8 is what the LOCKDOWN half closes. R7 shipped that gate with a generic boolean escape
+hatch that any control could set for itself: an ordinary roster line that broke nine tests it did
+not declare failed the run without it and exited 0 with it, so the invariant was whatever the
+manifest said it was. That boolean is gone, and nothing replaces it. The ONE row that is legitimately allowed to
+keep undeclared failures is the grader's own tenth counter-control, and it is allowed to only by
+naming them: `expectUndeclaredFailures` is at once the permission and the oracle, it exists only in
+the AUTOTEST document, only on that one id, and the run fails if the set it names is not exactly
+the set observed. Provenance is not read from a file name the caller controls - it is which arm of
+main() loaded the document.
 
 Unless `--no-self-test` is passed, a full roster run first replays
 ci/hostile-controls/counter-controls.json — ten situations whose classification is mandated — and
@@ -58,6 +68,45 @@ TRX_NS = {"trx": "http://microsoft.com/schemas/VisualStudio/TeamTest/2010"}
 # Every verdict a gate may return. GREEN means the gate HELD - the property the control attacks
 # was not broken by the mutation. It is the roster's INERT and the positive controls' PASS.
 GREEN, RED, ERROR, HUNG, NO_RIG = "GREEN", "RED", "ERROR", "HUNG", "NO-RIG"
+
+# The two - and only two - provenances a control document may have. This is an INTERNAL mode, set by
+# whichever arm of main() loaded the document, never inferred from a path the caller can choose:
+# ROSTER is always MANIFEST and AUTOTEST is always COUNTER_MANIFEST, both derived from this file's
+# own directory. The distinction is load-bearing, because exactly one shape is legal in one document
+# and illegal in the other (#153-LTV-R8).
+ROSTER, AUTOTEST = "roster", "autotest"
+
+# The one id in the AUTOTEST document that may keep failures it does not declare, and only while it
+# names every one of them. Nothing else, in either document, may.
+CC10 = "cc-10-a-declared-red-with-undeclared-collateral-is-reported-as-such"
+
+# The closed schema. Anything not named here is rejected: a key the runner does not read is a key a
+# reviewer reads as load-bearing, and R8's generic opt-out was exactly that failure mode in reverse
+# - a key the runner DID read, that the manifest was free to set, and that switched off a gate.
+DOCUMENT_KEYS = {
+    ROSTER: {"$comment", "controls", "grades", "isolation", "restoration"},
+    AUTOTEST: {"$comment", "controls", "grades"},
+}
+CONTROL_REQUIRED = ("id", "stage", "status", "expect", "property", "timeoutSeconds", "gate",
+                    "mutations")
+CONTROL_OPTIONAL = {
+    ROSTER: {"historicalId", "note", "historicalMutations", "supersededReason"},
+    AUTOTEST: {"note", "expectUndeclaredFailures"},
+}
+GATE_REQUIRED = {
+    "dotnet-test": ("kind", "project", "filter", "expectedTests"),
+    "rig": ("kind", "scenario"),
+    "source": ("kind", "file", "absentPattern"),
+    "inventory": ("kind", "script"),
+}
+GATE_OPTIONAL = {
+    "dotnet-test": set(),
+    "rig": {"requires"},
+    "source": set(),
+    "inventory": set(),
+}
+MUTATION_REQUIRED = ("file", "find", "replace")
+MUTATION_OPTIONAL = {"count"}
 
 
 def run(cmd, cwd, timeout, env=None):
@@ -111,34 +160,99 @@ def apply_mutation(worktree, mutation):
     return None
 
 
-def validate_schema(control):
+def validate_document(document, provenance):
+    """The document's own top level, closed to keys nothing reads.
+
+    Returns a reason or None. `controls` is the only key the runner needs; the rest are prose the
+    two documents happen to carry. A key that is in neither list is refused rather than ignored.
+    """
+    if not isinstance(document, dict):
+        return f"schema: the {provenance} document is not an object"
+    if "controls" not in document:
+        return f"schema: the {provenance} document declares no 'controls'"
+    if not isinstance(document["controls"], list):
+        return f"schema: the {provenance} document's 'controls' is not a list"
+    unknown = sorted(set(document) - DOCUMENT_KEYS[provenance])
+    if unknown:
+        return (f"schema: the {provenance} document declares unknown top-level key(s) "
+                f"{', '.join(unknown)}")
+    return None
+
+
+def validate_schema(control, provenance):
     """The control's own shape, checked before it is allowed to decide anything.
 
     An invalid control is an ERROR, never a grade: a control that cannot say which test decides it
     has no claim to make about the tree. Only `dotnet-test` carries `expectedTests` - the source,
     inventory and rig gates have no test list to validate and must not be failed for lacking one.
+
+    The schema is CLOSED, in both directions, and it is closed PER PROVENANCE (#153-LTV-R8):
+
+      * every key on a control, on its gate and on each of its mutations must be one this runner
+        reads. R8's generic opt-out is no longer one of them anywhere, at any value, and an
+        unknown key is an ERROR rather than something a reviewer must notice by eye;
+      * `expectUndeclaredFailures` is legal ONLY in the AUTOTEST document and ONLY on CC10, where
+        it is the permission and the oracle at once. In the ROSTER it is refused outright, so no
+        production control can buy itself the exemption by naming what it breaks either.
+
+    `provenance` is an internal mode, not a file name: see ROSTER / AUTOTEST.
     """
-    for field in ("id", "stage", "status", "expect", "property", "timeoutSeconds", "gate", "mutations"):
+    if provenance not in (ROSTER, AUTOTEST):
+        return f"schema: unknown provenance '{provenance}'"
+    if not isinstance(control, dict):
+        return "schema: control is not an object"
+    for field in CONTROL_REQUIRED:
         if field not in control:
             return f"schema: control is missing '{field}'"
+
+    unknown = sorted(set(control) - set(CONTROL_REQUIRED) - CONTROL_OPTIONAL[provenance])
+    if unknown:
+        return (f"schema: a {provenance} control declares unknown key(s) {', '.join(unknown)}; "
+                "the control schema is closed")
+
+    if not isinstance(control["gate"], dict):
+        return "schema: 'gate' is not an object"
+    if not isinstance(control["mutations"], list):
+        return "schema: 'mutations' is not a list"
+    if not isinstance(control["timeoutSeconds"], int) or control["timeoutSeconds"] <= 0:
+        return "schema: timeoutSeconds must be a positive integer"
+
     gate = control["gate"]
     kind = gate.get("kind")
-    if kind not in ("dotnet-test", "source", "inventory", "rig"):
+    if kind not in GATE_REQUIRED:
         return f"schema: unknown gate kind '{kind}'"
     if control["expect"] not in ("PASS", "RED", "INERT", "ERROR", "HUNG"):
         return f"schema: unknown expectation '{control['expect']}'"
 
+    for field in GATE_REQUIRED[kind]:
+        if field not in gate:
+            return f"schema: a '{kind}' gate is missing '{field}'"
+    unknown = sorted(set(gate) - set(GATE_REQUIRED[kind]) - GATE_OPTIONAL[kind])
+    if unknown:
+        return (f"schema: a '{kind}' gate declares unknown key(s) {', '.join(unknown)}, "
+                "which nothing reads")
+
+    for mutation in control["mutations"]:
+        if not isinstance(mutation, dict):
+            return "schema: a mutation is not an object"
+        for field in MUTATION_REQUIRED:
+            if field not in mutation:
+                return f"schema: a mutation is missing '{field}'"
+        unknown = sorted(set(mutation) - set(MUTATION_REQUIRED) - MUTATION_OPTIONAL)
+        if unknown:
+            return f"schema: a mutation declares unknown key(s) {', '.join(unknown)}"
+
+    invalid = validate_expected_undeclared(control, provenance)
+    if invalid:
+        return invalid
+
     if kind != "dotnet-test":
-        if "expectedTests" in gate:
-            return f"schema: a '{kind}' gate declares expectedTests, which nothing can validate"
         return None
 
     for field in ("project", "filter"):
         if not gate.get(field):
             return f"schema: a dotnet-test gate is missing '{field}'"
     declared = gate.get("expectedTests")
-    if declared is None:
-        return "schema: a dotnet-test gate must declare expectedTests"
     if not isinstance(declared, list) or not declared:
         return "schema: expectedTests must be a non-empty list"
     if any(not isinstance(name, str) or not name.strip() for name in declared):
@@ -148,36 +262,39 @@ def validate_schema(control):
     return None
 
 
-def validate_undeclared_opt_out(control):
-    """`allowUndeclaredFailures` is the ONLY way a RED may keep a failure outside expectedTests.
+def validate_expected_undeclared(control, provenance):
+    """`expectUndeclaredFailures` - the ONE narrow, named exception, and its whole rule.
 
-    It exists for the grader's own counter-control, whose whole subject is collateral damage. It is
-    a boolean, it is meaningless on a gate that runs no test, and the roster manifest sets it
-    nowhere — which is what makes the roster invariant (#153-LTV-R6 finding R6-1) worth anything.
+    It is not an opt-out. It is a list of the exact failures a control must be SEEN to report, and
+    the runner compares it against `unexpectedFailures`: amputate it, add a name to it, or perturb
+    one character of a name, and `undeclaredReportingHeld` goes False, the autotest is misgraded and
+    the row loses the exemption as well. Grading CC10 RED proves nothing about the report - the
+    grade was already right before R7 - so the report is what this pins.
+
+    It exists only in the grader's own AUTOTEST document, only on CC10, and CC10 must carry it.
     """
-    if "allowUndeclaredFailures" not in control:
+    present = "expectUndeclaredFailures" in control
+    is_cc10 = provenance == AUTOTEST and control.get("id") == CC10
+
+    if present and provenance != AUTOTEST:
+        return ("schema: expectUndeclaredFailures is not a roster mechanism; a production control "
+                "may not keep failures it does not declare, whether or not it names them")
+    if present and not is_cc10:
+        return (f"schema: expectUndeclaredFailures is allowed on '{CC10}' alone, not on "
+                f"'{control.get('id')}'")
+    if is_cc10 and not present:
+        return (f"schema: '{CC10}' must declare expectUndeclaredFailures; it is the only control "
+                "permitted to keep undeclared failures and the list is what permits it")
+    if not present:
         return None
-    if not isinstance(control["allowUndeclaredFailures"], bool):
-        return "schema: allowUndeclaredFailures must be a boolean"
-    if control["gate"].get("kind") != "dotnet-test":
-        return "schema: allowUndeclaredFailures is meaningless on a gate that runs no test"
-    return None
 
-
-def validate_expected_undeclared(control):
-    """`expectUndeclaredFailures` is how a counter-control PINS the R6-1 reporting itself.
-
-    Grading r6-4 RED proves nothing about the report: the grade was already right before R7. The
-    counter-control therefore also names the collateral it must SEE reported, and the runner
-    compares it against `unexpectedFailures`. Remove the reporting and this counter-control fails.
-    """
-    if "expectUndeclaredFailures" not in control:
-        return None
     names = control["expectUndeclaredFailures"]
     if not isinstance(names, list) or not names:
         return "schema: expectUndeclaredFailures must be a non-empty list"
     if any(not isinstance(name, str) or not name.strip() for name in names):
         return "schema: every expectUndeclaredFailures entry must be a non-empty string"
+    if len(set(names)) != len(names):
+        return "schema: expectUndeclaredFailures contains a duplicate"
     if control["gate"].get("kind") != "dotnet-test":
         return "schema: expectUndeclaredFailures is meaningless on a gate that runs no test"
     return None
@@ -440,20 +557,32 @@ def print_record(record):
             print(f"{pad}   - {name}", flush=True)
 
 
-def undeclared_rows(records):
+def undeclared_rows(records, provenance):
     """RED rows that kept a failure nothing declared - the #153-LTV-R6 finding R6-1 invariant.
 
-    A control may opt out with `allowUndeclaredFailures`, which only the grader's own collateral
-    counter-control does. Rows whose gate runs no test carry no `unexpectedFailures` field at all
+    There is no opt-out (#153-LTV-R8). The single exemption is CC10, in the AUTOTEST document, whose
+    whole subject is collateral damage - and it is exempt only while it NAMES the collateral: the
+    moment `undeclaredReportingHeld` is anything but True the row is counted here like any other, on
+    top of being misgraded. Rows whose gate runs no test carry no `unexpectedFailures` field at all
     and are not silently counted as clean.
     """
     return [r for r in records
             if r["grade"] == "RED"
             and r.get("unexpectedFailures")
-            and not r.get("allowUndeclaredFailures")]
+            and not (provenance == AUTOTEST
+                     and r["id"] == CC10
+                     and r.get("undeclaredReportingHeld") is True)]
 
 
-def replay(controls, worktree, baseline, rig, on_record=None):
+def replay(controls, worktree, baseline, rig, provenance, on_record=None):
+    """Replay one control document. `provenance` says WHICH document - see ROSTER / AUTOTEST.
+
+    It is a parameter and not a guess: the two documents have different closed schemas, and the one
+    shape that is legal in the autotests is illegal in the roster. Deriving it from a path would put
+    the choice back in the caller's hands, which is the whole of what #153-LTV-R8 found.
+    """
+    if provenance not in (ROSTER, AUTOTEST):
+        raise SystemExit(f"internal: replay called with unknown provenance '{provenance}'")
     results = []
     for control in controls:
         started = time.time()
@@ -462,11 +591,7 @@ def replay(controls, worktree, baseline, rig, on_record=None):
         if "note" in control:
             record["note"] = control["note"]
 
-        if control.get("allowUndeclaredFailures"):
-            record["allowUndeclaredFailures"] = True
-
-        invalid = (validate_schema(control) or validate_undeclared_opt_out(control)
-                   or validate_expected_undeclared(control))
+        invalid = validate_schema(control, provenance)
         if invalid:
             record["grade"] = "ERROR"
             record["headline"] = invalid
@@ -510,7 +635,10 @@ def replay(controls, worktree, baseline, rig, on_record=None):
                             f"{facts['totalFailures']} failure(s) in {facts['totalTests']} "
                             f"test(s) vs {counters}")
 
-        if "expectUndeclaredFailures" in control:
+        # The oracle. Only for a control whose schema was accepted: a control rejected on its
+        # schema never ran, so there is no observed set to compare its list against, and reporting
+        # one would be a verdict about a run that did not happen.
+        if not invalid and "expectUndeclaredFailures" in control:
             record["undeclaredReportingHeld"] = (
                 sorted(record.get("unexpectedFailures") or [])
                 == sorted(control["expectUndeclaredFailures"]))
@@ -544,10 +672,19 @@ def main():
     parser.add_argument("ids", nargs="*")
     args = parser.parse_args()
 
+    # The ONLY two loads in this program, and each one fixes its own provenance here. MANIFEST and
+    # COUNTER_MANIFEST are derived from this file's directory, so no argument, environment variable
+    # or file name decides which schema a document is held to (#153-LTV-R8).
     with open(MANIFEST, encoding="utf-8") as handle:
         manifest = json.load(handle)
     with open(COUNTER_MANIFEST, encoding="utf-8") as handle:
         counter = json.load(handle)
+
+    for document, provenance, path in ((manifest, ROSTER, MANIFEST),
+                                       (counter, AUTOTEST, COUNTER_MANIFEST)):
+        invalid = validate_document(document, provenance)
+        if invalid:
+            raise SystemExit(f"{path}: {invalid}")
 
     selected = [] if args.self_test else [
         c for c in manifest["controls"] if not args.ids or c["id"] in args.ids]
@@ -559,6 +696,26 @@ def main():
     # decided by a field nothing read.
     full_roster = not args.ids
     run_self_test = args.self_test or (full_roster and not args.no_self_test)
+
+    # THE ROSTER PRE-FLIGHT. Every selected production control is schema-checked here, before a
+    # worktree exists and therefore before any mutation is applied or anything is compiled. A roster
+    # is a fixed set of controls of which none may be malformed, so one bad row stops the run rather
+    # than costing 40 builds to reach. The AUTOTEST document is deliberately NOT pre-flighted: cc-9
+    # IS an invalid control, and it has to reach the per-control path to be graded ERROR there.
+    preflight = [(c.get("id"), validate_schema(c, ROSTER)) for c in selected]
+    preflight = [(cid, reason) for cid, reason in preflight if reason]
+    if preflight:
+        print(f"{len(preflight)} roster control(s) are ERROR on their own schema; nothing was "
+              "mutated and nothing was built:", flush=True)
+        for cid, reason in preflight:
+            print(f"  ERROR {cid}: {reason}", flush=True)
+        if args.out:
+            with open(args.out, "w", encoding="utf-8") as handle:
+                json.dump({"selfTest": "skipped", "counterControls": [], "undeclaredFailureRows": [],
+                           "results": [{"id": cid, "grade": "ERROR", "headline": reason,
+                                        "detail": reason} for cid, reason in preflight]},
+                          handle, indent=2)
+        return 1
 
     source = subprocess.run(
         ["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True).stdout.strip()
@@ -588,7 +745,7 @@ def main():
         if run_self_test:
             print("\n--- grader counter-controls (classification, not the product) ---", flush=True)
             counter_results = replay(
-                counter["controls"], worktree, baseline, args.rig,
+                counter["controls"], worktree, baseline, args.rig, AUTOTEST,
                 on_record=lambda r: (payload.__setitem__("counterControls", r), flush()))
             payload["counterControls"] = counter_results
 
@@ -611,7 +768,7 @@ def main():
         elif selected:
             print("\n--- roster ---", flush=True)
             results = replay(
-                selected, worktree, baseline, args.rig,
+                selected, worktree, baseline, args.rig, ROSTER,
                 on_record=lambda r: (payload.__setitem__("results", r), flush()))
             payload["results"] = results
             flush()
@@ -636,8 +793,10 @@ def main():
 
     # #153-LTV-R6 finding R6-1, made permanent: a RED that carries a failure outside its own
     # expectedTests is a general breakage wearing a targeted grade. It is reported by name above and
-    # it fails the run here, on the roster AND on the counter-controls, unless the control opted out.
-    collateral = undeclared_rows(counter_results) + undeclared_rows(results)
+    # it fails the run here, on the roster AND on the counter-controls. Nothing opts out (R8): the
+    # sole exemption is CC10, in the AUTOTEST document, for exactly as long as it names what it kept.
+    collateral = (undeclared_rows(counter_results, AUTOTEST)
+                  + undeclared_rows(results, ROSTER))
     payload["undeclaredFailureRows"] = [
         {"id": r["id"], "unexpectedFailures": r["unexpectedFailures"]} for r in collateral]
     flush()

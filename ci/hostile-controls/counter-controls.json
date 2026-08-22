@@ -225,7 +225,6 @@
       "stage": "R7",
       "status": "NEW",
       "expect": "RED",
-      "allowUndeclaredFailures": true,
       "property": "#153-LTV-R6 finding R6-1. One DECLARED deciding test fails and nine UNDECLARED tests fail with it. The grade stays RED - R6 ruled that legitimate - but the runner must SAY SO: the nine failures outside expectedTests are named in full in the structured result and on the console, with their count and the run's total, and the totals must match the TRX. Before R7 this row printed '1 declared deciding test(s) failed: ...' and nothing else, so a general breakage read exactly like a targeted RED. This is the ONLY control allowed to keep undeclared failures; every roster row is failed for them.",
       "timeoutSeconds": 1800,
       "gate": {
