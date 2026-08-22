@@ -519,7 +519,7 @@
           "replace": "                // MUTATION: append a second, identical capability.\n"
         }
       ],
-      "note": "The mutation removes the skip, not the branch. Writing `if (false)` instead does not compile — the analyzers reject the unreachable body — and an ERROR grade would say nothing about the property."
+      "note": "The mutation removes the skip, not the branch. Writing `if (false)` instead does not compile \u2014 the analyzers reject the unreachable body \u2014 and an ERROR grade would say nothing about the property."
     },
     {
       "id": "s1-propagate-api-key",
@@ -984,7 +984,7 @@
           "replace": "    public HlsJobOwnershipDecision AuthorizeBySegmentName(HttpContext context, string segmentName)\n        => _bindings.ResolveBySegmentName(segmentName) is { } unchecked_\n            ? HlsJobOwnershipDecision.Authorized(unchecked_)\n            : HlsJobOwnershipDecision.NoSuchJob();"
         }
       ],
-      "note": "The mutation removes the authorization from the AUDIO member itself rather than from the guard clause in the action. The first draft deleted `|| !decision.IsAuthorized` from the action and graded INERT, which is a fact about the design worth recording: a refused decision carries NO binding, so `decision.Binding is not { } binding` refuses on its own and the IsAuthorized clause is a second lock on the same door. Removing one lock is not removing the door — so the control now removes the door."
+      "note": "The mutation removes the authorization from the AUDIO member itself rather than from the guard clause in the action. The first draft deleted `|| !decision.IsAuthorized` from the action and graded INERT, which is a fact about the design worth recording: a refused decision carries NO binding, so `decision.Binding is not { } binding` refuses on its own and the IsAuthorized clause is a second lock on the same door. Removing one lock is not removing the door \u2014 so the control now removes the door."
     },
     {
       "id": "r3-remove-the-playlist-route-authorizer",
@@ -1132,6 +1132,268 @@
         }
       ],
       "note": "The same mutation as r3-drop-user-comparison, given one second. It WOULD be RED with time to run, so grading it HUNG rather than RED is the runner refusing to award a verdict it did not actually observe."
+    },
+    {
+      "id": "r5-positive-control",
+      "stage": "R5",
+      "status": "NEW",
+      "expect": "PASS",
+      "property": "the four permanent proofs R5 adds: ActiveEncodings ownership, two-job audio selection, the dynamic call sites and the in-flight contract",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.ActiveEncodingsOwnershipTests",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.AudioSegmentJobSelectionTests",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.DynamicHlsOwnershipCallSiteTests",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.InFlightRevocationTests"
+        ]
+      },
+      "mutations": [],
+      "note": "The anti-vacuity control for every R5 mutation below. If these four classes cannot pass unmutated, none of the REDs below mean anything."
+    },
+    {
+      "id": "r5-neuter-ownsjob",
+      "stage": "R5",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "DELETE Videos/ActiveEncodings ends only the caller's own transcode",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.ActiveEncodingsOwnershipTests.ActiveEncodingsFamily",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.ActiveEncodingsOwnershipTests.TheOwnerIsKilledAndAStrangerIsNot_FromTheSameFixture"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Auth/HlsJobOwnership/HlsJobOwnershipAuthorizer.cs",
+          "find": "        var provenance = PlaybackCapabilityProvenance.Resolve(context);\n        return provenance.Outcome != PlaybackCapabilityProvenanceOutcome.Refuse\n               && CallerIsTheOwner(context, provenance.Capability, ownerUserId, ownerDeviceId);",
+          "replace": "        return true;"
+        }
+      ],
+      "note": "R4 finding F1, half one: this exact mutation left all 69 tests green at the candidate commit. The route answers 204 either way, so what turns red is the RECORDED KILL, not the status code."
+    },
+    {
+      "id": "r5-blind-the-activeencodings-call-site",
+      "stage": "R5",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "the ActiveEncodings action consults the authorizer at all",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.ActiveEncodingsOwnershipTests.ActiveEncodingsFamily",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.ActiveEncodingsOwnershipTests.TheOwnerIsKilledAndAStrangerIsNot_FromTheSameFixture",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.ActiveEncodingsOwnershipTests.TheRouteAsksTheAuthorizerAboutTheJobsOwner_NotAboutTheQuery"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Controllers/HlsSegmentController.cs",
+          "find": "        if (job is null || !_jobOwnership.OwnsJob(HttpContext, job.UserId, job.OwnerDeviceId))",
+          "replace": "        if (job is null)"
+        }
+      ],
+      "note": "R4 finding F1, half two. Neutering the implementation and blinding the call site are different failures and both were invisible; both are pinned separately."
+    },
+    {
+      "id": "r5-select-any-job-for-a-segment-name",
+      "stage": "R5",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "a segment name selects the job that WRITES it, not simply the first live job",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.AudioSegmentJobSelectionTests.ASegmentNameSelectsTheJobThatWritesIt_NotTheFirstJobInTheRegistry",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.AudioSegmentJobSelectionTests.EachOwnerReachesTheirOwnJobsAudioSegment_WithThatJobsOwnBytes",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.AudioSegmentJobSelectionTests.TheRegistryOrderChangesNothing"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.MediaEncoding/Transcoding/TranscodeManager.cs",
+          "find": "            return !string.IsNullOrEmpty(jobPlaylistId)\n                   && segmentName.StartsWith(jobPlaylistId, StringComparison.Ordinal);",
+          "replace": "            return !string.IsNullOrEmpty(jobPlaylistId);"
+        }
+      ],
+      "note": "The mission's `FirstOrDefault` / `le premier job` / `segmentId seul` mutation stated at the predicate: the name stops constraining anything, so the name alone once again names a file under whichever job happens to be first."
+    },
+    {
+      "id": "r5-select-the-wrong-job-for-a-segment-name",
+      "stage": "R5",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "a segment name selects the RIGHT job, not merely a job",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.AudioSegmentJobSelectionTests.ASegmentNameSelectsTheJobThatWritesIt_NotTheFirstJobInTheRegistry",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.AudioSegmentJobSelectionTests.EachOwnerReachesTheirOwnJobsAudioSegment_WithThatJobsOwnBytes",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.AudioSegmentJobSelectionTests.TheRegistryOrderChangesNothing"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.MediaEncoding/Transcoding/TranscodeManager.cs",
+          "find": "                   && segmentName.StartsWith(jobPlaylistId, StringComparison.Ordinal);",
+          "replace": "                   && !segmentName.StartsWith(jobPlaylistId, StringComparison.Ordinal);"
+        }
+      ],
+      "note": "R4 finding F3 verbatim: this inversion left all 69 tests green at the candidate commit, verified twice, the second time by hand with a confirmed 23-project rebuild."
+    },
+    {
+      "id": "r5-selecthlsjob-ignores-its-predicate",
+      "stage": "R5",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "the job registry's shared selector applies the predicate it is given",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.AudioSegmentJobSelectionTests.ASegmentNameSelectsTheJobThatWritesIt_NotTheFirstJobInTheRegistry",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.AudioSegmentJobSelectionTests.EachOwnerReachesTheirOwnJobsAudioSegment_WithThatJobsOwnBytes",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.AudioSegmentJobSelectionTests.TheRegistryOrderChangesNothing"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.MediaEncoding/Transcoding/TranscodeManager.cs",
+          "find": "            return _activeTranscodingJobs.FirstOrDefault(j =>\n                j.Type == TranscodingJobType.Hls\n                && j.Path is not null\n                && predicate(j));",
+          "replace": "            return _activeTranscodingJobs.FirstOrDefault(j =>\n                j.Type == TranscodingJobType.Hls\n                && j.Path is not null);"
+        }
+      ],
+      "note": "The literal `FirstOrDefault` the mission names, at the one place all three resolutions share. It degrades every member at once, which is why it is graded separately from the predicate mutations above."
+    },
+    {
+      "id": "r5-blind-the-dynamic-segment-call-site",
+      "stage": "R5",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "GetDynamicSegment asks the authorizer about the request's own HttpContext",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.DynamicHlsOwnershipCallSiteTests.TheDynamicSegmentAction_AsksTheAuthorizerAboutThisRequestsOwnHttpContext"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Controllers/DynamicHlsController.cs",
+          "find": "        var ownership = _jobOwnership.AuthorizeByOutputPath(HttpContext, playlistPath);\n        if (ownership.Outcome == HlsJobOwnershipOutcome.Refused)\n        {\n            state.Dispose();\n            return Unauthorized();\n        }",
+          "replace": "        var ownership = _jobOwnership.AuthorizeByOutputPath(new DefaultHttpContext(), playlistPath);\n        if (ownership.Outcome == HlsJobOwnershipOutcome.Refused)\n        {\n            state.Dispose();\n            return Unauthorized();\n        }"
+        }
+      ],
+      "note": "R4 Phase 2 row R6, verbatim: `the route's own call site is handed a blank DefaultHttpContext instead of HttpContext`. It compiled and left all 69 tests green, because the matrix called AuthorizeByOutputPath directly and never instantiated the controller."
+    },
+    {
+      "id": "r5-blind-the-live-playlist-call-site",
+      "stage": "R5",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "GetLiveHlsStream asks the authorizer about the request's own HttpContext",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.DynamicHlsOwnershipCallSiteTests.TheLivePlaylistAction_AsksTheAuthorizerAboutThisRequestsOwnHttpContext"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Controllers/DynamicHlsController.cs",
+          "find": "        var ownership = _jobOwnership.AuthorizeByOutputPath(HttpContext, playlistPath);\n        if (ownership.Outcome == HlsJobOwnershipOutcome.Refused\n            || (!ownership.IsAuthorized && System.IO.File.Exists(playlistPath)))",
+          "replace": "        var ownership = _jobOwnership.AuthorizeByOutputPath(new DefaultHttpContext(), playlistPath);\n        if (ownership.Outcome == HlsJobOwnershipOutcome.Refused\n            || (!ownership.IsAuthorized && System.IO.File.Exists(playlistPath)))"
+        }
+      ],
+      "note": "R4 Phase 2 row R5, the other of the two call sites F2 names."
+    },
+    {
+      "id": "r5-remove-the-dynamic-segment-refusal",
+      "stage": "R5",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "a refused dynamic-segment caller is stopped before anything is opened",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.DynamicHlsOwnershipCallSiteTests.ARefusedDecision_EndsTheRequestBeforeAnythingIsOpened"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Controllers/DynamicHlsController.cs",
+          "find": "        var ownership = _jobOwnership.AuthorizeByOutputPath(HttpContext, playlistPath);\n        if (ownership.Outcome == HlsJobOwnershipOutcome.Refused)\n        {\n            state.Dispose();\n            return Unauthorized();\n        }\n",
+          "replace": "        var ownership = _jobOwnership.AuthorizeByOutputPath(HttpContext, playlistPath);\n"
+        }
+      ],
+      "note": "The decision is still taken and still consulted for `mayServeWhatIsAlreadyThere`, but it no longer ENDS the request. Before R5 nothing in the repository noticed."
+    },
+    {
+      "id": "r5-guard-inventory-catches-a-role-that-drifted",
+      "stage": "R5",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "the guard description cannot claim an authoritative guard is corroborative",
+      "timeoutSeconds": 600,
+      "gate": {
+        "kind": "inventory",
+        "script": "ci/hls-ownership-guard-inventory.sh"
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Auth/HlsJobOwnership/HlsJobOwnershipAuthorizer.cs",
+          "find": "        // GUARD 3 of 4, AUTHORITATIVE",
+          "replace": "        // GUARD 3 of 4, CORROBORATIVE"
+        }
+      ],
+      "note": "F4 is a description that had drifted away from the code. This is the gate that notices the same thing happening again, and it is deliberately a DRIFT check: it says nothing about whether the boundary is correct."
+    },
+    {
+      "id": "r5-guard-inventory-catches-the-false-claim-returning",
+      "stage": "R5",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "the sentence R4 measured to be false cannot come back",
+      "timeoutSeconds": 600,
+      "gate": {
+        "kind": "inventory",
+        "script": "ci/hls-ownership-guard-inventory.sh"
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Auth/HlsJobOwnership/HlsJobOwnershipAuthorizer.cs",
+          "find": "        // GUARD 2 of 4, CORROBORATIVE. An api key resolves to no user, so it cannot be anybody's\n        // owner.",
+          "replace": "        // GUARD 2 of 4, CORROBORATIVE. An api key resolves to no user, so it cannot be anybody's\n        // owner. Checked explicitly rather than left to the empty-guid test below, so that removing\n        // either one is a visible change rather than a silently redundant one."
+        }
+      ],
+      "note": "R4 finding F4 was exactly this sentence. R5 reproduced both of its halves as INERT, so its return is a regression in the evidence rather than in the code - which is why an inventory gate, not a test, is what catches it."
     }
   ]
 }

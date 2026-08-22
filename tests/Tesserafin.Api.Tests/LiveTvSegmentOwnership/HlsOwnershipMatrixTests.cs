@@ -78,6 +78,11 @@ public sealed class HlsOwnershipMatrixTests : IDisposable
         File.WriteAllBytes(Path.Combine(_transcodePath, JobA + "0.ts"), _videoBytes);
         File.WriteAllBytes(Path.Combine(_transcodePath, JobB + "0.ts"), _videoBytes);
         File.WriteAllBytes(Path.Combine(_transcodePath, JobA + "0.aac"), _audioBytes);
+
+        // #153-LTV-R5. Job B's audio segment exists on disk too, and job B is deliberately NOT in
+        // the registry. A resolution that fell back to the flat folder, or that selected the wrong
+        // job, would now serve real bytes into a refused row instead of finding nothing there.
+        File.WriteAllBytes(Path.Combine(_transcodePath, JobB + "0.aac"), _audioBytes);
     }
 
     /// <summary>
@@ -200,8 +205,9 @@ public sealed class HlsOwnershipMatrixTests : IDisposable
     [MemberData(nameof(Matrix))]
     public async Task AudioSegmentFamily(Row row, bool expectedToBeServed)
     {
-        // Job B has no audio segment on disk, so "job A's credential for job B's resource" is
-        // expressed for this family as the segment name of a job that is not the caller's.
+        // "Job A's credential for job B's resource" is expressed for this family as the segment
+        // name of a job that is not the caller's. Job B's file IS on disk (#153-LTV-R5), so the
+        // refusal is a decision rather than an absence.
         foreach (var verb in new[] { Verb.Get, Verb.Head, Verb.Range })
         {
             await AssertRow(row, verb, expectedToBeServed, JobA + "0.aac", _audioBytes, Family.Audio).ConfigureAwait(true);
