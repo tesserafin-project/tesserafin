@@ -1,0 +1,224 @@
+{
+  "$comment": "#153-LTV-R5. The grader's own counter-controls: eight mandated situations plus the schema row, each with the ONE classification run.py must produce. These say nothing about the product - they say whether a roster grade can be believed. run.py replays them before any full roster run and refuses to grade the roster if one of them is classified differently.",
+  "grades": {
+    "RED": "a declared deciding test really ran and really failed",
+    "INERT": "every declared deciding test ran and stayed green",
+    "ERROR": "the run could not decide: no such test, no test selected, no build, no TRX, only undeclared failures, a crashed grader, or an invalid control",
+    "HUNG": "the budget expired and the process was terminated"
+  },
+  "controls": [
+    {
+      "id": "cc-1-a-real-deciding-test-broken-is-RED",
+      "stage": "R5",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "situation: a REAL declared deciding test is broken -> RED",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests.VideoSegmentFamily",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests.AudioSegmentFamily",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests.DynamicFamilyVerdict"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Auth/HlsJobOwnership/HlsJobOwnershipAuthorizer.cs",
+          "find": "        if (callerUserId.IsEmpty() || !callerUserId.Equals(ownerUserId))",
+          "replace": "        if (callerUserId.IsEmpty() || (false && !callerUserId.Equals(ownerUserId)))"
+        }
+      ],
+      "note": "The one row that must stay RED. If the repaired grader could no longer red a genuine break it would have traded a false RED for a false green, which is worse than F8."
+    },
+    {
+      "id": "cc-2-a-declared-test-that-does-not-exist-is-ERROR",
+      "stage": "R5",
+      "status": "NEW",
+      "expect": "ERROR",
+      "property": "situation: expectedTests names a test that does not exist -> ERROR",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests.ThisDecidingTestDoesNotExist"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Auth/HlsJobOwnership/HlsJobOwnershipAuthorizer.cs",
+          "find": "        if (callerUserId.IsEmpty() || !callerUserId.Equals(ownerUserId))",
+          "replace": "        if (callerUserId.IsEmpty() || (false && !callerUserId.Equals(ownerUserId)))"
+        }
+      ],
+      "note": "R4 finding F8, as a permanent control. Before the repair this graded RED: real tests failed, none of them the one the control claimed decided it."
+    },
+    {
+      "id": "cc-3-a-filter-that-selects-no-test-is-ERROR",
+      "stage": "R5",
+      "status": "NEW",
+      "expect": "ERROR",
+      "property": "situation: the filter selects no test at all -> ERROR",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.NoSuchClassExistsHere",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests.VideoSegmentFamily",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests.AudioSegmentFamily",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests.DynamicFamilyVerdict"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Auth/HlsJobOwnership/HlsJobOwnershipAuthorizer.cs",
+          "find": "        if (callerUserId.IsEmpty() || !callerUserId.Equals(ownerUserId))",
+          "replace": "        if (callerUserId.IsEmpty() || (false && !callerUserId.Equals(ownerUserId)))"
+        }
+      ]
+    },
+    {
+      "id": "cc-4-a-mutation-that-does-not-compile-is-ERROR",
+      "stage": "R5",
+      "status": "NEW",
+      "expect": "ERROR",
+      "property": "situation: the mutation does not compile -> ERROR",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests.VideoSegmentFamily",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests.AudioSegmentFamily",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests.DynamicFamilyVerdict"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Auth/HlsJobOwnership/HlsJobOwnershipAuthorizer.cs",
+          "find": "        var callerUserId = capability?.Validation.UserId ?? user.GetUserId();",
+          "replace": "        var callerUserId = capability?.Validation.UserId ?? user.GetUserId(   // deliberately unbalanced"
+        }
+      ]
+    },
+    {
+      "id": "cc-5-only-an-undeclared-test-failing-is-ERROR",
+      "stage": "R5",
+      "status": "NEW",
+      "expect": "ERROR",
+      "property": "situation: tests fail, but none of them is declared decisive -> ERROR",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsJobOwnershipTests.TheLegacyPlaylistRoute_RefusesEveryCaller"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Auth/HlsJobOwnership/HlsJobOwnershipAuthorizer.cs",
+          "find": "    public HlsJobOwnershipDecision AuthorizeBySegmentName(HttpContext context, string segmentName)\n        => Decide(context, _bindings.ResolveBySegmentName(segmentName));",
+          "replace": "    public HlsJobOwnershipDecision AuthorizeBySegmentName(HttpContext context, string segmentName)\n        => _bindings.ResolveBySegmentName(segmentName) is { } unchecked_\n            ? HlsJobOwnershipDecision.Authorized(unchecked_)\n            : HlsJobOwnershipDecision.NoSuchJob();"
+        }
+      ],
+      "note": "Removing the audio authorizer reds the audio family and leaves the legacy playlist test green. A control that declared only the playlist test would, before the repair, have been credited with a RED it did not earn."
+    },
+    {
+      "id": "cc-6-a-no-op-mutation-is-INERT",
+      "stage": "R5",
+      "status": "NEW",
+      "expect": "INERT",
+      "property": "situation: the mutation changes no behaviour -> INERT",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests.VideoSegmentFamily",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests.AudioSegmentFamily",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests.DynamicFamilyVerdict"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Auth/HlsJobOwnership/HlsJobOwnershipAuthorizer.cs",
+          "find": "        // STEP 1. The job's metadata, and nothing else. No file has been named yet, let alone\n        // opened: this method returns a decision, never a path.",
+          "replace": "        // STEP 1. The job's metadata, and nothing else. No file has been named yet, let alone\n        // opened: this method returns a decision, never a path.\n        // (#153-LTV-R5 counter-control: a comment, so the compiled behaviour is unchanged.)"
+        }
+      ],
+      "note": "A mutation that builds and breaks nothing is INERT, not PASS and not RED. INERT is the finding R4 Phase 2 recorded four times; the grader has to be able to say it."
+    },
+    {
+      "id": "cc-8-a-gate-that-never-finishes-is-HUNG",
+      "stage": "R5",
+      "status": "NEW",
+      "expect": "HUNG",
+      "property": "situation: the gate does not finish inside its budget -> HUNG",
+      "timeoutSeconds": 1,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests.VideoSegmentFamily",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests.AudioSegmentFamily",
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests.DynamicFamilyVerdict"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Auth/HlsJobOwnership/HlsJobOwnershipAuthorizer.cs",
+          "find": "        if (callerUserId.IsEmpty() || !callerUserId.Equals(ownerUserId))",
+          "replace": "        if (callerUserId.IsEmpty() || (false && !callerUserId.Equals(ownerUserId)))"
+        }
+      ],
+      "note": "The same mutation as cc-1, given one second. It WOULD be RED with time to run, so HUNG is the runner refusing a verdict it never observed."
+    },
+    {
+      "id": "cc-7-a-grader-that-crashes-is-ERROR",
+      "stage": "R5",
+      "status": "NEW",
+      "expect": "ERROR",
+      "property": "situation: the grader itself raises -> ERROR, and the run continues",
+      "timeoutSeconds": 120,
+      "gate": {
+        "kind": "source",
+        "file": "Tesserafin.Api/Auth/HlsJobOwnership/ThisSourceFileDoesNotExist.cs",
+        "absentPattern": "never reached"
+      },
+      "mutations": [],
+      "note": "gate_source opens the file unconditionally, so a missing file raises inside the grader. Before R5 that exception escaped the per-control loop and killed the whole roster; the remaining controls were then simply absent from the report rather than graded."
+    },
+    {
+      "id": "cc-9-an-invalid-control-schema-is-ERROR",
+      "stage": "R5",
+      "status": "NEW",
+      "expect": "ERROR",
+      "property": "situation: the control's own schema is invalid -> ERROR",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.HlsOwnershipMatrixTests",
+        "expectedTests": []
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Auth/HlsJobOwnership/HlsJobOwnershipAuthorizer.cs",
+          "find": "        if (callerUserId.IsEmpty() || !callerUserId.Equals(ownerUserId))",
+          "replace": "        if (callerUserId.IsEmpty() || (false && !callerUserId.Equals(ownerUserId)))"
+        }
+      ],
+      "note": "An empty expectedTests is the shape F8's repair forbids: a dotnet-test control that names no deciding test cannot earn a RED. It is rejected before the mutation is applied, which is why this control restores byte-identically without ever building."
+    }
+  ]
+}
