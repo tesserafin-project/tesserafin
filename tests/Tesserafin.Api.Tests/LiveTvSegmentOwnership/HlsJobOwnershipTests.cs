@@ -64,7 +64,14 @@ public sealed class HlsJobOwnershipTests : IDisposable
         File.WriteAllText(Path.Combine(_transcodePath, JobB + ".m3u8"), "#EXTM3U\n");
         File.WriteAllBytes(Path.Combine(_transcodePath, JobA + "0.ts"), new byte[] { 0x47, 0x41 });
         File.WriteAllBytes(Path.Combine(_transcodePath, JobB + "0.ts"), new byte[] { 0x47, 0x42 });
-        File.WriteAllBytes(Path.Combine(_transcodePath, JobA + "0.aac"), new byte[] { 0xFF, 0xF1 });
+        File.WriteAllBytes(Path.Combine(_transcodePath, JobA + "0.aac"), new byte[] { 0xFF, 0xF1, 0x0A });
+
+        // #153-LTV-R5, repairing R4 finding F3. Job B's audio segment used to be MISSING, and
+        // `AnAudioSegmentNameOwnedByNoJob_IsNeverServed` asserted that exactly this file was not
+        // served. A file that does not exist cannot be served by any implementation, so that
+        // assertion could not fail whatever the resolution did. It exists now, with bytes of its
+        // own, so the refusal below is a decision rather than an absence.
+        File.WriteAllBytes(Path.Combine(_transcodePath, JobB + "0.aac"), new byte[] { 0xFF, 0xF1, 0x0B });
     }
 
     // ---------------------------------------------------------------------------------------
@@ -208,6 +215,11 @@ public sealed class HlsJobOwnershipTests : IDisposable
     /// The audio sibling resolves its file from the caller-supplied <c>segmentId</c> alone, with
     /// only a containment check against the flat transcode folder. It reads no job and no caller.
     /// </summary>
+    /// <remarks>
+    /// #153-LTV-R5. The fixture now holds job B's audio segment as well as job A's, so the two
+    /// audio refusals below are separable: one is about WHO is asking, the other about WHICH job
+    /// owns the name, and neither can be satisfied by a file that simply is not there.
+    /// </remarks>
     [Fact]
     public void ADurableTokenOfAnotherUser_NeverReachesTheJobsAudioSegment()
     {
@@ -225,14 +237,25 @@ public sealed class HlsJobOwnershipTests : IDisposable
     /// <c>segmentId</c> alone must never name a file. With no job owning the name, the answer is a
     /// closed refusal — the route must not fall back to the flat transcode folder.
     /// </summary>
+    /// <remarks>
+    /// #153-LTV-R5, repairing R4 finding F3. This test used to be vacuous twice over: the file it
+    /// asserts against was never written by the fixture, and it also passed <c>jobIsGone: true</c>,
+    /// so the whole registry was empty and "this NAME belongs to no job" was never the reason for
+    /// anything. Now job A is LIVE while the caller names job B's segment, and job B's segment file
+    /// really is on disk — so a resolution that fell back to the folder, or that selected the wrong
+    /// job, would serve it and this test would fail.
+    /// </remarks>
     [Fact]
     public void AnAudioSegmentNameOwnedByNoJob_IsNeverServed()
     {
+        Assert.True(
+            File.Exists(Path.Combine(_transcodePath, JobB + "0.aac")),
+            "the fixture must really contain the file this test asserts is not served.");
+
         var result = InvokeAudio(
             callerUserId: _ownerUserId,
             callerDeviceId: OwnerDevice,
-            segmentId: JobB + "0",
-            jobIsGone: true);
+            segmentId: JobB + "0");
 
         Assert.False(
             IsFileResultFor(result, JobB + "0.aac"),
