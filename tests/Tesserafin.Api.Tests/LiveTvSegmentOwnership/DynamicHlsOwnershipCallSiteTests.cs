@@ -117,6 +117,10 @@ public sealed class DynamicHlsOwnershipCallSiteTests : IDisposable
 
         var result = await InvokeAudioSegment(controller).ConfigureAwait(true);
 
+        // The gate was CONSULTED and then nothing downstream happened. Without this line the
+        // assertion below would also be satisfied by an action that threw before it ever reached
+        // the gate - which is R4 finding F3's vacuity in a new costume.
+        Assert.Single(authorizer.Questions);
         Assert.IsType<UnauthorizedResult>(result);
         Assert.False(beyondTheGate.Reached, "a refused caller reached the transcode manager.");
     }

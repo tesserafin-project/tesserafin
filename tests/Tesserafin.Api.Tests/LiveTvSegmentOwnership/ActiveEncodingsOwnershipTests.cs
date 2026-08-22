@@ -148,9 +148,14 @@ public sealed class ActiveEncodingsOwnershipTests : IDisposable
     {
         var kills = new List<(string DeviceId, string? PlaySessionId)>();
         var httpContext = Context(caller);
-        var controller = Controller(httpContext, kills, jobIsGone: false);
+        var controller = Controller(httpContext, kills, jobIsGone: false, out var asked);
 
         var result = controller.StopEncodingProcess(RequestedDeviceId, JobPlaySession);
+
+        // The real authorizer decided, and it was asked exactly once. Without this, every refusal
+        // row would also be satisfied by an action that never consulted anything - which is the
+        // shape of the vacuity R4 found in the audio tests.
+        Assert.Equal(1, asked.Count);
 
         // Every caller gets the same answer. This assertion is here to make the point explicit:
         // the status code cannot be the evidence, because it does not vary.
@@ -411,14 +416,22 @@ public sealed class ActiveEncodingsOwnershipTests : IDisposable
     }
 
     private HlsSegmentController Controller(HttpContext httpContext, List<(string DeviceId, string? PlaySessionId)> kills, bool jobIsGone)
-    {
-        // The REAL authorizer. Substituting it would make every assertion here a statement about a
-        // mock rather than about the boundary.
-        var authorizer = new HlsJobOwnershipAuthorizer(
-            Mock.Of<IHlsSegmentBindingRegistry>(MockBehavior.Loose),
-            SessionManager().Object);
+        => Controller(httpContext, kills, jobIsGone, out _);
 
-        return new HlsSegmentController(TranscodeManager(kills, jobIsGone).Object, authorizer)
+    private HlsSegmentController Controller(
+        HttpContext httpContext,
+        List<(string DeviceId, string? PlaySessionId)> kills,
+        bool jobIsGone,
+        out CountingAuthorizer asked)
+    {
+        // The REAL authorizer, wrapped only to COUNT the questions put to it. Substituting the
+        // decision would make every assertion here a statement about a mock rather than about the
+        // boundary; counting around it changes no answer.
+        asked = new CountingAuthorizer(new HlsJobOwnershipAuthorizer(
+            Mock.Of<IHlsSegmentBindingRegistry>(MockBehavior.Loose),
+            SessionManager().Object));
+
+        return new HlsSegmentController(TranscodeManager(kills, jobIsGone).Object, asked)
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext }
         };
@@ -426,6 +439,34 @@ public sealed class ActiveEncodingsOwnershipTests : IDisposable
 
     /// <inheritdoc />
     public void Dispose() => _services.Dispose();
+
+    /// <summary>
+    /// The real authorizer, with a counter around <c>OwnsJob</c>. It answers exactly what the real
+    /// one answers; all it adds is the ability to assert that the route asked at all.
+    /// </summary>
+    private sealed class CountingAuthorizer : IHlsJobOwnershipAuthorizer
+    {
+        private readonly IHlsJobOwnershipAuthorizer _inner;
+
+        public CountingAuthorizer(IHlsJobOwnershipAuthorizer inner) => _inner = inner;
+
+        public int Count { get; private set; }
+
+        public HlsJobOwnershipDecision AuthorizeByPlaylistId(HttpContext context, string playlistId)
+            => _inner.AuthorizeByPlaylistId(context, playlistId);
+
+        public HlsJobOwnershipDecision AuthorizeBySegmentName(HttpContext context, string segmentName)
+            => _inner.AuthorizeBySegmentName(context, segmentName);
+
+        public HlsJobOwnershipDecision AuthorizeByOutputPath(HttpContext context, string outputPath)
+            => _inner.AuthorizeByOutputPath(context, outputPath);
+
+        public bool OwnsJob(HttpContext context, Guid ownerUserId, string? ownerDeviceId)
+        {
+            Count++;
+            return _inner.OwnsJob(context, ownerUserId, ownerDeviceId);
+        }
+    }
 
     private sealed class RecordingAuthorizer : IHlsJobOwnershipAuthorizer
     {
