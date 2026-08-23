@@ -519,7 +519,7 @@
           "replace": "                // MUTATION: append a second, identical capability.\n"
         }
       ],
-      "note": "The mutation removes the skip, not the branch. Writing `if (false)` instead does not compile \u2014 the analyzers reject the unreachable body \u2014 and an ERROR grade would say nothing about the property."
+      "note": "The mutation removes the skip, not the branch. Writing `if (false)` instead does not compile — the analyzers reject the unreachable body — and an ERROR grade would say nothing about the property."
     },
     {
       "id": "s1-propagate-api-key",
@@ -984,7 +984,7 @@
           "replace": "    public HlsJobOwnershipDecision AuthorizeBySegmentName(HttpContext context, string segmentName)\n        => _bindings.ResolveBySegmentName(segmentName) is { } unchecked_\n            ? HlsJobOwnershipDecision.Authorized(unchecked_)\n            : HlsJobOwnershipDecision.NoSuchJob();"
         }
       ],
-      "note": "The mutation removes the authorization from the AUDIO member itself rather than from the guard clause in the action. The first draft deleted `|| !decision.IsAuthorized` from the action and graded INERT, which is a fact about the design worth recording: a refused decision carries NO binding, so `decision.Binding is not { } binding` refuses on its own and the IsAuthorized clause is a second lock on the same door. Removing one lock is not removing the door \u2014 so the control now removes the door."
+      "note": "The mutation removes the authorization from the AUDIO member itself rather than from the guard clause in the action. The first draft deleted `|| !decision.IsAuthorized` from the action and graded INERT, which is a fact about the design worth recording: a refused decision carries NO binding, so `decision.Binding is not { } binding` refuses on its own and the IsAuthorized clause is a second lock on the same door. Removing one lock is not removing the door — so the control now removes the door."
     },
     {
       "id": "r3-remove-the-playlist-route-authorizer",
@@ -1398,6 +1398,238 @@
         }
       ],
       "note": "R4 finding F4 was exactly this sentence. R5 reproduced both of its halves as INERT, so its return is a regression in the evidence rather than in the code - which is why an inventory gate, not a test, is what catches it."
+    },
+    {
+      "id": "cql-remove-boundary-attribute",
+      "stage": "CQL",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "the two dynamic segment actions carry the startTimeTicks boundary",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.DynamicHlsStartTimeTicksBoundaryTests.ExactlyTheTwoSegmentActions_CarryTheBoundary",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.DynamicHlsStartTimeTicksBoundaryTests.ExactlyTheTwoSegmentActions_CarryTheBoundary"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Controllers/DynamicHlsController.cs",
+          "find": "    [RequiresPlaybackCapability(PlaybackCapabilityScope.Media, \"itemId\", \"mediaSourceId\", \"playSessionId\")]\n    [RejectsStartTimeTicks(\"startTimeTicks\")]\n    public async Task<ActionResult> GetHlsVideoSegment(",
+          "replace": "    [RequiresPlaybackCapability(PlaybackCapabilityScope.Media, \"itemId\", \"mediaSourceId\", \"playSessionId\")]\n    public async Task<ActionResult> GetHlsVideoSegment(",
+          "count": 1
+        },
+        {
+          "file": "Tesserafin.Api/Controllers/DynamicHlsController.cs",
+          "find": "    [RequiresPlaybackCapability(PlaybackCapabilityScope.Media, \"itemId\", \"mediaSourceId\", \"playSessionId\")]\n    [RejectsStartTimeTicks(\"startTimeTicks\")]\n    public async Task<ActionResult> GetHlsAudioSegment(",
+          "replace": "    [RequiresPlaybackCapability(PlaybackCapabilityScope.Media, \"itemId\", \"mediaSourceId\", \"playSessionId\")]\n    public async Task<ActionResult> GetHlsAudioSegment(",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "cql-neuter-boundary-refusal",
+      "stage": "CQL",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "a forbidden startTimeTicks is refused at the MVC boundary",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Server.Integration.Tests/Tesserafin.Server.Integration.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Server.Integration.Tests.PlaybackCredentials.DynamicHlsStartTimeTicksHttpMatrixTests.AForbiddenStartTimeTicks_IsRefusedWithFourHundredAndZeroBytes",
+        "expectedTests": [
+          "Tesserafin.Server.Integration.Tests.PlaybackCredentials.DynamicHlsStartTimeTicksHttpMatrixTests.AForbiddenStartTimeTicks_IsRefusedWithFourHundredAndZeroBytes"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Attributes/RejectsStartTimeTicksAttribute.cs",
+          "find": "            context.Result = new ContentResult { StatusCode = StatusCodes.Status400BadRequest };",
+          "replace": "            _ = ticks;",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "cql-validate-after-stream-resolution",
+      "stage": "CQL",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "a forbidden value is refused before any streaming state is resolved",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.DynamicHlsStartTimeTicksBoundaryTests.AForbiddenValue_ResolvesNoStreamNamesNoPathAndTouchesNoJob",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.DynamicHlsStartTimeTicksBoundaryTests.AForbiddenValue_ResolvesNoStreamNamesNoPathAndTouchesNoJob"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Attributes/RejectsStartTimeTicksAttribute.cs",
+          "find": "            context.Result = new ContentResult { StatusCode = StatusCodes.Status400BadRequest };",
+          "replace": "            _ = ticks;",
+          "count": 1
+        },
+        {
+          "file": "Tesserafin.Api/Controllers/DynamicHlsController.cs",
+          "find": "        var state = await ResolveStreamingState(streamingRequest, cancellationToken)\n            .ConfigureAwait(false);\n\n        var playlistPath = Path.ChangeExtension(state.OutputFilePath, \".m3u8\");",
+          "replace": "        var state = await ResolveStreamingState(streamingRequest, cancellationToken)\n            .ConfigureAwait(false);\n\n        var playlistPath = Path.ChangeExtension(state.OutputFilePath, \".m3u8\");\n\n        if ((streamingRequest.StartTimeTicks ?? 0) != 0)\n        {\n            state.Dispose();\n            throw new ArgumentException(\"StartTimeTicks is not allowed.\");\n        }",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "cql-refuse-after-the-path-is-named",
+      "stage": "CQL",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "a forbidden value is refused before any output path is named or job touched",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.DynamicHlsStartTimeTicksBoundaryTests.AForbiddenValue_ResolvesNoStreamNamesNoPathAndTouchesNoJob",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.DynamicHlsStartTimeTicksBoundaryTests.AForbiddenValue_ResolvesNoStreamNamesNoPathAndTouchesNoJob"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Attributes/RejectsStartTimeTicksAttribute.cs",
+          "find": "            context.Result = new ContentResult { StatusCode = StatusCodes.Status400BadRequest };",
+          "replace": "            _ = ticks;",
+          "count": 1
+        },
+        {
+          "file": "Tesserafin.Api/Controllers/DynamicHlsController.cs",
+          "find": "        var segmentPath = GetSegmentPath(state, playlistPath, segmentId);",
+          "replace": "        var segmentPath = GetSegmentPath(state, playlistPath, segmentId);\n\n        if ((streamingRequest.StartTimeTicks ?? 0) != 0)\n        {\n            state.Dispose();\n            throw new ArgumentException(\"StartTimeTicks is not allowed.\");\n        }",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "cql-remove-authorizer-call",
+      "stage": "CQL",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "the dynamic segment action asks the ownership authorizer, unconditionally",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.DynamicHlsStartTimeTicksBoundaryTests.TheOwnershipMatrix_IsUnchangedByTheBoundary",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.DynamicHlsStartTimeTicksBoundaryTests.TheOwnershipMatrix_IsUnchangedByTheBoundary"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Controllers/DynamicHlsController.cs",
+          "find": "        // covered by it too.\n        var ownership = _jobOwnership.AuthorizeByOutputPath(HttpContext, playlistPath);",
+          "replace": "        // covered by it too.\n        var ownership = HlsJobOwnershipDecision.NoSuchJob();",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "cql-authorizer-conditional-on-starttimeticks",
+      "stage": "CQL",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "the ownership call is not conditional on a caller-supplied value",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.DynamicHlsStartTimeTicksBoundaryTests.AnAllowedValue_ReachesTheAuthorizerExactlyOnceOnTheSameHttpContext",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.DynamicHlsStartTimeTicksBoundaryTests.AnAllowedValue_ReachesTheAuthorizerExactlyOnceOnTheSameHttpContext"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Controllers/DynamicHlsController.cs",
+          "find": "        // covered by it too.\n        var ownership = _jobOwnership.AuthorizeByOutputPath(HttpContext, playlistPath);",
+          "replace": "        // covered by it too.\n        var ownership = streamingRequest.StartTimeTicks is null\n            ? _jobOwnership.AuthorizeByOutputPath(HttpContext, playlistPath)\n            : HlsJobOwnershipDecision.Authorized(new HlsSegmentBinding(\n                Path.GetFileNameWithoutExtension(playlistPath),\n                Guid.Empty,\n                \"any-device\",\n                streamingRequest.Id,\n                streamingRequest.MediaSourceId,\n                streamingRequest.PlaySessionId,\n                Path.GetDirectoryName(Path.GetFullPath(playlistPath))!,\n                Path.GetFullPath(playlistPath),\n                1));",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "cql-accept-another-user",
+      "stage": "CQL",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "a caller who is not the job's owner receives no media byte",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.LiveTvSegmentOwnership.DynamicHlsStartTimeTicksBoundaryTests.TheOwnershipMatrix_IsUnchangedByTheBoundary",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.LiveTvSegmentOwnership.DynamicHlsStartTimeTicksBoundaryTests.TheOwnershipMatrix_IsUnchangedByTheBoundary"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Auth/HlsJobOwnership/HlsJobOwnershipAuthorizer.cs",
+          "find": "        return CallerIsTheOwner(context, capability, binding.UserId, binding.DeviceId)\n            ? HlsJobOwnershipDecision.Authorized(binding)\n            : HlsJobOwnershipDecision.Refused();",
+          "replace": "        return HlsJobOwnershipDecision.Authorized(binding);",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "cql-refusal-carries-a-body",
+      "stage": "CQL",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "the boundary's refusal carries no bytes, not merely the right status",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Server.Integration.Tests/Tesserafin.Server.Integration.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Server.Integration.Tests.PlaybackCredentials.DynamicHlsStartTimeTicksHttpMatrixTests.AForbiddenStartTimeTicks_IsRefusedWithFourHundredAndZeroBytes",
+        "expectedTests": [
+          "Tesserafin.Server.Integration.Tests.PlaybackCredentials.DynamicHlsStartTimeTicksHttpMatrixTests.AForbiddenStartTimeTicks_IsRefusedWithFourHundredAndZeroBytes"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Attributes/RejectsStartTimeTicksAttribute.cs",
+          "find": "            context.Result = new ContentResult { StatusCode = StatusCodes.Status400BadRequest };",
+          "replace": "            context.Result = new ContentResult\n            {\n                StatusCode = StatusCodes.Status400BadRequest,\n                Content = \"StartTimeTicks is not allowed.\"\n            };",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "cql-restore-the-inline-guard",
+      "stage": "CQL",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "GetDynamicSegment carries no branch on the request in front of the authorizer",
+      "note": "The CodeQL control, expressed as the source property CodeQL is reading. Restoring the guard on the repaired tree reproduces cs/user-controlled-bypass at the guard's own line - measured with CodeQL 2.26.3 and codeql/csharp-queries 1.9.1, the CLI and pack the hosted run pinned, four thread flows from the same two startTimeTicks parameters. That measurement needs a C# database and cannot run here, so this row pins the source shape instead: the inline branch must not come back. It is a proxy for the CodeQL result and is stated as one.",
+      "timeoutSeconds": 600,
+      "gate": {
+        "kind": "source",
+        "file": "Tesserafin.Api/Controllers/DynamicHlsController.cs",
+        "absentPattern": "streamingRequest\\.StartTimeTicks \\?\\? 0"
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Controllers/DynamicHlsController.cs",
+          "find": "        // method and must stay that way; anything this route cannot honour belongs on the filter.\n        //\n        // CTS lifecycle is managed internally.",
+          "replace": "        // method and must stay that way; anything this route cannot honour belongs on the filter.\n        //\n        if ((streamingRequest.StartTimeTicks ?? 0) > 0)\n        {\n            throw new ArgumentException(\"StartTimeTicks is not allowed.\");\n        }\n\n        // CTS lifecycle is managed internally.",
+          "count": 1
+        }
+      ]
     }
   ]
 }
