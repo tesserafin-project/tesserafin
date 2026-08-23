@@ -1140,6 +1140,7 @@ public class DynamicHlsController : BaseTesserafinApiController
     [ProducesVideoFile]
     [SuppressMessage("Microsoft.Performance", "CA1801:ReviewUnusedParameters", MessageId = "playlistId", Justification = "Imported from ServiceStack")]
     [RequiresPlaybackCapability(PlaybackCapabilityScope.Media, "itemId", "mediaSourceId", "playSessionId")]
+    [RejectsStartTimeTicks("startTimeTicks")]
     public async Task<ActionResult> GetHlsVideoSegment(
         [FromRoute, Required] Guid itemId,
         [FromRoute, Required] string playlistId,
@@ -1323,6 +1324,7 @@ public class DynamicHlsController : BaseTesserafinApiController
     [ProducesAudioFile]
     [SuppressMessage("Microsoft.Performance", "CA1801:ReviewUnusedParameters", MessageId = "playlistId", Justification = "Imported from ServiceStack")]
     [RequiresPlaybackCapability(PlaybackCapabilityScope.Media, "itemId", "mediaSourceId", "playSessionId")]
+    [RejectsStartTimeTicks("startTimeTicks")]
     public async Task<ActionResult> GetHlsAudioSegment(
         [FromRoute, Required] Guid itemId,
         [FromRoute, Required] string playlistId,
@@ -1491,11 +1493,14 @@ public class DynamicHlsController : BaseTesserafinApiController
 
     private async Task<ActionResult> GetDynamicSegment(StreamingRequestDto streamingRequest, int segmentId)
     {
-        if ((streamingRequest.StartTimeTicks ?? 0) > 0)
-        {
-            throw new ArgumentException("StartTimeTicks is not allowed.");
-        }
-
+        // NO BRANCH ON THE REQUEST BEFORE THE AUTHORIZER, BY CONSTRUCTION. A caller-supplied
+        // StartTimeTicks is refused by [RejectsStartTimeTicks] on both entry actions, at the MVC
+        // boundary, before this method is entered at all. It used to be refused here, by a guard
+        // that threw — and a guard here is a query parameter deciding whether
+        // _jobOwnership.AuthorizeByOutputPath below runs, which is exactly the shape CodeQL's
+        // cs/user-controlled-bypass reports. The ownership decision is unconditional in this
+        // method and must stay that way; anything this route cannot honour belongs on the filter.
+        //
         // CTS lifecycle is managed internally.
         var cancellationTokenSource = new CancellationTokenSource();
         var cancellationToken = cancellationTokenSource.Token;
