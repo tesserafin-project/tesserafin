@@ -1,4 +1,4 @@
-# W1-A2 — the win-x64 FFmpeg runtime
+# W1-A3 — the win-x64 FFmpeg runtime
 
 Issue [#236]. Follows W1-R, which retained and published the Windows build
 inputs; see [W1-windows-build-input-retention.md](W1-windows-build-input-retention.md).
@@ -19,7 +19,8 @@ them stops rather than substituting something close.
 
 | Thing | Value |
 | --- | --- |
-| Server commit | `cc6ee781c732d9999b9619df68fc26c6a34dbfdc` |
+| Server base | `688436081e0ae6d9954af38b5fe306b6b853be7b` (master, the base of #253) |
+| Proof head | the head of #253; the exact SHA every run built is recorded in the pull-request body, because a document cannot name a commit it is itself part of |
 | jellyfin-ffmpeg | `d4590e12452f94d40e413caecb34b08de608353b` (`v7.1.4-3`) |
 | Build revision | `7.1.4-tesserafin.1` |
 | Build inputs | `ghcr.io/tesserafin-project/windows-ffmpeg-build-inputs@sha256:cff23b74…c04f0a` |
@@ -27,6 +28,16 @@ them stops rather than substituting something close.
 | Lock | `602510cd…5abcb8`, 246 packages, 246 valid signatures |
 | Trust root | `1c32ec73…16a49c` |
 | Signer | `5F944B027F7FE2091985AA2EFA11531AA0AA7F57` |
+
+#### A note on the earlier base
+
+An earlier revision of this document named `cc6ee781c732d9999b9619df68fc26c6a34dbfdc`
+as the server commit. That is the base of **#250 (W1-A2)**, the historical lane,
+and it is not this candidate's base. #253 (W1-A3) replays the same sixteen
+commits onto the post-#252 master `688436081e…` — range-diff equal, identical
+aggregate patch-id, every touched blob byte-identical — and then carries the
+measured repairs above it. #250 keeps its own history and its own runs; nothing
+here is evidence for it, and nothing there is evidence for this.
 
 They are committed in
 [`ci/windows/ffmpeg/accepted-build-inputs.json`](../../ci/windows/ffmpeg/accepted-build-inputs.json)
@@ -70,11 +81,42 @@ The Linux runtime applies **94 of 95**. It excludes
 FFmpeg's own `EXTERNAL_LIBRARY_NONFREE_LIST`, so that FFmpeg's upstream licence
 enforcement remains a fourth independent layer beneath Tesserafin's own.
 
-**win-x64 applies all 95.** The frozen premise for this work names 95/95, in
-order, zero fuzz. Applying 0029 does not enable FDK AAC — it only stops FFmpeg
-from classifying it as nonfree — but it does remove that fourth layer, and that
-is a real difference from the Linux posture. It is stated here rather than
-buried:
+**win-x64 applies all 95, as a declared platform exception.** Applying 0029 does
+not enable FDK AAC — it only stops FFmpeg from classifying it as nonfree — but it
+does remove that fourth layer, and that is a real difference from the Linux
+posture.
+
+It is not stated only in prose. `ci/ffmpeg/fork-patches.json` records the
+divergence as machine-readable data on the patch itself:
+
+```json
+"platformExceptions": [
+  { "platform": "win-x64", "applied": true,
+    "rationale": "…", "compensatingControls": [ "…", "…", "…" ] }
+]
+```
+
+That object is closed to unknown fields, its `platform` must be one of
+`components.json`'s declared platforms, and an exception whose `applied` matches
+the base decision is refused — an exception that changes nothing records nothing.
+Everything downstream reads it rather than restating it:
+
+* `ci/ffmpeg/verify-components.sh --platform <rid>` reports the **effective**
+  decision for one platform. It no longer reports one platform's exclusion count
+  while checking another platform's flags: `--platform win-x64` says
+  `95 of 95 patches applied, 0 excluded`, `--platform linux-x64` says
+  `94 of 95 patches applied, 1 excluded`, and the exception inventory is printed
+  in both.
+* `ci/windows/ffmpeg/build-win-x64.sh` computes its applied set from the same
+  file. Applying fewer patches than the decision and applying more are separate
+  failures with separate messages.
+* `provenance.json` carries `patches.platformExceptions` beside `patches.excluded`,
+  so a reader of the delivered artifact alone can see the divergence.
+  `excluded: []` on its own cannot distinguish "nothing diverged" from
+  "everything diverged and nobody said so".
+* `ci/windows/ffmpeg/verify-linux-identity.sh` compares the **decision** rather
+  than the file bytes, so recording a Windows exception cannot quietly change
+  what Linux applies.
 
 Four independent layers still keep FDK AAC out of this runtime.
 
@@ -221,11 +263,17 @@ runtime is refused.
 Linux workstation:
 
 ```bash
-ci/ffmpeg/verify-components.sh
-ci/ffmpeg/verify-components.sh --flags ci/windows/ffmpeg/ffmpeg-configure.win-x64.txt
+ci/ffmpeg/verify-components.sh                       # the catalogue view
+ci/ffmpeg/verify-components.sh --platform linux-x64  # what Linux decides
+ci/ffmpeg/verify-components.sh --platform win-x64 \
+    --flags ci/windows/ffmpeg/ffmpeg-configure.win-x64.txt
 ci/windows/ffmpeg/verify-linux-identity.sh
 python3 ci/windows/ffmpeg/negative-controls.py
 ```
+
+`--platform` is not cosmetic. Without it the report printed the base exclusion
+count while checking the Windows flag file, so a declared platform exception read
+as an exclusion that never happened.
 
 The PE reader is standard library only and reads delay-loaded imports as well as
 ordinary ones — a check that reads only the import directory concludes that a
@@ -239,28 +287,62 @@ extracted to an unrelated directory, PATH is reduced to the system directories,
 the absence of any other ffmpeg is asserted, and a software encode → probe →
 decode round trip is read back rather than trusted).
 
-**Across two hosts**: `.github/workflows/w1-windows-ffmpeg-runtime.yml` builds on
-two clean native `windows-latest` runners, each pulling the same digest
-independently with no cache anywhere, and `compare-hosts.py` requires the same
-path set, then the same content, then the same archive bytes.
+**Across two runner allocations**: `.github/workflows/w1-windows-ffmpeg-runtime.yml`
+builds on two clean native `windows-latest` allocations, each pulling the same
+digest independently with no cache anywhere, and `compare-hosts.py` requires the
+same path set, then the same content, then the same archive bytes.
+
+### What that proves, and what it does not
+
+This is **dual-runner reproducibility**, not two-host independence, and the
+distinction is enforced rather than described. `compare-hosts.py` reads both
+`runner.json` records and records three facts in `comparison.json`:
+
+| Field | Meaning |
+| --- | --- |
+| `distinctRunnerAllocations` | two different `runnerName` values. Required — one job compared against itself is refused outright. |
+| `sameRunnerImage` | both allocations ran the same runner-image generation. |
+| `sameNode` | both allocations landed on the same physical `node`. |
+
+`topology` is then derived, never asserted: `dual-runner` when `sameNode` is
+true, `two-host-same-image` or `two-host-distinct-images` when it is false. With
+`sameNode` true, `independenceClaim` reads `none: …`, and the verdict line says
+"two native Windows runner allocations", never "two hosts".
+
+The measured result on this candidate is **`sameNode: true`**: GitHub placed both
+allocations on one node. Nothing in this repository chooses that, and re-running
+until a second node happens to be allocated would be selecting evidence rather
+than producing it. So the proof states what the workflow guarantees — two
+isolated jobs, two allocations, one runner-image generation, byte-identical
+output — and states the limitation in the same record.
+
+Both `runner.json` files, `comparison.json` and the acceptance evidence are
+retained together for exactly this reason: split them and the limitation stops
+travelling with the claim.
 
 That workflow carries two triggers. `workflow_dispatch` takes an exact evidence
-SHA and is the intended long-term route. It is unusable before the file reaches
-master: GitHub only offers `workflow_dispatch` for a workflow present on the
-default branch, and dispatching this one from the W1-A2 branch answered `404`.
-So the workflow also runs on `push` to `w1/windows-ffmpeg-runtime-a2` alone. That
-trigger weakens nothing — the same two clean native runners, the same
-`contents: read`, the same absence of any publication job — and `github.sha` is
-as immutable as a hand-typed SHA. Both routes resolve to one `EVIDENCE_SHA`, and
-every job asserts that its checkout is exactly that commit, because a branch can
-move between the trigger and the checkout.
+SHA and is the intended route once this reaches master; GitHub only offers it for
+a workflow present on the default branch, and dispatching this one from a feature
+branch answered `404`. The second trigger is `pull_request`, filtered to
+`ci/windows/**`, `ci/ffmpeg/**` and the workflow file itself. It works before
+merge, from the pull request head's own copy of the workflow, and it keeps
+working after merge for every future change to those paths — unlike a
+single-branch `push` trigger, which works once and then becomes dead
+configuration on master. `EVIDENCE_SHA` resolves to
+`github.event.pull_request.head.sha` for that event, never the ephemeral merge
+commit, and every job asserts that its checkout is exactly that commit.
 
-**Permanent negative controls** (33) refuse: missing, added, renamed and
-corrupted paths — inside one delivered set and between two hosts; arm64, x86 and
-PE32 images; a PE carrying a link timestamp; an embedded build-host path in UTF-8
-and in UTF-16LE; a tagged or non-digest input reference; a wrong manifest, layer,
-lock, trust root or signer; a short package or signature count; and every shape
-of live pacman resolution.
+**Permanent negative controls** (58) refuse: missing, added, renamed and
+corrupted paths — inside one delivered set and between two allocations; arm64,
+x86 and PE32 images; a PE carrying a link timestamp; an embedded build-host path
+in UTF-8 and in UTF-16LE; a tagged or non-digest input reference; a wrong
+manifest, layer, lock, trust root or signer; a short package or signature count;
+every shape of live pacman resolution; one allocation compared against itself; a
+same-node comparison recorded as anything other than `dual-runner`; and five
+separate ways the fork-patch decision can go wrong — a silently excluded patch,
+0029 applied with no declared exception, an exception that changes nothing, an
+unsafe patch applied by the base decision, and FDK AAC reappearing in the
+configure line, the encoders or the decoders.
 
 ---
 
@@ -273,6 +355,52 @@ of live pacman resolution.
 * it does not change the Linux runtimes, the OpenAPI surface, the SDK
   provenance, the web pair lock or any #153 surface.
 
-**Durable retention of the proven runtime is a separate owner ruling.**
+---
+
+## 9. What durable retention would have to cover
+
+**Nothing here is authorised, and this section publishes nothing.** It states
+what an owner ruling would have to require, so that the ruling is decided against
+a written list rather than assembled from memory later.
+
+Everything that constitutes this proof currently exists only as an expiring
+Actions artifact. The runtime, its corresponding source, its inventory and the
+dual-runner records all disappear on their retention date, which is why W2 cannot
+consume any of it today.
+
+### The co-retention set
+
+These are one unit. Retaining a subset produces a binary whose licence
+obligations cannot be met, or a claim whose limitation no longer travels with it.
+
+| Item | Why it cannot be dropped |
+| --- | --- |
+| the win-x64 runtime archive | the artifact itself |
+| the corresponding-source archive | GPL obligation; see below |
+| `windows-ffmpeg-build-inputs@sha256:cff23b74…` | the 246-package MSYS2 set is the build's root of trust. Delete it and the accepted runtime stops being reproducible even if everything else here survives. |
+| `provenance.json` | binds inputs, patch decision, platform exceptions and toolchain to the bytes |
+| `sbom.cdx.json`, `licenses/**`, `THIRD-PARTY-NOTICES.md`, `SHA256SUMS` | the redistribution closure |
+| `accept-runtime.json` | the behavioural acceptance. It is deliberately moved OUT of the delivered set before upload, so it lives only in the evidence bundles — the delivered set alone does not carry the encode/probe/decode proof. |
+| both evidence bundles (`winx64-evidence-a`, `winx64-evidence-b`) | one bundle is one allocation; the comparison means nothing without both |
+| `comparison.json` | the reproducibility record |
+| both `runner.json` records | the `sameNode` limitation. Retain the comparison without these and the claim outlives the caveat that qualifies it. |
+
+### The licence obligation is durable, not one-shot
+
+The runtime is GPL-3.0-or-later (`--enable-gpl --enable-version3`, with
+x264 and x265 GPL-2.0-or-later) and links every component **statically**. So the
+corresponding source is not a convenience: it must remain available to anyone who
+receives the binary, for at least as long as that binary is distributed. A store
+the project can delete at will, or one with no stated retention, does not
+discharge that. Any ruling that authorises distribution has to say how long the
+corresponding source lives and how a recipient reaches it.
+
+### What a ruling must still not grant
+
+Publication of a candidate is not acceptance of one. A retention ruling may not
+carry signing authority, release authority, a server ZIP, an MSI, a mutable tag
+as an identity, or permission to begin W2. Consumption is by exact manifest
+digest only, and the accepted digest belongs on [#236] before anything downstream
+reads it.
 
 [#236]: https://github.com/tesserafin-project/tesserafin/issues/236
