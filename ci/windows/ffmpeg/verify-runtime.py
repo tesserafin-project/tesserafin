@@ -178,8 +178,23 @@ def check_binaries(gate: Gate, stage: Path, extra_markers: list[str]) -> None:
             for encoding, label in (("utf-8", "UTF-8"), ("utf-16-le", "UTF-16LE"),
                                     ("utf-16-be", "UTF-16BE")):
                 needle = marker.encode(encoding)
-                if needle and needle in blob:
-                    gate.fail(f"{rel} embeds build-host path '{marker}' ({label})")
+                if not needle:
+                    continue
+                at = blob.find(needle)
+                if at < 0:
+                    continue
+                # The bytes AROUND the hit, the way ci/ffmpeg/verify-runtime.sh
+                # has always reported them on Linux. The marker alone says a
+                # build path survived; the context says which kind, and they
+                # need different answers. A path with a source file after it is
+                # a compiled __FILE__, which -ffile-prefix-map can reach. A bare
+                # path is a generated config or resource string, which no
+                # compiler flag will ever rewrite.
+                width = 90 * (2 if encoding.startswith("utf-16") else 1)
+                terminator = b"\x00\x00" if encoding.startswith("utf-16") else b"\x00"
+                ctx = blob[at:at + width].split(terminator)[0]
+                gate.fail(f"{rel} embeds build-host path '{marker}' ({label}): "
+                          + ctx.decode(encoding, "replace").strip())
 
     # Schannel, positively.
     ffmpeg = stage / "bin/ffmpeg.exe"

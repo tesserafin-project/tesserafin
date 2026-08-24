@@ -511,25 +511,39 @@ done
 [[ "${#pkgconfig_missing[@]}" -eq 0 ]] \
     || ff_die "pkg-config cannot see: ${pkgconfig_missing[*]} (PKG_CONFIG_PATH=${PKG_CONFIG_PATH})"
 
-# A `-ffile-prefix-map` whose key is spelled differently from the path the
-# compiler saw is not an error. It is accepted, it maps nothing, and the first
-# evidence is an embedded build path in a binary fifty minutes later — reported
-# against ffmpeg.exe, which is statically linked, rather than against whichever
-# component actually carries it. So the archives are asked directly, here, while
-# the answer still names a component.
-ff_log "checking the static archives for embedded build paths"
-embedded=()
-for needle in "${BUILDROOT}" "$(cygpath -m "${BUILDROOT}")" "$(cygpath -w "${BUILDROOT}")"; do
-    while IFS= read -r archive; do
-        [[ -n "${archive}" ]] || continue
-        embedded+=("$(basename "${archive}") carries '${needle}'")
-    done < <(grep -lF -- "${needle}" "${PREFIX}"/lib/*.a 2>/dev/null | sort -u)
-done
-if [[ "${#embedded[@]}" -gt 0 ]]; then
-    printf 'ffmpeg-runtime:   %s\n' "${embedded[@]}" >&2
-    ff_die "${#embedded[@]} archive/spelling pair(s) embed the build root: -ffile-prefix-map did not match the spelling the compiler used"
-fi
-ff_log "no static archive embeds the build root"
+# Which archives still carry the build root, and what the bytes around it look
+# like. REPORTED, NOT ENFORCED: the contract is about the delivered binaries,
+# not the intermediate archives. ci/ffmpeg/verify-runtime.sh has always scanned
+# exactly two files, ffmpeg and ffprobe, and verify-runtime.py scans the
+# delivered binaries; neither has ever looked inside a static archive, and a
+# string in an archive only matters if the linker keeps it.
+#
+# It is printed because it localises a failure that is otherwise reported
+# against a statically linked ffmpeg.exe fifty minutes later, naming none of the
+# twenty-one components that could have contributed it. The context bytes are
+# the discriminator: a path with a source file after it is a compiled __FILE__
+# that -ffile-prefix-map can reach, while a bare path is a generated config or
+# resource string that no compiler flag will ever rewrite.
+ff_log "scanning the static archives for the build root (report only)"
+python3 - "${PREFIX}/lib" "${BUILDROOT}" "$(cygpath -m "${BUILDROOT}")" "$(cygpath -w "${BUILDROOT}")" <<'PYSCAN' >&2 || true
+import pathlib, sys
+
+libdir = pathlib.Path(sys.argv[1])
+needles = [n for n in dict.fromkeys(sys.argv[2:]) if n]
+hits = 0
+for archive in sorted(libdir.glob("*.a")):
+    blob = archive.read_bytes()
+    for needle in needles:
+        raw = needle.encode()
+        at = blob.find(raw)
+        if at < 0:
+            continue
+        hits += 1
+        ctx = blob[at:at + 90].split(b"\x00")[0].decode("utf-8", "replace").strip()
+        print(f"ffmpeg-runtime:   {archive.name} carries {needle!r}: {ctx}")
+print(f"ffmpeg-runtime: {hits} archive/spelling pair(s) carry the build root"
+      if hits else "ffmpeg-runtime: no static archive carries the build root")
+PYSCAN
 
 # =============================================================================
 # FFmpeg
