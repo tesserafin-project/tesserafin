@@ -1,0 +1,125 @@
+# FFmpeg configure flags for the Tesserafin win-x64 runtime (W1-A2, issue #236).
+#
+# One flag per line. Comments and blank lines are ignored.
+#
+# This file is COMPLETE and SELF-CONTAINED. It deliberately does not extend
+# ci/ffmpeg/ffmpeg-configure.txt the way the two Linux architecture files do.
+# That file states --enable-openssl, --enable-vaapi, --enable-libdrm and a Linux
+# --prefix, and the additive mechanism has no subtractive form: there is no flag
+# that takes back an --enable- stated in a common file. Four of the contract's
+# hardest guarantees for this runtime — Schannel only, no OpenSSL, no GnuTLS, no
+# Linux-only hardware stack — would then be provable only by reasoning about the
+# interaction of two files. Here they are provable by reading one.
+#
+# The cost is stated plainly: the Linux and Windows flag sets can now drift. That
+# is gated, not hoped for — ci/windows/ffmpeg/verify-flags.py requires the codec,
+# filter and licence flags common to both to stay identical, and the same
+# ci/ffmpeg/verify-components.sh that gates the Linux flags is run against this
+# file with --flags.
+#
+# Licence shape, unchanged from the Linux runtime:
+#   --enable-gpl       required by x264 and x265, both GPL-2.0-or-later.
+#   --enable-version3  the closure contains LGPL-3.0 material.
+#   --disable-nonfree  stated explicitly, so a diff that removes it is visible.
+#
+# There is deliberately no --enable-lto, for the reason the Linux file gives:
+# LTO partitioning depends on job count and link order and is the single largest
+# threat to bit-for-bit reproducibility, and two independent runners have to
+# agree on the bytes.
+#
+# Its ABSENCE is the whole statement: FFmpeg's configure accepts `--enable-lto`
+# and has no `--disable-lto` at all, so stating the negative form is not a
+# stronger guarantee, it is an unknown option that stops the build. The gate
+# ci/ffmpeg/verify-components.sh refuses `--enable-lto` appearing here, which is
+# the check that can actually fail.
+
+# The prefix is a drive-root path, NOT the MSYS2 root and NOT the workspace.
+# cmake and meson are native Windows programs, so MSYS2 rewrites a POSIX path
+# argument into its Windows form before they see it: a prefix under the MSYS2
+# installation would reach the produced files as `D:/a/_temp/msys64/...`, which
+# is a build-host path, and fontconfig would bake it in as a runtime search
+# directory. `/c/tesserafin-ffmpeg` converts to `C:/tesserafin-ffmpeg`, which
+# names no workspace, no runner and no build root in either form.
+--prefix=/c/tesserafin-ffmpeg
+--disable-doc
+--disable-debug
+--disable-ffplay
+--disable-sdl2
+--disable-libxcb
+--disable-xlib
+--disable-nonfree
+--disable-libfdk-aac
+--enable-gpl
+--enable-version3
+--disable-shared
+--enable-static
+
+# Threading. w32threads is the operating system's own primitive and needs no
+# runtime library; pthreads would pull libwinpthread into the closure for
+# nothing. Both are stated so neither is left to autodetection.
+--enable-w32threads
+--disable-pthreads
+
+# Base
+--enable-zlib
+
+# TLS. Schannel is the operating system's provider, so the runtime inherits the
+# machine's certificate store and its updates instead of shipping a private
+# CA bundle and a private TLS implementation. The two alternatives are disabled
+# explicitly BECAUSE the locked MSYS2 set contains both openssl and gnutls as
+# dependencies of curl: leaving either to autodetection would let a transitive
+# package decide this runtime's TLS provider.
+--enable-schannel
+--disable-openssl
+--disable-gnutls
+--disable-libtls
+--disable-securetransport
+
+# Software video
+--enable-libx264
+--enable-libx265
+--enable-libsvtav1
+--enable-libdav1d
+--enable-libvpx
+
+# Audio
+--enable-libmp3lame
+--enable-libopus
+--enable-libvorbis
+
+# Filters the server names in EncoderValidator._requiredFilters
+--enable-libzimg
+--enable-libass
+--enable-libfreetype
+--enable-libfribidi
+--enable-libharfbuzz
+--enable-fontconfig
+
+# Hardware. Headers and import libraries only; no runtime claim is made here.
+# A capability compiled in is a capability the binary can attempt, not evidence
+# that this or any other machine has the device or the driver for it.
+--enable-dxva2
+--enable-d3d11va
+--enable-d3d12va
+--enable-amf
+--enable-libvpl
+--enable-ffnvcodec
+--enable-cuda
+--enable-cuda-llvm
+--enable-cuvid
+--enable-nvdec
+--enable-nvenc
+
+# Explicitly NOT built on win-x64. Every one of these is either autodetected by
+# FFmpeg's configure or present in the locked MSYS2 package set, so silence would
+# mean "whatever the environment happened to offer" rather than a decision.
+--disable-vaapi
+--disable-libdrm
+--disable-vulkan
+--disable-vdpau
+--disable-opencl
+--disable-mediafoundation
+--disable-libxml2
+--disable-iconv
+--disable-lzma
+--disable-bzlib

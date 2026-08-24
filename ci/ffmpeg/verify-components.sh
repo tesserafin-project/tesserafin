@@ -128,6 +128,50 @@ assert f["repository"].startswith("https://"), "ffmpeg.repository is not https"
 print(f"  ok  : jellyfin-ffmpeg {f['baseline']} @ {f['commit']} ({f['commitSignature']}, {f['tagKind']} tag)")
 PY
 
+echo "== the platform dimension"
+# A component with no 'architectures' key is applicable everywhere, so the set of
+# declared platforms is load-bearing: adding one widens every unrestricted
+# component at once. This refuses an architecture value that is not a declared
+# platform, which is what stops a typo ('win-x86', 'windows-x64') from reading as
+# "restricted to nothing" and silently dropping a component from a build.
+python3 - "${COMPONENTS}" <<'PY' || exit 1
+import json, sys
+
+d = json.load(open(sys.argv[1]))
+platforms = d.get("platforms")
+failures = 0
+if not platforms:
+    print("  FAIL: components.json declares no 'platforms'")
+    sys.exit(1)
+if len(set(platforms)) != len(platforms):
+    print("  FAIL: 'platforms' lists a runtime identifier twice")
+    failures += 1
+
+unrestricted = []
+for c in d["components"]:
+    arches = c.get("architectures")
+    if arches is None:
+        unrestricted.append(c["name"])
+        continue
+    if not arches:
+        print(f"  FAIL: {c['name']} declares an empty 'architectures' list")
+        failures += 1
+        continue
+    for a in arches:
+        if a not in platforms:
+            print(f"  FAIL: {c['name']} is restricted to '{a}', which is not a declared platform")
+            failures += 1
+    if not c.get("architectureComment") and set(arches) != set(platforms):
+        print(f"  FAIL: {c['name']} is architecture-restricted with no architectureComment")
+        failures += 1
+
+if failures:
+    sys.exit(1)
+print(f"  ok  : platforms {', '.join(platforms)}")
+print(f"  ok  : {len(unrestricted)} portable components, "
+      f"{len(d['components']) - len(unrestricted)} restricted and justified")
+PY
+
 echo "== configure flags"
 # Every architecture's flags, not just the common file: a flag that only applies
 # to linux-x64 is still a flag this policy has to accept or refuse. When --flags
@@ -181,6 +225,11 @@ while read -r flag; do
     # same name; they are named here so the exception is visible, not implicit.
     case "${feature}" in
         vaapi|cuda|cuvid|nvdec|nvenc|ffnvcodec|amf|opencl|openssl|zlib|fontconfig) matched=1 ;;
+        # win-x64 only. None of these is a source component either: DXVA2, Direct3D
+        # and Schannel are operating-system interfaces reached through the mingw-w64
+        # headers and import libraries inside the digest-pinned MSYS2 package set
+        # that W1-R retained. Named here so the exception stays visible.
+        dxva2|d3d11va|d3d12va|schannel|w32threads) matched=1 ;;
         # Not a component either: it selects clang-as-NVPTX-compiler in the
         # pinned builder image, which is how the *_cuda filter kernels get built.
         cuda_llvm) matched=1 ;;
