@@ -30,13 +30,15 @@ on:
   #     POST .../workflows/w1-windows-ffmpeg-runtime.yml/dispatches -> 404
   #
   # so until it lands on master the dispatch route cannot produce evidence at
-  # all. This trigger is scoped to the single branch that owns the work, and it
+  # all. W1-A3 replays that work onto the post-#252 master, so the branch this
+  # trigger names is the A3 candidate; W1-A2 keeps its own history and its own
+  # runs. This trigger is scoped to the single branch that owns the work, and it
   # weakens nothing about the proof: the same two clean native runners, the same
   # `contents: read`, the same absence of any publication job, and github.sha is
   # every bit as immutable as a hand-typed evidence SHA.
   push:
     branches:
-      - w1/windows-ffmpeg-runtime-a2
+      - w1/windows-ffmpeg-runtime-a3
 
 permissions:
   contents: read
