@@ -1,4 +1,4 @@
-# FFmpeg configure flags for the Tesserafin win-x64 runtime (W1-A2, issue #236).
+# FFmpeg configure flags for the Tesserafin win-x64 runtime (W1-A3, issue #236).
 #
 # One flag per line. Comments and blank lines are ignored.
 #

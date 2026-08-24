@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Record the toolchain the win-x64 runtime was built with (W1-A2 / #236).
+# Record the toolchain the win-x64 runtime was built with (W1-A3 / #236).
 #
 # The compiler is an INPUT to this build, so provenance has to name it as
 # precisely as it names the sources.
@@ -63,7 +63,7 @@ import json, os, platform, sys
 uname = platform.uname()
 
 toolchain = {
-    "probe": "w1a2-toolchain",
+    "probe": "winx64-toolchain",
     "msystem": os.environ.get("MSYSTEM", ""),
     "architecture": "win-x64",
     "native": True,
@@ -85,7 +85,7 @@ toolchain = {
     "installedListSha256": installed_sha,
 }
 runner = {
-    "probe": "w1a2-runner",
+    "probe": "winx64-runner",
     "note": "host identity, deliberately NOT part of the delivered set",
     "imageOs": os.environ.get("ImageOS", ""),
     "imageVersion": os.environ.get("ImageVersion", ""),

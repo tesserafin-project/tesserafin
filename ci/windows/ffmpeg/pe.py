@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read a PE image with the standard library only (W1-A2, issue #236).
+"""Read a PE image with the standard library only (W1-A3, issue #236).
 
 Why this exists rather than a call to llvm-readobj or dumpbin:
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Refuse build inputs that are not the ones W1-R accepted (W1-A2, #236).
+"""Refuse build inputs that are not the ones W1-R accepted (W1-A3, #236).
 
 The W1-R consumer already refuses a tag, a wrong manifest digest, a wrong layer
 digest and an unsigned package. This is the second, independent statement of the
@@ -39,7 +39,7 @@ def check_reference(reference: str) -> None:
     name = m.group("name")
     expected_name = f"{ACCEPTED['registry']}/{ACCEPTED['package']}"
     if name != expected_name:
-        raise Refusal(f"'{name}' is not the authorised package; W1-A2 accepts "
+        raise Refusal(f"'{name}' is not the authorised package; this runtime accepts "
                       f"exactly one: {expected_name}")
     if m.group("digest") != ACCEPTED["manifestDigest"]:
         raise Refusal(f"manifest digest {m.group('digest')} is not the accepted "
@@ -117,7 +117,7 @@ def main(argv: list[str] | None = None) -> int:
         if not args.reference and not args.consume_evidence:
             ap.error("nothing to check")
     except Refusal as exc:
-        print(f"W1-A2 BUILD-INPUT HARD STOP: {exc}", file=sys.stderr)
+        print(f"WIN-X64 BUILD-INPUT HARD STOP: {exc}", file=sys.stderr)
         return 1
     return 0
 

@@ -1,4 +1,4 @@
-# DLLs the win-x64 runtime may import without delivering them (W1-A2 / #236).
+# DLLs the win-x64 runtime may import without delivering them (W1-A3 / #236).
 #
 # The Linux analogue is ci/ffmpeg/allowed-dt-needed.txt and the rule is the same:
 # a dependency is acceptable only when it is part of the operating system the

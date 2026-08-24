@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Behavioural acceptance for the win-x64 FFmpeg runtime (W1-A2, #236).
+    Behavioural acceptance for the win-x64 FFmpeg runtime (W1-A3, #236).
 
 .DESCRIPTION
     The static gate (verify-runtime.py) reads bytes and runs anywhere. These
@@ -51,7 +51,7 @@ $ffprobe = Join-Path $extract 'bin\ffprobe.exe'
 foreach ($exe in @($ffmpeg, $ffprobe)) {
     if (-not (Test-Path -LiteralPath $exe)) { Fail "the archive did not contain $exe"; }
 }
-if ($script:Failures) { throw "W1-A2 ACCEPTANCE HARD STOP: the delivered archive is not a runtime" }
+if ($script:Failures) { throw "WIN-X64 ACCEPTANCE HARD STOP: the delivered archive is not a runtime" }
 Ok "extracted to $extract, a path unrelated to the build"
 
 # ── 2. A PATH with no other FFmpeg on it ─────────────────────────────────────
@@ -130,7 +130,7 @@ $buildconf = (& $ffmpeg -hide_banner -buildconf 2>&1 | Out-String).Trim()
 $env:PATH = $originalPath
 
 $evidence = [ordered]@{
-    probe            = 'w1a2-accept-runtime'
+    probe            = 'winx64-accept-runtime'
     archive          = (Resolve-Path -LiteralPath $Archive).Path
     archiveSha256    = (Get-FileHash -LiteralPath $Archive -Algorithm SHA256).Hash.ToLowerInvariant()
     relocatedTo      = $extract
@@ -145,6 +145,6 @@ $evidence | ConvertTo-Json -Depth 5 |
     Set-Content -LiteralPath (Join-Path $EvidenceDir 'accept-runtime.json') -Encoding utf8NoBOM
 
 if ($script:Failures -gt 0) {
-    throw "W1-A2 ACCEPTANCE: FAIL — $($script:Failures) check(s) failed"
+    throw "WIN-X64 ACCEPTANCE: FAIL — $($script:Failures) check(s) failed"
 }
-Write-Host 'W1-A2 ACCEPTANCE: PASS'
+Write-Host 'WIN-X64 ACCEPTANCE: PASS'

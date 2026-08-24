@@ -1,4 +1,4 @@
-# Component patches for the win-x64 runtime (W1-A2 / #236).
+# Component patches for the win-x64 runtime (W1-A3 / #236).
 #
 # Format: <component> <patch file> <reason>
 # Comments and blank lines are ignored. Applied in the order listed, with

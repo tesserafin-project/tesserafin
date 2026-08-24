@@ -1,5 +1,5 @@
 {
-  "$comment": "The ONE build-input package the win-x64 FFmpeg runtime may be built from (W1-A2, issue #236). Committed here rather than passed to the workflow so that dispatching the proof cannot choose a different package: the workflow takes an evidence SHA, and the package identity travels with the tree that SHA names. ci/windows/ffmpeg/verify-build-inputs.py refuses any consume.json that does not match every field below.",
+  "$comment": "The ONE build-input package the win-x64 FFmpeg runtime may be built from (W1-A3, issue #236). Committed here rather than passed to the workflow so that dispatching the proof cannot choose a different package: the workflow takes an evidence SHA, and the package identity travels with the tree that SHA names. ci/windows/ffmpeg/verify-build-inputs.py refuses any consume.json that does not match every field below.",
   "schemaVersion": 1,
   "reference": "ghcr.io/tesserafin-project/windows-ffmpeg-build-inputs@sha256:cff23b74dbf9707ad7150c21a2985e320320b86d3c72656b2bf2b58ac1c04f0a",
   "registry": "ghcr.io",
