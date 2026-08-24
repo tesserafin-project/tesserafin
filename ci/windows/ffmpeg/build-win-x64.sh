@@ -102,7 +102,26 @@ export WINDRES=llvm-windres
 # so a toolchain that changed that default fails here rather than silently.
 export ARFLAGS=Drc
 
+# `-ffile-prefix-map` matches the path AS THE COMPILER SAW IT, and on Windows
+# that is not the POSIX form this script writes. CFLAGS is an ENVIRONMENT
+# variable, and MSYS2 does not rewrite the environment (see the PKG_CONFIG_PATH
+# note below), so clang received `-ffile-prefix-map=/c/tf-ffbuild=.` — 726 times
+# in the first run that reached the verifier — while the sources it was
+# compiling were named `C:/tf-ffbuild/...` in its own diagnostics. The map
+# matched nothing, and ffmpeg.exe and ffprobe.exe shipped with `C:\tf-ffbuild`
+# inside them.
+#
+# So the Windows spelling is mapped as well. `cygpath -m` rather than
+# `cygpath -w` deliberately: -m gives `C:/tf-ffbuild`, which is the spelling
+# CMake and clang's diagnostics use, and it carries no backslash. A backslash
+# key would travel through autotools `configure`, which re-expands CFLAGS, and
+# `\t` would reach clang as a TAB — a flag that maps nothing and cannot be told
+# apart from one that matched.
+BUILDROOT_M="$(cygpath -m "${BUILDROOT}")"
+CACHE_M="$(cygpath -m "${CACHE}")"
+PREFIX_M="$(cygpath -m "${PREFIX}")"
 MAP="-ffile-prefix-map=${BUILDROOT}=. -ffile-prefix-map=${CACHE}=. -ffile-prefix-map=${PREFIX}=."
+MAP="${MAP} -ffile-prefix-map=${BUILDROOT_M}=. -ffile-prefix-map=${CACHE_M}=. -ffile-prefix-map=${PREFIX_M}=."
 export CFLAGS="-O2 -g0 ${MAP}"
 export CXXFLAGS="${CFLAGS}"
 # --no-insert-timestamp is the PE analogue of --build-id=none: without it the
@@ -491,6 +510,26 @@ for mod in x264 x265 SvtAv1Enc dav1d vpx opus vorbis zimg libass freetype2 fontc
 done
 [[ "${#pkgconfig_missing[@]}" -eq 0 ]] \
     || ff_die "pkg-config cannot see: ${pkgconfig_missing[*]} (PKG_CONFIG_PATH=${PKG_CONFIG_PATH})"
+
+# A `-ffile-prefix-map` whose key is spelled differently from the path the
+# compiler saw is not an error. It is accepted, it maps nothing, and the first
+# evidence is an embedded build path in a binary fifty minutes later — reported
+# against ffmpeg.exe, which is statically linked, rather than against whichever
+# component actually carries it. So the archives are asked directly, here, while
+# the answer still names a component.
+ff_log "checking the static archives for embedded build paths"
+embedded=()
+for needle in "${BUILDROOT}" "$(cygpath -m "${BUILDROOT}")" "$(cygpath -w "${BUILDROOT}")"; do
+    while IFS= read -r archive; do
+        [[ -n "${archive}" ]] || continue
+        embedded+=("$(basename "${archive}") carries '${needle}'")
+    done < <(grep -lF -- "${needle}" "${PREFIX}"/lib/*.a 2>/dev/null | sort -u)
+done
+if [[ "${#embedded[@]}" -gt 0 ]]; then
+    printf 'ffmpeg-runtime:   %s\n' "${embedded[@]}" >&2
+    ff_die "${#embedded[@]} archive/spelling pair(s) embed the build root: -ffile-prefix-map did not match the spelling the compiler used"
+fi
+ff_log "no static archive embeds the build root"
 
 # =============================================================================
 # FFmpeg
