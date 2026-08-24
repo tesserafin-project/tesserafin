@@ -17,6 +17,7 @@ Usage: negative-controls.py [--verbose]
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import hashlib
 import re
@@ -709,6 +710,66 @@ def run_controls(c: Controls, tmp: Path) -> None:
         "Windows",
         not bare,
         "; ".join(bare))
+
+
+    # ── 10. A capability read as empty is a parser failure ─────────────────
+    #
+    # `ffmpeg -encoders` and `-decoders` print a legend, a rule of dashes, then
+    # their rows. `-filters` prints its legend and goes straight into rows with
+    # NO rule between them. One parser was written for all three, waiting for a
+    # rule that -filters never prints, so it reported that the binary had no
+    # filters at all — and the verifier then reported `scale` and `overlay`
+    # absent from a working FFmpeg, alongside five others, on both hosts.
+    #
+    # Measured off-runner against a stock ffmpeg: -encoders 225 names,
+    # -decoders 537, -filters 0.
+    #
+    # The control feeds a recorded -filters listing to the real parser through a
+    # stub binary. A parser that waits for the rule of dashes returns nothing
+    # here, which is what makes this load-bearing rather than a restatement.
+    spec = importlib.util.spec_from_file_location("w1a2_package", HERE / "package.py")
+    package = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(package)
+
+    fixture = HERE / "testdata/ffmpeg-filters.txt"
+    stub = tmp / "stub-ffmpeg"
+    stub.write_text(
+        "#!/usr/bin/env python3\n"
+        "import sys\n"
+        f"sys.stdout.write(open({str(fixture)!r}, encoding='utf-8').read())\n",
+        encoding="utf-8")
+    stub.chmod(0o755)
+
+    required = ["tonemapx", "zscale", "ass", "subtitles", "scale", "overlay", "alphasrc"]
+    try:
+        parsed = package._filters(stub)
+    except SystemExit as exc:
+        parsed, detail = [], f"the parser refused: {exc}"
+    else:
+        missing = [name for name in required if name not in parsed]
+        detail = (f"parsed {len(parsed)} filter(s), missing "
+                  + ", ".join(missing)) if missing else ""
+    if not parsed:
+        detail = detail or "the parser read zero filters from a listing that has them"
+    c.assert_true(
+        "every required filter is read back from a recorded -filters listing",
+        bool(parsed) and all(name in parsed for name in required),
+        detail)
+
+    # The other half: an empty listing must be refused, not recorded as a
+    # capability of nothing. Without this, the parser above could be replaced by
+    # one that returns [] and the delivered capability.json would simply say the
+    # runtime has no filters.
+    empty_stub = tmp / "stub-empty"
+    empty_stub.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+    empty_stub.chmod(0o755)
+    refused = False
+    try:
+        package._filters(empty_stub)
+    except SystemExit:
+        refused = True
+    c.assert_true("an empty capability listing is refused, not recorded as empty",
+                  refused, "the parser returned a capability set for no output")
 
 
 def main(argv: list[str] | None = None) -> int:

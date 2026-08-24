@@ -146,10 +146,12 @@ def run(binary: Path, *args: str) -> str:
 def _listing(binary: Path, flag: str) -> list[str]:
     """Names from an `ffmpeg -encoders`-shaped listing.
 
-    Every such listing prints a legend, then a rule of dashes, then one row per
-    item as `<flags> <name> <description>`. Parsing starts after the rule; a
-    parser that guesses from indentation reads the legend as data and every row
-    as a header, and reports an empty capability set for a healthy binary.
+    Such a listing prints a legend, then a rule of dashes, then one row per item
+    as `<flags> <name> <description>`. Parsing starts after the rule; a parser
+    that guesses from indentation reads the legend as data and every row as a
+    header, and reports an empty capability set for a healthy binary.
+
+    This shape is NOT universal — see _filters(), which has no rule at all.
     """
     names: set[str] = set()
     started = False
@@ -162,6 +164,38 @@ def _listing(binary: Path, flag: str) -> list[str]:
         parts = stripped.split()
         if len(parts) >= 2 and not stripped.startswith("-"):
             names.add(parts[1])
+    if not names:
+        raise SystemExit(
+            f"HARD STOP: {binary.name} {flag} produced no names. A capability "
+            f"list read as empty is a parser failure, not a binary without "
+            f"capabilities.")
+    return sorted(names)
+
+
+def _filters(binary: Path) -> list[str]:
+    """Names from `ffmpeg -filters`, which has NO rule of dashes.
+
+    -encoders and -decoders print a legend, a rule of dashes, then their rows.
+    -filters prints its legend and then goes straight into rows with no rule
+    between them, so a parser that waits for the rule waits forever and reports
+    that a healthy binary has no filters at all. The first build to reach the
+    verifier reported all seven required filters absent — `scale` and `overlay`
+    among them, which no FFmpeg can be built without. Reproduced off-runner
+    against a stock ffmpeg: -encoders 225 names, -decoders 537, -filters 0.
+
+    A filter row is identified by its connectivity field — `A->A`, `V->V`,
+    `N->N`, `|->V` and so on — which no legend line has.
+    """
+    names: set[str] = set()
+    for line in run(binary, "-filters").splitlines():
+        parts = line.strip().split()
+        if len(parts) >= 3 and "->" in parts[2]:
+            names.add(parts[1])
+    if not names:
+        raise SystemExit(
+            f"HARD STOP: {binary.name} -filters produced no names. A capability "
+            f"list read as empty is a parser failure, not a binary without "
+            f"filters.")
     return sorted(names)
 
 
@@ -174,7 +208,7 @@ def capability(ffmpeg: Path, ffprobe: Path) -> dict:
                  if ln.strip() and ":" not in ln and not ln.strip().startswith("Supported")]
     encoders = _listing(ffmpeg, "-encoders")
     decoders = _listing(ffmpeg, "-decoders")
-    filters = _listing(ffmpeg, "-filters")
+    filters = _filters(ffmpeg)
 
     return {
         "probe": "w1a2-capability",
