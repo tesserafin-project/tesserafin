@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Package and describe the win-x64 FFmpeg runtime (W1-A2, issue #236).
+"""Package and describe the win-x64 FFmpeg runtime (W1-A3, issue #236).
 
 Produces the complete delivered set from a staged build:
 
@@ -211,7 +211,7 @@ def capability(ffmpeg: Path, ffprobe: Path) -> dict:
     filters = _filters(ffmpeg)
 
     return {
-        "probe": "w1a2-capability",
+        "probe": "winx64-capability",
         "architecture": "win-x64",
         "note": "Every list here was read from the produced binaries. A compiled "
                 "capability is what the binary can attempt, never a claim that "
@@ -246,7 +246,7 @@ def pe_closure(stage: Path) -> dict:
         images.append(d)
     required = sorted({dll for i in images for dll in i["allDlls"]})
     return {
-        "probe": "w1a2-pe-closure",
+        "probe": "winx64-pe-closure",
         "delivered": sorted(delivered),
         "required": required,
         "images": images,
@@ -550,7 +550,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # --- what the binaries themselves say --------------------------------
     if args.skip_binary_probe:
-        cap = {"probe": "w1a2-capability", "architecture": "win-x64",
+        cap = {"probe": "winx64-capability", "architecture": "win-x64",
                "skipped": "binaries were not executed on this host"}
         buildconf = ""
     else:
@@ -631,8 +631,31 @@ def main(argv: list[str] | None = None) -> int:
     toolchain = json.loads(Path(args.toolchain).read_text())
     series = (cache / "git/jellyfin-ffmpeg/debian/patches/series").read_text().split()
 
+    # The applied set is READ from the same catalogue the build reads, never
+    # assumed to be the whole series. Recording `applied: len(series)` and
+    # `excluded: []` is what made a platform that diverges from the Linux patch
+    # policy indistinguishable from one that does not.
+    catalogue = json.loads((REPO_ROOT / "ci/ffmpeg/fork-patches.json").read_text())
+    applied_here, excluded_here, platform_exceptions = [], [], []
+    for entry in catalogue["patches"]:
+        applied = entry["applied"]
+        for exc in entry.get("platformExceptions", []):
+            if exc["platform"] != "win-x64":
+                continue
+            applied = exc["applied"]
+            platform_exceptions.append({
+                "patch": entry["patch"],
+                "platform": exc["platform"],
+                "baseClassification": entry["classification"],
+                "baseApplied": entry["applied"],
+                "applied": exc["applied"],
+                "rationale": exc["rationale"],
+                "compensatingControls": list(exc["compensatingControls"]),
+            })
+        (applied_here if applied else excluded_here).append(entry["patch"])
+
     provenance = {
-        "probe": "w1a2-provenance",
+        "probe": "winx64-provenance",
         "schemaVersion": 1,
         "buildRevision": build_revision,
         "architecture": "win-x64",
@@ -655,8 +678,9 @@ def main(argv: list[str] | None = None) -> int:
         "ffmpeg": ffmpeg_meta,
         "patches": {
             "seriesLength": len(series),
-            "applied": len(series),
-            "excluded": [],
+            "applied": len(applied_here),
+            "excluded": sorted(excluded_here),
+            "platformExceptions": platform_exceptions,
             "fuzz": 0,
             "order": "series order, top to bottom",
             "series": series,

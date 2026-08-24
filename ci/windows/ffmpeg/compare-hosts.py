@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare what two native Windows hosts produced (W1-A2, issue #236).
+"""Compare what two native Windows hosts produced (W1-A3, issue #236).
 
 The order of the checks is the finding. A reproducibility failure that is
 reported only as "the archives differ" costs a full rebuild to diagnose, so this
@@ -76,7 +76,7 @@ def main(argv: list[str] | None = None) -> int:
     a, b = tree(a_root), tree(b_root)
 
     report: dict = {
-        "probe": "w1a2-two-host-comparison",
+        "probe": "winx64-dual-runner-comparison",
         "hosts": {},
         "pathSet": {},
         "content": {},
@@ -90,19 +90,56 @@ def main(argv: list[str] | None = None) -> int:
             "imageOs": runner.get("imageOs", "unknown"),
             "imageVersion": runner.get("imageVersion", "unknown"),
             "runnerArch": runner.get("runnerArch", "unknown"),
+            # The two identities that decide what this proof may be CALLED.
+            # runnerName is the allocation; node is the machine GitHub put it on,
+            # which nothing in this repository can choose.
+            "runnerName": runner.get("runnerName", "unknown"),
+            "node": runner.get("node", "unknown"),
             "deliveredPaths": len(a if label == "a" else b),
         }
 
-    print("== host identities")
+    print("== runner identities")
     for label, info in report["hosts"].items():
-        print(f"  host {label}: image {info['imageOs']} {info['imageVersion']}, "
+        print(f"  allocation {label}: image {info['imageOs']} {info['imageVersion']}, "
+              f"runner {info['runnerName']}, node {info['node']}, "
               f"{info['deliveredPaths']} delivered paths")
     same_image = (report["hosts"]["a"]["imageVersion"]
                   == report["hosts"]["b"]["imageVersion"])
+    same_node = report["hosts"]["a"]["node"] == report["hosts"]["b"]["node"]
+    distinct_allocations = (report["hosts"]["a"]["runnerName"]
+                            != report["hosts"]["b"]["runnerName"])
     report["sameRunnerImage"] = same_image
+    report["sameNode"] = same_node
+    report["distinctRunnerAllocations"] = distinct_allocations
+
+    # What the evidence may claim, decided from what was measured rather than
+    # from what the workflow is called. Two allocations on one node is
+    # dual-runner reproducibility; it is not host independence, and naming it
+    # "two-host" would assert a hardware separation nobody arranged.
+    if same_node:
+        report["topology"] = "dual-runner"
+        report["independenceClaim"] = (
+            "none: both allocations reported the same node "
+            f"({report['hosts']['a']['node']}), so this proves reproducibility "
+            "between two isolated jobs on one runner-image generation, not "
+            "independence between two machines")
+    elif same_image:
+        report["topology"] = "two-host-same-image"
+        report["independenceClaim"] = (
+            "two distinct nodes on one runner-image generation")
+    else:
+        report["topology"] = "two-host-distinct-images"
+        report["independenceClaim"] = (
+            "two distinct nodes on two runner-image generations")
+    print(f"  topology: {report['topology']} — {report['independenceClaim']}")
+
+    if not distinct_allocations:
+        print("  FAIL: both evidence bundles name the same runner allocation; "
+              "this is one job compared against itself", file=sys.stderr)
+        return 1
     if not same_image:
-        print("  note: the two hosts ran DIFFERENT runner images. A byte-identical "
-              "result across them is stronger evidence, not weaker.")
+        print("  note: the two allocations ran DIFFERENT runner images. A "
+              "byte-identical result across them is stronger evidence, not weaker.")
 
     # ── 1. the complete delivered path set ─────────────────────────────────
     print("== the delivered path set")
@@ -199,9 +236,10 @@ def main(argv: list[str] | None = None) -> int:
             provenance.get("correspondingSource", {}).get("sha256"),
     }
 
-    report["verdict"] = ("FAIL: the two hosts disagree on an archive"
-                         if failed else
-                         "PASS: two native Windows hosts produced identical bytes")
+    report["verdict"] = (
+        "FAIL: the two runner allocations disagree on an archive" if failed else
+        "PASS: two native Windows runner allocations produced identical bytes "
+        f"({report['independenceClaim']})")
     Path(args.report).write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
 
     print()
@@ -212,7 +250,7 @@ def main(argv: list[str] | None = None) -> int:
     if failed:
         print(report["verdict"], file=sys.stderr)
         return 1
-    print("W1-A2 TWO-HOST REPRODUCIBILITY: PASS")
+    print("WIN-X64 DUAL-RUNNER REPRODUCIBILITY: PASS")
     return 0
 
 

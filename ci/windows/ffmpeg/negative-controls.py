@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Permanent negative controls for the win-x64 FFmpeg runtime (W1-A2, #236).
+"""Permanent negative controls for the win-x64 FFmpeg runtime (W1-A3, #236).
 
 A gate that has never been seen to fail is a gate nobody has tested. Each
 control below constructs an artifact that MUST be refused, runs the real gate
@@ -229,9 +229,40 @@ def _declared_component_patches() -> list[dict]:
     return out
 
 
+def _win_patch_decision() -> tuple[list[str], list[str], list[dict]]:
+    """The win-x64 applied/excluded split and its declared exceptions.
+
+    Read from ci/ffmpeg/fork-patches.json exactly as the build and the packager
+    read it, so a fixture cannot agree with a gate that has drifted away from
+    the catalogue both are supposed to obey.
+    """
+    catalogue = json.loads((REPO_ROOT / "ci/ffmpeg/fork-patches.json").read_text())
+    applied, excluded, exceptions = [], [], []
+    for entry in catalogue["patches"]:
+        taken = entry["applied"]
+        for exc in entry.get("platformExceptions", []):
+            if exc["platform"] != "win-x64":
+                continue
+            taken = exc["applied"]
+            exceptions.append({
+                "patch": entry["patch"],
+                "platform": exc["platform"],
+                "baseClassification": entry["classification"],
+                "baseApplied": entry["applied"],
+                "applied": exc["applied"],
+                "rationale": exc["rationale"],
+                "compensatingControls": list(exc["compensatingControls"]),
+            })
+        (applied if taken else excluded).append(entry["patch"])
+    return applied, excluded, exceptions
+
+
 def build_delivered_fixture(root: Path, *,
                             exe_imports: dict[str, list[str]] | None = None,
-                            exe_delay_imports: dict[str, list[str]] | None = None) -> Path:
+                            exe_delay_imports: dict[str, list[str]] | None = None,
+                            patches: dict | None = None,
+                            capability_overrides: dict | None = None,
+                            configuration: str | None = None) -> Path:
     """A structurally complete delivered set that the gate accepts.
 
     Deliberately minimal but SELF-CONSISTENT: every control below breaks exactly
@@ -259,16 +290,20 @@ def build_delivered_fixture(root: Path, *,
             "--enable-nvenc --enable-nvdec --enable-cuvid --enable-libx264 "
             "--enable-libx265 --enable-libsvtav1 --enable-libdav1d "
             "--enable-libvpx --enable-libzimg --enable-libass --enable-fontconfig")
+    if configuration is not None:
+        conf = configuration
     (delivered / "build-configuration.txt").write_text(conf + "\n")
 
     capability = {
-        "probe": "w1a2-capability",
+        "probe": "win-x64-capability",
         "filters": ["tonemapx", "zscale", "ass", "subtitles", "scale", "overlay",
                     "alphasrc"],
         "encoders": ["libx264", "libx265", "libsvtav1", "aac", "libmp3lame",
                      "libopus"],
         "decoders": ["h264", "hevc", "av1"],
     }
+    if capability_overrides:
+        capability.update(capability_overrides)
     (delivered / "capability.json").write_text(json.dumps(capability, indent=2,
                                                           sort_keys=True) + "\n")
 
@@ -292,8 +327,17 @@ def build_delivered_fixture(root: Path, *,
     source = delivered / "source/tesserafin-ffmpeg-win-x64-source.tar.zst"
     source.write_bytes(b"\x28\xb5\x2f\xfd" + b"\0" * 16)
 
+    applied, excluded, exceptions = _win_patch_decision()
+    default_patches = {
+        "seriesLength": len(applied) + len(excluded),
+        "applied": len(applied),
+        "excluded": sorted(excluded),
+        "platformExceptions": exceptions,
+        "fuzz": 0,
+    }
+
     provenance = {
-        "probe": "w1a2-provenance",
+        "probe": "win-x64-provenance",
         "buildRevision": manifest["buildRevision"],
         "repositorySha": "0" * 40,
         "buildInputs": {
@@ -308,7 +352,7 @@ def build_delivered_fixture(root: Path, *,
             "upstreamConsulted": False,
             "tagUsed": False,
         },
-        "patches": {"seriesLength": 95, "applied": 95, "excluded": [], "fuzz": 0},
+        "patches": patches if patches is not None else default_patches,
         "componentPatches": _declared_component_patches(),
         "runtime": {"archive": "runtime/tesserafin-ffmpeg-win-x64.zip",
                     "sha256": hashlib.sha256(archive.read_bytes()).hexdigest()},
@@ -475,6 +519,102 @@ def run_controls(c: Controls, tmp: Path) -> None:
         c.expect_refusal("a build that dropped a declared component patch",
                          [verify, "--delivered", str(d)], "component patches")
 
+    # ── 1b. the fork patch decision, per platform ──────────────────────────
+    # W1-A3-R0 found the repository asserting "1 patch excluded" while win-x64
+    # excluded none. Five separate controls, because the five ways that can go
+    # wrong are five different defects and a single control that catches "some
+    # of them" is a control nobody can read.
+    win_applied, win_excluded, win_exceptions = _win_patch_decision()
+    diverging = [e["patch"] for e in win_exceptions]
+
+    # (i) Windows silently excludes a patch its declared decision applies.
+    d = fresh("patch-silent-exclude")
+    prov = json.loads((d / "provenance.json").read_text())
+    prov["patches"]["applied"] = len(win_applied) - 1
+    prov["patches"]["excluded"] = sorted(win_excluded + [win_applied[0]])
+    (d / "provenance.json").write_text(json.dumps(prov, indent=2, sort_keys=True) + "\n")
+    write_sums(d)
+    c.expect_refusal("a win-x64 build that SILENTLY EXCLUDED a declared patch",
+                     [verify, "--delivered", str(d)], "the win-x64 decision")
+
+    # (ii) Windows applies the diverging patch with no exception declared. The
+    #      provenance then looks exactly like a platform that never diverged.
+    if diverging:
+        d = fresh("patch-undeclared-exception")
+        prov = json.loads((d / "provenance.json").read_text())
+        prov["patches"]["platformExceptions"] = []
+        (d / "provenance.json").write_text(json.dumps(prov, indent=2, sort_keys=True) + "\n")
+        write_sums(d)
+        c.expect_refusal("a win-x64 build that APPLIED 0029 WITH NO DECLARED EXCEPTION",
+                         [verify, "--delivered", str(d)],
+                         "platform exception")
+
+        # (iii) An exception that decides what the base already decided. This is
+        #       how a divergence gets recorded as if it were routine.
+        d = fresh("patch-null-exception")
+        prov = json.loads((d / "provenance.json").read_text())
+        for e in prov["patches"]["platformExceptions"]:
+            e["applied"] = e["baseApplied"]
+        (d / "provenance.json").write_text(json.dumps(prov, indent=2, sort_keys=True) + "\n")
+        write_sums(d)
+        c.expect_refusal("a platform exception that CHANGES NOTHING",
+                         [verify, "--delivered", str(d)],
+                         "decides what the base decision already decided")
+
+    # (iv) The Linux side takes the patch the base decision refuses. Checked in
+    #      the catalogue itself, because no Windows artifact can show it: the
+    #      base decision IS the Linux decision.
+    catalogue = json.loads((REPO_ROOT / "ci/ffmpeg/fork-patches.json").read_text())
+    unsafe_applied_on_linux = [
+        e["patch"] for e in catalogue["patches"]
+        if e["classification"] == "unsafe" and e["applied"] is True]
+    c.assert_true(
+        "no patch classified unsafe is applied by the base (Linux) decision",
+        not unsafe_applied_on_linux,
+        f"applied anyway: {unsafe_applied_on_linux}")
+
+    # (v) FDK back in the flags, the encoders or the decoders. The exception
+    #     removes FFmpeg's own source-level guard, so these three are what is
+    #     left; a control that only checked one of them would pass a runtime
+    #     that reintroduced FDK through the other two.
+    d = fresh_pe("fdk-flag", configuration=(
+        "--prefix=/c/tesserafin-ffmpeg --enable-gpl --enable-version3 "
+        "--enable-nonfree --enable-libfdk-aac --enable-schannel "
+        "--disable-openssl --disable-gnutls"))
+    write_sums(d)
+    c.expect_refusal("FDK AAC reintroduced in the CONFIGURE LINE",
+                     [verify, "--delivered", str(d)], "fdk")
+
+    d = fresh_pe("fdk-encoder", capability_overrides={
+        "encoders": ["libx264", "libfdk_aac", "aac"]})
+    write_sums(d)
+    c.expect_refusal("FDK AAC reintroduced as an ENCODER",
+                     [verify, "--delivered", str(d)], "fdk")
+
+    d = fresh_pe("fdk-decoder", capability_overrides={
+        "decoders": ["h264", "libfdk_aac"]})
+    write_sums(d)
+    c.expect_refusal("FDK AAC reintroduced as a DECODER",
+                     [verify, "--delivered", str(d)], "fdk")
+
+    # (vi) The gate printing an exclusion that did not happen — the R0 defect
+    #      itself. Run the real component gate for win-x64 and require that its
+    #      report does not claim an exclusion the platform does not make.
+    comp_gate = subprocess.run(
+        [str(REPO_ROOT / "ci/ffmpeg/verify-components.sh"),
+         "--platform", "win-x64",
+         "--flags", str(HERE / "ffmpeg-configure.win-x64.txt")],
+        capture_output=True, text=True)
+    report = (comp_gate.stdout or "") + (comp_gate.stderr or "")
+    claims_exclusion = re.search(
+        r"win-x64: \d+ of \d+ patches applied, ([1-9]\d*) excluded", report)
+    c.assert_true(
+        "the component gate does not report an exclusion win-x64 does not make",
+        comp_gate.returncode == 0 and not claims_exclusion
+        and "win-x64: " in report,
+        f"exit {comp_gate.returncode}; report said: "
+        f"{claims_exclusion.group(0) if claims_exclusion else 'no win-x64 line at all'}")
+
     # ── 2. wrong-architecture and non-deterministic PE ─────────────────────
     for tag, machine, label in (("arm64", IMAGE_FILE_MACHINE_ARM64, "arm64"),
                                 ("i386", IMAGE_FILE_MACHINE_I386, "x86")):
@@ -618,23 +758,79 @@ def run_controls(c: Controls, tmp: Path) -> None:
                       evidence("pacman", pacmanMode="pacman -S from a live mirror")],
                      "only `pacman -U`")
 
-    # ── 7. the two-host comparator ─────────────────────────────────────────
+    # ── 7. the dual-runner comparator ─────────────────────────────────────────
     #
     # The same four path defects again, but between two HOSTS rather than inside
     # one delivered set. A comparator that only compares archive bytes would
     # report every one of these as "the archives differ", which is true and
     # useless; these controls require it to name the path.
     compare = str(HERE / "compare-hosts.py")
+
+    def runner_evidence(tag: str, *, runner_name: str, node: str,
+                        image_version: str = "20260818.207.1") -> str:
+        """An evidence bundle carrying just the runner record the comparator reads."""
+        root = tmp / f"evidence-{tag}"
+        (root / "inputs").mkdir(parents=True, exist_ok=True)
+        (root / "inputs/runner.json").write_text(json.dumps({
+            "probe": "winx64-runner",
+            "imageOs": "win25-vs2026",
+            "imageVersion": image_version,
+            "runnerArch": "X64",
+            "runnerName": runner_name,
+            "node": node,
+        }, indent=2, sort_keys=True) + "\n")
+        return str(root)
+
+    ev_a = runner_evidence("a", runner_name="GitHub Actions 1", node="runnervm-1")
+    ev_b = runner_evidence("b", runner_name="GitHub Actions 2", node="runnervm-2")
+    ev_same_node = runner_evidence("same-node", runner_name="GitHub Actions 2",
+                                   node="runnervm-1")
+    ev_same_alloc = runner_evidence("same-alloc", runner_name="GitHub Actions 1",
+                                    node="runnervm-1")
+
     host_a = fresh("host-a")
     host_b = fresh("host-b")
-    c.expect_acceptance("two hosts that agree",
+    c.expect_acceptance("two allocations that agree",
                         [compare, "--host-a", str(host_a), "--host-b", str(host_b),
+                         "--evidence-a", ev_a, "--evidence-b", ev_b,
                          "--report", str(tmp / "cmp-good.json")])
+
+    # The naming ruling, enforced rather than documented. Same node must be
+    # recorded as dual-runner with no independence claim; distinct nodes may say
+    # two-host. A comparator that reported the same topology for both is exactly
+    # what let "two-host" be claimed for two allocations on one machine.
+    two_host = json.loads((tmp / "cmp-good.json").read_text())
+    c.assert_true("two distinct nodes are recorded as a two-host topology",
+                  two_host.get("topology") == "two-host-same-image"
+                  and two_host.get("sameNode") is False,
+                  f"topology={two_host.get('topology')} sameNode={two_host.get('sameNode')}")
+
+    c.expect_acceptance("two allocations on the SAME node still agree",
+                        [compare, "--host-a", str(host_a), "--host-b", str(host_b),
+                         "--evidence-a", ev_a, "--evidence-b", ev_same_node,
+                         "--report", str(tmp / "cmp-same-node.json")])
+    same_node_report = json.loads((tmp / "cmp-same-node.json").read_text())
+    c.assert_true(
+        "the same node is recorded as dual-runner with NO independence claim",
+        same_node_report.get("topology") == "dual-runner"
+        and same_node_report.get("sameNode") is True
+        and same_node_report.get("independenceClaim", "").startswith("none:")
+        and "two-host" not in same_node_report.get("verdict", ""),
+        f"topology={same_node_report.get('topology')} "
+        f"claim={same_node_report.get('independenceClaim')!r} "
+        f"verdict={same_node_report.get('verdict')!r}")
+
+    c.expect_refusal("ONE allocation compared against itself",
+                     [compare, "--host-a", str(host_a), "--host-b", str(host_b),
+                      "--evidence-a", ev_a, "--evidence-b", ev_same_alloc,
+                      "--report", str(tmp / "cmp-same-alloc.json")],
+                     "same runner allocation")
 
     host_b = fresh("host-b-missing")
     (host_b / "capability.json").unlink()
     c.expect_refusal("a path host b did not deliver",
                      [compare, "--host-a", str(host_a), "--host-b", str(host_b),
+                      "--evidence-a", ev_a, "--evidence-b", ev_b,
                       "--report", str(tmp / "cmp-missing.json")],
                      "different sets of paths")
 
@@ -642,6 +838,7 @@ def run_controls(c: Controls, tmp: Path) -> None:
     (host_b / "licenses/extra-on-b.txt").write_text("only on b\n")
     c.expect_refusal("a path only host b delivered",
                      [compare, "--host-a", str(host_a), "--host-b", str(host_b),
+                      "--evidence-a", ev_a, "--evidence-b", ev_b,
                       "--report", str(tmp / "cmp-added.json")],
                      "delivered by host b only")
 
@@ -651,6 +848,7 @@ def run_controls(c: Controls, tmp: Path) -> None:
     write_sums(host_b)
     c.expect_refusal("hosts that disagree on the runtime archive",
                      [compare, "--host-a", str(host_a), "--host-b", str(host_b),
+                      "--evidence-a", ev_a, "--evidence-b", ev_b,
                       "--report", str(tmp / "cmp-corrupt.json")],
                      "delivered paths differ between the two hosts")
 
@@ -713,7 +911,7 @@ def run_controls(c: Controls, tmp: Path) -> None:
         "unguarded at " + ", ".join(unguarded))
 
     # The other half of the same class. ci/ffmpeg/fetch-sources.sh reads a Python
-    # table and W1-A2 may not edit it, so the only defence is the shim being on
+    # table and this work may not edit it, so the only defence is the shim being on
     # PATH in the step that calls it. Without that, the last mirror of every
     # component carries a carriage return and curl rejects the URL — invisible
     # until a primary host fails, which is exactly when the mirror is needed.
@@ -828,7 +1026,7 @@ def run_controls(c: Controls, tmp: Path) -> None:
     # The control feeds a recorded -filters listing to the real parser through a
     # stub binary. A parser that waits for the rule of dashes returns nothing
     # here, which is what makes this load-bearing rather than a restatement.
-    spec = importlib.util.spec_from_file_location("w1a2_package", HERE / "package.py")
+    spec = importlib.util.spec_from_file_location("winx64_package", HERE / "package.py")
     package = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(package)
 
@@ -879,15 +1077,15 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
 
     c = Controls(args.verbose)
-    with tempfile.TemporaryDirectory(prefix="w1a2-controls-") as tmpdir:
+    with tempfile.TemporaryDirectory(prefix="winx64-controls-") as tmpdir:
         run_controls(c, Path(tmpdir))
 
     print()
     if c.failed:
-        print(f"W1-A2 NEGATIVE CONTROLS: FAIL — {c.failed} of "
+        print(f"WIN-X64 NEGATIVE CONTROLS: FAIL — {c.failed} of "
               f"{c.passed + c.failed} did not behave as required", file=sys.stderr)
         return 1
-    print(f"W1-A2 NEGATIVE CONTROLS: PASS — {c.passed} controls")
+    print(f"WIN-X64 NEGATIVE CONTROLS: PASS — {c.passed} controls")
     return 0
 
 

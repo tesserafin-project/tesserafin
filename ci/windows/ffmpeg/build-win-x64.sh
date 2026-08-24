@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The Tesserafin win-x64 FFmpeg runtime build (W1-A2 / #236).
+# The Tesserafin win-x64 FFmpeg runtime build (W1-A3 / #236).
 #
 # Runs INSIDE an MSYS2 CLANG64 shell whose /clang64 prefix holds exactly the
 # 246-package set W1-R retained and installed with `pacman -U` from local files.
@@ -60,7 +60,7 @@ ff_load_manifest
 # carriage return in its name, and a runtime archive nobody can find.
 #
 # Stripped here rather than in ci/ffmpeg/lib.sh: that file belongs to the Linux
-# runtimes, where the behaviour does not exist, and W1-A2 must leave it
+# runtimes, where the behaviour does not exist, and this work must leave it
 # byte-identical.
 ff_strip_cr() { printf '%s' "${1//$'\r'/}"; }
 FF_BUILD_REVISION="$(ff_strip_cr "${FF_BUILD_REVISION}")"
@@ -555,14 +555,64 @@ if step "FFmpeg ${FF_FFMPEG_BASELINE} (${FF_BUILD_REVISION}) win-x64"; then
 rm -rf "${FFSRC}"; cp -a "${CACHE}/git/jellyfin-ffmpeg" "${FFSRC}"
 
 # The fork ships its 95 changes as a quilt series rather than pre-applied.
-# Unlike the Linux runtime, win-x64 applies ALL 95 — see
-# docs/distribution/W1-ffmpeg-windows-runtime.md for why, and for the four
-# independent layers that keep FDK AAC out of this runtime without 0029.
+# Which of them win-x64 applies is NOT decided here: it is computed from
+# ci/ffmpeg/fork-patches.json, base decision plus declared platform exceptions.
+# Hard-coding "all 95" here is what let the repository's own exclusion policy and
+# this build disagree while both looked correct in isolation.
+#
+# The two failure directions are separated deliberately. A patch this platform is
+# supposed to skip but applies, and a patch it is supposed to apply but skips,
+# are different defects and get different messages.
+# `tr -d '\r'` for the reason given at the top of this file: Python on Windows
+# writes CRLF on text stdout, and without this every patch name arrives as
+# "0001-...patch<CR>", matches nothing in the series read from the fork's own
+# file, and this build reports that the catalogue classifies none of the 95
+# patches it is about to apply.
+mapfile -t WIN_PATCH_PLAN < <(python3 - "${FF_REPO_ROOT}/ci/ffmpeg/fork-patches.json" <<'PY' | tr -d '\r'
+import json, sys
+d = json.load(open(sys.argv[1]))
+for e in d["patches"]:
+    applied = e["applied"]
+    exception = "-"
+    for exc in e.get("platformExceptions", []):
+        if exc["platform"] == "win-x64":
+            applied, exception = exc["applied"], "exception"
+    print(f"{e['patch']}\t{'apply' if applied else 'skip'}\t{exception}")
+PY
+) || ff_die "could not read the win-x64 patch decision from ci/ffmpeg/fork-patches.json"
+
+declare -A WIN_PATCH_DECISION=() WIN_PATCH_EXCEPTION=()
+WIN_PATCHES_EXPECTED=0
+for line in "${WIN_PATCH_PLAN[@]}"; do
+    IFS=$'\t' read -r p decision exception <<<"${line}"
+    WIN_PATCH_DECISION["${p}"]="${decision}"
+    WIN_PATCH_EXCEPTION["${p}"]="${exception}"
+    [[ "${decision}" == "apply" ]] && WIN_PATCHES_EXPECTED=$((WIN_PATCHES_EXPECTED + 1))
+done
+ff_log "win-x64 patch decision: ${WIN_PATCHES_EXPECTED} of ${#WIN_PATCH_PLAN[@]} to apply"
+
 (
     cd "${FFSRC}"
     applied=0
+    skipped=0
+    exceptions=0
+    : > "${OUT}/patch-decisions.tsv"
     while read -r p; do
         [[ -n "${p}" ]] || continue
+        decision="${WIN_PATCH_DECISION[${p}]:-}"
+        [[ -n "${decision}" ]] \
+            || ff_die "the fork series carries ${p}, which ci/ffmpeg/fork-patches.json does not classify"
+        exception="${WIN_PATCH_EXCEPTION[${p}]:-'-'}"
+        printf '%s\t%s\t%s\n' "${p}" "${decision}" "${exception}" >> "${OUT}/patch-decisions.tsv"
+        [[ "${exception}" == "exception" ]] && exceptions=$((exceptions + 1))
+        if [[ "${decision}" != "apply" ]]; then
+            # Skipping is a decision this platform DECLARED, not a failure. It is
+            # counted and recorded so that "win-x64 skipped a patch" can never be
+            # indistinguishable from "win-x64 applied everything".
+            ff_log "  not applying ${p}: win-x64 excludes it"
+            skipped=$((skipped + 1))
+            continue
+        fi
         # --forward and -F0: a patch that only applies approximately is a patch
         # applying to the wrong place. The series is pinned by the same commit as
         # the tree, so anything but a clean apply means the pin moved.
@@ -582,11 +632,19 @@ rm -rf "${FFSRC}"; cp -a "${CACHE}/git/jellyfin-ffmpeg" "${FFSRC}"
         applied=$((applied + 1))
     done < debian/patches/series
     series_length="$(grep -cvE '^\s*$' debian/patches/series)"
-    [[ "${applied}" -eq "${series_length}" ]] \
-        || ff_die "applied ${applied} of ${series_length} patches; win-x64 takes the whole series"
-    [[ "${applied}" -eq 95 ]] \
-        || ff_die "the series is ${applied} patches; the frozen premise names 95"
-    ff_log "applied ${applied}/${series_length} fork patches, zero fuzz"
+    [[ "${series_length}" -eq "${#WIN_PATCH_PLAN[@]}" ]] \
+        || ff_die "the fork ships ${series_length} patches but ci/ffmpeg/fork-patches.json classifies ${#WIN_PATCH_PLAN[@]}"
+    # The two directions are separate failures. Applying fewer than the platform
+    # decision means a patch was dropped silently; applying more means one the
+    # policy refuses was taken anyway. Both were invisible while this asserted a
+    # literal 95.
+    [[ "${applied}" -le "${WIN_PATCHES_EXPECTED}" ]] \
+        || ff_die "applied ${applied} patches; the win-x64 decision in ci/ffmpeg/fork-patches.json is ${WIN_PATCHES_EXPECTED}"
+    [[ "${applied}" -eq "${WIN_PATCHES_EXPECTED}" ]] \
+        || ff_die "applied ${applied} of the ${WIN_PATCHES_EXPECTED} patches win-x64 declares; ${skipped} were skipped"
+    [[ "${applied}" -eq "${series_length}" || "${skipped}" -gt 0 ]] \
+        || ff_die "applied ${applied} of ${series_length} with nothing recorded as skipped"
+    ff_log "applied ${applied}/${series_length} fork patches, zero fuzz (${skipped} excluded, ${exceptions} declared platform exception(s))"
 
     # The series having run is not the same as the series having landed.
     grep -q 'tonemapx' libavfilter/allfilters.c \
@@ -594,6 +652,7 @@ rm -rf "${FFSRC}"; cp -a "${CACHE}/git/jellyfin-ffmpeg" "${FFSRC}"
     grep -q 'alphasrc' libavfilter/allfilters.c \
         || ff_die "the patch series applied but alphasrc is absent: the fork baseline did not land"
     printf '%s\n' "${applied}" > "${OUT}/patches-applied.txt"
+    printf '%s\n' "${skipped}" > "${OUT}/patches-skipped.txt"
 )
 (
     cd "${FFSRC}"

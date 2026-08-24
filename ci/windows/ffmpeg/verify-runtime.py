@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Refuse a win-x64 FFmpeg runtime that does not hold (W1-A2, issue #236).
+"""Refuse a win-x64 FFmpeg runtime that does not hold (W1-A3, issue #236).
 
 Runs against the DELIVERED SET, not against the build that produced it, and
 runs anywhere: every check here reads bytes and JSON, so the whole gate can be
@@ -159,19 +159,36 @@ def check_binaries(gate: Gate, stage: Path, extra_markers: list[str]) -> None:
         else:
             gate.ok(f"{rel}: no link timestamp")
 
+        # Counted, then reported. A check that only ever speaks when it fails
+        # leaves no evidence that it ran: the hosted log and the delivered
+        # artifact look the same whether the closure was computed or skipped.
+        ordinary = sorted(image.imports)
+        delayed = sorted(image.delay_imports)
+        refused = 0
+        system_admitted, delivered_beside = 0, 0
         for dll in image.all_dlls():
             if allowed(dll, exact, prefixes):
+                system_admitted += 1
                 continue
             if dll in delivered:
+                delivered_beside += 1
                 continue
             gate.fail(f"{rel} imports {dll}, which is neither a declared system "
                       f"DLL nor delivered beside it")
+            refused += 1
         for dll in image.all_dlls():
             if dll in MSYS_RUNTIME:
                 gate.fail(f"{rel} imports the MSYS2/MinGW runtime {dll}")
+                refused += 1
             for bad in FORBIDDEN_SUBSTRINGS:
                 if bad in dll:
                     gate.fail(f"{rel} imports {dll}, which matches forbidden '{bad}'")
+                    refused += 1
+        if refused == 0:
+            gate.ok(f"{rel}: import closure — {len(ordinary)} ordinary and "
+                    f"{len(delayed)} delay-imported DLL(s) inspected, "
+                    f"{system_admitted} declared system import(s) admitted, "
+                    f"{delivered_beside} delivered beside the image, 0 refused")
 
         blob = b.read_bytes()
         for marker in (*HOST_PATH_MARKERS, *extra_markers):
@@ -317,15 +334,81 @@ def check_delivered_set(gate: Gate, delivered: Path) -> None:
     if "@sha256:" not in str(inputs.get("reference", "")):
         gate.fail(f"the build-input reference is not digest-pinned: {inputs.get('reference')}")
 
+    # The applied set is checked against ci/ffmpeg/fork-patches.json — the base
+    # decision plus win-x64's declared exceptions — not against a literal. A
+    # runtime that quietly skipped a patch, or quietly took one the policy
+    # refuses, must be a different verdict from one that did what was declared.
+    catalogue = json.loads((REPO_ROOT / "ci/ffmpeg/fork-patches.json").read_text())
+    expected_applied, expected_excluded, expected_exceptions = [], [], []
+    for entry in catalogue["patches"]:
+        applied = entry["applied"]
+        for exc in entry.get("platformExceptions", []):
+            if exc["platform"] == "win-x64":
+                applied = exc["applied"]
+                expected_exceptions.append(entry["patch"])
+        (expected_applied if applied else expected_excluded).append(entry["patch"])
+
     patches = prov.get("patches", {})
-    if patches.get("seriesLength") != patches.get("applied"):
-        gate.fail(f"provenance records {patches.get('applied')} of "
-                  f"{patches.get('seriesLength')} patches applied")
-    elif patches.get("applied") != 95:
-        gate.fail(f"provenance records {patches.get('applied')} patches; the "
-                  "frozen premise names 95")
+    if patches.get("seriesLength") != len(catalogue["patches"]):
+        gate.fail(f"provenance records a series of {patches.get('seriesLength')} "
+                  f"patches; the catalogue classifies {len(catalogue['patches'])}")
+    elif patches.get("applied") != len(expected_applied):
+        gate.fail(f"provenance records {patches.get('applied')} patches applied; "
+                  f"the win-x64 decision is {len(expected_applied)}")
+    elif sorted(patches.get("excluded") or []) != sorted(expected_excluded):
+        gate.fail(f"provenance records excluded={sorted(patches.get('excluded') or [])}; "
+                  f"the win-x64 decision excludes {sorted(expected_excluded)}")
+    elif patches.get("fuzz") != 0:
+        gate.fail(f"provenance records fuzz={patches.get('fuzz')}")
     else:
-        gate.ok("provenance binds 95/95 patches, zero fuzz")
+        gate.ok(f"provenance binds {patches['applied']}/{patches['seriesLength']} "
+                f"patches, zero fuzz, {len(expected_excluded)} excluded")
+
+    # The exception record itself: present, closed to unknown fields, and
+    # agreeing with the catalogue. `excluded: []` alone can mean "nothing
+    # diverged" or "everything diverged and nobody said so"; this separates them.
+    recorded_exceptions = patches.get("platformExceptions")
+    exception_keys = {"patch", "platform", "baseClassification", "baseApplied",
+                      "applied", "rationale", "compensatingControls"}
+    if recorded_exceptions is None:
+        gate.fail("provenance records no patches.platformExceptions list, so a "
+                  "divergence from the base patch policy would be invisible")
+    elif sorted(e.get("patch") for e in recorded_exceptions) != sorted(expected_exceptions):
+        gate.fail(f"provenance records platform exceptions for "
+                  f"{sorted(str(e.get('patch')) for e in recorded_exceptions)}; the "
+                  f"catalogue declares {sorted(expected_exceptions)}")
+    else:
+        bad = False
+        for e in recorded_exceptions:
+            unknown = set(e) - exception_keys
+            missing = exception_keys - set(e)
+            if unknown or missing:
+                gate.fail(f"the platform exception for {e.get('patch')} has "
+                          f"unknown {sorted(unknown)} / missing {sorted(missing)} field(s)")
+                bad = True
+                continue
+            if e["platform"] != "win-x64":
+                gate.fail(f"the delivered provenance carries an exception for "
+                          f"{e['platform']}, which is not this runtime's platform")
+                bad = True
+            if e["applied"] is e["baseApplied"]:
+                gate.fail(f"the platform exception for {e['patch']} decides what "
+                          "the base decision already decided")
+                bad = True
+            if not str(e.get("rationale", "")).strip() or not e.get("compensatingControls"):
+                gate.fail(f"the platform exception for {e['patch']} carries no "
+                          "rationale or no compensating controls")
+                bad = True
+        if not bad:
+            if recorded_exceptions:
+                gate.ok(f"{len(recorded_exceptions)} declared platform exception(s), "
+                        "each with a rationale and compensating controls: "
+                        + ", ".join(f"{e['patch']} "
+                                    f"{'applied' if e['applied'] else 'excluded'}"
+                                    for e in recorded_exceptions))
+            else:
+                gate.ok("provenance declares no platform exception to the base "
+                        "patch decision")
 
     # Component patches: the provenance must describe exactly the series in the
     # tree, digests included. A build that applied a patch the repository does

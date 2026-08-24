@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Prove that adding win-x64 changed nothing about the Linux runtimes (W1-A2 / #236).
+# Prove that adding win-x64 changed nothing about the Linux runtimes (W1-A3 / #236).
 #
-# W1-A2 is allowed to touch ci/ffmpeg/components.json and its validators. That is
+# W1-A3 is allowed to touch ci/ffmpeg/components.json and its validators. That is
 # exactly the surface the two Linux runtimes are built from, so "the Linux
 # identities are preserved" cannot be an assurance in a pull-request description;
 # it has to be a check that fails.
@@ -44,8 +44,6 @@ UNCHANGED=(
     ci/ffmpeg/ffmpeg-configure.txt
     ci/ffmpeg/ffmpeg-configure.linux-x64.txt
     ci/ffmpeg/ffmpeg-configure.linux-arm64.txt
-    ci/ffmpeg/excluded-patches.txt
-    ci/ffmpeg/fork-patches.json
     ci/ffmpeg/build-in-container.sh
     ci/ffmpeg/build-runtime.sh
     ci/ffmpeg/fetch-sources.sh
@@ -64,9 +62,75 @@ for f in "${UNCHANGED[@]}"; do
     if git diff --quiet "${BASE}" -- "${f}"; then
         continue
     fi
-    fail "${f} differs from ${BASE}; W1-A2 does not own it"
+    fail "${f} differs from ${BASE}; this work does not own it"
 done
 [[ "${FAILURES}" -eq 0 ]] && pass "${#UNCHANGED[@]} Linux build inputs byte-identical to ${BASE}"
+
+# ci/ffmpeg/fork-patches.json and ci/ffmpeg/excluded-patches.txt are NOT in the
+# list above, and deliberately so. Recording a win-x64 platform exception means
+# editing the catalogue both operating systems read, so byte identity is not
+# available — and demanding it would only push the divergence somewhere the gate
+# cannot see. What must not move is the DECISION, so that is what is compared:
+# the effective applied/excluded split each Linux architecture takes, computed
+# from master's catalogue and from this tree's, character for character.
+#
+# This is strictly stronger than the byte comparison it replaces. A comment
+# rewrite used to fail it; a silent flip of `applied` inside an unchanged-looking
+# file used to pass.
+echo "== the Linux fork-patch decision is unchanged"
+git show "${BASE}:ci/ffmpeg/fork-patches.json" > /tmp/winx64-base-fork-patches.json
+git show "${BASE}:ci/ffmpeg/excluded-patches.txt" > /tmp/winx64-base-excluded-patches.txt
+for arch in linux-x64 linux-arm64; do
+    if python3 - "${arch}" /tmp/winx64-base-fork-patches.json ci/ffmpeg/fork-patches.json <<'PY'
+import json, sys
+
+arch, base_path, head_path = sys.argv[1:4]
+
+
+def decision(path):
+    """The applied/excluded split `arch` takes, exceptions included."""
+    out = {"applied": [], "excluded": []}
+    for e in json.load(open(path))["patches"]:
+        taken = e["applied"]
+        for exc in e.get("platformExceptions", []):
+            if exc["platform"] == arch:
+                taken = exc["applied"]
+        out["applied" if taken else "excluded"].append(e["patch"])
+    out["applied"].sort()
+    out["excluded"].sort()
+    return out
+
+
+base, head = decision(base_path), decision(head_path)
+if base == head:
+    print(f"    {len(base['applied'])} applied, {len(base['excluded'])} excluded, "
+          "identical to the base decision")
+    sys.exit(0)
+for key in ("applied", "excluded"):
+    added = sorted(set(head[key]) - set(base[key]))
+    removed = sorted(set(base[key]) - set(head[key]))
+    for p in added:
+        print(f"    {arch} now {key[:-1]}s {p}, which master does not")
+    for p in removed:
+        print(f"    {arch} no longer {key[:-1]}s {p}, which master does")
+sys.exit(1)
+PY
+    then
+        pass "${arch}: fork-patch decision identical to ${BASE}"
+    else
+        fail "${arch}: this tree changes which fork patches the Linux runtime takes"
+    fi
+done
+
+# The declared exclusion list, parsed rather than diffed: the comment block above
+# it explains the platform-exception mechanism and is expected to move.
+if diff <(grep -vE '^\s*(#|$)' /tmp/winx64-base-excluded-patches.txt | awk '{print $1, $2}') \
+        <(grep -vE '^\s*(#|$)' ci/ffmpeg/excluded-patches.txt | awk '{print $1, $2}') >/dev/null; then
+    pass "excluded-patches.txt declares the same patches with the same classifications"
+else
+    fail "excluded-patches.txt changes which patches are excluded, or how they are classified"
+fi
+rm -f /tmp/winx64-base-fork-patches.json /tmp/winx64-base-excluded-patches.txt
 
 echo "== the resolved Linux configure flags are unchanged"
 for arch in linux-x64 linux-arm64; do
@@ -85,9 +149,9 @@ for arch in linux-x64 linux-arm64; do
 done
 
 echo "== the component set each Linux architecture builds is unchanged"
-git show "${BASE}:ci/ffmpeg/components.json" > /tmp/w1a2-base-components.json
+git show "${BASE}:ci/ffmpeg/components.json" > /tmp/winx64-base-components.json
 for arch in linux-x64 linux-arm64; do
-    if python3 - "${arch}" /tmp/w1a2-base-components.json ci/ffmpeg/components.json <<'PY'
+    if python3 - "${arch}" /tmp/winx64-base-components.json ci/ffmpeg/components.json <<'PY'
 import json, sys
 arch, base_path, head_path = sys.argv[1:4]
 
@@ -120,7 +184,7 @@ PY
         fail "${arch}: the component set changed"
     fi
 done
-rm -f /tmp/w1a2-base-components.json
+rm -f /tmp/winx64-base-components.json
 
 echo
 if [[ "${FAILURES}" -gt 0 ]]; then
