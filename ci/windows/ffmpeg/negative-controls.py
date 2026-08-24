@@ -95,9 +95,62 @@ def _import_blob(imports: dict[str, list[str]], base_rva: int) -> bytes:
     return bytes(descriptors) + bytes(thunks) + bytes(strings)
 
 
+def _delay_blob(imports: dict[str, list[str]], base_rva: int) -> bytes:
+    """A real delay-load import directory, laid out at base_rva.
+
+    The delay descriptor is 32 bytes, not the import descriptor's 20, and its
+    first field is grAttrs rather than a thunk RVA. Bit 0 of grAttrs says the
+    addresses that follow are RVAs; it is set here, which is the modern layout
+    pe.py reads without the image-base subtraction.
+
+    Synthesised for the same reason as the ordinary import directory: a control
+    that cannot produce a delay-loaded import cannot show that the gate reads
+    one, and a delay import is exactly how a forbidden DLL arrives without
+    appearing in the import table.
+    """
+    n = len(imports)
+    desc_size = (n + 1) * 32
+    cursor = desc_size
+    int_rvas: dict[str, int] = {}
+    for dll, funcs in imports.items():
+        int_rvas[dll] = base_rva + cursor
+        cursor += (len(funcs) + 1) * 8
+
+    strings = bytearray()
+    string_base = cursor
+
+    def put(text: bytes) -> int:
+        rva = base_rva + string_base + len(strings)
+        strings.extend(text)
+        if len(strings) % 2:
+            strings.append(0)
+        return rva
+
+    name_rvas: dict[str, int] = {}
+    func_rvas: dict[str, list[int]] = {}
+    for dll, funcs in imports.items():
+        name_rvas[dll] = put(dll.encode() + b"\0")
+        func_rvas[dll] = [put(struct.pack("<H", 0) + f.encode() + b"\0") for f in funcs]
+
+    descriptors = bytearray()
+    for dll in imports:
+        descriptors += struct.pack("<IIIII", 1, name_rvas[dll], 0, 0,
+                                   int_rvas[dll]) + b"\0" * 12
+    descriptors += b"\0" * 32
+
+    thunks = bytearray()
+    for dll, funcs in imports.items():
+        for rva in func_rvas[dll]:
+            thunks += struct.pack("<Q", rva)
+        thunks += struct.pack("<Q", 0)
+
+    return bytes(descriptors) + bytes(thunks) + bytes(strings)
+
+
 def synth_pe(machine: int = IMAGE_FILE_MACHINE_AMD64, magic: int = 0x20B,
              timestamp: int = 0, payload: bytes = b"",
-             imports: dict[str, list[str]] | None = None) -> bytes:
+             imports: dict[str, list[str]] | None = None,
+             delay_imports: dict[str, list[str]] | None = None) -> bytes:
     """A minimal, structurally valid PE image with one section and an import table.
 
     Enough for the architecture, format, timestamp and import-closure checks to
@@ -107,7 +160,9 @@ def synth_pe(machine: int = IMAGE_FILE_MACHINE_AMD64, magic: int = 0x20B,
     imports = DEFAULT_IMPORTS if imports is None else imports
     import_rva = 0x1000
     blob = _import_blob(imports, import_rva) if imports else b""
-    body = blob + payload
+    delay_rva = import_rva + len(blob)
+    delay = _delay_blob(delay_imports, delay_rva) if delay_imports else b""
+    body = blob + delay + payload
     pad = (-len(body)) % 0x200
     section_data = body + b"\0" * (pad or 0)
     n_dirs = 16
@@ -139,9 +194,11 @@ def synth_pe(machine: int = IMAGE_FILE_MACHINE_AMD64, magic: int = 0x20B,
     struct.pack_into("<I", opt, 64, 0)                      # CheckSum
     struct.pack_into("<H", opt, 68, 3)                      # Subsystem: console
     struct.pack_into("<I", opt, (108 if magic == 0x20B else 92), n_dirs)
+    dir_base = (112 if magic == 0x20B else 96)
     if blob:
-        dir_base = (112 if magic == 0x20B else 96)
         struct.pack_into("<II", opt, dir_base + 1 * 8, import_rva, len(blob))
+    if delay:
+        struct.pack_into("<II", opt, dir_base + 13 * 8, delay_rva, len(delay))
 
     section = struct.pack("<8sIIII12xI", b".text\0\0\0", len(section_data),
                           0x1000, len(section_data), 0x200, 0x60000020)
@@ -172,7 +229,9 @@ def _declared_component_patches() -> list[dict]:
     return out
 
 
-def build_delivered_fixture(root: Path) -> Path:
+def build_delivered_fixture(root: Path, *,
+                            exe_imports: dict[str, list[str]] | None = None,
+                            exe_delay_imports: dict[str, list[str]] | None = None) -> Path:
     """A structurally complete delivered set that the gate accepts.
 
     Deliberately minimal but SELF-CONSISTENT: every control below breaks exactly
@@ -189,7 +248,8 @@ def build_delivered_fixture(root: Path) -> Path:
     (delivered / "runtime").mkdir()
     (delivered / "source").mkdir()
 
-    (delivered / "bin/ffmpeg.exe").write_bytes(synth_pe())
+    (delivered / "bin/ffmpeg.exe").write_bytes(
+        synth_pe(imports=exe_imports, delay_imports=exe_delay_imports))
     (delivered / "bin/ffprobe.exe").write_bytes(synth_pe())
 
     conf = ("--prefix=/c/tesserafin-ffmpeg --enable-gpl --enable-version3 "
@@ -365,6 +425,13 @@ def run_controls(c: Controls, tmp: Path) -> None:
         if root.exists():
             shutil.rmtree(root)
         return build_delivered_fixture(root)
+
+    def fresh_pe(tag: str, **kwargs) -> Path:
+        """A fresh delivered set whose ffmpeg.exe was synthesised differently."""
+        root = tmp / tag
+        if root.exists():
+            shutil.rmtree(root)
+        return build_delivered_fixture(root, **kwargs)
 
     # ── 1. the delivered path set ──────────────────────────────────────────
     d = fresh("missing")
@@ -674,6 +741,40 @@ def run_controls(c: Controls, tmp: Path) -> None:
     c.assert_true("the Linux-owned fetcher runs with the LF python shim on PATH",
                   shimmed, detail)
 
+
+    # ── 8b. A forbidden DLL, by either route into the image ────────────────
+    #
+    # verify-runtime.py refuses a DLL that is neither a declared system DLL nor
+    # delivered beside the binary, and refuses the MSYS2/MinGW runtime and the
+    # TLS and nonfree substrings outright. Nothing proved the gate was reached.
+    #
+    # Both routes are controlled, because they are different directories in the
+    # image and a reader that handles one can miss the other entirely. A delay
+    # import is exactly how a forbidden DLL arrives without ever appearing in
+    # the import table — `all_dlls()` merges the two, and this is what shows it.
+    d = fresh_pe("import-openssl", exe_imports={
+        **DEFAULT_IMPORTS, "libssl-3-x64.dll": ["SSL_new"]})
+    c.expect_refusal("a forbidden DLL reached by ORDINARY import",
+                     [verify, "--delivered", str(d)],
+                     "libssl")
+
+    d = fresh_pe("delay-openssl", exe_delay_imports={
+        "libcrypto-3-x64.dll": ["EVP_EncryptInit_ex"]})
+    c.expect_refusal("a forbidden DLL reached by DELAY import",
+                     [verify, "--delivered", str(d)],
+                     "libcrypto")
+
+    d = fresh_pe("delay-msys", exe_delay_imports={
+        "msys-2.0.dll": ["cygwin_internal"]})
+    c.expect_refusal("the MSYS2 runtime reached by DELAY import",
+                     [verify, "--delivered", str(d)],
+                     "msys-2.0.dll")
+
+    d = fresh_pe("delay-undeclared", exe_delay_imports={
+        "notarealsystem.dll": ["Nope"]})
+    c.expect_refusal("an undeclared DLL reached by DELAY import",
+                     [verify, "--delivered", str(d)],
+                     "neither a declared system")
 
     # ── 9. A bare program name is not a program on Windows ─────────────────
     #
