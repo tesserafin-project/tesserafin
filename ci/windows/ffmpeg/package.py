@@ -45,6 +45,64 @@ import pe  # noqa: E402  (local module, deliberately after sys.path)
 SOURCE_DATE_EPOCH = 1780743384
 ZIP_DATE_TIME = (2026, 6, 6, 10, 56, 24)
 
+# --------------------------------------------------------------------------- #
+# external programs
+# --------------------------------------------------------------------------- #
+# A bare program name is not safe to hand to subprocess on Windows. CPython on
+# Windows spawns through CreateProcess with a NULL application name, and that
+# API searches the SYSTEM DIRECTORY BEFORE it searches PATH. Windows ships
+# C:\Windows\System32\bash.exe — the WSL launcher — so ["bash", "-c", ...]
+# reaches WSL, not the MSYS2 bash that the surrounding shell uses. Measured on a
+# hosted runner: it wrote
+#
+#     Windows Subsystem for Linux has no installed distributions.
+#
+# to STDOUT in UTF-16LE and exited 1, while `bash -c` in the same step exited 0.
+# shutil.which() does not see this, because it searches PATH only and answered
+# C:\msys64\usr\bin\bash.EXE for the same name in the same process.
+#
+# So every external program is resolved to an absolute path through PATH, and a
+# resolution that lands in the system directory is refused rather than run.
+_TOOLS: dict[str, str] = {}
+
+
+def tool(name: str) -> str:
+    """Absolute path to an external program, never a bare name."""
+    cached = _TOOLS.get(name)
+    if cached is not None:
+        return cached
+    found = shutil.which(name)
+    if not found:
+        raise SystemExit(f"HARD STOP: {name} is not on PATH")
+    resolved = Path(found).resolve()
+    system_root = os.environ.get("SystemRoot") or os.environ.get("SYSTEMROOT")
+    if system_root:
+        try:
+            resolved.relative_to(Path(system_root).resolve())
+        except ValueError:
+            pass
+        else:
+            raise SystemExit(
+                f"HARD STOP: {name} resolved to {resolved}, inside the Windows "
+                f"system directory. That is the OS stub (bash.exe is the WSL "
+                f"launcher), not the MSYS2 program this build must use.")
+    _TOOLS[name] = str(resolved)
+    return _TOOLS[name]
+
+
+def bash(script: str, *, what: str) -> str:
+    """Run a bash script under the MSYS2 bash, and report what it said if it fails."""
+    proc = subprocess.run([tool("bash"), "-c", script],
+                          capture_output=True, text=True, check=False)
+    if proc.returncode != 0:
+        raise SystemExit(
+            f"HARD STOP: {what} failed with exit {proc.returncode}\n"
+            f"  command: bash -c {script!r}\n"
+            f"  stdout: {proc.stdout!r}\n"
+            f"  stderr: {proc.stderr!r}")
+    return proc.stdout
+
+
 LICENSE_NAMES = ("COPYING", "COPYING.LIB", "COPYING.LESSER", "LICENSE", "LICENCE",
                  "LICENSE.md", "LICENSE.txt", "LICENSE.TXT", "License.txt",
                  "COPYING.txt", "COPYING.MIT", "LICENCE.txt", "LICENSE.rst",
@@ -406,11 +464,9 @@ def source_archive(cache: Path, components: list[dict], ffmpeg_meta: dict,
                            for c in sorted(components, key=lambda x: x["name"])],
         }, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
 
-    subprocess.run(
-        ["bash", "-c",
-         f'source "{REPO_ROOT}/ci/ffmpeg/lib.sh"; ff_normalize_modes "{staging}"; '
-         f'ff_deterministic_tar "{staging}" "{dest_tar}" cat'],
-        check=True)
+    bash(f'source "{REPO_ROOT}/ci/ffmpeg/lib.sh"; ff_normalize_modes "{staging}"; '
+         f'ff_deterministic_tar "{staging}" "{dest_tar}" cat',
+         what="normalising modes and writing the deterministic source tar")
     shutil.rmtree(staging)
 
 
@@ -444,9 +500,8 @@ def main(argv: list[str] | None = None) -> int:
     components = [c for c in manifest["components"]
                   if c.get("architectures") is None or "win-x64" in c["architectures"]]
 
-    epoch = subprocess.run(
-        ["bash", "-c", f'source "{REPO_ROOT}/ci/ffmpeg/lib.sh"; ff_source_date_epoch'],
-        capture_output=True, text=True, check=True).stdout.strip()
+    epoch = bash(f'source "{REPO_ROOT}/ci/ffmpeg/lib.sh"; ff_source_date_epoch',
+                 what="reading SOURCE_DATE_EPOCH from ci/ffmpeg/lib.sh").strip()
     if int(epoch) != SOURCE_DATE_EPOCH:
         print(f"HARD STOP: ci/ffmpeg/lib.sh says SOURCE_DATE_EPOCH={epoch}, "
               f"package.py says {SOURCE_DATE_EPOCH}", file=sys.stderr)
@@ -500,7 +555,7 @@ def main(argv: list[str] | None = None) -> int:
     source_tar.parent.mkdir(parents=True, exist_ok=True)
     source_archive(cache, components, ffmpeg_meta, source_tar)
     source_uncompressed_digest = sha256_file(source_tar)
-    subprocess.run(["zstd", "-19", "-q", "-f", "--no-progress", str(source_tar),
+    subprocess.run([tool("zstd"), "-19", "-q", "-f", "--no-progress", str(source_tar),
                     "-o", str(source_tar) + ".zst"], check=True)
     source_tar.unlink()
     source_digest = sha256_file(Path(str(source_tar) + ".zst"))

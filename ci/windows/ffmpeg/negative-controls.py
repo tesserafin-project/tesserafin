@@ -674,6 +674,43 @@ def run_controls(c: Controls, tmp: Path) -> None:
                   shimmed, detail)
 
 
+    # ── 9. A bare program name is not a program on Windows ─────────────────
+    #
+    # CPython on Windows spawns through CreateProcess with a NULL application
+    # name, and that API searches the SYSTEM DIRECTORY BEFORE PATH. Windows
+    # ships C:\Windows\System32\bash.exe — the WSL launcher — so
+    # subprocess.run(["bash", ...]) reaches WSL and not the MSYS2 bash of the
+    # surrounding shell. Measured on a hosted runner: it wrote "Windows
+    # Subsystem for Linux has no installed distributions." to stdout in UTF-16LE
+    # and exited 1, while `bash -c` in the same step exited 0. That cost twelve
+    # dispatches, because the caller captured the output and reported only the
+    # exit code.
+    #
+    # shutil.which() cannot see this: it searches PATH only, and answered
+    # C:\msys64\usr\bin\bash.EXE for the same name in the same process. So the
+    # rule is a source rule — no string literal may be argv[0] in a file that
+    # runs on the runner — and only a source control can hold it, because a
+    # behavioural test on Linux resolves the name correctly every time.
+    windows_python = [HERE / "package.py", HERE / "verify-runtime.py", HERE / "pe.py"]
+    bare = []
+    for path in windows_python:
+        if not path.is_file():
+            continue
+        text = path.read_text(errors="replace")
+        for m in re.finditer(r"subprocess\.(?:run|Popen|call|check_output|check_call)\("
+                             r"\s*\[\s*(['\"])([^'\"]+)\1", text):
+            argv0 = m.group(2)
+            if "/" in argv0 or "\\" in argv0:
+                continue  # an absolute or explicit path is not a bare name
+            line = text[: m.start()].count("\n") + 1
+            bare.append(f"{path.name}:{line}: {argv0!r}")
+    c.assert_true(
+        "no external program is spawned by bare name from a file that runs on "
+        "Windows",
+        not bare,
+        "; ".join(bare))
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--verbose", action="store_true")
