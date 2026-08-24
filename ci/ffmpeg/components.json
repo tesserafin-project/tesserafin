@@ -221,7 +221,7 @@
         "linux-x64",
         "linux-arm64"
       ],
-      "architectureComment": "OpenCL is a named gap in the win-x64 runtime (W1-A2), not an oversight: the *_opencl filters are absent there and the Windows hardware surface is DXVA2/D3D11VA/D3D12VA/AMF/QSV/NVENC. Recorded the same way libplacebo is in 'excluded'."
+      "architectureComment": "OpenCL is a named gap in the win-x64 runtime (#236), not an oversight: the *_opencl filters are absent there and the Windows hardware surface is DXVA2/D3D11VA/D3D12VA/AMF/QSV/NVENC. Recorded the same way libplacebo is in 'excluded'."
     },
     {
       "name": "opencl-icd-loader",
@@ -331,7 +331,7 @@
     "libne10": "superseded by compiler intrinsics on aarch64",
     "rkmpp": "Rockchip SBC codepath; outside the declared linux-x64/linux-arm64 support matrix",
     "rkrga": "Rockchip SBC codepath; outside the declared support matrix",
-    "mingw / dxva / schannel / mfx / x11 / xorg-macros": "Excluded as SOURCE COMPONENTS on every platform, which is not the same as excluding the capability. The Windows-side pieces — the mingw-w64 toolchain and CRT, the DXVA2/D3D11VA/D3D12VA headers and Schannel — are not built from source by any Tesserafin runtime: on win-x64 (W1-A2) they arrive inside the digest-pinned, signature-verified MSYS2 CLANG64 package set that W1-R retained, and are enabled through ci/windows/ffmpeg/ffmpeg-configure.win-x64.txt. libmfx is superseded by libvpl, and X11 is excluded outright because Tesserafin ships headless on every platform.",
+    "mingw / dxva / schannel / mfx / x11 / xorg-macros": "Excluded as SOURCE COMPONENTS on every platform, which is not the same as excluding the capability. The Windows-side pieces — the mingw-w64 toolchain and CRT, the DXVA2/D3D11VA/D3D12VA headers and Schannel — are not built from source by any Tesserafin runtime: on win-x64 (#236) they arrive inside the digest-pinned, signature-verified MSYS2 CLANG64 package set that W1-R retained, and are enabled through ci/windows/ffmpeg/ffmpeg-configure.win-x64.txt. libmfx is superseded by libvpl, and X11 is excluded outright because Tesserafin ships headless on every platform.",
     "libplacebo + vulkan-headers + shaderc + glslang + SPIRV-Tools + SPIRV-Headers": "DEFERRED, NOT UNNEEDED. EncoderValidator._requiredFilters names 'libplacebo', so this is a real capability gap against the container image: Vulkan tone-mapping is unavailable and the server falls back to tonemap_vaapi / tonemap_opencl / the software tonemapx path. It is deferred from build revision 7.1.4-tesserafin.1 because the shader-toolchain subtree is the largest single source-closure and reproducibility risk in the component set. Tracked as a named gap in docs/distribution/F0-ffmpeg-runtime.md, not silently dropped."
   }
 }

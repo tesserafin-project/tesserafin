@@ -3,6 +3,14 @@
 #
 # Format: <patch filename> <classification> <reason>
 #
+# This file is the BASE decision, which is the Linux runtimes' decision. It is
+# not a statement about every platform: a platform that decides differently
+# records a `platformExceptions` entry in ci/ffmpeg/fork-patches.json, and
+# ci/ffmpeg/verify-components.sh --platform <rid> reports the effective decision
+# for that platform rather than this list. As of #236 exactly one such exception
+# exists — 0029 is applied on win-x64 — and it is declared there with its
+# rationale and its compensating controls.
+#
 # The default is to apply the full series. `v7.1.4-3` is the named compatibility
 # baseline, the 95 patches are what makes it that baseline rather than plain
 # FFmpeg 7.1.4, and they are interdependent — 0057 (tonemapx) sits on top of

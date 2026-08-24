@@ -1,5 +1,6 @@
 {
   "$comment": "Classification of every patch in the jellyfin-ffmpeg v7.1.4-3 series (F0 / #229). 'required' means Tesserafin names the capability the patch provides, or the patch is correctness for a capability it names. 'useful' is a real improvement Tesserafin does not depend on. 'irrelevant' is a platform outside the declared linux-x64/linux-arm64 matrix. 'unsafe' weakens a Tesserafin guarantee and is not applied. The whole series is applied except the unsafe class: the patches are interdependent and v7.1.4-3 is the named compatibility baseline, so a cherry-picked subset would be neither the fork nor upstream.",
+  "$platformExceptionComment": "'applied' above is the decision for the Linux runtimes, which are the platforms this catalogue was written for. A platform that decides differently must say so in 'platformExceptions' — an array of {platform, applied, rationale, compensatingControls} objects, closed to any other key, whose 'platform' must be one of components.json's declared platforms. There is no implicit divergence: ci/ffmpeg/verify-components.sh computes the EFFECTIVE decision per platform from this file, and a build whose applied set does not equal that decision is refused. An exception whose 'applied' equals the base decision is refused as well, because an exception that changes nothing hides rather than records.",
   "baseline": "jellyfin/jellyfin-ffmpeg v7.1.4-3",
   "seriesLength": 95,
   "counts": {
@@ -181,7 +182,19 @@
       "patch": "0029-remove-fdk-aac-from-nonfree.patch",
       "classification": "unsafe",
       "applied": false,
-      "rationale": "Deletes libfdk_aac from FFmpeg's own nonfree list. Excluded; see ci/ffmpeg/excluded-patches.txt."
+      "rationale": "Deletes libfdk_aac from FFmpeg's own nonfree list. Excluded; see ci/ffmpeg/excluded-patches.txt.",
+      "platformExceptions": [
+        {
+          "platform": "win-x64",
+          "applied": true,
+          "rationale": "win-x64 applies the whole 95-patch series because the MSYS2 CLANG64 toolchain reaches parts of the series the Linux builder never exercises, and a cherry-picked subset there is neither the fork nor upstream. Applying 0029 removes FFmpeg's own source-level nonfree enforcement as a fourth layer; it does not enable FDK AAC, and the three layers below are what keep it out. Recorded as a declared exception rather than an absence so that 'the Windows runtime applied a patch Linux refuses' is a reviewable statement rather than something a reader has to derive.",
+          "compensatingControls": [
+            "ci/windows/ffmpeg/ffmpeg-configure.win-x64.txt states --disable-nonfree and --disable-libfdk-aac explicitly, and ci/ffmpeg/verify-components.sh refuses the file if either is missing or if --enable-libfdk-aac appears.",
+            "ci/windows/ffmpeg/verify-runtime.py reads the configure line back out of the produced binary and refuses any fdk token in it.",
+            "ci/windows/ffmpeg/verify-runtime.py reads the encoder and decoder listings out of the produced binaries and refuses any fdk codec."
+          ]
+        }
+      ]
     },
     {
       "patch": "0030-pass-dovi-sidedata-to-hlsenc-and-mpegtsenc.patch",
