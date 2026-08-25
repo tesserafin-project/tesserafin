@@ -1,0 +1,209 @@
+# Publication of the retained win-x64 FFmpeg runtime (#236, W1-A4).
+#
+# NOT DISPATCHED BY W1-A4. This file is reviewed here and runs later, in W1-A5,
+# after this branch is independently reviewed and merged. Until then the GHCR
+# package does not exist.
+#
+# The publisher is TOLD what it may push. It does not publish whatever it
+# happens to have assembled:
+#
+#   * it takes NO inputs at all. Not a package, not a digest, not a tag, not a
+#     run id. Every one of those is read from the committed acceptance manifest,
+#     so the identity of what is published travels with the commit being
+#     published rather than with whoever pressed the button;
+#   * it runs only from `refs/heads/master`, asserted as a STEP inside the job.
+#     A job-level `if:` that evaluates false reports SUCCESS, which would make a
+#     refused publication indistinguishable from a completed one;
+#   * it reconstructs the OCI layout locally and pushes nothing unless the bytes
+#     it built hash to exactly the reviewed digest;
+#   * it reads the stored manifest back and compares it byte for byte;
+#   * `packages: write` is granted on the publication job alone.
+#
+# The artifacts it assembles from EXPIRE on 2026-09-23. That is an operational
+# deadline for W1-A5, not a property of this file, and it is recorded in
+# docs/distribution/W1-windows-runtime-retention.md.
+
+name: W1 Windows Runtime Publication
+
+on:
+  # No `inputs:` block anywhere in this file, deliberately. `negative-controls.py`
+  # asserts its continued absence, because an input is the shortest path from
+  # "publish the reviewed digest" to "publish what the caller named".
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: w1-windows-runtime-publication
+  cancel-in-progress: false
+
+env:
+  LC_ALL: C
+  TZ: UTC
+
+jobs:
+  publish:
+    name: Publish the reviewed runtime to GHCR (master only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    environment: windows-runtime-publication
+    permissions:
+      contents: read
+      # The only grant of packages: write for the retained runtime, and it is
+      # job level, not workflow level.
+      packages: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      # The trust boundary, asserted as a STEP. A job-level `if:` that evaluates
+      # false reports success; this cannot.
+      - name: Assert the trusted branch and the reviewed reference
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ci/windows/runtime-retention
+          python3 - <<'PY'
+          import json, os
+          import contract
+          contract.assert_trusted_ref(os.environ["GITHUB_REF"])
+          accepted = json.loads(open("accepted-runtime.json", "rb").read())
+          contract.validate_accepted(accepted)
+          contract.parse_reference(accepted["reference"])
+          print(f"trusted ref, reviewed reference {accepted['reference']}")
+          PY
+
+      - name: Assert the repository is the trusted one
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_REPOSITORY}" != "tesserafin-project/tesserafin" ]; then
+            echo "W1-A4 PUBLICATION HARD STOP: running in ${GITHUB_REPOSITORY}, not the trusted repository" >&2
+            exit 1
+          fi
+          echo "trusted repository ${GITHUB_REPOSITORY} at ${GITHUB_SHA}"
+
+      - name: Install the pinned ORAS
+        shell: bash
+        run: ./ci/windows/build-inputs/install-oras.sh linux-amd64 "${RUNNER_TEMP}/bin"
+
+      # The proof run is read from the COMMITTED manifest, never from an input.
+      - name: Recover the accepted artifacts from the recorded proof run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          run_id="$(python3 -c "
+          import json
+          print(json.load(open('ci/windows/runtime-retention/accepted-runtime.json'))['proofRun'])
+          ")"
+          echo "recovering artifacts from the recorded proof run ${run_id}"
+          mkdir -p "${RUNNER_TEMP}/artifacts"
+          for name in winx64-delivered-a winx64-evidence-a winx64-evidence-b winx64-comparison; do
+            gh run download "${run_id}" -R "${GITHUB_REPOSITORY}" \
+              -n "${name}" -D "${RUNNER_TEMP}/artifacts/${name}"
+          done
+
+      - name: Assemble and build the reviewed layout
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ci/windows/runtime-retention
+          python3 assemble.py \
+            --delivered  "${RUNNER_TEMP}/artifacts/winx64-delivered-a" \
+            --evidence-a "${RUNNER_TEMP}/artifacts/winx64-evidence-a" \
+            --evidence-b "${RUNNER_TEMP}/artifacts/winx64-evidence-b" \
+            --comparison "${RUNNER_TEMP}/artifacts/winx64-comparison/comparison.json" \
+            --accepted   accepted-runtime.json \
+            --out        "${RUNNER_TEMP}/unit"
+          ./scan-secrets.sh "${RUNNER_TEMP}/unit"
+          python3 build-oci.py \
+            --unit     "${RUNNER_TEMP}/unit" \
+            --accepted accepted-runtime.json \
+            --out      "${RUNNER_TEMP}/oci"
+
+      - name: Refuse to push anything but the reviewed digest
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ci/windows/runtime-retention
+          python3 - <<'PY'
+          import hashlib, json, os
+          import contract
+          temp = os.environ["RUNNER_TEMP"]
+          built = "sha256:" + hashlib.sha256(
+              open(f"{temp}/oci/manifest.json", "rb").read()
+          ).hexdigest()
+          accepted = json.loads(open("accepted-runtime.json", "rb").read())
+          contract.assert_expected_digest(accepted["manifestDigest"], built)
+          print(f"this run built the reviewed digest {built}")
+          PY
+
+      - name: Push the exact manifest bytes
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="${RUNNER_TEMP}/bin:${PATH}"
+          printf '%s' "${GHCR_TOKEN}" | oras login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+          ./ci/windows/runtime-retention/oci-protocol.sh push \
+            --oci  "${RUNNER_TEMP}/oci" \
+            --repo ghcr.io/tesserafin-project/windows-ffmpeg-runtime
+
+      # The immutable convenience tag. Never repointed: if it already resolves
+      # elsewhere this refuses, and if it already resolves to this digest the
+      # whole publication is an idempotent no-op.
+      - name: Apply the immutable acceptance tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="${RUNNER_TEMP}/bin:${PATH}"
+          tag="$(python3 -c "
+          import json
+          print(json.load(open('ci/windows/runtime-retention/accepted-runtime.json'))['immutableTag'])
+          ")"
+          ./ci/windows/runtime-retention/oci-protocol.sh tag \
+            --oci  "${RUNNER_TEMP}/oci" \
+            --repo ghcr.io/tesserafin-project/windows-ffmpeg-runtime \
+            --tag  "${tag}"
+
+      # What the registry STORED, compared byte for byte against what was
+      # reviewed. A push that succeeded is not the same claim as a registry
+      # holding the reviewed bytes.
+      - name: Read the stored manifest back and compare it
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="${RUNNER_TEMP}/bin:${PATH}"
+          ./ci/windows/runtime-retention/oci-protocol.sh verify \
+            --oci  "${RUNNER_TEMP}/oci" \
+            --repo ghcr.io/tesserafin-project/windows-ffmpeg-runtime \
+            --out  "${RUNNER_TEMP}/pulled" | tee -a "${GITHUB_STEP_SUMMARY}"
+
+      - name: Record what was published
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "## W1-A4 publication"
+            echo
+            python3 -c "
+          import json
+          a = json.load(open('ci/windows/runtime-retention/accepted-runtime.json'))
+          print(f\"reference: \`{a['reference']}\`\")
+          print()
+          print(f\"immutable tag: \`{a['immutableTag']}\` (never a consumer authority)\")
+          print()
+          print(f\"runtime: \`sha256:{a['runtimeSha256']}\`\")
+          print()
+          print(f\"corresponding source: \`sha256:{a['correspondingSourceSha256']}\`\")
+          "
+            echo
+            echo "The package is PRIVATE. Public anonymous availability, including the"
+            echo "corresponding source, is required before any public 1.1 Windows binary"
+            echo "is distributed."
+          } >> "${GITHUB_STEP_SUMMARY}"
