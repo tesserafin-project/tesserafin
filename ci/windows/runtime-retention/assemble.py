@@ -149,6 +149,13 @@ def stage_unit(
     (out / "evidence").mkdir(parents=True, exist_ok=True)
     shutil.copyfile(comparison, out / "evidence" / "comparison.json")
 
+    # The identity the manifest claims must be the identity the proof recorded.
+    # Checked HERE rather than only in derive-accepted.py, so it is a standing
+    # gate on the committed manifest rather than a one-off at derivation time.
+    contract.assert_identity_agrees_with_comparison(
+        identity, json.loads((out / "evidence" / "comparison.json").read_bytes())
+    )
+
     for host in ("host-a", "host-b"):
         if not (out / "evidence" / host / "inputs" / "runner.json").is_file():
             _stop(f"evidence bundle {host} carries no inputs/runner.json")

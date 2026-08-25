@@ -1,0 +1,114 @@
+{
+  "comment": [
+    "The cross-language reference corpus (#236, W1-A4-R1).",
+    "",
+    "`grammar` is the verdict all THREE parsers must reach, with the same reason",
+    "token: contract.classify_reference in Python, classify_reference in",
+    "oci-protocol.sh, and Get-ReferenceRejectionReason in consume.ps1. null means",
+    "the grammar accepts.",
+    "",
+    "`canonical` is a SEPARATE authority carried only by the two parsers that",
+    "consume our package: contract.parse_reference and consume.ps1's",
+    "Assert-DigestReference. oci-protocol.sh deliberately does not carry it,",
+    "because the local-registry controls address localhost:5000 and a shared",
+    "canonical rule would manufacture a disagreement that is not one. Entries",
+    "with canonical set to null are not offered to the canonical leg."
+  ],
+  "canonicalPackage": "ghcr.io/tesserafin-project/windows-ffmpeg-runtime",
+  "entries": [
+    { "name": "canonical-digest-pinned",
+      "reference": "ghcr.io/tesserafin-project/windows-ffmpeg-runtime@sha256:99e45f154a5d72aba4185eb19b6671aa1a11c30be837deac9dd26f473593c0b9",
+      "grammar": null, "canonical": null,
+      "why": "the accepted reference itself" },
+
+    { "name": "local-registry-with-port",
+      "reference": "localhost:5000/tesserafin-project/windows-ffmpeg-runtime@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "grammar": null, "canonical": "not-canonical-package",
+      "why": "a host:5000 reference is well formed, and is not our package" },
+
+    { "name": "tag-only",
+      "reference": "ghcr.io/tesserafin-project/windows-ffmpeg-runtime:accepted-000000000000",
+      "grammar": "tag-only", "canonical": "tag-only",
+      "why": "a tag is never an identity" },
+
+    { "name": "tag-plus-digest",
+      "reference": "ghcr.io/tesserafin-project/windows-ffmpeg-runtime:accepted-000000000000@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "grammar": "tag-and-digest", "canonical": "tag-and-digest",
+      "why": "the permissive [^@]+ repository shape used to let this through" },
+
+    { "name": "missing-digest",
+      "reference": "ghcr.io/tesserafin-project/windows-ffmpeg-runtime",
+      "grammar": "missing-digest", "canonical": "missing-digest",
+      "why": "no digest at all" },
+
+    { "name": "multiple-at",
+      "reference": "ghcr.io/tesserafin-project/windows-ffmpeg-runtime@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "grammar": "multiple-at", "canonical": "multiple-at",
+      "why": "two digests are two identities" },
+
+    { "name": "uppercase-digest",
+      "reference": "ghcr.io/tesserafin-project/windows-ffmpeg-runtime@sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "grammar": "malformed-digest", "canonical": "malformed-digest",
+      "why": "the contract is canonical lowercase; PowerShell -notmatch used to accept this" },
+
+    { "name": "short-digest",
+      "reference": "ghcr.io/tesserafin-project/windows-ffmpeg-runtime@sha256:abc123",
+      "grammar": "malformed-digest", "canonical": "malformed-digest",
+      "why": "a truncated digest is not a digest" },
+
+    { "name": "long-digest",
+      "reference": "ghcr.io/tesserafin-project/windows-ffmpeg-runtime@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "grammar": "malformed-digest", "canonical": "malformed-digest",
+      "why": "sixty-five hex characters" },
+
+    { "name": "wrong-algorithm",
+      "reference": "ghcr.io/tesserafin-project/windows-ffmpeg-runtime@sha512:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "grammar": "malformed-digest", "canonical": "malformed-digest",
+      "why": "only sha256 is the retained algorithm" },
+
+    { "name": "no-repository-path",
+      "reference": "ghcr.io@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "grammar": "malformed-name", "canonical": "malformed-name",
+      "why": "a registry with no repository" },
+
+    { "name": "leading-slash",
+      "reference": "/tesserafin-project/windows-ffmpeg-runtime@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "grammar": "malformed-name", "canonical": "malformed-name",
+      "why": "no registry host" },
+
+    { "name": "uppercase-repository",
+      "reference": "ghcr.io/Tesserafin-Project/windows-ffmpeg-runtime@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "grammar": "malformed-name", "canonical": "malformed-name",
+      "why": "an OCI repository name is lowercase" },
+
+    { "name": "double-slash",
+      "reference": "ghcr.io//windows-ffmpeg-runtime@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "grammar": "malformed-name", "canonical": "malformed-name",
+      "why": "an empty path component" },
+
+    { "name": "trailing-slash",
+      "reference": "ghcr.io/tesserafin-project/@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "grammar": "malformed-name", "canonical": "malformed-name",
+      "why": "no package component" },
+
+    { "name": "whitespace-injected",
+      "reference": "ghcr.io/tesserafin-project/windows-ffmpeg-runtime @sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "grammar": "malformed-name", "canonical": "malformed-name",
+      "why": "a space is not part of a reference" },
+
+    { "name": "caller-repository-override",
+      "reference": "ghcr.io/attacker/windows-ffmpeg-runtime@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "grammar": null, "canonical": "not-canonical-package",
+      "why": "well formed, and not the one package W1-A4 authorises" },
+
+    { "name": "caller-registry-override",
+      "reference": "evil.example.com/tesserafin-project/windows-ffmpeg-runtime@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "grammar": null, "canonical": "not-canonical-package",
+      "why": "an environment or caller redirect to another registry" },
+
+    { "name": "empty",
+      "reference": "",
+      "grammar": "missing-digest", "canonical": "missing-digest",
+      "why": "the empty string is not a reference" }
+  ]
+}

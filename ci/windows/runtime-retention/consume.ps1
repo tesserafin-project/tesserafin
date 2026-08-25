@@ -48,12 +48,23 @@
     as a caller-supplied reference wearing a different name. The registry-side
     controls exercise `oci-protocol.sh` instead, which is the publisher's tool.
 #>
-[CmdletBinding()]
+[CmdletBinding(DefaultParameterSetName = 'Consume')]
 param(
-    [Parameter(Mandatory = $true)][string] $AcceptedManifest,
-    [Parameter(Mandatory = $true)][string] $WorkDir,
-    [Parameter(Mandatory = $true)][string] $OutDir,
-    [Parameter(Mandatory = $true)][string] $OrasPath
+    [Parameter(Mandatory = $true, ParameterSetName = 'Consume')][string] $AcceptedManifest,
+    [Parameter(Mandatory = $true, ParameterSetName = 'Consume')][string] $WorkDir,
+    [Parameter(Mandatory = $true, ParameterSetName = 'Consume')][string] $OutDir,
+    [Parameter(Mandatory = $true, ParameterSetName = 'Consume')][string] $OrasPath,
+    # A pure grammar oracle for `reference-corpus.py`, in its own parameter set.
+    # It is NOT a caller-selectable identity: it reaches no registry, opens no
+    # manifest and returns before ORAS is ever consulted, and the corpus asserts
+    # that. It exists because the alternative — a second copy of this grammar
+    # written for the test — would prove the copy and not the consumer.
+    [Parameter(Mandatory = $true, ParameterSetName = 'GrammarCheck')]
+    [AllowEmptyString()][string] $GrammarCheck,
+    # Also apply the canonical-package authority, which the grammar deliberately
+    # does not carry: `localhost:5000/...` is well formed and the local-registry
+    # controls need it, while only THIS consumer insists on our one package.
+    [Parameter(ParameterSetName = 'GrammarCheck')][switch] $Canonical
 )
 
 $ErrorActionPreference = 'Stop'
@@ -80,15 +91,74 @@ function Get-Sha256 {
     finally { $stream.Dispose() }
 }
 
+# The reference grammar, restated for the third and last time.
+#
+# R0 found this parser using `[^@]+` for the repository path — the same
+# permissive shape `oci-protocol.sh` had already been repaired for. It accepted
+# a reference carrying BOTH a tag and a digest, and, because PowerShell's
+# `-notmatch` is CASE-INSENSITIVE, it also accepted an uppercase digest that the
+# other two parsers refuse. Both are fixed here: the classification order, the
+# reason tokens and the messages are identical to `contract.classify_reference`
+# and `classify_reference` in `oci-protocol.sh`, and the match is `-cnotmatch`
+# so a canonical lowercase digest means what it says.
+$ReferenceHost = '[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*(:[0-9]{1,5})?'
+$ReferenceComponent = '[a-z0-9]+([._-][a-z0-9]+)*'
+
+$ReferenceReasonText = @{
+    'tag-only'         = 'is not digest-pinned; a tag is never an accepted identity'
+    'missing-digest'   = 'is not digest-pinned; it names no sha256 digest'
+    'multiple-at'      = "carries more than one '@'"
+    'tag-and-digest'   = 'carries both a tag and a digest; use the digest alone'
+    'malformed-digest' = 'does not end in a canonical lowercase sha256:<64 hex> digest'
+    'malformed-name'   = 'has a malformed registry or repository'
+}
+
+function Get-ReferenceRejectionReason {
+    param([string] $Reference)
+    # Set-StrictMode makes a pipeline that yields one object have no .Count, so
+    # the separators are counted by length difference instead.
+    $ats = $Reference.Length - $Reference.Replace('@', '').Length
+    if ($ats -eq 0) {
+        $last = $Reference.Split('/')[-1]
+        if ($last.Contains(':')) { return 'tag-only' }
+        return 'missing-digest'
+    }
+    if ($ats -gt 1) { return 'multiple-at' }
+    $at = $Reference.IndexOf('@')
+    $name = $Reference.Substring(0, $at)
+    $digest = $Reference.Substring($at + 1)
+    if ($digest -cnotmatch '^sha256:[0-9a-f]{64}$') { return 'malformed-digest' }
+    if ($name.Split('/')[-1].Contains(':')) { return 'tag-and-digest' }
+    if ($name -cnotmatch "^$ReferenceHost(/$ReferenceComponent)+`$") { return 'malformed-name' }
+    return $null
+}
+
 function Assert-DigestReference {
     param([string] $Reference)
-    if ($Reference -notmatch '^[^@:]+(:[0-9]+)?/[^@]+@sha256:[0-9a-f]{64}$') {
-        Stop-Consumption "'$Reference' is not digest-pinned; a tag is not an identity this consumer accepts"
+    $reason = Get-ReferenceRejectionReason $Reference
+    if ($null -ne $reason) {
+        Stop-Consumption "REFERENCE-REJECTED:$reason '$Reference' $($ReferenceReasonText[$reason])"
     }
     $name = $Reference.Split('@')[0]
-    if ($name -ne $CanonicalPackage) {
-        Stop-Consumption "'$name' is not the authorised package; W1-A4 authorises exactly one: $CanonicalPackage"
+    if ($name -cne $CanonicalPackage) {
+        Stop-Consumption "REFERENCE-REJECTED:not-canonical-package '$name' is not the authorised package; W1-A4 authorises exactly one: $CanonicalPackage"
     }
+}
+
+if ($PSCmdlet.ParameterSetName -eq 'GrammarCheck') {
+    if ($Canonical) {
+        try { Assert-DigestReference $GrammarCheck }
+        catch { Write-Error $_.Exception.Message -ErrorAction Continue; exit 1 }
+        Write-Output "the consumer accepts '$GrammarCheck'"
+        exit 0
+    }
+    $reason = Get-ReferenceRejectionReason $GrammarCheck
+    if ($null -ne $reason) {
+        Write-Error "REFERENCE-REJECTED:$reason '$GrammarCheck' $($ReferenceReasonText[$reason])" -ErrorAction Continue
+        exit 1
+    }
+    Write-Output "the grammar accepts '$GrammarCheck'"
+    exit 0
 }
 
 function Assert-SafeRelativePath {

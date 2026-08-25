@@ -110,6 +110,63 @@ class ContractError(Exception):
     """Fail-closed condition. Never caught to continue."""
 
 
+# ── the reference grammar, stated once and restated in two other languages ──
+#
+# `oci-protocol.sh` and `consume.ps1` implement exactly this, classify in exactly
+# this order, and emit exactly these tokens. `reference-corpus.py` runs all three
+# over one corpus and requires identical decisions AND identical reason tokens,
+# because two parsers that both say "no" for different reasons are not a rule
+# stated twice — R0 found the PowerShell one accepting, through a permissive
+# `[^@]+` repository shape, a reference the other two refused.
+#
+# The canonical-package check is deliberately NOT part of the grammar. It is a
+# separate authority: `localhost:5000/...` is a well-formed reference that the
+# local-registry controls must be able to use, and only `parse_reference` adds
+# the "and it must be OUR package" rule on top.
+REFERENCE_HOST = r"[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*(:[0-9]{1,5})?"
+REFERENCE_COMPONENT = r"[a-z0-9]+([._-][a-z0-9]+)*"
+REFERENCE_NAME = re.compile(f"^{REFERENCE_HOST}(/{REFERENCE_COMPONENT})+$")
+
+#: Reason tokens. One per way a reference can be malformed, identical in all
+#: three implementations.
+REFERENCE_REASONS = {
+    "tag-only": "is not digest-pinned; a tag is never an accepted identity",
+    "missing-digest": "is not digest-pinned; it names no sha256 digest",
+    "multiple-at": "carries more than one '@'",
+    "tag-and-digest": "carries both a tag and a digest; use the digest alone",
+    "malformed-digest": "does not end in a canonical lowercase sha256:<64 hex> digest",
+    "malformed-name": "has a malformed registry or repository",
+}
+
+
+def classify_reference(reference: str) -> str | None:
+    """The reason `reference` is malformed, or None if the grammar accepts it."""
+    at = reference.count("@")
+    if at == 0:
+        last = reference.rsplit("/", 1)[-1]
+        return "tag-only" if ":" in last else "missing-digest"
+    if at > 1:
+        return "multiple-at"
+    name, _, digest = reference.partition("@")
+    if not _DIGEST.match(digest):
+        return "malformed-digest"
+    if ":" in name.rsplit("/", 1)[-1]:
+        return "tag-and-digest"
+    if not REFERENCE_NAME.match(name):
+        return "malformed-name"
+    return None
+
+
+def reference_rejection(reference: str, reason: str) -> str:
+    return f"REFERENCE-REJECTED:{reason} {reference!r} {REFERENCE_REASONS[reason]}"
+
+
+def check_reference_grammar(reference: str) -> None:
+    reason = classify_reference(reference)
+    if reason is not None:
+        raise ContractError(reference_rejection(reference, reason))
+
+
 def parse_reference(reference: str) -> str:
     """Return the digest of `reference`, or refuse it.
 
@@ -117,24 +174,46 @@ def parse_reference(reference: str) -> str:
     statements of that rule; `oci-protocol.sh` makes the second one, because
     that script is what actually talks to the registry.
     """
-    if "@" not in reference:
-        raise ContractError(
-            f"{reference!r} is not digest-pinned. A tag is never an accepted "
-            f"identity; use {CANONICAL}@sha256:<digest>"
-        )
+    check_reference_grammar(reference)
     name, _, digest = reference.partition("@")
-    if ":" in name.rsplit("/", 1)[-1]:
-        raise ContractError(
-            f"{reference!r} carries both a tag and a digest; use the digest alone"
-        )
     if name != CANONICAL:
         raise ContractError(
-            f"{name!r} is not the authorised package. W1-A4 authorises exactly one: "
-            f"{CANONICAL}"
+            f"REFERENCE-REJECTED:not-canonical-package {name!r} is not the authorised "
+            f"package. W1-A4 authorises exactly one: {CANONICAL}"
         )
-    if not _DIGEST.match(digest):
-        raise ContractError(f"{digest!r} is not a sha256 manifest digest")
     return digest
+
+
+def assert_identity_agrees_with_comparison(identity: dict, comparison: dict) -> None:
+    """The acceptance manifest's identity must be the one the PROOF recorded.
+
+    Two of the identity fields are not free-standing claims: `proofHead` and
+    `buildInputsReference` are copied out of the dual-runner comparison record at
+    derivation time, so the retained unit carries, beside the manifest, the
+    document that says what those values were. Nothing checked them again after
+    derivation, which meant a hand-edited `accepted-runtime.json` could only be
+    caught by the OCI digest recomputation — and that fires with one generic
+    message whatever was edited, so three separate hostile controls all graded RED
+    through the same token and none of them proved its own property.
+
+    Each field gets its own refusal, naming itself.
+    """
+    identities = comparison.get("identities", {})
+    recorded_head = identities.get("repositorySha")
+    if recorded_head is not None and identity.get("proofHead") != recorded_head:
+        raise ContractError(
+            f"IDENTITY-PROOF-HEAD-DISAGREES: the acceptance manifest claims proofHead "
+            f"{identity.get('proofHead')!r}, but the retained comparison record names "
+            f"{recorded_head!r}. The proof head is copied out of the proof, not asserted."
+        )
+    recorded_inputs = identities.get("buildInputs")
+    if recorded_inputs is not None and identity.get("buildInputsReference") != recorded_inputs:
+        raise ContractError(
+            f"IDENTITY-BUILD-INPUTS-DISAGREE: the acceptance manifest claims "
+            f"buildInputsReference {identity.get('buildInputsReference')!r}, but the "
+            f"retained comparison record names {recorded_inputs!r}. The build-input "
+            f"reference is copied out of the proof, not asserted."
+        )
 
 
 def assert_trusted_ref(github_ref: str) -> None:
@@ -153,6 +232,85 @@ def assert_trusted_ref(github_ref: str) -> None:
         f"publication refused: github.ref is {github_ref!r} and not {TRUSTED_REF!r} "
         f"({reason})"
     )
+
+
+#: The repository publication is permitted from, and nothing else.
+TRUSTED_REPOSITORY = "tesserafin-project/tesserafin"
+
+#: The accepted W1-A3 merge. Publication must run from a commit that DESCENDS
+#: from this, which is a durable statement about lineage rather than a demand
+#: that master stand still forever at one commit. The authority is the trusted
+#: master content that is checked out plus the exact digest committed in it —
+#: not a frozen branch tip, which would go stale on the next merge.
+FROZEN_W1A3_MERGE = "83e23b9579404883c2d3e93f6f3ac8748061c618"
+
+#: The only event that may publish.
+TRUSTED_EVENT = "workflow_dispatch"
+
+
+def assert_trusted_source(
+    repository: str, github_ref: str, event_name: str, github_sha: str, head_sha: str
+) -> None:
+    """Publication runs from a MEANINGFUL revision of trusted master, or not at all.
+
+    R0's adjacent finding: the publisher asserted the repository and the ref, and
+    both of those are true of a `refs/heads/master` checkout of ANY commit — a
+    detached checkout of an older or substituted revision satisfies them exactly
+    as well as the reviewed one does. A ref name is not a revision.
+
+    So the revision is asserted too:
+
+      * the event is `workflow_dispatch` — nothing else may reach this job;
+      * the checked-out HEAD is `GITHUB_SHA`, so the bytes being packaged are the
+        bytes of the commit the run claims to be;
+      * `GITHUB_SHA` descends from the accepted W1-A3 merge, checked with
+        `git merge-base --is-ancestor` in the workflow because it needs history.
+
+    Together with the manifest being read from that same checked-out commit, and
+    its canonical content hash being compared against the value validated before
+    the push, there is no detached, caller-selected or substituted revision that
+    can be packaged.
+    """
+    if repository != TRUSTED_REPOSITORY:
+        raise ContractError(
+            f"TRUSTED-SOURCE-REPOSITORY: publication refused: running in {repository!r}, "
+            f"not {TRUSTED_REPOSITORY!r}"
+        )
+    assert_trusted_ref(github_ref)
+    if event_name != TRUSTED_EVENT:
+        raise ContractError(
+            f"TRUSTED-SOURCE-EVENT: publication refused: the event is {event_name!r}, "
+            f"not {TRUSTED_EVENT!r}"
+        )
+    if not _BARE_SHA256.match(github_sha.lower()) and len(github_sha) != 40:
+        raise ContractError(
+            f"TRUSTED-SOURCE-SHA: {github_sha!r} is not a full commit sha"
+        )
+    if head_sha != github_sha:
+        raise ContractError(
+            f"TRUSTED-SOURCE-HEAD: publication refused: the checkout stands at "
+            f"{head_sha!r}, but the run claims {github_sha!r}. A ref name is not a "
+            f"revision, and the revision is what gets packaged."
+        )
+
+
+def assert_committed_manifest(committed: bytes, working: bytes) -> None:
+    """What is packaged must be what the checked-out commit holds.
+
+    The publisher reads `accepted-runtime.json` from the working tree. This
+    compares those bytes against the ones `git show <GITHUB_SHA>:<path>` returns,
+    so a manifest modified after checkout — by a step, by a cached artifact, by
+    anything — is refused before the OCI layout is built from it.
+    """
+    import hashlib
+
+    if committed != working:
+        raise ContractError(
+            "TRUSTED-SOURCE-MANIFEST: the acceptance manifest on disk is not the one "
+            f"committed at the revision being published "
+            f"(committed sha256:{hashlib.sha256(committed).hexdigest()}, "
+            f"on disk sha256:{hashlib.sha256(working).hexdigest()})"
+        )
 
 
 def assert_expected_digest(expected: str, actual: str) -> None:

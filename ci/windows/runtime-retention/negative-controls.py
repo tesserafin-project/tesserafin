@@ -279,31 +279,87 @@ def control_08(root: Path, work: Path) -> None:
     contract.validate_accepted(accepted)
 
 
-def control_09(root: Path, work: Path) -> None:
+# ── controls 09, 10 and 11: three identity tampers, three distinct properties ─
+#
+# R0's adjacent finding: all three used to reach RED through the substring
+# "predicts", which is the OCI digest recomputation's generic message. Any of the
+# three mutations produces it, so none of them proved its own property — remove
+# the gate control 10 is named for and control 10 still goes RED, through control
+# 09's mechanism. A grading token shared by three controls grades one control
+# three times.
+#
+# So each now has a mutation that is REACHED and verified, a unique sentinel that
+# only its own mutation can produce, and a distinct assertion:
+#
+#   09  proofHead disagrees with the comparison record the proof wrote
+#   10  buildInputsReference disagrees with that same record, by a different field
+#   11  the tampered identity is embedded in RETENTION.md, whose digest is pinned
+#       in the unit inventory — so the unit stops matching its own manifest
+#
+# `--ablate` runs the three mutations against the three expectations as a matrix
+# and requires the off-diagonal to be empty.
+
+_IDENTITY_TAMPERS: dict[str, tuple[str, dict]] = {
+    "09": ("CONTROL-09-SENTINEL-proof-head-and-run",
+           {"proofHead": "9" * 40, "proofRun": 999999}),
+    "10": ("CONTROL-10-SENTINEL-build-inputs-reference",
+           {"buildInputsReference":
+            "ghcr.io/tesserafin-project/windows-ffmpeg-build-inputs@sha256:" + "b" * 64}),
+    "11": ("CONTROL-11-SENTINEL-accepted-server-tree",
+           {"acceptedServerTree": "c" * 40}),
+}
+
+
+def _identity_tamper(root: Path, work: Path, which: str, resync: bool) -> None:
+    """Apply one identity tamper, prove it landed, then build.
+
+    The mutation is re-read from disk before anything else runs. A control whose
+    mutation silently did not apply is INERT, not RED, and without this check it
+    would be indistinguishable from a control that worked.
+    """
+    sentinel, changes = _IDENTITY_TAMPERS[which]
     accepted = _accepted(root)
-    accepted["proofHead"] = "9" * 40
-    accepted["proofRun"] = 999999
+    for field, value in changes.items():
+        if field not in accepted:
+            raise Inert(f"the acceptance manifest has no {field!r} to tamper with")
+        if accepted[field] == value:
+            raise Inert(f"{field!r} already holds the tampered value; nothing was mutated")
+        accepted[field] = value
     _write_accepted(root, accepted)
-    _resync_readme(root, work)
-    _build(root, work / "unit", work / "oci")
+
+    reread = _accepted(root)
+    for field, value in changes.items():
+        if reread[field] != value:
+            raise Inert(f"the mutation of {field!r} did not reach the manifest on disk")
+
+    # The resync is INSIDE the try: it stages the unit itself, so an identity
+    # gate that fires during staging escapes from there, not from `_build`, and
+    # a narrower try silently dropped the sentinel off two of the three refusals.
+    try:
+        if resync:
+            _resync_readme(root, work)
+        _build(root, work / "unit", work / "oci")
+    except (contract.ContractError, retention.RetentionError) as error:
+        raise type(error)(f"{sentinel} {error}") from None
+
+
+def control_09(root: Path, work: Path) -> None:
+    # Resynced, so the shallow RETENTION.md rebinding does not fire first and the
+    # control reaches the identity-versus-proof gate it is named for.
+    _identity_tamper(root, work, "09", resync=True)
 
 
 def control_10(root: Path, work: Path) -> None:
-    accepted = _accepted(root)
-    accepted["buildInputsReference"] = (
-        "ghcr.io/tesserafin-project/windows-ffmpeg-build-inputs@sha256:" + "b" * 64
-    )
-    _write_accepted(root, accepted)
-    _resync_readme(root, work)
-    _build(root, work / "unit", work / "oci")
+    _identity_tamper(root, work, "10", resync=True)
 
 
 def control_11(root: Path, work: Path) -> None:
-    accepted = _accepted(root)
-    accepted["acceptedServerTree"] = "c" * 40
-    _write_accepted(root, accepted)
-    _resync_readme(root, work)
-    _build(root, work / "unit", work / "oci")
+    # Deliberately NOT resynced. `acceptedServerTree` appears in no proof record,
+    # so there is nothing to compare it against — what refuses it is that the
+    # retained unit's own RETENTION.md embeds it and the unit inventory pins that
+    # file's digest. Re-pinning the readme would erase the only gate this value
+    # has, which is the property under test.
+    _identity_tamper(root, work, "11", resync=False)
 
 
 def control_12(root: Path, work: Path) -> None:
@@ -399,12 +455,21 @@ def control_18(root: Path, work: Path) -> None:
                 "reads the committed acceptance manifest and nothing else"
             )
 
-    # And it must actually assert the trusted ref, otherwise "no inputs" would
-    # be satisfied by a workflow anyone could dispatch from any branch.
-    if "assert_trusted_ref" not in text:
-        raise retention.RetentionError(
-            "the publication workflow does not assert the trusted ref"
-        )
+    # And it must actually assert the trusted SOURCE, otherwise "no inputs" would
+    # be satisfied by a workflow anyone could dispatch from any branch — or, as
+    # R0 found, from any REVISION of the right branch. A ref name is not a
+    # revision, so the head assertion and the descendant assertion are required
+    # here by name.
+    for required in (
+        "assert_trusted_source",
+        "assert_committed_manifest",
+        "merge-base --is-ancestor",
+    ):
+        if required not in text:
+            raise retention.RetentionError(
+                f"the publication workflow does not assert {required!r}; the identity of "
+                f"what is published would follow the ref rather than the revision"
+            )
 
     raise retention.RetentionError(
         "CONTROL-18-SATISFIED: neither the consumer nor the publication workflow "
@@ -452,9 +517,9 @@ CONTROLS: list[tuple[str, str, str, Callable[[Path, Path], None]]] = [
     ("06-renamed-path", "a renamed path is refused", "added=", control_06),
     ("07-missing-evidence-bundle", "a missing evidence bundle is refused", "carries no", control_07),
     ("08-one-allocation-claimed-twice", "two bundles claiming one runner allocation are refused", "claim runner allocation", control_08),
-    ("09-false-proof-head", "a false proof head or run is refused", "predicts", control_09),
-    ("10-wrong-build-input-digest", "a wrong build-input OCI digest is refused", "predicts", control_10),
-    ("11-wrong-accepted-tree", "a wrong accepted master or tree is refused", "predicts", control_11),
+    ("09-false-proof-head", "a false proof head disagrees with the proof's own comparison record", "CONTROL-09-SENTINEL-proof-head-and-run IDENTITY-PROOF-HEAD-DISAGREES", control_09),
+    ("10-wrong-build-input-digest", "a wrong build-input reference disagrees with the proof's own comparison record", "CONTROL-10-SENTINEL-build-inputs-reference IDENTITY-BUILD-INPUTS-DISAGREE", control_10),
+    ("11-wrong-accepted-tree", "a wrong accepted tree is refused by the unit's own pinned RETENTION.md", "CONTROL-11-SENTINEL-accepted-server-tree the staged unit is not the pinned unit: added=[] missing=[] changed=['RETENTION.md']", control_11),
     ("12-unknown-manifest-field", "an unknown acceptance-manifest field is refused", "unknown field(s)", control_12),
     ("13-tag-only-reference", "a tag-only consumer reference is refused", "not digest-pinned", control_13),
     ("14-manifest-digest-drift", "an OCI manifest differing from the committed digest is refused", "records", control_14),
@@ -467,11 +532,88 @@ CONTROLS: list[tuple[str, str, str, Callable[[Path, Path], None]]] = [
 ]
 
 
+def _expected_for(name_prefix: str) -> str:
+    for name, _prop, expected, _fn in CONTROLS:
+        if name.startswith(name_prefix):
+            return expected
+    raise KeyError(name_prefix)
+
+
+def ablate(fixture: Path) -> int:
+    """Prove controls 09, 10 and 11 grade on their OWN assertion.
+
+    The matrix applies each identity mutation and then asks, of every one of the
+    three expectations, whether that mutation satisfies it. Only the diagonal may
+    be true. An off-diagonal hit is exactly the R0 finding: three controls sharing
+    one grading token, so removing the gate one of them is named for leaves it
+    passing through another's mechanism.
+
+    The `none` row is the other direction — with nothing mutated there must be no
+    refusal at all, so a control cannot be satisfied by a pristine tree.
+    """
+    which = ("09", "10", "11")
+    functions = {"09": control_09, "10": control_10, "11": control_11}
+    expectations = {
+        "09": _expected_for("09-"),
+        "10": _expected_for("10-"),
+        "11": _expected_for("11-"),
+    }
+    failures = 0
+    print("ablation matrix for controls 09, 10 and 11")
+    print(f"  {'mutation':<10} " + "  ".join(f"expects-{k}" for k in which))
+
+    for mutation in ("none",) + which:
+        work = Path(tempfile.mkdtemp(prefix=f"w1a4r1-ablate-{mutation}-"))
+        try:
+            root = _fresh(fixture, work)
+            message = ""
+            try:
+                if mutation == "none":
+                    _build(root, work / "unit", work / "oci")
+                else:
+                    functions[mutation](root, work)
+            except Inert as error:
+                print(f"  ERROR  {mutation:<10} the mutation never reached its assertion: {error}")
+                failures += 1
+                continue
+            except Exception as error:  # noqa: BLE001 - the refusal is the datum
+                message = str(error)
+            row = []
+            for expectation in which:
+                hit = expectations[expectation] in message
+                want = (mutation == expectation)
+                row.append("RED " if hit else "--  ")
+                if hit != want:
+                    failures += 1
+            print(f"  {mutation:<10} " + "     ".join(row))
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
+
+    print()
+    if failures:
+        print(f"W1-A4 ABLATION HARD STOP: {failures} off-diagonal or missing result(s)",
+              file=sys.stderr)
+        return 1
+    print("each of 09, 10 and 11 is satisfied by its own mutation and by no other, and none "
+          "of them is satisfied by a pristine tree")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--fixture", required=True, type=Path)
+    parser.add_argument("--ablate", action="store_true",
+                        help="run the 09/10/11 uniqueness matrix instead of the suite")
     parser.add_argument("--json", type=Path)
     args = parser.parse_args()
+
+    if args.ablate:
+        before = _fixture_digest(args.fixture)
+        status = ablate(args.fixture)
+        if _fixture_digest(args.fixture) != before:
+            print("W1-A4 ABLATION HARD STOP: the fixture was not restored", file=sys.stderr)
+            return 1
+        return status
 
     before = _fixture_digest(args.fixture)
     outcomes: list[Outcome] = []
