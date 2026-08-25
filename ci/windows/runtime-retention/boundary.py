@@ -108,6 +108,32 @@ FORBIDDEN_ROLE_PATTERNS: list[tuple[str, str, re.Pattern[str]]] = [
     ),
 ]
 
+#: What each role's members may LOOK like, and how many there may be.
+#:
+#: Without this, `check_inventory` only rejects a role outside PERMITTED_ROLES,
+#: so any swap AMONG the nine permitted roles passes silently — `consume.ps1`
+#: relabelled `accepted-manifest` would be accepted, and "exactly one permitted
+#: role" would mean "one of the nine, whichever". A role is a claim about what a
+#: file IS, so the claim is checked.
+#:
+#: Cardinality is the sharper half: three of these roles describe exactly one
+#: artefact each. A second accepted manifest is not a classification mistake, it
+#: is a second identity.
+ROLE_SHAPES: dict[str, re.Pattern[str]] = {
+    "accepted-manifest": re.compile(r"\.json$"),
+    "accepted-schema": re.compile(r"\.py$"),
+    "deterministic-oci-assembly": re.compile(r"\.py$"),
+    "retained-unit-verification": re.compile(r"\.(py|sh)$"),
+    "digest-only-consumer": re.compile(r"\.ps1$"),
+    "publication-boundary-validation": re.compile(r"\.(py|sh)$"),
+    "local-registry-protocol": re.compile(r"\.sh$"),
+    "tests-and-fixtures": re.compile(r"\.(py|json|ps1|sh)$"),
+    "retention-documentation": re.compile(r"\.md$"),
+}
+
+#: Roles that describe exactly one artefact.
+SINGLETON_ROLES = ("accepted-manifest", "accepted-schema", "digest-only-consumer")
+
 #: The closed inventory. Path relative to SUBTREE -> role.
 #:
 #: Every tracked file under the subtree must appear here exactly once, and every
@@ -250,6 +276,25 @@ def check_inventory(root: Path) -> list[Finding]:
                     f"forbidden role {forbidden!r}: {why}",
                 ))
                 break
+
+    for rel in present:
+        role = INVENTORY.get(rel)
+        shape = ROLE_SHAPES.get(role) if role else None
+        if shape is not None and not shape.search(rel):
+            findings.append(Finding(
+                "boundary.role-shape-mismatch",
+                f"{SUBTREE}/{rel} is classified {role!r}, but that role describes "
+                f"{shape.pattern!r} files; a role is a claim about what a file is",
+            ))
+
+    for role in SINGLETON_ROLES:
+        members = sorted(rel for rel in present if INVENTORY.get(rel) == role)
+        if len(members) != 1:
+            findings.append(Finding(
+                "boundary.role-cardinality",
+                f"the role {role!r} describes exactly one artefact, but {len(members)} "
+                f"file(s) claim it: {members}",
+            ))
 
     for rel in INVENTORY:
         if rel not in present:

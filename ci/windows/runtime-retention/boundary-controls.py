@@ -111,6 +111,17 @@ def control_f(root: Path) -> None:
     boundary.INVENTORY["fixtures/tag-corpus.json"] = "tests-and-fixtures"
 
 
+def control_h(root: Path) -> None:
+    """A file classified with a permitted but WRONG role.
+
+    `consume.ps1` relabelled `accepted-manifest`. Both the role and the file are
+    legitimate; the pairing is not. Without a shape and a cardinality rule this
+    passes, and "exactly one permitted role" degrades to "one of the nine,
+    whichever".
+    """
+    boundary.INVENTORY["consume.ps1"] = "accepted-manifest"
+
+
 def control_g(root: Path) -> None:
     """The gate is unpinned from the retention workflow. Its absence must be seen."""
     body = (root / RETENTION).read_text(encoding="utf-8")
@@ -142,6 +153,9 @@ CONTROLS: list[tuple[str, str, str | None, object]] = [
     ("F-classified-retention-fixture",
      "a legitimate, classified retention fixture is accepted",
      None, control_f),
+    ("H-misclassified-file",
+     "a file wearing a permitted but wrong role is refused",
+     "boundary.role-shape-mismatch", control_h),
     ("G-gate-unpinned",
      "removing the gate from the retention workflow is detected",
      "boundary.gate-not-pinned", control_g),
