@@ -317,14 +317,18 @@ def _check_permission_block(block, where: str, findings: list[Finding]) -> None:
             ))
 
 
-def check_permissions(doc, workflow: str) -> list[Finding]:
+def check_permissions(doc, workflow: str, called: bool = False) -> list[Finding]:
     findings: list[Finding] = []
     top = doc.get("permissions") if isinstance(doc, dict) else None
     if top is None:
+        inherited = ("whatever the CALLER grants it" if called
+                     else "whatever the repository setting happens to be")
         findings.append(Finding(
             "permissions.absent-at-workflow-level",
-            f"{workflow} declares no workflow-level `permissions:`; the default token is "
-            f"whatever the repository setting happens to be, which is not a closed set",
+            f"{workflow} declares no workflow-level `permissions:`; the token it runs with "
+            f"is {inherited}, which is not a closed set. A permission set inherited from a "
+            f"caller is not a reason to stop reading the callee: the callee is where the "
+            f"token is USED",
         ))
     else:
         _check_permission_block(top, f"{workflow} (workflow level)", findings)
@@ -484,6 +488,220 @@ def check_registry_authority(
     return findings
 
 
+# ── property: the reusable-workflow graph ───────────────────────────────────
+#
+# R1's finding D1. Everything above reads ONE workflow file. `jobs.<id>.uses`
+# hands the whole job to another workflow, and that other workflow has its own
+# `permissions:`, its own steps, its own `run:` bodies and its own `uses:`. A
+# validation workflow that grants itself nothing and calls a local reusable
+# workflow holding `packages: write` publishes exactly as effectively as one
+# that held the grant itself — and R1 would have reported it as closed and
+# read-only, because it never opened the second file.
+#
+# So the closure is the GRAPH, not the file. Every node reachable from the
+# validation workflow is parsed and subjected to the same three property
+# checks, and the edges themselves are checked too: a reference that leaves
+# `.github/workflows/`, a symlinked workflow file, an external `uses`, a cycle
+# and a callee that is not a `workflow_call` workflow are each a named finding.
+#
+# `secrets:` is an edge property and is refused at the edge. `secrets: inherit`
+# hands the caller's entire secret context to the callee in three words, and no
+# amount of reading the callee's text can tell you what that context contains.
+
+WORKFLOWS_DIR = ".github/workflows"
+
+#: External reusable workflows permitted in the validation closure. Empty, and
+#: emptiness is the policy: an external callee is somebody else's file at
+#: somebody else's revision, and nothing in this repository gates what it
+#: becomes. A future exception belongs in a separately frozen allowlist with its
+#: own argument, not in a widened regex here.
+PERMITTED_EXTERNAL_REUSABLE: frozenset[str] = frozenset()
+
+
+def _uses_edges(doc, workflow: str) -> list[tuple[str, str, dict]]:
+    """Every `jobs.<id>.uses` in `doc`, as (job id, uses string, job mapping)."""
+    edges = []
+    for name, job in _jobs(doc).items():
+        if isinstance(job, dict) and isinstance(job.get("uses"), str):
+            edges.append((str(name), job["uses"], job))
+    return edges
+
+
+def _check_edge_credentials(job: dict, where: str, findings: list[Finding]) -> None:
+    secrets = job.get("secrets")
+    if isinstance(secrets, str) and secrets.strip().lower() == "inherit":
+        findings.append(Finding(
+            "credential.secrets-inherit",
+            f"{where} passes `secrets: inherit`, which hands the caller's entire secret "
+            f"context to the called workflow. Nothing in the callee's text can bound what "
+            f"that contains, so it is forbidden in the validation closure outright",
+        ))
+    elif isinstance(secrets, dict) and secrets:
+        findings.append(Finding(
+            "credential.secrets-mapping",
+            f"{where} maps {sorted(str(k) for k in secrets)} into the called workflow; a "
+            f"validation workflow passes no credential to anything",
+        ))
+    elif secrets is not None and not isinstance(secrets, (str, dict)):
+        findings.append(Finding(
+            "credential.secrets-unparseable",
+            f"{where} has a `secrets:` value that is neither `inherit` nor a mapping",
+        ))
+
+
+def _resolve_local_uses(
+    uses: str, uses_root: Path, where: str, findings: list[Finding]
+) -> str | None:
+    """The repository-relative path a local `uses:` names, or None with findings."""
+    if uses.startswith("/"):
+        findings.append(Finding(
+            "workflow.absolute-uses",
+            f"{where} references {uses!r} by absolute path; a local reusable workflow is "
+            f"named relative to the repository root and nothing else",
+        ))
+        return None
+    if not uses.startswith("./"):
+        allowed = uses.split("@")[0] in PERMITTED_EXTERNAL_REUSABLE
+        findings.append(Finding(
+            "workflow.external-reusable" if not allowed else "workflow.external-permitted",
+            f"{where} calls the external reusable workflow {uses!r}; an external callee is "
+            f"another repository's file at another repository's revision, and no gate here "
+            f"decides what it becomes. The permitted set is "
+            f"{sorted(PERMITTED_EXTERNAL_REUSABLE) or 'empty'}",
+        ))
+        return None
+
+    relative = uses[2:]
+    if ".." in Path(relative).parts:
+        findings.append(Finding(
+            "workflow.traversal-uses",
+            f"{where} references {uses!r}, which traverses out of the directory it names",
+        ))
+        return None
+    if not relative.startswith(WORKFLOWS_DIR + "/"):
+        findings.append(Finding(
+            "workflow.uses-outside-workflows-dir",
+            f"{where} references {uses!r}, which is not under {WORKFLOWS_DIR}/",
+        ))
+        return None
+
+    target = uses_root / relative
+    workflows_dir = (uses_root / WORKFLOWS_DIR).resolve()
+
+    # The file AND every directory between it and the workflows directory. A
+    # symlinked parent leaves the file itself a perfectly ordinary regular file.
+    component = target
+    while True:
+        if component.is_symlink():
+            findings.append(Finding(
+                "workflow.symlinked-workflow",
+                f"{where} references {uses!r}, and {component} is a symbolic link; a "
+                f"workflow reached through a link carries a name from inside "
+                f"{WORKFLOWS_DIR}/ and content from wherever the link points",
+            ))
+            return None
+        if component.parent == component or component.resolve() == workflows_dir:
+            break
+        component = component.parent
+
+    if not target.is_file():
+        findings.append(Finding(
+            "workflow.uses-target-missing",
+            f"{where} references {uses!r}, which is not a file",
+        ))
+        return None
+    try:
+        target.resolve().relative_to(workflows_dir)
+    except ValueError:
+        findings.append(Finding(
+            "workflow.uses-escapes-workflows-dir",
+            f"{where} references {uses!r}, which resolves to {target.resolve()}, outside "
+            f"{workflows_dir}",
+        ))
+        return None
+    return relative
+
+
+def _declares_workflow_call(doc) -> bool:
+    # `on:` is a YAML 1.1 boolean, so PyYAML hands the key back as True.
+    triggers = doc.get("on", doc.get(True)) if isinstance(doc, dict) else None
+    if isinstance(triggers, str):
+        return triggers == "workflow_call"
+    if isinstance(triggers, list):
+        return "workflow_call" in triggers
+    if isinstance(triggers, dict):
+        return "workflow_call" in triggers
+    return False
+
+
+def workflow_graph(
+    root: Path, entry: str, uses_root: Path
+) -> tuple[list[tuple[str, dict]], list[Finding]]:
+    """Every workflow reachable from `entry`, with the findings the edges produced.
+
+    Nodes are returned in discovery order, each exactly once. A node reached by
+    two different callers is inspected once — its findings do not depend on who
+    called it — but EVERY edge is validated, so a second alias cannot smuggle a
+    `secrets: inherit` or a traversal past the check by pointing at a file that
+    has already been seen.
+    """
+    findings: list[Finding] = []
+    nodes: list[tuple[str, dict]] = []
+    inspected: set[str] = set()
+
+    def visit(path: str, doc, stack: tuple[str, ...]) -> None:
+        for job_id, uses, job in _uses_edges(doc, path):
+            where = f"{path} job `{job_id}`"
+            _check_edge_credentials(job, where, findings)
+            target = _resolve_local_uses(uses, uses_root, where, findings)
+            if target is None:
+                continue
+            if target in stack:
+                findings.append(Finding(
+                    "workflow.reusable-cycle",
+                    f"{where} calls {uses!r}, closing the cycle "
+                    f"{' -> '.join(stack + (target,))}",
+                ))
+                continue
+            source = (uses_root / target).read_text(encoding="utf-8", errors="replace")
+            try:
+                called = yaml.safe_load(source)
+            except yaml.YAMLError as error:
+                findings.append(Finding(
+                    "workflow.called-unparseable",
+                    f"{where} calls {uses!r}, which is not valid YAML: {error}",
+                ))
+                continue
+            if not isinstance(called, dict):
+                findings.append(Finding(
+                    "workflow.called-unparseable",
+                    f"{where} calls {uses!r}, which does not parse to a mapping",
+                ))
+                continue
+            if not _declares_workflow_call(called):
+                findings.append(Finding(
+                    "workflow.not-workflow-call",
+                    f"{where} calls {uses!r}, which does not declare `on: workflow_call`; "
+                    f"a file that is not a reusable workflow cannot be reasoned about as "
+                    f"one",
+                ))
+                # Still traversed. A callee GitHub would refuse is not a callee
+                # this policy may skip: skipping it is how a node leaves the
+                # closure while still being named by it.
+            if target in inspected:
+                continue
+            inspected.add(target)
+            nodes.append((target, called))
+            visit(target, called, stack + (target,))
+
+    visit(entry, _load(uses_root, entry), (entry,))
+    return nodes, findings
+
+
+def _load(root: Path, workflow: str):
+    return yaml.safe_load((root / workflow).read_text(encoding="utf-8"))
+
+
 # ── driving it ──────────────────────────────────────────────────────────────
 def workflow_closure_text(
     root: Path, workflow: str, extra_scripts: tuple[str, ...] = ()
@@ -503,13 +721,23 @@ def workflow_closure_text(
 
 
 def evaluate(
-    root: Path, workflow: str, extra_scripts: tuple[str, ...] = ()
+    root: Path,
+    workflow: str,
+    extra_scripts: tuple[str, ...] = (),
+    uses_root: Path | None = None,
 ) -> list[Finding]:
     """Every way `workflow` could publish, as a list of named findings.
 
     `workflow` may be an absolute path outside the repository — that is how a
     permission fixture evaluates a mutated copy without ever writing it into the
     tree under review.
+
+    `uses_root` is the root a local `jobs.<id>.uses` resolves against, and
+    defaults to `root`. A reusable-workflow fixture builds a complete throwaway
+    `.github/workflows/` tree and points this at it, so the graph traversal
+    under test is the real one rather than a second resolver written for the
+    fixture. Script closure resolution keeps using `root`, because that is where
+    the repository's scripts are.
     """
     source = (root / workflow).read_text(encoding="utf-8")
     try:
@@ -521,11 +749,24 @@ def evaluate(
 
     closure_text = workflow_closure_text(root, workflow, extra_scripts)
     exempt = set(boundary.LOCAL_REGISTRY_PROTOCOL)
-    return (
+    findings = (
         check_permissions(doc, workflow)
         + check_credentials(doc, workflow, closure_text)
         + check_registry_authority(doc, workflow, closure_text, exempt)
     )
+
+    # The rest of the graph. Each node gets the SAME three checks, because a
+    # grant, a credential or a push is no less effective for being one file
+    # further away from the trigger.
+    nodes, graph_findings = workflow_graph(root, workflow, uses_root or root)
+    findings += graph_findings
+    for path, called in nodes:
+        label = f"{path} (reached from {workflow})"
+        called_text = workflow_closure_text(root, path) if (root / path).is_file() else {}
+        findings += check_permissions(called, label, called=True)
+        findings += check_credentials(called, label, called_text)
+        findings += check_registry_authority(called, label, called_text, exempt)
+    return findings
 
 
 def main(argv: list[str]) -> int:
@@ -542,9 +783,12 @@ def main(argv: list[str]) -> int:
         for finding in findings:
             print(f"  FAIL [{finding.prop}] {finding.message}", file=sys.stderr)
         return 1
+    nodes, _ = workflow_graph(root, relative, root)
+    reached = ", ".join(path for path, _ in nodes) or "no reusable workflow"
     print(f"{relative} resolves to exactly {PERMITTED_PERMISSIONS} at every level, holds no "
           f"credential, declares no environment, performs no registry login, and reaches no "
           f"registry write outside the loopback-restricted protocol")
+    print(f"the same holds for every node its reusable-workflow graph reaches: {reached}")
     return 0
 
 
