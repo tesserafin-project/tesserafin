@@ -339,12 +339,12 @@ jobs:
           cd ci/windows/runtime-retention
           python3 boundary.py | tee -a "${GITHUB_STEP_SUMMARY}"
 
-      - name: The exclusion matches GitHub path-filter semantics
+      - name: The W1 proof trigger is positive-only and every retention change crosses it
         shell: bash
         run: |
           set -euo pipefail
           cd ci/windows/runtime-retention
-          python3 pathfilter.py | tee -a "${GITHUB_STEP_SUMMARY}"
+          python3 trigger_policy.py | tee -a "${GITHUB_STEP_SUMMARY}"
 
       - name: Hostile controls on the boundary
         shell: bash

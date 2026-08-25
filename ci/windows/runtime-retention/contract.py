@@ -282,9 +282,17 @@ def assert_trusted_source(
             f"TRUSTED-SOURCE-EVENT: publication refused: the event is {event_name!r}, "
             f"not {TRUSTED_EVENT!r}"
         )
-    if not _BARE_SHA256.match(github_sha.lower()) and len(github_sha) != 40:
+    # R1 wrote this as `not _BARE_SHA256.match(github_sha.lower()) and
+    # len(github_sha) != 40`, which is three defects in one expression: it
+    # accepted a 64-hex CONTENT digest as a commit sha, it accepted ANY
+    # 40-character string because the length test alone made the conjunction
+    # false, and `.lower()` meant an uppercase sha was normalised into
+    # acceptance rather than refused. A commit sha has exactly one shape and it
+    # is the shape `git rev-parse` prints.
+    if not _COMMIT.match(github_sha):
         raise ContractError(
-            f"TRUSTED-SOURCE-SHA: {github_sha!r} is not a full commit sha"
+            f"TRUSTED-SOURCE-SHA: {github_sha!r} is not a 40-character lowercase "
+            f"hexadecimal commit sha"
         )
     if head_sha != github_sha:
         raise ContractError(

@@ -47,24 +47,33 @@ on:
   # every future change to these paths — with the same `contents: read` and the
   # same absence of any publication job.
   #
-  # The path filter is what keeps a five-hour native Windows build off pull
-  # requests that cannot affect it.
+  # The path filter keeps a five-hour native Windows build off pull requests
+  # that cannot affect it. It is POSITIVE ONLY, and that is a decision rather
+  # than an oversight.
+  #
+  # W1-A4-R1 carried an ordered negation, `!ci/windows/runtime-retention/**`, so
+  # that a retention-only pull request did not start two metered native Windows
+  # builds to re-derive bytes already accepted and pinned by digest. Independent
+  # review (W1-A4-R1, finding D2) withdrew it. The negation's safety rested on a
+  # claim nobody can discharge: that a static pattern set recognises EVERY way
+  # shell tooling can stage a directory into a build. `cp -r ci/windows dst`,
+  # a tar of the parent, an rsync with a different exclude spelling and a
+  # `Path().rglob` all ingest the excluded subtree while every declared
+  # dependency check stays green, and the exclusion then guarantees that no
+  # proof ever runs over the ingested bytes.
+  #
+  # So the trade is inverted deliberately. Every change under ci/windows/**,
+  # including every change under ci/windows/runtime-retention/**, crosses this
+  # trigger and starts the dual-runner proof. That costs metered Windows
+  # minutes on retention-only pull requests. It buys the property that no
+  # change to any file in this tree can reach a build without the proof running
+  # over it. `trigger_policy.py` refuses any negative pattern here, so the
+  # optimisation cannot be reintroduced by a later edit.
   pull_request:
     paths:
       - 'ci/windows/**'
       - 'ci/ffmpeg/**'
       - '.github/workflows/w1-windows-ffmpeg-runtime.yml'
-      # W1-A4 (#236) added ci/windows/runtime-retention/**, which RETAINS the
-      # runtime this workflow proves and cannot affect how it is built. Without
-      # this exclusion every retention pull request starts two five-hour native
-      # Windows builds to re-derive bytes that are already accepted and pinned
-      # by digest — and Windows minutes are metered at x2 against an
-      # account-wide allowance whose exhaustion takes ALL of CI down with no
-      # error message. Measured, not predicted: it fired twice on PR #254.
-      #
-      # Nothing about the proof changes. A change under ci/windows/ffmpeg/**,
-      # ci/ffmpeg/** or this file still triggers it, exactly as before.
-      - '!ci/windows/runtime-retention/**'
 
 permissions:
   contents: read

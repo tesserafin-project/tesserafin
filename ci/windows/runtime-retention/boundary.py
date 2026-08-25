@@ -153,7 +153,7 @@ INVENTORY: dict[str, str] = {
     "assert-cannot-publish.sh": "publication-boundary-validation",
     "publication_policy.py": "publication-boundary-validation",
     "boundary.py": "publication-boundary-validation",
-    "pathfilter.py": "publication-boundary-validation",
+    "trigger_policy.py": "publication-boundary-validation",
     "oci-protocol.sh": "local-registry-protocol",
     "registry-controls.sh": "local-registry-protocol",
     "make-fixture.py": "tests-and-fixtures",
@@ -186,7 +186,6 @@ POLICY_SELF = (
     "assert-cannot-publish.sh",
     "boundary.py",
     "boundary-controls.py",
-    "pathfilter.py",
 )
 
 #: The only files permitted to contain a registry WRITE verb. `publication_policy`
@@ -448,8 +447,6 @@ def check_w1_closure(root: Path) -> list[Finding]:
             continue
         body = strip_shell_comments(target.read_text(encoding="utf-8", errors="replace"))
         for line_no, line in enumerate(body.splitlines(), start=1):
-            if re.match(r"^\s*-\s*['\"]?!ci/windows/runtime-retention/\*\*['\"]?\s*$", line):
-                continue
             if SUBTREE in line or "runtime-retention" in line:
                 findings.append(Finding(
                     "boundary.build-closure-names-subtree",
@@ -503,7 +500,7 @@ def check_build_manifests(root: Path) -> list[Finding]:
         if path == RETENTION_WORKFLOW:
             continue  # the retention workflow necessarily includes the subtree
         for line_no, line in enumerate(strip_yaml_comments(body).splitlines(), start=1):
-            if "runtime-retention" in line and "!ci/windows/runtime-retention" not in line:
+            if "runtime-retention" in line:
                 findings.append(Finding(
                     "boundary.build-manifest-names-subtree",
                     f"{path}:{line_no} names a path under the excluded subtree: {line.strip()!r}",
