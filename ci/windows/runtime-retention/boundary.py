@@ -35,7 +35,9 @@ and a walk would report a pristine checkout as carrying unclassified content.
 
 from __future__ import annotations
 
+import os
 import re
+import stat as _stat
 import subprocess
 from pathlib import Path
 
@@ -227,6 +229,26 @@ def tracked(root: Path, pathspec: str) -> list[str]:
     return sorted(dict.fromkeys(p for p in out.stdout.split("\0") if p))
 
 
+def index_modes(root: Path, pathspec: str) -> dict[str, str]:
+    """The Git INDEX mode of every cached path under `pathspec`.
+
+    `120000` is a symlink and `160000` is a gitlink. Neither is readable as
+    content, and neither can be told apart from a regular file by looking at the
+    name — which is what W1-A4-R1 did, and finding D4 is the consequence.
+    """
+    out = subprocess.run(
+        ["git", "-C", str(root), "ls-files", "-s", "-z", "--", pathspec],
+        check=True, capture_output=True, text=True,
+    )
+    modes: dict[str, str] = {}
+    for record in out.stdout.split("\0"):
+        if not record:
+            continue
+        meta, _, path = record.partition("\t")
+        modes[path] = meta.split()[0]
+    return modes
+
+
 class Finding:
     __slots__ = ("prop", "message")
 
@@ -239,9 +261,123 @@ class Finding:
 
 
 # ── property 1: the inventory is closed ─────────────────────────────────────
-def check_inventory(root: Path) -> list[Finding]:
+#: Git index modes that describe a regular file. Everything else is refused.
+_REGULAR_INDEX_MODES = frozenset({"100644", "100755"})
+
+
+def check_file_types(root: Path) -> tuple[list[Finding], set[str]]:
+    """Every tracked path under the subtree is a REGULAR FILE. Returns the
+    findings and the set of paths that failed, which are never role-classified.
+
+    R1's finding D4. The inventory asked what a path was NAMED and what its
+    extension was; it never asked what it IS. So replacing `reference-corpus.json`
+    with a symlink to `ci/windows/ffmpeg/pe.py` left a path that is still called
+    `reference-corpus.json`, still ends in `.json`, still carries the role
+    `tests-and-fixtures` — and whose content is a build script from outside the
+    boundary. Every content check downstream then read the target's bytes while
+    reporting the link's name.
+
+    The type is therefore decided by the FILESYSTEM and the INDEX, never by the
+    path:
+
+      * a cached path is refused unless its index mode is 100644 or 100755, so
+        120000 (symlink) and 160000 (gitlink) are refused structurally;
+      * a path present but not yet cached — which is what the hostile controls
+        produce, and why `tracked()` passes `--others` — has no index mode, so
+        `os.lstat` decides. `lstat`, not `stat`: `stat` follows the link and
+        reports the target as a regular file, which is the whole defect;
+      * devices, FIFOs, sockets and directories are refused by name in the
+        finding, so a control can assert which one it hit;
+      * the resolved path must still be inside the subtree, which catches a
+        symlinked PARENT directory that no per-file mode can see.
+
+    This runs to completion before any role is looked up. A file that is not a
+    regular file has no role, and asking which role it claims would report the
+    second-order defect (`boundary.role-shape-mismatch`) for a tree whose
+    first-order defect is that the file is not a file.
+    """
     findings: list[Finding] = []
-    present = [p[len(SUBTREE) + 1:] for p in tracked(root, SUBTREE)]
+    failed: set[str] = set()
+    modes = index_modes(root, SUBTREE)
+    subtree_root = (root / SUBTREE).resolve()
+
+    for path in tracked(root, SUBTREE):
+        rel = path[len(SUBTREE) + 1:]
+        target = root / path
+        mode = modes.get(path)
+
+        if mode is not None and mode not in _REGULAR_INDEX_MODES:
+            kind = {"120000": "a symbolic link", "160000": "a gitlink"}.get(
+                mode, f"index mode {mode}")
+            findings.append(Finding(
+                "boundary.not-a-regular-file",
+                f"{SUBTREE}/{rel} is {kind} in the Git index (mode {mode}); every path "
+                f"behind this boundary must be a regular file, because a link carries a "
+                f"name from inside the subtree and content from outside it",
+            ))
+            failed.add(rel)
+            continue
+
+        try:
+            status = target.lstat()
+        except OSError as error:
+            findings.append(Finding(
+                "boundary.unstattable-path",
+                f"{SUBTREE}/{rel} cannot be lstat'd ({error.strerror}); a path that "
+                f"cannot be typed is refused rather than assumed",
+            ))
+            failed.add(rel)
+            continue
+
+        if _stat.S_ISLNK(status.st_mode):
+            try:
+                points_to = os.readlink(target)
+            except OSError:
+                points_to = "<unreadable>"
+            findings.append(Finding(
+                "boundary.not-a-regular-file",
+                f"{SUBTREE}/{rel} is a symbolic link to {points_to!r}; every path behind "
+                f"this boundary must be a regular file, because a link carries a name "
+                f"from inside the subtree and content from outside it",
+            ))
+            failed.add(rel)
+            continue
+        if not _stat.S_ISREG(status.st_mode):
+            kind = ("a directory" if _stat.S_ISDIR(status.st_mode)
+                    else "a FIFO" if _stat.S_ISFIFO(status.st_mode)
+                    else "a socket" if _stat.S_ISSOCK(status.st_mode)
+                    else "a character device" if _stat.S_ISCHR(status.st_mode)
+                    else "a block device" if _stat.S_ISBLK(status.st_mode)
+                    else "not a regular file")
+            findings.append(Finding(
+                "boundary.not-a-regular-file",
+                f"{SUBTREE}/{rel} is {kind}; only regular files carry retention content",
+            ))
+            failed.add(rel)
+            continue
+
+        # A symlinked PARENT directory leaves every file under it a regular
+        # file with a resolved path outside the subtree.
+        try:
+            resolved = target.resolve()
+        except OSError:
+            resolved = target
+        try:
+            resolved.relative_to(subtree_root)
+        except ValueError:
+            findings.append(Finding(
+                "boundary.resolves-outside-subtree",
+                f"{SUBTREE}/{rel} resolves to {resolved}, which is outside "
+                f"{subtree_root}; a path inside the boundary must stay inside it",
+            ))
+            failed.add(rel)
+    return findings, failed
+
+
+def check_inventory(root: Path) -> list[Finding]:
+    findings, failed = check_file_types(root)
+    present = [p[len(SUBTREE) + 1:] for p in tracked(root, SUBTREE)
+               if p[len(SUBTREE) + 1:] not in failed]
 
     for rel in present:
         role = INVENTORY.get(rel)
