@@ -20,6 +20,7 @@ set -euo pipefail
 
 OCI=""; REPO=""; OUT=""; TAG=""
 PLAIN=()
+ALLOW_REMOTE=0
 
 stop() { echo "W1-A4 REGISTRY HARD STOP: $*" >&2; exit 1; }
 
@@ -30,23 +31,78 @@ print(json.load(open(sys.argv[1]))[sys.argv[2]])
 " "$1" "$2"
 }
 
+# The reference grammar, restated. `contract.classify_reference` is the first
+# statement and `consume.ps1` is the third; `reference-corpus.py` runs all three
+# over one corpus and requires the same verdict AND the same reason token. An
+# earlier form of this used `[^@]+` for the repository path, which let a
+# reference carrying BOTH a tag and a digest through, and the PowerShell
+# consumer kept that shape until R1. Two independent statements of one rule are
+# only worth having if they actually agree.
+REFERENCE_HOST='[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*(:[0-9]{1,5})?'
+REFERENCE_COMPONENT='[a-z0-9]+([._-][a-z0-9]+)*'
+
+classify_reference() {
+  # Echoes the reason token, or nothing when the grammar accepts. Classification
+  # order is identical to contract.py: at-count, digest shape, tag-and-digest,
+  # then name.
+  local reference="$1" ats name digest last
+  ats="$(printf '%s' "${reference}" | tr -cd '@' | wc -c)"
+  if [ "${ats}" -eq 0 ]; then
+    last="${reference##*/}"
+    case "${last}" in *:*) echo tag-only ;; *) echo missing-digest ;; esac
+    return 0
+  fi
+  if [ "${ats}" -gt 1 ]; then echo multiple-at; return 0; fi
+  name="${reference%@*}"
+  digest="${reference#*@}"
+  [[ "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo malformed-digest; return 0; }
+  last="${name##*/}"
+  case "${last}" in *:*) echo tag-and-digest; return 0 ;; esac
+  [[ "${name}" =~ ^${REFERENCE_HOST}(/${REFERENCE_COMPONENT})+$ ]] \
+    || { echo malformed-name; return 0; }
+  return 0
+}
+
+reference_reason_text() {
+  case "$1" in
+    tag-only)         echo "is not digest-pinned; a tag is never an accepted identity" ;;
+    missing-digest)   echo "is not digest-pinned; it names no sha256 digest" ;;
+    multiple-at)      echo "carries more than one '@'" ;;
+    tag-and-digest)   echo "carries both a tag and a digest; use the digest alone" ;;
+    malformed-digest) echo "does not end in a canonical lowercase sha256:<64 hex> digest" ;;
+    malformed-name)   echo "has a malformed registry or repository" ;;
+  esac
+}
+
 require_digest_reference() {
-  # A tag is never an accepted identity. Refused here as well as in the caller,
-  # because this script is what actually talks to the registry.
-  #
-  # Every path component excludes ':' deliberately. An earlier form used
-  # `[^@]+` for the repository path, which let a reference carrying BOTH a tag
-  # and a digest through — `host:5000/owner/name:sometag@sha256:...` matched,
-  # because the tag hid inside the "path". The Python contract refuses that
-  # case by name; this one silently accepted it. Two independent statements of
-  # one rule are only worth having if they actually agree, and a local-registry
-  # control is what showed that they did not.
-  [[ "$1" =~ ^[^@:/]+(:[0-9]+)?(/[^@:/]+)+@sha256:[0-9a-f]{64}$ ]] \
-    || stop "'$1' is not digest-pinned; a tag is not an identity this protocol accepts"
+  local reason
+  reason="$(classify_reference "$1")"
+  [ -z "${reason}" ] \
+    || stop "REFERENCE-REJECTED:${reason} '$1' $(reference_reason_text "${reason}")"
+}
+
+# A WRITE to a registry is only allowed against loopback unless the caller says
+# otherwise in as many words. This is what makes the validation workflow's use of
+# this script provably unable to publish: the retention workflow never passes
+# --allow-remote, so every write path here refuses any host but localhost. The
+# publication workflow passes it, and `publication_policy.py` refuses any
+# workflow that does. Reads (fetch/compare/verify) are not gated: they cannot
+# publish.
+require_loopback_write() {
+  local host="${1%%/*}"
+  host="${host%%:*}"
+  if [ "${ALLOW_REMOTE}" -eq 1 ]; then
+    return 0
+  fi
+  case "${host}" in
+    localhost|127.0.0.1|'[::1]'|::1) return 0 ;;
+  esac
+  stop "refusing to write to the non-loopback registry '${host}' without --allow-remote"
 }
 
 do_push() {
   [ -n "${OCI}" ] && [ -n "${REPO}" ] || stop 'push needs --oci and --repo'
+  require_loopback_write "${REPO}"
   local descriptor="${OCI}/descriptor.json"
   local layer config manifest
   layer="$(field "${descriptor}" layerDigest)"
@@ -67,6 +123,7 @@ do_push() {
 
 do_tag() {
   [ -n "${OCI}" ] && [ -n "${REPO}" ] && [ -n "${TAG}" ] || stop 'tag needs --oci, --repo and --tag'
+  require_loopback_write "${REPO}"
   local manifest resolved
   manifest="$(field "${OCI}/descriptor.json" manifestDigest)"
 
@@ -181,11 +238,17 @@ while [ $# -gt 0 ]; do
     --out)        OUT="$2"; shift 2 ;;
     --tag)        TAG="$2"; shift 2 ;;
     --plain-http) PLAIN=(--plain-http); shift ;;
+    --allow-remote) ALLOW_REMOTE=1; shift ;;
     *) stop "unknown argument '$1'" ;;
   esac
 done
 
 case "${command}" in
+  check-reference)
+           # Grammar only, for the cross-language corpus. It talks to no
+           # registry and takes no --oci.
+           require_digest_reference "${REPO}"
+           echo "the grammar accepts '${REPO}'" ;;
   push)    do_push ;;
   tag)     do_tag ;;
   fetch)   do_fetch ;;

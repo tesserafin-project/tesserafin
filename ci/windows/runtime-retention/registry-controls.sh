@@ -155,8 +155,26 @@ else
 fi
 
 # ── the protocol refuses a tag as an identity ───────────────────────────────
-refuses control.push-refuses-tag-reference "is not digest-pinned" \
+# The reference the fetch builds is `${REPO}:${tag}@${manifest}` — a tag AND a
+# digest, which is the exact shape the old permissive `[^@]+` repository pattern
+# let through. The reason token is asserted, not just the refusal: all three
+# parsers now name this case identically.
+refuses control.push-refuses-tag-reference "REFERENCE-REJECTED:tag-and-digest" \
   "${PROTOCOL}" fetch --oci "${OCI}" --repo "${REPO}:${tag}" --out "${WORK}/by-tag" --plain-http
+
+# ── a write to a non-loopback registry needs saying so out loud ─────────────
+# This is what makes the publication policy's exemption for this file worth
+# anything: `oci-protocol.sh` is allowed to contain a push verb only because it
+# refuses to write anywhere but loopback unless handed --allow-remote, and the
+# validation workflow never hands it that. Offered a real registry, it stops
+# before ORAS is invoked, so nothing here reaches the network.
+refuses control.write-refuses-non-loopback "without --allow-remote" \
+  "${PROTOCOL}" push --oci "${OCI}" \
+  --repo ghcr.io/tesserafin-project/windows-ffmpeg-runtime --plain-http
+
+refuses control.tag-refuses-non-loopback "without --allow-remote" \
+  "${PROTOCOL}" tag --oci "${OCI}" \
+  --repo ghcr.io/tesserafin-project/windows-ffmpeg-runtime --tag "${tag}" --plain-http
 
 echo
 if [ "${failures}" -ne 0 ]; then
