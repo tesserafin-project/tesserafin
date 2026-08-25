@@ -54,6 +54,17 @@ on:
       - 'ci/windows/**'
       - 'ci/ffmpeg/**'
       - '.github/workflows/w1-windows-ffmpeg-runtime.yml'
+      # W1-A4 (#236) added ci/windows/runtime-retention/**, which RETAINS the
+      # runtime this workflow proves and cannot affect how it is built. Without
+      # this exclusion every retention pull request starts two five-hour native
+      # Windows builds to re-derive bytes that are already accepted and pinned
+      # by digest — and Windows minutes are metered at x2 against an
+      # account-wide allowance whose exhaustion takes ALL of CI down with no
+      # error message. Measured, not predicted: it fired twice on PR #254.
+      #
+      # Nothing about the proof changes. A change under ci/windows/ffmpeg/**,
+      # ci/ffmpeg/** or this file still triggers it, exactly as before.
+      - '!ci/windows/runtime-retention/**'
 
 permissions:
   contents: read
