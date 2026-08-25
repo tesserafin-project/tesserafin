@@ -69,6 +69,20 @@ jobs:
             exit 1
           fi
 
+      # PyYAML is not in the standard library, and `publication_policy.py` parses
+      # the workflow rather than grepping it. "The runner probably has it" is not
+      # a guarantee, and a checker that cannot import its parser must fail loudly
+      # rather than be skipped.
+      - name: Guarantee the YAML parser this validation depends on
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! python3 -c "import yaml" 2>/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends python3-yaml
+          fi
+          python3 -c "import yaml; print(f'PyYAML {yaml.__version__}')"
+
       - name: The committed acceptance manifest survives the closed schema
         shell: bash
         run: |
@@ -124,6 +138,17 @@ jobs:
           python3 negative-controls.py \
             --fixture "${RUNNER_TEMP}/fixture" \
             --json "${RUNNER_TEMP}/controls.json" | tee -a "${GITHUB_STEP_SUMMARY}"
+
+      # Controls 09, 10 and 11 used to grade RED through one shared token, so
+      # none of them proved its own property. The matrix requires each to be
+      # satisfied by its own mutation and by no other.
+      - name: Controls 09, 10 and 11 grade on their own assertion
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ci/windows/runtime-retention
+          python3 negative-controls.py \
+            --fixture "${RUNNER_TEMP}/fixture" --ablate | tee -a "${GITHUB_STEP_SUMMARY}"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ always() }}
@@ -232,12 +257,23 @@ jobs:
           ref: ${{ env.W1A4_EVIDENCE_SHA }}
           persist-credentials: false
 
-      # The patterns live in a separate script, and that separation is the
-      # whole trick: the first version of this check was inline here and failed
-      # on its own text — its grep patterns, and the header comment saying none
-      # of them are present, both matched. A self-scanning check reports the
-      # absence of a thing as its presence.
-      - name: No write permission, no login, no publication path
+      - name: Guarantee the YAML parser this validation depends on
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! python3 -c "import yaml" 2>/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends python3-yaml
+          fi
+          python3 -c "import yaml; print(f'PyYAML {yaml.__version__}')"
+
+      # The permission set is PARSED, not grepped. `permissions: write-all`
+      # grants packages: write without containing the string, a quoted or inline
+      # mapping reads differently to a line-oriented pattern, and a job block can
+      # widen what the workflow level narrowed — none of which a regex can
+      # answer. The closure is followed into repository-local scripts, so "this
+      # workflow contains no push" stops being a claim about its own text.
+      - name: This workflow resolves to a closed read-only permission set
         shell: bash
         run: |
           set -euo pipefail
@@ -247,7 +283,7 @@ jobs:
       # The other direction, so the check above cannot pass vacuously. A scanner
       # that finds nothing everywhere is indistinguishable from one that is
       # broken, so it is pointed at the workflow that DOES publish and must
-      # refuse it.
+      # refuse it — for the exact publishing capability that workflow owns.
       - name: The same check refuses the publishing workflow
         shell: bash
         run: |
@@ -259,3 +295,103 @@ jobs:
             exit 1
           fi
           echo "the check refuses the publishing workflow, so its acceptance above means something"
+
+      # Twelve fixtures, each required to reach ONE named property. A checker
+      # that refuses everything passes the two checks above; it does not pass
+      # these, because fixture 11 requires the pristine workflow to be ACCEPTED
+      # and each of the other eleven names the property it must be refused for.
+      - name: Semantic permission fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ci/windows/runtime-retention
+          python3 permission-fixtures.py \
+            --json "${RUNNER_TEMP}/permission-fixtures.json" | tee -a "${GITHUB_STEP_SUMMARY}"
+
+  # The excluded subtree owns itself, and the build workflow cannot reach into
+  # it. This job runs on retention-only changes, which is exactly when the W1
+  # dual-runner workflow does NOT run — the two filters are complementary by
+  # construction, and `pathfilter.py` proves that against GitHub's own semantics.
+  boundary:
+    name: The excluded subtree owns itself
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ env.W1A4_EVIDENCE_SHA }}
+          persist-credentials: false
+
+      - name: Guarantee the YAML parser this validation depends on
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! python3 -c "import yaml" 2>/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends python3-yaml
+          fi
+          python3 -c "import yaml; print(f'PyYAML {yaml.__version__}')"
+
+      - name: Every file behind the exclusion has exactly one retention role
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ci/windows/runtime-retention
+          python3 boundary.py | tee -a "${GITHUB_STEP_SUMMARY}"
+
+      - name: The exclusion matches GitHub path-filter semantics
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ci/windows/runtime-retention
+          python3 pathfilter.py | tee -a "${GITHUB_STEP_SUMMARY}"
+
+      - name: Hostile controls on the boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ci/windows/runtime-retention
+          python3 boundary-controls.py \
+            --json "${RUNNER_TEMP}/boundary-controls.json" | tee -a "${GITHUB_STEP_SUMMARY}"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ always() }}
+        with:
+          name: w1a4-boundary-${{ github.run_id }}
+          path: ${{ runner.temp }}/boundary-controls.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  # One grammar, three languages, one corpus. R0 found the PowerShell consumer
+  # still carrying the permissive shape the other two had been repaired for, and
+  # nothing was comparing their decisions.
+  references:
+    name: Cross-language reference grammar
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ env.W1A4_EVIDENCE_SHA }}
+          persist-credentials: false
+
+      # pwsh is preinstalled on ubuntu-latest. It is asserted rather than
+      # assumed: without it the PowerShell leg would be silently skipped and
+      # two-thirds of a corpus would be reported as a pass.
+      - name: Assert the PowerShell host exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v pwsh >/dev/null || {
+            echo "W1-A4 HARD STOP: pwsh is not on PATH; the PowerShell leg cannot be skipped" >&2
+            exit 1
+          }
+          pwsh -NoProfile -Command '$PSVersionTable.PSVersion.ToString()'
+
+      - name: One corpus, three parsers, identical decisions
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ci/windows/runtime-retention
+          python3 reference-corpus.py \
+            --json "${RUNNER_TEMP}/reference-corpus.json" | tee -a "${GITHUB_STEP_SUMMARY}"

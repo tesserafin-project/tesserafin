@@ -56,34 +56,90 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
+          # Full history: the descendant assertion below needs the accepted
+          # W1-A3 merge to be an OBJECT, and a depth-1 checkout does not have it.
+          # `git merge-base --is-ancestor` against a missing object fails in a way
+          # that looks like a lineage violation rather than a shallow clone.
+          fetch-depth: 0
           persist-credentials: false
 
       # The trust boundary, asserted as a STEP. A job-level `if:` that evaluates
       # false reports success; this cannot.
-      - name: Assert the trusted branch and the reviewed reference
+      #
+      # Repository, ref, EVENT and REVISION. The first two are true of a checkout
+      # of any commit on master, including a detached or substituted one, which is
+      # why the last two are here: the run must be a dispatch, and the checkout
+      # must stand at exactly the commit the run claims.
+      - name: Assert the trusted source revision, not merely the trusted ref
         shell: bash
         run: |
           set -euo pipefail
+          head="$(git rev-parse HEAD)"
           cd ci/windows/runtime-retention
-          python3 - <<'PY'
+          HEAD_SHA="${head}" python3 - <<'PY'
           import json, os
           import contract
-          contract.assert_trusted_ref(os.environ["GITHUB_REF"])
+          contract.assert_trusted_source(
+              os.environ["GITHUB_REPOSITORY"],
+              os.environ["GITHUB_REF"],
+              os.environ["GITHUB_EVENT_NAME"],
+              os.environ["GITHUB_SHA"],
+              os.environ["HEAD_SHA"],
+          )
           accepted = json.loads(open("accepted-runtime.json", "rb").read())
           contract.validate_accepted(accepted)
           contract.parse_reference(accepted["reference"])
-          print(f"trusted ref, reviewed reference {accepted['reference']}")
+          print(f"trusted repository, trusted ref, dispatch event, standing at "
+                f"{os.environ['HEAD_SHA']}")
+          print(f"reviewed reference {accepted['reference']}")
           PY
 
-      - name: Assert the repository is the trusted one
+      # Lineage, not a frozen tip. Master is expected to move; what may never
+      # move is the requirement that the revision being published descends from
+      # the accepted W1-A3 merge.
+      - name: Assert the revision descends from the accepted W1-A3 merge
         shell: bash
         run: |
           set -euo pipefail
-          if [ "${GITHUB_REPOSITORY}" != "tesserafin-project/tesserafin" ]; then
-            echo "W1-A4 PUBLICATION HARD STOP: running in ${GITHUB_REPOSITORY}, not the trusted repository" >&2
+          anchor="$(python3 -c "
+          import sys
+          sys.path.insert(0, 'ci/windows/runtime-retention')
+          import contract
+          print(contract.FROZEN_W1A3_MERGE)
+          ")"
+          if ! git cat-file -e "${anchor}^{commit}" 2>/dev/null; then
+            echo "W1-A4 PUBLICATION HARD STOP: the accepted W1-A3 merge ${anchor} is not in this clone" >&2
             exit 1
           fi
-          echo "trusted repository ${GITHUB_REPOSITORY} at ${GITHUB_SHA}"
+          if ! git merge-base --is-ancestor "${anchor}" "${GITHUB_SHA}"; then
+            echo "W1-A4 PUBLICATION HARD STOP: ${GITHUB_SHA} does not descend from the accepted W1-A3 merge ${anchor}" >&2
+            exit 1
+          fi
+          echo "${GITHUB_SHA} descends from the accepted W1-A3 merge ${anchor}"
+
+      # The manifest that is packaged must be the one the REVISION holds, not
+      # whatever is on disk by the time the layout is built.
+      - name: The acceptance manifest is the one committed at this revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show "${GITHUB_SHA}:ci/windows/runtime-retention/accepted-runtime.json" \
+            > "${RUNNER_TEMP}/committed-accepted.json"
+          cd ci/windows/runtime-retention
+          COMMITTED="${RUNNER_TEMP}/committed-accepted.json" python3 - <<'PY'
+          import hashlib, json, os
+          import contract
+          committed = open(os.environ["COMMITTED"], "rb").read()
+          working = open("accepted-runtime.json", "rb").read()
+          contract.assert_committed_manifest(committed, working)
+          accepted = json.loads(committed)
+          print(f"the acceptance manifest is the committed one, canonical content hash "
+                f"sha256:{hashlib.sha256(committed).hexdigest()}")
+          print(f"expected OCI manifest digest {accepted['manifestDigest']}")
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              env.write(f"W1A4_COMMITTED_MANIFEST_SHA256={hashlib.sha256(committed).hexdigest()}\n")
+              env.write(f"W1A4_EXPECTED_OCI_DIGEST={accepted['manifestDigest']}\n")
+          PY
 
       - name: Install the pinned ORAS
         shell: bash
@@ -137,9 +193,27 @@ jobs:
           built = "sha256:" + hashlib.sha256(
               open(f"{temp}/oci/manifest.json", "rb").read()
           ).hexdigest()
-          accepted = json.loads(open("accepted-runtime.json", "rb").read())
+          committed = open(f"{temp}/committed-accepted.json", "rb").read()
+          working = open("accepted-runtime.json", "rb").read()
+          # Re-read, immediately before the push. The manifest was compared
+          # against the commit before the layout was built; between then and now
+          # a step ran, and a check that only fires early is a check that can be
+          # walked around.
+          contract.assert_committed_manifest(committed, working)
+          if hashlib.sha256(committed).hexdigest() != os.environ["W1A4_COMMITTED_MANIFEST_SHA256"]:
+              raise SystemExit(
+                  "W1-A4 PUBLICATION HARD STOP: the committed manifest's canonical content "
+                  "hash changed between validation and push"
+              )
+          accepted = json.loads(committed)
           contract.assert_expected_digest(accepted["manifestDigest"], built)
-          print(f"this run built the reviewed digest {built}")
+          if accepted["manifestDigest"] != os.environ["W1A4_EXPECTED_OCI_DIGEST"]:
+              raise SystemExit(
+                  "W1-A4 PUBLICATION HARD STOP: the expected OCI digest changed between "
+                  "validation and push"
+              )
+          print(f"this run built the reviewed digest {built}, read from the commit being "
+                f"published")
           PY
 
       - name: Push the exact manifest bytes
@@ -150,7 +224,11 @@ jobs:
           set -euo pipefail
           export PATH="${RUNNER_TEMP}/bin:${PATH}"
           printf '%s' "${GHCR_TOKEN}" | oras login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+          # --allow-remote is what lifts oci-protocol.sh's loopback write
+          # restriction. It appears in this file and nowhere else, and
+          # publication_policy.py refuses any workflow that passes it.
           ./ci/windows/runtime-retention/oci-protocol.sh push \
+            --allow-remote \
             --oci  "${RUNNER_TEMP}/oci" \
             --repo ghcr.io/tesserafin-project/windows-ffmpeg-runtime
 
@@ -167,6 +245,7 @@ jobs:
           print(json.load(open('ci/windows/runtime-retention/accepted-runtime.json'))['immutableTag'])
           ")"
           ./ci/windows/runtime-retention/oci-protocol.sh tag \
+            --allow-remote \
             --oci  "${RUNNER_TEMP}/oci" \
             --repo ghcr.io/tesserafin-project/windows-ffmpeg-runtime \
             --tag  "${tag}"
