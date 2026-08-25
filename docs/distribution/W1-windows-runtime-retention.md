@@ -293,31 +293,56 @@ never a filesystem walk: `__pycache__/` is ignored-but-present on any tree where
 these scripts have run, and a walk would report a pristine checkout as carrying
 unclassified content.
 
-`boundary-controls.py` runs seven hostile controls — a `runtime-retention/ffmpeg/build.sh`,
-a toolchain lock, a W1 script sourcing a permitted retention file, the W1
-workflow copying the subtree into its build context, a broad recursive glob, a
-legitimate classified fixture that must be ACCEPTED, and the gate itself removed
-from the validation workflow.
+`boundary-controls.py` runs thirteen hostile controls — a
+`runtime-retention/ffmpeg/build.sh`, a toolchain lock, a W1 script sourcing a
+permitted retention file, the W1 workflow copying the subtree into its build
+context, a broad recursive glob, a misclassified file, the five symlink cases of
+R2's finding D4, and two legitimate classified fixtures that must be ACCEPTED.
 
-### The path-filter division, checked against GitHub's own semantics
+### The proof trigger is positive-only, and every retention change crosses it
 
 | | W1 dual-runner build | retention validation |
 | --- | --- | --- |
-| `ci/windows/runtime-retention/**` | **excluded** | **included, and policed** |
+| `ci/windows/runtime-retention/**` | **triggers**, via `ci/windows/**` | **included, and policed** |
 | `ci/windows/ffmpeg/**`, `ci/ffmpeg/**` | triggers | not watched |
 | own workflow file | triggers | triggers |
+| retention documentation | not watched | triggers |
 
-`pathfilter.py` implements GitHub's rules rather than approximating them: `*`
-never crosses `/`, `**` does, `paths:` is an allowlist so a file starts excluded,
-patterns are evaluated in order and the **last** match decides, and the workflow
-runs if any changed file ends up included. That last-match-wins rule is what a
-substring approximation gets wrong, and it is the rule the mixed diff depends
-on — a pull request touching both the subtree and `ci/windows/ffmpeg/**` still
-triggers the build, because the ffmpeg file is included on its own.
+R1 subtracted the retention subtree from the W1 build's `paths:` filter with an
+ordered negation, and `pathfilter.py` existed to prove the negation subtracted
+exactly that subtree. Independent review withdrew the optimisation (W1-A4-R1,
+finding D2): the negation was safe only under a premise that cannot be
+discharged — that a static pattern set recognises every way shell tooling can
+stage a directory into a build. It cannot, and where it failed the exclusion
+guaranteed that no proof ran over the ingested bytes.
 
-Fourteen cases are checked, including deletion and rename across the boundary and
-a sibling (`ci/windows/runtime-retention-notes.md`) that merely starts with the
-subtree name and must NOT be excluded.
+The W1 `paths:` filter therefore carries **no negative pattern**, at any
+position, for any subtree, and `pathfilter.py` is deleted rather than kept as
+evidence for a policy that no longer exists. `trigger_policy.py` states the
+opposite contract and is a roster gate:
+
+* the filter carries no negation, so the optimisation cannot be reintroduced by
+  a later edit without failing this gate;
+* every representative retention change resolves the trigger TRUE — nested
+  additions, single-file diffs, renames into, out of and within the subtree,
+  deletions, and the sibling `ci/windows/runtime-retention-notes.md` whose name
+  merely starts with the subtree name;
+* the exact R1 staging diffs that made the old exclusion unsafe — a `cp -r
+  ci/windows dst`, a `tar` of the parent directory, an `rsync` whose
+  `--exclude` spelling differs, a `Path().rglob()` walk, and the retention file
+  such a stage would ingest — all now resolve TRUE;
+* every build-affecting change still resolves it true, as before.
+
+The glob engine is retained because the positive claim needs it: "this diff
+triggers the proof" is a statement about GitHub's matching rules — `*` never
+crosses `/`, `**` does, `paths:` is an allowlist — not about whether a substring
+appears in a string. What is gone is the claim it used to carry. This document
+no longer asserts that any pattern set recognises every staging syntax; the
+contract is that no pattern set has to, because nothing is subtracted.
+
+The cost is accepted and stated: a retention-only pull request now starts the
+~49-minute dual-runner build. That is the price of never having ingested bytes
+go unproven.
 
 ### One reference grammar, three languages
 
@@ -401,6 +426,146 @@ repoint an immutable tag, and the push is by digest, so a conflicting
 tag or digest is refused rather than overwritten, and a matching one is an
 idempotent no-op.
 
+## 9c. What W1-A4-R2 repaired
+
+The R1 independent review raised four blocking findings and two low ones. What
+follows is what changed.
+
+### D1 — the cannot-publish closure was one file, not the reachable graph
+
+`assert-cannot-publish.sh` and `publication_policy.py` parsed the validation
+workflow's own permissions, credentials and `run:` closure, and stopped there. A
+`uses: ./.github/workflows/x.yml` edge left the called workflow unread, so a
+local reusable workflow carrying `permissions: {packages: write}`, an `oras
+login` and an `oras manifest push`, invoked with `secrets: inherit`, resolved to
+a workflow this gate called read-only.
+
+The closure is now the **reachable workflow graph**. Every `uses:` edge to a
+repository-local workflow is followed recursively; each node is parsed once and
+memoised, so a cycle terminates instead of hiding the nodes behind it. At every
+node the permission set is resolved semantically — `write-all`, a quoted or
+inline mapping, an absent workflow-level block that a called workflow would
+inherit, and any write scope including `id-token` — and every credential is
+refused by name: `secrets: inherit`, an explicit `secrets:` mapping,
+`${{ secrets.* }}` and `${{ github.token }}`. An edge that cannot be resolved to
+a repository-local, `on: workflow_call` regular file inside `.github/workflows/`
+is itself a refusal: an external `owner/repo/.github/workflows/x.yml@ref`, an
+absolute `uses:` path, a `../` traversal, a symlinked workflow file and a callee
+that is not a `workflow_call` each fail by their own name rather than being
+skipped.
+
+`reusable-workflow-controls.py` is the roster proof: sixteen controls, one per
+refusal, plus a pristine read-only local reusable workflow that must be
+ACCEPTED — a checker that refuses every graph proves nothing — and a duplicate
+alias whose second edge must still be checked. It restores the reviewed
+workflow byte-identically.
+
+### D2 — the negative path filter is withdrawn, not narrowed
+
+See *The proof trigger is positive-only* above. `pathfilter.py` and its
+dedicated proof are deleted; the authority that replaced them is
+`trigger_policy.py`, a roster gate. No replacement negative glob exists in any
+workflow in this repository.
+
+### D3 — the gate invocation was proved by substring presence
+
+The validation workflow invoked seven gates as seven steps, and
+`boundary.check_gate_is_pinned` proved they ran by testing whether the strings
+`boundary.py` and `boundary-controls.py` appeared anywhere in the workflow file.
+A **comment** naming either satisfied that. An invocation could be commented out
+and the workflow still read as before, ran nothing, and reported the gate as
+pinned.
+
+There is now **one canonical command** — `retention_gates.py --validate` —
+holding a closed roster resolved by exact module and function identity. A roster
+entry that is deleted, duplicated, unknown, repointed at a missing function or
+repointed at a no-op is refused by name.
+
+The pin lives **outside the subtree it pins**, in
+`ci/windows/verify-retention-gate-pinned.py`, which `ci/run.sh` runs
+unconditionally and which is not skippable by flag or environment variable — a
+pin the pinned code performs disappears the moment that code is deleted. It
+parses the workflow as YAML and requires the exact job, that exact command as an
+**active `run` value**, no `continue-on-error`, no unreachable step or job
+condition and no success masking. Commenting the line out, prefixing it with
+`:` or `echo`, appending `|| true` or `; true`, moving it to another job or
+deleting the job each fail that check by their own name.
+
+`gate-roster-controls.py` replays all of it: seven closed-roster controls and
+eleven structural-pin controls, each RED for its own reason, with a pristine
+workflow that must be ACCEPTED and a byte-identical restoration.
+
+### D4 — a role was read before the file type was checked
+
+`boundary.py` classified every tracked path under the subtree by role and
+extension, and a **symlink** carrying a permitted extension satisfied a role.
+Replacing `reference-corpus.json` with a tracked symlink to
+`ci/windows/ffmpeg/pe.py` therefore passed: the subtree could name a build input
+by reference while every check reported a closed retention role schema.
+
+Every tracked path under the subtree is now required to be a **regular file**,
+checked before any role or content is read, from the Git index mode (`120000`)
+and from `lstat`, never from a followed `open()`. `boundary-controls.py` covers
+the reviewer's exact fixture, a symlink with a permitted extension **and** a
+declared role, a relative symlink wholly inside the subtree, a dangling symlink,
+a symlink staged in the index, and — as the necessary positive control — a
+normal regular file that must be ACCEPTED.
+
+### The two low findings
+
+`oci-protocol.sh` and `publication_policy.py` disagreed about what a loopback
+authority is, so a `[::1]:5000` reference was a permitted local registry to one
+parser and a remote write to the other. One committed corpus,
+`loopback-corpus.json`, now drives both: twenty-five authorities, each reaching
+the **same named verdict** in Python and in shell — `localhost` with and
+without a port, IPv4 loopback including `127.0.0.0/8`, bracketed and expanded
+IPv6 loopback, an unclosed bracket, an unbracketed IPv6 literal, non-loopback
+and unspecified IPv6, IPv6 spellings this grammar deliberately does not support,
+`localhost.example.com` and `127.0.0.1.example.com` suffix tricks, a
+`127.0.0.1`-prefixed name, embedded credentials, junk after the bracket, a
+non-numeric port, a bracketed IPv4 and an empty host. Eight permit a registry
+write; seventeen refuse one.
+
+The trusted-source check's SHA-shape test was a boolean expression that could
+not fail. It is now two independent properties, and
+`trusted-source-controls.py` shows each is load-bearing alone: an empty, short,
+long, abbreviated, uppercase, non-hexadecimal or `sha256:`-prefixed value is
+refused naming `TRUSTED-SOURCE-SHA`, while a well-formed SHA whose checked-out
+`HEAD` disagrees is refused naming `TRUSTED-SOURCE-HEAD`.
+
+## 9d. The predecessor proof run
+
+Run [32864950596] is **completed / success** at head
+`2622dd442c5ce68f04c8c43ae1d66fd4163ffcde` — the W1-A4 head as it stood *before*
+the R2 repair. It ran `2026-08-25T15:18:16Z → 16:07:19Z` (49m, displayed 49m01s)
+on the `W1 Windows FFmpeg Runtime — Dual-runner proof` workflow, and all four
+jobs succeeded:
+
+| job | conclusion |
+| --- | --- |
+| Negative controls and policy gates | success |
+| Build on a clean native Windows runner (a) | success |
+| Build on a clean native Windows runner (b) | success |
+| Dual-runner comparison | success |
+
+Both runners produced **identical 31-path delivered inventories**, and the
+digests are unchanged from the accepted manifest:
+
+* runtime `f28cc9186aad757491a6f44e7950d39bc39354dfe9505e278af91d7619811c9e`;
+* corresponding source `d753268c14d8e312bdd8ccd5ce8af90d495d185e807b77621e229eb8f71cc76d`;
+* corresponding-source stream `5158221a246c7e7d0d843d649571625ad0277152a093361419414195a8afee8e`.
+
+Two limits are part of the record, not footnotes to it. The dual-runner topology
+is **same-node** — two runner allocations on one physical node — so this is a
+determinism result, not a two-host independence claim. And the run carried **no
+publication authority**: it is a `pull_request` run of a workflow with no
+`packages: write` at any level, so nothing was pushed to GHCR.
+
+Above all, this run is evidence for **the predecessor head only**. It proves
+W1-A3 non-regression at `2622dd442c`; it says nothing about the R2 head, which
+the R2 push starts a new dual-runner run against precisely because the negative
+exclusion is gone.
+
 ## 10. Update policy
 
 A retained unit is **never mutated**. Any change to the retained bytes produces a
@@ -425,3 +590,4 @@ which would produce a new runtime that nobody has reviewed.
 [#236]: https://github.com/tesserafin-project/tesserafin/issues/236
 [ruling]: https://github.com/tesserafin-project/tesserafin/issues/236#issuecomment-5409680727
 [32750491696]: https://github.com/tesserafin-project/tesserafin/actions/runs/32750491696
+[32864950596]: https://github.com/tesserafin-project/tesserafin/actions/runs/32864950596
