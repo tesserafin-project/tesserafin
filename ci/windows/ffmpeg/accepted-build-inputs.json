@@ -1,0 +1,24 @@
+{
+  "$comment": "The ONE build-input package the win-x64 FFmpeg runtime may be built from (W1-A3, issue #236). Committed here rather than passed to the workflow so that dispatching the proof cannot choose a different package: the workflow takes an evidence SHA, and the package identity travels with the tree that SHA names. ci/windows/ffmpeg/verify-build-inputs.py refuses any consume.json that does not match every field below.",
+  "schemaVersion": 1,
+  "reference": "ghcr.io/tesserafin-project/windows-ffmpeg-build-inputs@sha256:cff23b74dbf9707ad7150c21a2985e320320b86d3c72656b2bf2b58ac1c04f0a",
+  "registry": "ghcr.io",
+  "package": "tesserafin-project/windows-ffmpeg-build-inputs",
+  "manifestDigest": "sha256:cff23b74dbf9707ad7150c21a2985e320320b86d3c72656b2bf2b58ac1c04f0a",
+  "layerDigest": "sha256:03b43119e59f84e993e5ff0be0f3dceba913d41d2db40638530b5e8a72de271e",
+  "lockSha256": "602510cd80de472e206d35c5ca753be5745fe4d739c40521c50471178d5abcb8",
+  "trustRootSha256": "1c32ec73f6a89c09f5cd0b23d59727ebc671946e2cf2f3710f61326dee16a49c",
+  "packageCount": 246,
+  "signaturesRequired": 246,
+  "acceptedSigner": "5F944B027F7FE2091985AA2EFA11531AA0AA7F57",
+  "msystem": "CLANG64",
+  "target": "win-x64",
+  "acquisition": {
+    "credentials": "none — anonymous pull by digest",
+    "tagsAccepted": false,
+    "registryWrites": false,
+    "pacmanMode": "pacman -U over local files only",
+    "mirrors": "emptied before installation",
+    "upstreamConsulted": false
+  }
+}

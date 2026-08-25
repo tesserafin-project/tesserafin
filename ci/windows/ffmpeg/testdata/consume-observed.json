@@ -1,0 +1,39 @@
+{
+  "probe": "w1r-consume",
+  "reference": "ghcr.io/tesserafin-project/windows-ffmpeg-build-inputs@sha256:cff23b74dbf9707ad7150c21a2985e320320b86d3c72656b2bf2b58ac1c04f0a",
+  "manifestDigest": "sha256:cff23b74dbf9707ad7150c21a2985e320320b86d3c72656b2bf2b58ac1c04f0a",
+  "layerDigest": "sha256:03b43119e59f84e993e5ff0be0f3dceba913d41d2db40638530b5e8a72de271e",
+  "lockSha256": "602510cd80de472e206d35c5ca753be5745fe4d739c40521c50471178d5abcb8",
+  "trustRootSha256": "1c32ec73f6a89c09f5cd0b23d59727ebc671946e2cf2f3710f61326dee16a49c",
+  "signaturesVerified": 246,
+  "acceptedFingerprints": [
+    "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+  ],
+  "packageCount": 246,
+  "installedPackages": 246,
+  "installedSetEqualsLock": true,
+  "runtimeReinstall": {
+    "performed": true,
+    "needed": false,
+    "lockedVersion": "3.6.10-2",
+    "archive": "msys2-runtime-3.6.10-2-x86_64.pkg.tar.zst",
+    "transactionLines": [
+      "reinstalling msys2-runtime..."
+    ],
+    "phase1ShellPid": "518",
+    "phase2ShellPid": "711",
+    "freshProcess": true,
+    "phase2UnameRelease": "3.6.10-8fbd9808.x86_64",
+    "phase2PacmanQuery": "msys2-runtime 3.6.10-2",
+    "dllSha256": "d9bb385834f1a235009f0962b7bda7e1832fb12e53d832f1dc389c3144e03d44",
+    "ownedFiles": 162,
+    "ownedFilesMatchArchive": true
+  },
+  "mirrorsEmptied": [
+    "mirrorlist.mingw",
+    "mirrorlist.msys"
+  ],
+  "upstreamConsulted": false,
+  "pacmanMode": "pacman -U over local files only",
+  "tagUsed": false
+}

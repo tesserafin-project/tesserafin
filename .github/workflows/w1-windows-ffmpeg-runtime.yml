@@ -1,0 +1,336 @@
+# Dual-runner reproducibility proof for the win-x64 FFmpeg runtime (#236, W1-A3).
+#
+# Two clean, native windows-latest runner allocations each pull the SAME
+# digest-pinned MSYS2 package set that W1-R retained, build the runtime from the
+# pinned sources, and produce a complete delivered set. A comparator then
+# requires the two to agree: first on the set of delivered paths, then on every
+# path's digest, then on the archive bytes themselves.
+#
+# WHAT THIS PROVES, EXACTLY. Two isolated jobs, two runner allocations, two
+# `runnerName` values, one runner-image generation. GitHub decides which physical
+# node each allocation lands on, and W1-A3-R0 measured both allocations reporting
+# the SAME `node`. So this is DUAL-RUNNER reproducibility, not two-host
+# independence, and it is named that way everywhere. Calling it "two-host" would
+# claim a hardware separation this workflow cannot arrange and does not check.
+# Both runner.json records are kept beside the comparison so the limitation
+# travels with the evidence instead of living in a review comment.
+#
+# It publishes NOTHING. There is no `packages: write` anywhere, no registry
+# login, no tag, no release and no signature. The runtime it produces is a
+# CANDIDATE; durable retention is a separate owner ruling.
+#
+# There is no Wine job and no cross-build job. If GitHub cannot allocate both
+# native Windows runners, the correct outcome is "acceptance pending", not a
+# weaker proof.
+
+name: W1 Windows FFmpeg Runtime — Dual-runner proof
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: 'The exact commit to build and prove (full 40-character SHA)'
+        type: string
+        required: true
+  # A pull_request trigger rather than a branch push. Measured, not assumed:
+  # GitHub only offers workflow_dispatch for a workflow present on the DEFAULT
+  # branch, and dispatching this file while it existed only on a feature branch
+  # answered
+  #
+  #     POST .../workflows/w1-windows-ffmpeg-runtime.yml/dispatches -> 404
+  #
+  # so before merge the dispatch route cannot produce evidence at all and some
+  # second trigger is required. The earlier answer named one branch by hand,
+  # which works exactly once and becomes dead configuration on master the moment
+  # that branch is deleted. `pull_request` runs from the PR head's own copy of
+  # this file, so it works before merge, and it keeps working afterwards for
+  # every future change to these paths — with the same `contents: read` and the
+  # same absence of any publication job.
+  #
+  # The path filter is what keeps a five-hour native Windows build off pull
+  # requests that cannot affect it.
+  pull_request:
+    paths:
+      - 'ci/windows/**'
+      - 'ci/ffmpeg/**'
+      - '.github/workflows/w1-windows-ffmpeg-runtime.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.sha || github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: false
+
+env:
+  # The one commit this run builds and proves, whichever trigger started it. For
+  # a pull_request event that is the HEAD of the branch, never the ephemeral
+  # merge commit GitHub checks out by default: a proof has to name a commit that
+  # exists in the history being reviewed.
+  EVIDENCE_SHA: ${{ inputs.sha || github.event.pull_request.head.sha || github.sha }}
+
+jobs:
+  # ── Cheap controls first. They run on Linux in about a minute and refuse a
+  #    dispatch whose tree could not produce acceptable evidence anyway.
+  controls:
+    name: Negative controls and policy gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ env.EVIDENCE_SHA }}
+          persist-credentials: false
+
+      # A branch can move between dispatch and checkout. Without this, the
+      # evidence would name a commit that is no longer what was built.
+      - name: Assert the checkout is the exact evidence SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          head="$(git rev-parse HEAD)"
+          [ "${head}" = "${{ env.EVIDENCE_SHA }}" ] || {
+            echo "WIN-X64 RUNTIME HARD STOP: checked out ${head}, asked for ${{ env.EVIDENCE_SHA }}" >&2
+            exit 1; }
+          echo "building and proving ${head}"
+
+      - name: Component policy, Linux and Windows flag sets
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Three reports, three platforms. The bare call is the catalogue view;
+          # the two --platform calls are what each runtime actually decides. The
+          # win-x64 call must pass --platform as well as --flags: reporting the
+          # Linux exclusion count while checking the Windows flag file is what
+          # made a declared platform exception read as an exclusion that never
+          # happened.
+          ./ci/ffmpeg/verify-components.sh
+          ./ci/ffmpeg/verify-components.sh --platform linux-x64
+          ./ci/ffmpeg/verify-components.sh --platform win-x64 \
+              --flags ci/windows/ffmpeg/ffmpeg-configure.win-x64.txt
+
+      - name: Linux runtime identities are unchanged
+        shell: bash
+        run: ./ci/windows/ffmpeg/verify-linux-identity.sh
+
+      - name: Negative controls
+        shell: bash
+        run: python3 ci/windows/ffmpeg/negative-controls.py
+
+  # ── Two native builder allocations. Two jobs, two runner allocations; the
+  #    physical node is GitHub's choice and is recorded, never claimed. ──────
+  build:
+    name: Build on a clean native Windows runner (${{ matrix.host }})
+    needs: controls
+    runs-on: windows-latest
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      matrix:
+        host: [a, b]
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ env.EVIDENCE_SHA }}
+          persist-credentials: false
+
+      - name: Assert the checkout is the exact evidence SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          head="$(git rev-parse HEAD)"
+          [ "${head}" = "${{ env.EVIDENCE_SHA }}" ] || {
+            echo "WIN-X64 RUNTIME HARD STOP: checked out ${head}, asked for ${{ env.EVIDENCE_SHA }}" >&2
+            exit 1; }
+
+      # A bare MSYS2. `update: false`, `release: false`, no `install:` list and
+      # no cache: this runner must not resolve or restore anything, so whatever
+      # ends up installed came from the digest-pinned bundle and nowhere else.
+      - uses: msys2/setup-msys2@e9898307ac31d1a803454791be09ab9973336e1c # v2
+        id: msys2
+        with:
+          msystem: CLANG64
+          update: false
+          release: false
+          cache: false
+
+      - name: Install the pinned ORAS
+        shell: bash
+        run: ./ci/windows/build-inputs/install-oras.sh windows-amd64 "${RUNNER_TEMP}/bin"
+
+      # No login step, deliberately. W1-R proved the package answers an
+      # anonymous pull by digest, so this build needs no token, no PAT, no
+      # repository secret and not even `packages: read`.
+      - name: Consume the accepted build inputs by digest, anonymously
+        id: consume
+        shell: pwsh
+        run: |
+          $accepted = Get-Content -LiteralPath ci/windows/ffmpeg/accepted-build-inputs.json -Raw | ConvertFrom-Json
+          ./ci/windows/build-inputs/consume.ps1 `
+            -Reference $accepted.reference `
+            -MsysRoot '${{ steps.msys2.outputs.msys2-location }}' `
+            -WorkDir (Join-Path $env:RUNNER_TEMP 'winx64-consume') `
+            -EvidenceDir (Join-Path $env:RUNNER_TEMP 'winx64-inputs') `
+            -OrasPath (Join-Path $env:RUNNER_TEMP 'bin\oras.exe')
+
+      - name: Refuse build inputs that are not the accepted ones
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 ci/windows/ffmpeg/verify-build-inputs.py \
+            --consume-evidence "${RUNNER_TEMP}/winx64-inputs/consume.json"
+
+      - name: Record the toolchain and the runner image
+        shell: msys2 {0}
+        run: ./ci/windows/ffmpeg/record-toolchain.sh "${RUNNER_TEMP}/winx64-inputs/toolchain.json"
+
+      # The shim makes Python write LF. ci/ffmpeg/fetch-sources.sh belongs to the
+      # Linux runtimes and must stay byte-identical, but its component table puts
+      # the mirror list last, so on Windows every last mirror arrives with a
+      # carriage return glued to it and curl rejects the URL. That stays
+      # invisible until a primary host fails — which freedesktop.org does
+      # routinely, with HTTP 418, to shared CI address space.
+      - name: Make Python write LF for the scripts this work may not edit
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          command -v python3 >/dev/null 2>&1 || ln -sf "$(command -v python)" /usr/bin/python3
+          ./ci/windows/ffmpeg/install-python-shim.sh /c/tf-shims
+
+      - name: Fetch every pinned source
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          export PATH="/c/tf-shims:${PATH}"
+          ./ci/ffmpeg/fetch-sources.sh --cache /c/tf-ffsrc
+
+      - name: Build the runtime natively
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          export PATH="/c/tf-shims:${PATH}"
+          ./ci/windows/ffmpeg/build-win-x64.sh --cache /c/tf-ffsrc --out /c/tf-ffout
+
+      - name: Package the delivered set
+        id: package
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          export PATH="/c/tf-shims:${PATH}"
+          revision="$(python3 -c 'import json;print(json.load(open("ci/ffmpeg/components.json"))["buildRevision"])' | tr -d '\r')"
+          python3 ci/windows/ffmpeg/package.py \
+            --stage "/c/tf-ffout/tesserafin-ffmpeg-${revision}-win-x64" \
+            --cache /c/tf-ffsrc \
+            --out /c/tf-delivered \
+            --consume-evidence "$(cygpath -u "${RUNNER_TEMP}")/winx64-inputs/consume.json" \
+            --toolchain "$(cygpath -u "${RUNNER_TEMP}")/winx64-inputs/toolchain.json" \
+            --repo-sha "${{ env.EVIDENCE_SHA }}"
+
+      - name: Verify the delivered set
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          export PATH="/c/tf-shims:${PATH}"
+          revision="$(python3 -c 'import json;print(json.load(open("ci/ffmpeg/components.json"))["buildRevision"])' | tr -d '\r')"
+          python3 ci/windows/ffmpeg/verify-runtime.py \
+            --delivered /c/tf-delivered \
+            --stage "/c/tf-ffout/tesserafin-ffmpeg-${revision}-win-x64" \
+            --workspace "$(pwd)" \
+            --workspace "$(cygpath -w "$(pwd)")"
+
+      - name: Accept the runtime after relocation, with no system FFmpeg on PATH
+        shell: pwsh
+        run: |
+          $revision = (Get-Content -LiteralPath ci/ffmpeg/components.json -Raw | ConvertFrom-Json).buildRevision
+          ./ci/windows/ffmpeg/accept-runtime.ps1 `
+            -Archive "C:\tf-delivered\runtime\tesserafin-ffmpeg-$revision-win-x64.zip" `
+            -WorkDir (Join-Path $env:RUNNER_TEMP 'winx64-accept') `
+            -EvidenceDir 'C:\tf-delivered\acceptance'
+
+      # The acceptance evidence is written INTO the delivered set after the
+      # checksum manifest was produced, so it is deliberately excluded from the
+      # comparison: it records a machine's behaviour, not the artifact's bytes.
+      - name: Separate the acceptance evidence from the delivered set
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/winx64-acceptance"
+          if [ -d /c/tf-delivered/acceptance ]; then
+            mv /c/tf-delivered/acceptance/* "${RUNNER_TEMP}/winx64-acceptance/" || true
+            rmdir /c/tf-delivered/acceptance || true
+          fi
+          cp -r "${RUNNER_TEMP}/winx64-inputs" "${RUNNER_TEMP}/winx64-acceptance/inputs" || true
+
+      # Only when packaging actually ran. `if-no-files-found: error` is kept
+      # deliberately — a packaging step that succeeded and delivered nothing is a
+      # finding — but a job that failed BEFORE packaging would otherwise report
+      # that same error and bury its real cause. The first run of this workflow
+      # failed at the build-input gate and reported "no files were found",
+      # which is true and says nothing.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ always() && steps.package.conclusion == 'success' }}
+        with:
+          name: winx64-delivered-${{ matrix.host }}
+          path: C:\tf-delivered
+          if-no-files-found: error
+          retention-days: 30
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ always() }}
+        with:
+          name: winx64-evidence-${{ matrix.host }}
+          path: ${{ runner.temp }}/winx64-acceptance
+          if-no-files-found: warn
+          retention-days: 30
+
+  # ── The comparator ─────────────────────────────────────────────────────────
+  compare:
+    name: Dual-runner comparison
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ env.EVIDENCE_SHA }}
+          persist-credentials: false
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: winx64-delivered-a
+          path: host-a
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: winx64-delivered-b
+          path: host-b
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: winx64-evidence-a
+          path: evidence-a
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: winx64-evidence-b
+          path: evidence-b
+
+      - name: Compare the two hosts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 ci/windows/ffmpeg/compare-hosts.py \
+            --host-a host-a --host-b host-b \
+            --evidence-a evidence-a --evidence-b evidence-b \
+            --report comparison.json | tee "${GITHUB_STEP_SUMMARY}"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ always() }}
+        with:
+          name: winx64-comparison
+          path: comparison.json
+          if-no-files-found: error
+          retention-days: 30

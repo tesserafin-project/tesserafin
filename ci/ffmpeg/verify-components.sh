@@ -4,6 +4,8 @@
 # Usage:
 #   ci/ffmpeg/verify-components.sh                     # policy only
 #   ci/ffmpeg/verify-components.sh --binary PATH       # also inspect a built ffmpeg
+#   ci/ffmpeg/verify-components.sh --platform win-x64  # report one platform's
+#                                                      # effective patch decision
 #
 # The policy lives in ci/ffmpeg/components.json and ci/ffmpeg/ffmpeg-configure.txt.
 # This script is the only thing that decides whether that policy holds, so the
@@ -23,12 +25,19 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 COMPONENTS="${ROOT}/ci/ffmpeg/components.json"
 FLAGS_FILE="${ROOT}/ci/ffmpeg/ffmpeg-configure.txt"
 BINARY=""
+# The platform whose EFFECTIVE patch decision is reported. Empty means the
+# catalogue view: the base decision plus an inventory of every declared
+# exception. It is never a synonym for "the Linux decision" — a report that
+# silently means one platform while a second platform decides otherwise is the
+# defect this option exists to remove.
+PLATFORM=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --binary)     BINARY="$2"; shift 2 ;;
         --components) COMPONENTS="$2"; shift 2 ;;
         --flags)      FLAGS_FILE="$2"; shift 2 ;;
+        --platform)   PLATFORM="$2"; shift 2 ;;
         *) echo "unknown argument: $1" >&2; exit 2 ;;
     esac
 done
@@ -128,6 +137,50 @@ assert f["repository"].startswith("https://"), "ffmpeg.repository is not https"
 print(f"  ok  : jellyfin-ffmpeg {f['baseline']} @ {f['commit']} ({f['commitSignature']}, {f['tagKind']} tag)")
 PY
 
+echo "== the platform dimension"
+# A component with no 'architectures' key is applicable everywhere, so the set of
+# declared platforms is load-bearing: adding one widens every unrestricted
+# component at once. This refuses an architecture value that is not a declared
+# platform, which is what stops a typo ('win-x86', 'windows-x64') from reading as
+# "restricted to nothing" and silently dropping a component from a build.
+python3 - "${COMPONENTS}" <<'PY' || exit 1
+import json, sys
+
+d = json.load(open(sys.argv[1]))
+platforms = d.get("platforms")
+failures = 0
+if not platforms:
+    print("  FAIL: components.json declares no 'platforms'")
+    sys.exit(1)
+if len(set(platforms)) != len(platforms):
+    print("  FAIL: 'platforms' lists a runtime identifier twice")
+    failures += 1
+
+unrestricted = []
+for c in d["components"]:
+    arches = c.get("architectures")
+    if arches is None:
+        unrestricted.append(c["name"])
+        continue
+    if not arches:
+        print(f"  FAIL: {c['name']} declares an empty 'architectures' list")
+        failures += 1
+        continue
+    for a in arches:
+        if a not in platforms:
+            print(f"  FAIL: {c['name']} is restricted to '{a}', which is not a declared platform")
+            failures += 1
+    if not c.get("architectureComment") and set(arches) != set(platforms):
+        print(f"  FAIL: {c['name']} is architecture-restricted with no architectureComment")
+        failures += 1
+
+if failures:
+    sys.exit(1)
+print(f"  ok  : platforms {', '.join(platforms)}")
+print(f"  ok  : {len(unrestricted)} portable components, "
+      f"{len(d['components']) - len(unrestricted)} restricted and justified")
+PY
+
 echo "== configure flags"
 # Every architecture's flags, not just the common file: a flag that only applies
 # to linux-x64 is still a flag this policy has to accept or refuse. When --flags
@@ -181,6 +234,11 @@ while read -r flag; do
     # same name; they are named here so the exception is visible, not implicit.
     case "${feature}" in
         vaapi|cuda|cuvid|nvdec|nvenc|ffnvcodec|amf|opencl|openssl|zlib|fontconfig) matched=1 ;;
+        # win-x64 only. None of these is a source component either: DXVA2, Direct3D
+        # and Schannel are operating-system interfaces reached through the mingw-w64
+        # headers and import libraries inside the digest-pinned MSYS2 package set
+        # that W1-R retained. Named here so the exception stays visible.
+        dxva2|d3d11va|d3d12va|schannel|w32threads) matched=1 ;;
         # Not a component either: it selects clang-as-NVPTX-compiler in the
         # pinned builder image, which is how the *_cuda filter kernels get built.
         cuda_llvm) matched=1 ;;
@@ -207,16 +265,28 @@ echo "== fork patch classification"
 # before it ships, and the only patches the build may skip are the ones this
 # policy calls unsafe. A patch appearing in the series with no classification is
 # a change to the baseline that nobody looked at.
-python3 - "${ROOT}/ci/ffmpeg/fork-patches.json" "${ROOT}/ci/ffmpeg/excluded-patches.txt" <<'PY' || exit 1
+python3 - "${ROOT}/ci/ffmpeg/fork-patches.json" "${ROOT}/ci/ffmpeg/excluded-patches.txt" \
+         "${COMPONENTS}" "${PLATFORM}" <<'PY' || exit 1
 import json, sys
 
-catalogue, excluded_file = sys.argv[1:3]
+catalogue, excluded_file, components_file, platform = sys.argv[1:5]
 d = json.load(open(catalogue))
 patches = d["patches"]
+declared_platforms = json.load(open(components_file)).get("platforms") or []
 failures = 0
+
+# Closed schemas. An unknown key is not a harmless extra: the whole point of
+# recording a platform exception is that a reader can tell what was decided, and
+# a field this gate does not understand is a decision nobody checked.
+PATCH_KEYS = {"patch", "classification", "applied", "rationale", "platformExceptions"}
+EXCEPTION_KEYS = {"platform", "applied", "rationale", "compensatingControls"}
 
 valid = {"required", "useful", "irrelevant", "unsafe"}
 for entry in patches:
+    unknown = set(entry) - PATCH_KEYS
+    if unknown:
+        print(f"  FAIL: {entry['patch']} carries unknown field(s) {sorted(unknown)}")
+        failures += 1
     if entry["classification"] not in valid:
         print(f"  FAIL: {entry['patch']} has unknown classification "
               f"'{entry['classification']}'")
@@ -225,12 +295,57 @@ for entry in patches:
         print(f"  FAIL: {entry['patch']} is classified with no rationale")
         failures += 1
     # The two fields must agree: 'unsafe' is the only class that is not applied,
-    # and nothing else may be quietly dropped.
+    # and nothing else may be quietly dropped. This is the BASE decision — the
+    # one every platform takes unless it declares otherwise below.
     expected = entry["classification"] != "unsafe"
     if entry["applied"] is not expected:
         print(f"  FAIL: {entry['patch']} is {entry['classification']} but "
               f"applied={entry['applied']}")
         failures += 1
+
+    seen_platforms = set()
+    for exc in entry.get("platformExceptions", []):
+        unknown = set(exc) - EXCEPTION_KEYS
+        if unknown:
+            print(f"  FAIL: {entry['patch']} exception for "
+                  f"'{exc.get('platform')}' carries unknown field(s) {sorted(unknown)}")
+            failures += 1
+        missing = EXCEPTION_KEYS - set(exc)
+        if missing:
+            print(f"  FAIL: {entry['patch']} exception for "
+                  f"'{exc.get('platform')}' is missing {sorted(missing)}")
+            failures += 1
+            continue
+        if exc["platform"] not in declared_platforms:
+            print(f"  FAIL: {entry['patch']} declares an exception for "
+                  f"'{exc['platform']}', which is not a declared platform")
+            failures += 1
+        if exc["platform"] in seen_platforms:
+            print(f"  FAIL: {entry['patch']} declares two exceptions for "
+                  f"'{exc['platform']}'")
+            failures += 1
+        seen_platforms.add(exc["platform"])
+        if not isinstance(exc["applied"], bool):
+            print(f"  FAIL: {entry['patch']} exception for {exc['platform']} "
+                  "has a non-boolean 'applied'")
+            failures += 1
+        elif exc["applied"] is entry["applied"]:
+            # An exception that decides what the base already decided records
+            # nothing and hides the fact that no platform diverges.
+            print(f"  FAIL: {entry['patch']} declares an exception for "
+                  f"{exc['platform']} that matches the base decision "
+                  f"(applied={entry['applied']})")
+            failures += 1
+        if not str(exc.get("rationale", "")).strip():
+            print(f"  FAIL: {entry['patch']} exception for {exc['platform']} "
+                  "has no rationale")
+            failures += 1
+        controls = exc.get("compensatingControls")
+        if not isinstance(controls, list) or not controls or \
+                not all(isinstance(x, str) and x.strip() for x in controls):
+            print(f"  FAIL: {entry['patch']} exception for {exc['platform']} "
+                  "lists no compensating controls")
+            failures += 1
 
 if len(patches) != d["seriesLength"]:
     print(f"  FAIL: seriesLength is {d['seriesLength']} but {len(patches)} patches are listed")
@@ -251,14 +366,58 @@ if catalogued_unsafe != declared_excluded:
           f"excluded-patches.txt declares {sorted(declared_excluded)}")
     failures += 1
 
+if platform and platform not in declared_platforms:
+    print(f"  FAIL: --platform '{platform}' is not a declared platform "
+          f"({', '.join(declared_platforms)})")
+    failures += 1
+
 if failures:
     sys.exit(1)
+
 counts = {}
 for e in patches:
     counts[e["classification"]] = counts.get(e["classification"], 0) + 1
 print(f"  ok  : {len(patches)} patches classified "
       + ", ".join(f"{v} {k}" for k, v in sorted(counts.items())))
-print(f"  ok  : {len(declared_excluded)} patch(es) excluded, all classified unsafe")
+
+
+def effective(entry, plat):
+    """What `plat` actually does with this patch, exception included."""
+    for exc in entry.get("platformExceptions", []):
+        if exc["platform"] == plat:
+            return exc["applied"], exc
+    return entry["applied"], None
+
+
+# Every exception, always, whatever platform is being reported. An exception a
+# reader can only see by asking for the right platform is not recorded.
+inventory = [(e["patch"], exc["platform"])
+             for e in patches
+             for exc in e.get("platformExceptions", [])]
+if inventory:
+    print(f"  ok  : {len(inventory)} declared platform exception(s): "
+          + ", ".join(f"{p} on {pl}" for p, pl in sorted(inventory)))
+else:
+    print("  ok  : no platform declares an exception to the base patch decision")
+
+if platform:
+    # The report names the platform it is about. Saying "1 patch excluded" while
+    # reporting a platform that excludes none is the defect W1-A3-R0 found.
+    excluded_here = sorted(p for p in
+                           (e["patch"] for e in patches if not effective(e, platform)[0]))
+    applied_here = len(patches) - len(excluded_here)
+    exceptions_here = [(e["patch"], effective(e, platform)[1])
+                       for e in patches if effective(e, platform)[1] is not None]
+    print(f"  ok  : {platform}: {applied_here} of {len(patches)} patches applied, "
+          f"{len(excluded_here)} excluded"
+          + (f" ({', '.join(excluded_here)})" if excluded_here else ""))
+    for name, exc in sorted(exceptions_here):
+        verb = "applied" if exc["applied"] else "excluded"
+        print(f"  ok  : {platform}: {name} {verb} as a declared platform "
+              f"exception, {len(exc['compensatingControls'])} compensating control(s)")
+else:
+    print(f"  ok  : base decision: {len(declared_excluded)} patch(es) excluded, "
+          "all classified unsafe")
 PY
 
 # --- optional: inspect a real binary -----------------------------------------
