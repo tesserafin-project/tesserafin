@@ -1,32 +1,53 @@
-"""The ownership contract for the path-filter-excluded retention subtree (#236, W1-A4-R1).
+"""The ownership contract for the retention subtree (#236, W1-A4-R2).
 
-WHY THIS FILE EXISTS.
+WHY THIS FILE EXISTS, AND WHAT IT NO LONGER CLAIMS.
 
-W1-A4 excluded `ci/windows/runtime-retention/**` from the W1 dual-runner
-workflow's `paths:` filter, so a change under this subtree does not start two
-five-hour metered native Windows builds. That exclusion is only safe while
-nothing under the subtree can affect how the runtime is BUILT. Nothing
-structural enforced that: a `runtime-retention/ffmpeg/build.sh`, a toolchain
-lock, or a W1 build script that sourced a file from here would all have been
-silently exempted from the proof that is supposed to cover them. The R0 review
-named that as blocking finding F2.
+W1-A4-R1 excluded `ci/windows/runtime-retention/**` from the W1 dual-runner
+workflow's `paths:` filter, so a retention change did not start two five-hour
+metered native Windows builds. That exclusion was safe only while nothing under
+the subtree could affect how the runtime is BUILT, and this file existed to
+enforce it.
 
-So this file states, as a closed schema, exactly what may live under the
-excluded subtree, and scans the W1 build workflow and its transitive local
-script closure to prove nothing there reaches into it.
+The exclusion is GONE. Independent review (W1-A4-R1, finding D2) withdrew it,
+because its safety rested on a premise that cannot be discharged: that a static
+pattern set recognises every way shell tooling can stage a directory into a
+build. `cp -r ci/windows dst`, a tar of the parent, an rsync with a different
+`--exclude` spelling and a `Path().rglob()` all ingest the subtree while every
+declared dependency check stays green — and under the exclusion, no proof then
+ran over the ingested bytes.
+
+So the safety argument is now four things, and this file is one of them rather
+than the whole of it:
+
+  1. every retention file is a role-classified REGULAR file (here);
+  2. a DECLARED W1 dependency on the subtree is refused (here);
+  3. every retention change crosses the native dual-runner proof trigger
+     (`trigger_policy.py`, and the workflow's positive-only `paths:` filter);
+  4. the accepted runtime digests and the evidence bundles reveal any byte
+     change that results (`contract.py`, `retention.py`, `build-twice.sh`).
+
+Property 3 is what carries the weight that the exclusion used to demand of
+property 2. The checks below are DEFENCE IN DEPTH and diagnostic coverage: they
+catch the staging spellings they know, and their completeness is deliberately
+not an acceptance premise. A `cp`, `tar`, `rsync` or glob this file fails to
+recognise is now a diagnostic that did not fire, not a hole in the proof,
+because the change carrying it triggers the dual-runner build either way.
 
 TWO INDEPENDENT PROPERTIES, BOTH REQUIRED.
 
-  1. INVENTORY. Every tracked file under the subtree has exactly one permitted
-     retention role. There is no "other" role and no wildcard: a file nobody
-     classified is a finding, not a default. Roles are retention concerns only;
-     build roles are named and forbidden by name so the message says which
+  1. INVENTORY. Every tracked path under the subtree is a regular file — decided
+     by the Git index mode and by `lstat`, never by its name — with exactly one
+     permitted retention role. There is no "other" role and no wildcard: a file
+     nobody classified is a finding, not a default. Roles are retention concerns
+     only; build roles are named and forbidden by name so the message says which
      build role was attempted rather than only "unknown".
 
-  2. CLOSURE. No build, verify, package or runtime-acceptance script reachable
-     from the W1 workflow reads from the subtree, no glob in that workflow can
-     traverse it, no build manifest names a path under it, and no environment
-     variable redirects a build input there.
+  2. DECLARED CLOSURE. No build, verify, package or runtime-acceptance script
+     reachable from the W1 workflow reads from the subtree, no glob in that
+     workflow is one this file recognises as able to traverse it, no build
+     manifest names a path under it, and no environment variable redirects a
+     build input there. "Declared" is the operative word and it is meant
+     literally: this is what the W1 closure SAYS it depends on.
 
 The inventory is taken from `git ls-files`, never from a filesystem walk.
 `__pycache__/` is ignored-but-present on any tree where these scripts have run,
@@ -156,6 +177,7 @@ INVENTORY: dict[str, str] = {
     "publication_policy.py": "publication-boundary-validation",
     "boundary.py": "publication-boundary-validation",
     "trigger_policy.py": "publication-boundary-validation",
+    "retention_gates.py": "publication-boundary-validation",
     "oci-protocol.sh": "local-registry-protocol",
     "registry-controls.sh": "local-registry-protocol",
     "make-fixture.py": "tests-and-fixtures",
@@ -168,6 +190,7 @@ INVENTORY: dict[str, str] = {
     "trusted-source-controls.py": "tests-and-fixtures",
     "reusable-workflow-controls.py": "tests-and-fixtures",
     "reusable-workflow-fixtures.json": "tests-and-fixtures",
+    "gate-roster-controls.py": "tests-and-fixtures",
     "reference-corpus.py": "tests-and-fixtures",
 }
 
@@ -596,14 +619,18 @@ def check_w1_closure(root: Path) -> list[Finding]:
                 ))
             if _BROAD_GLOB.search(line) and "runtime-retention" not in line:
                 # A broad glob only matters where it can INGEST. `paths:` in the
-                # trigger is a trigger filter and is handled by pathfilter.py,
-                # which requires the ordered negation to follow it.
+                # trigger is a trigger filter, and `trigger_policy.py` requires
+                # it to be positive-only — so a broad pattern THERE is the
+                # intended behaviour rather than a leak.
                 if re.search(r"\b(cp|rsync|tar|zip|copy|Copy-Item|glob|iglob|rglob|find)\b", line, re.I) \
                         or re.search(r"(path|paths|src|source|include|context)\s*[:=]", line, re.I):
                     findings.append(Finding(
                         "boundary.broad-glob-can-traverse-subtree",
-                        f"{path}:{line_no} uses a broad ci/windows glob that can traverse the "
-                        f"excluded subtree: {line.strip()!r}",
+                        f"{path}:{line_no} uses a broad ci/windows glob this check RECOGNISES "
+                        f"as able to traverse the retention subtree: {line.strip()!r}. The "
+                        f"list of spellings it recognises is diagnostic coverage and is not "
+                        f"claimed to be complete; what makes an unrecognised one safe is that "
+                        f"the change carrying it triggers the dual-runner proof",
                     ))
     return findings
 
@@ -649,16 +676,24 @@ def check_build_manifests(root: Path) -> list[Finding]:
     return findings
 
 
-def check_gate_is_pinned(root: Path) -> list[Finding]:
-    """The gate has to be RUN, not merely present."""
-    body = (root / RETENTION_WORKFLOW).read_text(encoding="utf-8")
-    if "boundary-controls.py" not in body or "boundary.py" not in body:
-        return [Finding(
-            "boundary.gate-not-pinned",
-            f"{RETENTION_WORKFLOW} does not invoke the excluded-subtree ownership gate; "
-            f"a gate that no workflow runs cannot refuse anything",
-        )]
-    return []
+# The gate-is-pinned check that used to live here has been DELETED, not moved.
+#
+# It read
+#
+#     if "boundary-controls.py" not in body or "boundary.py" not in body
+#
+# against the retention workflow's raw text, and R1's finding D3 is that a
+# COMMENT naming either file satisfies it. Commenting out the invocation left a
+# workflow that read exactly as before, ran nothing, and reported the gate as
+# pinned. Repairing it in place was not an option worth taking either: a check
+# that a subtree performs on its own pin disappears the moment that subtree is
+# deleted, so however well it were written it could only ever be circular.
+#
+# The pin is now `ci/windows/verify-retention-gate-pinned.py`, which lives
+# outside this subtree and which `ci/run.sh` runs on every branch. It parses the
+# workflow as YAML — so a comment is gone before any assertion is made — and
+# requires the canonical command to be a live, unmasked, reachable step of the
+# job it names. `gate-roster-controls.py` replays D3 against it exactly.
 
 
 def check_all(root: Path) -> list[Finding]:
@@ -667,7 +702,6 @@ def check_all(root: Path) -> list[Finding]:
         + check_w1_closure(root)
         + check_w1_environment(root)
         + check_build_manifests(root)
-        + check_gate_is_pinned(root)
     )
 
 

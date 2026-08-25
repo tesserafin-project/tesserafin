@@ -631,3 +631,42 @@ def _validate_unit_paths(accepted: Dict[str, Any]) -> None:
             f"unitPaths carries {len(delivered)} delivered paths, but "
             f"deliveredPathCount says {accepted['deliveredPathCount']}"
         )
+
+
+def check_all(root):
+    """The accepted-manifest gate, as the retention orchestrator's roster holds it.
+
+    Two properties, not one. The committed manifest must survive the closed
+    schema, and the manifest digest every consumer pins must be RECONSTRUCTIBLE
+    from committed data alone — a manifest that describes itself inconsistently
+    is a manifest nobody can check against the registry.
+    """
+    import json as _json
+
+    import boundary as _boundary
+    import retention as _retention
+
+    findings = []
+    path = root / _boundary.SUBTREE / "accepted-runtime.json"
+    try:
+        accepted = _json.loads(path.read_bytes())
+    except (OSError, ValueError) as error:
+        return [_boundary.Finding("contract.manifest-unreadable",
+                                  f"{path} cannot be read as JSON: {error}")]
+    try:
+        validate_accepted(accepted)
+    except ContractError as error:
+        findings.append(_boundary.Finding("contract.schema", str(error)))
+        return findings
+    try:
+        predicted = _retention.expected_manifest_digest(accepted)
+    except Exception as error:  # noqa: BLE001 - a finding, not a traceback
+        return [_boundary.Finding("contract.digest-not-reconstructible", str(error))]
+    for field in ("configDigest", "configSize", "manifestDigest", "manifestSize"):
+        if predicted[field] != accepted[field]:
+            findings.append(_boundary.Finding(
+                "contract.manifest-describes-itself-inconsistently",
+                f"{field} recomputes to {predicted[field]!r}, but accepted-runtime.json "
+                f"records {accepted[field]!r}",
+            ))
+    return findings

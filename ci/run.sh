@@ -181,6 +181,31 @@ if [ "$PROBE_UNDECLARED_STATUS" -ne 0 ] || [ "$PROBE_SCHEMA_STATUS" -ne 0 ]; the
     STATUS=1
 fi
 
+banner "The W1 retention gate roster is invoked (#236, W1-A4-R2 finding D3)"
+# The retention contract's gates are a closed roster behind one command in
+# .github/workflows/w1-windows-runtime-retention.yml. Until W1-A4-R2 that
+# invocation was "proved" by the retention subtree's own boundary.py testing
+# whether the string "boundary.py" appeared anywhere in the workflow, which a
+# COMMENT satisfies -- so the invocation could be commented out while every
+# check still reported the gate as pinned.
+#
+# The pin therefore lives HERE, outside the subtree it pins, because a pin the
+# pinned code performs disappears the moment that code is deleted. It parses the
+# workflow as YAML and requires the exact job, the exact command as an active
+# `run` value, no continue-on-error, no unreachable condition and no `|| true`.
+# It reads only; it builds nothing and mutates nothing, and it is deliberately
+# not skippable by flag or environment variable.
+set +e
+python3 "$REPO_ROOT/ci/windows/verify-retention-gate-pinned.py"
+RETENTION_PIN_STATUS=$?
+set -e
+echo ""
+echo "verify-retention-gate-pinned.py exit ${RETENTION_PIN_STATUS}"
+if [ "$RETENTION_PIN_STATUS" -ne 0 ]; then
+    echo "The W1 retention gate roster is not provably invoked; this gate FAILS." >&2
+    STATUS=1
+fi
+
 END_TS=$(date +%s)
 ELAPSED=$((END_TS - START_TS))
 

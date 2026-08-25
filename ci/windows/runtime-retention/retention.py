@@ -386,3 +386,72 @@ def load_layer_index(layer: Path) -> Dict[str, str]:
                 raise RetentionError(f"unreadable layer entry: {member.name}")
             index[member.name] = hashlib.sha256(handle.read()).hexdigest()
     return index
+
+
+def check_all(root):
+    """The deterministic-layout gate, as the retention orchestrator's roster holds it.
+
+    This is the part of determinism that is provable from committed data alone:
+    the config and manifest bytes the layout builder emits are a pure function
+    of the acceptance manifest's CONTENT, not of the order its keys happen to
+    arrive in, nor of the run that produced them. Two evaluations must agree
+    byte for byte, and so must an evaluation over a re-ordered copy — a builder
+    that serialised a mapping in insertion order would pass the first and fail
+    the second.
+
+    It does NOT replace `build-twice.sh`. That builds the whole unit in two
+    differently named directories and compares the file inventory, every
+    per-file digest, the layer/config/manifest bytes and the manifest digest,
+    which needs a staged unit and stays its own workflow job. What is here is
+    the half that needs no fixture, so that a tree whose layout builder has
+    become order-dependent is refused by the one canonical command rather than
+    only by the job that happens to build a fixture.
+    """
+    import json as _json
+
+    import boundary as _boundary
+
+    findings = []
+    path = root / _boundary.SUBTREE / "accepted-runtime.json"
+    try:
+        accepted = _json.loads(path.read_bytes())
+    except (OSError, ValueError) as error:
+        return [_boundary.Finding("layout.manifest-unreadable",
+                                  f"{path} cannot be read as JSON: {error}")]
+
+    try:
+        first = expected_manifest_digest(accepted)
+        second = expected_manifest_digest(_json.loads(_json.dumps(accepted)))
+        reordered = expected_manifest_digest(
+            {key: accepted[key] for key in sorted(accepted, reverse=True)})
+        config_a = canonical_json(build_config(accepted))
+        config_b = canonical_json(build_config(
+            {key: accepted[key] for key in sorted(accepted, reverse=True)}))
+    except Exception as error:  # noqa: BLE001 - a finding, not a traceback
+        return [_boundary.Finding("layout.not-buildable",
+                                  f"the layout cannot be derived from the committed "
+                                  f"manifest: {type(error).__name__}: {error}")]
+
+    if first != second:
+        findings.append(_boundary.Finding(
+            "layout.not-reproducible",
+            f"two evaluations of the same manifest disagree: {first} vs {second}",
+        ))
+    if first != reordered:
+        findings.append(_boundary.Finding(
+            "layout.depends-on-mapping-order",
+            f"re-ordering the manifest's keys changes the layout: {first} vs {reordered}; "
+            f"a digest that depends on insertion order is not reproducible anywhere else",
+        ))
+    if config_a != config_b:
+        findings.append(_boundary.Finding(
+            "layout.config-depends-on-mapping-order",
+            "the config blob's bytes change when the manifest's keys are re-ordered",
+        ))
+    if first["manifestDigest"] != accepted.get("manifestDigest"):
+        findings.append(_boundary.Finding(
+            "layout.digest-disagrees-with-committed",
+            f"the layout derives {first['manifestDigest']!r}, but accepted-runtime.json "
+            f"records {accepted.get('manifestDigest')!r}",
+        ))
+    return findings

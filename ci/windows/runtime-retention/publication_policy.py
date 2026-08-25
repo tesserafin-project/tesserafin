@@ -769,6 +769,19 @@ def evaluate(
     return findings
 
 
+def check_all(root: Path) -> list[Finding]:
+    """The gate entry point the retention orchestrator holds in its roster.
+
+    The reviewed workflow is the RETENTION workflow, and the publication
+    workflow is deliberately not evaluated here: it is supposed to publish, and
+    folding it in would mean this gate could only ever be satisfied by ignoring
+    its findings. `permission-fixtures.py` fixture 12 is where the publication
+    workflow is required to be REFUSED, which is the assertion that keeps this
+    checker honest without making the gate meaningless.
+    """
+    return evaluate(root, boundary.RETENTION_WORKFLOW)
+
+
 def main(argv: list[str]) -> int:
     if len(argv) != 2:
         print("usage: publication_policy.py <workflow.yml>", file=sys.stderr)

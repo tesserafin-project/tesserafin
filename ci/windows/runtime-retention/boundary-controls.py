@@ -132,18 +132,6 @@ def control_h(root: Path) -> None:
     boundary.INVENTORY["consume.ps1"] = "accepted-manifest"
 
 
-def control_g(root: Path) -> None:
-    """The gate is unpinned from the retention workflow. Its absence must be seen."""
-    body = (root / RETENTION).read_text(encoding="utf-8")
-    stripped = "\n".join(
-        line for line in body.splitlines()
-        if "boundary-controls.py" not in line and "boundary.py" not in line
-    ) + "\n"
-    if stripped == body:
-        raise Inert("the retention workflow does not pin the gate, so it cannot be unpinned")
-    (root / RETENTION).write_text(stripped, encoding="utf-8")
-
-
 # ── D4: a path's TYPE is not its name ───────────────────────────────────────
 #
 # R1's inventory asked what a path was called and what it ended in. It never
@@ -253,9 +241,10 @@ CONTROLS: list[tuple] = [
     ("H-misclassified-file",
      "a file wearing a permitted but wrong role is refused",
      "boundary.role-shape-mismatch", control_h),
-    ("G-gate-unpinned",
-     "removing the gate from the retention workflow is detected",
-     "boundary.gate-not-pinned", control_g),
+    # There is no G control any more. Its assertion — that the gate is actually
+    # invoked — moved OUT of this subtree, because a subtree proving its own pin
+    # is circular. `gate-roster-controls.py` replays it against
+    # ci/windows/verify-retention-gate-pinned.py, which ci/run.sh runs.
     ("I-tracked-file-replaced-by-symlink",
      "the exact D4 mutation: reference-corpus.json linked to ci/windows/ffmpeg/pe.py",
      "boundary.not-a-regular-file", control_i,

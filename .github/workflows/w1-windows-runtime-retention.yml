@@ -49,15 +49,36 @@ env:
   TZ: UTC
 
 jobs:
-  contract:
-    name: Contract and controls
+  # ── ONE canonical command ────────────────────────────────────────────────
+  #
+  # R1's finding D3: this workflow used to invoke seven gates as seven separate
+  # steps, and `boundary.check_gate_is_pinned` proved they ran by testing
+  # whether the strings "boundary.py" and "boundary-controls.py" appeared
+  # anywhere in this file. A COMMENT naming either satisfied that, so commenting
+  # out an invocation left a workflow that read exactly as before, ran nothing,
+  # and reported the gate as pinned.
+  #
+  # There is now one command, holding a closed roster resolved by exact module
+  # and function identity, and it is pinned STRUCTURALLY from outside the
+  # subtree by ci/windows/verify-retention-gate-pinned.py, which ci/run.sh runs.
+  # That check parses this file as YAML and requires this job, this command as
+  # an active `run` command, no continue-on-error, no unreachable condition and
+  # no success masking. Editing the line below to `: python3 ...`, prefixing it
+  # with `echo`, appending `|| true` or commenting it out each fails that check
+  # rather than passing quietly.
+  gates:
+    name: Retention gates
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ env.W1A4_EVIDENCE_SHA }}
           persist-credentials: false
+          # The ownership self-proof mutates and reverts the working tree, and
+          # one of its controls stages its mutation. A shallow checkout is
+          # enough for that; a detached HEAD is not a problem because nothing
+          # here commits.
 
       - name: Assert the evidence SHA
         shell: bash
@@ -68,11 +89,8 @@ jobs:
             echo "W1-A4 HARD STOP: standing in ${actual}, not ${W1A4_EVIDENCE_SHA}." >&2
             exit 1
           fi
+          echo "validating ${actual}"
 
-      # PyYAML is not in the standard library, and `publication_policy.py` parses
-      # the workflow rather than grepping it. "The runner probably has it" is not
-      # a guarantee, and a checker that cannot import its parser must fail loudly
-      # rather than be skipped.
       - name: Guarantee the YAML parser this validation depends on
         shell: bash
         run: |
@@ -83,80 +101,14 @@ jobs:
           fi
           python3 -c "import yaml; print(f'PyYAML {yaml.__version__}')"
 
-      - name: The committed acceptance manifest survives the closed schema
+      - name: The complete retention gate roster
         shell: bash
-        run: |
-          set -euo pipefail
-          cd ci/windows/runtime-retention
-          python3 - <<'PY'
-          import json
-          import contract
-          accepted = json.loads(open("accepted-runtime.json", "rb").read())
-          contract.validate_accepted(accepted)
-          print(f"accepted-runtime.json validates at {accepted['manifestDigest']}")
-          PY
+        run: python3 ci/windows/runtime-retention/retention_gates.py --validate
 
-      # The load-bearing check, and the one that never goes stale: the expected
-      # OCI manifest digest is RECOMPUTED from the committed manifest and must
-      # equal the digest the manifest claims. No artifact, no registry, no
-      # network. If someone edits a digest, a size, a media type or an
-      # annotation-bearing field by hand, this disagrees.
-      - name: The expected manifest digest is reconstructible from committed data alone
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd ci/windows/runtime-retention
-          python3 - <<'PY'
-          import json
-          import contract, retention
-          accepted = json.loads(open("accepted-runtime.json", "rb").read())
-          contract.validate_accepted(accepted)
-          predicted = retention.expected_manifest_digest(accepted)
-          for field in ("configDigest", "configSize", "manifestDigest", "manifestSize"):
-              if predicted[field] != accepted[field]:
-                  raise SystemExit(
-                      f"W1-A4 HARD STOP: {field} recomputes to {predicted[field]!r}, but "
-                      f"accepted-runtime.json records {accepted[field]!r}"
-                  )
-          print("the committed manifest describes itself consistently:")
-          for field, value in predicted.items():
-              print(f"  {field}: {value}")
-          PY
-
-      - name: Build the fixture
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd ci/windows/runtime-retention
-          python3 make-fixture.py --out "${RUNNER_TEMP}/fixture"
-
-      - name: Hostile controls
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd ci/windows/runtime-retention
-          python3 negative-controls.py \
-            --fixture "${RUNNER_TEMP}/fixture" \
-            --json "${RUNNER_TEMP}/controls.json" | tee -a "${GITHUB_STEP_SUMMARY}"
-
-      # Controls 09, 10 and 11 used to grade RED through one shared token, so
-      # none of them proved its own property. The matrix requires each to be
-      # satisfied by its own mutation and by no other.
-      - name: Controls 09, 10 and 11 grade on their own assertion
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd ci/windows/runtime-retention
-          python3 negative-controls.py \
-            --fixture "${RUNNER_TEMP}/fixture" --ablate | tee -a "${GITHUB_STEP_SUMMARY}"
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - name: The roster, for the record
         if: ${{ always() }}
-        with:
-          name: w1a4-controls-${{ github.run_id }}
-          path: ${{ runner.temp }}/controls.json
-          if-no-files-found: warn
-          retention-days: 14
+        shell: bash
+        run: python3 ci/windows/runtime-retention/retention_gates.py --list | tee -a "${GITHUB_STEP_SUMMARY}"
 
   determinism:
     name: Deterministic layout
@@ -296,75 +248,16 @@ jobs:
           fi
           echo "the check refuses the publishing workflow, so its acceptance above means something"
 
-      # Twelve fixtures, each required to reach ONE named property. A checker
-      # that refuses everything passes the two checks above; it does not pass
-      # these, because fixture 11 requires the pristine workflow to be ACCEPTED
-      # and each of the other eleven names the property it must be refused for.
-      - name: Semantic permission fixtures
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd ci/windows/runtime-retention
-          python3 permission-fixtures.py \
-            --json "${RUNNER_TEMP}/permission-fixtures.json" | tee -a "${GITHUB_STEP_SUMMARY}"
+      # The SEMANTIC fixtures are not here. They are roster entries in the
+      # `gates` job, because a checker that refuses everything passes the two
+      # shell checks above and only the fixtures can tell that apart. What
+      # remains here is the shell-level assertion and its own self-proof — the
+      # same check applied to the publishing workflow, which it must refuse.
 
-  # The excluded subtree owns itself, and the build workflow cannot reach into
-  # it. This job runs on retention-only changes, which is exactly when the W1
-  # dual-runner workflow does NOT run — the two filters are complementary by
-  # construction, and `pathfilter.py` proves that against GitHub's own semantics.
-  boundary:
-    name: The excluded subtree owns itself
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          ref: ${{ env.W1A4_EVIDENCE_SHA }}
-          persist-credentials: false
-
-      - name: Guarantee the YAML parser this validation depends on
-        shell: bash
-        run: |
-          set -euo pipefail
-          if ! python3 -c "import yaml" 2>/dev/null; then
-            sudo apt-get update -qq
-            sudo apt-get install -y --no-install-recommends python3-yaml
-          fi
-          python3 -c "import yaml; print(f'PyYAML {yaml.__version__}')"
-
-      - name: Every file behind the exclusion has exactly one retention role
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd ci/windows/runtime-retention
-          python3 boundary.py | tee -a "${GITHUB_STEP_SUMMARY}"
-
-      - name: The W1 proof trigger is positive-only and every retention change crosses it
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd ci/windows/runtime-retention
-          python3 trigger_policy.py | tee -a "${GITHUB_STEP_SUMMARY}"
-
-      - name: Hostile controls on the boundary
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd ci/windows/runtime-retention
-          python3 boundary-controls.py \
-            --json "${RUNNER_TEMP}/boundary-controls.json" | tee -a "${GITHUB_STEP_SUMMARY}"
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: ${{ always() }}
-        with:
-          name: w1a4-boundary-${{ github.run_id }}
-          path: ${{ runner.temp }}/boundary-controls.json
-          if-no-files-found: warn
-          retention-days: 14
-
-  # One grammar, three languages, one corpus. R0 found the PowerShell consumer
-  # still carrying the permissive shape the other two had been repaired for, and
-  # nothing was comparing their decisions.
+  # The reference grammar, with a real PowerShell host. The roster runs this
+  # corpus too, with --allow-missing-pwsh, so the Python and shell parsers are
+  # covered by the one canonical command; this job is what keeps the third
+  # parser from being quietly skipped on a runner that happens to lack pwsh.
   references:
     name: Cross-language reference grammar
     runs-on: ubuntu-latest

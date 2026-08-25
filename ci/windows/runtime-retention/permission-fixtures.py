@@ -46,7 +46,7 @@ def _replace(source: str, old: str, new: str) -> str:
 
 # ── the mutations ───────────────────────────────────────────────────────────
 _WORKFLOW_PERMS = "permissions:\n  contents: read\n"
-_JOB_ANCHOR = "  contract:\n    name: Contract and controls\n    runs-on: ubuntu-latest\n"
+_JOB_ANCHOR = "  gates:\n    name: Retention gates\n    runs-on: ubuntu-latest\n"
 
 
 def fixture_01(source, work):
@@ -83,8 +83,8 @@ def fixture_04(source, work):
 def fixture_05(source, work):
     return _replace(
         source,
-        "      - name: Build the fixture\n        shell: bash\n",
-        "      - name: Build the fixture\n        shell: bash\n"
+        "      - name: Assert the evidence SHA\n        shell: bash\n",
+        "      - name: Assert the evidence SHA\n        shell: bash\n"
         "        env:\n          FORWARDED: ${{ github.token }}\n",
     ), ()
 
@@ -92,8 +92,8 @@ def fixture_05(source, work):
 def fixture_06(source, work):
     return _replace(
         source,
-        "      - name: Build the fixture\n        shell: bash\n",
-        "      - name: Build the fixture\n        shell: bash\n"
+        "      - name: Assert the evidence SHA\n        shell: bash\n",
+        "      - name: Assert the evidence SHA\n        shell: bash\n"
         "        env:\n          FORWARDED: ${{ secrets.GITHUB_TOKEN }}\n",
     ), ()
 
@@ -101,8 +101,8 @@ def fixture_06(source, work):
 def fixture_07(source, work):
     return _replace(
         source,
-        "      - name: Build the fixture\n        shell: bash\n",
-        "      - name: Build the fixture\n        shell: bash\n"
+        "      - name: Assert the evidence SHA\n        shell: bash\n",
+        "      - name: Assert the evidence SHA\n        shell: bash\n"
         "        env:\n          FORWARDED: ${{ secrets.GHCR_PUBLISH_PAT }}\n",
     ), ()
 
@@ -110,8 +110,8 @@ def fixture_07(source, work):
 def fixture_08(source, work):
     return _replace(
         source,
-        "          python3 make-fixture.py --out \"${RUNNER_TEMP}/fixture\"\n",
-        "          python3 make-fixture.py --out \"${RUNNER_TEMP}/fixture\"\n"
+        "          echo \"validating ${actual}\"\n",
+        "          echo \"validating ${actual}\"\n"
         "          oras manifest push ghcr.io/tesserafin-project/windows-ffmpeg-runtime@sha256:0\n",
     ), ()
 
@@ -127,8 +127,8 @@ def fixture_09(source, work):
     helper = _helper(work, "retention-helper.sh", "#!/usr/bin/env bash\nset -eu\noras manifest push \"$1\"\n")
     return _replace(
         source,
-        "          python3 make-fixture.py --out \"${RUNNER_TEMP}/fixture\"\n",
-        f"          python3 make-fixture.py --out \"${{RUNNER_TEMP}}/fixture\"\n"
+        "          echo \"validating ${actual}\"\n",
+        f"          echo \"validating ${{actual}}\"\n"
         f"          {helper} \"${{RUNNER_TEMP}}/fixture\"\n",
     ), (helper,)
 
@@ -141,8 +141,8 @@ def fixture_10(source, work):
     )
     return _replace(
         source,
-        "          python3 make-fixture.py --out \"${RUNNER_TEMP}/fixture\"\n",
-        f"          python3 make-fixture.py --out \"${{RUNNER_TEMP}}/fixture\"\n"
+        "          echo \"validating ${actual}\"\n",
+        f"          echo \"validating ${{actual}}\"\n"
         f"          {outer} \"${{RUNNER_TEMP}}/fixture\"\n",
     ), (inner, outer)
 
