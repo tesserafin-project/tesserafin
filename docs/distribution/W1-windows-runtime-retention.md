@@ -199,10 +199,11 @@ twenty that work.
 
 Current state: **20 RED, 0 INERT, 0 GREEN**, fixture restored byte-identically.
 
-`registry-controls.sh` adds twelve more against a local registry over plain
+`registry-controls.sh` adds fourteen more against a local registry over plain
 HTTP, with no credential anywhere: push, byte-for-byte read-back, idempotent
-re-push, idempotent re-tag, the refusal to repoint an immutable tag, and the
-proof that the tag still resolves where it did after that refusal.
+re-push, idempotent re-tag, the refusal to repoint an immutable tag, the proof
+that the tag still resolves where it did after that refusal, and — added in R1 —
+the refusal to write to a non-loopback registry without `--allow-remote`.
 
 That suite earned its keep. It caught a real defect in `require_digest_reference`:
 the shell guard used `[^@]+` for the repository path, which permits a colon, so
@@ -210,6 +211,195 @@ the shell guard used `[^@]+` for the repository path, which permits a colon, so
 a tag and a digest was accepted. The Python contract refuses that case by name;
 the shell one silently did not. Two independent statements of one rule are only
 worth having if they actually agree.
+
+## 9b. What W1-A4-R1 repaired
+
+The R0 independent review raised two blocking findings and four bounded
+observations. What follows is what changed, and what deliberately did not.
+
+### F1 — the cannot-publish gate was a regex, not a permission model
+
+`assert-cannot-publish.sh` interpreted permissions with six greps. That misses
+`permissions: write-all`, which grants `packages: write` without containing the
+string; it reads a quoted `"packages": "write"` and an inline
+`{ packages: write }` differently from the plain form; it cannot see a job-level
+block widening what the workflow level narrowed; and "this workflow contains no
+push" is a statement about the workflow's own text, not about the scripts it
+runs.
+
+The interpretation now lives in `publication_policy.py`, which parses the file
+with PyYAML — guaranteed by an explicit step in the validation workflow rather
+than assumed of the runner image — and evaluates:
+
+| property | refused |
+| --- | --- |
+| `permissions.workflow-level-not-exact` | anything but exactly `contents: read` at workflow level |
+| `permissions.scalar-write-all` / `scalar-read-all` | either scalar form |
+| `permissions.packages-write` | `packages: write` in any quoting, casing or mapping style |
+| `permissions.write-scope` | every other write permission |
+| `permissions.job-widens-workflow` | a job granting what the workflow level does not |
+| `permissions.deployment-environment` | a job `environment:` |
+| `credential.github-token` / `credential.secrets-*` | `${{ github.token }}`, `${{ secrets.GITHUB_TOKEN }}`, any `${{ secrets.* }}` |
+| `registry.login` / `registry.credential-to-client` | a registry login, `--password-stdin` |
+| `registry.write-verb-inline` / `registry.write-verb-in-helper` | a push, copy or tag outside the two `local-registry-protocol` files |
+| `registry.allow-remote` / `registry.non-loopback-target` | lifting the loopback restriction, or naming a remote registry on a registry command line |
+
+**The discriminator is authority, not the verb `push`.** The validation workflow
+legitimately pushes — to `localhost:5000`, over plain HTTP, through
+`registry-controls.sh`. A rule keyed on the token `push` would reject the very
+workflow it is meant to accept, and the only way out of that is to keep weakening
+it until it catches nothing. So `oci-protocol.sh` now refuses to write to any
+non-loopback host unless handed `--allow-remote`; that flag appears in the
+publication workflow and nowhere else; and the policy refuses any workflow that
+passes it. `registry-controls.sh` proves the guard by offering it `ghcr.io` and
+requiring the refusal.
+
+`permission-fixtures.py` runs twelve reviewer fixtures, each required to reach
+**one named property** — a fixture that is refused for a different reason is
+INERT, not RED. Fixture 11 requires the pristine validation workflow to be
+ACCEPTED, so a checker that refuses everything fails the suite; fixture 12
+requires the real publication workflow to be refused, for the exact capability it
+intentionally owns.
+
+The checker's own source and its fixtures are excluded from the closure it
+scans. That is the same trick the original grep gate needed, one level up:
+`permission-fixtures.py` constructs a `${{ secrets.GITHUB_TOKEN }}` on purpose so
+the checker can be shown refusing it, and reading that as the workflow's
+capability is the absence of a thing reported as its presence. Fixtures 08, 09
+and 10 put the same text in an inline `run:` body, in a helper, and in a helper
+reached only through another helper — all three are refused, so the exemption is
+narrow rather than a hole.
+
+### F2 — nothing stopped a build input from hiding behind the exclusion
+
+`boundary.py` states a **closed role schema** for `ci/windows/runtime-retention/**`.
+Every file git would carry under that subtree must have exactly one permitted
+retention role, and the inventory must not name a file that is gone. Roles are
+retention concerns only: accepted manifest, accepted schema, deterministic OCI
+assembly, retained-unit verification, digest-only consumer, publication-boundary
+validation, local registry protocol, tests and fixtures, retention
+documentation. Component source, patches, configure flags, toolchain locks,
+dependency prefixes and build/package/acceptance scripts are named and forbidden
+by name, so a hostile control's message says which build role was attempted
+rather than only "unknown".
+
+It also scans the W1 build workflow and its **transitive local script closure**
+(thirty files) and requires that none of them reads from the subtree, that no
+broad `ci/windows` glob can ingest it, that no build manifest names a path under
+it, and that no environment variable redirects a build input there.
+
+The inventory comes from `git ls-files --cached --others --exclude-standard`,
+never a filesystem walk: `__pycache__/` is ignored-but-present on any tree where
+these scripts have run, and a walk would report a pristine checkout as carrying
+unclassified content.
+
+`boundary-controls.py` runs seven hostile controls — a `runtime-retention/ffmpeg/build.sh`,
+a toolchain lock, a W1 script sourcing a permitted retention file, the W1
+workflow copying the subtree into its build context, a broad recursive glob, a
+legitimate classified fixture that must be ACCEPTED, and the gate itself removed
+from the validation workflow.
+
+### The path-filter division, checked against GitHub's own semantics
+
+| | W1 dual-runner build | retention validation |
+| --- | --- | --- |
+| `ci/windows/runtime-retention/**` | **excluded** | **included, and policed** |
+| `ci/windows/ffmpeg/**`, `ci/ffmpeg/**` | triggers | not watched |
+| own workflow file | triggers | triggers |
+
+`pathfilter.py` implements GitHub's rules rather than approximating them: `*`
+never crosses `/`, `**` does, `paths:` is an allowlist so a file starts excluded,
+patterns are evaluated in order and the **last** match decides, and the workflow
+runs if any changed file ends up included. That last-match-wins rule is what a
+substring approximation gets wrong, and it is the rule the mixed diff depends
+on — a pull request touching both the subtree and `ci/windows/ffmpeg/**` still
+triggers the build, because the ffmpeg file is included on its own.
+
+Fourteen cases are checked, including deletion and rename across the boundary and
+a sibling (`ci/windows/runtime-retention-notes.md`) that merely starts with the
+subtree name and must NOT be excluded.
+
+### One reference grammar, three languages
+
+`consume.ps1` still carried the permissive `[^@]+` repository shape that
+`oci-protocol.sh` had already been repaired for, and PowerShell's `-notmatch` is
+case-insensitive, so it also accepted an uppercase digest the other two refuse.
+All three now classify in the same order, emit the same reason tokens, and are
+run over one corpus by `reference-corpus.py`, which requires the same verdict
+**and** the same reason. A parser that refuses the right reference for the wrong
+reason is a disagreement, not a pass — which is precisely what leaning on the
+later canonical-package equality check to repair an over-permissive grammar
+would look like.
+
+The canonical-package authority is deliberately not part of the grammar:
+`localhost:5000/...` is a well-formed reference the local-registry controls need,
+and only `contract.parse_reference` and `consume.ps1` add the "and it must be OUR
+package" rule on top. The corpus checks that separately, against the two parsers
+that carry it.
+
+The PowerShell leg is not optional. Without `pwsh` the corpus refuses to report a
+result rather than reporting two-thirds of it as a pass.
+
+### Publication binds a revision, not only a ref
+
+Asserting the repository and `refs/heads/master` is true of a checkout of **any**
+commit on master, including a detached or substituted one. The publication job
+now also asserts that the event is `workflow_dispatch`, that the checked-out HEAD
+equals `GITHUB_SHA`, that `GITHUB_SHA` descends from the accepted W1-A3 merge
+`83e23b9579404883c2d3e93f6f3ac8748061c618` (with `fetch-depth: 0`, because a
+depth-1 checkout does not hold that object), and that the acceptance manifest on
+disk is byte-identical to the one `git show <GITHUB_SHA>:…` returns — checked
+once before the layout is built and again immediately before the push.
+
+Master is **not** required to stand still at the W1-A4 merge. The durable
+authority is the trusted master content that is checked out plus the exact digest
+committed in it.
+
+### Controls 09, 10 and 11 graded on a shared token
+
+All three reached RED through the substring `predicts`, which is the generic OCI
+digest recomputation message. Any of the three mutations produces it, so none of
+them proved its own property: remove the gate control 10 is named for and control
+10 still goes RED, through control 09's mechanism.
+
+Each now has a unique sentinel, a mutation that is re-read from disk to prove it
+landed, and a distinct assertion:
+
+| control | mutation | assertion |
+| --- | --- | --- |
+| 09 | `proofHead`, `proofRun` | `IDENTITY-PROOF-HEAD-DISAGREES` — the manifest disagrees with the comparison record the proof itself wrote |
+| 10 | `buildInputsReference` | `IDENTITY-BUILD-INPUTS-DISAGREE` — the same record, a different field |
+| 11 | `acceptedServerTree` | the value is embedded in `RETENTION.md`, whose digest is pinned in the unit inventory, so the unit stops matching its own manifest |
+
+`negative-controls.py --ablate` runs the three mutations against the three
+expectations as a matrix and requires the off-diagonal to be empty, plus a `none`
+row proving no control is satisfied by a pristine tree.
+
+### Accepted limitations, recorded rather than repaired
+
+These are properties of the ACCEPTED W1-A3 evidence. Editing the retained bytes
+to remove them cosmetically would invalidate the digest that is the whole point
+of retention.
+
+* the retained evidence contains deterministic local Windows paths;
+* the SBOM carries a deterministic timestamp;
+* the dual-runner topology is same-node — two runner allocations, one physical
+  node, named that way everywhere rather than claimed as two-host independence.
+
+### Package absence is no longer a load-bearing premise
+
+The author observed that `ghcr.io/tesserafin-project/windows-ffmpeg-runtime` did
+not exist, with a suitably scoped token. The independent reviewer could not
+reproduce that observation with theirs — `GET /orgs/.../packages` answers `403`
+without `read:packages`, and the per-package route answers `404` for both
+"absent" and "not visible to this token", so the two are indistinguishable from
+outside.
+
+W1-A5 must re-check package and tag state using authorised `read:packages`
+access. Publication remains safe either way: `oci-protocol.sh tag` refuses to
+repoint an immutable tag, and the push is by digest, so a conflicting
+tag or digest is refused rather than overwritten, and a matching one is an
+idempotent no-op.
 
 ## 10. Update policy
 
