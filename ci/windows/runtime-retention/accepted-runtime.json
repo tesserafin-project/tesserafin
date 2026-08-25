@@ -1,0 +1,315 @@
+{
+  "acceptedServerCommit": "83e23b9579404883c2d3e93f6f3ac8748061c618",
+  "acceptedServerTree": "d66351490d0af8a8b4a31538d96bbd9eb58cb691",
+  "artifactType": "application/vnd.tesserafin.windows-ffmpeg-runtime.v1+json",
+  "buildConfigurationSha256": "f93ae55c1b98af9f4212932a560afc08b1f0c2d463cacad2f0c4ca1a66965521",
+  "buildInputsReference": "ghcr.io/tesserafin-project/windows-ffmpeg-build-inputs@sha256:cff23b74dbf9707ad7150c21a2985e320320b86d3c72656b2bf2b58ac1c04f0a",
+  "capabilitySha256": "754d44ea67f94dafef11f2e1ed9d2cd0864a65bed013e8d45a0690dda31106c8",
+  "checksumManifestPath": "delivered/SHA256SUMS",
+  "checksumManifestSha256": "7cdbab51a00abaed0615204a32117ad7c6ee568ef31f033fbb97e302165eda5b",
+  "configDigest": "sha256:2f6bfd237c79f551b4a7c90c64685f22bc5731b90c3f4c0ca6542da2e1a5ba4c",
+  "configMediaType": "application/vnd.tesserafin.windows-ffmpeg-runtime.config.v1+json",
+  "configSize": 1065,
+  "correspondingSourcePath": "delivered/source/tesserafin-ffmpeg-7.1.4-tesserafin.1-win-x64-source.tar.zst",
+  "correspondingSourceSha256": "d753268c14d8e312bdd8ccd5ce8af90d495d185e807b77621e229eb8f71cc76d",
+  "correspondingSourceSize": 215992327,
+  "correspondingSourceStreamSha256": "5158221a246c7e7d0d843d649571625ad0277152a093361419414195a8afee8e",
+  "deliveredPathCount": 31,
+  "evidence": {
+    "comparisonSha256": "a18b37918e663dd307a2cbac92f2636d2991ec85f9de002cacee2235115df075",
+    "hostA": {
+      "acceptRuntimeSha256": "71ef9ab62995ac773b578971c3fe274a68defab23876e3e28450f5977a4f74fb",
+      "bundlePathCount": 14,
+      "imageOs": "win25-vs2026",
+      "imageVersion": "20260818.207.1",
+      "node": "runnervm6iq3x",
+      "runnerJsonSha256": "0380845948ea2bf96ae7816c34228f87b06c2450e13fb3c9cfef1c5f3cf4cbbd",
+      "runnerName": "GitHub Actions 1000008383"
+    },
+    "hostB": {
+      "acceptRuntimeSha256": "71ef9ab62995ac773b578971c3fe274a68defab23876e3e28450f5977a4f74fb",
+      "bundlePathCount": 14,
+      "imageOs": "win25-vs2026",
+      "imageVersion": "20260818.207.1",
+      "node": "runnervm6iq3x",
+      "runnerJsonSha256": "f416eb256b47e86e982d19b4208123448b0a1d75c8935a566cc07c11e55801a4",
+      "runnerName": "GitHub Actions 1000008384"
+    }
+  },
+  "ffmpegBuildRevision": "7.1.4-tesserafin.1",
+  "ffmpegUpstreamCommit": "d4590e12452f94d40e413caecb34b08de608353b",
+  "immutableTag": "accepted-83e23b957940",
+  "independenceClaim": "none",
+  "layerDigest": "sha256:17028a251f8c413653dcb91082a594915eb7ad3831e12a723a446ee1364ea7af",
+  "layerMediaType": "application/vnd.tesserafin.windows-ffmpeg-runtime.layer.v1.tar",
+  "layerSize": 259860480,
+  "licence": "GPL-3.0-or-later",
+  "licenceFileCount": 22,
+  "manifestDigest": "sha256:99e45f154a5d72aba4185eb19b6671aa1a11c30be837deac9dd26f473593c0b9",
+  "manifestMediaType": "application/vnd.oci.image.manifest.v1+json",
+  "manifestSize": 1851,
+  "noticesSha256": "f441e5ef05b5e62fa246b3e035f5d950871982e2eac81523e1707d699f53dcf6",
+  "peClosureSha256": "241a109402c1b7c1f525a57ac48532f2a545cfbf409f1c57900b0f051d4a71c6",
+  "platform": "win-x64",
+  "proofHead": "e608559fea49c8a23279678448f94aac15fe557d",
+  "proofRun": 32750491696,
+  "provenanceSha256": "2e6778503e671f037279f19b7857c3d0a9b91cad1f35cfc515c17309635358e2",
+  "published": false,
+  "reference": "ghcr.io/tesserafin-project/windows-ffmpeg-runtime@sha256:99e45f154a5d72aba4185eb19b6671aa1a11c30be837deac9dd26f473593c0b9",
+  "registry": "ghcr.io",
+  "repository": "tesserafin-project/windows-ffmpeg-runtime",
+  "runtimePath": "delivered/runtime/tesserafin-ffmpeg-7.1.4-tesserafin.1-win-x64.zip",
+  "runtimeSha256": "f28cc9186aad757491a6f44e7950d39bc39354dfe9505e278af91d7619811c9e",
+  "runtimeSize": 43538170,
+  "sameNode": true,
+  "sbomSha256": "89a9d98a8155dc370044bca7b4d2cea1c64adef99bcadc2467b8f05b77df5c17",
+  "schemaVersion": 1,
+  "signed": false,
+  "topology": "dual-runner",
+  "unitPaths": {
+    "RETENTION.md": {
+      "sha256": "db8a153592afb6d67df3e24559cb4f3cd619de346f40ed8afd94cd5f3264fad6",
+      "size": 3739
+    },
+    "delivered/SHA256SUMS": {
+      "sha256": "7cdbab51a00abaed0615204a32117ad7c6ee568ef31f033fbb97e302165eda5b",
+      "size": 2798
+    },
+    "delivered/THIRD-PARTY-NOTICES.md": {
+      "sha256": "f441e5ef05b5e62fa246b3e035f5d950871982e2eac81523e1707d699f53dcf6",
+      "size": 8720
+    },
+    "delivered/build-configuration.txt": {
+      "sha256": "f93ae55c1b98af9f4212932a560afc08b1f0c2d463cacad2f0c4ca1a66965521",
+      "size": 1651
+    },
+    "delivered/capability.json": {
+      "sha256": "754d44ea67f94dafef11f2e1ed9d2cd0864a65bed013e8d45a0690dda31106c8",
+      "size": 21728
+    },
+    "delivered/licenses/amf-headers-LICENSE.txt": {
+      "sha256": "eb297397aaa455b5668ab67d216b83828466152dab123fa92384c6ec16b74170",
+      "size": 1747
+    },
+    "delivered/licenses/dav1d-COPYING": {
+      "sha256": "b327887de263238deaa80c34cdd2ff3e0ba1d35db585ce14a37ce3e74ee389e9",
+      "size": 1317
+    },
+    "delivered/licenses/expat-COPYING": {
+      "sha256": "122f2c27000472a201d337b9b31f7eb2b52d091b02857061a8880371612d9534",
+      "size": 1144
+    },
+    "delivered/licenses/fontconfig-COPYING": {
+      "sha256": "51a51aa9823704fd90bccc616cdd17ebabb5b2b3e9cbde886ca02c7002288067",
+      "size": 8616
+    },
+    "delivered/licenses/freetype-LICENSE.TXT": {
+      "sha256": "2e3bbb7d7c5c396368dd0853a790ec29ce5b8647163dde42a0493fb0d6556b2b",
+      "size": 2074
+    },
+    "delivered/licenses/fribidi-COPYING": {
+      "sha256": "32434afcc8666ba060e111d715bfdb6c2d5dd8a35fa4d3ab8ad67d8f850d2f2b",
+      "size": 26440
+    },
+    "delivered/licenses/harfbuzz-COPYING": {
+      "sha256": "ba8f810f2455c2f08e2d56bb49b72f37fcf68f1f4fade38977cfd7372050ad64",
+      "size": 1971
+    },
+    "delivered/licenses/lame-COPYING": {
+      "sha256": "bfe4a52dc4645385f356a8e83cc54216a293e3b6f1cb4f79f5fc0277abf937fd",
+      "size": 25284
+    },
+    "delivered/licenses/lame-LICENSE": {
+      "sha256": "7a40cbd8818c57e5285e83c772a459a996d1662c824a879836b97b473c07cae4",
+      "size": 487
+    },
+    "delivered/licenses/libass-COPYING": {
+      "sha256": "f7e30699d02798351e7f839e3d3bfeb29ce65e44efa7735c225464c4fd7dfe9c",
+      "size": 755
+    },
+    "delivered/licenses/libogg-COPYING": {
+      "sha256": "d2ab5758336489da61c12cc5bb757da5339c4ae9001f9bb0562b4370249af814",
+      "size": 1466
+    },
+    "delivered/licenses/libunibreak-LICENCE": {
+      "sha256": "0c57e2ec42ece17791a75d2f9b2f8e0663181be008667a507f765b3ef22522db",
+      "size": 1045
+    },
+    "delivered/licenses/libvorbis-COPYING": {
+      "sha256": "ec1815db59fcd302846df949d7424876cb2e2dc5ed1606c5fb0b36787b1cf43a",
+      "size": 1470
+    },
+    "delivered/licenses/libvpl-LICENSE": {
+      "sha256": "bf1cfac2e2792b6e1e995ce103d70796aecaf2ec7e4c5fe5474f7acec7b4a677",
+      "size": 1074
+    },
+    "delivered/licenses/libvpx-LICENSE": {
+      "sha256": "8267348d5af1262c11d1a08de2f5afc77457755f1ac658627dd9acf71011d615",
+      "size": 1537
+    },
+    "delivered/licenses/nv-codec-headers-LICENSE-extracted-from-nvEncodeAPI.h": {
+      "sha256": "350ab83cfae177dce1f5e7719dfc6e6264722edaede08d43d6f4342ad228bbab",
+      "size": 1198
+    },
+    "delivered/licenses/opus-COPYING": {
+      "sha256": "01e1167d54a096d123cf6dfbbeb19587278845c6481d2d66d545669846079551",
+      "size": 1945
+    },
+    "delivered/licenses/svt-av1-LICENSE.md": {
+      "sha256": "0acc2fcb27472bdc9aaf8b71f37055bbdac4f54671b7d922f241bd7fcd0dd3e6",
+      "size": 1709
+    },
+    "delivered/licenses/x264-COPYING": {
+      "sha256": "32b1062f7da84967e7019d01ab805935caa7ab7321a7ced0e30ebe75e5df1670",
+      "size": 17992
+    },
+    "delivered/licenses/x265-COPYING": {
+      "sha256": "d8afb1bcc7a2cfc603683b168d6987ef0a48e59e0da3693bf55c5d33b67e2b49",
+      "size": 18120
+    },
+    "delivered/licenses/zimg-COPYING": {
+      "sha256": "7637386b5f81e8a719ca336233149005e5fa28b5e6054ea7b67de49355b0ad40",
+      "size": 484
+    },
+    "delivered/licenses/zlib-LICENSE": {
+      "sha256": "845efc77857d485d91fb3e0b884aaa929368c717ae8186b66fe1ed2495753243",
+      "size": 1002
+    },
+    "delivered/pe-closure.json": {
+      "sha256": "241a109402c1b7c1f525a57ac48532f2a545cfbf409f1c57900b0f051d4a71c6",
+      "size": 32592
+    },
+    "delivered/provenance.json": {
+      "sha256": "2e6778503e671f037279f19b7857c3d0a9b91cad1f35cfc515c17309635358e2",
+      "size": 18821
+    },
+    "delivered/runtime/tesserafin-ffmpeg-7.1.4-tesserafin.1-win-x64.zip": {
+      "sha256": "f28cc9186aad757491a6f44e7950d39bc39354dfe9505e278af91d7619811c9e",
+      "size": 43538170
+    },
+    "delivered/sbom.cdx.json": {
+      "sha256": "89a9d98a8155dc370044bca7b4d2cea1c64adef99bcadc2467b8f05b77df5c17",
+      "size": 18404
+    },
+    "delivered/source/tesserafin-ffmpeg-7.1.4-tesserafin.1-win-x64-source.tar.zst": {
+      "sha256": "d753268c14d8e312bdd8ccd5ce8af90d495d185e807b77621e229eb8f71cc76d",
+      "size": 215992327
+    },
+    "evidence/comparison.json": {
+      "sha256": "a18b37918e663dd307a2cbac92f2636d2991ec85f9de002cacee2235115df075",
+      "size": 2492
+    },
+    "evidence/host-a/accept-runtime.json": {
+      "sha256": "71ef9ab62995ac773b578971c3fe274a68defab23876e3e28450f5977a4f74fb",
+      "size": 2424
+    },
+    "evidence/host-a/inputs/consume-request.json": {
+      "sha256": "b40c7a8966e0b52ccf10d74f90d4391e6c1c2963cd7badcb55c367cd64333d36",
+      "size": 274
+    },
+    "evidence/host-a/inputs/consume-signatures.json": {
+      "sha256": "00a282dcf97de08de0b8ce499a97ba53133fa218aaa3e19ca34174ad784d28f0",
+      "size": 422
+    },
+    "evidence/host-a/inputs/consume.json": {
+      "sha256": "341de0d3ac793a8d88b47f43200ddf58814a951bdb02fe199c9b943d70ec05fc",
+      "size": 1508
+    },
+    "evidence/host-a/inputs/install/install-locked.json": {
+      "sha256": "63e560cfb6b0865a8be871c331d9419b83dc42941097c2650566fa0dfc48bea4",
+      "size": 1258
+    },
+    "evidence/host-a/inputs/install/installed-after.txt": {
+      "sha256": "0bb10dcff021652f95adc3b76349b7d9aa72cf73aa46bccc48093c79e7a1bbf2",
+      "size": 8224
+    },
+    "evidence/host-a/inputs/install/installed-before.txt": {
+      "sha256": "1a7e4aad2e7a0f99e778c240a6378bd6741bebca4ca1583902b46473147b3dbc",
+      "size": 2097
+    },
+    "evidence/host-a/inputs/install/installed-set.json": {
+      "sha256": "bbddabc804b00979b22b24e8a1148861cabecce8bb9a27a6be6c641f47df7765",
+      "size": 287
+    },
+    "evidence/host-a/inputs/install/pacman-stderr-phase2.log": {
+      "sha256": "8dba540ee79a468649b6ece614620c45f4874b74754c3f16e7611c43ccb84869",
+      "size": 4528
+    },
+    "evidence/host-a/inputs/install/pacman-stderr.log": {
+      "sha256": "79bf63eae28381b7f78dd4211171ac880a8e9b83873e67c6c6228cd0434e2ad1",
+      "size": 67
+    },
+    "evidence/host-a/inputs/install/pacman-stdout.log": {
+      "sha256": "4184db3b21cc3a7bee24a74a36847281eb291801d76a09306f301f23c617a1af",
+      "size": 409
+    },
+    "evidence/host-a/inputs/registry-manifest.json": {
+      "sha256": "cff23b74dbf9707ad7150c21a2985e320320b86d3c72656b2bf2b58ac1c04f0a",
+      "size": 1394
+    },
+    "evidence/host-a/inputs/runner.json": {
+      "sha256": "0380845948ea2bf96ae7816c34228f87b06c2450e13fb3c9cfef1c5f3cf4cbbd",
+      "size": 360
+    },
+    "evidence/host-a/inputs/toolchain.json": {
+      "sha256": "703868d2fdec1a03226f331ba37bb85dd6392cf48b3ed0e69aad92dd8e6a8a1c",
+      "size": 819
+    },
+    "evidence/host-b/accept-runtime.json": {
+      "sha256": "71ef9ab62995ac773b578971c3fe274a68defab23876e3e28450f5977a4f74fb",
+      "size": 2424
+    },
+    "evidence/host-b/inputs/consume-request.json": {
+      "sha256": "b40c7a8966e0b52ccf10d74f90d4391e6c1c2963cd7badcb55c367cd64333d36",
+      "size": 274
+    },
+    "evidence/host-b/inputs/consume-signatures.json": {
+      "sha256": "00a282dcf97de08de0b8ce499a97ba53133fa218aaa3e19ca34174ad784d28f0",
+      "size": 422
+    },
+    "evidence/host-b/inputs/consume.json": {
+      "sha256": "8af12c710796c499a9df0193106e592906886ad3064ff1561a2e5c85e88ad17f",
+      "size": 1509
+    },
+    "evidence/host-b/inputs/install/install-locked.json": {
+      "sha256": "7807d4de8c205a32022cd90099f4d1bc5cb96ae8f6dc63901cb63885cea00340",
+      "size": 1259
+    },
+    "evidence/host-b/inputs/install/installed-after.txt": {
+      "sha256": "0bb10dcff021652f95adc3b76349b7d9aa72cf73aa46bccc48093c79e7a1bbf2",
+      "size": 8224
+    },
+    "evidence/host-b/inputs/install/installed-before.txt": {
+      "sha256": "1a7e4aad2e7a0f99e778c240a6378bd6741bebca4ca1583902b46473147b3dbc",
+      "size": 2097
+    },
+    "evidence/host-b/inputs/install/installed-set.json": {
+      "sha256": "bbddabc804b00979b22b24e8a1148861cabecce8bb9a27a6be6c641f47df7765",
+      "size": 287
+    },
+    "evidence/host-b/inputs/install/pacman-stderr-phase2.log": {
+      "sha256": "8dba540ee79a468649b6ece614620c45f4874b74754c3f16e7611c43ccb84869",
+      "size": 4528
+    },
+    "evidence/host-b/inputs/install/pacman-stderr.log": {
+      "sha256": "79bf63eae28381b7f78dd4211171ac880a8e9b83873e67c6c6228cd0434e2ad1",
+      "size": 67
+    },
+    "evidence/host-b/inputs/install/pacman-stdout.log": {
+      "sha256": "edde3f72c73258d9241d60dbd7708973e73fc0e2f8995b3cc6ff53ded27c58ee",
+      "size": 410
+    },
+    "evidence/host-b/inputs/registry-manifest.json": {
+      "sha256": "cff23b74dbf9707ad7150c21a2985e320320b86d3c72656b2bf2b58ac1c04f0a",
+      "size": 1394
+    },
+    "evidence/host-b/inputs/runner.json": {
+      "sha256": "f416eb256b47e86e982d19b4208123448b0a1d75c8935a566cc07c11e55801a4",
+      "size": 360
+    },
+    "evidence/host-b/inputs/toolchain.json": {
+      "sha256": "703868d2fdec1a03226f331ba37bb85dd6392cf48b3ed0e69aad92dd8e6a8a1c",
+      "size": 819
+    }
+  }
+}
