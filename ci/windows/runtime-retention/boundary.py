@@ -161,6 +161,9 @@ INVENTORY: dict[str, str] = {
     "permission-fixtures.py": "tests-and-fixtures",
     "boundary-controls.py": "tests-and-fixtures",
     "reference-corpus.json": "tests-and-fixtures",
+    "loopback-corpus.py": "tests-and-fixtures",
+    "loopback-corpus.json": "tests-and-fixtures",
+    "trusted-source-controls.py": "tests-and-fixtures",
     "reference-corpus.py": "tests-and-fixtures",
 }
 

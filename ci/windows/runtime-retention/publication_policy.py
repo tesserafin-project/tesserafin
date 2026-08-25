@@ -50,6 +50,7 @@ the workflow's text and not about what it runs.
 
 from __future__ import annotations
 
+import ipaddress
 import re
 import sys
 from pathlib import Path
@@ -80,20 +81,167 @@ _PROTOCOL_WRITE = re.compile(r"oci-protocol\.sh\s+(?:\S+\s+)*?(push|tag)\b")
 _ALLOW_REMOTE = re.compile(r"--allow-remote\b")
 _GH_RELEASE_UPLOAD = re.compile(r"\bgh\s+release\s+(?:upload|create)\b", re.I)
 
-#: A registry reference literal. Loopback is the only permitted host.
+#: A registry reference literal.
+#:
+#: R1 spelled the authority as a three-way alternation of dotted name, the
+#: literal `localhost` and the literal `127.0.0.1`. Nothing in it could match a
+#: BRACKETED authority, so `[2001:db8::1]:5000/tesserafin/runtime` was not
+#: recognised as a registry literal at all and `registry.non-loopback-target`
+#: could never fire on it — a remote IPv6 registry passed the check by not
+#: being seen. The recognition problem has to be fixed before the classification
+#: problem: an authority that is never matched is never classified.
+#:
+#: So every authority shape reaches the parser, INCLUDING the malformed ones.
+#: `[::1` with no closing bracket must be matched and then refused, not skipped.
+#: Every branch runs to the `/` that starts the repository path, so a MALFORMED
+#: authority is matched whole and handed to the parser rather than being trimmed
+#: into a well-formed prefix. `[::1]x` must arrive as `[::1]x`, not as `[::1]`.
+_AUTHORITY = (
+    r"(?:"
+    r"\[[0-9A-Za-z:.%_-]*\][^\s/'\"]*"           # bracketed, closed, and any tail
+    r"|\[[^\s/'\"]*"                             # bracketed, UNCLOSED: malformed
+    r"|[^\s/@'\"]+@[^\s/'\"]+"                    # anything carrying userinfo
+    r"|(?:[a-z0-9-]+\.)+[a-z0-9-]+(?::[^\s/'\"]*)?"  # dotted name or dotted quad
+    r"|localhost(?::[^\s/'\"]*)?"
+    r"|(?:[0-9A-Fa-f]*:){2,}[0-9A-Fa-f]*(?::\d+)?" # bare, UNBRACKETED IPv6
+    r"|:\d+"                                      # a port with no host in front
+    r")"
+)
 _REGISTRY_LITERAL = re.compile(
-    r"\b(?P<host>(?:[a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?|localhost(?::\d+)?|127\.0\.0\.1(?::\d+)?)"
-    r"/(?:[a-z0-9._-]+/)+[a-z0-9._-]+",
+    rf"(?<![\w.-])(?P<host>{_AUTHORITY})/(?:[a-z0-9._-]+/)+[a-z0-9._-]+",
     re.I,
 )
-_LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1", "[::1]"}
 
-_SECRETS = re.compile(r"\$\{\{[^}]*\bsecrets\s*\.\s*([A-Za-z_]\w*)", re.I)
-_GITHUB_TOKEN = re.compile(r"\$\{\{[^}]*\bgithub\s*\.\s*token\b", re.I)
+
+class Authority:
+    """A registry authority, parsed structurally rather than string-matched."""
+
+    __slots__ = ("raw", "userinfo", "host", "port", "bracketed", "malformed")
+
+    def __init__(self, raw: str) -> None:
+        self.raw = raw
+        self.userinfo: str | None = None
+        self.host = ""
+        self.port: str | None = None
+        self.bracketed = False
+        self.malformed: str | None = None
+
+    def __repr__(self) -> str:  # pragma: no cover - diagnostics only
+        return f"Authority({self.raw!r} host={self.host!r} port={self.port!r})"
+
+
+def parse_authority(raw: str) -> Authority:
+    """Split `[userinfo@]host[:port]` without guessing.
+
+    `host.split(":")[0]`, which R1 used, is wrong for every authority a colon
+    can legitimately appear inside. On `[::1]:5000` it yields `[`, on `::1:5000`
+    it yields the empty string, and on `user:pass@evil.example` it yields
+    `user`. Each of those then compares unequal to every loopback spelling and
+    the caller reads the result as "not loopback" for the right reason by
+    accident, or — worse, for `[::1]` — as loopback because the literal
+    `"[::1]"` happened to be in the set.
+    """
+    authority = Authority(raw)
+    rest = raw
+
+    # Userinfo is whatever precedes the LAST `@`; a host may not contain one.
+    if "@" in rest:
+        authority.userinfo, _, rest = rest.rpartition("@")
+
+    if rest.startswith("["):
+        end = rest.find("]")
+        if end == -1:
+            authority.malformed = "unclosed-bracket"
+            authority.host = rest[1:]
+            return authority
+        authority.bracketed = True
+        authority.host = rest[1:end]
+        tail = rest[end + 1:]
+        if tail:
+            if not tail.startswith(":"):
+                authority.malformed = "junk-after-bracket"
+                return authority
+            authority.port = tail[1:]
+    elif rest.count(":") > 1:
+        # Unbracketed and carrying more than one colon. `::1:5000` cannot be
+        # split into host and port without guessing which colon is the
+        # separator, and RFC 3986 requires the brackets precisely so that
+        # nobody has to. Refused as malformed rather than parsed.
+        authority.malformed = "unbracketed-ipv6"
+        authority.host = rest
+        return authority
+    else:
+        authority.host, sep, port = rest.partition(":")
+        if sep:
+            authority.port = port
+
+    if authority.port is not None and not authority.port.isdigit():
+        authority.malformed = "non-numeric-port"
+    if not authority.host:
+        authority.malformed = authority.malformed or "empty-host"
+    return authority
+
+
+#: The only local registry forms this contract supports. IPv6 IS supported, so
+#: a valid `[::1]` is accepted rather than refused for want of a rule — and any
+#: other valid IPv6 form fails closed, which is the point of naming the
+#: supported set instead of the refused one.
+SUPPORTED_LOCAL_FORMS = (
+    "the name `localhost`",
+    "an IPv4 address in 127.0.0.0/8",
+    "a bracketed IPv6 loopback, written `[::1]` or `[0:0:0:0:0:0:0:1]`",
+)
+
+#: The IPv6 loopback SPELLINGS this contract supports, as text.
+#:
+#: `ipaddress` would happily call `::0001` and `0:0::1` loopback too. They are
+#: not accepted, because the same decision has to be reachable by
+#: `oci-protocol.sh` in bash, which has no address parser, and two independent
+#: hand-written parsers that agree only on the cases someone remembered to test
+#: are a drift waiting to happen. `loopback-corpus.py` runs one corpus through
+#: both and requires identical verdicts, so the supported set is textual on both
+#: sides and a valid-but-unsupported IPv6 form fails CLOSED under its own reason
+#: rather than being silently permitted by whichever side is more generous.
+SUPPORTED_IPV6_LOOPBACK: frozenset[str] = frozenset({"::1", "0:0:0:0:0:0:0:1"})
+
+
+def local_authority_verdict(raw: str) -> tuple[bool, str]:
+    """(permitted, reason). A permitted authority is a supported LOCAL one."""
+    authority = parse_authority(raw)
+    if authority.userinfo is not None:
+        return False, "embedded-credentials"
+    if authority.malformed is not None:
+        return False, authority.malformed
+    host = authority.host.lower()
+    if host == "localhost":
+        return True, "localhost"
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        # Not an address at all: a name that merely CONTAINS a loopback
+        # spelling. `localhost.evil` and `127.0.0.1.evil` both land here, and
+        # both resolve wherever their owner points them.
+        return False, "non-loopback-name"
+    if address.version == 6:
+        if not authority.bracketed:
+            return False, "unbracketed-ipv6"
+        if host not in SUPPORTED_IPV6_LOOPBACK:
+            # Fail closed, under a reason that says which of the two it is.
+            return False, ("ipv6-form-not-supported" if address.is_loopback
+                           else "non-loopback-address")
+        return True, "loopback-address"
+    if authority.bracketed:
+        return False, "bracketed-ipv4"
+    if not address.is_loopback:
+        return False, "non-loopback-address"
+    return True, "loopback-address"
 
 
 def _is_loopback(host: str) -> bool:
-    return host.split(":")[0].lower() in _LOOPBACK_HOSTS
+    return local_authority_verdict(host)[0]
+
+_SECRETS = re.compile(r"\$\{\{[^}]*\bsecrets\s*\.\s*([A-Za-z_]\w*)", re.I)
+_GITHUB_TOKEN = re.compile(r"\$\{\{[^}]*\bgithub\s*\.\s*token\b", re.I)
 
 
 # ── walking the parsed document ─────────────────────────────────────────────
@@ -324,11 +472,14 @@ def check_registry_authority(
                 continue
             for match in _REGISTRY_LITERAL.finditer(line):
                 host = match.group("host")
-                if not _is_loopback(host):
+                permitted, reason = local_authority_verdict(host)
+                if not permitted:
                     findings.append(Finding(
                         "registry.non-loopback-target",
-                        f"{where}:{line_no} names the non-loopback registry "
-                        f"{match.group(0)!r} on a registry command line",
+                        f"{where}:{line_no} names the registry {match.group(0)!r} on a "
+                        f"registry command line; its authority {host!r} is refused as "
+                        f"{reason}. The supported local forms are "
+                        f"{', '.join(SUPPORTED_LOCAL_FORMS)}",
                     ))
     return findings
 

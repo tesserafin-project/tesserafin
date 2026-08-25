@@ -176,6 +176,30 @@ refuses control.tag-refuses-non-loopback "without --allow-remote" \
   "${PROTOCOL}" tag --oci "${OCI}" \
   --repo ghcr.io/tesserafin-project/windows-ffmpeg-runtime --tag "${tag}" --plain-http
 
+# ── the authority is parsed, so the shapes that used to slip past are refused ─
+# Until W1-A4-R2 the guard did `host="${host%%:*}"` and compared the result to a
+# four-entry list. That yields `[` for a bracketed IPv6 authority, the empty
+# string for an unbracketed one and `user` when credentials are embedded, so
+# each of these reached the list, missed every entry, and was refused for the
+# right outcome by accident — while `[::1]` was ACCEPTED only because that exact
+# literal was in the list and would have stopped being accepted the moment a
+# port was appended. The reason token is asserted, not merely the refusal.
+refuses control.write-refuses-remote-ipv6 "(non-loopback-address)" \
+  "${PROTOCOL}" push --oci "${OCI}" \
+  --repo "[2001:db8::1]:5000/tesserafin/windows-ffmpeg-runtime" --plain-http
+
+refuses control.write-refuses-embedded-credentials "(embedded-credentials)" \
+  "${PROTOCOL}" push --oci "${OCI}" \
+  --repo "user:pass@localhost:5000/tesserafin/windows-ffmpeg-runtime" --plain-http
+
+refuses control.write-refuses-loopback-suffix-trick "(non-loopback-name)" \
+  "${PROTOCOL}" push --oci "${OCI}" \
+  --repo "localhost.evil/tesserafin/windows-ffmpeg-runtime" --plain-http
+
+refuses control.write-refuses-unbracketed-ipv6 "(unbracketed-ipv6)" \
+  "${PROTOCOL}" push --oci "${OCI}" \
+  --repo "::1:5000/tesserafin/windows-ffmpeg-runtime" --plain-http
+
 echo
 if [ "${failures}" -ne 0 ]; then
   echo "W1-A4 REGISTRY HARD STOP: ${failures} control(s) did not reach their property" >&2

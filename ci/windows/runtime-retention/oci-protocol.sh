@@ -88,16 +88,113 @@ require_digest_reference() {
 # publication workflow passes it, and `publication_policy.py` refuses any
 # workflow that does. Reads (fetch/compare/verify) are not gated: they cannot
 # publish.
+# The authority is PARSED, not string-matched. `${host%%:*}` — which this
+# function used until W1-A4-R2 — yields `[` for `[::1]:5000`, the empty string
+# for `::1:5000` and `user` for `user:pass@evil.example`, so every one of those
+# compared unequal to every entry in a loopback list and only `[::1]` was
+# accepted at all, because the literal string happened to be in the list.
+#
+# The verdict vocabulary here is the same vocabulary `publication_policy.py`
+# returns, and `loopback-corpus.py` runs one corpus through both and requires
+# identical verdicts entry by entry. Two hand-written parsers that agree only
+# where somebody remembered to test are how a guard drifts open.
+local_authority_verdict() {
+  local rest="$1" host="" port="" bracketed=0 colons
+
+  case "${rest}" in *@*) echo embedded-credentials; return 0 ;; esac
+
+  case "${rest}" in
+    '['*)
+      case "${rest}" in
+        *']'*) : ;;
+        *) echo unclosed-bracket; return 0 ;;
+      esac
+      bracketed=1
+      host="${rest#\[}"; host="${host%%]*}"
+      port="${rest#*]}"
+      if [ -n "${port}" ]; then
+        case "${port}" in
+          :*) port="${port#:}" ;;
+          *)  echo junk-after-bracket; return 0 ;;
+        esac
+      fi
+      ;;
+    *)
+      colons="${rest//[!:]/}"
+      if [ "${#colons}" -gt 1 ]; then
+        # Unbracketed with more than one colon cannot be split into host and
+        # port without guessing which colon separates them. RFC 3986 requires
+        # the brackets precisely so nobody has to guess.
+        echo unbracketed-ipv6; return 0
+      fi
+      host="${rest%%:*}"
+      port="${rest#"${host}"}"; port="${port#:}"
+      ;;
+  esac
+
+  if [ -n "${port}" ]; then
+    case "${port}" in *[!0-9]*) echo non-numeric-port; return 0 ;; esac
+  fi
+  [ -n "${host}" ] || { echo empty-host; return 0; }
+
+  host="$(printf '%s' "${host}" | tr 'A-Z' 'a-z')"
+  if [ "${host}" = "localhost" ]; then
+    if [ "${bracketed}" -eq 1 ]; then echo non-loopback-name; else echo localhost; fi
+    return 0
+  fi
+
+  case "${host}" in
+    *:*)
+      # IPv6. Only the two spellings publication_policy.SUPPORTED_IPV6_LOOPBACK
+      # names are accepted; any other VALID loopback spelling fails closed under
+      # its own reason rather than being permitted by whichever parser is the
+      # more generous of the two.
+      if [ "${bracketed}" -eq 0 ]; then echo unbracketed-ipv6; return 0; fi
+      case "${host}" in
+        ::1|0:0:0:0:0:0:0:1) echo loopback-address; return 0 ;;
+      esac
+      # Not a supported spelling. Say WHICH kind of refusal it is, in the same
+      # vocabulary the Python side uses. Bash has no address parser, so
+      # loopback-shape is decided textually: an IPv6 loopback is written
+      # entirely from zeroes, colons and a single trailing 1, so deleting every
+      # `0` and `:` leaves exactly `1` and nothing else does.
+      local bare="${host//[0:]/}"
+      if [ "${bare}" = "1" ]; then
+        echo ipv6-form-not-supported
+      else
+        echo non-loopback-address
+      fi
+      return 0
+      ;;
+    *[!0-9.]*) echo non-loopback-name; return 0 ;;
+  esac
+
+  # A run of digits and dots. A dotted quad is an address; anything else is a
+  # name that merely looks like one, and `127.0.0.1.evil` is exactly that.
+  local first second third fourth extra octet
+  IFS=. read -r first second third fourth extra <<<"${host}"
+  if [ -n "${extra}" ] || [ -z "${fourth}" ]; then
+    echo non-loopback-name; return 0
+  fi
+  for octet in "${first}" "${second}" "${third}" "${fourth}"; do
+    case "${octet}" in ''|*[!0-9]*) echo non-loopback-name; return 0 ;; esac
+    [ "${octet}" -le 255 ] || { echo non-loopback-name; return 0; }
+  done
+  if [ "${bracketed}" -eq 1 ]; then echo bracketed-ipv4; return 0; fi
+  if [ "${first}" -eq 127 ]; then echo loopback-address; else echo non-loopback-address; fi
+}
+
+# A WRITE is permitted only against an explicitly supported LOCAL authority.
 require_loopback_write() {
-  local host="${1%%/*}"
-  host="${host%%:*}"
+  local authority="${1%%/*}" verdict
   if [ "${ALLOW_REMOTE}" -eq 1 ]; then
     return 0
   fi
-  case "${host}" in
-    localhost|127.0.0.1|'[::1]'|::1) return 0 ;;
+  verdict="$(local_authority_verdict "${authority}")"
+  case "${verdict}" in
+    localhost|loopback-address) return 0 ;;
   esac
-  stop "refusing to write to the non-loopback registry '${host}' without --allow-remote"
+  stop "refusing to write to the registry authority '${authority}' (${verdict}) without --allow-remote"
 }
 
 do_push() {
@@ -249,6 +346,12 @@ case "${command}" in
            # registry and takes no --oci.
            require_digest_reference "${REPO}"
            echo "the grammar accepts '${REPO}'" ;;
+  check-authority)
+           # The authority verdict, for the cross-language loopback corpus. It
+           # calls the SAME function every write path calls, so a corpus entry
+           # cannot pass here while the write path decides otherwise.
+           [ -n "${REPO}" ] || stop 'check-authority needs --repo'
+           local_authority_verdict "${REPO%%/*}" ;;
   push)    do_push ;;
   tag)     do_tag ;;
   fetch)   do_fetch ;;
