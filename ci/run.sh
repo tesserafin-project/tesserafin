@@ -181,20 +181,37 @@ if [ "$PROBE_UNDECLARED_STATUS" -ne 0 ] || [ "$PROBE_SCHEMA_STATUS" -ne 0 ]; the
     STATUS=1
 fi
 
-banner "The W1 retention gate roster is invoked (#236, W1-A4-R2 finding D3)"
-# The retention contract's gates are a closed roster behind one command in
-# .github/workflows/w1-windows-runtime-retention.yml. Until W1-A4-R2 that
-# invocation was "proved" by the retention subtree's own boundary.py testing
-# whether the string "boundary.py" appeared anywhere in the workflow, which a
-# COMMENT satisfies -- so the invocation could be commented out while every
-# check still reported the gate as pinned.
+banner "The W1 retention gate command and roster are pinned (#236, W1-A4-R3, D3)"
+# THIS SCRIPT IS THE TRUST ROOT FOR THE W1 RETENTION CONTRACT.
 #
-# The pin therefore lives HERE, outside the subtree it pins, because a pin the
-# pinned code performs disappears the moment that code is deleted. It parses the
-# workflow as YAML and requires the exact job, the exact command as an active
-# `run` value, no continue-on-error, no unreachable condition and no `|| true`.
-# It reads only; it builds nothing and mutates nothing, and it is deliberately
-# not skippable by flag or environment variable.
+# ci/windows/verify-retention-gate-pinned.py owns two things the retention
+# subtree is not allowed to decide about itself:
+#
+#   1. COMMAND IDENTITY. The retention workflow's gate step must carry the
+#      canonical orchestrator command as its `run` scalar, BYTE FOR BYTE, in a
+#      named job and a step named by id. Not "not obviously a no-op" -- equal.
+#      R1 proved invocation by substring, which a comment satisfies. R2
+#      replaced that with a no-op regex, and eleven harmless wrappers walked
+#      through it (`#cmd`, `cmd || :`, `cmd &`, `(cmd)`, a block scalar, a
+#      padded scalar, `working-directory:`, `shell:` among them). Equality has
+#      no such list.
+#
+#   2. ROSTER AUTHORITY. retention_gates.py may report which gates it HAS; it
+#      may not decide which it MUST have, because one edit could then delete
+#      the entry and the requirement together. The expected roster -- id,
+#      module, callable, kind, argv, tier and position -- is frozen in the
+#      verifier, outside ci/windows/runtime-retention/.
+#
+# Nothing pins this script in turn, and nothing should: a chain of scripts each
+# pinning the next has no last link. ci/run.sh is a merge gate for every
+# branch, it invokes the verifier unconditionally, and a non-zero exit here
+# fails the run. That is where the regress stops, and it is stated rather than
+# hidden behind one more file.
+#
+# The block between the markers below is extracted verbatim by
+# gate-roster-controls.py control A2, which runs it against a tree with the
+# verifier removed and requires this gate to FAIL. Keep the markers.
+# >>> W1A4-PIN-BLOCK
 set +e
 python3 "$REPO_ROOT/ci/windows/verify-retention-gate-pinned.py"
 RETENTION_PIN_STATUS=$?
@@ -202,9 +219,10 @@ set -e
 echo ""
 echo "verify-retention-gate-pinned.py exit ${RETENTION_PIN_STATUS}"
 if [ "$RETENTION_PIN_STATUS" -ne 0 ]; then
-    echo "The W1 retention gate roster is not provably invoked; this gate FAILS." >&2
+    echo "The W1 retention gate command or roster is not pinned; this gate FAILS." >&2
     STATUS=1
 fi
+# <<< W1A4-PIN-BLOCK
 
 END_TS=$(date +%s)
 ELAPSED=$((END_TS - START_TS))

@@ -17,14 +17,26 @@ Two things had to change, and one alone would not have been enough.
 
 FIRST, the gates are a closed ROSTER, resolved by exact module and function
 identity and CALLED. Nothing is located by searching text for a filename.
-Deleting an entry removes a gate that the roster's own required set then reports
-as missing; adding an unknown one fails closed; naming one twice fails closed.
+Naming one twice fails closed; an entry whose callable does not exist fails
+closed. Those are claims about this file, and this file is entitled to make
+them.
 
-SECOND, the invocation is pinned STRUCTURALLY, from outside this subtree, by
-`ci/windows/verify-retention-gate-pinned.py` — which `ci/run.sh` runs. It parses
-the workflow as YAML and requires the exact job, the exact command as an ACTIVE
-`run` command, no `continue-on-error`, no unreachable condition and no success
-masking. A pin that lives inside the thing it pins is not a pin.
+SECOND — and this is the W1-A4-R3 correction — WHICH members are mandatory is
+not decided here. Until R3 this file carried a `REQUIRED` set beside `GATES`
+and enforced it, so one file answered both "what does this run" and "what must
+it run", and a single edit could delete the entry and the requirement together.
+The authority now lives in `ci/windows/verify-retention-gate-pinned.py`, which
+is outside this subtree and which `ci/run.sh` runs on every branch. It freezes
+id, module, callable, kind, argv, tier and position, resolves this file's real
+bindings, and refuses a lambda or an alias standing in for an expected
+callable. `DIAGNOSTIC_EXPECTATION` below is what remains here, and it refuses
+nothing.
+
+THIRD, the invocation itself is pinned by that same external file, which parses
+the workflow as YAML and requires the canonical command to be the `run` scalar
+of a step named by id, BYTE FOR BYTE. Not "not obviously a no-op" — equal. A
+pin that lives inside the thing it pins is not a pin, and a pin that decides
+inertness by regex is a list of the bypasses someone thought of.
 
 WHY BOTH TIERS RUN.
 
@@ -131,16 +143,25 @@ PROOFS: tuple[Gate, ...] = (
          "command inert"),
 )
 
-#: The gate ids this command MUST run, WITH the exact identity each must have.
+#: NOT THE AUTHORITY. Diagnostic data only.
 #:
-#: Stating the identity and not merely the id is what closes the substitution
-#: the roster would otherwise permit. A roster entry keeping its id while its
-#: function name changes is a gate replaced, and an entry pointing at
-#: `check_all_no_op` has a perfectly good identity of its own — the required set
-#: is where that stops being acceptable. The set is written out separately from
-#: the roster on purpose: removing a roster line cannot remove the requirement
-#: with it.
-REQUIRED: dict[str, tuple[str, str, tuple[str, ...]]] = {
+#: Until W1-A4-R3 this set was named REQUIRED and this file enforced it, which
+#: made one file both the answer to "what does this command run" and the answer
+#: to "what must it run". Those can be edited together: delete the roster line,
+#: delete the requirement, and the run gets shorter and stays green. Nothing
+#: inside `ci/windows/runtime-retention/` can close that, because whatever is
+#: added here is deletable by the same edit.
+#:
+#: The authority is `ci/windows/verify-retention-gate-pinned.py`, which lives
+#: outside this subtree and which `ci/run.sh` runs on every branch. It freezes
+#: id, module, callable, kind, argv, tier and position, and it resolves this
+#: file's real bindings rather than reading its declarations.
+#:
+#: This copy stays so that `--list` can say, on the spot, where the roster has
+#: drifted from what was last agreed. It is a hint printed for a reader. It
+#: refuses nothing, and a disagreement between it and the roster is reported by
+#: the external contract, not here.
+DIAGNOSTIC_EXPECTATION: dict[str, tuple[str, str, tuple[str, ...]]] = {
     "accepted-contract": ("contract.py", "check_all", ()),
     "deterministic-layout": ("retention.py", "check_all", ()),
     "publication-policy": ("publication_policy.py", "check_all", ()),
@@ -198,12 +219,18 @@ def _load(filename: str):
 
 
 def validate_roster() -> None:
-    """The roster describes itself, or nothing runs.
+    """The roster is INTERNALLY CONSISTENT, or nothing runs.
 
-    Fail-closed in four directions: an unknown identity, a duplicate id, a
-    duplicate identity, and a required id the roster no longer carries. The
-    last is the one that matters most — it is what makes DELETING the ownership
-    gate a refusal instead of a shorter, still-green run.
+    Three self-consistency directions: a duplicate id, a duplicate identity,
+    and an entry naming a callable that does not exist. Each is a statement
+    about this file alone, which is the only kind of statement this file is
+    entitled to make about itself.
+
+    What is deliberately NOT here any more is "the roster carries every member
+    it must". That is a claim about what was agreed, not about what is written
+    down, and a file that makes it can withdraw it in the same edit that
+    removes the member. `ci/windows/verify-retention-gate-pinned.py` makes it
+    from outside the subtree, and `ci/run.sh` runs that file.
     """
     seen_ids: set[str] = set()
     seen_identities: set[tuple[str, str, tuple[str, ...]]] = set()
@@ -225,24 +252,24 @@ def validate_roster() -> None:
                 f"the roster names {gate.filename}::{gate.function}, which is not a "
                 f"callable in that module")
 
-    missing = sorted(set(REQUIRED) - seen_ids)
-    if missing:
-        raise RosterError(
-            f"the roster no longer carries the required gate(s) {missing}; a gate deleted "
-            f"from the roster is a gate that stops running, and this command refuses to be "
-            f"the thing that made that quiet")
-    unknown = sorted(seen_ids - set(REQUIRED))
-    if unknown:
-        raise RosterError(
-            f"the roster carries {unknown}, which the required set does not name; a gate "
-            f"added without being required is a gate that can be removed without notice")
-    for gate in GATES + PROOFS:
-        expected = REQUIRED[gate.gate_id]
-        if gate.identity != expected:
-            raise RosterError(
-                f"the roster resolves {gate.gate_id!r} to {gate.identity}, but the required "
-                f"identity is {expected}; a gate that keeps its id while its module or "
-                f"function changes is a gate replaced, not a gate configured")
+
+
+def diagnostic_drift() -> list[str]:
+    """Where the roster differs from the diagnostic copy. Refuses nothing.
+
+    Printed by `--list` so a reader sees drift immediately. The verdict on that
+    drift belongs to `ci/windows/verify-retention-gate-pinned.py`.
+    """
+    present = {gate.gate_id: gate.identity for gate in GATES + PROOFS}
+    notes = [f"absent from the roster: {gate_id}"
+             for gate_id in sorted(set(DIAGNOSTIC_EXPECTATION) - set(present))]
+    notes += [f"not in the diagnostic copy: {gate_id}"
+              for gate_id in sorted(set(present) - set(DIAGNOSTIC_EXPECTATION))]
+    notes += [f"{gate_id}: roster has {present[gate_id]}, diagnostic copy has "
+              f"{DIAGNOSTIC_EXPECTATION[gate_id]}"
+              for gate_id in sorted(set(present) & set(DIAGNOSTIC_EXPECTATION))
+              if present[gate_id] != DIAGNOSTIC_EXPECTATION[gate_id]]
+    return notes
 
 
 def _run(gate: Gate, root: Path, fixture: Path) -> tuple[bool, str]:
@@ -281,10 +308,19 @@ def main() -> int:
     validate_roster()
 
     if args.list:
+        print(f"the roster this command actually carries ({len(GATES)} gates, "
+              f"{len(PROOFS)} self-proofs). Whether it is the roster that was AGREED is "
+              f"decided by ci/windows/verify-retention-gate-pinned.py, which ci/run.sh "
+              f"runs, and not here.")
         for gate in GATES + PROOFS:
             print(f"  {gate.gate_id:<32} {gate.filename}::{gate.function}")
         for name, why in NOT_IN_ROSTER.items():
             print(f"  {'(not in roster)':<32} {name}: {why}")
+        drift = diagnostic_drift()
+        if drift:
+            print("\n  drift from the diagnostic copy (a hint, not a verdict):")
+            for note in drift:
+                print(f"    {note}")
         return 0
     if not args.validate:
         parser.error("--validate is required")

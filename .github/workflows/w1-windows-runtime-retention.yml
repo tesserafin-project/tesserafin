@@ -102,6 +102,7 @@ jobs:
           python3 -c "import yaml; print(f'PyYAML {yaml.__version__}')"
 
       - name: The complete retention gate roster
+        id: retention-gate-roster
         shell: bash
         run: python3 ci/windows/runtime-retention/retention_gates.py --validate
 
