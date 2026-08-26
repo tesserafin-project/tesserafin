@@ -577,7 +577,9 @@ equal
 
 **byte for byte** — one plain YAML scalar, no wrapper, no composition, no
 padding, no trailing newline. A deviation that would in fact still run the
-command is refused too. That is deliberate: a gate step is not a place for
+command is refused too. (**R4 changed the string**: the interpreter is now
+absolute, `/usr/bin/python3 …`. See section 9f, F1 — a bare `python3` is a PATH
+lookup, and a PATH lookup is something a startup file can answer.) That is deliberate: a gate step is not a place for
 expressive shell, and refusing `(cmd)` costs nothing anyone wants.
 
 Around the step the contract is structural, and each part has its own finding
@@ -600,8 +602,12 @@ run gets shorter and stays green. Nothing inside
 `ci/windows/runtime-retention/` can close that, because whatever is added there
 is deletable by the same edit.
 
-The authoritative roster now lives in `ci/windows/verify-retention-gate-pinned.py`,
-outside the subtree, and it is an exact mapping rather than a set of names:
+The authoritative roster moved to `ci/windows/verify-retention-gate-pinned.py`,
+outside the subtree, as an exact mapping rather than a set of names. **R4
+superseded that location** — see section 9f, F3: a roster frozen in the verifier
+is a roster the verifier can edit, which makes the orchestrator and the verifier
+a two-party agreement. The table below is still the contract; what changed is
+where it is written down and what authenticates it.
 
 | # | gate id | module | callable | kind | argv | tier |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -677,12 +683,14 @@ Two ablations settle where authority lives:
 * **A1** neuters the orchestrator's own `validate_roster()` *and* deletes a
   member. The external contract refuses anyway. The orchestrator's self-check
   is therefore not load-bearing for the roster question.
-* **A2** extracts `ci/run.sh`'s pin block verbatim between the
-  `# >>> W1A4-PIN-BLOCK` / `# <<< W1A4-PIN-BLOCK` markers, runs it against a
-  tree with the verifier removed, and requires it to exit non-zero — and
-  against the real tree, and requires zero. Those markers look like a removable
-  comment and are not: a control reads them, and `ci/run.sh` says so where they
-  appear.
+* **A2** extracted `ci/run.sh`'s pin block verbatim between the
+  `# >>> W1A4-PIN-BLOCK` / `# <<< W1A4-PIN-BLOCK` markers and ran the extracted
+  text against a tree with the verifier removed. **R4 deleted it** — see
+  section 9f, F4. Extracting a block and running it separately proves the block
+  works; it proves nothing about whether `ci/run.sh` reaches it, and the
+  reviewer's mutation (the intact block moved below `exit "$STATUS"`) passed
+  A2 unchanged. It is replaced by twelve structural controls and five runs of
+  the real script.
 
 `ci/run.sh` is the trust root, and it says so in its own comment. Nothing pins
 it in turn, and nothing should: a chain of scripts each pinning the next has no
@@ -711,6 +719,275 @@ the two in `.github/workflows/w1-windows-ffmpeg-runtime.yml`. The figures are
 recorded here as measured rather than as asserted; no commit message, document
 or pull-request body in this branch ever carried the stale numbers, so there
 was nothing else to correct.
+
+## 9f. What W1-A4-R4 repaired
+
+Independent review (R3) returned five blocking findings. Three of them are one
+shape: something that decided a property was itself downstream of the thing it
+was deciding about.
+
+### F1 — `BASH_ENV` could stop the command running while the step succeeded
+
+GitHub expands `shell: bash` to `bash --noprofile --norc -eo pipefail {0}`, and
+a non-interactive bash **sources `$BASH_ENV` before the first line of the
+script**. So
+
+```yaml
+env:
+  BASH_ENV: mal.sh      # mal.sh: python3() { return 0; }
+```
+
+at workflow, job or step scope made `mal.sh` run first, the shell function
+answered to the command's name, the validator never executed, and the step
+exited 0. Adding `BASH_ENV` to the forbidden-name list does not close this: any
+check run by a shell this workflow configures is downstream of the same
+sourcing.
+
+**Two mechanisms, and the second does not depend on the first.**
+
+1. **Runtime, at the highest precedence GitHub offers.** The gate step declares
+   a closed neutralising `env:` — `BASH_ENV` and `ENV` at `/dev/null`,
+   `PYTHONSTARTUP` at `/dev/null`, and `PYTHONPATH`, `PYTHONHOME`,
+   `PYTHONEXECUTABLE`, `PYTHONSAFEPATH`, `PYTHONNOUSERSITE`, `PYTHONWARNINGS`,
+   `LD_PRELOAD`, `LD_LIBRARY_PATH`, `VIRTUAL_ENV` and `CONDA_PREFIX` empty.
+   Step `env:` overrides job and workflow `env:` and is applied to the process
+   environment **before the shell is created**, so bash starts with `BASH_ENV`
+   already pointing at an empty file and sources nothing — whatever a wider
+   scope tried to set, and whether or not the structural rule caught it.
+2. **Structural, run by no shell this workflow configures.**
+   `ci/windows/verify-retention-gate-pinned.py` refuses `BASH_ENV`, `ENV`,
+   `SHELLOPTS`, `BASHOPTS`, `BASH_XTRACEFD`, `PS4`, `PATH`, `LD_PRELOAD`,
+   `LD_LIBRARY_PATH`, `VIRTUAL_ENV`, `CONDA_PREFIX` and the ten `PYTHON*`
+   names at workflow scope, at job scope, at `defaults.run` scope and on every
+   step of the job; it requires the neutralising block above verbatim on the
+   gate step; and `ci/run.sh` launches it through `/usr/bin/env -i`, so it
+   inherits nothing at all.
+
+The interpreter is now **absolute**: the canonical command is
+
+```
+/usr/bin/python3 ci/windows/runtime-retention/retention_gates.py --validate
+```
+
+`PATH` is therefore not load-bearing for the gate, and no shell function or
+alias can answer for `/usr/bin/python3`.
+
+`PYTHONSAFEPATH` is neutralised to the **empty string, not `1`**. The
+orchestrator does `import boundary`, which resolves through the script's own
+directory; `PYTHONSAFEPATH=1` removes that directory and the validator would
+fail to import. That is measured, not assumed.
+
+`retention_gates.py` prints `W1A4-ROSTER-SENTINEL` on entry and on success. The
+proof records that **the real validator reached a reviewer-visible sentinel**,
+not that a wrapper returned zero.
+
+**The reviewer's experiment, replayed as an execution.** Control `B1` runs
+`bash --noprofile --norc -eo pipefail` twice with `BASH_ENV` pointing at a
+startup file that writes a marker and defines `python3() { return 0; }`:
+
+| case | command | startup file ran | validator ran | exit |
+| --- | --- | --- | --- | --- |
+| R3 (vulnerable) | `python3 …`, no neutralising env | yes | no | 0 |
+| R4 (repaired) | `/usr/bin/python3 …`, step env overlay | no | yes (sentinel) | 0 |
+
+The vulnerable case has to reproduce or the repaired case proves nothing; if it
+does not, `B1` grades INERT rather than RED.
+
+### F2 — `defaults.run` bypassed the step-only checks
+
+`defaults: {run: {shell: sh}}` at workflow or job scope changed the shell the
+canonical command ran under while the step stayed byte-identical, and `sh` is
+not expanded with `-eo pipefail`. `defaults: {run: {working-directory: ci}}`
+likewise moved the directory a repository-relative path resolves against.
+
+The contract is now stated across **every scope that can change what runs**:
+workflow, job, `defaults.run`, the target step, inherited environment, shell,
+working directory, interpreter resolution, conditional execution and failure
+masking.
+
+| scope | shell | working-directory | interpreter env |
+| --- | --- | --- | --- |
+| workflow | absent, or exactly `bash` | absent | forbidden |
+| job | absent, or exactly `bash` | absent | forbidden |
+| `defaults.run` (either scope) | absent, or exactly `bash` | absent | n/a |
+| gate step | **required**, exactly `bash` | **required absent** | **required, exact values** |
+| any other step of the job | unconstrained | unconstrained | forbidden |
+
+A `defaults.run` key this contract does not enumerate is refused rather than
+ignored. The workflow is parsed with a loader that **raises on a duplicate
+mapping key**, because GitHub rejects such a document: accepting a last-wins
+local parse would mean deciding a workflow is safe from a document that would
+never run.
+
+### F3 — the roster was a two-party agreement
+
+R3's attack: delete `excluded-subtree-ownership`, its self-proof and
+`gate-roster-self-proof` from `retention_gates.py`, delete the same three from
+the verifier's frozen `EXPECTED_ROSTER`, and every check agrees with every other
+check. Both representations were mutable and both were editable in one commit.
+
+There is now a **third, separately located, machine-enforced commitment**, and
+it is not a fourth self-verifier:
+
+| where | what it holds |
+| --- | --- |
+| `ci/windows/w1a4-roster-manifest.v1.json` | the canonical roster — id, module, callable, kind, argv, tier and position for all fourteen members |
+| `ci/run.sh` → `W1A4_ROSTER_MANIFEST_SHA256` | the manifest's exact content digest |
+| `ci/run.sh` → `W1A4_ROSTER_IDS` | the fourteen identities, in order |
+
+`verify-retention-gate-pinned.py` **consumes** the manifest and **reads both
+constants out of `ci/run.sh`**. It writes down no roster of its own, so there is
+nothing in it to edit: `EXPECTED_ROSTER` is populated at run time by
+`install_roster()` and is empty until the anchor authenticates it. The verifier
+cannot redefine the expected roster *and* the value that authenticates it,
+because it holds neither.
+
+A digest mismatch is **recorded without stopping the identity comparison**, so
+the failure names the members that went missing rather than only observing that
+the file changed. `ci/run.sh` additionally checks the digest itself, inline, in
+bash, before the verifier runs — so a stubbed verifier does not silently take
+the manifest check with it.
+
+The reviewer's exact mutation and its neighbours:
+
+| control | mutation | verdict |
+| --- | --- | --- |
+| `X01` | the three members removed from `retention_gates.py` **and** from the external expected roster | RED — `anchor.manifest-digest` + `anchor.manifest-roster-drift`, naming all three identities |
+| `X02` | the same, with the eleven survivors reordered | RED, naming all three |
+| `X03` | both sides repointed at a matching no-op callable that really exists | RED |
+| `X04` | matching tier/position substitution on both sides | RED |
+| `X05` | the manifest edited, the pinned digest untouched | RED, naming all three |
+| `X06` | the pinned digest removed from `ci/run.sh` | RED — `anchor.digest-unpinned` |
+| `X07` | the pinned identity list removed | RED — `anchor.ids-unpinned` |
+| `X08` | three identities quietly dropped from the pinned list | RED — `anchor.manifest-roster-drift` |
+| `X09` | the manifest deleted | RED — `anchor.manifest-missing` |
+| `X10` | a schema version the verifier does not understand, correctly repinned | RED — `anchor.manifest-schema` |
+| `BY` | the verifier replaced by a file that only exits 0 | RED — it implements none of the authority's API |
+
+### F4 — the `ci/run.sh` pin block was not proved reachable
+
+The block sat after `STATUS=$?`, and the only thing that proved it ran was
+control `A2`, which **extracted** the block and executed the extracted text.
+Extracting a block proves the block works. The reviewer's mutation — the intact
+block moved below `exit "$STATUS"` — passed `A2` unchanged.
+
+The block is now the **first thing `ci/run.sh` executes after its prologue**. It
+is top-level, unconditional, before the image build, before the test dispatch
+and before any status aggregation, and it is fail-closed by `exit 1` rather than
+by folding into `$STATUS` — which does not exist yet at that point, and which a
+later stage reassigns.
+
+**Structural** (`check_trust_root`, twelve controls). The rule is an allowlist,
+not a list of relocations: only comments, blank lines, `set`, simple
+assignments, `cd`, `source` and *closed* function definitions may precede the
+block. A function still open where the block begins makes the block a function
+body and is refused by name. Inside the block, `|| true`, `|| :`, `set +e`,
+backgrounding, assignment to `STATUS`, a missing `exit 1`, a missing
+`/usr/bin/env -i`, a missing absolute-interpreter invocation and a missing
+sentinel are each their own finding.
+
+**Dynamic** (five runs of the real script). `ci/run.sh` is executed with a
+stubbed verifier, a stubbed artifact purge, stubbed host probes and a stubbed
+`docker` on `PATH`, so a run costs a second and can only measure order and
+reachability.
+
+| control | expectation | result |
+| --- | --- | --- |
+| `D1` pristine | sentinel printed, verifier ran, non-zero exit, build never dispatched | RED |
+| `D4` verifier deleted | reached, exited non-zero, build never dispatched | RED |
+| `D5` manifest not authentic | reached, exited non-zero, build never dispatched | RED |
+| `D2` block below the final `exit` | never ran, script still exited 0 | RED |
+| `D3` block removed to an uninvoked fragment | never ran, script still exited 0 | RED |
+
+`D2` and `D3` are what prove the structural mutations **reach their intended
+property**: the relocated block really is unreachable, so refusing it
+structurally is refusing something real.
+
+Neither half alone is sufficient, and both are kept. Structural inspection
+cannot tell whether the script would run; a dynamic run cannot tell whether a
+block that is reachable today stays reachable tomorrow.
+
+### The control ledger
+
+Every control below is machine-graded on each run, with `--json` for the full
+record. A mutation that fails to apply, a module that will not import, a
+timeout or a syntax error grades **ERROR**, never RED; a mutation that is
+refused for a property other than its own grades **INERT**; a mutation that is
+accepted grades **GREEN**. Only RED and PASS are passes.
+
+| suite | count | result |
+| --- | --- | --- |
+| command identity (`C01`–`C24`) | 24 | 23 RED + 1 PASS (`C20`, pristine) |
+| execution root (`E01`–`E20`) | 20 | 20 RED |
+| roster authority (`N01`–`N11`, `NX`, `A1`) | 13 | 13 RED |
+| roster authority, pristine (`N12`) | 1 | PASS |
+| the contract's other direction (`N14`) | 1 | RED |
+| the no-op tier control (`N13`) | 1 | RED |
+| the independent anchor (`X01`–`X10`) | 10 | 10 RED |
+| the independent anchor, pristine (`X11`) | 1 | PASS |
+| the trust boundary (`BX`, `BY`) | 2 | 1 PASS + 1 RED |
+| trust-root reachability, structural (`RB01`–`RB11`) | 11 | 11 RED |
+| trust-root reachability, pristine (`RB12`) | 1 | PASS |
+| trust-root reachability, dynamic (`D1`–`D5`) | 5 | 5 RED |
+| the bootstrap experiment (`B1`) | 1 | RED |
+| **total** | **91** | **86 RED + 5 PASS, 0 INERT, 0 ERROR, 0 GREEN** |
+
+`E01`–`E20` are the execution-root controls: `BASH_ENV` at step, job and
+workflow scope; `ENV`; `PATH`; `PYTHONPATH` and `PYTHONSTARTUP`;
+`defaults.run.shell` at workflow and at job scope; `defaults.run.working-directory`
+at workflow and at job scope; the neutralising entry repointed, removed, and the
+whole block removed; a name added beside the closed set; the step declaring no
+shell; a relative interpreter; a duplicate `run:` key; the bypass on a sibling
+step of the same job; and the two trigger paths that keep a change to the anchor
+or to the trust root from landing without running the job.
+
+Every control restores its fixtures byte-identically and the suite asserts a
+pristine working tree — the retention workflow, `retention_gates.py`, `ci/run.sh`
+and the canonical manifest are each compared byte-for-byte after the run.
+
+The D1, D2, D4, reference-grammar, loopback, trusted-SHA, registry,
+publication-policy, symlink and boundary controls of R1–R3 are retained
+unchanged; none of their named properties was weakened.
+
+### The trust boundary, and what it does not cover
+
+Stated as measured, not as claimed. Control `BX` performs the three-file edit —
+`retention_gates.py`, the canonical manifest **and** `ci/run.sh`'s pinned digest
+and identity list, all consistent — and records that it is **not detected**.
+That is the boundary:
+
+* removing a roster member now requires an edit to the orchestrator, an edit to
+  the canonical manifest, and an edit to `ci/run.sh`;
+* `ci/run.sh` is the merge gate for every branch and is reviewed as one;
+* nothing pins `ci/run.sh` in turn, and nothing should — a chain of files each
+  pinning the next has no last link, and adding one more would move the same
+  defect one directory further out.
+
+`BX` grades INERT if the three-file edit *is* refused, because the documentation
+would then be describing a narrower boundary than the implementation.
+
+Two further limits are part of the record:
+
+* the structural reachability rule reasons about `ci/run.sh` **as text**. It
+  refuses anything it cannot show to be prologue, so it is fail-closed, but it
+  is not a shell semantics model;
+* the dynamic runs execute the real `ci/run.sh` with every heavy dependency
+  stubbed. They prove order and reachability. They prove nothing about the
+  build stage they deliberately never reach.
+
+### What this section does not claim
+
+* The exact-head reproducibility runs recorded in sections 9d and *The R2
+  head's own exact-head runs* are evidence **for their own heads only**. They
+  say nothing about the R3 head or the R4 head; each head that needs a
+  dual-runner result gets its own run.
+* Package absence at `ghcr.io/tesserafin-project/windows-ffmpeg-runtime`
+  remains a **W1-A5 check** with authorised `read:packages` access. From
+  outside, "absent" and "not visible to this token" are indistinguishable.
+* The dual-runner topology is **same-node**: two runner allocations on one
+  physical node. It is a determinism result, not a two-host independence claim.
+* **W2 is still blocked.** W1-A4 is validation only; it publishes nothing, and
+  no part of this repair changes that.
 
 ## 9d. The predecessor proof run
 
