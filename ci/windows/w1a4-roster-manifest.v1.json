@@ -1,9 +1,7 @@
 {
   "schema": "tesserafin.w1a4.roster-manifest",
   "version": 1,
-  "subtree": "ci/windows/runtime-retention",
-  "orchestrator": "ci/windows/runtime-retention/retention_gates.py",
-  "authenticated_by": "ci/run.sh W1A4_ROSTER_MANIFEST_SHA256 / W1A4_ROSTER_IDS",
+  "authenticated_by": "ci/run.sh W1A4_ROSTER_MANIFEST_SHA256 and W1A4_ROSTER_IDS",
   "roster": [
     {
       "position": 0,

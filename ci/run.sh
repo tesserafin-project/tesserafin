@@ -112,7 +112,7 @@ banner() {
 # pinning the next has no last link. That is the trust boundary, and it is
 # stated here rather than hidden behind one more file.
 W1A4_ROSTER_MANIFEST="ci/windows/w1a4-roster-manifest.v1.json"
-W1A4_ROSTER_MANIFEST_SHA256="6ba9107285422f8323a9ac99d39c168ea7cefa8f5dca372b2757c293b2c7c18b"
+W1A4_ROSTER_MANIFEST_SHA256="bf2ae962446e51380d6e9ec561dea3d8e94cf1832334108420cf6b83acf94476"
 W1A4_ROSTER_IDS=(
     accepted-contract
     deterministic-layout
