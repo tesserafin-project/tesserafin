@@ -120,7 +120,7 @@ GATES: tuple[Gate, ...] = (
 #: integer return is the verdict, which is how the existing suites already work.
 PROOFS: tuple[Gate, ...] = (
     Gate("ownership-self-proof", "boundary-controls.py", "main", "exit-code", (),
-         "fourteen hostile controls each reach their own named ownership property"),
+         "thirteen hostile controls each reach their own named ownership property"),
     Gate("publication-self-proof", "permission-fixtures.py", "main", "exit-code", (),
          "twelve semantic permission fixtures each reach their own named property"),
     Gate("reusable-workflow-self-proof", "reusable-workflow-controls.py", "main",
@@ -138,9 +138,9 @@ PROOFS: tuple[Gate, ...] = (
          ("--fixture", "{fixture}", "--ablate"),
          "controls 09, 10 and 11 are each satisfied by their own mutation and no other"),
     Gate("gate-roster-self-proof", "gate-roster-controls.py", "main", "exit-code", (),
-         "D3 replayed: deleting, duplicating, no-opping or unpinning a roster entry is "
-         "refused, and the structural pin refuses every way of making the canonical "
-         "command inert"),
+         "D3 replayed twice: the canonical command is decided by equality and every "
+         "wrapper R2 accepted is refused, and the roster's expected members are "
+         "frozen outside this subtree"),
 )
 
 #: NOT THE AUTHORITY. Diagnostic data only.
