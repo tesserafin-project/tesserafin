@@ -160,6 +160,20 @@ COMMAND_CONTROLS: list[tuple[str, str, str | None, object]] = [
      "cmd.job-missing", _remove_job),
     ("C22-step-moved-to-another-job", "the command present, but not in the named job",
      "cmd.job-missing", _move_to_another_job),
+    ("C23-step-id-duplicated",
+     "the pristine step first, a second step claiming the same id after it",
+     "cmd.step-duplicated",
+     lambda source: source.replace(
+         STEPHDR + RUNLINE,
+         STEPHDR + RUNLINE + "\n      - name: Also the gate, apparently\n"
+         "        id: retention-gate-roster\n        shell: bash\n"
+         "        run: 'true'\n", 1)),
+    ("C24-step-env-replaces-the-interpreter",
+     "a step `env:` that can change which python3 runs, under an unchanged command",
+     "cmd.step-env",
+     _hdr("      - name: The complete retention gate roster\n"
+          "        id: retention-gate-roster\n        env:\n"
+          "          PATH: /tmp/nowhere\n        shell: bash\n")),
 ]
 
 
@@ -369,6 +383,36 @@ def _grade_roster(pin, name, expected, mutate, pristine_src, pristine_boundary):
             shutil.rmtree(work, ignore_errors=True)
 
 
+# ── the contract is two-sided ───────────────────────────────────────────────
+def _external_roster_narrowed(pin) -> tuple[str, str]:
+    """N14: the EXTERNAL expectation edited, the orchestrator left pristine.
+
+    Every other roster control mutates the subtree and requires the external
+    contract to refuse. This is the other direction: the external file is the
+    authority, so an expectation that no longer matches a pristine orchestrator
+    must also refuse — otherwise "authority" would only mean "veto", and a
+    quiet edit HERE would be the way to drop a gate.
+    """
+    saved_roster = pin.EXPECTED_ROSTER
+    saved_by_id = pin.EXPECTED_BY_ID
+    try:
+        pin.EXPECTED_ROSTER = tuple(e for e in saved_roster if e.gate_id != OWNERSHIP)
+        pin.EXPECTED_BY_ID = {e.gate_id: e for e in pin.EXPECTED_ROSTER}
+        orchestrator = pin.load_orchestrator(HERE / "retention_gates.py")
+        findings = pin.check_roster(orchestrator)
+        properties = sorted({f.prop for f in findings})
+        if not findings:
+            return "GREEN", "ACCEPTED an external expectation that no longer matches"
+        if "roster.unknown" in properties:
+            return "RED", f"refused, naming {properties}"
+        return "INERT", f"refused, but not for roster.unknown; got {properties}"
+    except Exception as error:  # noqa: BLE001
+        return "ERROR", f"{type(error).__name__}: {error}"
+    finally:
+        pin.EXPECTED_ROSTER = saved_roster
+        pin.EXPECTED_BY_ID = saved_by_id
+
+
 # ── A2: ci/run.sh is the trust root ─────────────────────────────────────────
 PIN_BLOCK_START = "# >>> W1A4-PIN-BLOCK"
 PIN_BLOCK_END = "# <<< W1A4-PIN-BLOCK"
@@ -496,6 +540,14 @@ def main() -> int:
         results.append({"control": name, "property": description,
                         "expected": list(expected), "grade": grade, "detail": detail,
                         "found": properties})
+
+    print("\nthe contract is two-sided")
+    grade, detail = _external_roster_narrowed(pin)
+    if grade != "RED":
+        failures += 1
+    print(f"  {grade:<6} {'N14-external-expectation-narrowed':<40} {detail}")
+    results.append({"control": "N14-external-expectation-narrowed", "grade": grade,
+                    "detail": detail})
 
     print("\nthe no-op substitution, which only the self-proof tier can see")
     grade, detail = _no_op_tier_control(root)

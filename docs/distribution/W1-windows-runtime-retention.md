@@ -647,11 +647,24 @@ duplicate identity, no entry naming a callable that does not exist.
 
 | suite | count | result |
 | --- | --- | --- |
-| command identity (C01–C22) | 22 | 21 RED + 1 PASS (pristine) |
+| command identity (C01–C24) | 24 | 23 RED + 1 PASS (C20, pristine) |
 | roster authority (N01–N11, NX, A1) | 13 | 13 RED |
 | roster authority, pristine (N12) | 1 | PASS |
+| the contract's other direction (N14) | 1 | RED |
 | the no-op tier control (N13) | 1 | RED |
 | the trust-root ablation (A2) | 1 | RED |
+
+C23 puts the pristine step first and a second step claiming the same id after
+it, so `cmd.step-duplicated` is proved to fire rather than merely to exist. C24
+gives the step an `env:` setting `PATH` under an otherwise unchanged command,
+so the environment rule is proved load-bearing too — an unproved boundary is
+the exact class of defect this whole repair is about.
+
+**N14 runs the contract in the other direction.** Every other roster control
+mutates the subtree and requires the external file to refuse. N14 narrows the
+EXTERNAL expectation and leaves the orchestrator pristine, and requires a
+refusal there too — otherwise "authority" would only mean "veto", and a quiet
+edit to the verifier would be the way to drop a gate.
 
 C01, C03, C04, C05, C06, C08, C09, C12, C13, C18 and C19 are exactly the eleven
 wrappers R2 accepted, marked `[R2-BYPASS]` in the source. NX is the reviewer's
@@ -665,9 +678,11 @@ Two ablations settle where authority lives:
   member. The external contract refuses anyway. The orchestrator's self-check
   is therefore not load-bearing for the roster question.
 * **A2** extracts `ci/run.sh`'s pin block verbatim between the
-  `# >>> W1A4-PIN-BLOCK` markers, runs it against a tree with the verifier
-  removed, and requires it to exit non-zero — and against the real tree, and
-  requires zero.
+  `# >>> W1A4-PIN-BLOCK` / `# <<< W1A4-PIN-BLOCK` markers, runs it against a
+  tree with the verifier removed, and requires it to exit non-zero — and
+  against the real tree, and requires zero. Those markers look like a removable
+  comment and are not: a control reads them, and `ci/run.sh` says so where they
+  appear.
 
 `ci/run.sh` is the trust root, and it says so in its own comment. Nothing pins
 it in turn, and nothing should: a chain of scripts each pinning the next has no
