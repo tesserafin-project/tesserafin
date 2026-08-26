@@ -199,11 +199,14 @@ twenty that work.
 
 Current state: **20 RED, 0 INERT, 0 GREEN**, fixture restored byte-identically.
 
-`registry-controls.sh` adds fourteen more against a local registry over plain
-HTTP, with no credential anywhere: push, byte-for-byte read-back, idempotent
-re-push, idempotent re-tag, the refusal to repoint an immutable tag, the proof
-that the tag still resolves where it did after that refusal, and — added in R1 —
-the refusal to write to a non-loopback registry without `--allow-remote`.
+`registry-controls.sh` adds **eighteen** more against a local registry over
+plain HTTP, with no credential anywhere: push, byte-for-byte read-back,
+idempotent re-push, idempotent re-tag, the refusal to repoint an immutable tag,
+the proof that the tag still resolves where it did after that refusal, and —
+added in R1 and extended in R2 — the refusal to write to a non-loopback
+registry, to a remote IPv6 literal, to an unbracketed IPv6 authority, to an
+authority carrying embedded credentials and to a hostname that merely ends in
+`localhost`, in each case without `--allow-remote`.
 
 That suite earned its keep. It caught a real defect in `require_digest_reference`:
 the shell guard used `[^@]+` for the repository path, which permits a colon, so
@@ -491,9 +494,15 @@ condition and no success masking. Commenting the line out, prefixing it with
 `:` or `echo`, appending `|| true` or `; true`, moving it to another job or
 deleting the job each fail that check by their own name.
 
-`gate-roster-controls.py` replays all of it: seven closed-roster controls and
+`gate-roster-controls.py` replayed all of it: seven closed-roster controls and
 eleven structural-pin controls, each RED for its own reason, with a pristine
 workflow that must be ACCEPTED and a byte-identical restoration.
+
+**Superseded by R3.** The R3 review found that both halves of the paragraph
+above were still a file deciding a question about itself: "an active `run`
+value" was decided by a list of no-op shapes, and the closed roster named its
+own required members. Section 9e states what replaced them. Read that section,
+not this one, for the current contract.
 
 ### D4 — a role was read before the file type was checked
 
@@ -533,6 +542,161 @@ long, abbreviated, uppercase, non-hexadecimal or `sha256:`-prefixed value is
 refused naming `TRUSTED-SOURCE-SHA`, while a well-formed SHA whose checked-out
 `HEAD` disagrees is refused naming `TRUSTED-SOURCE-HEAD`.
 
+## 9e. What W1-A4-R3 repaired
+
+Two findings, and they are the same shape twice: a file deciding a question
+about itself.
+
+### D3a — inertness was decided by a list of shapes
+
+R1 proved the gate ran by searching the workflow's raw text for a filename,
+which a comment satisfies. R2 replaced that with a YAML parse plus
+`_NO_OP_PREFIX`, a success-mask regex and a substring containment test — a list
+of the bypasses someone had thought of. R3 measured that list. **Eleven**
+syntactically harmless wrappers were accepted by the R2 file as a live
+invocation:
+
+| accepted by R2 | accepted by R2 |
+| --- | --- |
+| `#cmd` — no space after the hash | `(cmd)` |
+| `##cmd` | a block scalar containing the command |
+| `cmd \|\| :` | a scalar padded with whitespace |
+| `cmd \|\| echo x` | `working-directory:` on the step |
+| `cmd &` | `shell:` overridden to a shell that does not fail fast |
+| `if false; then cmd; fi` | |
+
+The question has therefore changed. Not *is this command inert*, which needs a
+shell semantics model and loses to the next wrapper anyone writes, but *is this
+string the string*, which needs `==`.
+
+The gate step now carries `id: retention-gate-roster`, and
+`verify-retention-gate-pinned.py::check_command` requires its `run` value to
+equal
+
+    python3 ci/windows/runtime-retention/retention_gates.py --validate
+
+**byte for byte** — one plain YAML scalar, no wrapper, no composition, no
+padding, no trailing newline. A deviation that would in fact still run the
+command is refused too. That is deliberate: a gate step is not a place for
+expressive shell, and refusing `(cmd)` costs nothing anyone wants.
+
+Around the step the contract is structural, and each part has its own finding
+name: no `if` at step or job (`cmd.step-conditional`, `cmd.job-conditional` —
+*any* condition, true ones included), no `continue-on-error`, no
+`working-directory`, no `strategy:` matrix, no `env:` at workflow, job or step
+level that could change which `python3` runs or which file it reads, `shell`
+absent or exactly `bash` (which GitHub expands with `-eo pipefail`), and the
+`pull_request` path filters that reach the job still present.
+
+`_NO_OP_PREFIX` and the success-mask and unreachability regexes are **deleted**.
+Nothing decides command identity by running a shell, and no rule depends on
+spacing after `#`.
+
+### D3b — the roster named its own required members
+
+`retention_gates.py` carried `GATES` — what it has — beside `REQUIRED` — what
+it must have. One edit deletes an entry and its requirement together, and the
+run gets shorter and stays green. Nothing inside
+`ci/windows/runtime-retention/` can close that, because whatever is added there
+is deletable by the same edit.
+
+The authoritative roster now lives in `ci/windows/verify-retention-gate-pinned.py`,
+outside the subtree, and it is an exact mapping rather than a set of names:
+
+| # | gate id | module | callable | kind | argv | tier |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | `accepted-contract` | `contract.py` | `check_all` | findings | — | gate |
+| 2 | `deterministic-layout` | `retention.py` | `check_all` | findings | — | gate |
+| 3 | `publication-policy` | `publication_policy.py` | `check_all` | findings | — | gate |
+| 4 | `excluded-subtree-ownership` | `boundary.py` | `check_all` | findings | — | gate |
+| 5 | `proof-trigger` | `trigger_policy.py` | `check_all` | findings | — | gate |
+| 6 | `registry-authority` | `loopback-corpus.py` | `check_all` | findings | — | gate |
+| 7 | `ownership-self-proof` | `boundary-controls.py` | `main` | exit-code | — | proof |
+| 8 | `publication-self-proof` | `permission-fixtures.py` | `main` | exit-code | — | proof |
+| 9 | `reusable-workflow-self-proof` | `reusable-workflow-controls.py` | `main` | exit-code | — | proof |
+| 10 | `trusted-source-self-proof` | `trusted-source-controls.py` | `main` | exit-code | — | proof |
+| 11 | `reference-grammar-self-proof` | `reference-corpus.py` | `main` | exit-code | `--allow-missing-pwsh` | proof |
+| 12 | `hostile-controls-self-proof` | `negative-controls.py` | `main` | exit-code | `--fixture {fixture}` | proof |
+| 13 | `hostile-controls-ablation` | `negative-controls.py` | `main` | exit-code | `--fixture {fixture} --ablate` | proof |
+| 14 | `gate-roster-self-proof` | `gate-roster-controls.py` | `main` | exit-code | — | proof |
+
+**Position is part of the contract.** An order-independent rule would let a
+gate and a proof trade places while both sets stayed equal, and "no gate
+substituted by a self-proof" is one of the properties this has to hold. The
+argv is part of the identity too: `negative-controls.py::main` with and without
+`--ablate` is two members, not one named twice.
+
+At runtime the verifier resolves the orchestrator's **real bindings**, through
+the orchestrator's own loader, and refuses:
+
+* a missing member, an unknown member, a duplicate, wrong cardinality;
+* an id whose module, callable, kind, argv or tier differs from the table;
+* a roster presented in another order;
+* a callable that is a lambda or an alias — caught by `__name__`;
+* a callable re-exported from another file under the expected name — caught by
+  `__code__.co_filename`.
+
+What remains inside the subtree is `DIAGNOSTIC_EXPECTATION`, which `--list`
+prints drift against and which **refuses nothing**. `validate_roster()` keeps
+only claims this file is entitled to make about itself: no duplicate id, no
+duplicate identity, no entry naming a callable that does not exist.
+
+### The controls, and where the regress stops
+
+`gate-roster-controls.py` is rewritten around both halves:
+
+| suite | count | result |
+| --- | --- | --- |
+| command identity (C01–C22) | 22 | 21 RED + 1 PASS (pristine) |
+| roster authority (N01–N11, NX, A1) | 13 | 13 RED |
+| roster authority, pristine (N12) | 1 | PASS |
+| the no-op tier control (N13) | 1 | RED |
+| the trust-root ablation (A2) | 1 | RED |
+
+C01, C03, C04, C05, C06, C08, C09, C12, C13, C18 and C19 are exactly the eleven
+wrappers R2 accepted, marked `[R2-BYPASS]` in the source. NX is the reviewer's
+exact mutation — the ownership gate, its self-proof and the gate-roster
+self-proof deleted from the roster *and* from the diagnostic copy — and it is
+refused with all three identities named in one finding.
+
+Two ablations settle where authority lives:
+
+* **A1** neuters the orchestrator's own `validate_roster()` *and* deletes a
+  member. The external contract refuses anyway. The orchestrator's self-check
+  is therefore not load-bearing for the roster question.
+* **A2** extracts `ci/run.sh`'s pin block verbatim between the
+  `# >>> W1A4-PIN-BLOCK` markers, runs it against a tree with the verifier
+  removed, and requires it to exit non-zero — and against the real tree, and
+  requires zero.
+
+`ci/run.sh` is the trust root, and it says so in its own comment. Nothing pins
+it in turn, and nothing should: a chain of scripts each pinning the next has no
+last link, and adding one more file would move the same defect one directory
+further out rather than close it. `ci/run.sh` is a merge gate for every branch,
+it invokes the verifier unconditionally, and a non-zero exit there fails the
+run. That is stated rather than implied.
+
+### The reviewed candidate, and its measured delta
+
+The R3 mission text carried two delta figures — 22 files / +3254 / −475 as the
+current state, and 21 files / +3069 / −456 as the stale claim it replaced.
+**Neither is reproducible.** Measured at the frozen candidate
+`9daafb85ea64c79100995812c379d6c1e8bcce81`, tree
+`3a0d84178ad0de92855172a56fe1072b0179000e`, against base
+`83e23b9579404883c2d3e93f6f3ac8748061c618`:
+
+| source | files | insertions | deletions |
+| --- | --- | --- | --- |
+| `git diff --shortstat 83e23b9579...9daafb85ea` | 34 | 9801 | 2 |
+| GitHub pull-request API for #254 | 34 | 9801 | 2 |
+
+The two agree, and no head on this branch matches either mission figure: the
+only 21-file head is `d2cc109630` at +5185, and no head has any deletions but
+the two in `.github/workflows/w1-windows-ffmpeg-runtime.yml`. The figures are
+recorded here as measured rather than as asserted; no commit message, document
+or pull-request body in this branch ever carried the stale numbers, so there
+was nothing else to correct.
+
 ## 9d. The predecessor proof run
 
 Run [32864950596] is **completed / success** at head
@@ -565,6 +729,31 @@ Above all, this run is evidence for **the predecessor head only**. It proves
 W1-A3 non-regression at `2622dd442c`; it says nothing about the R2 head, which
 the R2 push starts a new dual-runner run against precisely because the negative
 exclusion is gone.
+
+### The R2 head's own exact-head runs
+
+The R2 push produced two runs at exactly `9daafb85ea64c79100995812c379d6c1e8bcce81`,
+and both are **completed / success**:
+
+| run | workflow | window | conclusion |
+| --- | --- | --- | --- |
+| [32877243939] | W1 Windows FFmpeg Runtime — Dual-runner proof | 17:19:51Z → 18:06:00Z | success |
+| [32877243948] | W1 Windows Runtime Retention | 17:19:51Z → 17:21:00Z | success |
+
+[32877243939]: https://github.com/tesserafin-project/tesserafin/actions/runs/32877243939
+[32877243948]: https://github.com/tesserafin-project/tesserafin/actions/runs/32877243948
+
+Three required checks at that head are **SKIPPED, not PASS**, because heavy CI
+in this repository is draft-gated and #254 is a draft: `Tests`,
+`OpenAPI Check` and `ABI Compatibility`. They are recorded as skipped rather
+than counted as green; a draft pull request cannot satisfy them, and readying
+#254 is not part of W1-A4. `CodeQL`, `SDK Provenance` and `Dependency Audit`
+all succeeded at that head.
+
+Package absence at `ghcr.io/tesserafin-project/windows-ffmpeg-runtime` remains
+a **W1-A5 check** with authorised `read:packages` access, for the reason given
+in section 9b: from outside, "absent" and "not visible to this token" are
+indistinguishable.
 
 ## 10. Update policy
 
