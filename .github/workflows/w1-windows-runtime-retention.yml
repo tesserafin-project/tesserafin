@@ -30,6 +30,9 @@ on:
       - '.github/workflows/w1-windows-runtime-retention.yml'
       - '.github/workflows/w1-windows-runtime-publish.yml'
       - 'docs/distribution/W1-windows-runtime-retention.md'
+      - 'ci/windows/verify-retention-gate-pinned.py'
+      - 'ci/windows/w1a4-roster-manifest.v1.json'
+      - 'ci/run.sh'
 
 # Read-only for the whole workflow, and never raised at job level. This is the
 # validation half; it has nothing to write.
@@ -95,21 +98,69 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if ! python3 -c "import yaml" 2>/dev/null; then
+          if ! /usr/bin/python3 -c "import yaml" 2>/dev/null; then
             sudo apt-get update -qq
             sudo apt-get install -y --no-install-recommends python3-yaml
           fi
-          python3 -c "import yaml; print(f'PyYAML {yaml.__version__}')"
+          /usr/bin/python3 -c "import yaml; print(f'PyYAML {yaml.__version__}')"
 
+      # ── THE GATE STEP ───────────────────────────────────────────────
+      #
+      # R3 finding F1. Every check that decided whether this step is inert used
+      # to run in a shell, and a shell reads BASH_ENV before it runs anything.
+      # `env: {BASH_ENV: mal.sh}` at workflow, job or step scope therefore made
+      # the malicious file run FIRST, and a `python3() { return 0; }` defined
+      # there returned success without the validator executing at all. Adding
+      # BASH_ENV to the forbidden list did not close it: the check itself would
+      # have been the next thing that shell decided not to run.
+      #
+      # Two mechanisms, and the second does not depend on the first.
+      #
+      #   1. STRUCTURAL, and not run by any shell this workflow configures.
+      #      `ci/windows/verify-retention-gate-pinned.py` refuses BASH_ENV,
+      #      ENV, PATH and every PYTHON* redirection at workflow, job,
+      #      `defaults.run` and step scope, refuses `defaults.run.shell` and
+      #      `defaults.run.working-directory` at workflow and job scope, and
+      #      requires the `env:` below to be present with these exact values.
+      #      It is launched by `ci/run.sh` through `/usr/bin/env -i`, so no
+      #      inherited variable reaches it and no shell function can stand in
+      #      for its interpreter.
+      #
+      #   2. RUNTIME, at the highest precedence GitHub offers. Step `env:`
+      #      overrides job and workflow `env:`, and it is applied to the
+      #      process environment BEFORE the shell is created — so bash starts
+      #      with BASH_ENV already pointing at /dev/null and sources nothing,
+      #      whatever a wider scope tried to set.
+      #
+      # The interpreter is absolute. PATH cannot substitute a fake `python3`
+      # for `/usr/bin/python3`, and neither can a shell function or an alias.
+      #
+      # `retention_gates.py` prints W1A4-ROSTER-SENTINEL lines on entry and on
+      # success, so this step's log shows that the REAL validator ran, not only
+      # that the step returned zero.
       - name: The complete retention gate roster
         id: retention-gate-roster
         shell: bash
-        run: python3 ci/windows/runtime-retention/retention_gates.py --validate
+        env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          PYTHONSTARTUP: /dev/null
+          PYTHONPATH: ''
+          PYTHONHOME: ''
+          PYTHONEXECUTABLE: ''
+          PYTHONSAFEPATH: ''
+          PYTHONNOUSERSITE: ''
+          PYTHONWARNINGS: ''
+          LD_PRELOAD: ''
+          LD_LIBRARY_PATH: ''
+          VIRTUAL_ENV: ''
+          CONDA_PREFIX: ''
+        run: /usr/bin/python3 ci/windows/runtime-retention/retention_gates.py --validate
 
       - name: The roster, for the record
         if: ${{ always() }}
         shell: bash
-        run: python3 ci/windows/runtime-retention/retention_gates.py --list | tee -a "${GITHUB_STEP_SUMMARY}"
+        run: /usr/bin/python3 ci/windows/runtime-retention/retention_gates.py --list | tee -a "${GITHUB_STEP_SUMMARY}"
 
   determinism:
     name: Deterministic layout
@@ -214,11 +265,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if ! python3 -c "import yaml" 2>/dev/null; then
+          if ! /usr/bin/python3 -c "import yaml" 2>/dev/null; then
             sudo apt-get update -qq
             sudo apt-get install -y --no-install-recommends python3-yaml
           fi
-          python3 -c "import yaml; print(f'PyYAML {yaml.__version__}')"
+          /usr/bin/python3 -c "import yaml; print(f'PyYAML {yaml.__version__}')"
 
       # The permission set is PARSED, not grepped. `permissions: write-all`
       # grants packages: write without containing the string, a quoted or inline

@@ -82,6 +82,104 @@ banner() {
     echo "======================================================================"
 }
 
+# ── THE W1 RETENTION TRUST ROOT (#236, W1-A4-R4) ────────────────────────────
+#
+# THIS SCRIPT IS THE TRUST ROOT FOR THE W1 RETENTION CONTRACT, and these three
+# constants are the part of it that no other file may restate. They are the
+# THIRD party to an agreement that used to have two.
+#
+# Until R4 the expected roster lived in exactly two places: the orchestrator
+# `ci/windows/runtime-retention/retention_gates.py`, which declares what it
+# runs, and `ci/windows/verify-retention-gate-pinned.py`, which froze what it
+# must run. Independent review (R3, finding F3) showed that is a bilateral
+# agreement and can be weakened on both sides at once: delete a member from the
+# orchestrator, delete the matching entry from the verifier's frozen tuple, and
+# every check still agrees with every other check.
+#
+# The roster is now a versioned canonical manifest — a data file, outside both
+# of those — and the values that AUTHENTICATE that manifest are here:
+#
+#   W1A4_ROSTER_MANIFEST_SHA256  the manifest's exact content digest.
+#   W1A4_ROSTER_IDS              the fourteen member identities, in order.
+#
+# The verifier CONSUMES the manifest and READS these two constants out of this
+# file. It cannot redefine either, because neither is written down where it can
+# reach. Editing the manifest without editing this file is a digest mismatch;
+# editing both is an edit to ci/run.sh, which is the merge gate for every
+# branch and is reviewed as one.
+#
+# Nothing pins ci/run.sh in turn, and nothing should: a chain of scripts each
+# pinning the next has no last link. That is the trust boundary, and it is
+# stated here rather than hidden behind one more file.
+W1A4_ROSTER_MANIFEST="ci/windows/w1a4-roster-manifest.v1.json"
+W1A4_ROSTER_MANIFEST_SHA256="6ba9107285422f8323a9ac99d39c168ea7cefa8f5dca372b2757c293b2c7c18b"
+W1A4_ROSTER_IDS=(
+    accepted-contract
+    deterministic-layout
+    publication-policy
+    excluded-subtree-ownership
+    proof-trigger
+    registry-authority
+    ownership-self-proof
+    publication-self-proof
+    reusable-workflow-self-proof
+    trusted-source-self-proof
+    reference-grammar-self-proof
+    hostile-controls-self-proof
+    hostile-controls-ablation
+    gate-roster-self-proof
+)
+
+# WHY THIS BLOCK IS HERE, AT THE TOP, AND NOT NEXT TO THE OTHER SELF-PROOFS.
+#
+# R3 finding F4: the block used to sit near the end of this script, after
+# `STATUS=$?`, and the only thing that proved it ran was a control that
+# EXTRACTED it and executed the extracted text on its own. Extracting a block
+# and running it separately proves the block works. It proves nothing about
+# whether ci/run.sh reaches it — moving the intact block below `exit "$STATUS"`
+# passed that control unchanged.
+#
+# So the block is now the FIRST thing this script executes after its prologue.
+# Only comments, blank lines, simple assignments, `cd`, `source` and closed
+# function definitions may precede it, and `verify-retention-gate-pinned.py`
+# refuses this file if anything else does. Nothing before it can exit, return,
+# disable errexit, open a conditional, open a subshell or dispatch a test, so
+# there is no reachable path through this script that skips it.
+#
+# It is fail-closed by `exit 1`, not by folding into $STATUS: $STATUS does not
+# exist yet, and an accumulated status can be reassigned by a later stage.
+#
+# The interpreter is absolute and the environment is emptied by `/usr/bin/env
+# -i` before python3 starts, so neither a shell function named `python3`, nor
+# PATH, nor BASH_ENV, nor any PYTHON* variable inherited from the caller can
+# decide what actually runs.
+#
+# `gate-roster-controls.py` proves both halves: STRUCTURALLY, that this block
+# is top-level and unconditional and that nothing precedes it; and DYNAMICALLY,
+# by running this script with a stubbed verifier and requiring the sentinel
+# below to appear, the run to fail, and the build stage never to be reached.
+# Keep the markers.
+# >>> W1A4-PIN-BLOCK
+banner "The W1 retention gate command, roster and anchor are pinned (#236, W1-A4-R4)"
+echo "W1A4-PIN-BLOCK-REACHED"
+W1A4_ANCHOR_STATUS=0
+W1A4_MANIFEST_ACTUAL="$(/usr/bin/sha256sum "$REPO_ROOT/$W1A4_ROSTER_MANIFEST" | /usr/bin/cut -d' ' -f1)"
+if [ "$W1A4_MANIFEST_ACTUAL" != "$W1A4_ROSTER_MANIFEST_SHA256" ]; then
+    echo "W1-A4 ANCHOR HARD STOP: $W1A4_ROSTER_MANIFEST hashes to ${W1A4_MANIFEST_ACTUAL};" >&2
+    echo "this file pins ${W1A4_ROSTER_MANIFEST_SHA256}. The canonical roster manifest was" >&2
+    echo "changed without the authority that authenticates it." >&2
+    W1A4_ANCHOR_STATUS=1
+fi
+if ! /usr/bin/env -i         PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin         HOME="$HOME" LC_ALL=C TZ=UTC         /usr/bin/python3 "$REPO_ROOT/ci/windows/verify-retention-gate-pinned.py"; then
+    W1A4_ANCHOR_STATUS=1
+fi
+if [ "$W1A4_ANCHOR_STATUS" -ne 0 ]; then
+    echo "The W1 retention gate command, roster or anchor is not pinned; this gate FAILS." >&2
+    exit 1
+fi
+echo "W1A4-PIN-BLOCK-PASSED"
+# <<< W1A4-PIN-BLOCK
+
 START_TS=$(date +%s)
 
 banner "Building ${IMAGE_TAG} from Dockerfile.ci"
@@ -180,50 +278,6 @@ if [ "$PROBE_UNDECLARED_STATUS" -ne 0 ] || [ "$PROBE_SCHEMA_STATUS" -ne 0 ]; the
     echo "The hostile-control grader did not prove itself; this gate FAILS." >&2
     STATUS=1
 fi
-
-banner "The W1 retention gate command and roster are pinned (#236, W1-A4-R3, D3)"
-# THIS SCRIPT IS THE TRUST ROOT FOR THE W1 RETENTION CONTRACT.
-#
-# ci/windows/verify-retention-gate-pinned.py owns two things the retention
-# subtree is not allowed to decide about itself:
-#
-#   1. COMMAND IDENTITY. The retention workflow's gate step must carry the
-#      canonical orchestrator command as its `run` scalar, BYTE FOR BYTE, in a
-#      named job and a step named by id. Not "not obviously a no-op" -- equal.
-#      R1 proved invocation by substring, which a comment satisfies. R2
-#      replaced that with a no-op regex, and eleven harmless wrappers walked
-#      through it (`#cmd`, `cmd || :`, `cmd &`, `(cmd)`, a block scalar, a
-#      padded scalar, `working-directory:`, `shell:` among them). Equality has
-#      no such list.
-#
-#   2. ROSTER AUTHORITY. retention_gates.py may report which gates it HAS; it
-#      may not decide which it MUST have, because one edit could then delete
-#      the entry and the requirement together. The expected roster -- id,
-#      module, callable, kind, argv, tier and position -- is frozen in the
-#      verifier, outside ci/windows/runtime-retention/.
-#
-# Nothing pins this script in turn, and nothing should: a chain of scripts each
-# pinning the next has no last link. ci/run.sh is a merge gate for every
-# branch, it invokes the verifier unconditionally, and a non-zero exit here
-# fails the run. That is where the regress stops, and it is stated rather than
-# hidden behind one more file.
-#
-# The block between the markers below is extracted verbatim by
-# gate-roster-controls.py control A2, which runs it against a tree with the
-# verifier removed and requires this gate to FAIL. Keep the markers.
-# >>> W1A4-PIN-BLOCK
-set +e
-python3 "$REPO_ROOT/ci/windows/verify-retention-gate-pinned.py"
-RETENTION_PIN_STATUS=$?
-set -e
-echo ""
-echo "verify-retention-gate-pinned.py exit ${RETENTION_PIN_STATUS}"
-if [ "$RETENTION_PIN_STATUS" -ne 0 ]; then
-    echo "The W1 retention gate command or roster is not pinned; this gate FAILS." >&2
-    STATUS=1
-fi
-# <<< W1A4-PIN-BLOCK
-
 END_TS=$(date +%s)
 ELAPSED=$((END_TS - START_TS))
 

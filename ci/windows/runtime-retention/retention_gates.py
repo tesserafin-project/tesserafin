@@ -1,6 +1,19 @@
-"""The one canonical retention validation command (#236, W1-A4-R2).
+"""The one canonical retention validation command (#236, W1-A4-R4).
 
-    python3 ci/windows/runtime-retention/retention_gates.py --validate
+    /usr/bin/python3 ci/windows/runtime-retention/retention_gates.py --validate
+
+The interpreter is ABSOLUTE. R3 finding F1: with `python3` resolved through
+PATH, a shell function or a PATH entry planted by anything the workflow shell
+sourced before the script began — `BASH_ENV` is the specific mechanism — could
+answer to that name and return success without this file ever executing. An
+absolute path has no such lookup. The gate step also forces `BASH_ENV`, `ENV`
+and every PYTHON* startup variable to harmless values at step scope, which is
+the highest-precedence environment GitHub offers and is applied before the
+shell is created.
+
+This file prints W1A4-ROSTER-SENTINEL on entry and on success. That is what a
+reviewer reads to know that the REAL validator ran, rather than that a wrapper
+returned zero.
 
 R1's blocking finding D3. The retention workflow invoked its gates as seven
 separate `run:` steps, and `boundary.check_gate_is_pinned` proved they were
@@ -25,12 +38,14 @@ SECOND — and this is the W1-A4-R3 correction — WHICH members are mandatory i
 not decided here. Until R3 this file carried a `REQUIRED` set beside `GATES`
 and enforced it, so one file answered both "what does this run" and "what must
 it run", and a single edit could delete the entry and the requirement together.
-The authority now lives in `ci/windows/verify-retention-gate-pinned.py`, which
-is outside this subtree and which `ci/run.sh` runs on every branch. It freezes
-id, module, callable, kind, argv, tier and position, resolves this file's real
-bindings, and refuses a lambda or an alias standing in for an expected
-callable. `DIAGNOSTIC_EXPECTATION` below is what remains here, and it refuses
-nothing.
+The authority is the canonical manifest `ci/windows/w1a4-roster-manifest.v1.json`
+— outside this subtree — whose content digest and fourteen member identities
+are pinned in `ci/run.sh`. `ci/windows/verify-retention-gate-pinned.py` CONSUMES
+both: it freezes nothing of its own, so it cannot be the second half of a
+bilateral edit. That was W1-A4-R3 finding F3: until R4 the expected roster was a
+tuple inside the verifier, and deleting a member here and its entry there left
+every check agreeing with every other check. `DIAGNOSTIC_EXPECTATION` below is
+what remains here, and it refuses nothing.
 
 THIRD, the invocation itself is pinned by that same external file, which parses
 the workflow as YAML and requires the canonical command to be the `run` scalar
@@ -305,6 +320,8 @@ def main() -> int:
     parser.add_argument("--json", type=Path)
     args = parser.parse_args()
 
+    print(f"W1A4-ROSTER-SENTINEL entered {Path(__file__).name} "
+          f"({len(GATES)} gates, {len(PROOFS)} self-proofs declared)")
     validate_roster()
 
     if args.list:
@@ -372,6 +389,7 @@ def main() -> int:
               f"failed", file=sys.stderr)
         return 1
     print(f"all {len(GATES)} gates and {len(PROOFS)} self-proofs in the closed roster passed")
+    print(f"W1A4-ROSTER-SENTINEL completed {len(results)} roster entries, 0 failures")
     return 0
 
 
