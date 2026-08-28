@@ -1,0 +1,158 @@
+{
+  "$comment": [
+    "The reusable-workflow graphs for the D1 controls, as data.",
+    "",
+    "They live here rather than in reusable-workflow-controls.py for a structural",
+    "reason. Every filename in boundary.INVENTORY is a token local_script_closure",
+    "resolves, so naming a module there puts it in the retention workflow's script",
+    "closure, and publication_policy then reads its text as the workflow's own",
+    "capability. A control module carrying a literal `packages: write`, an `oras`",
+    "push or a `secrets:` reference would fail the pristine tree. Data files are",
+    "not scripts and are never walked. The alternative -- adding the module to",
+    "boundary.POLICY_SELF -- would widen the one exemption in this design a",
+    "reviewer should be attacking, and is not worth a string.",
+    "",
+    "`caller` is always written to .github/workflows/caller.yml inside a throwaway",
+    "tree; `files` are written beside it. `expect` is the property the control must",
+    "reach, and null means the graph must be accepted."
+  ],
+  "readOnlyPreamble": "name: Called\non:\n  workflow_call:\npermissions:\n  contents: read\njobs:\n  work:\n    runs-on: ubuntu-latest\n    steps:\n      - name: Do nothing that can publish\n        shell: bash\n        run: echo 'this workflow holds no grant and no credential'\n",
+  "controls": [
+    {
+      "name": "01-called-workflow-holds-packages-write",
+      "property": "a local reusable workflow granting packages: write is refused",
+      "expect": "permissions.packages-write",
+      "caller": "name: Caller\non:\n  pull_request:\npermissions:\n  contents: read\njobs:\n  delegate:\n    uses: ./.github/workflows/called.yml\n",
+      "files": {
+        ".github/workflows/called.yml": "name: Called\non:\n  workflow_call:\npermissions:\n  contents: read\n  packages: write\njobs:\n  work:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo hello\n"
+      }
+    },
+    {
+      "name": "02-called-workflow-logs-in-and-pushes",
+      "property": "a local reusable workflow performing a registry login and push is refused",
+      "expect": "registry.login",
+      "caller": "name: Caller\non:\n  pull_request:\npermissions:\n  contents: read\njobs:\n  delegate:\n    uses: ./.github/workflows/called.yml\n",
+      "files": {
+        ".github/workflows/called.yml": "name: Called\non:\n  workflow_call:\npermissions:\n  contents: read\njobs:\n  work:\n    runs-on: ubuntu-latest\n    steps:\n      - name: Publish\n        shell: bash\n        run: |\n          oras login ghcr.io --password-stdin\n          oras manifest push ghcr.io/tesserafin-project/windows-ffmpeg-runtime@sha256:0 manifest.json\n"
+      }
+    },
+    {
+      "name": "03-secrets-inherit",
+      "property": "`secrets: inherit` is refused at the edge, whatever the callee contains",
+      "expect": "credential.secrets-inherit",
+      "caller": "name: Caller\non:\n  pull_request:\npermissions:\n  contents: read\njobs:\n  delegate:\n    uses: ./.github/workflows/called.yml\n    secrets: inherit\n",
+      "files": { ".github/workflows/called.yml": "@readOnlyPreamble" }
+    },
+    {
+      "name": "04-explicit-secret-mapping",
+      "property": "an explicit job-level secrets mapping is refused",
+      "expect": "credential.secrets-mapping",
+      "caller": "name: Caller\non:\n  pull_request:\npermissions:\n  contents: read\njobs:\n  delegate:\n    uses: ./.github/workflows/called.yml\n    secrets:\n      REGISTRY_TOKEN: ${{ secrets.GHCR_PUBLISH_PAT }}\n",
+      "files": { ".github/workflows/called.yml": "@readOnlyPreamble" }
+    },
+    {
+      "name": "05-second-hop-publishes",
+      "property": "a callee that calls a second local workflow which publishes is refused",
+      "expect": "permissions.packages-write",
+      "caller": "name: Caller\non:\n  pull_request:\npermissions:\n  contents: read\njobs:\n  delegate:\n    uses: ./.github/workflows/middle.yml\n",
+      "files": {
+        ".github/workflows/middle.yml": "name: Middle\non:\n  workflow_call:\npermissions:\n  contents: read\njobs:\n  onward:\n    uses: ./.github/workflows/deep.yml\n",
+        ".github/workflows/deep.yml": "name: Deep\non:\n  workflow_call:\npermissions:\n  contents: read\n  packages: write\njobs:\n  work:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo hello\n"
+      }
+    },
+    {
+      "name": "06-three-node-cycle",
+      "property": "a three-node cycle is detected rather than recursed into",
+      "expect": "workflow.reusable-cycle",
+      "caller": "name: Caller\non:\n  pull_request:\npermissions:\n  contents: read\njobs:\n  delegate:\n    uses: ./.github/workflows/a.yml\n",
+      "files": {
+        ".github/workflows/a.yml": "name: A\non:\n  workflow_call:\npermissions:\n  contents: read\njobs:\n  onward:\n    uses: ./.github/workflows/b.yml\n",
+        ".github/workflows/b.yml": "name: B\non:\n  workflow_call:\npermissions:\n  contents: read\njobs:\n  onward:\n    uses: ./.github/workflows/c.yml\n",
+        ".github/workflows/c.yml": "name: C\non:\n  workflow_call:\npermissions:\n  contents: read\njobs:\n  onward:\n    uses: ./.github/workflows/a.yml\n"
+      }
+    },
+    {
+      "name": "07-traversal-reference",
+      "property": "a `uses:` that traverses out of .github/workflows is refused",
+      "expect": "workflow.traversal-uses",
+      "caller": "name: Caller\non:\n  pull_request:\npermissions:\n  contents: read\njobs:\n  delegate:\n    uses: ./.github/workflows/../../outside/publisher.yml\n",
+      "files": {
+        "outside/publisher.yml": "name: Outside\non:\n  workflow_call:\npermissions:\n  contents: read\n  packages: write\njobs:\n  work:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo hello\n"
+      }
+    },
+    {
+      "name": "08-symlinked-workflow",
+      "property": "a workflow file reached through a symbolic link is refused",
+      "expect": "workflow.symlinked-workflow",
+      "caller": "name: Caller\non:\n  pull_request:\npermissions:\n  contents: read\njobs:\n  delegate:\n    uses: ./.github/workflows/called.yml\n",
+      "files": {
+        "outside/publisher.yml": "name: Outside\non:\n  workflow_call:\npermissions:\n  contents: read\n  packages: write\njobs:\n  work:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo hello\n"
+      },
+      "symlinks": { ".github/workflows/called.yml": "../../outside/publisher.yml" }
+    },
+    {
+      "name": "09-external-reusable-workflow",
+      "property": "an external reusable workflow is refused in the validation closure",
+      "expect": "workflow.external-reusable",
+      "caller": "name: Caller\non:\n  pull_request:\npermissions:\n  contents: read\njobs:\n  delegate:\n    uses: some-org/some-repo/.github/workflows/publish.yml@v1\n",
+      "files": {}
+    },
+    {
+      "name": "10-pristine-read-only-local-workflow",
+      "property": "a pristine read-only local reusable workflow is accepted",
+      "expect": null,
+      "caller": "name: Caller\non:\n  pull_request:\npermissions:\n  contents: read\njobs:\n  delegate:\n    uses: ./.github/workflows/called.yml\n",
+      "files": { ".github/workflows/called.yml": "@readOnlyPreamble" }
+    },
+    {
+      "name": "11-callee-is-not-a-workflow-call",
+      "property": "a callee that does not declare `on: workflow_call` is refused",
+      "expect": "workflow.not-workflow-call",
+      "caller": "name: Caller\non:\n  pull_request:\npermissions:\n  contents: read\njobs:\n  delegate:\n    uses: ./.github/workflows/called.yml\n",
+      "files": {
+        ".github/workflows/called.yml": "name: Not reusable\non:\n  pull_request:\npermissions:\n  contents: read\njobs:\n  work:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo hello\n"
+      }
+    },
+    {
+      "name": "12-duplicate-alias-second-edge-still-checked",
+      "property": "a second alias for an already-inspected callee still has its edge checked",
+      "expect": "credential.secrets-inherit",
+      "caller": "name: Caller\non:\n  pull_request:\npermissions:\n  contents: read\njobs:\n  first:\n    uses: ./.github/workflows/called.yml\n  second:\n    uses: ./.github/workflows/called.yml\n    secrets: inherit\n",
+      "files": { ".github/workflows/called.yml": "@readOnlyPreamble" }
+    },
+    {
+      "name": "13-called-workflow-holds-id-token-write",
+      "property": "any write permission in a callee is refused, not merely packages: write",
+      "expect": "permissions.write-scope",
+      "caller": "name: Caller\non:\n  pull_request:\npermissions:\n  contents: read\njobs:\n  delegate:\n    uses: ./.github/workflows/called.yml\n",
+      "files": {
+        ".github/workflows/called.yml": "name: Called\non:\n  workflow_call:\npermissions:\n  contents: read\n  id-token: write\njobs:\n  work:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo hello\n"
+      }
+    },
+    {
+      "name": "14-called-workflow-inherits-permissions",
+      "property": "a callee with no permissions block of its own is refused, not read as the caller's",
+      "expect": "permissions.absent-at-workflow-level",
+      "caller": "name: Caller\non:\n  pull_request:\npermissions:\n  contents: read\njobs:\n  delegate:\n    uses: ./.github/workflows/called.yml\n",
+      "files": {
+        ".github/workflows/called.yml": "name: Called\non:\n  workflow_call:\njobs:\n  work:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo hello\n"
+      }
+    },
+    {
+      "name": "15-called-workflow-carries-a-credential",
+      "property": "a ${{ secrets.* }} reference inside the callee is refused",
+      "expect": "credential.secrets-reference",
+      "caller": "name: Caller\non:\n  pull_request:\npermissions:\n  contents: read\njobs:\n  delegate:\n    uses: ./.github/workflows/called.yml\n",
+      "files": {
+        ".github/workflows/called.yml": "name: Called\non:\n  workflow_call:\npermissions:\n  contents: read\njobs:\n  work:\n    runs-on: ubuntu-latest\n    steps:\n      - name: Forward\n        shell: bash\n        env:\n          FORWARDED: ${{ secrets.GHCR_PUBLISH_PAT }}\n        run: echo forwarded\n"
+      }
+    },
+    {
+      "name": "16-absolute-uses-path",
+      "property": "an absolute `uses:` path is refused",
+      "expect": "workflow.absolute-uses",
+      "caller": "name: Caller\non:\n  pull_request:\npermissions:\n  contents: read\njobs:\n  delegate:\n    uses: /etc/publisher.yml\n",
+      "files": {}
+    }
+  ]
+}

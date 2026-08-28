@@ -1,0 +1,342 @@
+# Validation for the win-x64 FFmpeg runtime retention contract (#236, W1-A4).
+#
+# This workflow CANNOT publish. There is no `packages: write` at any level, no
+# registry login, no secret beyond the default read-only token, and no branch or
+# input under which a publication path becomes reachable. Publication lives in
+# w1-windows-runtime-publish.yml and runs only from trusted master.
+#
+# WHAT IT VALIDATES, AND WHY IT DOES NOT TOUCH THE REAL 260 MB UNIT.
+#
+# The accepted runtime lives in Actions artifacts from run 32750491696, which
+# EXPIRE on 2026-09-23. A gate built on those artifacts would pass until they
+# expire and then either fail for an unrelated reason or, worse, quietly stop
+# checking. That is exactly the staleness failure W1-A3's O-1 observation
+# named, and reproducing it here would be a choice, not an accident.
+#
+# So the identity of the real unit is verified WITHOUT the real unit: the
+# expected OCI manifest digest is a pure function of the committed acceptance
+# manifest, and `retention.expected_manifest_digest` recomputes it from those
+# committed bytes alone. Everything else — determinism, the layer format, the
+# consumer's refusals, the registry protocol — is structural, so it is exercised
+# against a generated fixture of the same shape. Neither depends on an artifact
+# that can expire.
+
+name: W1 Windows Runtime Retention
+
+on:
+  pull_request:
+    paths:
+      - 'ci/windows/runtime-retention/**'
+      - '.github/workflows/w1-windows-runtime-retention.yml'
+      - '.github/workflows/w1-windows-runtime-publish.yml'
+      - 'docs/distribution/W1-windows-runtime-retention.md'
+      - 'ci/windows/verify-retention-gate-pinned.py'
+      - 'ci/windows/w1a4-roster-manifest.v1.json'
+      - 'ci/run.sh'
+
+# Read-only for the whole workflow, and never raised at job level. This is the
+# validation half; it has nothing to write.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  # On `pull_request`, actions/checkout defaults to the synthetic merge ref,
+  # which exists in no branch and changes whenever master moves. Evidence has to
+  # name a commit that exists in the history being reviewed.
+  W1A4_EVIDENCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+  LC_ALL: C
+  TZ: UTC
+
+jobs:
+  # ── ONE canonical command ────────────────────────────────────────────────
+  #
+  # R1's finding D3: this workflow used to invoke seven gates as seven separate
+  # steps, and `boundary.check_gate_is_pinned` proved they ran by testing
+  # whether the strings "boundary.py" and "boundary-controls.py" appeared
+  # anywhere in this file. A COMMENT naming either satisfied that, so commenting
+  # out an invocation left a workflow that read exactly as before, ran nothing,
+  # and reported the gate as pinned.
+  #
+  # There is now one command, holding a closed roster resolved by exact module
+  # and function identity, and it is pinned STRUCTURALLY from outside the
+  # subtree by ci/windows/verify-retention-gate-pinned.py, which ci/run.sh runs.
+  # That check parses this file as YAML and requires this job, this command as
+  # an active `run` command, no continue-on-error, no unreachable condition and
+  # no success masking. Editing the line below to `: python3 ...`, prefixing it
+  # with `echo`, appending `|| true` or commenting it out each fails that check
+  # rather than passing quietly.
+  gates:
+    name: Retention gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ env.W1A4_EVIDENCE_SHA }}
+          persist-credentials: false
+          # The ownership self-proof mutates and reverts the working tree, and
+          # one of its controls stages its mutation. A shallow checkout is
+          # enough for that; a detached HEAD is not a problem because nothing
+          # here commits.
+
+      - name: Assert the evidence SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          if [ "${actual}" != "${W1A4_EVIDENCE_SHA}" ]; then
+            echo "W1-A4 HARD STOP: standing in ${actual}, not ${W1A4_EVIDENCE_SHA}." >&2
+            exit 1
+          fi
+          echo "validating ${actual}"
+
+      - name: Guarantee the YAML parser this validation depends on
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! /usr/bin/python3 -c "import yaml" 2>/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends python3-yaml
+          fi
+          /usr/bin/python3 -c "import yaml; print(f'PyYAML {yaml.__version__}')"
+
+      # ── THE GATE STEP ───────────────────────────────────────────────
+      #
+      # R3 finding F1. Every check that decided whether this step is inert used
+      # to run in a shell, and a shell reads BASH_ENV before it runs anything.
+      # `env: {BASH_ENV: mal.sh}` at workflow, job or step scope therefore made
+      # the malicious file run FIRST, and a `python3() { return 0; }` defined
+      # there returned success without the validator executing at all. Adding
+      # BASH_ENV to the forbidden list did not close it: the check itself would
+      # have been the next thing that shell decided not to run.
+      #
+      # Two mechanisms, and the second does not depend on the first.
+      #
+      #   1. STRUCTURAL, and not run by any shell this workflow configures.
+      #      `ci/windows/verify-retention-gate-pinned.py` refuses BASH_ENV,
+      #      ENV, PATH and every PYTHON* redirection at workflow, job,
+      #      `defaults.run` and step scope, refuses `defaults.run.shell` and
+      #      `defaults.run.working-directory` at workflow and job scope, and
+      #      requires the `env:` below to be present with these exact values.
+      #      It is launched by `ci/run.sh` through `/usr/bin/env -i`, so no
+      #      inherited variable reaches it and no shell function can stand in
+      #      for its interpreter.
+      #
+      #   2. RUNTIME, at the highest precedence GitHub offers. Step `env:`
+      #      overrides job and workflow `env:`, and it is applied to the
+      #      process environment BEFORE the shell is created — so bash starts
+      #      with BASH_ENV already pointing at /dev/null and sources nothing,
+      #      whatever a wider scope tried to set.
+      #
+      # The interpreter is absolute. PATH cannot substitute a fake `python3`
+      # for `/usr/bin/python3`, and neither can a shell function or an alias.
+      #
+      # `retention_gates.py` prints W1A4-ROSTER-SENTINEL lines on entry and on
+      # success, so this step's log shows that the REAL validator ran, not only
+      # that the step returned zero.
+      - name: The complete retention gate roster
+        id: retention-gate-roster
+        shell: bash
+        env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          PYTHONSTARTUP: /dev/null
+          PYTHONPATH: ''
+          PYTHONHOME: ''
+          PYTHONEXECUTABLE: ''
+          PYTHONSAFEPATH: ''
+          PYTHONNOUSERSITE: ''
+          PYTHONWARNINGS: ''
+          LD_PRELOAD: ''
+          LD_LIBRARY_PATH: ''
+          VIRTUAL_ENV: ''
+          CONDA_PREFIX: ''
+        run: /usr/bin/python3 ci/windows/runtime-retention/retention_gates.py --validate
+
+      - name: The roster, for the record
+        if: ${{ always() }}
+        shell: bash
+        run: /usr/bin/python3 ci/windows/runtime-retention/retention_gates.py --list | tee -a "${GITHUB_STEP_SUMMARY}"
+
+  determinism:
+    name: Deterministic layout
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ env.W1A4_EVIDENCE_SHA }}
+          persist-credentials: false
+
+      - name: Build the fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ci/windows/runtime-retention
+          python3 make-fixture.py --out "${RUNNER_TEMP}/fixture"
+
+      # Two builds, in directories with different names. If a path, a clock or a
+      # filesystem walk order ever reached the bytes, these disagree.
+      - name: Build twice and compare
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ci/windows/runtime-retention
+          ./build-twice.sh \
+            --delivered  "${RUNNER_TEMP}/fixture/delivered" \
+            --evidence-a "${RUNNER_TEMP}/fixture/evidence-a" \
+            --evidence-b "${RUNNER_TEMP}/fixture/evidence-b" \
+            --comparison "${RUNNER_TEMP}/fixture/comparison.json" \
+            --accepted   "${RUNNER_TEMP}/fixture/accepted-runtime.json" \
+            --work       "${RUNNER_TEMP}/twice" | tee -a "${GITHUB_STEP_SUMMARY}"
+
+  registry:
+    name: Registry protocol
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      registry:
+        # Pinned by immutable digest, like every other image this repository runs.
+        image: registry@sha256:1be55279f18a2fe1a74edf2664cac61c1bea305b7b4642dab412e7affdcb3e33
+        ports:
+          - 5000:5000
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ env.W1A4_EVIDENCE_SHA }}
+          persist-credentials: false
+
+      # The pinned client, verified by sha256 BEFORE it is unpacked. A
+      # runner-preinstalled client is never accepted.
+      - name: Install the pinned ORAS
+        shell: bash
+        run: ./ci/windows/build-inputs/install-oras.sh linux-amd64 "${RUNNER_TEMP}/bin"
+
+      - name: Build the fixture and its layout
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ci/windows/runtime-retention
+          python3 make-fixture.py --out "${RUNNER_TEMP}/fixture"
+          python3 assemble.py \
+            --delivered  "${RUNNER_TEMP}/fixture/delivered" \
+            --evidence-a "${RUNNER_TEMP}/fixture/evidence-a" \
+            --evidence-b "${RUNNER_TEMP}/fixture/evidence-b" \
+            --comparison "${RUNNER_TEMP}/fixture/comparison.json" \
+            --accepted   "${RUNNER_TEMP}/fixture/accepted-runtime.json" \
+            --out        "${RUNNER_TEMP}/unit"
+          python3 build-oci.py \
+            --unit     "${RUNNER_TEMP}/unit" \
+            --accepted "${RUNNER_TEMP}/fixture/accepted-runtime.json" \
+            --out      "${RUNNER_TEMP}/oci"
+
+      # A LOCAL registry, over plain HTTP, with no credential anywhere. This
+      # proves the protocol without proving anything about ghcr.io, and it
+      # deliberately cannot reach ghcr.io: there is no login step and no token.
+      - name: Registry controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="${RUNNER_TEMP}/bin:${PATH}"
+          cd ci/windows/runtime-retention
+          ./registry-controls.sh \
+            --oci  "${RUNNER_TEMP}/oci" \
+            --repo localhost:5000/tesserafin-project/windows-ffmpeg-runtime \
+            --work "${RUNNER_TEMP}/registry" | tee -a "${GITHUB_STEP_SUMMARY}"
+
+  # A structural refusal, stated as a job rather than as a comment. If a future
+  # edit adds `packages: write` or a registry login to THIS workflow, this fails
+  # and names why.
+  cannot-publish:
+    name: This workflow cannot publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ env.W1A4_EVIDENCE_SHA }}
+          persist-credentials: false
+
+      - name: Guarantee the YAML parser this validation depends on
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! /usr/bin/python3 -c "import yaml" 2>/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends python3-yaml
+          fi
+          /usr/bin/python3 -c "import yaml; print(f'PyYAML {yaml.__version__}')"
+
+      # The permission set is PARSED, not grepped. `permissions: write-all`
+      # grants packages: write without containing the string, a quoted or inline
+      # mapping reads differently to a line-oriented pattern, and a job block can
+      # widen what the workflow level narrowed — none of which a regex can
+      # answer. The closure is followed into repository-local scripts, so "this
+      # workflow contains no push" stops being a claim about its own text.
+      - name: This workflow resolves to a closed read-only permission set
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./ci/windows/runtime-retention/assert-cannot-publish.sh \
+            .github/workflows/w1-windows-runtime-retention.yml
+
+      # The other direction, so the check above cannot pass vacuously. A scanner
+      # that finds nothing everywhere is indistinguishable from one that is
+      # broken, so it is pointed at the workflow that DOES publish and must
+      # refuse it — for the exact publishing capability that workflow owns.
+      - name: The same check refuses the publishing workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ./ci/windows/runtime-retention/assert-cannot-publish.sh \
+               .github/workflows/w1-windows-runtime-publish.yml >/dev/null 2>&1; then
+            echo "W1-A4 HARD STOP: the publication check accepted a workflow that publishes;" >&2
+            echo "it would accept anything, and proves nothing about the validation half." >&2
+            exit 1
+          fi
+          echo "the check refuses the publishing workflow, so its acceptance above means something"
+
+      # The SEMANTIC fixtures are not here. They are roster entries in the
+      # `gates` job, because a checker that refuses everything passes the two
+      # shell checks above and only the fixtures can tell that apart. What
+      # remains here is the shell-level assertion and its own self-proof — the
+      # same check applied to the publishing workflow, which it must refuse.
+
+  # The reference grammar, with a real PowerShell host. The roster runs this
+  # corpus too, with --allow-missing-pwsh, so the Python and shell parsers are
+  # covered by the one canonical command; this job is what keeps the third
+  # parser from being quietly skipped on a runner that happens to lack pwsh.
+  references:
+    name: Cross-language reference grammar
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ env.W1A4_EVIDENCE_SHA }}
+          persist-credentials: false
+
+      # pwsh is preinstalled on ubuntu-latest. It is asserted rather than
+      # assumed: without it the PowerShell leg would be silently skipped and
+      # two-thirds of a corpus would be reported as a pass.
+      - name: Assert the PowerShell host exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v pwsh >/dev/null || {
+            echo "W1-A4 HARD STOP: pwsh is not on PATH; the PowerShell leg cannot be skipped" >&2
+            exit 1
+          }
+          pwsh -NoProfile -Command '$PSVersionTable.PSVersion.ToString()'
+
+      - name: One corpus, three parsers, identical decisions
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ci/windows/runtime-retention
+          python3 reference-corpus.py \
+            --json "${RUNNER_TEMP}/reference-corpus.json" | tee -a "${GITHUB_STEP_SUMMARY}"

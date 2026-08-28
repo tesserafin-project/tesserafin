@@ -1,0 +1,142 @@
+{
+  "schema": "tesserafin.w1a4.roster-manifest",
+  "version": 1,
+  "authenticated_by": "ci/run.sh W1A4_ROSTER_MANIFEST_SHA256 and W1A4_ROSTER_IDS",
+  "roster": [
+    {
+      "position": 0,
+      "id": "accepted-contract",
+      "module": "contract.py",
+      "callable": "check_all",
+      "kind": "findings",
+      "argv": [],
+      "tier": "gate"
+    },
+    {
+      "position": 1,
+      "id": "deterministic-layout",
+      "module": "retention.py",
+      "callable": "check_all",
+      "kind": "findings",
+      "argv": [],
+      "tier": "gate"
+    },
+    {
+      "position": 2,
+      "id": "publication-policy",
+      "module": "publication_policy.py",
+      "callable": "check_all",
+      "kind": "findings",
+      "argv": [],
+      "tier": "gate"
+    },
+    {
+      "position": 3,
+      "id": "excluded-subtree-ownership",
+      "module": "boundary.py",
+      "callable": "check_all",
+      "kind": "findings",
+      "argv": [],
+      "tier": "gate"
+    },
+    {
+      "position": 4,
+      "id": "proof-trigger",
+      "module": "trigger_policy.py",
+      "callable": "check_all",
+      "kind": "findings",
+      "argv": [],
+      "tier": "gate"
+    },
+    {
+      "position": 5,
+      "id": "registry-authority",
+      "module": "loopback-corpus.py",
+      "callable": "check_all",
+      "kind": "findings",
+      "argv": [],
+      "tier": "gate"
+    },
+    {
+      "position": 6,
+      "id": "ownership-self-proof",
+      "module": "boundary-controls.py",
+      "callable": "main",
+      "kind": "exit-code",
+      "argv": [],
+      "tier": "proof"
+    },
+    {
+      "position": 7,
+      "id": "publication-self-proof",
+      "module": "permission-fixtures.py",
+      "callable": "main",
+      "kind": "exit-code",
+      "argv": [],
+      "tier": "proof"
+    },
+    {
+      "position": 8,
+      "id": "reusable-workflow-self-proof",
+      "module": "reusable-workflow-controls.py",
+      "callable": "main",
+      "kind": "exit-code",
+      "argv": [],
+      "tier": "proof"
+    },
+    {
+      "position": 9,
+      "id": "trusted-source-self-proof",
+      "module": "trusted-source-controls.py",
+      "callable": "main",
+      "kind": "exit-code",
+      "argv": [],
+      "tier": "proof"
+    },
+    {
+      "position": 10,
+      "id": "reference-grammar-self-proof",
+      "module": "reference-corpus.py",
+      "callable": "main",
+      "kind": "exit-code",
+      "argv": [
+        "--allow-missing-pwsh"
+      ],
+      "tier": "proof"
+    },
+    {
+      "position": 11,
+      "id": "hostile-controls-self-proof",
+      "module": "negative-controls.py",
+      "callable": "main",
+      "kind": "exit-code",
+      "argv": [
+        "--fixture",
+        "{fixture}"
+      ],
+      "tier": "proof"
+    },
+    {
+      "position": 12,
+      "id": "hostile-controls-ablation",
+      "module": "negative-controls.py",
+      "callable": "main",
+      "kind": "exit-code",
+      "argv": [
+        "--fixture",
+        "{fixture}",
+        "--ablate"
+      ],
+      "tier": "proof"
+    },
+    {
+      "position": 13,
+      "id": "gate-roster-self-proof",
+      "module": "gate-roster-controls.py",
+      "callable": "main",
+      "kind": "exit-code",
+      "argv": [],
+      "tier": "proof"
+    }
+  ]
+}
