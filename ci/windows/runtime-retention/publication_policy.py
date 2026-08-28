@@ -52,6 +52,7 @@ from __future__ import annotations
 
 import ipaddress
 import re
+import hashlib
 import sys
 from pathlib import Path
 
@@ -769,6 +770,157 @@ def evaluate(
     return findings
 
 
+# ── property: the publication summary is the approved prose, byte for byte ──
+#
+# W1-A5-V1-R0 found that nothing stopped the publication workflow's step summary
+# from regaining an arbitrary visibility assertion. The workflow's own prose is
+# the only place where a claim about the package's registry visibility can be
+# reintroduced into the record without touching a single reviewed byte of the
+# accepted unit, and a reviewer reading a later diff has nothing to compare it
+# against.
+#
+# This pins it. The approved `run:` scalar of exactly one step, in exactly one
+# job, of exactly one workflow, is frozen by SHA-256.
+#
+# It is deliberately NOT a content check. No keyword list, no `PRIVATE`/`PUBLIC`
+# regex, no blacklist of known bad phrasings, and nothing that tries to tell
+# "derived shell text" from "prose". Every one of those approaches has to be
+# extended each time somebody invents a new sentence, and each of them is a
+# second parser that can disagree with the first. Hashing the whole scalar has
+# the property the finding actually needs: a DIFFERENTLY WORDED assertion fails
+# for the same named reason as a restored old one, because the only thing being
+# asserted is "these are the reviewed bytes".
+#
+# The comparison is made against the ACTIVE YAML SCALAR that `yaml.safe_load`
+# produces, not against the file's source text. Comments are already absent from
+# the parsed tree, so a comment cannot smuggle text past this, and a source
+# substring cannot satisfy it. Nothing is executed to decide equality.
+#
+# This is deliberately separate from the cannot-publish evaluation. The
+# publication workflow is SUPPOSED to publish; `check_all` never runs
+# `evaluate()` over it, and folding it in would make the gate satisfiable only
+# by ignoring its own legitimate `packages: write` findings. This property makes
+# a different, orthogonal claim: whatever that workflow publishes, the sentences
+# it writes into the run summary are the reviewed ones.
+
+#: The workflow whose summary prose is frozen.
+PUBLICATION_WORKFLOW = ".github/workflows/w1-windows-runtime-publish.yml"
+
+#: The one job, and the one step inside it, that writes the run summary.
+SUMMARY_JOB = "publish"
+SUMMARY_STEP = "Record what was published"
+
+#: SHA-256 of the approved `run:` scalar, as `yaml.safe_load` yields it — block
+#: indentation stripped and clip-chomped, which is what makes this stable under
+#: reindentation of the surrounding YAML and unstable under any change to the
+#: text itself. Regenerate deliberately, by review, never by copying whatever
+#: the tree currently holds:
+#:
+#:     python3 -c "import publication_policy as p, boundary; \
+#:                 print(p.approved_summary_sha256(boundary.repo_root()))"
+APPROVED_SUMMARY_SHA256 = (
+    "00602259b86b39a706dd1a22682efb6ed9da6743b59848dd0daa1ada0673141f"
+)
+
+
+def _summary_scalar(doc, workflow: str) -> tuple[str | None, Finding | None]:
+    """The one summary step's `run:` scalar, or the finding that says why not.
+
+    Every refusal below is the same property. A missing job, a duplicated step,
+    a `run:` that is a list instead of a string and an altered sentence are all
+    the same failure from this gate's point of view: the reviewed summary is not
+    what this workflow would print.
+    """
+    prop = "summary.frozen-prose-drift"
+    if not isinstance(doc, dict):
+        return None, Finding(prop, f"{workflow} does not parse to a mapping")
+
+    jobs = doc.get("jobs")
+    if not isinstance(jobs, dict):
+        return None, Finding(prop, f"{workflow} declares no jobs mapping")
+    if SUMMARY_JOB not in jobs:
+        return None, Finding(
+            prop, f"{workflow} has no `{SUMMARY_JOB}` job to carry the approved summary")
+    # A YAML mapping cannot hold a duplicate key by the time it is parsed, so
+    # "exactly one publish job" is asserted where duplication CAN survive: the
+    # step list.
+    job = jobs[SUMMARY_JOB]
+    if not isinstance(job, dict):
+        return None, Finding(prop, f"{workflow}: `{SUMMARY_JOB}` is not a job mapping")
+
+    steps = job.get("steps")
+    if not isinstance(steps, list):
+        return None, Finding(
+            prop, f"{workflow}: `{SUMMARY_JOB}` declares no step list")
+
+    matches = [
+        step for step in steps
+        if isinstance(step, dict) and step.get("name") == SUMMARY_STEP
+    ]
+    if not matches:
+        return None, Finding(
+            prop,
+            f"{workflow}: `{SUMMARY_JOB}` has no step named {SUMMARY_STEP!r}; the "
+            f"approved publication summary is missing")
+    if len(matches) > 1:
+        return None, Finding(
+            prop,
+            f"{workflow}: `{SUMMARY_JOB}` has {len(matches)} steps named "
+            f"{SUMMARY_STEP!r}; which one writes the summary is not decidable")
+
+    run = matches[0].get("run")
+    if not isinstance(run, str):
+        return None, Finding(
+            prop,
+            f"{workflow}: the {SUMMARY_STEP!r} step's `run:` is "
+            f"{type(run).__name__}, not a string scalar")
+    return run, None
+
+
+def approved_summary_sha256(root: Path, workflow: str = PUBLICATION_WORKFLOW) -> str:
+    """The hash of the summary scalar as it stands. Used to regenerate the pin."""
+    doc = yaml.safe_load((root / workflow).read_text(encoding="utf-8"))
+    run, finding = _summary_scalar(doc, workflow)
+    if finding is not None:
+        raise SystemExit(f"cannot hash the summary: {finding.message}")
+    return hashlib.sha256(run.encode("utf-8")).hexdigest()
+
+
+def check_summary_identity(
+    root: Path, workflow: str = PUBLICATION_WORKFLOW
+) -> list[Finding]:
+    """`summary.frozen-prose-drift` — the publication summary is the reviewed one.
+
+    `workflow` may be an absolute path outside the repository, exactly as in
+    `evaluate`. That is how the S0–S3 controls grade a mutated COPY without the
+    reviewed file ever changing on disk.
+    """
+    prop = "summary.frozen-prose-drift"
+    target = root / workflow
+    try:
+        source = target.read_text(encoding="utf-8")
+    except OSError as error:
+        return [Finding(prop, f"{workflow} cannot be read: {error}")]
+    try:
+        doc = yaml.safe_load(source)
+    except yaml.YAMLError as error:
+        return [Finding(prop, f"{workflow} is not valid YAML: {error}")]
+
+    run, finding = _summary_scalar(doc, workflow)
+    if finding is not None:
+        return [finding]
+
+    actual = hashlib.sha256(run.encode("utf-8")).hexdigest()
+    if actual != APPROVED_SUMMARY_SHA256:
+        return [Finding(
+            prop,
+            f"{workflow}: the {SUMMARY_STEP!r} summary is not the approved text. "
+            f"Approved sha256:{APPROVED_SUMMARY_SHA256}, this workflow would print "
+            f"sha256:{actual}. The summary prose is reviewed content: change it by "
+            f"review, and move the pin in the same commit.")]
+    return []
+
+
 def check_all(root: Path) -> list[Finding]:
     """The gate entry point the retention orchestrator holds in its roster.
 
@@ -778,8 +930,15 @@ def check_all(root: Path) -> list[Finding]:
     its findings. `permission-fixtures.py` fixture 12 is where the publication
     workflow is required to be REFUSED, which is the assertion that keeps this
     checker honest without making the gate meaningless.
+
+    `summary.frozen-prose-drift` is folded in here on purpose. It is the one
+    claim this gate makes ABOUT the publication workflow, and it is orthogonal to
+    whether that workflow may publish: it says only that the sentences it writes
+    into the run summary are the reviewed ones. Keeping it separate from
+    `evaluate` is what lets the publication workflow keep its legitimate
+    `packages: write` findings without either check weakening the other.
     """
-    return evaluate(root, boundary.RETENTION_WORKFLOW)
+    return evaluate(root, boundary.RETENTION_WORKFLOW) + check_summary_identity(root)
 
 
 def main(argv: list[str]) -> int:

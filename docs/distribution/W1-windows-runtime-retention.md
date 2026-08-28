@@ -53,15 +53,29 @@ only, trusted `master` only, one unit, and no release, MSI, ZIP, signature,
 deletion automation, moving tag or start to W2.
 
 The reasoning is recorded on the ruling comment and summarised here because it
-changes what a reader should verify. The source repository is public, so GHCR's
-inherited default made the package public at creation; the accepted digest and
-the whole build contract are already public; the unit carries the binary and its
-complete corresponding source together, so anonymous availability **over**‑satisfies
-the `GPL-3.0-or-later` condition rather than weakening anything; and no secret or
-unreleased proprietary payload was ever being protected by private visibility.
-Keeping the inherited state also removes a later manual visibility transition,
-which would otherwise be an unautomatable manual step standing between W4 and a
-release.
+changes what a reader should verify. Nothing sensitive is being protected by
+private visibility: the accepted digest and the whole build contract are already
+public, and no secret or unreleased proprietary payload is in the unit. The unit
+carries the binary and its complete corresponding source together, so public
+anonymous availability of it is a stronger position than the licence condition
+alone requires, not a weaker one. And keeping the package public removes a later
+manual visibility transition that would otherwise stand, unautomatable, between
+W4 and a release.
+
+**How the package came to be public is not established, and is not used as a
+gate.** An earlier revision of this document asserted that the public source
+repository's visibility was inherited by the package at creation. That was
+withdrawn on [#236][evidence-correction] and is not asserted here. GitHub
+documents a package published to a repository for the first time as **private by
+default**, and documents the repository relationship as inheriting the
+repository's **access permissions** — which is a different property from the
+repository's **visibility**. The documented default therefore points away from
+the observed state rather than towards it, so the mechanism is unexplained. The
+visibility of sibling packages in this organisation is **not** offered as causal
+proof either; correlation across packages is not a mechanism.
+
+What is on the record is an observation, dated and sourced. See
+[§5](#the-public-availability-gate--observed-2026-08-28-re-measured-at-release).
 
 ## 3. The accepted identity
 
@@ -111,8 +125,9 @@ The build-input pattern has no equivalent of this section, because build inputs
 are not a conveyed binary. A runtime is.
 
 The runtime and its complete corresponding source are retained in **one** OCI
-unit so that copying, mirroring or moving the artifact cannot separate them.
-That pairing is enforced in code, in four independent places:
+unit, so that the ordinary ways of handling the artifact — pulling it, copying
+it, mirroring it — move both or neither. That is a property of how the unit is
+*assembled*, and it is enforced in code, in four independent places:
 
 * `retention.make_layer` refuses to build a unit with a binary and no source;
 * `contract.validate_accepted` refuses such a manifest **before** any count or
@@ -129,7 +144,7 @@ the corresponding source and shipping something shaped like it. Control 03
 proves that check is load-bearing by substituting a *valid* archive with
 different content.
 
-### The public-availability gate — satisfied on 2026-08-28
+### The public-availability gate — observed 2026-08-28, re-measured at release
 
 The condition itself is unchanged, and it is the one that matters:
 
@@ -140,12 +155,27 @@ The condition itself is unchanged, and it is the one that matters:
 Retaining the binary while the corresponding source is absent or unreachable is
 not a permitted state at any point.
 
-What changed is that this is no longer outstanding. **W1-A5 satisfied it at
-first publication**, and it was never in the state this section previously
-anticipated. The package has been public and anonymously readable from the
-moment the accepted digest existed in the registry; there was never an interval
-during which the retained binary was reachable and its corresponding source was
-not.
+What changed is that there is now a measurement where previously there was only
+an expectation. **On 2026-08-28, after the publication run, the package was
+observed public and anonymously readable**, and both the runtime and its
+complete corresponding source were retrieved with no credential and rehashed
+against `accepted-runtime.json`.
+
+That is a point-in-time observation taken **after** publication. It is not a
+continuous one:
+
+* no observation was taken at the instant the package version was created, and
+  none was taken continuously since;
+* so this document does **not** claim uninterrupted public visibility from the
+  moment the accepted digest existed, and it does **not** claim that there was
+  never an interval in which the retained binary was reachable and its
+  corresponding source was not. Neither was measured.
+
+The one continuity that *is* proven is structural and internal to the accepted
+unit: the runtime and the complete corresponding source are in the same layer of
+the same manifest, so a complete pull of the accepted digest has always
+retrieved both or neither. That is a fact about the stored bytes, not about the
+registry's access-control state over time.
 
 | | |
 | --- | --- |
@@ -157,10 +187,20 @@ not.
 
 With no credential at all, `tags/list` and the digest-addressed manifest return
 `200`, the manifest bytes rehash to the accepted digest, and the layer blob
-redirects to storage and downloads. Because runtime and complete corresponding
-source are **one layer in one unit**, that single anonymous pull delivers both;
-they cannot be separated by a mirror, a copy or a partial fetch. Both were
-independently pulled anonymously and rehashed against `accepted-runtime.json`.
+redirects to storage and downloads. Both the runtime and the complete
+corresponding source were independently pulled anonymously and rehashed against
+`accepted-runtime.json`.
+
+**What one-layer co-location does and does not prove.** The accepted registry
+unit structurally contains the runtime and the complete corresponding source in
+one layer, and one complete pull of the accepted digest retrieves both. A
+downstream consumer who has retrieved the unit can still extract or redistribute
+a subset of it. An earlier revision said the two "cannot be separated by a
+mirror, a copy or a partial fetch"; that overstated a property of the stored
+unit into a property of every party who handles it, and it is withdrawn. What
+co-location buys is that *this* registry, serving *this* digest, cannot offer
+the binary without also offering its source — which is the part the gate below
+depends on.
 
 Public visibility is intended throughout W2–W4 ([the superseding
 ruling](#the-visibility-element-is-superseded)). **No later manual visibility
@@ -169,11 +209,14 @@ kind between W4 and a distributed binary.
 
 Two properties of this gate survive that, and both are load-bearing.
 
-**Nothing in this repository sets or proves visibility.** GHCR package
-visibility cannot be changed through any REST or GraphQL route, so no workflow
-here — the publication workflow included — can set it, and none claims to. The
-publication workflow's summary says so explicitly and asserts nothing about the
-current state in either direction. Visibility is an independently observed
+**Nothing in this repository sets or proves visibility.** There is no currently
+documented or supported REST or GraphQL route for mutating GHCR package
+visibility, so no workflow here — the publication workflow included — sets it,
+and none claims to. The publication workflow's summary says so explicitly and
+asserts nothing about the current state in either direction; since W1-A5-V1-R1
+that summary is pinned to its reviewed bytes by
+`publication_policy.summary.frozen-prose-drift`, so it cannot silently regain a
+visibility assertion in a later edit. Visibility is an independently observed
 property of the registry, and this document records an observation, not a
 control.
 
@@ -181,9 +224,35 @@ control.
 — including this one — does not discharge the gate above. Before any public 1.1
 Windows binary is distributed, anonymous availability of both the runtime and
 its complete corresponding source has to be measured against the registry *at
-that time*. That is the only form of evidence the licence condition actually
-needs, and it is why the paragraph above is dated and sourced rather than
-written as a standing property.
+that time*. The 2026-08-28 row above is historical evidence, which is why it is
+dated and sourced rather than written as a standing property, and why the
+heading of this section names an observation rather than a discharge.
+
+#### Four things that are not the same act
+
+An earlier revision of this section deleted the distinction between holding this
+package and distributing from it. Restated, descriptively:
+
+1. **Holding the package as an internal W2–W4 build input.** No binary has been
+   conveyed to anyone. The `GPL-3.0-or-later` corresponding-source condition
+   attaches to conveying, so this act does not trigger it.
+2. **Distributing a public 1.1 Windows binary built from this runtime.** This is
+   the act the gate above is written about.
+3. **Conveying or offering the complete corresponding source.** The licence
+   admits more than one conforming route for this — accompanying the binary
+   with the source, or a written offer, among others. Anonymous registry
+   availability is **one sufficient** route. It is not the only evidence the
+   licence can accept, and an earlier revision saying so is withdrawn.
+4. **The project's own release gate.** This project requires anonymous
+   availability of the runtime *together with* its complete corresponding
+   source, re-measured at release time. That is a **deliberately stronger**
+   requirement than the licence minimum, chosen because it is mechanically
+   checkable and because it leaves nothing standing between W4 and a release.
+   Describing it as the licence's floor conflated a policy choice with a legal
+   one.
+
+Owner policy is unchanged by any of this: the package is public for the duration
+of W2–W4, and it is not to be made private.
 
 ## 6. The OCI unit
 
@@ -223,20 +292,29 @@ not an observed state.
 
 **It is deliberately not corrected, and it must not be.** That file is one of
 the 61 paths in the accepted unit. It is inside the single layer, the layer
-digest is inside the manifest, and the manifest digest is the accepted
-identity. Changing one byte of it — or of `assemble.py`, which generates it —
-produces a different layer digest, a different manifest digest and therefore a
-**different OCI identity**, discarding the reviewed and independently verified
-one. Rewriting frozen text to make it read better is not worth re-accepting a
-260 MB unit, and the acceptance evidence has to remain exactly the bytes that
-were accepted.
+digest is inside the manifest, and the manifest digest is the accepted identity.
+Changing the **emitted** bytes of that file — by any route, including an edit to
+`assemble.py` that alters what it generates — changes the layer digest, the
+manifest digest and therefore the **OCI identity**, discarding the reviewed and
+independently verified one. Rewriting frozen text to make it read better is not
+worth re-accepting a 260 MB unit, and the acceptance evidence has to remain
+exactly the bytes that were accepted.
+
+The precise dependency is on the generated output, not on the generator's
+source. A **comment-only or otherwise byte-preserving** change to `assemble.py`
+— a rename, a refactor, a docstring — leaves the emitted unit identical and so
+need **not** change the accepted identity at all. An earlier revision said that
+changing `assemble.py` necessarily changes the digest; that is not true, and it
+is withdrawn. What is frozen is the bytes the generator emits.
 
 So the wording stays frozen as acceptance evidence, and the record is placed
 outside the unit rather than inside it:
 
 * the condition that sentence describes — public, anonymous availability of the
-  runtime together with its complete corresponding source — **was satisfied by
-  W1-A5**, at first publication, as recorded in [§5](#the-public-availability-gate--satisfied-on-2026-08-28);
+  runtime together with its complete corresponding source — was **measured and
+  met on 2026-08-28**, after publication, as recorded in
+  [§5](#the-public-availability-gate--observed-2026-08-28-re-measured-at-release).
+  That measurement is historical and must be re-taken at release time;
 * this document and the durable [#236][a5-record] record carry the observed
   post-publication truth;
 * a reader who pulls the unit and finds that conditional inside it should read
@@ -294,6 +372,14 @@ as evidence. Twenty controls that all failed on an ImportError look identical to
 twenty that work.
 
 Current state: **20 RED, 0 INERT, 0 GREEN**, fixture restored byte-identically.
+
+`permission-fixtures.py` currently runs **sixteen** controls in two tiers:
+twelve semantic cannot-publish fixtures over a copy of the retention workflow,
+and four frozen-summary controls (S0–S3) over a copy of the publication
+workflow. Current state: **12 RED, 1 PASS** in tier 1 and **3 RED, 1 PASS** in
+tier 2, with **0 INERT, 0 GREEN, 0 ERROR**, and both reviewed workflows
+byte-identical on disk afterwards. Tier 2 is described in
+[§9g](#9g-what-w1-a5-v1-r1-repaired).
 
 `registry-controls.sh` adds **eighteen** more against a local registry over
 plain HTTP, with no credential anywhere: push, byte-for-byte read-back,
@@ -1085,6 +1171,121 @@ Two further limits are part of the record:
 * **W2 is still blocked.** W1-A4 is validation only; it publishes nothing, and
   no part of this repair changes that.
 
+## 9g. What W1-A5-V1-R1 repaired
+
+W1-A5-V1-R0 reviewed the first public-visibility evidence commit and accepted
+the publication workflow's replacement summary prose as careful and correct. It
+refused the reasoning offered around it. Seven of its eight findings were
+corrections to text — they are applied in place, above, and the withdrawn claims
+are named where they stood so that a later reader can see what changed rather
+than only what survived. The durable version of those corrections is on
+[#236][evidence-correction].
+
+The eighth finding was structural, and it is the one that needed code.
+
+### F8 — nothing stopped the summary from regaining a visibility assertion
+
+The accepted summary prose says that this repository neither sets nor verifies
+package visibility, and asserts nothing about the current state in either
+direction. That is the right text. Nothing held it there.
+
+The step summary is the one place where a claim about registry visibility can be
+reintroduced into the published record without touching a single reviewed byte
+of the accepted unit — the digest does not cover it, no gate read it, and a
+reviewer looking at a later diff had nothing to compare the new sentence
+against. "The prose is careful" is a property of a moment, not of the file.
+
+`publication_policy.summary.frozen-prose-drift` pins it:
+
+1. it parses the real publication workflow with `yaml.safe_load`;
+2. it locates exactly one `publish` job;
+3. it locates exactly one step named `Record what was published` — zero is a
+   finding, and so is two, because which one writes the summary would then not
+   be decidable;
+4. it requires that step's `run:` scalar to be a **string**, and to hash to the
+   approved `sha256:00602259…` exactly;
+5. it joins `check_all()`, so the canonical retention roster runs it on every
+   pull request that touches these paths. The roster manifest and `ci/run.sh`
+   are unchanged, because the entry point is still
+   `publication_policy.py::check_all`.
+
+**It is a hash, deliberately, and not a content check.** There is no visibility
+keyword list, no `PRIVATE`/`PUBLIC`/`anonymous` regex, no blacklist of known bad
+phrasings, and nothing that tries to tell "derived shell text" from "prose" —
+that last one would be a second parser that can disagree with the first. Every
+keyword approach has to be extended each time somebody invents a new sentence.
+Hashing the whole scalar has the property the finding actually needs: a
+**differently worded** assertion fails for the same named reason as a restored
+old one, because the only thing being asserted is *these are the reviewed
+bytes*.
+
+The comparison is made against the **active YAML scalar** the parser yields, not
+against the file's source text. Comments are already absent from the parsed
+tree, so a comment cannot smuggle text past it; a source substring cannot
+satisfy it; and nothing is executed to decide equality. Because the scalar is
+compared post-parse, the pin is stable under reindentation of the surrounding
+YAML and unstable under any change to the text itself, which is the correct way
+round.
+
+This property is kept **separate** from the cannot-publish evaluation.
+`check_all` has never run `evaluate()` over the publication workflow, and must
+not: that workflow is supposed to publish, and folding it in would make the gate
+satisfiable only by ignoring its own legitimate `packages: write` findings.
+Fixture 12 is still where the publication workflow is required to be **refused**
+for that capability. `summary.frozen-prose-drift` makes an orthogonal claim —
+whatever that workflow publishes, the sentences it writes into the run summary
+are the reviewed ones.
+
+### The S0–S3 controls
+
+| control | mutation | grade |
+| --- | --- | --- |
+| S0 | the pristine approved summary | **PASS** |
+| S1 | `The package is PRIVATE.` restored | **RED** `summary.frozen-prose-drift` |
+| S2 | `The package is PUBLIC.` inserted | **RED** `summary.frozen-prose-drift` |
+| S3 | a differently worded anonymous-availability assertion | **RED** `summary.frozen-prose-drift` |
+
+S0 is what stops the pin from being inverted: a checker that refuses everything
+fails the suite rather than looking maximally strict.
+
+**S3 is the control that matters.** Its replacement text is not false, contains
+no banned word, and says roughly what the approved text already says — it is the
+mutation a careful maintainer would actually write. A keyword or blacklist gate
+would pass it. It is refused for the same named property as S1 and S2, which is
+the whole argument for hashing rather than reading.
+
+Each control mutates a **disposable copy** written outside the repository, and
+the discipline is the same as tier 1's, with two additions the summary tier
+needs:
+
+* the anchor is proved to exist before the mutation is applied. A mutation whose
+  anchor has drifted would otherwise write pristine bytes, grade PASS, and read
+  as success — a silently skipped control is worse than a missing one;
+* the file that was actually **written** is re-read before it is graded, so the
+  grade is about the bytes the checker will open rather than about a string that
+  was computed.
+
+A missing anchor or a failed mutation is **ERROR**. A refusal naming some other
+property is **INERT**. Only **PASS** and **RED** pass the suite, and both
+reviewed workflows are asserted byte-identical on disk after every control has
+run.
+
+Neutering the checker was exercised: with `check_summary_identity` replaced by a
+function returning no findings, S1, S2 and S3 all grade **GREEN** — accepted
+what must be refused — and the suite exits non-zero. The controls fail their own
+self-proof rather than appearing to succeed, which is the property that makes
+them worth running.
+
+### Excluded from this repair, on purpose
+
+W1-A5-V1-R0 also recorded an incidental, non-blocking observation about
+workflow-level `packages: write` in the publication workflow. It is **not**
+repaired here, deliberately. It is unrelated to the visibility evidence and to
+the summary pin, and changing the shape of that workflow's finding set in the
+same commit as S0–S3 would make those grades harder to attribute to the property
+they are named after. It is carried forward as a separate item rather than
+silently absorbed into this repair.
+
 ## 9d. The predecessor proof run
 
 Run [32864950596] is **completed / success** at head
@@ -1180,6 +1381,7 @@ the gate keeps working afterwards.
 [ruling]: https://github.com/tesserafin-project/tesserafin/issues/236#issuecomment-5409680727
 [visibility-ruling]: https://github.com/tesserafin-project/tesserafin/issues/236#issuecomment-5454747674
 [a5-record]: https://github.com/tesserafin-project/tesserafin/issues/236#issuecomment-5454486781
+[evidence-correction]: https://github.com/tesserafin-project/tesserafin/issues/236#issuecomment-5455807718
 [33178349029]: https://github.com/tesserafin-project/tesserafin/actions/runs/33178349029
 [32750491696]: https://github.com/tesserafin-project/tesserafin/actions/runs/32750491696
 [32864950596]: https://github.com/tesserafin-project/tesserafin/actions/runs/32864950596
