@@ -25,8 +25,8 @@ It retains. It does not rebuild, and it does not re-accept.
 
 ## 2. The authority
 
-The owner ruling is recorded on [#236][ruling]. It authorises exactly one
-repository-controlled package:
+The original owner ruling is recorded on [#236][ruling]. It authorises exactly
+one repository-controlled package:
 
 ```
 ghcr.io/tesserafin-project/windows-ffmpeg-runtime
@@ -39,6 +39,29 @@ licences, checksums and the full acceptance evidence.
 
 It authorises no release, no MSI, no server ZIP, no signature, no deletion
 automation, no moving tag, and no start to W2.
+
+### The visibility element is superseded
+
+That paragraph is quoted as written, because it is what the ruling said. Its
+**visibility** element — and only that element — has since been superseded by a
+second owner ruling on [#236][visibility-ruling]: the package is **public** for
+the duration of W2–W4, and that is the intended state rather than a deviation
+to be corrected.
+
+Every other element of the original ruling stands unchanged: one package, digest
+only, trusted `master` only, one unit, and no release, MSI, ZIP, signature,
+deletion automation, moving tag or start to W2.
+
+The reasoning is recorded on the ruling comment and summarised here because it
+changes what a reader should verify. The source repository is public, so GHCR's
+inherited default made the package public at creation; the accepted digest and
+the whole build contract are already public; the unit carries the binary and its
+complete corresponding source together, so anonymous availability **over**‑satisfies
+the `GPL-3.0-or-later` condition rather than weakening anything; and no secret or
+unreleased proprietary payload was ever being protected by private visibility.
+Keeping the inherited state also removes a later manual visibility transition,
+which would otherwise be an unautomatable manual step standing between W4 and a
+release.
 
 ## 3. The accepted identity
 
@@ -106,19 +129,61 @@ the corresponding source and shipping something shaped like it. Control 03
 proves that check is load-bearing by substituting a *valid* archive with
 different content.
 
-### The public-availability gate
+### The public-availability gate — satisfied on 2026-08-28
 
-Private visibility is acceptable **only** while this package is an internal
-W2–W4 build input.
+The condition itself is unchanged, and it is the one that matters:
 
 > **Before any public 1.1 Windows binary built from this runtime is distributed,
 > this package — including the complete corresponding source — must be publicly
 > and anonymously available.**
 
 Retaining the binary while the corresponding source is absent or unreachable is
-not a permitted state at any point. Note that GHCR package visibility cannot be
-changed through any REST or GraphQL route; it is a manual step, and it is a
-release gate rather than a detail of this document.
+not a permitted state at any point.
+
+What changed is that this is no longer outstanding. **W1-A5 satisfied it at
+first publication**, and it was never in the state this section previously
+anticipated. The package has been public and anonymously readable from the
+moment the accepted digest existed in the registry; there was never an interval
+during which the retained binary was reachable and its corresponding source was
+not.
+
+| | |
+| --- | --- |
+| publication run | [33178349029] |
+| accepted digest | `sha256:99e45f154a5d72aba4185eb19b6671aa1a11c30be837deac9dd26f473593c0b9` |
+| immutable tag | `accepted-83e23b957940` → the same digest |
+| observed on | 2026-08-28 |
+| durable record | [#236][a5-record] |
+
+With no credential at all, `tags/list` and the digest-addressed manifest return
+`200`, the manifest bytes rehash to the accepted digest, and the layer blob
+redirects to storage and downloads. Because runtime and complete corresponding
+source are **one layer in one unit**, that single anonymous pull delivers both;
+they cannot be separated by a mirror, a copy or a partial fetch. Both were
+independently pulled anonymously and rehashed against `accepted-runtime.json`.
+
+Public visibility is intended throughout W2–W4 ([the superseding
+ruling](#the-visibility-element-is-superseded)). **No later manual visibility
+transition remains outstanding**, and there is no residual release step of that
+kind between W4 and a distributed binary.
+
+Two properties of this gate survive that, and both are load-bearing.
+
+**Nothing in this repository sets or proves visibility.** GHCR package
+visibility cannot be changed through any REST or GraphQL route, so no workflow
+here — the publication workflow included — can set it, and none claims to. The
+publication workflow's summary says so explicitly and asserts nothing about the
+current state in either direction. Visibility is an independently observed
+property of the registry, and this document records an observation, not a
+control.
+
+**Release validation must re-measure, not cite.** A historical visibility claim
+— including this one — does not discharge the gate above. Before any public 1.1
+Windows binary is distributed, anonymous availability of both the runtime and
+its complete corresponding source has to be measured against the registry *at
+that time*. That is the only form of evidence the licence condition actually
+needs, and it is why the paragraph above is dated and sourced rather than
+written as a standing property.
 
 ## 6. The OCI unit
 
@@ -148,6 +213,37 @@ most common reason an "identical" artifact has two digests.
 `RETENTION.md` deliberately does **not** print the manifest digest. It lives
 inside the layer that digest is computed over, so a copy of the digest there
 could not be written before the digest existed.
+
+### The unit's own `RETENTION.md` is frozen, including one stale conditional
+
+`assemble.py` generates the in-unit `RETENTION.md` with pre-publication
+conditional wording, beginning *"While this package is private…"*. That
+sentence was written before anything was published and describes a condition,
+not an observed state.
+
+**It is deliberately not corrected, and it must not be.** That file is one of
+the 61 paths in the accepted unit. It is inside the single layer, the layer
+digest is inside the manifest, and the manifest digest is the accepted
+identity. Changing one byte of it — or of `assemble.py`, which generates it —
+produces a different layer digest, a different manifest digest and therefore a
+**different OCI identity**, discarding the reviewed and independently verified
+one. Rewriting frozen text to make it read better is not worth re-accepting a
+260 MB unit, and the acceptance evidence has to remain exactly the bytes that
+were accepted.
+
+So the wording stays frozen as acceptance evidence, and the record is placed
+outside the unit rather than inside it:
+
+* the condition that sentence describes — public, anonymous availability of the
+  runtime together with its complete corresponding source — **was satisfied by
+  W1-A5**, at first publication, as recorded in [§5](#the-public-availability-gate--satisfied-on-2026-08-28);
+* this document and the durable [#236][a5-record] record carry the observed
+  post-publication truth;
+* a reader who pulls the unit and finds that conditional inside it should read
+  it as frozen pre-publication text, and read the current state here.
+
+The same rule that makes the unit trustworthy is the rule that makes this
+sentence unfixable. That is the intended trade.
 
 Publication uses `oras manifest push` and never `oras push`: the latter builds a
 manifest of its own and would replace these bytes.
@@ -1062,13 +1158,28 @@ The immutable tag is never repointed. If it already resolves to the reviewed
 digest, publication is an idempotent no-op; if it resolves elsewhere, publication
 is refused.
 
-## 11. Operational deadline
+## 11. Operational deadline — met
 
-The proof run's artifacts expire **2026-09-23**. W1-A5 must publish before then,
-or the accepted bytes become unrecoverable and W1-A3 would have to be re-run —
-which would produce a new runtime that nobody has reviewed.
+The proof run's artifacts expire **2026-09-23**. Until publication, the accepted
+bytes existed in exactly one place: that expiring artifact storage. Had the
+deadline passed first, the bytes would have become unrecoverable and W1-A3 would
+have had to be re-run — producing a new runtime that nobody had reviewed.
+
+**W1-A5 published the accepted bytes on 2026-08-28**, in run [33178349029],
+ahead of that expiry. The runtime, its complete corresponding source and the
+full acceptance evidence are now retained as one digest-addressed unit in the
+registry rather than only in artifact storage, so the 2026-09-23 date is no
+longer a risk to the accepted identity.
+
+The date itself remains true and is not withdrawn: the artifacts still expire
+then, and the statements elsewhere in this document that the retention gate
+does not depend on them ([§7](#7-the-gate-does-not-expire)) remain the reason
+the gate keeps working afterwards.
 
 [#236]: https://github.com/tesserafin-project/tesserafin/issues/236
 [ruling]: https://github.com/tesserafin-project/tesserafin/issues/236#issuecomment-5409680727
+[visibility-ruling]: https://github.com/tesserafin-project/tesserafin/issues/236#issuecomment-5454747674
+[a5-record]: https://github.com/tesserafin-project/tesserafin/issues/236#issuecomment-5454486781
+[33178349029]: https://github.com/tesserafin-project/tesserafin/actions/runs/33178349029
 [32750491696]: https://github.com/tesserafin-project/tesserafin/actions/runs/32750491696
 [32864950596]: https://github.com/tesserafin-project/tesserafin/actions/runs/32864950596

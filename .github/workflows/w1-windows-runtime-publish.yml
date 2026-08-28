@@ -282,7 +282,18 @@ jobs:
           print(f\"corresponding source: \`sha256:{a['correspondingSourceSha256']}\`\")
           "
             echo
-            echo "The package is PRIVATE. Public anonymous availability, including the"
-            echo "corresponding source, is required before any public 1.1 Windows binary"
-            echo "is distributed."
+            echo "This workflow does not set, change or verify the package's registry"
+            echo "visibility, and nothing in this summary is a claim about it in either"
+            echo "direction. GHCR visibility has no REST or GraphQL route, so it is not"
+            echo "reachable from here; it is an independently observed property and has to"
+            echo "be measured at the registry."
+            echo
+            echo "The durable record on #236 carries the visibility, and the anonymous"
+            echo "manifest and blob readback, observed for this accepted digest. That is"
+            echo "evidence of an observation at a point in time, not a standing guarantee."
+            echo
+            echo "Before any public 1.1 Windows binary built from this runtime is"
+            echo "distributed, anonymous availability of BOTH the runtime and its complete"
+            echo "corresponding source must be re-measured against the registry at that"
+            echo "time. A historical visibility claim does not discharge that gate."
           } >> "${GITHUB_STEP_SUMMARY}"
