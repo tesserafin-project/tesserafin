@@ -819,7 +819,7 @@ SUMMARY_STEP = "Record what was published"
 #:     python3 -c "import publication_policy as p, boundary; \
 #:                 print(p.approved_summary_sha256(boundary.repo_root()))"
 APPROVED_SUMMARY_SHA256 = (
-    "00602259b86b39a706dd1a22682efb6ed9da6743b59848dd0daa1ada0673141f"
+    "0dadcc185d75965aecd83001e957d64d15c0fbbcada4c06f2b57139c89cbb5cb"
 )
 
 
@@ -892,7 +892,7 @@ def check_summary_identity(
     """`summary.frozen-prose-drift` — the publication summary is the reviewed one.
 
     `workflow` may be an absolute path outside the repository, exactly as in
-    `evaluate`. That is how the S0–S3 controls grade a mutated COPY without the
+    `evaluate`. That is how the tier-2 controls grade a mutated COPY without the
     reviewed file ever changing on disk.
     """
     prop = "summary.frozen-prose-drift"
@@ -921,6 +921,84 @@ def check_summary_identity(
     return []
 
 
+# ── property: the publication workflow is the reviewed file, byte for byte ──
+#
+# W1-A5-V1-R2 measured the summary pin above and found it sound in what it
+# claims and useless against what it does not. Nine syntactically harmless
+# additions were accepted as a live publication workflow: a second summary-
+# writing step AFTER the pinned one, the same writer BEFORE it, a writer in a
+# second job, an approved hash-matching DECOY beside a differently-named writer,
+# a writer reached through a shell variable, a duplicate `publish:` job key with
+# the rogue job FIRST, a duplicate `run:` key in the pinned step, a second
+# publication-capable job carrying its own prose, and a hoist of
+# `packages: write` to workflow scope.
+#
+# The mechanism is the same in all nine: the summary property names ONE step, so
+# everything that is not that step is outside it. The three duplicate-key cases
+# add a second mechanism — `yaml.safe_load` resolves a duplicate key
+# last-wins and silently, so a rogue FIRST job or run scalar is not visible to
+# any check that reads the parsed tree.
+#
+# Narrowing the search does not close either. "No other step may write
+# `GITHUB_STEP_SUMMARY`" is false of the reviewed file itself — the readback
+# step legitimately tees the stored-manifest comparison into the summary — and
+# a name-based rule is answered by the indirection this very review used. A
+# canonical re-dump of the parsed tree is a SECOND parser, which is what the
+# W1-A4-R3 doctrine in verify-retention-gate-pinned.py refuses, and PyYAML's
+# emitted style is not stable enough to pin across versions.
+#
+# So the whole file is pinned, as raw bytes, by SHA-256. Nothing is parsed,
+# nothing is searched, and no property of YAML is relied upon, which is exactly
+# why duplicate keys, comments, indirection and steps nobody has thought of yet
+# all fail here for one reason: these are not the reviewed bytes.
+#
+# The summary property above is KEPT rather than replaced. It is narrower and
+# strictly implied by this one, and that is its value: when only the prose
+# moves, the refusal still names the prose. R1's rationale for comparing the
+# ACTIVE SCALAR rather than the source text stands for that property and is
+# SUPERSEDED for this one, which has no parse to be smuggled past.
+
+#: SHA-256 of the reviewed publication workflow, as bytes on disk. Regenerate
+#: deliberately, by review, never by copying whatever the tree currently holds:
+#:
+#:     python3 -c "import publication_policy as p, boundary; \
+#:                 print(p.approved_workflow_sha256(boundary.repo_root()))"
+APPROVED_WORKFLOW_SHA256 = (
+    "892fdcc7badb429adcd821294421faee9995c4ac8161d2972e9062de7de7b526"
+)
+
+
+def approved_workflow_sha256(root: Path, workflow: str = PUBLICATION_WORKFLOW) -> str:
+    """The digest `APPROVED_WORKFLOW_SHA256` must carry, for regeneration."""
+    return hashlib.sha256((root / workflow).read_bytes()).hexdigest()
+
+
+def check_workflow_identity(
+    root: Path, workflow: str = PUBLICATION_WORKFLOW
+) -> list[Finding]:
+    """`publication.frozen-workflow-drift` — the whole file is the reviewed one.
+
+    `workflow` may be an absolute path outside the repository, exactly as in
+    `evaluate` and `check_summary_identity`. That is how the H controls grade a
+    mutated COPY without the reviewed file ever changing on disk.
+    """
+    prop = "publication.frozen-workflow-drift"
+    try:
+        raw = (root / workflow).read_bytes()
+    except OSError as error:
+        return [Finding(prop, f"{workflow} cannot be read: {error}")]
+    actual = hashlib.sha256(raw).hexdigest()
+    if actual != APPROVED_WORKFLOW_SHA256:
+        return [Finding(
+            prop,
+            f"{workflow} is not the reviewed publication workflow. Approved "
+            f"sha256:{APPROVED_WORKFLOW_SHA256}, this tree holds sha256:{actual}. "
+            f"Every step, every job, every permission grant and every sentence this "
+            f"workflow would print is reviewed content: change it by review, and move "
+            f"the pin in the same commit.")]
+    return []
+
+
 def check_all(root: Path) -> list[Finding]:
     """The gate entry point the retention orchestrator holds in its roster.
 
@@ -931,14 +1009,26 @@ def check_all(root: Path) -> list[Finding]:
     workflow is required to be REFUSED, which is the assertion that keeps this
     checker honest without making the gate meaningless.
 
-    `summary.frozen-prose-drift` is folded in here on purpose. It is the one
-    claim this gate makes ABOUT the publication workflow, and it is orthogonal to
-    whether that workflow may publish: it says only that the sentences it writes
-    into the run summary are the reviewed ones. Keeping it separate from
-    `evaluate` is what lets the publication workflow keep its legitimate
-    `packages: write` findings without either check weakening the other.
+    `summary.frozen-prose-drift` and `publication.frozen-workflow-drift` are
+    folded in here on purpose. They are the two claims this gate makes ABOUT the
+    publication workflow, and both are orthogonal to whether that workflow may
+    publish: the first says the sentences it writes into the run summary are the
+    reviewed ones, the second says every byte of the file is. Keeping them
+    separate from `evaluate` is what lets the publication workflow keep its
+    legitimate `packages: write` findings without any check weakening another.
+
+    Both are reported by THIS callable, which is the identity the canonical
+    roster manifest pins and which `ci/windows/verify-retention-gate-pinned.py`
+    calls against a witness violation for each property it declares. W1-A5-V1-R2
+    finding B2 was that removing the one-line call site below left every control
+    still red, because the controls called the implementation directly; B3 was
+    that co-removing the call, the implementation and the controls left the
+    roster passing 14/14. Neither is reachable now without moving a pin that
+    lives outside this subtree.
     """
-    return evaluate(root, boundary.RETENTION_WORKFLOW) + check_summary_identity(root)
+    return (evaluate(root, boundary.RETENTION_WORKFLOW)
+            + check_summary_identity(root)
+            + check_workflow_identity(root))
 
 
 def main(argv: list[str]) -> int:

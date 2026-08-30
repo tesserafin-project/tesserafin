@@ -284,9 +284,8 @@ jobs:
             echo
             echo "This workflow does not set, change or verify the package's registry"
             echo "visibility, and nothing in this summary is a claim about it in either"
-            echo "direction. GHCR visibility has no REST or GraphQL route, so it is not"
-            echo "reachable from here; it is an independently observed property and has to"
-            echo "be measured at the registry."
+            echo "direction. Visibility is an independently observed property of the"
+            echo "registry, and it has to be measured there."
             echo
             echo "The durable record on #236 carries the visibility, and the anonymous"
             echo "manifest and blob readback, observed for this accepted digest. That is"

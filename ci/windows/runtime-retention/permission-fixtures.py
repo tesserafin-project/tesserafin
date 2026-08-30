@@ -1,6 +1,6 @@
 """Reviewer fixtures for the retention workflow's publication policy (#236).
 
-Two tiers, sixteen controls, each of which must reach ONE named property. The
+Two tiers, twenty-five controls, each of which must reach ONE named property. The
 point of a control is not that the checker fails — a broken checker fails on
 everything — but that it fails for the reason the control is named after. So
 each control declares the property it expects, and a control whose finding set
@@ -14,9 +14,21 @@ reviewed. The two helper fixtures write throwaway scripts outside the repository
 too, and hand them to the real closure resolver rather than to a second one
 written for the test.
 
-Tier 2, controls S0–S3 (W1-A5-V1-R1): the frozen publication summary. Same
-discipline, applied to a COPY of the PUBLICATION workflow and graded against
-`publication_policy.check_summary_identity`. W1-A5-V1-R0 found that nothing
+Tier 2, controls S0–S3 and H01–H09: the frozen publication workflow. Same
+discipline, applied to a COPY of the PUBLICATION workflow. Since W1-A5-V1-R3
+they are graded against `publication_policy.check_all` — the callable the
+canonical roster manifest pins — over a disposable repository root built outside
+the tree, because R2 finding B2 deleted the one line that CALLS
+`check_summary_identity` and every control that reached the implementation
+directly stayed red against a gate that no longer ran it.
+
+S0–S3 name `summary.frozen-prose-drift`. H01–H09 name
+`publication.frozen-workflow-drift`, and are the nine bypass classes R2 measured
+against the R1 pin: a second summary writer after the pinned step, the same
+before it, one in a second job, an approved decoy beside a rogue writer, a
+writer reached through a shell variable, a duplicate `publish:` job key and a
+duplicate `run:` key with the rogue first, a second publication-capable job, and
+`packages: write` hoisted to workflow scope. W1-A5-V1-R0 found that nothing
 stopped that workflow's step summary from regaining an arbitrary visibility
 assertion; S1 restores the old private claim, S2 asserts the opposite, and S3
 is a careful, well-intentioned REWORDING of an assertion the approved text
@@ -38,6 +50,7 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -174,6 +187,35 @@ def fixture_11(source, work):
 # evaluation over it would only re-derive its legitimate `packages: write`
 # findings and could never reach this property.
 
+def _disposable_root(work: Path, root: Path, publication: str) -> Path:
+    """A throwaway repository root carrying the workflow under test.
+
+    W1-A5-V1-R2 finding B2. Until R3 these controls called
+    `publication_policy.check_summary_identity` directly, so deleting the one
+    line that calls it from `check_all` — the callable the canonical roster
+    manifest actually pins — left every control still RED and the whole suite
+    still green. A control that reaches an implementation the gate no longer
+    invokes proves nothing about the gate.
+
+    So the controls now grade through `check_all`, which takes a ROOT and not a
+    workflow path. This builds one: the pristine retention workflow, so the
+    cannot-publish evaluation inside `check_all` has the reviewed file to look
+    at and contributes nothing; the publication workflow under test; a symlink
+    to the real `ci/` tree, which is where the script closure lives; and
+    `git init`, because the closure resolver enumerates tracked paths.
+
+    Nothing here is written inside the repository under review.
+    """
+    fake = work / "root"
+    (fake / ".github" / "workflows").mkdir(parents=True)
+    shutil.copy2(root / RETENTION, fake / RETENTION)
+    (fake / PUBLISH).write_text(publication, encoding="utf-8")
+    (fake / "ci").symlink_to(root / "ci")
+    subprocess.run(["git", "init", "-q", str(fake)], check=True,
+                   capture_output=True)
+    return fake
+
+
 def _pristine_publish(root: Path) -> str:
     return (root / PUBLISH).read_text(encoding="utf-8")
 
@@ -227,8 +269,145 @@ def summary_s3(source, work):
     return _replace(source, _SUMMARY_OBSERVATION, replacement), replacement
 
 
+#: The nine bypass classes W1-A5-V1-R2 measured against the R1 pin. Each one is
+#: a syntactically harmless addition that the summary property, which names ONE
+#: step in ONE job, could not see. They are graded on
+#: `publication.frozen-workflow-drift`, which reads the file as bytes and so has
+#: no step, no job and no parse for any of them to stand outside of.
+
+_PUBLISH_JOB_ANCHOR = "jobs:\n  publish:\n"
+_PINNED_STEP_ANCHOR = "      - name: Record what was published\n        shell: bash\n"
+_WORKFLOW_PERMISSIONS = "permissions:\n  contents: read\n\nconcurrency:\n"
+
+_ROGUE_WRITER = (
+    "      - name: Note the registry state\n"
+    "        shell: bash\n"
+    '        run: echo "The package is PUBLIC." >> "${GITHUB_STEP_SUMMARY}"\n'
+)
+
+
+def publish_h01(source, work):
+    """A second summary writer AFTER the pinned step. R2 control H1."""
+    return source.rstrip("\n") + "\n" + _ROGUE_WRITER, _ROGUE_WRITER
+
+
+def publish_h02(source, work):
+    """The same writer BEFORE the pinned step. R2 control H2."""
+    return _replace(source, _PINNED_STEP_ANCHOR,
+                    _ROGUE_WRITER + _PINNED_STEP_ANCHOR), _ROGUE_WRITER
+
+
+def publish_h03(source, work):
+    """A writer in a SECOND job. R2 control H3."""
+    added = (
+        "\n  annotate:\n"
+        "    name: Annotate the run\n"
+        "    runs-on: ubuntu-latest\n"
+        "    steps:\n"
+        "      - name: Record what was published\n"
+        "        shell: bash\n"
+        '        run: echo "The package is PUBLIC." >> "${GITHUB_STEP_SUMMARY}"\n'
+    )
+    return source.rstrip("\n") + "\n" + added, added
+
+
+def publish_h04(source, work):
+    """The approved scalar kept as a DECOY beside a differently named writer.
+
+    R2 control H4. The summary property finds its one named step, hashes it,
+    and is satisfied; the sentence a reader sees is written by the other step.
+    """
+    return source.rstrip("\n") + "\n" + _ROGUE_WRITER, _ROGUE_WRITER
+
+
+def publish_h05(source, work):
+    """A writer reached through a shell variable. R2 control H5.
+
+    No check that looks for the name `GITHUB_STEP_SUMMARY` on a step sees this,
+    which is why the repair does not look for names.
+    """
+    added = (
+        "      - name: Emit the closing note\n"
+        "        shell: bash\n"
+        "        run: |\n"
+        "          set -euo pipefail\n"
+        '          target="GITHUB_STEP_SUMMARY"\n'
+        '          echo "The package is PUBLIC." >> "${!target}"\n'
+    )
+    return source.rstrip("\n") + "\n" + added, added
+
+
+def publish_h06(source, work):
+    """A duplicate `publish:` job key with the ROGUE job FIRST. R2 control H6f.
+
+    `yaml.safe_load` resolves a duplicate mapping key last-wins and silently, so
+    the parsed tree a checker reads is the SECOND, pristine job. GitHub does not
+    read the file that way. Any property decided on the parsed tree is blind
+    here; a byte pin is not.
+    """
+    rogue = (
+        "jobs:\n"
+        "  publish:\n"
+        "    name: Publish\n"
+        "    runs-on: ubuntu-latest\n"
+        "    steps:\n"
+        "      - name: Record what was published\n"
+        "        shell: bash\n"
+        '        run: echo "The package is PUBLIC." >> "${GITHUB_STEP_SUMMARY}"\n'
+    )
+    return _replace(source, _PUBLISH_JOB_ANCHOR, rogue + "  publish:\n"), rogue
+
+
+def publish_h07(source, work):
+    """A duplicate `run:` key in the pinned step, rogue FIRST. R2 control H6g."""
+    rogue = '        run: echo "The package is PUBLIC." >> "${GITHUB_STEP_SUMMARY}"\n'
+    return _replace(source, _PINNED_STEP_ANCHOR, _PINNED_STEP_ANCHOR + rogue), rogue
+
+
+def publish_h08(source, work):
+    """A second publication-capable job carrying its own prose. R2 control H9.
+
+    `check_all` never runs `evaluate` over this workflow — it is supposed to
+    publish — so its authority surface had no owner on the canonical path at
+    all. The byte pin is that owner: it does not decide whether the job could
+    publish, it decides that the job is not in the reviewed file.
+    """
+    added = (
+        "\n  publish-mirror:\n"
+        "    name: Mirror the accepted unit\n"
+        "    runs-on: ubuntu-latest\n"
+        "    environment: windows-runtime-publication\n"
+        "    permissions:\n"
+        "      contents: read\n"
+        "      packages: write\n"
+        "    steps:\n"
+        "      - name: Push and note it\n"
+        "        env:\n"
+        "          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}\n"
+        "        shell: bash\n"
+        "        run: |\n"
+        "          set -euo pipefail\n"
+        '          printf %s "${GHCR_TOKEN}" | oras login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin\n'
+        "          oras manifest push ghcr.io/tesserafin-project/windows-ffmpeg-runtime:mirror\n"
+        '          echo "The package is PUBLIC." >> "${GITHUB_STEP_SUMMARY}"\n'
+    )
+    return source.rstrip("\n") + "\n" + added, added
+
+
+def publish_h09(source, work):
+    """`packages: write` hoisted to workflow scope. R2 control H11.
+
+    R1 recorded this observation and deliberately did not repair it, so that the
+    S0-S3 grades stayed attributable to the property they name. It is repaired
+    here as a side effect of pinning the file, and it is a control so that the
+    coverage is stated rather than assumed.
+    """
+    hoisted = "permissions:\n  contents: read\n  packages: write\n\nconcurrency:\n"
+    return _replace(source, _WORKFLOW_PERMISSIONS, hoisted), "  packages: write\n\nconcurrency:"
+
+
 SUMMARY_FIXTURES: list[tuple[str, str, str, object]] = [
-    ("S0-pristine-approved-summary", "the approved publication summary is accepted",
+    ("S0-pristine-approved-summary", "the approved publication workflow is accepted",
      None, summary_s0),
     ("S1-restored-private-claim", "a restored `The package is PRIVATE.` is refused",
      "summary.frozen-prose-drift", summary_s1),
@@ -237,6 +416,30 @@ SUMMARY_FIXTURES: list[tuple[str, str, str, object]] = [
     ("S3-reworded-anonymous-claim",
      "a differently worded anonymous-availability assertion is refused",
      "summary.frozen-prose-drift", summary_s3),
+    ("H01-writer-after-the-pinned-step", "a second summary writer after it is refused",
+     "publication.frozen-workflow-drift", publish_h01),
+    ("H02-writer-before-the-pinned-step", "a second summary writer before it is refused",
+     "publication.frozen-workflow-drift", publish_h02),
+    ("H03-writer-in-a-second-job", "a summary writer in another job is refused",
+     "publication.frozen-workflow-drift", publish_h03),
+    ("H04-approved-decoy-plus-writer",
+     "the approved scalar kept as a decoy beside a writer is refused",
+     "publication.frozen-workflow-drift", publish_h04),
+    ("H05-writer-through-indirection",
+     "a writer reached through a shell variable is refused",
+     "publication.frozen-workflow-drift", publish_h05),
+    ("H06-duplicate-job-key-rogue-first",
+     "a duplicate `publish:` key whose rogue job is hidden by last-wins is refused",
+     "publication.frozen-workflow-drift", publish_h06),
+    ("H07-duplicate-run-key-rogue-first",
+     "a duplicate `run:` key in the pinned step is refused",
+     "publication.frozen-workflow-drift", publish_h07),
+    ("H08-second-publication-capable-job",
+     "a second job with packages: write, a credential and its own prose is refused",
+     "publication.frozen-workflow-drift", publish_h08),
+    ("H09-workflow-level-packages-write",
+     "`packages: write` hoisted to workflow scope is refused",
+     "publication.frozen-workflow-drift", publish_h09),
 ]
 
 
@@ -342,8 +545,8 @@ def main() -> int:
             # that silently skips its own mutation is the failure mode this
             # exists to make impossible.
             mutated, marker = mutate(publish_pristine, work)
-            target = work / "publication-workflow.yml"
-            target.write_text(mutated, encoding="utf-8")
+            fake = _disposable_root(work, root, mutated)
+            target = fake / PUBLISH
 
             # Re-read what was actually WRITTEN, not what was computed. The
             # grade below is about the bytes on disk that the checker will open.
@@ -358,7 +561,7 @@ def main() -> int:
                     f"the mutation was not present in the file that was written: "
                     f"{marker!r}")
 
-            findings = publication_policy.check_summary_identity(root, str(target))
+            findings = publication_policy.check_all(fake)
             grade, detail, properties = _grade(findings, expected)
         except Exception as error:  # noqa: BLE001 - an ERROR grade is the point
             grade, detail = "ERROR", f"{type(error).__name__}: {error}"

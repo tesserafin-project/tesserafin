@@ -210,15 +210,26 @@ kind between W4 and a distributed binary.
 Two properties of this gate survive that, and both are load-bearing.
 
 **Nothing in this repository sets or proves visibility.** There is no currently
-documented or supported REST or GraphQL route for mutating GHCR package
+documented or supported REST or GraphQL route for *mutating* GHCR package
 visibility, so no workflow here — the publication workflow included — sets it,
-and none claims to. The publication workflow's summary says so explicitly and
-asserts nothing about the current state in either direction; since W1-A5-V1-R1
-that summary is pinned to its reviewed bytes by
-`publication_policy.summary.frozen-prose-drift`, so it cannot silently regain a
-visibility assertion in a later edit. Visibility is an independently observed
-property of the registry, and this document records an observation, not a
-control.
+and none claims to. Visibility is nonetheless **readable**: `GET
+/orgs/{org}/packages/container/{name}` returns a `visibility` field, and it
+returned `"public"` for this package on 2026-08-28. The two are different
+claims, and W1-A5-V1-R2 found the publication workflow asserting the stronger,
+false one — *"GHCR visibility has no REST or GraphQL route, so it is not
+reachable from here"* — inside the very scalar W1-A5-V1-R1 had frozen. That
+sentence is **withdrawn** and the claim is not restated in a corrected form:
+the workflow now says only that it neither sets, changes nor verifies
+visibility, and that visibility has to be measured at the registry. Fewer
+claims, and nothing left in the frozen bytes to falsify.
+
+Since W1-A5-V1-R3 that workflow is pinned by **two** properties rather than
+one: `publication_policy.summary.frozen-prose-drift`, which hashes the reviewed
+summary scalar, and `publication_policy.publication.frozen-workflow-drift`,
+which hashes the whole file as bytes. Both are obligations recorded outside the
+subtree that implements them — see [section 9h](#9h-what-w1-a5-v1-r2-found-and-r3-repaired).
+Visibility remains an independently observed property of the registry, and this
+document records an observation, not a control.
 
 **Release validation must re-measure, not cite.** A historical visibility claim
 — including this one — does not discharge the gate above. Before any public 1.1
@@ -373,13 +384,14 @@ twenty that work.
 
 Current state: **20 RED, 0 INERT, 0 GREEN**, fixture restored byte-identically.
 
-`permission-fixtures.py` currently runs **sixteen** controls in two tiers:
+`permission-fixtures.py` currently runs **twenty-five** controls in two tiers:
 twelve semantic cannot-publish fixtures over a copy of the retention workflow,
-and four frozen-summary controls (S0–S3) over a copy of the publication
-workflow. Current state: **12 RED, 1 PASS** in tier 1 and **3 RED, 1 PASS** in
-tier 2, with **0 INERT, 0 GREEN, 0 ERROR**, and both reviewed workflows
-byte-identical on disk afterwards. Tier 2 is described in
-[§9g](#9g-what-w1-a5-v1-r1-repaired).
+and thirteen frozen publication-workflow controls (S0–S3, H01–H09) over a copy
+of the publication workflow. Current state: **11 RED, 1 PASS** in tier 1 and
+**12 RED, 1 PASS** in tier 2, with **0 INERT, 0 GREEN, 0 ERROR**, and both
+reviewed workflows byte-identical on disk afterwards. Tier 2 is described in
+[§9g](#9g-what-w1-a5-v1-r1-repaired) and
+[§9h](#9h-what-w1-a5-v1-r2-found-and-r3-repaired).
 
 `registry-controls.sh` adds **eighteen** more against a local registry over
 plain HTTP, with no credential anywhere: push, byte-for-byte read-back,
@@ -1285,6 +1297,177 @@ the summary pin, and changing the shape of that workflow's finding set in the
 same commit as S0–S3 would make those grades harder to attribute to the property
 they are named after. It is carried forward as a separate item rather than
 silently absorbed into this repair.
+
+**Closed by R3.** The whole-file pin refuses that hoist along with everything
+else in the file, and control `H09` in `permission-fixtures.py` states the
+coverage rather than leaving it to be inferred. See
+[section 9h](#9h-what-w1-a5-v1-r2-found-and-r3-repaired).
+
+## 9h. What W1-A5-V1-R2 found, and R3 repaired
+
+W1-A5-V1-R2 was an independent hostile re-review of the R1 head. It reproduced
+R1's own ablation — neutralising `check_summary_identity` does turn S1–S3 green
+and does fail the suite — and then measured the pin against mutations R1 had not
+tried. It returned **FAILED** on five blocking findings. All five are repaired
+here. The mission title names two of them; it was the headline, not the
+boundary.
+
+### B1 — the summary pin named one step, so everything else stood outside it
+
+`summary.frozen-prose-drift` finds the one step named `Record what was
+published`, in the one job named `publish`, and hashes its `run:` scalar. R2
+measured **nine** additions that leave that scalar untouched and were accepted:
+
+| control | mutation | R2 |
+| --- | --- | --- |
+| H01 | a second summary-writing step **after** the pinned one | accepted |
+| H02 | the same writer **before** it | accepted |
+| H03 | a writer in a **second job** | accepted |
+| H04 | the approved scalar kept as a **decoy** beside a differently named writer | accepted |
+| H05 | a writer reached through a **shell variable** (`${!name}`) | accepted |
+| H06 | a duplicate `publish:` job key with the **rogue job first** | accepted |
+| H07 | a duplicate `run:` key in the pinned step, **rogue first** | accepted |
+| H08 | a **second publication-capable job** carrying its own prose | accepted |
+| H09 | `packages: write` **hoisted** to workflow scope | accepted |
+
+Two mechanisms, not one. H01–H05 and H08–H09 are outside the one step the
+property names. H06 and H07 are worse: `yaml.safe_load` resolves a duplicate
+mapping key **last-wins and silently**, so the tree any parser-based check reads
+is the *second*, pristine value, while GitHub reads a file that has both.
+
+None of the obvious narrowings closes this.
+
+* *"No other step may write `GITHUB_STEP_SUMMARY`"* is **false of the reviewed
+  file**: the readback step legitimately tees the stored-manifest comparison
+  into the summary. A rule that refuses the pristine workflow is not a rule.
+* A name-based rule is answered by H05, which never writes the name.
+* Hashing a **canonical re-dump** of the parsed tree is a second parser — the
+  thing `verify-retention-gate-pinned.py` already refuses on principle — and
+  PyYAML's emitted scalar style is not stable enough across versions to pin.
+
+So the whole file is pinned, as **raw bytes**, by
+`publication.frozen-workflow-drift`. Nothing is parsed, nothing is searched, and
+no property of YAML is relied on, which is exactly why duplicate keys,
+indirection, and steps nobody has thought of yet all fail here for one reason:
+these are not the reviewed bytes. R1's rationale for comparing the *active
+scalar* rather than the source text stands for the summary property, which is
+narrower and still names the prose when only the prose moves; it is
+**superseded** for the file property, which has no parse to be smuggled past.
+
+H09 is also the disposition of the `packages: write` observation R1 recorded and
+deliberately left unrepaired. It is closed here as a consequence of pinning the
+file, and it is a control so that the coverage is stated rather than assumed.
+
+### B2 — the call site was unowned, and the controls could not see that
+
+R2 deleted **one line** — `+ check_summary_identity(root)` — from
+`publication_policy.check_all`. Every identity check in
+`verify-retention-gate-pinned.py` passed, the orchestrator ran 14/14, and S1–S3
+stayed **RED**.
+
+The reason S1–S3 stayed red is that they called `check_summary_identity`
+directly. A control that reaches an implementation the gate no longer invokes
+proves nothing about the gate. Tier 2 now grades through
+`publication_policy.check_all` — the callable the canonical roster manifest
+actually pins — against a disposable repository root built outside the tree.
+With the call site removed, all thirteen tier-2 controls now grade GREEN and the
+suite exits non-zero.
+
+### B3 — the obligation was self-declared, so co-removal was silent
+
+R2 then removed the call, the implementation, the four controls and their
+invocation together. Nothing refused. The roster still passed 14/14, because the
+property was named only by the file that implemented it, and by the document.
+
+**Identity is not behaviour.** Everything the roster contract established was
+that `publication_policy.py::check_all` exists, under that name, in that file,
+at that position. None of it notices that the function stopped reporting
+something.
+
+The obligation is now recorded in three places that cannot be edited as one:
+
+| where | what it holds |
+| --- | --- |
+| `ci/windows/w1a4-roster-manifest.v1.json` | per member, the properties it must still **report** |
+| `ci/run.sh` `W1A4_ROSTER_PROPERTIES` | the set of obligations, pinned outside the manifest |
+| `ci/windows/verify-retention-gate-pinned.py` | **witness violations** that demonstrate each one |
+
+The demonstration is a call, not a source scan — a grep for the property name is
+satisfied by the string in a comment, which is finding D3 in a new place. For
+each declared property the verifier builds a disposable root, breaks the thing
+the property is about, calls the pinned callable, and requires the property to
+be named. It then calls the same callable against an **unbroken** root and
+requires the property to be **absent**, so a gate that satisfies the witness by
+reporting the property unconditionally fails the second half.
+
+The two witnesses are deliberately distinguishable: the prose witness inserts a
+sentence into the summary scalar, and the byte witness appends a trailing
+**comment**, which `yaml.safe_load` never yields and which therefore only the
+file property can see.
+
+The witnesses live in the external verifier, not in the subtree. A witness the
+subtree could edit is the bilateral agreement W1-A4-R3 finding F3 already
+refused once.
+
+### Where this stops, measured rather than claimed
+
+Tier P of `gate-roster-controls.py` replays both attacks and three more:
+
+| control | mutation | refusing property |
+| --- | --- | --- |
+| P01 | R2's B2: the summary call site deleted | `ownership.property-not-reported` |
+| P02 | the file call site deleted | `ownership.property-not-reported` |
+| P03 | R2's B3: calls, implementations and controls removed together | `ownership.property-not-reported` |
+| P04 | the obligation dropped from the manifest, its digest correctly re-pinned | `anchor.properties-drift` |
+| P05 | a gate that names the property for **every** tree | `ownership.property-always-reported` |
+| P06 | pristine | accepted, as it must be |
+| P07 | one obligation dropped from the manifest **and** from `ci/run.sh` | **accepted** — the boundary |
+
+The pinned file must also be unable to change without the gate running. The
+retention workflow already listed `w1-windows-runtime-publish.yml` in its
+`paths:` filter; until R3 nothing required it to keep listing it, so a pull
+request that edited only the publication workflow could have removed the filter
+entry and the pin in one commit that never evaluated either. That path is now in
+the verifier's `REQUIRED_TRIGGER_PATHS`.
+
+P07 is the boundary itself. Dropping an obligation takes an edit to the
+canonical manifest *and* to `ci/run.sh`, which is the merge gate for every
+branch and is reviewed as one. Removing the array altogether is a different
+outcome — `anchor.properties-unpinned` — because the trust root may not stop
+naming obligations at all. Nothing pins `ci/run.sh` in turn, and nothing should:
+a chain of files each pinning the next has no last link.
+
+### B4 and B5 — an absolute claim, frozen into the reviewed bytes
+
+The pinned scalar asserted *"GHCR visibility has no REST or GraphQL route, so it
+is not reachable from here"*. That is false. `GET
+/orgs/{org}/packages/container/{name}` returns `visibility`, and returned
+`"public"` for this package. What is undocumented is a route that **sets** it —
+which is what the same-head document said, correctly, all along. R1 froze the
+stronger sentence and disclosed the discrepancy nowhere.
+
+It is **withdrawn rather than corrected**: the workflow now claims only that it
+neither sets, changes nor verifies visibility, and that visibility must be
+measured at the registry. A claim that is not made cannot be falsified by a
+later change to GitHub's API surface. Section 5 above carries the distinction in
+full.
+
+Both pins moved in this commit, by review:
+
+| pin | value |
+| --- | --- |
+| `APPROVED_SUMMARY_SHA256` | `0dadcc18…89cbb5cb` |
+| `APPROVED_WORKFLOW_SHA256` | `892fdcc7…7de7b526` |
+| `W1A4_ROSTER_MANIFEST_SHA256` | `312d1ece…3966a1b841` |
+
+### Not changed
+
+`accepted-runtime.json`, `assemble.py`, `retention.py`, `contract.py` and
+`build-oci.py` are byte-identical. The accepted OCI identity
+`sha256:99e45f15…93c0b9`, its immutable tag and the single publication run are
+untouched, and nothing here writes to GHCR or dispatches a workflow. The unit's
+own frozen `RETENTION.md` still reads *"While this package is private…"* for the
+reason [given above](#the-units-own-retentionmd-is-frozen-including-one-stale-conditional).
 
 ## 9d. The predecessor proof run
 

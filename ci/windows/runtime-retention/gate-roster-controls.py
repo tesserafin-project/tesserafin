@@ -804,6 +804,212 @@ ANCHOR_CONTROLS: list[tuple[str, str, tuple[str, ...], object]] = [
 ]
 
 
+# ── tier P: the obligations are OWNED, not declared (W1-A5-V1-R2 B2/B3) ─────
+#
+# Everything in tier X establishes that the roster runs the callables the
+# manifest names. R2 showed that is not the same claim as those callables still
+# doing anything:
+#
+#   B2. Delete `+ check_summary_identity(root)` from `publication_policy.
+#       check_all` — one line. Every identity check passes, the orchestrator
+#       runs 14/14, and the subtree's own S1-S3 controls stay RED, because they
+#       called the implementation directly rather than through the roster's
+#       callable.
+#
+#   B3. Co-remove the call, the implementation, the controls and their
+#       invocation. Nothing refuses at all: the property was declared only by
+#       the file that implemented it.
+#
+# The repair is a third constant beside the roster digest and the member ids —
+# `W1A4_ROSTER_PROPERTIES` in the trust root — plus witness violations in the
+# external verifier, which CALL the pinned callable and require it to name the
+# property. These controls prove that mechanism refuses R2's two attacks, that
+# it refuses a manifest that quietly drops an obligation, and that it refuses a
+# gate which satisfies the witness by reporting the property unconditionally.
+#
+# The last control is the boundary itself, measured rather than claimed: an
+# edit to the manifest AND to ci/run.sh together does remove the obligation.
+# That is the same two-key boundary tier X already states for the roster, and
+# ci/run.sh is the merge gate for every branch.
+PUBLISH_REL = ".github/workflows/w1-windows-runtime-publish.yml"
+POLICY_REL = "publication_policy.py"
+
+_CALL_BOTH = """    return (evaluate(root, boundary.RETENTION_WORKFLOW)
+            + check_summary_identity(root)
+            + check_workflow_identity(root))"""
+
+
+def _property_tree(root: Path) -> Path:
+    """An anchor tree that also carries the two workflows the witnesses need."""
+    work = _anchor_tree(root)
+    (work / ".github" / "workflows").mkdir(parents=True)
+    for relative in (
+        ".github/workflows/w1-windows-runtime-retention.yml",
+        PUBLISH_REL,
+    ):
+        shutil.copy2(root / relative, work / relative)
+    return work
+
+
+def _policy(work: Path) -> Path:
+    return work / SUBTREE_REL / POLICY_REL
+
+
+def _rewrite_check_all(work: Path, replacement: str) -> None:
+    path = _policy(work)
+    source = path.read_text(encoding="utf-8")
+    if _CALL_BOTH not in source:
+        raise AssertionError(f"{POLICY_REL} no longer carries the check_all body this "
+                             f"control mutates")
+    path.write_text(source.replace(_CALL_BOTH, replacement, 1), encoding="utf-8")
+
+
+def p_unwire_summary(work: Path) -> str:
+    """R2 finding B2, exactly: one line deleted from the roster's callable."""
+    _rewrite_check_all(work, """    return (evaluate(root, boundary.RETENTION_WORKFLOW)
+            + check_workflow_identity(root))""")
+    return "the summary call site removed from check_all"
+
+
+def p_unwire_workflow(work: Path) -> str:
+    _rewrite_check_all(work, """    return (evaluate(root, boundary.RETENTION_WORKFLOW)
+            + check_summary_identity(root))""")
+    return "the whole-file call site removed from check_all"
+
+
+def p_co_remove(work: Path) -> str:
+    """R2 finding B3: the calls, the implementations and the controls together."""
+    _rewrite_check_all(work, "    return evaluate(root, boundary.RETENTION_WORKFLOW)")
+    path = _policy(work)
+    source = path.read_text(encoding="utf-8")
+    for name in ("check_summary_identity", "check_workflow_identity"):
+        start = source.index(f"def {name}(")
+        end = source.index("\ndef ", start) + 1
+        source = source[:start] + source[end:]
+    path.write_text(source, encoding="utf-8")
+    fixtures = work / SUBTREE_REL / "permission-fixtures.py"
+    text = fixtures.read_text(encoding="utf-8")
+    text = re.sub(r"SUMMARY_FIXTURES: list\[tuple\[str, str, str, object\]\] = \[.*?\n\]\n",
+                  "SUMMARY_FIXTURES: list[tuple[str, str, str, object]] = []\n",
+                  text, flags=re.S)
+    fixtures.write_text(text, encoding="utf-8")
+    return "both call sites, both implementations and every tier-2 control removed"
+
+
+def p_unconditional(work: Path) -> str:
+    """A gate that satisfies the witness by always naming the property.
+
+    The witness half alone would accept this. The baseline half — the same
+    callable, against an unmodified tree — is what refuses it.
+    """
+    _rewrite_check_all(work, """    return (evaluate(root, boundary.RETENTION_WORKFLOW)
+            + [Finding("summary.frozen-prose-drift", "unconditional")]
+            + check_workflow_identity(root))""")
+    return "the summary property reported for every tree, modified or not"
+
+
+def p_manifest_drops_obligation(work: Path) -> str:
+    """The obligation deleted from the manifest, its digest correctly re-pinned."""
+    doc = _manifest_rows(work)
+    for row in doc["roster"]:
+        if row["id"] == "publication-policy":
+            row["properties"] = []
+    _write_manifest(work, doc)
+    _repin_digest(work)
+    return "the obligations dropped from the manifest and the digest re-pinned"
+
+
+#: The obligation the boundary control drops from BOTH data files at once.
+_DROPPED = "summary.frozen-prose-drift"
+
+
+def p_two_file_boundary(work: Path) -> str:
+    """The stated boundary: the manifest AND the trust root, edited together.
+
+    One obligation is dropped from both, consistently, and the manifest digest
+    is re-pinned. This is ACCEPTED, and saying so is the point: the contract
+    stops at ci/run.sh, which is the merge gate for every branch and is reviewed
+    as one. A chain of files each pinning the next has no last link.
+
+    The other obligation is left in place. Removing the array altogether is a
+    different outcome — `anchor.properties-unpinned` — because the trust root
+    may not stop naming obligations at all.
+    """
+    doc = _manifest_rows(work)
+    for row in doc["roster"]:
+        row["properties"] = [p for p in row["properties"] if p != _DROPPED]
+    _write_manifest(work, doc)
+    text = (work / TRUST_ROOT_REL).read_text(encoding="utf-8")
+    text = text.replace(f"    {_DROPPED}\n", "", 1)
+    (work / TRUST_ROOT_REL).write_text(text, encoding="utf-8")
+    _repin_digest(work)
+    return f"{_DROPPED} dropped from the manifest AND from the trust root"
+
+
+def p_pristine(work: Path) -> str:
+    return "nothing changed"
+
+
+PROPERTY_CONTROLS: list[tuple[str, str, tuple[str, ...], object]] = [
+    ("P01-summary-call-site-removed",
+     "R2 finding B2: the one-line call site deleted from the pinned callable",
+     ("ownership.property-not-reported",), p_unwire_summary),
+    ("P02-file-call-site-removed", "the other call site deleted",
+     ("ownership.property-not-reported",), p_unwire_workflow),
+    ("P03-co-removed-with-its-controls",
+     "R2 finding B3: calls, implementations and controls removed together",
+     ("ownership.property-not-reported",), p_co_remove),
+    ("P04-obligation-dropped-from-the-manifest",
+     "the obligation deleted from the manifest, its digest correctly re-pinned",
+     ("anchor.properties-drift",), p_manifest_drops_obligation),
+    ("P05-property-reported-unconditionally",
+     "a gate that names the property for every tree satisfies no witness",
+     ("ownership.property-always-reported",), p_unconditional),
+    ("P06-pristine", "the pristine obligations are accepted", (), p_pristine),
+    ("P07-two-file-boundary",
+     "the stated boundary, measured: manifest and trust root edited together",
+     (), p_two_file_boundary),
+]
+
+
+def _grade_property(pin, name, expected, mutate, real_root: Path):
+    """Mutate a copy of the anchored files and read the OWNERSHIP verdict."""
+    work = None
+    try:
+        work = _property_tree(real_root)
+        before = sorted((str(p.relative_to(work)), p.read_bytes())
+                        for p in work.rglob("*") if p.is_file())
+        reached = mutate(work)
+        after = sorted((str(p.relative_to(work)), p.read_bytes())
+                       for p in work.rglob("*") if p.is_file())
+        if name != "P06-pristine" and before == after:
+            return "ERROR", "the mutation did not apply", []
+
+        findings = pin.install_roster(work)
+        if not findings:
+            orchestrator = pin.load_orchestrator(
+                work / SUBTREE_REL / "retention_gates.py")
+            findings = pin.check_properties(work, orchestrator)
+        properties = sorted({f.prop for f in findings})
+
+        if not expected:
+            if findings:
+                return "GREEN", f"refused: {properties}", properties
+            return "PASS", f"accepted ({reached})", properties
+        if not findings:
+            return "GREEN", "ACCEPTED what must be refused", properties
+        absent = [prop for prop in expected if prop not in properties]
+        if absent:
+            return "INERT", f"refused, but not for {absent}; got {properties}", properties
+        return "RED", f"refused, naming {list(properties)}", properties
+    except Exception as error:  # noqa: BLE001
+        return "ERROR", f"{type(error).__name__}: {error}", []
+    finally:
+        pin.install_roster(real_root)
+        if work is not None:
+            shutil.rmtree(work, ignore_errors=True)
+
+
 def _grade_anchor(pin, name, expected, mutate, real_root: Path):
     """Mutate a copy of the four anchored files and read the verifier's verdict.
 
@@ -912,8 +1118,8 @@ def _stubbed_verifier(pin, real_root: Path) -> tuple[str, str]:
             spec.loader.exec_module(module)
         except SystemExit:
             pass
-        required = ("check", "check_command", "check_roster", "check_trust_root",
-                    "install_roster", "read_anchor", "load_manifest")
+        required = ("check", "check_command", "check_roster", "check_properties",
+                    "check_trust_root", "install_roster", "read_anchor", "load_manifest")
         absent = [name for name in required if not callable(getattr(module, name, None))]
         if absent:
             return "RED", (f"the stub exits 0 and implements none of {absent}; the roster "
@@ -1393,6 +1599,16 @@ def main() -> int:
     print("\nthe independent anchor — a third party to a two-party agreement")
     for name, description, expected, mutate in ANCHOR_CONTROLS:
         grade, detail, properties = _grade_anchor(pin, name, expected, mutate, root)
+        if grade not in ("RED", "PASS"):
+            failures += 1
+        print(f"  {grade:<6} {name:<40} {detail}")
+        results.append({"control": name, "property": description,
+                        "expected": list(expected), "grade": grade, "detail": detail,
+                        "found": properties})
+
+    print("\nthe obligations are owned, not declared (W1-A5-V1-R2 B2/B3)")
+    for name, description, expected, mutate in PROPERTY_CONTROLS:
+        grade, detail, properties = _grade_property(pin, name, expected, mutate, root)
         if grade not in ("RED", "PASS"):
             failures += 1
         print(f"  {grade:<6} {name:<40} {detail}")

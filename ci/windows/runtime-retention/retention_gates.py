@@ -137,7 +137,8 @@ PROOFS: tuple[Gate, ...] = (
     Gate("ownership-self-proof", "boundary-controls.py", "main", "exit-code", (),
          "thirteen hostile controls each reach their own named ownership property"),
     Gate("publication-self-proof", "permission-fixtures.py", "main", "exit-code", (),
-         "twelve semantic permission fixtures each reach their own named property"),
+         "twelve semantic permission fixtures and thirteen frozen publication-workflow "
+         "controls each reach their own named property"),
     Gate("reusable-workflow-self-proof", "reusable-workflow-controls.py", "main",
          "exit-code", (),
          "sixteen reusable-workflow graph controls each reach their own named property"),
