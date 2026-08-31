@@ -829,8 +829,14 @@ ANCHOR_CONTROLS: list[tuple[str, str, tuple[str, ...], object]] = [
 #
 # The last control is the boundary itself, measured rather than claimed: an
 # edit to the manifest AND to ci/run.sh together does remove the obligation.
-# That is the same two-key boundary tier X already states for the roster, and
-# ci/run.sh is the merge gate for every branch.
+# That is the same two-key boundary tier X already states for the roster.
+# W1-A5-V1-R5 corrects what was claimed of ci/run.sh here: it is the
+# authoritative LOCAL gate and the file the anchor pins are read from, but no
+# hosted workflow runs it on a pull request. `local-ci.yml` is the only workflow
+# that executes it, and its `pull_request`/`push` triggers were removed when the
+# self-hosted runner was parked; it is `workflow_dispatch`-only and is not among
+# master's required contexts. So this boundary rests on ordinary review of a
+# reviewed file, not on an enforced hosted gate.
 PUBLISH_REL = ".github/workflows/w1-windows-runtime-publish.yml"
 POLICY_REL = "publication_policy.py"
 
@@ -928,8 +934,9 @@ def p_two_file_boundary(work: Path) -> str:
 
     One obligation is dropped from both, consistently, and the manifest digest
     is re-pinned. This is ACCEPTED, and saying so is the point: the contract
-    stops at ci/run.sh, which is the merge gate for every branch and is reviewed
-    as one. A chain of files each pinning the next has no last link.
+    stops at ci/run.sh, which is the authoritative local gate and is reviewed as
+    one. No hosted workflow runs it on a pull request — see the tier-P note
+    above, corrected by W1-A5-V1-R5. A chain of files each pinning the next has no last link.
 
     The other obligation is left in place. Removing the array altogether is a
     different outcome — `anchor.properties-unpinned` — because the trust root
@@ -970,6 +977,127 @@ PROPERTY_CONTROLS: list[tuple[str, str, tuple[str, ...], object]] = [
      "the stated boundary, measured: manifest and trust root edited together",
      (), p_two_file_boundary),
 ]
+
+
+# ── tier Q: the verifier's own success line (W1-A5-V1-R4 finding O9b) ──────
+#
+# Tier P grades by calling `check_properties` in THIS process, on the installed
+# verifier module. That is the right shape for an attack on the subtree, and the
+# wrong shape for an attack on the verifier: R4 unwired `check_properties` from
+# `check()` and the run still printed the sentence claiming every obligation had
+# been checked, because a caller that only counts findings cannot tell an empty
+# result from work that never happened.
+#
+# So tier Q mutates a COPY of the verifier and runs it as a SUBPROCESS, which is
+# the only way to observe what it prints and what it exits with. The R5 repair
+# is an execution receipt: `check_properties` records that it ran, that it
+# reached the end, and which (member, property) pairs it actually demonstrated,
+# and `main` refuses to print the success sentence unless that set equals the
+# set the canonical manifest obliges.
+#
+# This is not self-protection and is not claimed as any. An author who may
+# rewrite the verifier may also rewrite the receipt. These controls establish
+# what the REVIEWED verifier bytes do when the property run is removed or cut
+# short, which is the specific defect R4 measured.
+
+#: The sentence `main` prints once every obligation has been demonstrated.
+_SUCCESS_LINE = "properties the manifest obliges is REPORTED"
+
+
+def _verifier_tree(root: Path) -> Path:
+    """A property tree the copied verifier can be RUN inside.
+
+    `repo_root()` asks git for the top level, so the copy needs to be one.
+    """
+    work = _property_tree(root)
+    subprocess.run(["git", "init", "-q", str(work)], check=True, capture_output=True)
+    return work
+
+
+def _verifier(work: Path) -> Path:
+    return work / VERIFIER_REL
+
+
+def q_unwire_property_run(work: Path) -> str:
+    """R4 finding O9b: `check_properties` removed from the entry point."""
+    path = _verifier(work)
+    source = path.read_text(encoding="utf-8")
+    old = "    return findings + check_roster(orchestrator) + check_properties(root, orchestrator)"
+    if old not in source:
+        raise AssertionError("the verifier no longer carries the check() body this "
+                             "control mutates")
+    path.write_text(source.replace(old, "    return findings + check_roster(orchestrator)", 1),
+                    encoding="utf-8")
+    return "check_properties unwired from check()"
+
+
+def q_property_run_returns_early(work: Path) -> str:
+    """The run starts and abandons its obligations before demonstrating them."""
+    path = _verifier(work)
+    source = path.read_text(encoding="utf-8")
+    old = ("    RECEIPT.ran = True\n"
+           "    obliged = [e for e in EXPECTED_ROSTER if e.properties]")
+    if old not in source:
+        raise AssertionError("the verifier no longer carries the check_properties body "
+                             "this control mutates")
+    path.write_text(source.replace(old, "    RECEIPT.ran = True\n    return findings", 1),
+                    encoding="utf-8")
+    return "check_properties returns before demonstrating anything"
+
+
+def q_pristine(work: Path) -> str:
+    return "nothing changed"
+
+
+VERIFIER_CONTROLS: list[tuple[str, str, tuple[str, ...], object]] = [
+    ("Q01-property-run-unwired",
+     "R4 finding O9b: the success sentence over a property run that never ran",
+     ("ownership.properties-unchecked",), q_unwire_property_run),
+    ("Q02-property-run-returns-early",
+     "a property run that starts and abandons its obligations",
+     ("ownership.properties-incomplete",), q_property_run_returns_early),
+    ("Q03-pristine", "the reviewed verifier prints the sentence and exits 0",
+     (), q_pristine),
+]
+
+
+def _grade_verifier(name, expected, mutate, real_root: Path):
+    """Run a mutated COPY of the verifier and read what it printed and exited."""
+    work = None
+    try:
+        work = _verifier_tree(real_root)
+        before = _verifier(work).read_bytes()
+        reached = mutate(work)
+        if name != "Q03-pristine" and _verifier(work).read_bytes() == before:
+            return "ERROR", "the mutation did not apply", []
+        done = subprocess.run(
+            ["/usr/bin/env", "-i", "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:"
+             "/usr/bin:/sbin:/bin", f"HOME={Path.home()}", "LC_ALL=C", "TZ=UTC",
+             "/usr/bin/python3", str(_verifier(work))],
+            capture_output=True, text=True)
+        printed = _SUCCESS_LINE in done.stdout
+        properties = sorted(set(re.findall(r"FAIL \[([^\]]+)\]", done.stderr)))
+
+        if not expected:
+            if done.returncode != 0:
+                return "GREEN", f"exit {done.returncode}; {properties}", properties
+            if not printed:
+                return "GREEN", "exit 0 without the success sentence", properties
+            return "PASS", f"exit 0 and the sentence is printed ({reached})", properties
+        if done.returncode == 0:
+            return "GREEN", "ACCEPTED what must be refused: exit 0", properties
+        if printed:
+            return "GREEN", "refused, but printed the success sentence anyway", properties
+        absent = [prop for prop in expected if prop not in properties]
+        if absent:
+            return "INERT", f"refused, but not for {absent}; got {properties}", properties
+        return "RED", f"exit {done.returncode}, no success sentence, naming {properties}", \
+            properties
+    except Exception as error:  # noqa: BLE001
+        return "ERROR", f"{type(error).__name__}: {error}", []
+    finally:
+        if work is not None:
+            shutil.rmtree(work, ignore_errors=True)
 
 
 def _grade_property(pin, name, expected, mutate, real_root: Path):
@@ -1088,7 +1216,8 @@ def _three_file_boundary(pin, real_root: Path) -> tuple[str, str]:
                              f"documentation is wrong")
         return "PASS", ("not detected, and stated as the boundary: removing a member now "
                         "takes an edit to retention_gates.py, to the canonical manifest "
-                        "AND to ci/run.sh, which is the merge gate for every branch")
+                        "AND to ci/run.sh, the reviewed local gate the anchor pins "
+                        "are read from")
     except Exception as error:  # noqa: BLE001
         return "ERROR", f"{type(error).__name__}: {error}"
     finally:
@@ -1609,6 +1738,16 @@ def main() -> int:
     print("\nthe obligations are owned, not declared (W1-A5-V1-R2 B2/B3)")
     for name, description, expected, mutate in PROPERTY_CONTROLS:
         grade, detail, properties = _grade_property(pin, name, expected, mutate, root)
+        if grade not in ("RED", "PASS"):
+            failures += 1
+        print(f"  {grade:<6} {name:<40} {detail}")
+        results.append({"control": name, "property": description,
+                        "expected": list(expected), "grade": grade, "detail": detail,
+                        "found": properties})
+
+    print("\nthe verifier's own success sentence (W1-A5-V1-R4 O9b)")
+    for name, description, expected, mutate in VERIFIER_CONTROLS:
+        grade, detail, properties = _grade_verifier(name, expected, mutate, root)
         if grade not in ("RED", "PASS"):
             failures += 1
         print(f"  {grade:<6} {name:<40} {detail}")

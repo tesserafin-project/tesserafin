@@ -204,12 +204,22 @@ REQUIRED_TRIGGER_PATHS = (
 )
 
 
-# ── a YAML loader that refuses what GitHub refuses ──────────────────────────
+# ── a YAML loader that refuses an ambiguous document ────────────────────────
 class StrictLoader(yaml.SafeLoader):
-    """`yaml.safe_load` resolves a duplicate mapping key last-wins. GitHub does
-    not: it rejects the workflow. Parsing it last-wins here would mean deciding
-    a workflow is safe from a document GitHub would never run, and the
-    difference is exactly where a second `env:` or a second `run:` hides."""
+    """A duplicate mapping key is refused because THIS repository requires a
+    unique one, not because of any claim about another parser.
+
+    W1-A5-V1-R5 corrects the rationale this docstring used to carry. Measured on
+    PyYAML 6.0.1, `yaml.SafeLoader` MAY resolve a duplicate mapping key
+    last-wins and silently; this loader raises `ConstructorError` on the same
+    document. What GitHub's own parser does with a duplicate key was never
+    established by any review in this series and is NOT asserted here.
+
+    The reason to refuse is that a decision taken from a last-wins tree is a
+    decision about one of two readings of an ambiguous file, and a gate may not
+    silently pick one. Refusing is fail-closed under every parser, including the
+    ones nobody here has measured, which is exactly where a second `env:` or a
+    second `run:` would otherwise hide."""
 
 
 def _no_duplicate_keys(loader, node, deep=False):
@@ -219,7 +229,9 @@ def _no_duplicate_keys(loader, node, deep=False):
         if key in mapping:
             raise yaml.constructor.ConstructorError(
                 "while constructing a mapping", node.start_mark,
-                f"found a duplicate key {key!r}, which GitHub rejects",
+                f"found a duplicate key {key!r}; this repository requires unique "
+                f"mapping keys, because a decision taken from one of two readings of "
+                f"an ambiguous document is not a decision about the file",
                 key_node.start_mark)
         mapping[key] = loader.construct_object(value_node, deep=deep)
     return mapping
@@ -1318,11 +1330,82 @@ def _call_for_properties(target, where: Path) -> tuple[frozenset[str], str | Non
         return frozenset(), f"the return value is not a list of findings: {error}"
 
 
+# ── the execution receipt (W1-A5-V1-R4 finding O9b) ─────────────────────────
+#
+# `check_properties` returning no findings and `check_properties` never having
+# run are the same thing to a caller that only counts findings. R4 unwired the
+# call from `check()` and the run still printed "every one of the 2 properties
+# the manifest obliges is REPORTED ..." over zero work.
+#
+# So the success line is no longer reachable from an empty finding list. It is
+# reachable only from a RECEIPT that `check_properties` writes as it goes: it
+# ran, it reached the end, and the set of (member, property) pairs it actually
+# DEMONSTRATED equals the set the manifest obliges. A pair is recorded only
+# after both halves of its witness succeeded — the property named for the
+# broken tree AND absent for the unmodified one.
+#
+# This is an execution invariant, not self-protection. An author who may
+# rewrite this file may also rewrite the receipt; the claim is about what these
+# reviewed bytes do, and nothing more.
+class _PropertyReceipt:
+    """What `check_properties` actually did, for `main` to verify."""
+
+    __slots__ = ("ran", "completed", "demonstrated")
+
+    def __init__(self) -> None:
+        self.reset()
+
+    def reset(self) -> None:
+        self.ran = False
+        self.completed = False
+        self.demonstrated: set[tuple[str, str]] = set()
+
+
+RECEIPT = _PropertyReceipt()
+
+
+def obliged_pairs() -> frozenset[tuple[str, str]]:
+    """Every (member, property) pair the canonical manifest obliges."""
+    return frozenset((e.gate_id, name) for e in EXPECTED_ROSTER for name in e.properties)
+
+
+def receipt_findings() -> list[Finding]:
+    """The ownership run did what the success line is about to claim it did."""
+    obliged = obliged_pairs()
+    if not RECEIPT.ran:
+        return [Finding(
+            "ownership.properties-unchecked",
+            f"the {len(obliged)} obligation(s) the canonical manifest records were never "
+            f"checked: `check_properties` did not run. An empty finding list from a check "
+            f"that never ran is not a passing check")]
+    if not RECEIPT.completed:
+        return [Finding(
+            "ownership.properties-incomplete",
+            f"`check_properties` ran but did not reach the end, so the obligations it did "
+            f"not get to were neither demonstrated nor reported")]
+    missing = sorted(obliged - RECEIPT.demonstrated)
+    if missing:
+        return [Finding(
+            "ownership.properties-partial",
+            f"`check_properties` completed having demonstrated "
+            f"{len(RECEIPT.demonstrated)} of {len(obliged)} obligation(s); not "
+            f"demonstrated: {[f'{g}::{n}' for g, n in missing]}")]
+    unexpected = sorted(RECEIPT.demonstrated - obliged)
+    if unexpected:
+        return [Finding(
+            "ownership.properties-unexpected",
+            f"`check_properties` demonstrated obligations the canonical manifest does not "
+            f"record: {[f'{g}::{n}' for g, n in unexpected]}")]
+    return []
+
+
 def check_properties(root: Path, orchestrator) -> list[Finding]:
     """Each member still reports the properties the canonical manifest names."""
     findings: list[Finding] = []
+    RECEIPT.ran = True
     obliged = [e for e in EXPECTED_ROSTER if e.properties]
     if not obliged:
+        RECEIPT.completed = True
         return findings
     loader = getattr(orchestrator, "_load", None)
     here = getattr(orchestrator, "HERE", None)
@@ -1392,6 +1475,9 @@ def check_properties(root: Path, orchestrator) -> list[Finding]:
                         "ownership.property-always-reported",
                         f"{entry.gate_id!r} names {name!r} for an UNMODIFIED tree as well as "
                         f"for the witness, so the witness demonstrates nothing"))
+                    continue
+                RECEIPT.demonstrated.add((entry.gate_id, name))
+        RECEIPT.completed = True
     finally:
         shutil.rmtree(work, ignore_errors=True)
         try:
@@ -1403,6 +1489,7 @@ def check_properties(root: Path, orchestrator) -> list[Finding]:
 
 # ── entry point ─────────────────────────────────────────────────────────────
 def check(root: Path) -> list[Finding]:
+    RECEIPT.reset()
     findings = install_roster(root)
     findings += check_trust_root(root)
     findings += check_command(root)
@@ -1424,7 +1511,7 @@ def check(root: Path) -> list[Finding]:
 
 def main() -> int:
     root = repo_root()
-    findings = check(root)
+    findings = check(root) + receipt_findings()
     if findings:
         print(f"W1-A4 RETENTION AUTHORITY HARD STOP: {len(findings)} finding(s)",
               file=sys.stderr)
@@ -1442,10 +1529,12 @@ def main() -> int:
     print(f"{ORCHESTRATOR} carries exactly the {len(EXPECTED_ROSTER)} members the "
           f"authenticated manifest requires, in order, each resolving to its expected "
           f"callable")
-    obliged = sum(len(e.properties) for e in EXPECTED_ROSTER)
-    print(f"every one of the {obliged} properties the manifest obliges is REPORTED by the "
-          f"member that owns it when called against a witness violation, and by none of "
-          f"them against an unmodified tree")
+    # Counted from the receipt, not from the manifest: this sentence may only
+    # describe work that was actually done. `receipt_findings` above has
+    # already established that the two sets are equal.
+    print(f"every one of the {len(RECEIPT.demonstrated)} properties the manifest obliges "
+          f"is REPORTED by the member that owns it when called against a witness "
+          f"violation, and by none of them against an unmodified tree")
     return 0
 
 

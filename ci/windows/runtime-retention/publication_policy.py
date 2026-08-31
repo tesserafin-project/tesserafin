@@ -51,8 +51,10 @@ the workflow's text and not about what it runs.
 from __future__ import annotations
 
 import ipaddress
+import os
 import re
 import hashlib
+import stat
 import sys
 from pathlib import Path
 
@@ -935,9 +937,15 @@ def check_summary_identity(
 #
 # The mechanism is the same in all nine: the summary property names ONE step, so
 # everything that is not that step is outside it. The three duplicate-key cases
-# add a second mechanism — `yaml.safe_load` resolves a duplicate key
-# last-wins and silently, so a rogue FIRST job or run scalar is not visible to
-# any check that reads the parsed tree.
+# add a second mechanism, and W1-A5-V1-R5 corrects how it was described here.
+# `yaml.safe_load` MAY resolve a duplicate mapping key last-wins and silently —
+# measured on PyYAML 6.0.1, `jobs: {publish: {a: 1}, publish: {a: 2}}` yields the
+# second value — so a rogue FIRST job or run scalar is invisible to a check that
+# reads a SafeLoader tree. It is NOT invisible to every parser: this repository's
+# own `StrictLoader`, in ci/windows/verify-retention-gate-pinned.py, raises
+# `ConstructorError` on the same document. What GitHub's own parser does with a
+# duplicate key was never established by any review in this series and remains
+# unverified here.
 #
 # Narrowing the search does not close either. "No other step may write
 # `GITHUB_STEP_SUMMARY`" is false of the reviewed file itself — the readback
@@ -948,9 +956,12 @@ def check_summary_identity(
 # emitted style is not stable enough to pin across versions.
 #
 # So the whole file is pinned, as raw bytes, by SHA-256. Nothing is parsed,
-# nothing is searched, and no property of YAML is relied upon, which is exactly
-# why duplicate keys, comments, indirection and steps nobody has thought of yet
-# all fail here for one reason: these are not the reviewed bytes.
+# nothing is searched, and no property of YAML is relied upon. The reason for
+# raw bytes is to remove parser-dependent ambiguity altogether and to pin the
+# COMPLETE reviewed file — not a claim that some other parser necessarily reads
+# a pristine second value. Duplicate keys, comments, indirection and steps
+# nobody has thought of yet all fail here for one reason: these are not the
+# reviewed bytes.
 #
 # The summary property above is KEPT rather than replaced. It is narrower and
 # strictly implied by this one, and that is its value: when only the prose
@@ -983,8 +994,36 @@ def check_workflow_identity(
     mutated COPY without the reviewed file ever changing on disk.
     """
     prop = "publication.frozen-workflow-drift"
+    target = root / workflow
+
+    # W1-A5-V1-R4 finding NB-1. Hashing whatever the path RESOLVES to accepts a
+    # symbolic link pointing at the approved bytes, and a link can be repointed
+    # after review without the reviewed content ever changing. The filesystem
+    # TYPE is checked first, with `lstat`, which does not follow the link — and
+    # the link's target is deliberately never read, so nothing about the bytes
+    # it happens to resolve to today can satisfy this property.
     try:
-        raw = (root / workflow).read_bytes()
+        info = os.lstat(target)
+    except FileNotFoundError:
+        return [Finding(prop, f"{workflow} does not exist, so the reviewed publication "
+                              f"workflow is not present at the reviewed path")]
+    except OSError as error:
+        return [Finding(prop, f"{workflow} cannot be examined: {error}")]
+    if stat.S_ISLNK(info.st_mode):
+        return [Finding(
+            prop,
+            f"{workflow} is a symbolic link, not the reviewed file. Identity is a "
+            f"property of the file at the reviewed path: a link can be repointed after "
+            f"review, so what it resolves to today is not read and cannot satisfy this "
+            f"property")]
+    if not stat.S_ISREG(info.st_mode):
+        return [Finding(
+            prop,
+            f"{workflow} is not a regular file (st_mode 0o{info.st_mode:o}). Only a "
+            f"regular file at the reviewed path can carry the reviewed bytes")]
+
+    try:
+        raw = target.read_bytes()
     except OSError as error:
         return [Finding(prop, f"{workflow} cannot be read: {error}")]
     actual = hashlib.sha256(raw).hexdigest()
@@ -1023,8 +1062,15 @@ def check_all(root: Path) -> list[Finding]:
     finding B2 was that removing the one-line call site below left every control
     still red, because the controls called the implementation directly; B3 was
     that co-removing the call, the implementation and the controls left the
-    roster passing 14/14. Neither is reachable now without moving a pin that
-    lives outside this subtree.
+    roster passing 14/14.
+
+    W1-A5-V1-R5 corrects what was claimed of that repair. Neither attack is
+    reachable from INSIDE this subtree alone: both are refused by the external
+    verifier, which calls this callable against a witness violation. The
+    verifier is itself an in-tree, presently unpinned trust root, so a
+    coordinated edit that also rewrites it can still remove the check. What is
+    established is the behaviour of the REVIEWED verifier bytes, not resistance
+    to an author authorised to rewrite the verifier.
     """
     return (evaluate(root, boundary.RETENTION_WORKFLOW)
             + check_summary_identity(root)

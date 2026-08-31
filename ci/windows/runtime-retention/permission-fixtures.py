@@ -1,6 +1,6 @@
 """Reviewer fixtures for the retention workflow's publication policy (#236).
 
-Two tiers, twenty-five controls, each of which must reach ONE named property. The
+Three tiers, thirty controls, each of which must reach ONE named property. The
 point of a control is not that the checker fails — a broken checker fails on
 everything — but that it fails for the reason the control is named after. So
 each control declares the property it expects, and a control whose finding set
@@ -35,6 +35,18 @@ is a careful, well-intentioned REWORDING of an assertion the approved text
 already makes. All three must fail for the same named reason, because the pin
 is a hash of the reviewed bytes and not a search for bad words. S3 is the one
 that matters: a keyword or blacklist check would let it through.
+
+Tier 3, controls T01–T05 (W1-A5-V1-R5, closing R4 finding NB-1): the reviewed
+publication workflow must be a REGULAR FILE at the reviewed path. Hashing
+whatever the path resolves to accepts a symbolic link pointing at the approved
+bytes, and a link can be repointed after review without the reviewed content
+changing. T01 is the decisive one — a symlink whose target is byte-for-byte the
+approved workflow — and it is refused for the same
+`publication.frozen-workflow-drift` the altered-byte controls name, because the
+target is never read. T02 links to altered bytes, T03 puts a directory at the
+path, T04 removes it, and T05 is the pristine regular file, which must be
+accepted or the tier is inverted. These are filesystem-shape controls, so unlike
+tiers 1 and 2 each one builds its own disposable root and then acts on it.
 
 Each tier-2 control proves its anchor existed before mutating — a silently
 skipped mutation would otherwise grade PASS against pristine bytes and read as
@@ -267,6 +279,69 @@ def summary_s3(source, work):
         '            echo "for the accepted unit, and the durable #236 record carries it."\n'
     )
     return _replace(source, _SUMMARY_OBSERVATION, replacement), replacement
+
+
+#: Tier 3. Each builder returns the disposable ROOT it has already acted on,
+#: plus a description of what it did, and the harness grades
+#: `publication_policy.check_all` over that root — the same callable the
+#: canonical roster manifest pins, for the same B2 reason tier 2 does.
+
+
+def identity_t01(root: Path, work: Path):
+    """A symlink whose target is byte-for-byte the approved workflow."""
+    fake = _disposable_root(work, root, _pristine_publish(root))
+    target = fake / PUBLISH
+    target.unlink()
+    target.symlink_to(root / PUBLISH)
+    return fake, "a symbolic link to the approved bytes"
+
+
+def identity_t02(root: Path, work: Path):
+    """A symlink to altered bytes. The link, not the bytes, is the finding."""
+    elsewhere = work / "altered.yml"
+    elsewhere.write_text(_pristine_publish(root) + "# not the reviewed bytes\n",
+                         encoding="utf-8")
+    fake = _disposable_root(work, root, _pristine_publish(root))
+    target = fake / PUBLISH
+    target.unlink()
+    target.symlink_to(elsewhere)
+    return fake, "a symbolic link to altered bytes"
+
+
+def identity_t03(root: Path, work: Path):
+    """A directory at the reviewed path."""
+    fake = _disposable_root(work, root, _pristine_publish(root))
+    target = fake / PUBLISH
+    target.unlink()
+    target.mkdir()
+    return fake, "a directory at the reviewed path"
+
+
+def identity_t04(root: Path, work: Path):
+    """The reviewed path removed altogether."""
+    fake = _disposable_root(work, root, _pristine_publish(root))
+    (fake / PUBLISH).unlink()
+    return fake, "the reviewed path removed"
+
+
+def identity_t05(root: Path, work: Path):
+    """The pristine regular file. Must be accepted, or the tier is inverted."""
+    return _disposable_root(work, root, _pristine_publish(root)), "the reviewed file"
+
+
+IDENTITY_FIXTURES: list[tuple[str, str, str | None, object]] = [
+    ("T01-symlink-to-approved-bytes",
+     "a symlink whose target is the approved workflow is refused",
+     "publication.frozen-workflow-drift", identity_t01),
+    ("T02-symlink-to-altered-bytes", "a symlink to altered bytes is refused",
+     "publication.frozen-workflow-drift", identity_t02),
+    ("T03-directory-at-the-path", "a directory at the reviewed path is refused",
+     "publication.frozen-workflow-drift", identity_t03),
+    ("T04-reviewed-path-missing", "a missing reviewed path is refused",
+     "publication.frozen-workflow-drift", identity_t04),
+    ("T05-pristine-regular-file", "the reviewed regular file is accepted",
+     None, identity_t05),
+]
 
 
 #: The nine bypass classes W1-A5-V1-R2 measured against the R1 pin. Each one is
@@ -577,6 +652,31 @@ def main() -> int:
         })
 
     print()
+    print("frozen publication workflow filesystem-identity controls")
+    for name, description, expected, build in IDENTITY_FIXTURES:
+        work = Path(tempfile.mkdtemp(prefix=f"w1a5r5-{name}-"))
+        grade = "ERROR"
+        detail = ""
+        properties: list[str] = []
+        try:
+            fake, marker = build(root, work)
+            findings = publication_policy.check_all(fake)
+            grade, detail, properties = _grade(findings, expected)
+            detail = f"{detail} [{marker}]"
+        except Exception as error:  # noqa: BLE001 - an ERROR grade is the point
+            grade, detail = "ERROR", f"{type(error).__name__}: {error}"
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
+
+        if grade not in ("RED", "PASS"):
+            failures += 1
+        print(f"  {grade:<6} {name:<38} {detail}")
+        results.append({
+            "fixture": name, "property": description, "expected": expected,
+            "grade": grade, "detail": detail, "found": properties,
+        })
+
+    print()
     after = (root / RETENTION).read_bytes()
     if after != before:
         print("  FAIL   tree-restored                          "
@@ -605,8 +705,10 @@ def main() -> int:
         print(f"W1-A4 FIXTURE HARD STOP: {failures} control(s) did not reach their property",
               file=sys.stderr)
         return 1
-    print(f"all {len(FIXTURES)} semantic permission fixtures and all "
-          f"{len(SUMMARY_FIXTURES)} frozen-summary controls reached their named property")
+    print(f"all {len(FIXTURES)} semantic permission fixtures, all "
+          f"{len(SUMMARY_FIXTURES)} frozen-summary controls and all "
+          f"{len(IDENTITY_FIXTURES)} filesystem-identity controls reached their named "
+          f"property")
     return 0
 
 

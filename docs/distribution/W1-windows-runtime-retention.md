@@ -889,9 +889,15 @@ Two ablations settle where authority lives:
 `ci/run.sh` is the trust root, and it says so in its own comment. Nothing pins
 it in turn, and nothing should: a chain of scripts each pinning the next has no
 last link, and adding one more file would move the same defect one directory
-further out rather than close it. `ci/run.sh` is a merge gate for every branch,
-it invokes the verifier unconditionally, and a non-zero exit there fails the
-run. That is stated rather than implied.
+further out rather than close it. `ci/run.sh` invokes the verifier
+unconditionally, and a non-zero exit there fails the run.
+
+> **Corrected by W1-A5-V1-R5.** This paragraph originally called `ci/run.sh`
+> "a merge gate for every branch". It is the authoritative **local** gate. The
+> only workflow that executes it is `local-ci.yml`, whose `pull_request` and
+> `push` triggers were removed when the self-hosted runner was parked
+> (2026-07-19); it is `workflow_dispatch`-only and is not among `master`'s
+> required contexts. See §9i.
 
 ### The reviewed candidate, and its measured delta
 
@@ -1009,9 +1015,11 @@ masking.
 
 A `defaults.run` key this contract does not enumerate is refused rather than
 ignored. The workflow is parsed with a loader that **raises on a duplicate
-mapping key**, because GitHub rejects such a document: accepting a last-wins
-local parse would mean deciding a workflow is safe from a document that would
-never run.
+mapping key**. W1-A5-V1-R5 corrects the reason this document used to give:
+the refusal is **repository policy**, not a claim about GitHub. A decision taken
+from a last-wins parse is a decision about one of two readings of an ambiguous
+file, and a gate may not silently pick one. What GitHub's own parser does with a
+duplicate key is **not established** anywhere in this series — see §9i.
 
 ### F3 — the roster was a two-party agreement
 
@@ -1152,7 +1160,8 @@ That is the boundary:
 
 * removing a roster member now requires an edit to the orchestrator, an edit to
   the canonical manifest, and an edit to `ci/run.sh`;
-* `ci/run.sh` is the merge gate for every branch and is reviewed as one;
+* `ci/run.sh` is the authoritative **local** gate and is reviewed as one — it is
+  not a hosted required context, see the W1-A5-V1-R5 correction in §9i;
 * nothing pins `ci/run.sh` in turn, and nothing should — a chain of files each
   pinning the next has no last link, and adding one more would move the same
   defect one directory further out.
@@ -1331,9 +1340,15 @@ measured **nine** additions that leave that scalar untouched and were accepted:
 | H09 | `packages: write` **hoisted** to workflow scope | accepted |
 
 Two mechanisms, not one. H01–H05 and H08–H09 are outside the one step the
-property names. H06 and H07 are worse: `yaml.safe_load` resolves a duplicate
-mapping key **last-wins and silently**, so the tree any parser-based check reads
-is the *second*, pristine value, while GitHub reads a file that has both.
+property names. H06 and H07 are worse: `yaml.SafeLoader` **may** resolve a
+duplicate mapping key last-wins and silently, so the tree a **SafeLoader**-based
+check reads is the *second*, pristine value.
+
+> **Corrected by W1-A5-V1-R5.** This paragraph originally read "the tree any
+> parser-based check reads … while GitHub reads a file that has both". Both
+> halves were wrong. Not *any* parser: this repository's own `StrictLoader`
+> raises `ConstructorError` on the same document. And GitHub's treatment was
+> never measured by any review in this series. See §9i.
 
 None of the obvious narrowings closes this.
 
@@ -1384,7 +1399,11 @@ that `publication_policy.py::check_all` exists, under that name, in that file,
 at that position. None of it notices that the function stopped reporting
 something.
 
-The obligation is now recorded in three places that cannot be edited as one:
+The obligation is now recorded in three places:
+
+> **Corrected by W1-A5-V1-R5.** This sentence originally read "in three places
+> **that cannot be edited as one**". That is false: the third row is a file in
+> this tree, and an edit that also rewrites it removes the check. See §9i.
 
 | where | what it holds |
 | --- | --- |
@@ -1468,6 +1487,174 @@ Both pins moved in this commit, by review:
 untouched, and nothing here writes to GHCR or dispatches a workflow. The unit's
 own frozen `RETENTION.md` still reads *"While this package is private…"* for the
 reason [given above](#the-units-own-retentionmd-is-frozen-including-one-stale-conditional).
+
+## 9i. What W1-A5-V1-R5 repaired
+
+The independent W1-A5-V1-R4 review of `65c2bcc35b` returned three blockers and
+four non-blocking findings. This section is the durable record of the repair.
+
+### The authority, and the scope it opened
+
+R4's BL-1 was **undisclosed scope**: the R4 commit changed nine paths where six
+were governed, and no ruling covered the other three. The owner ruling of
+2026-08-31 —
+[#236 comment 5477730710](https://github.com/tesserafin-project/tesserafin/issues/236#issuecomment-5477730710)
+— ratifies exactly those three, by name:
+
+| ratified path | what R4 changed there | class |
+| --- | --- | --- |
+| `ci/windows/verify-retention-gate-pinned.py` | external property ownership, the raw-byte workflow pin, the witnesses | executable policy |
+| `ci/windows/runtime-retention/gate-roster-controls.py` | the 218-line tier-P self-controls | tests |
+| `ci/windows/runtime-retention/retention_gates.py` | one roster **description** string | prose inside an executable file |
+
+The six governed paths were `.github/workflows/w1-windows-runtime-publish.yml`,
+`ci/run.sh`, `ci/windows/runtime-retention/permission-fixtures.py`,
+`ci/windows/runtime-retention/publication_policy.py`,
+`ci/windows/w1a4-roster-manifest.v1.json` and this document. That boundary was
+never written down as a six-path list anywhere; it is reconstructed as the
+complement of the three, and saying so is part of the record.
+
+**The R5 commit touches only those nine paths minus the three data files.** It
+changes no pin: `APPROVED_SUMMARY_SHA256`, `APPROVED_WORKFLOW_SHA256` and
+`W1A4_ROSTER_MANIFEST_SHA256` are byte-unmoved, `ci/run.sh` and the canonical
+manifest are untouched, and the accepted publication workflow is untouched.
+
+### BL-2 — the duplicate-key account was wrong
+
+Three files and this document asserted that a duplicate mapping key is refused
+*because GitHub rejects such a document*, and that a last-wins parse is what
+**any** parser-based check would read. Measured here, on PyYAML 6.0.1:
+
+```
+document:      jobs:\n  publish:\n    a: 1\n  publish:\n    a: 2\n
+SafeLoader  -> {'jobs': {'publish': {'a': 2}}}
+StrictLoader -> ConstructorError: found a duplicate key 'publish'
+```
+
+So the corrected account is:
+
+* `yaml.SafeLoader` **may** accept a duplicate key, last-wins and silently;
+* this repository's own `StrictLoader` **rejects** it with `ConstructorError`;
+* **GitHub's treatment was never established** by any review in this series and
+  is not asserted anywhere any more;
+* the strict loader refuses ambiguous input because **repository policy requires
+  a unique key** — a decision taken from one of two readings of an ambiguous
+  file is not a decision about the file — and refusing is fail-closed under
+  every parser, including the ones nobody here has measured;
+* the raw-byte pin was chosen to **remove parser-dependent ambiguity** and to
+  pin the complete reviewed file, **not** because some other parser necessarily
+  reads a pristine second value.
+
+The earlier explanation is superseded, not deleted: the commits and comments
+that carried it stay as written, and each place that stated it now says so.
+
+### BL-3 — the ownership claim was stronger than the mechanism
+
+R3 said the obligation lived "in three places that cannot be edited as one".
+The third place is `ci/windows/verify-retention-gate-pinned.py`, a file in this
+tree that **nothing pins**. The real boundary:
+
+* the canonical manifest and the roster it authenticates are **one reviewed
+  obligation source**;
+* the verifier is a **second, in-tree, presently unpinned trust root**;
+* a coordinated edit that also rewrites the verifier can weaken or remove its
+  own checks;
+* what the proof establishes is therefore the behaviour of the **reviewed
+  verifier bytes**, not resistance to an author authorised to rewrite the
+  verifier;
+* `ci/run.sh` is the authoritative **local** gate. `local-ci.yml` is the only
+  workflow that runs it, and it is `workflow_dispatch`-only and not a required
+  context — so this boundary rests on ordinary review, not on an enforced
+  hosted gate.
+
+### O9b — the success sentence over work that never happened
+
+R4 unwired `check_properties` from `check()`. The run printed *"every one of the
+2 properties the manifest obliges is REPORTED …"* and exited 0, because a caller
+that only counts findings cannot tell an empty result from work that never ran.
+
+The repair is an **execution receipt**. `check_properties` records that it ran,
+that it reached the end, and the set of `(member, property)` pairs it actually
+demonstrated — a pair is recorded only after **both** halves of its witness
+succeeded, the property named for the broken tree *and* absent for the
+unmodified one. `main` computes `receipt_findings()` before it prints anything,
+and the success sentence counts from the receipt rather than from the manifest.
+Four new properties can refuse: `ownership.properties-unchecked`,
+`-incomplete`, `-partial` and `-unexpected`.
+
+This is an execution invariant and **not** self-protection. An author who may
+rewrite the verifier may also rewrite the receipt.
+
+New controls, tier **Q** of `gate-roster-controls.py`. Unlike tier P, which
+calls `check_properties` in-process, tier Q mutates a **copy** of the verifier
+and runs it as a **subprocess**, because the defect is something the verifier
+prints and exits with:
+
+| id | mutation | result |
+| --- | --- | --- |
+| `Q01` | `check_properties` unwired from `check()` | exit 1, no success sentence, `ownership.properties-unchecked` |
+| `Q02` | `check_properties` returns before demonstrating anything | exit 1, no success sentence, `ownership.properties-incomplete` |
+| `Q03` | pristine | exit 0, sentence printed |
+
+### NB-1 — workflow identity followed a symbolic link
+
+`check_workflow_identity` hashed whatever the reviewed path **resolved to**, so
+a symlink pointing at the approved bytes was accepted. A link can be repointed
+after review without the reviewed content ever changing.
+
+The filesystem **type** is now checked first, with `os.lstat`, which does not
+follow the link, and the link's target is **never read** — so nothing about the
+bytes it happens to resolve to today can satisfy the property. Symlinks,
+directories, missing paths and any non-regular object are refused for
+`publication.frozen-workflow-drift`.
+
+New controls, tier **3** of `permission-fixtures.py`, graded through
+`publication_policy.check_all` over a disposable root — never through the
+implementation directly, which is R2 finding B2:
+
+| id | shape at the reviewed path | grade |
+| --- | --- | --- |
+| `T01` | symlink whose target is **byte-for-byte the approved workflow** | RED |
+| `T02` | symlink to altered bytes | RED |
+| `T03` | a directory | RED |
+| `T04` | the path removed | RED |
+| `T05` | the pristine regular file | PASS |
+
+`T01` is the load-bearing one, and it is measured as such: with the `lstat`
+block removed it grades **GREEN — ACCEPTED what must be refused**, while
+`T02`–`T04` stay RED on the read or the hash. The tier is five controls, of
+which exactly one fails without the repair.
+
+### NB-2 — what the pin does not prove
+
+The pin freezes the **approved publication workflow**, byte for byte. It does
+**not** prove repository-wide publisher exclusivity. A *separate* workflow file
+carrying `packages: write` and an `oras push` is outside the proven boundary:
+`H08` and `H09` are refused because they are edits to the reviewed file, and a
+new file is not an edit to it.
+
+Closing that would take an independent repository-wide exclusivity control.
+None is added here, and the R5 ruling does not authorise one.
+
+### NB-4 — hosted coverage of the external verifier
+
+Measured, not inferred. `ci/windows/verify-retention-gate-pinned.py` is executed
+by `ci/run.sh` alone. Of the six workflows that mention `ci/run.sh`, exactly one
+**runs** it — `local-ci.yml`, line 55 — and that workflow is
+`workflow_dispatch`-only. `w1-windows-runtime-retention.yml`, which does run on
+an ordinary pull request, runs `retention_gates.py --validate`, **not** the
+verifier.
+
+So the external verifier does **not** run hosted on an ordinary PR push. NB-4
+stays **open and non-blocking**. No workflow was added or altered to change
+that, and none was dispatched.
+
+### Residual, disclosed rather than repaired
+
+`ci/windows/runtime-retention/boundary.py` still describes the verifier as one
+"which `ci/run.sh` runs on every branch". That file is outside the six governed
+paths and outside the three the owner ratified, so it is left as written and
+recorded here instead.
 
 ## 9d. The predecessor proof run
 
