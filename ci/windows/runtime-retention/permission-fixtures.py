@@ -415,10 +415,10 @@ def publish_h05(source, work):
 def publish_h06(source, work):
     """A duplicate `publish:` job key with the ROGUE job FIRST. R2 control H6f.
 
-    `yaml.safe_load` resolves a duplicate mapping key last-wins and silently, so
-    the parsed tree a checker reads is the SECOND, pristine job. GitHub does not
-    read the file that way. Any property decided on the parsed tree is blind
-    here; a byte pin is not.
+    The complete publication workflow is pinned as raw bytes. Inserting a
+    duplicate key changes those bytes and is refused as
+    `publication.frozen-workflow-drift`; this control does not rely on
+    YAML parser semantics.
     """
     rogue = (
         "jobs:\n"
