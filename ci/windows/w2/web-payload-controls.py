@@ -433,7 +433,16 @@ def scan_for(paths, pattern, code_only=False):
             text = strip_commentary(path, text)
         for number, line in enumerate(text.splitlines(), 1):
             if compiled.search(line):
-                hits.append((os.path.relpath(path, REPO_ROOT), number, line.rstrip()))
+                # A control may scan a planted fixture in temporary storage, and
+                # on Windows that can sit on a different drive from the checkout:
+                # `relpath` cannot relate the two and raises. The match has
+                # already been made, so this is a display limit, not a result.
+                # Fall back to the path as given rather than lose the finding.
+                try:
+                    shown = os.path.relpath(path, REPO_ROOT)
+                except ValueError:
+                    shown = os.fspath(path)
+                hits.append((shown, number, line.rstrip()))
     return hits
 
 
@@ -846,6 +855,10 @@ def run_controls(work, report, only=None):
     if selected("C22"):
         _workflow_control(report, work)
 
+    # --- C23 -----------------------------------------------------------------
+    if selected("C23"):
+        _cross_volume_control(report, work)
+
 
 def strip_commentary(path, text):
     """The executable part of a file, with comments and docstrings blanked out.
@@ -888,6 +901,79 @@ def strip_commentary(path, text):
     if suffix in (".yml", ".yaml"):
         return "\n".join(re.sub(r"(^|\s)#.*$", r"\1", line) for line in text.splitlines())
     return text
+
+
+def _cross_volume_control(report, work):
+    """C23: a finding the checkout cannot relate to is reported, not raised.
+
+    A control plants its fixtures in temporary storage. On a Windows runner that
+    is a different drive from the checkout -- `D:\\a\\...` against `C:\\Users\\...`
+    -- and `os.path.relpath` refuses to relate two mounts. The match has already
+    been made by then, so raising there turns a detected dependency into a crash
+    and skips every control after it.
+
+    No Linux host has two drive letters, so the refusal is forced directly: the
+    path formatter is replaced for the duration of one scan. That also lets the
+    control assert the part a real two-drive machine could not -- that an
+    unrelated failure from the same call is still allowed to escape.
+    """
+    pattern = r"(?<!vnd\.)\bdocker\b|containerd|podman|nerdctl|buildx|dockerd|docker-compose"
+    planted = os.path.join(work, "c23", "planted-cross-volume.ps1")
+    os.makedirs(os.path.dirname(planted), exist_ok=True)
+    with open(planted, "w", encoding="utf-8") as handle:
+        handle.write("# an explanatory comment naming docker is not an invocation\n"
+                     "docker pull ghcr.io/example/image:latest\n")
+    expected = [(planted, 2, "docker pull ghcr.io/example/image:latest")]
+
+    real_relpath = os.path.relpath
+    calls = []
+
+    def cross_volume(path, start=os.curdir):
+        calls.append((os.fspath(path), os.fspath(start)))
+        if os.fspath(path) == planted:
+            raise ValueError("path is on mount 'C:', start on mount 'D:'")
+        return real_relpath(path, start)
+
+    def unrelated(path, start=os.curdir):
+        if os.fspath(path) == planted:
+            raise RuntimeError("an unrelated failure in the path formatter")
+        return real_relpath(path, start)
+
+    os.path.relpath = cross_volume
+    try:
+        hits = scan_for([planted], pattern, code_only=True)
+    finally:
+        os.path.relpath = real_relpath
+
+    # Inert-proof: if `scan_for` ever stops relating a finding to the repository
+    # root, the fallback below is unreached and this control proves nothing.
+    if (planted, REPO_ROOT) not in calls:
+        report.record("C23", "INERT",
+                      "scan_for never asked to relate the finding to the checkout root")
+        return
+    if hits != expected:
+        report.record("C23", "RED",
+                      "a cross-volume finding was lost or altered: expected %s, got %s"
+                      % (expected, hits))
+        return
+
+    os.path.relpath = unrelated
+    try:
+        scan_for([planted], pattern, code_only=True)
+    except RuntimeError:
+        propagated = True
+    else:
+        propagated = False
+    finally:
+        os.path.relpath = real_relpath
+
+    if not propagated:
+        report.record("C23", "RED",
+                      "an unrelated failure in the path formatter was swallowed with the ValueError")
+    else:
+        report.record("C23", "PASS",
+                      "a finding on an unrelatable path keeps its path, line %d and content, "
+                      "and an unrelated failure still raises" % expected[0][1])
 
 
 def _compare_trees(left, right):
