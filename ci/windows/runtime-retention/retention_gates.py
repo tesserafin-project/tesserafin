@@ -137,7 +137,9 @@ PROOFS: tuple[Gate, ...] = (
     Gate("ownership-self-proof", "boundary-controls.py", "main", "exit-code", (),
          "thirteen hostile controls each reach their own named ownership property"),
     Gate("publication-self-proof", "permission-fixtures.py", "main", "exit-code", (),
-         "twelve semantic permission fixtures each reach their own named property"),
+         "twelve semantic permission fixtures, thirteen frozen publication-workflow "
+         "controls and five filesystem-identity controls each reach their own named "
+         "property"),
     Gate("reusable-workflow-self-proof", "reusable-workflow-controls.py", "main",
          "exit-code", (),
          "sixteen reusable-workflow graph controls each reach their own named property"),
@@ -168,9 +170,16 @@ PROOFS: tuple[Gate, ...] = (
 #: added here is deletable by the same edit.
 #:
 #: The authority is `ci/windows/verify-retention-gate-pinned.py`, which lives
-#: outside this subtree and which `ci/run.sh` runs on every branch. It freezes
-#: id, module, callable, kind, argv, tier and position, and it resolves this
-#: file's real bindings rather than reading its declarations.
+#: outside this subtree and which `ci/run.sh` runs. It freezes id, module,
+#: callable, kind, argv, tier and position, and it resolves this file's real
+#: bindings rather than reading its declarations.
+#:
+#: W1-A5-V1-R5 narrows what that means: `ci/run.sh` is the authoritative LOCAL
+#: gate, and `local-ci.yml` — `workflow_dispatch`-only since the self-hosted
+#: runner was parked — is the only workflow that executes it, so the verifier
+#: does not run hosted on an ordinary pull request. It is also itself an
+#: in-tree, presently unpinned trust root: an edit that rewrites it can weaken
+#: what it checks. What it establishes is the behaviour of its reviewed bytes.
 #:
 #: This copy stays so that `--list` can say, on the spot, where the roster has
 #: drifted from what was last agreed. It is a hint printed for a reader. It

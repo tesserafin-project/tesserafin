@@ -101,6 +101,18 @@ banner() {
 #
 #   W1A4_ROSTER_MANIFEST_SHA256  the manifest's exact content digest.
 #   W1A4_ROSTER_IDS              the fourteen member identities, in order.
+#   W1A4_ROSTER_PROPERTIES       every named property a member must still
+#                                REPORT, in manifest order (W1-A5-V1-R3).
+#
+# The third constant is finding B3 of W1-A5-V1-R2. Member identity is not
+# member behaviour: `publication_policy.py::check_all` kept its name, its file
+# and its position while one deleted line stopped it reporting
+# `summary.frozen-prose-drift`, and co-removing the implementation and its
+# controls left the roster passing 14/14. The manifest now records which
+# properties each member owes, the verifier DEMONSTRATES each one by calling
+# the member against a witness violation, and the set of obligations is pinned
+# here so that dropping one is an edit to this file rather than to the subtree
+# that owes it.
 #
 # The verifier CONSUMES the manifest and READS these two constants out of this
 # file. It cannot redefine either, because neither is written down where it can
@@ -112,7 +124,7 @@ banner() {
 # pinning the next has no last link. That is the trust boundary, and it is
 # stated here rather than hidden behind one more file.
 W1A4_ROSTER_MANIFEST="ci/windows/w1a4-roster-manifest.v1.json"
-W1A4_ROSTER_MANIFEST_SHA256="bf2ae962446e51380d6e9ec561dea3d8e94cf1832334108420cf6b83acf94476"
+W1A4_ROSTER_MANIFEST_SHA256="312d1eceaf5690fb57caa7e65b9a72c01f86c07ff3dde1f5b054743966a1b841"
 W1A4_ROSTER_IDS=(
     accepted-contract
     deterministic-layout
@@ -128,6 +140,10 @@ W1A4_ROSTER_IDS=(
     hostile-controls-self-proof
     hostile-controls-ablation
     gate-roster-self-proof
+)
+W1A4_ROSTER_PROPERTIES=(
+    summary.frozen-prose-drift
+    publication.frozen-workflow-drift
 )
 
 # WHY THIS BLOCK IS HERE, AT THE TOP, AND NOT NEXT TO THE OTHER SELF-PROOFS.

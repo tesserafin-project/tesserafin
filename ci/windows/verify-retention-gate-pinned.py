@@ -3,7 +3,7 @@
 thing that says so is reached.
 
 R1 finding D3, its R2 successor, and the three R3 findings (F1, F3, F4) that
-this file is the repair for. It is the external authority for four things the
+this file is the repair for. It is the external authority for five things the
 retention subtree is not allowed to decide about itself:
 
   1. COMMAND IDENTITY. `.github/workflows/w1-windows-runtime-retention.yml`
@@ -36,6 +36,17 @@ retention subtree is not allowed to decide about itself:
      sentinel, the failure and the un-reached build stage — is
      `gate-roster-controls.py`, because a structural claim and a dynamic claim
      are different claims and neither implies the other.
+
+  5. PROPERTY OWNERSHIP (W1-A5-V1-R2 findings B2 and B3). Identity is not
+     behaviour. A member may keep its name, its file and its position while
+     silently ceasing to report a property: R2 deleted one line from
+     `publication_policy.check_all` and every check above still agreed. The
+     canonical manifest now records, per member, the properties it must still
+     REPORT; `ci/run.sh` pins the set of obligations in `W1A4_ROSTER_PROPERTIES`
+     so the manifest cannot drop one on its own; and this file DEMONSTRATES each
+     one by calling the member against a witness violation, and against an
+     unmodified tree, so neither a deleted property nor an unconditional one
+     satisfies it. See PROPERTY OWNERSHIP below.
 
 WHY THE COMMAND CHECK IS EQUALITY AND NOT A REGEX.
 
@@ -106,8 +117,10 @@ import hashlib
 import importlib.util
 import json
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import yaml
@@ -179,18 +192,34 @@ REQUIRED_STEP_ENV: dict[str, str] = {
 REQUIRED_TRIGGER_PATHS = (
     f"{SUBTREE}/**",
     WORKFLOW,
+    # W1-A5-V1-R3. `publication.frozen-workflow-drift` pins this file as bytes,
+    # so a pull request that edits ONLY the publication workflow is exactly the
+    # change the pin exists to refuse, and it must not be able to skip the job
+    # that evaluates it. The retention workflow already listed it; until R3
+    # nothing required it to keep listing it.
+    ".github/workflows/w1-windows-runtime-publish.yml",
     "ci/windows/verify-retention-gate-pinned.py",
     MANIFEST,
     TRUST_ROOT,
 )
 
 
-# ── a YAML loader that refuses what GitHub refuses ──────────────────────────
+# ── a YAML loader that refuses an ambiguous document ────────────────────────
 class StrictLoader(yaml.SafeLoader):
-    """`yaml.safe_load` resolves a duplicate mapping key last-wins. GitHub does
-    not: it rejects the workflow. Parsing it last-wins here would mean deciding
-    a workflow is safe from a document GitHub would never run, and the
-    difference is exactly where a second `env:` or a second `run:` hides."""
+    """A duplicate mapping key is refused because THIS repository requires a
+    unique one, not because of any claim about another parser.
+
+    W1-A5-V1-R5 corrects the rationale this docstring used to carry. Measured on
+    PyYAML 6.0.1, `yaml.SafeLoader` MAY resolve a duplicate mapping key
+    last-wins and silently; this loader raises `ConstructorError` on the same
+    document. What GitHub's own parser does with a duplicate key was never
+    established by any review in this series and is NOT asserted here.
+
+    The reason to refuse is that a decision taken from a last-wins tree is a
+    decision about one of two readings of an ambiguous file, and a gate may not
+    silently pick one. Refusing is fail-closed under every parser, including the
+    ones nobody here has measured, which is exactly where a second `env:` or a
+    second `run:` would otherwise hide."""
 
 
 def _no_duplicate_keys(loader, node, deep=False):
@@ -200,7 +229,9 @@ def _no_duplicate_keys(loader, node, deep=False):
         if key in mapping:
             raise yaml.constructor.ConstructorError(
                 "while constructing a mapping", node.start_mark,
-                f"found a duplicate key {key!r}, which GitHub rejects",
+                f"found a duplicate key {key!r}; this repository requires unique "
+                f"mapping keys, because a decision taken from one of two readings of "
+                f"an ambiguous document is not a decision about the file",
                 key_node.start_mark)
         mapping[key] = loader.construct_object(value_node, deep=deep)
     return mapping
@@ -213,16 +244,26 @@ StrictLoader.add_constructor(
 class Entry:
     """One authoritative roster member. Position is part of it."""
 
-    __slots__ = ("gate_id", "module", "callable_name", "kind", "argv", "tier")
+    __slots__ = ("gate_id", "module", "callable_name", "kind", "argv", "tier",
+                 "properties")
 
     def __init__(self, gate_id: str, module: str, callable_name: str, kind: str,
-                 argv: tuple[str, ...], tier: str) -> None:
+                 argv: tuple[str, ...], tier: str,
+                 properties: tuple[str, ...] = ()) -> None:
         self.gate_id = gate_id
         self.module = module
         self.callable_name = callable_name
         self.kind = kind
         self.argv = argv
         self.tier = tier
+        #: The named properties this member must still REPORT. Identity is not
+        #: behaviour: W1-A5-V1-R2 finding B2 deleted one line — the call to
+        #: `check_summary_identity` inside `publication_policy.check_all` — and
+        #: every identity check here, and every control in the subtree, stayed
+        #: green. Finding B3 co-removed the call, the implementation and the
+        #: controls and the roster still passed 14/14, because the property was
+        #: declared only by the file that implemented it.
+        self.properties = properties
 
     @property
     def identity(self) -> tuple[str, str, str, tuple[str, ...], str]:
@@ -262,6 +303,8 @@ _PIN_DIGEST = re.compile(
 _PIN_PATH = re.compile(r'^W1A4_ROSTER_MANIFEST="([^"\n]+)"$', re.MULTILINE)
 _PIN_IDS = re.compile(r'^W1A4_ROSTER_IDS=\(\n((?:[ \t]*[A-Za-z0-9._-]+\n)+)\)$',
                       re.MULTILINE)
+_PIN_PROPERTIES = re.compile(
+    r'^W1A4_ROSTER_PROPERTIES=\(\n((?:[ \t]*[A-Za-z0-9._-]+\n)+)\)$', re.MULTILINE)
 
 
 class Anchor:
@@ -272,12 +315,18 @@ class Anchor:
     the verifier is a consumer of both.
     """
 
-    __slots__ = ("manifest_path", "digest", "ids")
+    __slots__ = ("manifest_path", "digest", "ids", "properties")
 
-    def __init__(self, manifest_path: str, digest: str, ids: tuple[str, ...]) -> None:
+    def __init__(self, manifest_path: str, digest: str, ids: tuple[str, ...],
+                 properties: tuple[str, ...]) -> None:
         self.manifest_path = manifest_path
         self.digest = digest
         self.ids = ids
+        #: Every property obligation the manifest may carry, in manifest order.
+        #: W1-A5-V1-R2 finding B3: an obligation that the file owing it can
+        #: delete is not an obligation, and neither is one the manifest alone
+        #: can drop, because the manifest is a data file this contract reads.
+        self.properties = properties
 
 
 def read_anchor(root: Path) -> tuple[Anchor | None, list[Finding]]:
@@ -294,6 +343,7 @@ def read_anchor(root: Path) -> tuple[Anchor | None, list[Finding]]:
     match_path = _PIN_PATH.search(text)
     match_digest = _PIN_DIGEST.search(text)
     match_ids = _PIN_IDS.search(text)
+    match_properties = _PIN_PROPERTIES.search(text)
     if match_path is None:
         findings.append(Finding(
             "anchor.manifest-unpinned",
@@ -306,6 +356,12 @@ def read_anchor(root: Path) -> tuple[Anchor | None, list[Finding]]:
             f"`W1A4_ROSTER_MANIFEST_SHA256=\"<64 hex>\"`; without it the manifest is a "
             f"file anyone may rewrite, and this file would be authenticating it against "
             f"a value it holds itself"))
+    if match_properties is None:
+        findings.append(Finding(
+            "anchor.properties-unpinned",
+            f"{TRUST_ROOT} declares no top-level `W1A4_ROSTER_PROPERTIES=( ... )` array; "
+            f"without it the manifest could drop a member's obligation and re-pin its own "
+            f"digest in one edit to a data file"))
     if match_ids is None:
         findings.append(Finding(
             "anchor.ids-unpinned",
@@ -316,13 +372,20 @@ def read_anchor(root: Path) -> tuple[Anchor | None, list[Finding]]:
         return None, findings
 
     ids = tuple(line.strip() for line in match_ids.group(1).splitlines() if line.strip())
+    properties = tuple(line.strip() for line in match_properties.group(1).splitlines()
+                       if line.strip())
     if len(set(ids)) != len(ids):
         duplicates = sorted({i for i in ids if ids.count(i) > 1})
         findings.append(Finding(
             "anchor.ids-duplicated",
             f"{TRUST_ROOT} names {duplicates} more than once in W1A4_ROSTER_IDS"))
         return None, findings
-    return Anchor(match_path.group(1), match_digest.group(1), ids), []
+    if len(set(properties)) != len(properties):
+        repeated = sorted({p for p in properties if properties.count(p) > 1})
+        return None, findings + [Finding(
+            "anchor.properties-duplicated",
+            f"{TRUST_ROOT} names {repeated} more than once in W1A4_ROSTER_PROPERTIES")]
+    return Anchor(match_path.group(1), match_digest.group(1), ids, properties), []
 
 
 def load_manifest(root: Path, anchor: Anchor) -> tuple[tuple[Entry, ...], list[Finding]]:
@@ -376,13 +439,14 @@ def load_manifest(root: Path, anchor: Anchor) -> tuple[tuple[Entry, ...], list[F
             findings.append(Finding("anchor.manifest-schema",
                                     f"{anchor.manifest_path} roster[{index}] is not an object"))
             continue
-        missing = [k for k in ("position", "id", "module", "callable", "kind", "argv", "tier")
+        missing = [k for k in ("position", "id", "module", "callable", "kind", "argv",
+                               "tier", "properties")
                    if k not in row]
         if missing:
             findings.append(Finding(
                 "anchor.manifest-schema",
                 f"{anchor.manifest_path} roster[{index}] omits {missing}; the contract is "
-                f"id, module, callable, kind, argv, tier and position"))
+                f"id, module, callable, kind, argv, tier, properties and position"))
             continue
         if row["position"] != index:
             findings.append(Finding(
@@ -396,8 +460,23 @@ def load_manifest(root: Path, anchor: Anchor) -> tuple[tuple[Entry, ...], list[F
                                     f"{anchor.manifest_path} roster[{index}] has a non-string "
                                     f"argv"))
             continue
+        if not isinstance(row["properties"], list) or \
+                not all(isinstance(a, str) for a in row["properties"]):
+            findings.append(Finding("anchor.manifest-schema",
+                                    f"{anchor.manifest_path} roster[{index}] has a non-string "
+                                    f"properties list"))
+            continue
+        unknown = [name for name in row["properties"] if name not in WITNESSES]
+        if unknown:
+            findings.append(Finding(
+                "anchor.manifest-witnessless",
+                f"{anchor.manifest_path} roster[{index}] declares {unknown}, for which this "
+                f"file holds no witness violation. A property nothing can demonstrate is a "
+                f"name, not an obligation"))
+            continue
         entries.append(Entry(row["id"], row["module"], row["callable"], row["kind"],
-                             tuple(row["argv"]), row["tier"]))
+                             tuple(row["argv"]), row["tier"],
+                             tuple(row["properties"])))
     if any(f.prop != "anchor.manifest-digest" for f in findings):
         return (), findings
 
@@ -423,6 +502,29 @@ def load_manifest(root: Path, anchor: Anchor) -> tuple[tuple[Entry, ...], list[F
             "anchor.manifest-roster-drift",
             f"{anchor.manifest_path} does not carry the roster {TRUST_ROOT} pins: "
             + "; ".join(detail))]
+
+    # The obligations the manifest carries are the obligations the trust root
+    # pins, in the same order. W1-A5-V1-R2 finding B3's residue: without this,
+    # deleting `"properties": [...]` from a member and re-pinning the manifest
+    # digest is one edit to two data files and removes the obligation silently.
+    manifest_properties = tuple(name for e in entries for name in e.properties)
+    if manifest_properties != anchor.properties:
+        absent = [p for p in anchor.properties if p not in manifest_properties]
+        extra = [p for p in manifest_properties if p not in anchor.properties]
+        detail = []
+        if absent:
+            detail.append(f"{TRUST_ROOT} requires {absent}, which no member in the manifest "
+                          f"still owes")
+        if extra:
+            detail.append(f"the manifest obliges {extra}, which {TRUST_ROOT} does not name")
+        if not detail:
+            detail.append(f"the same obligations in a different order: manifest has "
+                          f"{list(manifest_properties)}, {TRUST_ROOT} has "
+                          f"{list(anchor.properties)}")
+        return (), findings + [Finding(
+            "anchor.properties-drift",
+            f"{anchor.manifest_path} does not carry the property obligations "
+            f"{TRUST_ROOT} pins: " + "; ".join(detail))]
     if findings:
         return (), findings
     return tuple(entries), []
@@ -1117,8 +1219,277 @@ def _resolve_bindings(loader, here: Path) -> list[Finding]:
     return findings
 
 
+# ── property ownership (W1-A5-V1-R2 findings B2 and B3) ─────────────────────
+#
+# Identity is not behaviour. Everything above this point establishes that the
+# roster runs `publication_policy.py::check_all`, defined in that file, under
+# that name. None of it notices that the function no longer reports a property
+# it used to report.
+#
+# R2 measured both halves of that gap:
+#
+#   B2. Delete the single line `+ check_summary_identity(root)` from
+#       `check_all`. Every identity check here passes, the orchestrator runs
+#       14/14, and the subtree's own controls stay RED — because they called
+#       the implementation directly, so they graded a function the gate no
+#       longer invoked.
+#
+#   B3. Co-remove the call, the implementation, the four controls and their
+#       invocation. Nothing anywhere refuses, because the property was declared
+#       only by the file that implemented it. A self-declared obligation is not
+#       an obligation.
+#
+# So the obligation is moved out. The canonical manifest names, per member, the
+# properties that member must still REPORT; the manifest's digest and member
+# identities are pinned in `ci/run.sh`; and this file — which is neither the
+# manifest nor the subtree — demonstrates each one by CALLING the member.
+#
+# The demonstration is a witness violation, not a source scan. A grep for the
+# property name is satisfied by the string in a comment, which is the D3 defect
+# in a new place. Each witness builds a disposable repository root, breaks the
+# thing the property is about, calls the pinned callable, and requires the
+# property to be named. It then calls the same callable on an UNBROKEN root and
+# requires the property to be absent, so a gate that returns the property
+# unconditionally — which would pass the first half — fails the second.
+#
+# The witnesses live HERE, not in the subtree. A witness the subtree could edit
+# is the bilateral agreement R3 finding F3 already refused once.
+
+#: `properties` values the manifest may name. A member may not declare an
+#: obligation this file cannot demonstrate; `load_manifest` refuses it as
+#: `anchor.manifest-witnessless`.
+PUBLICATION_WORKFLOW = ".github/workflows/w1-windows-runtime-publish.yml"
+
+#: A line inside the approved summary's `run:` scalar. The prose witness
+#: inserts ahead of it, which changes the scalar and therefore the summary
+#: property. The byte witness deliberately does NOT touch the scalar.
+_SUMMARY_ANCHOR = (
+    '            echo "This workflow does not set, change or verify the '
+    'package\'s registry"\n'
+)
+
+
+def _disposable_root(work: Path, root: Path, publication: str | None) -> Path:
+    """A throwaway repository root the gates can be called against.
+
+    The reviewed retention workflow so the cannot-publish evaluation inside
+    `check_all` has the real file and contributes nothing; the publication
+    workflow, pristine or broken; a symlink to the real `ci/` tree, where the
+    script closure lives; and `git init`, because the closure resolver
+    enumerates tracked paths. Nothing is written inside the repository.
+    """
+    fake = work / "root"
+    (fake / ".github" / "workflows").mkdir(parents=True)
+    for relative in (WORKFLOW, PUBLICATION_WORKFLOW):
+        (fake / relative).write_bytes((root / relative).read_bytes())
+    if publication is not None:
+        (fake / PUBLICATION_WORKFLOW).write_text(publication, encoding="utf-8")
+    (fake / "ci").symlink_to(root / "ci")
+    subprocess.run(["git", "init", "-q", str(fake)], check=True, capture_output=True)
+    return fake
+
+
+def _witness_summary_prose(root: Path, work: Path) -> tuple[Path, str] | str:
+    """Break the reviewed summary PROSE without touching anything else."""
+    source = (root / PUBLICATION_WORKFLOW).read_text(encoding="utf-8")
+    if source.count(_SUMMARY_ANCHOR) != 1:
+        return (f"{PUBLICATION_WORKFLOW} no longer carries the summary anchor this "
+                f"witness inserts before, so the witness cannot be built")
+    inserted = '            echo "The package is PUBLIC."\n'
+    broken = source.replace(_SUMMARY_ANCHOR, inserted + _SUMMARY_ANCHOR, 1)
+    return _disposable_root(work, root, broken), "an inserted visibility assertion"
+
+
+def _witness_workflow_bytes(root: Path, work: Path) -> tuple[Path, str] | str:
+    """Break the reviewed BYTES without changing the parsed summary scalar.
+
+    A trailing comment. `yaml.safe_load` never yields it, so the summary
+    property cannot see it and only the file property can. That is what makes
+    the two obligations distinguishable rather than one obligation named twice.
+    """
+    source = (root / PUBLICATION_WORKFLOW).read_text(encoding="utf-8")
+    broken = source + "# witness: not the reviewed bytes\n"
+    return _disposable_root(work, root, broken), "an appended comment line"
+
+
+WITNESSES = {
+    "summary.frozen-prose-drift": _witness_summary_prose,
+    "publication.frozen-workflow-drift": _witness_workflow_bytes,
+}
+
+
+def _call_for_properties(target, where: Path) -> tuple[frozenset[str], str | None]:
+    """Every property `target` names for `where`, or why it could not be asked."""
+    try:
+        findings = target(where)
+    except Exception as error:  # noqa: BLE001 - a gate that raises is a finding
+        return frozenset(), f"{type(error).__name__}: {error}"
+    try:
+        return frozenset(f.prop for f in findings), None
+    except (TypeError, AttributeError) as error:
+        return frozenset(), f"the return value is not a list of findings: {error}"
+
+
+# ── the execution receipt (W1-A5-V1-R4 finding O9b) ─────────────────────────
+#
+# `check_properties` returning no findings and `check_properties` never having
+# run are the same thing to a caller that only counts findings. R4 unwired the
+# call from `check()` and the run still printed "every one of the 2 properties
+# the manifest obliges is REPORTED ..." over zero work.
+#
+# So the success line is no longer reachable from an empty finding list. It is
+# reachable only from a RECEIPT that `check_properties` writes as it goes: it
+# ran, it reached the end, and the set of (member, property) pairs it actually
+# DEMONSTRATED equals the set the manifest obliges. A pair is recorded only
+# after both halves of its witness succeeded — the property named for the
+# broken tree AND absent for the unmodified one.
+#
+# This is an execution invariant, not self-protection. An author who may
+# rewrite this file may also rewrite the receipt; the claim is about what these
+# reviewed bytes do, and nothing more.
+class _PropertyReceipt:
+    """What `check_properties` actually did, for `main` to verify."""
+
+    __slots__ = ("ran", "completed", "demonstrated")
+
+    def __init__(self) -> None:
+        self.reset()
+
+    def reset(self) -> None:
+        self.ran = False
+        self.completed = False
+        self.demonstrated: set[tuple[str, str]] = set()
+
+
+RECEIPT = _PropertyReceipt()
+
+
+def obliged_pairs() -> frozenset[tuple[str, str]]:
+    """Every (member, property) pair the canonical manifest obliges."""
+    return frozenset((e.gate_id, name) for e in EXPECTED_ROSTER for name in e.properties)
+
+
+def receipt_findings() -> list[Finding]:
+    """The ownership run did what the success line is about to claim it did."""
+    obliged = obliged_pairs()
+    if not RECEIPT.ran:
+        return [Finding(
+            "ownership.properties-unchecked",
+            f"the {len(obliged)} obligation(s) the canonical manifest records were never "
+            f"checked: `check_properties` did not run. An empty finding list from a check "
+            f"that never ran is not a passing check")]
+    if not RECEIPT.completed:
+        return [Finding(
+            "ownership.properties-incomplete",
+            f"`check_properties` ran but did not reach the end, so the obligations it did "
+            f"not get to were neither demonstrated nor reported")]
+    missing = sorted(obliged - RECEIPT.demonstrated)
+    if missing:
+        return [Finding(
+            "ownership.properties-partial",
+            f"`check_properties` completed having demonstrated "
+            f"{len(RECEIPT.demonstrated)} of {len(obliged)} obligation(s); not "
+            f"demonstrated: {[f'{g}::{n}' for g, n in missing]}")]
+    unexpected = sorted(RECEIPT.demonstrated - obliged)
+    if unexpected:
+        return [Finding(
+            "ownership.properties-unexpected",
+            f"`check_properties` demonstrated obligations the canonical manifest does not "
+            f"record: {[f'{g}::{n}' for g, n in unexpected]}")]
+    return []
+
+
+def check_properties(root: Path, orchestrator) -> list[Finding]:
+    """Each member still reports the properties the canonical manifest names."""
+    findings: list[Finding] = []
+    RECEIPT.ran = True
+    obliged = [e for e in EXPECTED_ROSTER if e.properties]
+    if not obliged:
+        RECEIPT.completed = True
+        return findings
+    loader = getattr(orchestrator, "_load", None)
+    here = getattr(orchestrator, "HERE", None)
+    if not callable(loader) or not isinstance(here, Path):
+        return [Finding(
+            "ownership.orchestrator-shape",
+            f"{ORCHESTRATOR} exposes no `_load`/`HERE`, so the obliged members cannot be "
+            f"called")]
+
+    on_path = str(Path(here).resolve())
+    sys.path.insert(0, on_path)
+    work = Path(tempfile.mkdtemp(prefix="w1a5r3-ownership-"))
+    try:
+        for entry in obliged:
+            if entry.kind != "findings":
+                findings.append(Finding(
+                    "ownership.kind-unsupported",
+                    f"{entry.gate_id!r} declares properties but is a {entry.kind!r} member; "
+                    f"only a findings member can be asked which properties it names"))
+                continue
+            try:
+                module = loader(entry.module)
+                target = getattr(module, entry.callable_name)
+            except Exception as error:  # noqa: BLE001
+                findings.append(Finding(
+                    "ownership.member-unreachable",
+                    f"{entry.module}::{entry.callable_name} cannot be resolved to ask it "
+                    f"for its properties: {type(error).__name__}: {error}"))
+                continue
+
+            clean = work / f"{entry.gate_id}-clean"
+            clean.mkdir()
+            unbroken = _disposable_root(clean, root, None)
+            baseline, problem = _call_for_properties(target, unbroken)
+            if problem is not None:
+                findings.append(Finding(
+                    "ownership.member-unusable",
+                    f"{entry.module}::{entry.callable_name} could not be called against an "
+                    f"unmodified tree: {problem}"))
+                continue
+
+            for name in entry.properties:
+                built = WITNESSES[name](root, work / f"{entry.gate_id}-{len(findings)}-"
+                                        f"{name.replace('.', '-')}")
+                if isinstance(built, str):
+                    findings.append(Finding("ownership.witness-unanchored", built))
+                    continue
+                broken_root, description = built
+                named, problem = _call_for_properties(target, broken_root)
+                if problem is not None:
+                    findings.append(Finding(
+                        "ownership.member-unusable",
+                        f"{entry.module}::{entry.callable_name} could not be called against "
+                        f"the {name} witness: {problem}"))
+                    continue
+                if name not in named:
+                    findings.append(Finding(
+                        "ownership.property-not-reported",
+                        f"{MANIFEST} obliges {entry.gate_id!r} to report {name!r}. Given "
+                        f"{description}, {entry.module}::{entry.callable_name} named "
+                        f"{sorted(named) or 'nothing'} instead. The property is no longer "
+                        f"on the canonical path, whether it was unwired, deleted or never "
+                        f"reached"))
+                    continue
+                if name in baseline:
+                    findings.append(Finding(
+                        "ownership.property-always-reported",
+                        f"{entry.gate_id!r} names {name!r} for an UNMODIFIED tree as well as "
+                        f"for the witness, so the witness demonstrates nothing"))
+                    continue
+                RECEIPT.demonstrated.add((entry.gate_id, name))
+        RECEIPT.completed = True
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+        try:
+            sys.path.remove(on_path)
+        except ValueError:
+            pass
+    return findings
+
+
 # ── entry point ─────────────────────────────────────────────────────────────
 def check(root: Path) -> list[Finding]:
+    RECEIPT.reset()
     findings = install_roster(root)
     findings += check_trust_root(root)
     findings += check_command(root)
@@ -1135,12 +1506,12 @@ def check(root: Path) -> list[Finding]:
         return findings + [Finding(
             "roster.orchestrator-unloadable",
             f"{ORCHESTRATOR} does not import: {type(error).__name__}: {error}")]
-    return findings + check_roster(orchestrator)
+    return findings + check_roster(orchestrator) + check_properties(root, orchestrator)
 
 
 def main() -> int:
     root = repo_root()
-    findings = check(root)
+    findings = check(root) + receipt_findings()
     if findings:
         print(f"W1-A4 RETENTION AUTHORITY HARD STOP: {len(findings)} finding(s)",
               file=sys.stderr)
@@ -1158,6 +1529,12 @@ def main() -> int:
     print(f"{ORCHESTRATOR} carries exactly the {len(EXPECTED_ROSTER)} members the "
           f"authenticated manifest requires, in order, each resolving to its expected "
           f"callable")
+    # Counted from the receipt, not from the manifest: this sentence may only
+    # describe work that was actually done. `receipt_findings` above has
+    # already established that the two sets are equal.
+    print(f"every one of the {len(RECEIPT.demonstrated)} properties the manifest obliges "
+          f"is REPORTED by the member that owns it when called against a witness "
+          f"violation, and by none of them against an unmodified tree")
     return 0
 
 
