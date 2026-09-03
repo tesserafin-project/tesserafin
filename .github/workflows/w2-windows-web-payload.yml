@@ -1,0 +1,166 @@
+# W2-A0 (#256): acquire the accepted Tesserafin Web payload on a clean Windows
+# runner, by immutable digest, with no container runtime of any kind.
+#
+# This workflow exists to answer one question with evidence rather than with an
+# argument: can a hosted `windows-latest` job obtain exactly the web bundle the
+# Linux packages ship, using only the job-scoped GITHUB_TOKEN, and prove it is
+# that bundle before anything downstream is allowed to see it?
+#
+# What it deliberately does NOT do, because W2-A0 is not authorised to and
+# because each of these would weaken the answer:
+#
+#   * no container engine, no image build, no daemon and no CLI for one -- the
+#     consumer speaks the OCI distribution protocol directly over HTTPS;
+#   * no artifact upload or download and no cache -- a payload that arrives via
+#     an Actions artifact is a payload whose identity was decided in another
+#     job, which is exactly what the digest chain is for;
+#   * no write permission of any kind, so no package, release or deployment can
+#     be mutated even by accident;
+#   * no ZIP construction, no service installation and no publication.
+#
+# The permission grant below is the whole authentication boundary: `packages:
+# read` on the job's own token, nothing else, no PAT and no repository secret.
+
+name: W2 Windows Web payload
+
+on:
+  pull_request:
+    # Draft pull requests are covered: `pull_request` fires for them unless a
+    # type filter excludes them, and W2-A0 is reviewed as a draft.
+    paths:
+      - 'ci/windows/w2/**'
+      - '.github/workflows/w2-windows-web-payload.yml'
+      - 'docs/distribution/W2-A0-web-payload.md'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  # The accepted contract, restated here so a reader of the run does not have to
+  # open the script to know what was consumed. The script holds the same values
+  # and refuses anything else; ci/windows/w2/web-payload-controls.py (C21)
+  # asserts the two agree.
+  ACCEPTED_IMAGE: ghcr.io/tesserafin-project/tesserafin-web-assets@sha256:6150380052c8a3a154a8a25a9f40a741175a7563afdf89284f9c1f46d3042a6c
+  ACCEPTED_TREE_DIGEST: 4148c4bc6e0c7c2d6b35ed9992e874a06dcc11d2b6d9e0aad06719e36567be4f
+  ACCEPTED_WEB_REVISION: a9a362eec764a9fe3fa6ba9b4a7dd7473677e35a
+
+jobs:
+  payload:
+    name: Consume the pinned Web payload on a clean Windows runner
+    runs-on: windows-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      # The entire write surface of this workflow. Read only, job scoped.
+      packages: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Record the runner's interpreters
+        id: tools
+        shell: pwsh
+        run: |
+          $python = (Get-Command python -CommandType Application | Select-Object -First 1).Source
+          if (-not $python) { throw 'no python on this runner' }
+          "python=$python" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "PowerShell $($PSVersionTable.PSVersion), .NET $([System.Environment]::Version)"
+          & $python --version
+
+      # ── Everything that can be proven without the network ────────────────
+      #
+      # Disposable local registries and deliberately hostile images. If any of
+      # these controls is ineffective, the real pull below proves much less.
+      - name: Hostile controls against disposable local fixtures
+        shell: pwsh
+        run: |
+          & '${{ steps.tools.outputs.python }}' ci/windows/w2/web-payload-controls.py
+          if ($LASTEXITCODE -ne 0) { throw "the W2-A0 hostile controls failed" }
+
+      # ── The real thing ───────────────────────────────────────────────────
+      - name: Consume the accepted image by digest
+        shell: pwsh
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./ci/windows/w2/consume-web-payload.ps1 `
+            -OutputPath (Join-Path $env:RUNNER_TEMP 'w2a0-first/web') `
+            -EvidencePath (Join-Path $env:RUNNER_TEMP 'w2a0-first/evidence.json') `
+            -PythonPath '${{ steps.tools.outputs.python }}'
+          if ($LASTEXITCODE -ne 0) { throw 'the accepted payload was not acquired' }
+
+      # A second, independent consumption into a directory that has never held
+      # anything. Two runs that agree byte for byte is the only evidence that
+      # the acquisition is a function of the digest and nothing else -- not of
+      # the runner's state, and not of whatever the registry felt like serving
+      # the first time.
+      - name: Consume it again into a second clean directory
+        shell: pwsh
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./ci/windows/w2/consume-web-payload.ps1 `
+            -OutputPath (Join-Path $env:RUNNER_TEMP 'w2a0-second/web') `
+            -EvidencePath (Join-Path $env:RUNNER_TEMP 'w2a0-second/evidence.json') `
+            -PythonPath '${{ steps.tools.outputs.python }}'
+          if ($LASTEXITCODE -ne 0) { throw 'the second consumption failed' }
+
+      - name: Require the two consumptions to be identical
+        shell: pwsh
+        run: |
+          $first  = Join-Path $env:RUNNER_TEMP 'w2a0-first/web'
+          $second = Join-Path $env:RUNNER_TEMP 'w2a0-second/web'
+          $one = & '${{ steps.tools.outputs.python }}' ci/windows/w2/pkg-tree-digest.py $first 1785852822
+          $two = & '${{ steps.tools.outputs.python }}' ci/windows/w2/pkg-tree-digest.py $second 1785852822
+          "first  $one"
+          "second $two"
+          if ($one -ne $two) { throw "two clean consumptions disagree: $one vs $two" }
+          if ($one -ne $env:ACCEPTED_TREE_DIGEST) { throw "the accepted tree digest is $one" }
+
+          $left  = Get-ChildItem -LiteralPath $first  -Recurse -File
+          $right = Get-ChildItem -LiteralPath $second -Recurse -File
+          if ($left.Count -ne $right.Count) { throw "file counts differ: $($left.Count) vs $($right.Count)" }
+          foreach ($file in $left) {
+            $relative = $file.FullName.Substring($first.Length)
+            $other = Join-Path $second $relative
+            if (-not (Test-Path -LiteralPath $other)) { throw "missing in the second tree: $relative" }
+            $a = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash
+            $b = (Get-FileHash -LiteralPath $other -Algorithm SHA256).Hash
+            if ($a -ne $b) { throw "byte difference at $relative" }
+          }
+          "$($left.Count) files are byte-identical across both consumptions"
+
+      - name: Require the payload's own recorded revision
+        shell: pwsh
+        run: |
+          $evidence = Get-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'w2a0-first/evidence.json') -Raw |
+            ConvertFrom-Json
+          if ($evidence.webRevision -ne $env:ACCEPTED_WEB_REVISION) {
+            throw "the payload records $($evidence.webRevision)"
+          }
+          if ($evidence.treeDigest -ne $env:ACCEPTED_TREE_DIGEST) {
+            throw "the payload hashes to $($evidence.treeDigest)"
+          }
+          if ($evidence.reference -ne ($env:ACCEPTED_IMAGE -split '@')[1]) {
+            throw "the consumer used $($evidence.reference)"
+          }
+
+      # Sanitized by construction: consume-web-payload.ps1 routes every string it
+      # emits through its redaction pass, and the evidence document holds only
+      # digests, sizes and media types.
+      - name: Publish the descriptor inventory to the run summary
+        if: ${{ always() }}
+        shell: pwsh
+        run: |
+          $path = Join-Path $env:RUNNER_TEMP 'w2a0-first/evidence.json'
+          if (Test-Path -LiteralPath $path) {
+            $json = Get-Content -LiteralPath $path -Raw
+            $json
+            "``````json`n$json`n``````" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          }
