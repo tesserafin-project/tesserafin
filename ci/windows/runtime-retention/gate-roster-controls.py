@@ -286,7 +286,7 @@ SCOPE_CONTROLS: list[tuple[str, str, str | None, object]] = [
      _run("        run: python3 ci/windows/runtime-retention/retention_gates.py "
           "--validate\n")),
     ("E17-duplicate-run-key",
-     "a second `run:` in the gate step — last-wins locally, rejected by GitHub",
+     "a duplicate `run:` key in the gate step, refused by strict local workflow validation as `cmd.workflow-unparseable`",
      "cmd.workflow-unparseable",
      lambda source: source.replace(RUNLINE, RUNLINE + "        run: 'true'\n", 1)),
     ("E18-sibling-step-env",
