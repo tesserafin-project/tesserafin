@@ -1,0 +1,290 @@
+# W2-A2 (#256): assemble the portable, self-contained win-x64 Tesserafin server
+# ZIP twice on ONE clean `windows-latest` runner, and require the two archives
+# to be byte-identical.
+#
+# This workflow proves exactly one thing:
+#
+#     two clean assemblies of tesserafin-server_<version>_win-x64.zip from the
+#     same commit, into two directories that have never held anything, produce
+#     the same bytes.
+#
+# Each assembly acquires the Web payload with the FROZEN W2-A0 consumer, the
+# FFmpeg runtime with the FROZEN W1/W2-A1 consumer driven by the committed
+# acceptance manifest, publishes the server self-contained for win-x64, stages
+# ONE top-level directory and packs it with a clamped mtime and a deterministic
+# order. `ci/windows/w2/assemble-server-zip.ps1` refuses to emit an archive at
+# all if any of that is not the accepted thing.
+#
+# What it deliberately does NOT do, because W2-A2 is not authorised to:
+#
+#   * §8.1 two-runner identity is NOT claimed. Two assemblies on ONE runner is
+#     the evidence for this slice, and the doc says so in its own words;
+#   * it does not start tesserafin.exe, relocate the tree, discover a port, hit
+#     `/` or register a service -- relocation is §2.3's proof and is W2-A3;
+#   * it adds no first-party service script (§6's last bullet is deferred);
+#   * no artifact upload or download and no cache, so the ZIP can never become a
+#     production input to another job;
+#   * no container engine, no daemon and no CLI for one;
+#   * no package write, no publication, no release asset.
+#
+# The `paths:` filter below closes W2-A1-V1 NB-1. A1's own filter names three
+# files individually, so a second file added under `ci/windows/w2/` could be
+# reviewed without ever running the proof that covers it. This workflow watches
+# the whole directory, plus the two frozen files it actually runs and the one
+# canonical version source it reads.
+
+name: W2 Windows server ZIP
+
+on:
+  pull_request:
+    # Draft pull requests are covered: `pull_request` fires for them unless a
+    # type filter excludes them, and W2-A2 is reviewed as a draft.
+    paths:
+      # The whole authored directory, not a list of names -- NB-1.
+      - 'ci/windows/w2/**'
+      - '.github/workflows/w2-windows-server-zip.yml'
+      - 'docs/distribution/W2-A2-server-zip.md'
+      # The frozen files this workflow actually runs. A change to either is a
+      # change to the production acquisition path, so it must re-run this proof
+      # even though this slice may not author it.
+      - 'ci/windows/runtime-retention/consume.ps1'
+      - 'ci/windows/runtime-retention/accepted-runtime.json'
+      # The one canonical source of the version that names the archive.
+      - 'SharedVersion.cs'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  # The accepted identities, restated so a reader of the run does not have to
+  # open two JSON documents to know what was packed. These are NOT the trust
+  # boundary: the assembler reads the committed acceptance manifest and the
+  # frozen consumers refuse anything else, and it asserts that those agree with
+  # these values rather than the other way round. `ci/windows/w2/zip-controls.py`
+  # (Z07) asserts all three statements agree.
+  WEB_PAYLOAD_SHA256: 4148c4bc6e0c7c2d6b35ed9992e874a06dcc11d2b6d9e0aad06719e36567be4f
+  ACCEPTED_RUNTIME_SHA256: f28cc9186aad757491a6f44e7950d39bc39354dfe9505e278af91d7619811c9e
+  SDK_VERSION: "10.0.x"
+
+jobs:
+  zip:
+    name: Assemble the deterministic win-x64 server ZIP twice on one runner
+    runs-on: windows-latest
+    # Two 260 MB runtime pulls with a zstd stream verification each, two Web
+    # pulls, two self-contained publishes and two packs of a ~300 MB tree.
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      # The entire write surface of this workflow. Read only, job scoped, and
+      # needed only because the accepted Web payload image is pulled with the
+      # job's own token.
+      packages: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: ${{ env.SDK_VERSION }}
+
+      # Both interpreters are recorded rather than assumed. The frozen FFmpeg
+      # consumer verifies the corresponding source through `zstd -dc > file`,
+      # which is a native-command redirect: Windows PowerShell 5.1 would
+      # re-encode that stream and the consumer would then refuse its own
+      # accepted source. That refusal would be correct and completely illegible.
+      - name: Record the runner's interpreters
+        id: tools
+        shell: pwsh
+        run: |
+          $python = (Get-Command python -CommandType Application | Select-Object -First 1).Source
+          if (-not $python) { throw 'no python on this runner' }
+          "python=$python" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "PowerShell $($PSVersionTable.PSVersion), .NET $([System.Environment]::Version)"
+          if ($PSVersionTable.PSVersion.Major -lt 7) {
+            throw "W2-A2 HARD STOP: this job needs PowerShell 7 or newer to keep a native command's bytes intact; it has $($PSVersionTable.PSVersion)"
+          }
+          & $python --version
+          & dotnet --version
+          & tar --version | Select-Object -First 1
+
+      - name: Make the corresponding-source verifier available
+        shell: pwsh
+        run: |
+          $zstd = Get-Command zstd -CommandType Application -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+          if ($zstd) {
+            "zstd $((& $zstd.Source --version) -join ' ')"
+            exit 0
+          }
+          $fallback = Join-Path $env:ProgramFiles 'Git\usr\bin\zstd.exe'
+          if (Test-Path -LiteralPath $fallback) {
+            (Split-Path -Parent $fallback) | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+            "zstd taken from Git for Windows at $fallback"
+            exit 0
+          }
+          throw 'W2-A2 HARD STOP: this runner has no zstd, so the corresponding source cannot be verified'
+
+      # The same pinned client W1 installs, from the same lock file. W2 adds no
+      # second `tools.lock.json`: a second pin is a second thing to drift.
+      - name: Install the pinned ORAS
+        shell: bash
+        run: ./ci/windows/build-inputs/install-oras.sh windows-amd64 "${RUNNER_TEMP}/bin"
+
+      # SOURCE_DATE_EPOCH is the committer time of the commit being built --
+      # the same definition docker/version-contract.sh uses for every other
+      # Tesserafin artifact (`git log -1 --format=%ct`). It is never the clock,
+      # never a tag and never a run identifier, and it is derived ONCE here so
+      # the two assemblies below are given the same value by construction.
+      - name: Derive SOURCE_DATE_EPOCH from the commit
+        id: epoch
+        shell: pwsh
+        run: |
+          $commit = (& git rev-parse HEAD).Trim()
+          if ($commit -notmatch '^[0-9a-f]{40}$') { throw "not a commit: $commit" }
+          $epoch = (& git log -1 --format=%ct $commit).Trim()
+          if ($epoch -notmatch '^[1-9][0-9]*$') { throw "no committer time for $commit" }
+          "commit=$commit" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "epoch=$epoch"   | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "commit            : $commit"
+          "SOURCE_DATE_EPOCH : $epoch ($([System.DateTimeOffset]::FromUnixTimeSeconds([int64]$epoch).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')))"
+
+      # Everything the controls can prove without the network: the assembler's
+      # named refusals observed live against disposable stages, an audit of the
+      # production path, and a raw-byte pin over this workflow. If any of these
+      # is ineffective, the two assemblies below prove much less.
+      - name: Hostile controls against the assembler and this workflow
+        shell: pwsh
+        run: |
+          & '${{ steps.tools.outputs.python }}' ci/windows/w2/zip-controls.py
+          if ($LASTEXITCODE -ne 0) { throw 'the W2-A2 hostile controls failed' }
+
+      # ── The real thing, twice, into two trees that have never held anything.
+      - name: Assemble the ZIP
+        shell: pwsh
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./ci/windows/w2/assemble-server-zip.ps1 `
+            -RepoRoot $PWD `
+            -WorkDir (Join-Path $env:RUNNER_TEMP 'w2a2-first/work') `
+            -OutDir (Join-Path $env:RUNNER_TEMP 'w2a2-first/out') `
+            -SourceDateEpoch ${{ steps.epoch.outputs.epoch }} `
+            -OrasPath (Join-Path $env:RUNNER_TEMP 'bin\oras.exe') `
+            -PythonPath '${{ steps.tools.outputs.python }}'
+          if ($LASTEXITCODE -ne 0) { throw 'the first assembly produced no archive' }
+
+      - name: Assemble it again into a second clean tree
+        shell: pwsh
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./ci/windows/w2/assemble-server-zip.ps1 `
+            -RepoRoot $PWD `
+            -WorkDir (Join-Path $env:RUNNER_TEMP 'w2a2-second/work') `
+            -OutDir (Join-Path $env:RUNNER_TEMP 'w2a2-second/out') `
+            -SourceDateEpoch ${{ steps.epoch.outputs.epoch }} `
+            -OrasPath (Join-Path $env:RUNNER_TEMP 'bin\oras.exe') `
+            -PythonPath '${{ steps.tools.outputs.python }}'
+          if ($LASTEXITCODE -ne 0) { throw 'the second assembly produced no archive' }
+
+      - name: Require the two archives to be the same bytes
+        shell: pwsh
+        run: |
+          $firstDir  = Join-Path $env:RUNNER_TEMP 'w2a2-first/out'
+          $secondDir = Join-Path $env:RUNNER_TEMP 'w2a2-second/out'
+          $left  = @(Get-ChildItem -LiteralPath $firstDir  -Filter '*.zip' -File)
+          $right = @(Get-ChildItem -LiteralPath $secondDir -Filter '*.zip' -File)
+          if ($left.Count -ne 1)  { throw "the first assembly wrote $($left.Count) archives" }
+          if ($right.Count -ne 1) { throw "the second assembly wrote $($right.Count) archives" }
+          if ($left[0].Name -cne $right[0].Name) {
+            throw "the two archives are named differently: $($left[0].Name) vs $($right[0].Name)"
+          }
+          if ($left[0].Length -ne $right[0].Length) {
+            throw "the two archives differ in length: $($left[0].Length) vs $($right[0].Length)"
+          }
+          $a = (Get-FileHash -LiteralPath $left[0].FullName  -Algorithm SHA256).Hash.ToLowerInvariant()
+          $b = (Get-FileHash -LiteralPath $right[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($a -cne $b) { throw "two clean assemblies disagree: $a vs $b" }
+
+          # A hash agreement is a statement about a digest. The byte comparison
+          # is the statement the ruling actually asks for, so both are made.
+          $bytesA = [System.IO.File]::ReadAllBytes($left[0].FullName)
+          $bytesB = [System.IO.File]::ReadAllBytes($right[0].FullName)
+          if (-not [System.Linq.Enumerable]::SequenceEqual([byte[]]$bytesA, [byte[]]$bytesB)) {
+            throw 'the two archives hash equal but differ byte for byte'
+          }
+
+          # The two env values above are restated identities, and a restated
+          # identity that nothing reads is a comment. This is what reads them:
+          # the manifest that ships INSIDE the archive must name the same two
+          # digests the ruling names, so all three statements are checked
+          # against each other rather than each being believed on its own.
+          $zip = [System.IO.Compression.ZipFile]::OpenRead($left[0].FullName)
+          try {
+            $entry = $zip.Entries | Where-Object { $_.FullName -like '*/licenses/provenance.json' } |
+              Select-Object -First 1
+            if (-not $entry) { throw 'the archive carries no provenance manifest' }
+            $reader = New-Object System.IO.StreamReader($entry.Open())
+            try { $manifest = $reader.ReadToEnd() | ConvertFrom-Json } finally { $reader.Dispose() }
+          } finally {
+            $zip.Dispose()
+          }
+          if ($manifest.web.payloadSha256 -cne $env:WEB_PAYLOAD_SHA256) {
+            throw "the packed manifest names web payload $($manifest.web.payloadSha256)"
+          }
+          if ($manifest.ffmpegRuntime.archiveSha256 -cne $env:ACCEPTED_RUNTIME_SHA256) {
+            throw "the packed manifest names FFmpeg runtime $($manifest.ffmpegRuntime.archiveSha256)"
+          }
+          if ($manifest.sourceDateEpoch -ne [int64]'${{ steps.epoch.outputs.epoch }}') {
+            throw "the packed manifest records epoch $($manifest.sourceDateEpoch)"
+          }
+          if ($manifest.serverCommit -cne '${{ steps.epoch.outputs.commit }}') {
+            throw "the packed manifest records commit $($manifest.serverCommit)"
+          }
+
+          "archive           : $($left[0].Name)"
+          "SOURCE_DATE_EPOCH : ${{ steps.epoch.outputs.epoch }}"
+          "bytes             : $($left[0].Length)"
+          "sha256            : $a"
+          @(
+            "### W2-A2 deterministic win-x64 server ZIP"
+            ""
+            "| what | value |"
+            "| --- | --- |"
+            "| archive | ``$($left[0].Name)`` |"
+            "| commit | ``${{ steps.epoch.outputs.commit }}`` |"
+            "| SOURCE_DATE_EPOCH | ``${{ steps.epoch.outputs.epoch }}`` |"
+            "| bytes | $($left[0].Length) |"
+            "| sha256 (first) | ``$a`` |"
+            "| sha256 (second) | ``$b`` |"
+            ""
+            "Two assemblies on ONE runner. §8.1 two-runner identity is not claimed."
+          ) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+      # The provenance manifest that ships INSIDE the archive, read back out of
+      # it. It records identities and digests only: no work directory, no run
+      # identifier and no host path, which is why it can be printed whole.
+      - name: Publish the packed provenance manifest to the run summary
+        if: ${{ always() }}
+        shell: pwsh
+        run: |
+          $firstDir = Join-Path $env:RUNNER_TEMP 'w2a2-first/out'
+          $archive = @(Get-ChildItem -LiteralPath $firstDir -Filter '*.zip' -File -ErrorAction SilentlyContinue)
+          if ($archive.Count -ne 1) { 'no archive to read'; exit 0 }
+          $zip = [System.IO.Compression.ZipFile]::OpenRead($archive[0].FullName)
+          try {
+            $entry = $zip.Entries | Where-Object { $_.FullName -like '*/licenses/provenance.json' } | Select-Object -First 1
+            if (-not $entry) { 'the archive carries no provenance manifest'; exit 1 }
+            $reader = New-Object System.IO.StreamReader($entry.Open())
+            try { $json = $reader.ReadToEnd() } finally { $reader.Dispose() }
+          } finally {
+            $zip.Dispose()
+          }
+          $json
+          "``````json`n$json`n``````" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
