@@ -1,0 +1,231 @@
+# W2-A1 (#256): consume the accepted Windows FFmpeg runtime by digest, on a
+# clean `windows-latest` runner, using the frozen W1 consumer and nothing else.
+#
+# W2-A1 proves ONE thing: W2's production FFmpeg acquisition is exactly
+# `ci/windows/runtime-retention/consume.ps1` driven by the committed
+# `ci/windows/runtime-retention/accepted-runtime.json`. Both of those files are
+# frozen by the ruling and are inputs to this workflow, never outputs of it.
+#
+# There is deliberately NO W2 wrapper script. A wrapper is where a
+# `-Reference`, a `-Tag` or a `-RunId` would eventually be added, and the whole
+# security property of the frozen consumer is that it offers no such parameter:
+# the identity of what W2 builds against travels with the commit. This workflow
+# therefore calls the frozen consumer directly, with the four arguments it
+# actually has, and `ci/windows/w2/ffmpeg-consume-controls.py` asserts that the
+# argument set stays exactly those four.
+#
+# What it deliberately does NOT do, because W2-A1 is not authorised to:
+#
+#   * no ZIP construction, no server build, no service installation, no
+#     relocation and no start;
+#   * no package write and no publication -- there is no `packages:` grant
+#     anywhere in this file, at either scope;
+#   * no artifact upload or download and no cache, so nothing this job proves
+#     can be laundered into another job;
+#   * no container engine, no daemon and no CLI for one;
+#   * no Web payload consumption -- that is W2-A0's accepted slice.
+#
+# The pull is ANONYMOUS. The accepted runtime package answers an unauthenticated
+# pull by digest, so this job carries no token, no PAT and no repository secret,
+# and it points ORAS at an empty `DOCKER_CONFIG` so that no credential the
+# runner image might carry can be used by accident.
+
+name: W2 Windows FFmpeg runtime
+
+on:
+  pull_request:
+    # Draft pull requests are covered: `pull_request` fires for them unless a
+    # type filter excludes them, and W2-A1 is reviewed as a draft.
+    paths:
+      # The three paths this slice is authorised to add ...
+      - 'ci/windows/w2/ffmpeg-consume-controls.py'
+      - '.github/workflows/w2-windows-ffmpeg-consume.yml'
+      - 'docs/distribution/W2-A1-ffmpeg-runtime.md'
+      # ... and the two frozen files it actually runs. A change to either of
+      # those is a change to the production acquisition path, so it must re-run
+      # this proof even though this slice may not author it.
+      - 'ci/windows/runtime-retention/consume.ps1'
+      - 'ci/windows/runtime-retention/accepted-runtime.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  # The accepted identity, restated so a reader of the run does not have to open
+  # a 13 KB JSON document to know what was consumed. These are NOT the trust
+  # boundary: the consumer reads the committed acceptance manifest and refuses
+  # anything else, and the steps below assert that the manifest agrees with
+  # these two values rather than the other way round.
+  # `ci/windows/w2/ffmpeg-consume-controls.py` (F12) asserts all three agree.
+  ACCEPTED_REFERENCE: ghcr.io/tesserafin-project/windows-ffmpeg-runtime@sha256:99e45f154a5d72aba4185eb19b6671aa1a11c30be837deac9dd26f473593c0b9
+  ACCEPTED_RUNTIME_SHA256: f28cc9186aad757491a6f44e7950d39bc39354dfe9505e278af91d7619811c9e
+
+jobs:
+  ffmpeg:
+    name: Consume the accepted FFmpeg runtime on a clean Windows runner
+    runs-on: windows-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      # Both interpreters are recorded rather than assumed. The corresponding
+      # source is verified through `zstd -dc > file`, which is a native-command
+      # redirect: Windows PowerShell 5.1 would re-encode that stream and the
+      # frozen consumer would then refuse its own accepted source. That refusal
+      # would be correct and completely illegible, so the version is asserted
+      # here where the message can say so.
+      - name: Record the runner's interpreters
+        id: tools
+        shell: pwsh
+        run: |
+          $python = (Get-Command python -CommandType Application | Select-Object -First 1).Source
+          if (-not $python) { throw 'no python on this runner' }
+          "python=$python" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "PowerShell $($PSVersionTable.PSVersion), .NET $([System.Environment]::Version)"
+          if ($PSVersionTable.PSVersion.Major -lt 7) {
+            throw "W2-A1 HARD STOP: this job needs PowerShell 7 or newer to keep a native command's bytes intact; it has $($PSVersionTable.PSVersion)"
+          }
+          & $python --version
+          & tar --version | Select-Object -First 1
+
+      # The frozen consumer hard-stops without zstd, because an unverified
+      # corresponding source is not an accepted one. `windows-latest` documents
+      # zstd 1.5.7 in its image manifest; the fallback probes Git for Windows'
+      # own copy rather than installing anything, and the throw names the
+      # missing tool so a red here is not mistaken for a digest failure.
+      #
+      # Retained limitation: zstd's identity is the runner image's, not a pin.
+      # It is a decompressor whose output is verified against a committed
+      # digest, so a substituted zstd fails closed rather than silently.
+      - name: Make the corresponding-source verifier available
+        shell: pwsh
+        run: |
+          $zstd = Get-Command zstd -CommandType Application -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+          if ($zstd) {
+            "zstd $((& $zstd.Source --version) -join ' ')"
+            exit 0
+          }
+          $fallback = Join-Path $env:ProgramFiles 'Git\usr\bin\zstd.exe'
+          if (Test-Path -LiteralPath $fallback) {
+            (Split-Path -Parent $fallback) | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+            "zstd taken from Git for Windows at $fallback"
+            exit 0
+          }
+          throw 'W2-A1 HARD STOP: this runner has no zstd, so the corresponding source cannot be verified'
+
+      # The same pinned client W1 installs, from the same lock file. W2 adds no
+      # second `tools.lock.json`: a second pin is a second thing to drift.
+      - name: Install the pinned ORAS
+        shell: bash
+        run: ./ci/windows/build-inputs/install-oras.sh windows-amd64 "${RUNNER_TEMP}/bin"
+
+      # Everything the controls can prove without touching the accepted bytes,
+      # plus four controls that mutate a DISPOSABLE copy of the acceptance
+      # manifest and require the frozen consumer to refuse the real registry's
+      # honest answer. If any of these is ineffective, the two consumptions
+      # below prove much less.
+      - name: Hostile controls against the frozen consumer and this workflow
+        shell: pwsh
+        run: |
+          & '${{ steps.tools.outputs.python }}' ci/windows/w2/ffmpeg-consume-controls.py `
+            --oras (Join-Path $env:RUNNER_TEMP 'bin\oras.exe')
+          if ($LASTEXITCODE -ne 0) { throw 'the W2-A1 hostile controls failed' }
+
+      # ── The real thing, twice, into two directories that have never held
+      #    anything. Two runs that agree byte for byte is the only evidence that
+      #    the acquisition is a function of the committed digest and nothing
+      #    else -- not of the runner's state, and not of whatever the registry
+      #    felt like serving the first time.
+      - name: Consume the accepted runtime by digest, anonymously
+        shell: pwsh
+        run: |
+          $empty = Join-Path $env:RUNNER_TEMP 'w2a1-no-credentials'
+          New-Item -ItemType Directory -Force -Path $empty | Out-Null
+          $env:DOCKER_CONFIG = $empty
+          ./ci/windows/runtime-retention/consume.ps1 `
+            -AcceptedManifest ci/windows/runtime-retention/accepted-runtime.json `
+            -WorkDir (Join-Path $env:RUNNER_TEMP 'w2a1-first/work') `
+            -OutDir (Join-Path $env:RUNNER_TEMP 'w2a1-first/runtime') `
+            -OrasPath (Join-Path $env:RUNNER_TEMP 'bin\oras.exe')
+
+      - name: Consume it again into a second clean directory
+        shell: pwsh
+        run: |
+          $empty = Join-Path $env:RUNNER_TEMP 'w2a1-no-credentials'
+          New-Item -ItemType Directory -Force -Path $empty | Out-Null
+          $env:DOCKER_CONFIG = $empty
+          ./ci/windows/runtime-retention/consume.ps1 `
+            -AcceptedManifest ci/windows/runtime-retention/accepted-runtime.json `
+            -WorkDir (Join-Path $env:RUNNER_TEMP 'w2a1-second/work') `
+            -OutDir (Join-Path $env:RUNNER_TEMP 'w2a1-second/runtime') `
+            -OrasPath (Join-Path $env:RUNNER_TEMP 'bin\oras.exe')
+
+      - name: Require both inner runtime archives to be the accepted bytes
+        shell: pwsh
+        run: |
+          $accepted = Get-Content -LiteralPath ci/windows/runtime-retention/accepted-runtime.json -Raw |
+            ConvertFrom-Json
+          if ($accepted.reference -cne $env:ACCEPTED_REFERENCE) {
+            throw "the committed manifest names $($accepted.reference)"
+          }
+          if ($accepted.runtimeSha256 -cne $env:ACCEPTED_RUNTIME_SHA256) {
+            throw "the committed manifest pins runtime $($accepted.runtimeSha256)"
+          }
+          $name = Split-Path -Leaf $accepted.runtimePath
+          $first = Join-Path (Join-Path $env:RUNNER_TEMP 'w2a1-first/runtime') $name
+          $second = Join-Path (Join-Path $env:RUNNER_TEMP 'w2a1-second/runtime') $name
+          foreach ($path in @($first, $second)) {
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "no runtime archive at $path" }
+            $hash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $path"
+            if ($hash -cne $env:ACCEPTED_RUNTIME_SHA256) {
+              throw "the runtime archive at $path hashes to $hash"
+            }
+          }
+          # A hash agreement is not a byte comparison. Both are required: the
+          # digests could agree while the two directories differ in what else
+          # they carry.
+          $left = Get-ChildItem -LiteralPath (Join-Path $env:RUNNER_TEMP 'w2a1-first/runtime') -Recurse -File |
+            Sort-Object Name
+          $right = Get-ChildItem -LiteralPath (Join-Path $env:RUNNER_TEMP 'w2a1-second/runtime') -Recurse -File |
+            Sort-Object Name
+          if ($left.Count -ne $right.Count) { throw "file counts differ: $($left.Count) vs $($right.Count)" }
+          for ($index = 0; $index -lt $left.Count; $index++) {
+            if ($left[$index].Name -cne $right[$index].Name) {
+              throw "names differ: $($left[$index].Name) vs $($right[$index].Name)"
+            }
+            $a = (Get-FileHash -LiteralPath $left[$index].FullName -Algorithm SHA256).Hash
+            $b = (Get-FileHash -LiteralPath $right[$index].FullName -Algorithm SHA256).Hash
+            if ($a -cne $b) { throw "byte difference at $($left[$index].Name)" }
+          }
+          $bytes = [System.IO.File]::ReadAllBytes($first)
+          $other = [System.IO.File]::ReadAllBytes($second)
+          if ($bytes.Length -ne $other.Length) { throw 'the two runtime archives differ in length' }
+          for ($index = 0; $index -lt $bytes.Length; $index++) {
+            if ($bytes[$index] -ne $other[$index]) { throw "the two runtime archives differ at byte $index" }
+          }
+          "$($left.Count) delivered files are byte-identical across both consumptions"
+          "the inner runtime archive is $($bytes.Length) bytes and compares equal byte for byte"
+
+      # The consumer's own evidence document, which records only digests and
+      # counts. There is no credential anywhere in this job to redact.
+      - name: Publish the consumption evidence to the run summary
+        if: ${{ always() }}
+        shell: pwsh
+        run: |
+          $path = Join-Path $env:RUNNER_TEMP 'w2a1-first/work/consume.json'
+          if (Test-Path -LiteralPath $path) {
+            $json = Get-Content -LiteralPath $path -Raw
+            $json
+            "``````json`n$json`n``````" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          }
