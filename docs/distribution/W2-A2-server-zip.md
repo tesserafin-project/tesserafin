@@ -244,28 +244,41 @@ frozen, as the ruling directs.
 
 ---
 
-## 8. Known consequence: W2-A1's F18 goes RED
+## 8. Amendment W2-A2-F18: A1's second-consumer check names the assembler
 
-`ci/windows/w2/ffmpeg-consume-controls.py` treats every `.ps1` under
-`ci/windows/w2/` except `consume-web-payload.ps1` as "a second consumer". The
-ruling authorises `ci/windows/w2/assemble-server-zip.ps1` at exactly that path
-**and** freezes `ffmpeg-consume-controls.py`, so the A1 suite reads:
+`ci/windows/w2/ffmpeg-consume-controls.py` treated every `.ps1` under
+`ci/windows/w2/` except `consume-web-payload.ps1` as "a second consumer". That
+is the right refusal for a second FFmpeg or Web consumer, and the wrong one for
+the ZIP assembler this slice is authorised to add: with
+`ci/windows/w2/assemble-server-zip.ps1` present, the A1 suite read
 
 ```
 W2-A1 controls: 21 PASS, 1 RED, 0 INERT
   F18 RED ci/windows/w2/assemble-server-zip.ps1 is a second consumer
 ```
 
-The assembler is not an FFmpeg consumer — it invokes the frozen one and adds
-none of its own, which is what `Z09`, `Z10` and `Z12` assert. A1's check is a
-directory-listing heuristic, not a statement about behaviour.
+The owner ruling **W2-A2-F18** on #256 amends this slice: it authorises the
+fifth path `ci/windows/w2/ffmpeg-consume-controls.py` and exactly one change
+inside it — `F18` allows `assemble-server-zip.ps1` **by exact name**, the same
+way it already allows `consume-web-payload.ps1`. Widening `F18` to "any `.ps1`
+under `w2/`", deleting it, or touching `F01`-`F17`, `F19`, the roster or the
+frozen-consumer byte pins is not authorised, and none of it was done. The
+one-line allowlist is the whole edit.
 
-This is a **latent** break, not a red check on this pull request: A1's own
-`paths:` filter does not watch `ci/windows/w2/**` — that is NB-1 itself — so its
-workflow does not run here. It reddens the moment anyone edits
-`ffmpeg-consume-controls.py`, `consume.ps1` or `accepted-runtime.json`. The
-one-line repair is an `assemble-server-zip.ps1` exemption in
-`w2_directory_findings`, which this slice is not authorised to make.
+`F18` therefore still REDs any other new `.ps1` in that directory — a planted
+`ci/windows/w2/ffmpeg-consume.ps1` is named as a second consumer — and the A1
+suite now reads 22 PASS, 0 RED, 0 INERT.
+
+The assembler is not an FFmpeg consumer and not a registry consumer: it invokes
+the frozen consumers and adds none of its own, and it must never grow a
+`-Reference`. `Z09`, `Z10` and `Z12` own that property behaviourally and by
+source audit; A1's `F18` is a directory-listing heuristic, not a statement about
+behaviour.
+
+`ci/windows/runtime-retention/consume.ps1` and `accepted-runtime.json` remain
+frozen and byte-identical, so A1's `F16` pins are untouched. A1's own `paths:`
+filter watches `ci/windows/w2/ffmpeg-consume-controls.py`, so the W2-A1 workflow
+runs on this pull request with the amended check.
 
 ---
 
@@ -332,5 +345,5 @@ Local suite results at the commit this document ships with:
 ```
 W2-A2 controls: 22 PASS, 0 RED, 0 INERT
 W2-A0 controls: 44 PASS, 0 RED, 0 INERT
-W2-A1 controls: 21 PASS, 1 RED, 0 INERT   (F18, §8)
+W2-A1 controls: 22 PASS, 0 RED, 0 INERT   (F18 amended, §8)
 ```

@@ -741,6 +741,8 @@ def w2_directory_findings(entries):
             continue
         if name == "consume-web-payload.ps1":
             continue  # W2-A0's accepted Web payload consumer.
+        if name == "assemble-server-zip.ps1":
+            continue  # W2-A2's ZIP assembler, allowed by name (W2-A2-F18).
         findings.append("ci/windows/w2/%s is a second consumer" % name)
     return findings
 
