@@ -175,11 +175,31 @@ passing after the property it names was deleted.
 | C19 | The canonical digest implementation agrees with GNU tar |
 | C20 | Two clean consumptions are byte-identical and hash to the same tree |
 | C21 | The consumer's own accepted constants are still the ruling's five values |
-| C22 | The workflow declares only `contents: read` + `packages: read`, triggers only on `pull_request`, pins every action to a commit SHA, persists no credentials, and names no mutable image |
+| C22 | The workflow is byte-identical to its pinned raw bytes, and its executable text declares only `contents: read` + `packages: read`, no write grant and no `write-all`, one `on:` block triggering `pull_request` only, one `jobs:` block holding the one authorised job, pinned actions, no persisted credentials and no mutable image |
+| C24 / C25 | A **config** descriptor that lies about its size, and a config whose bytes were substituted at the same length, are refused — the layer twins C04/C05 do not reach these |
+| C26 | A config whose `rootfs.diff_ids` does not describe the layer actually served is refused, with every descriptor and every blob honest |
+| C27 | Two entries differing only in case are refused rather than folded into one file by NTFS |
+| C28 | A complete, internally consistent image that carries no payload root is refused |
+| C29 | Fixture mode aimed at a registry that is not loopback is refused, with `-Fixture` present |
+| C30 | An image whose manifest, config and layer all use the **Docker** media types is accepted and hashes to the fixture tree |
+| C31 | A Docker manifest **list** is refused on media type — a different string from the OCI index C06b sends |
 
 C16, C17 and C22 each run their audit over a deliberately bad planted file
 first: an audit that cannot find a planted violation is reported INERT rather
 than PASS. The suite exits non-zero on any RED **or** any INERT.
+
+C22's plant is the specific mutation that once walked past it: the frozen
+workflow rewritten to trigger on `push`, to grant `write-all` at both the
+workflow and a second job, and to keep `contents: read` and `packages: read`
+only as comment text, with the pinned action SHA and `persist-credentials:
+false` carried over untouched. The audit reads the file's executable text, so a
+comment cannot satisfy a check, and it also pins the workflow by its raw bytes:
+the named rules refuse the shapes someone thought of, and the pin refuses every
+other edit to a file no loop is authorised to touch. A copy differing only in
+line endings is reported as exactly that — `.gitattributes` normalises this
+repository to LF, so the byte pin is safe to assert literally on a Windows
+runner, and a pin over the text-mode read would have called a 165-byte-different
+CRLF copy byte-identical.
 
 ## Hosted proof
 
@@ -199,10 +219,16 @@ artifact step, no cache, and no container engine.
 * **`licenses/` and `metadata/` are not handed over.** The accepted output is
   the `web/` tree, which is what the canonical digest covers. The distribution's
   licence obligations are a later step's problem and will need them.
-* **The image is a single-layer OCI manifest today.** The multi-layer,
-  whiteout-bearing and Docker-media-type paths are exercised only by local
-  fixtures. They exist so a re-published web image cannot silently change what
-  the consumer accepts — not because they have been met in production.
+* **The image is a single-layer OCI manifest today.** The multi-layer and
+  whiteout-bearing paths are exercised by local fixtures (C11, C15, C18), and
+  the Docker media types by C30, which is accepted, and C31, which is refused.
+  Until those controls existed the string `vnd.docker` appeared in the suite
+  only inside a comment, so an earlier claim in this file that the
+  Docker-media-type paths were exercised by fixtures was false and is withdrawn.
+  One accepted spelling is still uncovered: `application/vnd.oci.image.layer.v1.tar`,
+  the plain uncompressed layer, which no fixture sends. All of this exists so a
+  re-published web image cannot silently change what the consumer accepts — not
+  because any of it has been met in production.
 * **An image index would be refused.** If the web image ever becomes
   multi-platform, this consumer must be extended deliberately, with a documented
   platform-selection rule.

@@ -75,6 +75,29 @@ OCI_INDEX = "application/vnd.oci.image.index.v1+json"
 OCI_CONFIG = "application/vnd.oci.image.config.v1+json"
 OCI_LAYER_GZIP = "application/vnd.oci.image.layer.v1.tar+gzip"
 
+# The consumer accepts the Docker equivalents of the three descriptor types and
+# refuses the Docker manifest list, exactly as it does for the OCI four. Naming
+# them here is what lets C30 and C31 drive those branches; before they existed,
+# `vnd.docker` appeared in this file only inside a comment.
+DOCKER_MANIFEST = "application/vnd.docker.distribution.manifest.v2+json"
+DOCKER_MANIFEST_LIST = "application/vnd.docker.distribution.manifest.list.v2+json"
+DOCKER_CONFIG = "application/vnd.docker.container.image.v1+json"
+DOCKER_LAYER_GZIP = "application/vnd.docker.image.rootfs.diff.tar.gzip"
+
+# C22 pins the frozen workflow by its RAW BYTES. `.gitattributes` normalises
+# every file in this repository to LF (`* text=auto eol=lf`), so a Windows
+# checkout delivers the same bytes a Linux one does and this is safe to assert
+# literally. A pin over the text-mode read would have been more forgiving and
+# less true: a CRLF copy differs by 165 bytes and hashes identically under
+# universal newlines, so C22 would have called it byte-identical. A file whose
+# line endings alone differ is reported as exactly that, not as an unexplained
+# digest mismatch.
+WORKFLOW_SHA256 = "c27fb4f9b768be1401fb143990402b7efd214ca9838e7784236231e13cd878ca"
+
+# The workflow's whole authorised shape, asserted by name rather than inferred.
+WORKFLOW_ALLOWED_TRIGGERS = ("pull_request",)
+WORKFLOW_ALLOWED_JOBS = ("payload",)
+
 FIXTURE_REVISION = "1111111111111111111111111111111111111111"
 FIXTURE_EPOCH = 1700000000
 FIXTURE_TOKEN = "fixture-registry-credential-do-not-reuse"
@@ -138,6 +161,7 @@ def build_image(layer_entry_sets, layer_media_type=OCI_LAYER_GZIP,
                 config_media_type=OCI_CONFIG, manifest_media_type=OCI_MANIFEST,
                 break_layer_size=None, break_layer_bytes=None,
                 break_manifest_bytes=None, break_diff_id=None,
+                break_config_size=False, break_config_bytes=False,
                 reverse_layers=False):
     """Return (reference, manifest_bytes, manifest_content_type, blobs)."""
     layers = [build_layer(entries) for entries in layer_entry_sets]
@@ -171,11 +195,22 @@ def build_image(layer_entry_sets, layer_media_type=OCI_LAYER_GZIP,
     }, separators=(",", ":")).encode("utf-8")
     config_digest = _sha256(config)
     blobs[config_digest] = config
+    config_size = len(config)
+    if break_config_size:
+        # The descriptor lies by one byte and the blob is untouched. One byte is
+        # deliberate: it stays far under the consumer's config ceiling, so the
+        # refusal has to come from comparing the served length against the
+        # declared one and not from a size that was obviously absurd.
+        config_size = config_size + 1
+    if break_config_bytes:
+        # Same length, different content, so the size gate cannot be what
+        # catches this one -- the config digest has to be.
+        blobs[config_digest] = bytes([config[0] ^ 0xFF]) + config[1:]
 
     manifest = json.dumps({
         "schemaVersion": 2,
         "mediaType": manifest_media_type,
-        "config": {"mediaType": config_media_type, "digest": config_digest, "size": len(config)},
+        "config": {"mediaType": config_media_type, "digest": config_digest, "size": config_size},
         "layers": descriptors,
     }, separators=(",", ":")).encode("utf-8")
     reference = _sha256(manifest)
@@ -202,6 +237,22 @@ def web_layers(files=None, revision=FIXTURE_REVISION, epoch=FIXTURE_EPOCH):
     ]
     for name, content in (files or [("index.html", "<!doctype html>fixture\n")]):
         entries.append(("web/" + name, "file", content))
+    return entries
+
+
+def misrooted_layers(root="site", revision=FIXTURE_REVISION, epoch=FIXTURE_EPOCH):
+    """`web_layers()` with the payload under a different top-level directory.
+
+    The provenance document still has to be present and correct: the consumer
+    checks `metadata/web-revision.json` BEFORE it looks for the payload root, so
+    a fixture that omitted it would be refused on `web-revision` and C28 would
+    own the wrong gate.
+    """
+    entries = []
+    for name, kind, payload in web_layers(revision=revision, epoch=epoch):
+        if name == "web" or name.startswith("web/"):
+            name = root + name[3:]
+        entries.append((name, kind, payload))
     return entries
 
 
@@ -859,6 +910,163 @@ def run_controls(work, report, only=None):
     if selected("C23"):
         _cross_volume_control(report, work)
 
+    # --- C24 -----------------------------------------------------------------
+    if selected("C24"):
+        # The CONFIG descriptor, not the layer twins C04/C05 already own. The
+        # config is where `rootfs.diff_ids` lives, so a config the consumer
+        # accepts on a registry's say-so is a config that can relicense every
+        # layer that follows it.
+        registry, reference = with_fixture(work, [web_layers()], break_config_size=True)
+        with registry:
+            out = os.path.join(work, "c24", "web")
+            completed = run_consumer(registry.authority, "fixtures/web", reference, out,
+                                     tree_digest=ACCEPTED_TREE_DIGEST, revision=FIXTURE_REVISION)
+            expect_denial(report, "C24", completed, "descriptor-size",
+                          "a config descriptor that lies about its size by one byte",
+                          workdir=os.path.dirname(out), output=out)
+
+    # --- C25 -----------------------------------------------------------------
+    if selected("C25"):
+        registry, reference = with_fixture(work, [web_layers()], break_config_bytes=True)
+        with registry:
+            out = os.path.join(work, "c25", "web")
+            completed = run_consumer(registry.authority, "fixtures/web", reference, out,
+                                     tree_digest=ACCEPTED_TREE_DIGEST, revision=FIXTURE_REVISION)
+            expect_denial(report, "C25", completed, "descriptor-digest",
+                          "a config whose bytes were substituted at the same length",
+                          workdir=os.path.dirname(out), output=out)
+
+    # --- C26 -----------------------------------------------------------------
+    if selected("C26"):
+        # Every layer descriptor is honest here and every layer blob hashes to
+        # what its descriptor claims. Only the config's commitment to what those
+        # layers DECOMPRESS to is wrong, so nothing but the diff_id comparison
+        # can catch it: this is the link between "the compressed bytes were
+        # verified" and "what was extracted was".
+        registry, reference = with_fixture(work, [web_layers()], break_diff_id=0)
+        with registry:
+            out = os.path.join(work, "c26", "web")
+            completed = run_consumer(registry.authority, "fixtures/web", reference, out,
+                                     tree_digest=ACCEPTED_TREE_DIGEST, revision=FIXTURE_REVISION)
+            expect_denial(report, "C26", completed, "diff-id",
+                          "a config whose rootfs.diff_ids does not describe the layer served",
+                          workdir=os.path.dirname(out), output=out)
+
+    # --- C27 -----------------------------------------------------------------
+    if selected("C27"):
+        # NTFS folds case. These two entries would become one file on a Windows
+        # runner and stay two on the Linux builder, so the tree digest would
+        # move for a reason nothing reports.
+        layers = [web_layers(files=[("index.html", "lower\n"), ("Index.html", "UPPER\n")])]
+        registry, reference = with_fixture(work, layers)
+        with registry:
+            out = os.path.join(work, "c27", "web")
+            completed = run_consumer(registry.authority, "fixtures/web", reference, out,
+                                     tree_digest=ACCEPTED_TREE_DIGEST, revision=FIXTURE_REVISION)
+            expect_denial(report, "C27", completed, "case-collision",
+                          "two entries differing only in case",
+                          workdir=os.path.dirname(out), output=out)
+
+    # --- C28 -----------------------------------------------------------------
+    if selected("C28"):
+        # A complete, internally consistent image that simply is not a web
+        # payload. Everything up to the payload root verifies, including the
+        # provenance document, so the refusal can only come from the root check.
+        layers = [misrooted_layers()]
+        registry, reference = with_fixture(work, layers)
+        with registry:
+            out = os.path.join(work, "c28", "web")
+            completed = run_consumer(registry.authority, "fixtures/web", reference, out,
+                                     tree_digest=ACCEPTED_TREE_DIGEST, revision=FIXTURE_REVISION)
+            expect_denial(report, "C28", completed, "payload-root",
+                          "an image whose extracted tree has no payload root",
+                          workdir=os.path.dirname(out), output=out)
+
+    # --- C29 -----------------------------------------------------------------
+    if selected("C29"):
+        # Fixture mode is the one path that relaxes the accepted contract, so it
+        # is the one path that must not be aimable anywhere real. `-Fixture` is
+        # PRESENT here: a control that proved this by omitting the switch would
+        # be measuring the contract gate that C01/C02 already reach, not the
+        # loopback restriction. `.invalid` is reserved by RFC 2606 and cannot
+        # resolve, so if the restriction is ever deleted this control fails
+        # closed against a name that does not exist rather than reaching a host.
+        out = os.path.join(work, "c29", "web")
+        # The refusal happens before anything is created, so the parent has to
+        # exist for the leftover-staging assertion to be a real look at a real
+        # directory rather than a missing one.
+        os.makedirs(os.path.dirname(out), exist_ok=True)
+        completed = run_consumer("example.invalid:443", "fixtures/web",
+                                 ACCEPTED_REFERENCE, out,
+                                 tree_digest=ACCEPTED_TREE_DIGEST, revision=ACCEPTED_REVISION,
+                                 fixture=True)
+        if expect_denial(report, "C29", completed, "accepted-contract",
+                         "fixture mode aimed at a registry that is not loopback",
+                         workdir=os.path.dirname(out), output=out):
+            # `accepted-contract` is denied at three sites. Only one of them is
+            # the loopback restriction, so the property name alone would not say
+            # which gate answered.
+            text = (completed.stdout + completed.stderr).decode("utf-8", "replace")
+            if "restricted to a loopback registry" not in text:
+                report.rows.pop()
+                report.record("C29", "RED",
+                              "denied on 'accepted-contract', but not by the loopback "
+                              "restriction: %s" % text.strip()[-200:])
+
+    # --- C30 -----------------------------------------------------------------
+    if selected("C30"):
+        # The Docker media types are a live acceptance path in the consumer, not
+        # a documented intention. Manifest, config and layer all carry the
+        # Docker spelling; nothing else about the image changes, so the only way
+        # this can be accepted is if all three are genuinely recognised.
+        layers = [web_layers(files=[("index.html", "docker\n")])]
+        expected = expected_digest_for(work, layers)
+        registry, reference = with_fixture(work, layers,
+                                           manifest_media_type=DOCKER_MANIFEST,
+                                           config_media_type=DOCKER_CONFIG,
+                                           layer_media_type=DOCKER_LAYER_GZIP)
+        with registry:
+            out = os.path.join(work, "c30", "web")
+            evidence = os.path.join(work, "c30", "evidence.json")
+            completed = run_consumer(registry.authority, "fixtures/web", reference, out,
+                                     tree_digest=expected, revision=FIXTURE_REVISION,
+                                     evidence=evidence)
+            text = (completed.stdout + completed.stderr).decode("utf-8", "replace")
+            if completed.returncode != 0:
+                report.record("C30", "RED",
+                              "a Docker-media-type image was refused: %s" % text[-300:])
+            else:
+                document = json.load(open(evidence, encoding="utf-8"))
+                served = [layer["mediaType"] for layer in document["layers"]]
+                if document["treeDigest"] != expected:
+                    report.record("C30", "RED",
+                                  "accepted, but hashed to %s" % document["treeDigest"])
+                elif document["webRevision"] != FIXTURE_REVISION:
+                    report.record("C30", "RED",
+                                  "accepted, but recorded revision %s" % document["webRevision"])
+                elif served != [DOCKER_LAYER_GZIP]:
+                    report.record("C30", "RED",
+                                  "the evidence does not record the Docker layer type: %s" % served)
+                else:
+                    report.record("C30", "PASS",
+                                  "an image whose manifest, config and layer all use the Docker "
+                                  "media types is accepted and hashes to the fixture tree")
+
+    # --- C31 -----------------------------------------------------------------
+    if selected("C31"):
+        # C06b sends the OCI index. The Docker manifest list is a DIFFERENT
+        # string in a different list in the consumer, so C06b says nothing about
+        # it, and a multi-platform web image would arrive as this one.
+        registry, reference = with_fixture(work, [web_layers()],
+                                           manifest_media_type=DOCKER_MANIFEST_LIST)
+        with registry:
+            out = os.path.join(work, "c31", "web")
+            completed = run_consumer(registry.authority, "fixtures/web", reference, out,
+                                     tree_digest=ACCEPTED_TREE_DIGEST, revision=FIXTURE_REVISION)
+            expect_denial(report, "C31", completed, "media-type",
+                          "a Docker manifest list where an image manifest is required",
+                          workdir=os.path.dirname(out), output=out)
+
 
 def strip_commentary(path, text):
     """The executable part of a file, with comments and docstrings blanked out.
@@ -1030,60 +1238,321 @@ def oracle_tree(work):
     return root
 
 
+def _workflow_triggers(text):
+    """Every trigger under every top-level `on:`, block style or flow style.
+
+    Returns (names, blocks). Deliberately not `yaml.safe_load`: a YAML loader
+    resolves duplicate keys last-wins, so a file carrying two `on:` blocks would
+    be audited on whichever one the loader kept rather than on everything the
+    file says. Reading the first block and stopping would be the same defect
+    mirrored, so every block is read and the count is reported. A loader also
+    cannot be asked what a comment contains, which is the substitution this
+    audit exists to refuse.
+    """
+    lines = text.splitlines()
+    names = []
+    blocks = 0
+    for index, line in enumerate(lines):
+        match = re.match(r"^on:(.*)$", line)
+        if not match:
+            continue
+        blocks += 1
+        inline = match.group(1).strip()
+        if inline:
+            # `on: [push, pull_request]` or `on: push`.
+            names.extend(re.findall(r"[A-Za-z_][A-Za-z0-9_]*", inline))
+            continue
+        for following in lines[index + 1:]:
+            if not following.strip():
+                continue
+            if not following.startswith(" "):
+                break
+            nested = re.match(r"^  ([A-Za-z_][A-Za-z0-9_]*):", following)
+            if nested:
+                names.append(nested.group(1))
+    return names, blocks
+
+
+def _workflow_jobs(text):
+    """Every job under every top-level `jobs:`, from raw text, for that reason."""
+    names = []
+    blocks = 0
+    inside = False
+    for line in text.splitlines():
+        if re.match(r"^jobs:\s*$", line):
+            blocks += 1
+            inside = True
+            continue
+        if not inside:
+            continue
+        if line.strip() and not line.startswith(" "):
+            inside = False
+            continue
+        nested = re.match(r"^  ([A-Za-z0-9_-]+):", line)
+        if nested:
+            names.append(nested.group(1))
+    return names, blocks
+
+
+def _audit_workflow(text):
+    """Every way the frozen workflow could stop being what the ruling authorised.
+
+    Runs over the executable part of the file only. A permission grant, a
+    trigger and a job are things a workflow DOES; a comment that names one is a
+    comment. Auditing the raw text meant every positive check here could be
+    satisfied by writing the expected words into a comment, which is how a file
+    granting `write-all` at two scopes was graded green.
+    """
+    # The name is what selects the comment syntax, so it has to look like a
+    # file with a suffix: `os.path.splitext('.yml')` reports NO extension, and
+    # a strip that quietly returns its input would leave every positive check
+    # below satisfiable by a comment, which is the defect being repaired.
+    code = strip_commentary("workflow.yml", text)
+    findings = []
+
+    forbidden = {
+        r"write-all": "grants write-all",
+        r"packages:\s*write": "declares packages: write",
+        r"contents:\s*write": "declares contents: write",
+        r"id-token:\s*write": "declares id-token: write",
+        # Named rather than left to the pin: the PASS string claims read-only,
+        # and a scope this audit never thought to enumerate would otherwise be
+        # measured by nothing but the digest.
+        r"^[ \t]*[a-z-]+:[ \t]*write[ \t]*$": "declares a write permission",
+        r"^\s*pull_request_target:": "declares pull_request_target",
+        r"^\s*workflow_dispatch:": "declares workflow_dispatch",
+        r"^\s*schedule:": "declares schedule",
+    }
+    for pattern, label in forbidden.items():
+        if re.search(pattern, code, re.MULTILINE):
+            findings.append(label)
+
+    triggers, trigger_blocks = _workflow_triggers(code)
+    if not triggers:
+        findings.append("declares no trigger this audit can read")
+    if trigger_blocks > 1:
+        findings.append("declares %d top-level on: blocks" % trigger_blocks)
+    for trigger in triggers:
+        if trigger not in WORKFLOW_ALLOWED_TRIGGERS:
+            findings.append("triggers on '%s'" % trigger)
+    for required in WORKFLOW_ALLOWED_TRIGGERS:
+        if required not in triggers:
+            findings.append("has no %s trigger" % required)
+
+    jobs, job_blocks = _workflow_jobs(code)
+    if not jobs:
+        findings.append("declares no job this audit can read")
+    if job_blocks > 1:
+        findings.append("declares %d top-level jobs: blocks" % job_blocks)
+    for job in jobs:
+        if job not in WORKFLOW_ALLOWED_JOBS:
+            findings.append("declares the unauthorised job '%s'" % job)
+    for job in sorted(set(jobs)):
+        if jobs.count(job) > 1:
+            findings.append("declares the job '%s' %d times" % (job, jobs.count(job)))
+
+    for match in re.finditer(r"uses:\s*([^\s#]+)", code):
+        reference = match.group(1)
+        if "@" not in reference or not re.search(r"@[0-9a-f]{40}$", reference):
+            findings.append("unpinned action %s" % reference)
+
+    for match in re.finditer(r"ghcr\.io/[A-Za-z0-9._/-]+", code):
+        image = match.group(0)
+        if "@sha256:" not in code[match.start():match.start() + len(image) + 80]:
+            findings.append("mutable image reference %s" % image)
+
+    if "persist-credentials: false" not in code:
+        findings.append("checks out with persisted credentials")
+    if "contents: read" not in code or "packages: read" not in code:
+        findings.append("does not request exactly contents: read + packages: read")
+    if "windows-latest" not in code:
+        findings.append("has no windows-latest proof job")
+
+    return findings
+
+
+def _v1_permission_mutation(text):
+    """The exact shape W2-A0-V1 walked past C22, rebuilt from the real file.
+
+    Returns (mutant, applied). Everything the rest of the audit reads is carried
+    over verbatim -- the pinned checkout SHA, `persist-credentials: false`,
+    `windows-latest` -- so the only reason this file must be refused is the
+    trigger, the two `write-all` grants and the second job. Every block it
+    replaces is demoted to comment text rather than deleted, so `pull_request:`,
+    `contents: read` and `packages: read` all still appear in the file: that is
+    exactly the substitution the previous audit accepted, and a mutation that
+    merely deleted them would be refused by rules that predate this repair.
+
+    `applied` names the edits that actually landed. If the frozen workflow ever
+    stops having the shape this rewrites, the mutation would silently degrade
+    into a file the audit refuses for some unrelated reason, and C22 would be
+    proven against nothing.
+    """
+    lines = text.splitlines()
+    total = len(lines)
+    out = []
+    applied = []
+    index = 0
+
+    def copy_until(predicate):
+        nonlocal index
+        while index < total and not predicate(lines[index]):
+            out.append(lines[index])
+            index += 1
+        return index < total
+
+    def demote_block(indent):
+        """Replace a block with the same block commented out, not with nothing."""
+        nonlocal index
+        out.append("#" + lines[index])
+        index += 1
+        while index < total and (not lines[index].strip() or lines[index].startswith(indent)):
+            if lines[index].strip():
+                out.append("#" + lines[index])
+            index += 1
+
+    if copy_until(lambda line: line == "on:"):
+        out.append("on: [push, pull_request]")
+        demote_block(" ")
+        out.append("")
+        applied.append("push trigger")
+
+    if copy_until(lambda line: line == "permissions:"):
+        out.append("permissions: write-all")
+        demote_block(" ")
+        out.append("")
+        applied.append("workflow-scope write-all")
+
+    if copy_until(lambda line: line == "    permissions:"):
+        out.append("    permissions: write-all")
+        demote_block("      ")
+        applied.append("job-scope write-all with the reads demoted to comments")
+
+    out.extend(lines[index:])
+    out.extend([
+        "",
+        "  exfiltrate:",
+        "    runs-on: ubuntu-latest",
+        "    permissions: write-all",
+        "    steps:",
+        "      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0",
+        "        with:",
+        "          persist-credentials: false",
+    ])
+    applied.append("second job")
+    return "\n".join(out) + "\n", applied
+
+
+# A workflow with the frozen file's structural shape and nothing else. The
+# inert-proof needs a baseline the V1 mutation can always be applied to: once
+# that mutation has been applied to the real file, the real file no longer HAS
+# an `on:` block or a workflow-scope `permissions:` block to rewrite, so a proof
+# that could only mutate the live text would degrade to INERT at exactly the
+# moment it is supposed to report RED. This audits clean unmutated, which the
+# control asserts, so every finding the proof requires comes from the mutation.
+FROZEN_SHAPE_BASELINE = """\
+name: baseline
+on:
+  pull_request:
+    paths:
+      - 'ci/windows/w2/**'
+
+permissions:
+  contents: read
+
+jobs:
+  payload:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+"""
+
+
 def _workflow_control(report, work):
     if not os.path.isfile(WORKFLOW):
         report.record("C22", "RED", "the W2 workflow is missing")
         return
     text = open(WORKFLOW, encoding="utf-8").read()
-    findings = []
 
-    forbidden = {
-        r"packages:\s*write": "packages: write",
-        r"contents:\s*write": "contents: write",
-        r"id-token:\s*write": "id-token: write",
-        r"^\s*pull_request_target:": "pull_request_target",
-        r"^\s*workflow_dispatch:": "workflow_dispatch",
-        r"^\s*schedule:": "schedule",
+    findings = _audit_workflow(text)
+    raw = open(WORKFLOW, "rb").read()
+    digest = hashlib.sha256(raw).hexdigest()
+    if digest != WORKFLOW_SHA256:
+        # The pin is what makes the audit exhaustive. The named rules above can
+        # only refuse the shapes someone thought of; the pin refuses every other
+        # edit to a file this loop is not authorised to touch at all.
+        normalised = hashlib.sha256(
+            raw.replace(b"\r\n", b"\n")).hexdigest()
+        if normalised == WORKFLOW_SHA256:
+            findings.append("differs from the pinned frozen workflow in its line "
+                            "endings only (%d bytes, pinned content)" % len(raw))
+        else:
+            findings.append("is not the pinned frozen workflow: %s, pinned %s"
+                            % (digest[:16], WORKFLOW_SHA256[:16]))
+
+    # --- inert-proof 1: the mutation that actually got past this control -----
+    expected_edits = ["push trigger", "workflow-scope write-all",
+                      "job-scope write-all with the reads demoted to comments", "second job"]
+    mutant, applied = _v1_permission_mutation(text)
+    if applied != expected_edits:
+        # The live file no longer has the frozen trigger/permission/job shape,
+        # which is a finding in its own right, and the proof falls back to the
+        # baseline so the audit's power is still measured rather than skipped.
+        findings.append("no longer has the frozen trigger/permission/job shape; "
+                        "the V1 mutation applies only %s" % (applied or "nothing"))
+        if _audit_workflow(FROZEN_SHAPE_BASELINE):
+            report.record("C22", "INERT", "the inert-proof baseline does not audit clean")
+            return
+        mutant, applied = _v1_permission_mutation(FROZEN_SHAPE_BASELINE)
+        if applied != expected_edits:
+            report.record("C22", "INERT",
+                          "the V1 permission mutation no longer applies to the baseline: %s" % applied)
+            return
+    mutant_findings = _audit_workflow(mutant)
+    required = {
+        "grants write-all": "write-all",
+        "triggers on 'push'": "the push trigger",
+        "declares the unauthorised job 'exfiltrate'": "the second job",
+        "does not request exactly contents: read + packages: read":
+            "reads that exist only in a comment",
     }
-    for pattern, label in forbidden.items():
-        if re.search(pattern, text, re.MULTILINE):
-            findings.append("declares %s" % label)
+    unproven = [description for finding, description in required.items()
+                if finding not in mutant_findings]
+    if unproven:
+        report.record("C22", "INERT",
+                      "the workflow audit does not refuse %s" % ", ".join(sorted(unproven)))
+        return
+    if hashlib.sha256(mutant.encode("utf-8")).hexdigest() == WORKFLOW_SHA256:
+        report.record("C22", "INERT", "the content pin does not distinguish the mutation")
+        return
 
-    for match in re.finditer(r"uses:\s*([^\s#]+)", text):
-        reference = match.group(1)
-        if "@" not in reference or not re.search(r"@[0-9a-f]{40}$", reference):
-            findings.append("unpinned action %s" % reference)
-
-    for match in re.finditer(r"ghcr\.io/[A-Za-z0-9._/-]+", text):
-        image = match.group(0)
-        if "@sha256:" not in text[match.start():match.start() + len(image) + 80]:
-            findings.append("mutable image reference %s" % image)
-
-    if "pull_request:" not in text:
-        findings.append("has no pull_request trigger")
-    if "persist-credentials: false" not in text:
-        findings.append("checks out with persisted credentials")
-    if "contents: read" not in text or "packages: read" not in text:
-        findings.append("does not request exactly contents: read + packages: read")
-    if "windows-latest" not in text:
-        findings.append("has no windows-latest proof job")
-
-    # Inert-proof: the same audit run over a deliberately bad workflow must fail.
+    # --- inert-proof 2: the original planted violation ----------------------
     planted = os.path.join(work, "planted-workflow.yml")
     with open(planted, "w", encoding="utf-8") as handle:
         handle.write("on:\n  workflow_dispatch:\npermissions:\n  packages: write\n"
                      "jobs:\n  x:\n    steps:\n      - uses: actions/checkout@v4\n")
-    planted_text = open(planted, encoding="utf-8").read()
-    detects = bool(re.search(r"packages:\s*write", planted_text)) and \
-        bool(re.search(r"^\s*workflow_dispatch:", planted_text, re.MULTILINE))
-    if not detects:
-        report.record("C22", "INERT", "the workflow audit does not detect a planted violation")
-    elif findings:
+    planted_findings = _audit_workflow(open(planted, encoding="utf-8").read())
+    for label in ("declares packages: write", "declares workflow_dispatch",
+                  "unpinned action actions/checkout@v4"):
+        if label not in planted_findings:
+            report.record("C22", "INERT",
+                          "the workflow audit does not detect a planted violation: %s" % label)
+            return
+
+    if findings:
         report.record("C22", "RED", "; ".join(findings))
     else:
         report.record("C22", "PASS",
-                      "pull_request only, contents+packages read only, pinned actions, "
-                      "no persisted credentials, no dispatch, no mutable image reference")
+                      "byte-identical to the pinned frozen workflow, and its executable text "
+                      "declares one on: block triggering pull_request only, one jobs: block "
+                      "with the one authorised job, contents+packages read only, no write "
+                      "grant and no write-all, pinned actions, no persisted credentials, "
+                      "no dispatch and no mutable image reference")
 
 
 # ===========================================================================
