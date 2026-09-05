@@ -40,7 +40,8 @@ than assuming it.
 
     python3 ci/windows/w2/two-runner-controls.py
     python3 ci/windows/w2/two-runner-controls.py --only T07
-    python3 ci/windows/w2/two-runner-controls.py --compare a/sha256.txt b/sha256.txt
+    python3 ci/windows/w2/two-runner-controls.py --compare a/sha256.txt b/sha256.txt \
+    --members a/members.txt b/members.txt
 """
 
 import argparse
@@ -112,7 +113,7 @@ FROZEN_PINS = {
 }
 
 # Filled in by the pinning pass below; see T01.
-WORKFLOW_SHA256 = "b954ec898ff8b2c4a90caa220e09e9ee172baa3865b2df16ed5d69bdac768b32"
+WORKFLOW_SHA256 = "9aa141faf516cab591c2021a8465c49b8b31b503eba0e3640d609b2355357934"
 
 # The .ps1 files `ci/windows/w2/` is allowed to carry. W2-A4 adds none: the
 # ruling says "no new .ps1 under ci/windows/w2/" and T16 is what says so about
@@ -154,6 +155,9 @@ ROSTER = {
     "T18": "actions are SHA-pinned, credentials are not persisted, no container engine",
     "T19": "the controls run on a runner that assembles nothing",
     "T20": "the doc states the non-goals and claims no acceptance",
+    "T21": "both allocations publish a member digest list and the compare is given both",
+    "T22": "the compare refuses a missing, malformed or unsorted member list",
+    "T23": "the compare names every differing member, and says so when none differs",
 }
 
 
@@ -213,17 +217,166 @@ def compare_hash_files(path_a, path_b, label_a, label_b):
     return left, []
 
 
+# ---------------------------------------------------------------------------
+# The member digest list (W2-A4-R1-DIAG)
+# ---------------------------------------------------------------------------
+#
+# A whole-archive SHA-256 can only ever say "these two runs disagree". Run
+# 33967489630 said exactly that -- the same commit, the same epoch, the same
+# 185755892 bytes and two SHA-256 values -- and a byte count is not a
+# diagnosis. Each allocation therefore also publishes one line per staged file:
+#
+#     <64 lowercase hex digits><two spaces><posix relative path><LF>
+#
+# sorted bytewise by path, LF only, no BOM. The paths are relative to the stage
+# root, which is what the frozen assembler's `Invoke-Pack` names its archive
+# entries after, so a line in this file IS an archive member and "the differing
+# members" is meant literally.
+#
+# This is evidence ABOUT a production output, exactly as sha256.txt is. It is
+# not an archive, nothing consumes it to produce anything, and W0 §8.7 is
+# untouched: the ZIP still never leaves the runner that made it.
+
+MEMBER_SEPARATOR = b"  "
+MEMBER_DIGEST_BYTES = 64
+
+
+def read_member_file(path, label):
+    """`(members, findings)`, where `members` is a list of `(path, digest)`.
+
+    Read as BYTES for the same reason the hash file is. A text-mode read would
+    translate CRLF, so a list written by a PowerShell text writer would be
+    accepted as well formed and its paths would silently carry a CR that the
+    other allocation's paths do not -- which would report every file as
+    differing, for a reason that has nothing to do with the build.
+    """
+    if not os.path.isfile(path):
+        return None, ["%s: there is no member list at %s" % (label, path)]
+    with open(path, "rb") as handle:
+        raw = handle.read()
+    if not raw:
+        return None, ["%s: the member list is empty" % label]
+    if raw.startswith(b"\xef\xbb\xbf"):
+        return None, ["%s: the member list starts with a UTF-8 BOM" % label]
+    if b"\r" in raw:
+        return None, ["%s: the member list carries a CR" % label]
+    if not raw.endswith(b"\n"):
+        return None, ["%s: the member list does not end in LF" % label]
+    members = []
+    seen = {}
+    previous = None
+    for number, line in enumerate(raw.split(b"\n")[:-1], start=1):
+        if len(line) < MEMBER_DIGEST_BYTES + len(MEMBER_SEPARATOR) + 1:
+            return None, ["%s: line %d is not a digest, two spaces and a path"
+                          % (label, number)]
+        digest = line[:MEMBER_DIGEST_BYTES]
+        if any(value not in LOWER_HEX for value in digest):
+            return None, ["%s: line %d does not begin with 64 lowercase hex digits"
+                          % (label, number)]
+        if line[MEMBER_DIGEST_BYTES:MEMBER_DIGEST_BYTES + 2] != MEMBER_SEPARATOR:
+            return None, ["%s: line %d does not separate the digest from the path with "
+                          "exactly two spaces" % (label, number)]
+        raw_path = line[MEMBER_DIGEST_BYTES + 2:]
+        try:
+            member = raw_path.decode("utf-8")
+        except UnicodeDecodeError:
+            return None, ["%s: the path on line %d is not UTF-8" % (label, number)]
+        if "\\" in member or member.startswith("/"):
+            return None, ["%s: the path on line %d is not a posix relative path: %s"
+                          % (label, number, member)]
+        if member in seen:
+            return None, ["%s: '%s' appears on both line %d and line %d"
+                          % (label, member, seen[member], number)]
+        # Bytewise ascending, which is the order the writer produces with an
+        # ordinal sort. Requiring it here is what makes the two lists comparable
+        # as SETS without either side's enumeration order mattering.
+        if previous is not None and raw_path < previous:
+            return None, ["%s: line %d is out of order ('%s' sorts before the line above it)"
+                          % (label, number, member)]
+        seen[member] = number
+        previous = raw_path
+        members.append((member, digest.decode("ascii")))
+    if not members:
+        return None, ["%s: the member list names no files" % label]
+    return members, []
+
+
+def compare_member_files(path_a, path_b, label_a, label_b):
+    """`(differences, findings)`.
+
+    `differences` is a list of `(path, kind, digest_a, digest_b)` with `kind`
+    one of 'differs', 'only-a', 'only-b'. Findings mean the question could not
+    be asked at all; an empty findings list with a non-empty `differences` is
+    the diagnosis this slice exists to print.
+    """
+    findings = []
+    left, left_findings = read_member_file(path_a, label_a)
+    findings.extend(left_findings)
+    right, right_findings = read_member_file(path_b, label_b)
+    findings.extend(right_findings)
+    if findings:
+        return [], findings
+    left_map = dict(left)
+    right_map = dict(right)
+    differences = []
+    for member in sorted(set(left_map) | set(right_map)):
+        first = left_map.get(member)
+        second = right_map.get(member)
+        if first is None:
+            differences.append((member, "only-b", None, second))
+        elif second is None:
+            differences.append((member, "only-a", first, None))
+        elif first != second:
+            differences.append((member, "differs", first, second))
+    return differences, []
+
+
 def run_compare(args):
+    label_a, label_b = args.label_a, args.label_b
     agreed, findings = compare_hash_files(args.compare[0], args.compare[1],
-                                          args.label_a, args.label_b)
+                                          label_a, label_b)
     if findings:
         print("W2-A4 COMPARE: NO IDENTITY")
         for finding in findings:
             print("  %s" % finding)
+    else:
+        print("W2-A4 COMPARE: IDENTICAL %s" % agreed)
+        print("  %s and %s produced the same win-x64 archive bytes on two separate "
+              "runner allocations." % (label_a, label_b))
+
+    differences, member_findings = compare_member_files(args.members[0], args.members[1],
+                                                        label_a, label_b)
+    if member_findings:
+        print("W2-A4 MEMBERS: NO LIST")
+        for finding in member_findings:
+            print("  %s" % finding)
+        print("  Without a well-formed list from BOTH allocations this run can name nothing, "
+              "so it has no diagnosis and no verdict.")
         return 1
-    print("W2-A4 COMPARE: IDENTICAL %s" % agreed)
-    print("  %s and %s produced the same win-x64 archive bytes on two separate "
-          "runner allocations." % (args.label_a, args.label_b))
+
+    print("W2-A4 MEMBERS: %d differing member(s)" % len(differences))
+    for member, kind, first, second in differences:
+        if kind == "differs":
+            print("  differs  %s" % member)
+            print("      %s  %s" % (label_a, first))
+            print("      %s  %s" % (label_b, second))
+        elif kind == "only-a":
+            print("  only on %s  %s  %s" % (label_a, member, first))
+        else:
+            print("  only on %s  %s  %s" % (label_b, member, second))
+
+    if findings and not differences:
+        print("  No staged member differs. The two allocations staged byte-identical trees "
+              "and the two archives still disagree, so the difference is in the ZIP "
+              "CONTAINER -- entry order, entry metadata or the compressed stream -- and not "
+              "in any file the package ships.")
+    if differences and not findings:
+        print("  The two archives hash alike while %d staged member(s) differ. One of the "
+              "two measurements is not measuring what it claims to."
+              % len(differences))
+
+    if findings or differences:
+        return 1
     return 0
 
 
@@ -444,10 +597,47 @@ def cache_findings(code):
     return findings
 
 
+# The basenames an artifact may carry. Both are statements ABOUT a production
+# output; neither is an input to producing one, and neither is an archive.
+# `sha256.txt` says the two allocations disagree; `members.txt` says where.
+ALLOWED_EVIDENCE = ("sha256.txt", "members.txt")
+
+
+def upload_paths(step):
+    """Every path an upload step names, block scalars included.
+
+    `path: |` followed by indented entries is one `path:` key with several
+    values. A regex that read the key's own line would capture `|` and then
+    judge the pipe rather than the files, so a workflow could smuggle an
+    archive past this audit purely by changing YAML style.
+    """
+    lines = step.splitlines()
+    paths = []
+    index = 0
+    while index < len(lines):
+        match = re.match(r"^(\s*)path:\s*(.*?)\s*$", lines[index])
+        if not match:
+            index += 1
+            continue
+        indent, inline = match.group(1), match.group(2)
+        index += 1
+        if inline and inline not in ("|", ">", "|-", ">-", "|+", ">+"):
+            paths.append(inline)
+            continue
+        while index < len(lines):
+            entry = lines[index]
+            if entry.strip() and len(entry) - len(entry.lstrip()) <= len(indent):
+                break
+            if entry.strip():
+                paths.append(entry.strip())
+            index += 1
+    return paths
+
+
 def artifact_findings(code):
-    """§8.7: the archive never crosses a job boundary. Sixty-five bytes of hex
-    do, and that is a statement ABOUT a production output rather than an input
-    to producing one."""
+    """§8.7: the archive never crosses a job boundary. Two small text files do,
+    and both are statements ABOUT a production output rather than inputs to
+    producing one."""
     order, bodies, _ = workflow_jobs(code)
     assemble = assembling_jobs(bodies)
     findings = []
@@ -459,9 +649,10 @@ def artifact_findings(code):
             if "actions/upload-artifact" not in step:
                 continue
             uploads += 1
-            paths = re.findall(r"^\s*path:\s*(.+?)\s*$", step, re.MULTILINE)
+            paths = upload_paths(step)
             if not paths:
                 findings.append("an upload in '%s' names no path" % name)
+            carried = set()
             for path in paths:
                 # `${{ runner.temp }}\\w2a4-a\\evidence\\sha256.txt` is the form the other
                 # Windows workflows in this repository use, and `@actions/glob`
@@ -469,12 +660,20 @@ def artifact_findings(code):
                 # otherwise it would fire on the spelling rather than on the
                 # thing being uploaded.
                 normalised = path.replace("\\", "/")
-                if not normalised.endswith("/sha256.txt"):
-                    findings.append("the job '%s' uploads %s; only a sha256.txt may leave a "
-                                    "runner" % (name, path))
+                allowed = [leaf for leaf in ALLOWED_EVIDENCE
+                           if normalised.endswith("/" + leaf)]
+                if not allowed:
+                    findings.append("the job '%s' uploads %s; only %s may leave a runner"
+                                    % (name, path, " or a ".join(ALLOWED_EVIDENCE)))
+                else:
+                    carried.add(allowed[0])
                 if ".zip" in path or "*" in path:
                     findings.append("the job '%s' uploads an archive or a glob: %s"
                                     % (name, path))
+            if name in assemble and carried != set(ALLOWED_EVIDENCE):
+                findings.append("the job '%s' uploads %s; an allocation must publish both its "
+                                "hash and its member list, or the compare cannot name what "
+                                "differs" % (name, ", ".join(sorted(carried)) or "nothing"))
             if "if-no-files-found: error" not in step:
                 findings.append("the upload in '%s' does not fail when the evidence file is "
                                 "missing; the default is a warning and an empty artifact"
@@ -528,6 +727,56 @@ def compare_findings(code):
         if downloads != len(assemble):
             findings.append("the compare job '%s' downloads %d evidence files for %d "
                             "allocations" % (name, downloads, len(assemble)))
+    return findings
+
+
+def members_findings(code):
+    """W2-A4-R1-DIAG: each allocation must WALK its staged tree, write the
+    member digest list, upload it beside its hash, and the compare must be
+    GIVEN both lists.
+
+    A hash-only compare is not wrong, it is silent: it can say the two
+    allocations disagree and it cannot say about what. 33967489630 is exactly
+    that silence, and this rule is what stops the workflow from regressing to
+    it.
+    """
+    _, bodies, _ = workflow_jobs(code)
+    assemble = assembling_jobs(bodies)
+    findings = []
+    for name in sorted(assemble):
+        steps = job_steps(bodies[name])
+        writers = [step for step in steps
+                   if "members.txt" in step and "upload-artifact" not in step]
+        if not writers:
+            findings.append("the assemble job '%s' never writes a member digest list, so a "
+                            "disagreement in this allocation cannot be located" % name)
+            continue
+        writer = re.sub(r"\s+", " ", "\n".join(writers)).replace("\\", "/")
+        for needle, complaint in (
+                ("work/stage", "does not walk the stage the assembler left behind"),
+                ("EnumerateFiles", "does not enumerate the staged files itself"),
+                ("Ordinal", "does not sort the paths ordinally, so two allocations could "
+                            "order the same tree differently"),
+                ("WriteAllBytes", "does not write the list as bytes, so a text writer could "
+                                  "give it CRLF or a BOM")):
+            if needle not in writer:
+                findings.append("the member list in '%s' %s" % (name, complaint))
+        # `[System.IO.File]::OpenRead` on a staged file is how the digest is
+        # taken; `ZipFile` or a `.zip` in the same step would mean the list was
+        # read back out of the pack, which cannot separate "the staged files
+        # differ" from "the container differs".
+        if "ZipFile" in writer or ".zip" in writer:
+            findings.append("the member list in '%s' is read out of the archive rather than "
+                            "walked from the stage" % name)
+    candidates = {name: body for name, body in bodies.items()
+                  if set(assemble) and set(assemble).issubset(set(job_needs(body)))}
+    for name, body in sorted(candidates.items()):
+        flat = re.sub(r"\s+", " ", body)
+        if "--members" not in flat:
+            findings.append("the compare job '%s' is given no member list (--members), so it "
+                            "can report a disagreement and never name it" % name)
+        elif len(re.findall(r"members\.txt", body)) < 2:
+            findings.append("the compare job '%s' names fewer than two member lists" % name)
     return findings
 
 
@@ -717,9 +966,9 @@ def audit_workflow(text):
     code = workflow_code(text)
     findings = []
     for producer in (permission_findings, supply_chain_findings, allocation_findings,
-                     cache_findings, artifact_findings, compare_findings, epoch_findings,
-                     clean_tree_findings, scope_findings, paths_findings,
-                     controls_job_findings):
+                     cache_findings, artifact_findings, compare_findings,
+                     members_findings, epoch_findings, clean_tree_findings,
+                     scope_findings, paths_findings, controls_job_findings):
         findings.extend(producer(code))
     return findings
 
@@ -771,18 +1020,50 @@ def mutate_chain_assemble_jobs(text):
 
 def mutate_upload_the_archive(text):
     """The §8.7 violation: the archive itself offered to another job."""
-    marker = "          name: w2a4-sha256-a"
+    marker = ("          name: w2a4-evidence-a\n"
+              "          path: |\n"
+              "            ${{ runner.temp }}/w2a4-a/evidence/sha256.txt\n"
+              "            ${{ runner.temp }}/w2a4-a/evidence/members.txt\n")
     if marker not in text:
         return text, []
-    mutated = text.replace(
-        "          name: w2a4-sha256-a\n"
-        "          path: ${{ runner.temp }}/w2a4-a/evidence/sha256.txt\n",
+    return text.replace(
+        marker,
         "          name: w2a4-zip-a\n"
-        "          path: ${{ runner.temp }}/w2a4-a/out/tesserafin-server_1.0.0_win-x64.zip\n",
-        1)
-    if mutated == text:
+        "          path: |\n"
+        "            ${{ runner.temp }}/w2a4-a/out/tesserafin-server_1.0.0_win-x64.zip\n",
+        1), ["an upload of the archive itself"]
+
+
+def mutate_drop_members(text):
+    """The R1-DIAG regression: a compare given only the two hashes. It still
+    fails when they differ, and it names nothing, which is the run that made
+    this slice necessary."""
+    lines = [line for line in text.splitlines()
+             if "--members" not in line and "/members.txt" not in line]
+    if len(lines) == len(text.splitlines()):
         return text, []
-    return mutated, ["an upload of the archive itself"]
+    return "\n".join(lines) + "\n", ["the member lists withheld from the compare"]
+
+
+def mutate_stop_walking_the_stage(text):
+    """An allocation that publishes a hash and no member list. The compare then
+    has one list, which is no list."""
+    lines = text.splitlines()
+    out = []
+    applied = []
+    dropping = False
+    for line in lines:
+        if re.match(r"^      - name: members-a\s*$", line):
+            dropping = True
+            applied.append("the member walk removed from allocation A")
+            continue
+        if dropping:
+            if re.match(r"^      - ", line):
+                dropping = False
+            else:
+                continue
+        out.append(line)
+    return "\n".join(out) + "\n", applied
 
 
 def mutate_skippable_compare(text):
@@ -960,10 +1241,20 @@ jobs:
             -OutDir (Join-Path $env:RUNNER_TEMP 'w2a4-a/out') `
             -SourceDateEpoch ${{ steps.epoch.outputs.epoch }} `
             -OrasPath (Join-Path $env:RUNNER_TEMP 'bin\\oras.exe')
+      - name: members-a
+        shell: pwsh
+        run: |
+          $stage = Join-Path $env:RUNNER_TEMP 'w2a4-a/work/stage'
+          $files = [System.IO.Directory]::EnumerateFiles($stage, '*', 'AllDirectories')
+          [System.Array]::Sort($ordered, [System.StringComparer]::Ordinal)
+          [System.IO.File]::WriteAllBytes($file, $bytes)
+          $members = Join-Path $env:RUNNER_TEMP 'w2a4-a/evidence/members.txt'
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: w2a4-sha256-a
-          path: ${{ runner.temp }}/w2a4-a/evidence/sha256.txt
+          name: w2a4-evidence-a
+          path: |
+            ${{ runner.temp }}/w2a4-a/evidence/sha256.txt
+            ${{ runner.temp }}/w2a4-a/evidence/members.txt
           if-no-files-found: error
   assemble-b:
     runs-on: windows-latest
@@ -1001,10 +1292,20 @@ jobs:
             -OutDir (Join-Path $env:RUNNER_TEMP 'w2a4-b/out') `
             -SourceDateEpoch ${{ steps.epoch.outputs.epoch }} `
             -OrasPath (Join-Path $env:RUNNER_TEMP 'bin\\oras.exe')
+      - name: members-b
+        shell: pwsh
+        run: |
+          $stage = Join-Path $env:RUNNER_TEMP 'w2a4-b/work/stage'
+          $files = [System.IO.Directory]::EnumerateFiles($stage, '*', 'AllDirectories')
+          [System.Array]::Sort($ordered, [System.StringComparer]::Ordinal)
+          [System.IO.File]::WriteAllBytes($file, $bytes)
+          $members = Join-Path $env:RUNNER_TEMP 'w2a4-b/evidence/members.txt'
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: w2a4-sha256-b
-          path: ${{ runner.temp }}/w2a4-b/evidence/sha256.txt
+          name: w2a4-evidence-b
+          path: |
+            ${{ runner.temp }}/w2a4-b/evidence/sha256.txt
+            ${{ runner.temp }}/w2a4-b/evidence/members.txt
           if-no-files-found: error
   compare:
     runs-on: ubuntu-latest
@@ -1014,26 +1315,33 @@ jobs:
       contents: read
     steps:
       - name: Both allocations must have succeeded
-        if: ${{ needs.assemble-a.result != 'success' || needs.assemble-b.result != 'success' }}
+        if: ${{ always() }}
         run: |
-          exit 1
+          a='${{ needs.assemble-a.result }}'
+          b='${{ needs.assemble-b.result }}'
+          if [ "${a}" != 'success' ] || [ "${b}" != 'success' ]; then
+            exit 1
+          fi
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: w2a4-sha256-a
-          path: ${{ runner.temp }}/hash-a
+          name: w2a4-evidence-a
+          path: ${{ runner.temp }}/evidence-a
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: w2a4-sha256-b
-          path: ${{ runner.temp }}/hash-b
+          name: w2a4-evidence-b
+          path: ${{ runner.temp }}/evidence-b
       - name: compare
         run: |
           python3 ci/windows/w2/two-runner-controls.py --compare \\
-            "${RUNNER_TEMP}/hash-a/sha256.txt" \\
-            "${RUNNER_TEMP}/hash-b/sha256.txt"
+            "${RUNNER_TEMP}/evidence-a/sha256.txt" \\
+            "${RUNNER_TEMP}/evidence-b/sha256.txt" \\
+            --members \\
+            "${RUNNER_TEMP}/evidence-a/members.txt" \\
+            "${RUNNER_TEMP}/evidence-b/members.txt"
 """
 
 
@@ -1094,9 +1402,12 @@ def write_bytes(path, payload):
     return path
 
 
-def drive_compare(work, left, right):
-    """Run THIS file's `--compare` exactly the way the hosted compare job does."""
+def drive_compare(work, left, right, members_left, members_right):
+    """Run THIS file's `--compare` exactly the way the hosted compare job does,
+    member lists included: `--members` is not optional there and must not be
+    optional here either."""
     command = [sys.executable, os.path.abspath(__file__), "--compare", left, right,
+               "--members", members_left, members_right,
                "--label-a", "assemble-a", "--label-b", "assemble-b"]
     result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             cwd=work, check=False)
@@ -1106,30 +1417,46 @@ def drive_compare(work, left, right):
 GOOD = b"a" * 64 + b"\n"
 OTHER = b"b" * 64 + b"\n"
 
+# Two well-formed member lists that agree, so a hash-file case is refused for
+# the hash file and never for its members.
+MEMBERS = b"a" * 64 + b"  one/alpha.txt\n" + b"b" * 64 + b"  two/beta.txt\n"
+MEMBERS_CHANGED = b"a" * 64 + b"  one/alpha.txt\n" + b"c" * 64 + b"  two/beta.txt\n"
+MEMBERS_EXTRA = MEMBERS + b"d" * 64 + b"  zeta/extra.txt\n"
 
-def compare_case(work, name, left_bytes, right_bytes):
+
+def compare_case(work, name, left_bytes, right_bytes,
+                 left_members=MEMBERS, right_members=MEMBERS):
     directory = os.path.join(work, "compare", name)
     os.makedirs(directory, exist_ok=True)
     left = os.path.join(directory, "a.txt")
     right = os.path.join(directory, "b.txt")
+    members_left = os.path.join(directory, "a-members.txt")
+    members_right = os.path.join(directory, "b-members.txt")
     if left_bytes is not None:
         write_bytes(left, left_bytes)
     if right_bytes is not None:
         write_bytes(right, right_bytes)
-    return drive_compare(work, left, right)
+    if left_members is not None:
+        write_bytes(members_left, left_members)
+    if right_members is not None:
+        write_bytes(members_right, right_members)
+    return drive_compare(work, left, right, members_left, members_right)
 
 
-def refusal_cases(report, name, cases, description):
-    """Every case must exit non-zero AND say NO IDENTITY. An exit code alone
-    would be satisfied by a crash, and a crash proves nothing about the rule."""
+def refusal_cases(report, name, cases, description, verdict="NO IDENTITY"):
+    """Every case must exit non-zero AND print the named verdict line. An exit
+    code alone would be satisfied by a crash, and a crash proves nothing about
+    the rule."""
     failures = []
-    for label, left, right in cases:
-        code, output = compare_case(report_work, label, left, right)
+    for case in cases:
+        label, left, right = case[0], case[1], case[2]
+        members = case[3:5] if len(case) > 3 else (MEMBERS, MEMBERS)
+        code, output = compare_case(report_work, label, left, right, members[0], members[1])
         if code == 0:
             failures.append("%s: the compare accepted it (exit 0)" % label)
-        elif "NO IDENTITY" not in output:
-            failures.append("%s: refused without a verdict line -- %s"
-                            % (label, output.strip()[-160:]))
+        elif verdict not in output:
+            failures.append("%s: refused without a %s line -- %s"
+                            % (label, verdict, output.strip()[-160:]))
     if failures:
         report.record(name, "RED", "; ".join(failures))
     else:
@@ -1250,9 +1577,9 @@ def run_controls(work, report, only=None):
         audited_rule(report, "T05", artifact_findings(code),
                      [(mutate_upload_the_archive, "uploads an archive",
                        "an upload of the .zip")],
-                     "each allocation uploads exactly one sha256.txt and nothing else, with "
-                     "if-no-files-found: error, and no assemble job downloads anything (W0 "
-                     "§8.7)")
+                     "each allocation uploads exactly one artifact carrying its sha256.txt "
+                     "and its members.txt and nothing else, with if-no-files-found: error, "
+                     "and no assemble job downloads anything (W0 §8.7)")
 
     # --- T06: the compare cannot be skipped -----------------------------------
     if selected("T06"):
@@ -1306,6 +1633,98 @@ def run_controls(work, report, only=None):
             report.record("T09", "PASS",
                           "two different hashes are refused as a disagreement, and the one "
                           "agreeing well-formed pair is accepted and its hash printed")
+
+    # --- T21: the member lists are produced, published and consumed -----------
+    if selected("T21"):
+        audited_rule(report, "T21", members_findings(code),
+                     [(mutate_drop_members, "given no member list",
+                       "a compare handed only the two hashes"),
+                      (mutate_stop_walking_the_stage, "never writes a member digest list",
+                       "an allocation that walks no stage")],
+                     "each allocation walks the stage the frozen assembler left, sorts the "
+                     "paths ordinally, writes the list as bytes and uploads it beside its "
+                     "hash, and the compare is handed both lists")
+
+    # --- T22: the REAL member reader, driven ----------------------------------
+    if selected("T22"):
+        refusal_cases(report, "T22", [
+            ("members-missing-left", GOOD, GOOD, None, MEMBERS),
+            ("members-missing-right", GOOD, GOOD, MEMBERS, None),
+            ("members-missing-both", GOOD, GOOD, None, None),
+            ("members-empty", GOOD, GOOD, b"", MEMBERS),
+            ("members-bom", GOOD, GOOD, b"\xef\xbb\xbf" + MEMBERS, MEMBERS),
+            ("members-crlf", GOOD, GOOD, MEMBERS.replace(b"\n", b"\r\n"), MEMBERS),
+            ("members-unterminated", GOOD, GOOD, MEMBERS[:-1], MEMBERS),
+            ("members-uppercase", GOOD, GOOD,
+             b"A" * 64 + b"  one/alpha.txt\n", MEMBERS),
+            ("members-short-digest", GOOD, GOOD,
+             b"a" * 63 + b"  one/alpha.txt\n", MEMBERS),
+            ("members-one-space", GOOD, GOOD, b"a" * 64 + b" one/alpha.txt\n", MEMBERS),
+            ("members-no-path", GOOD, GOOD, b"a" * 64 + b"  \n", MEMBERS),
+            ("members-backslash", GOOD, GOOD,
+             b"a" * 64 + b"  one\\alpha.txt\n", MEMBERS),
+            ("members-duplicate", GOOD, GOOD,
+             b"a" * 64 + b"  one/alpha.txt\n" + b"b" * 64 + b"  one/alpha.txt\n", MEMBERS),
+            ("members-unsorted", GOOD, GOOD,
+             b"b" * 64 + b"  two/beta.txt\n" + b"a" * 64 + b"  one/alpha.txt\n", MEMBERS),
+        ], "a missing, empty, BOM-prefixed, CRLF, unterminated, uppercase, short, "
+           "mis-separated, path-less, backslashed, duplicated or unsorted member list is "
+           "refused on either side, and the run then carries no verdict",
+           verdict="NO LIST")
+
+    # --- T23: the diagnosis itself --------------------------------------------
+    if selected("T23"):
+        findings = []
+
+        code_differs, output_differs = compare_case(
+            work, "members-differ", GOOD, OTHER, MEMBERS, MEMBERS_CHANGED)
+        if code_differs == 0:
+            findings.append("a differing member was accepted")
+        elif "differs  two/beta.txt" not in output_differs:
+            findings.append("the differing member is not named: %s"
+                            % output_differs.strip()[-200:])
+        elif "b" * 64 not in output_differs or "c" * 64 not in output_differs:
+            findings.append("the two member digests are not both printed")
+
+        code_only_a, output_only_a = compare_case(
+            work, "members-only-a", GOOD, OTHER, MEMBERS_EXTRA, MEMBERS)
+        if code_only_a == 0 or "only on assemble-a  zeta/extra.txt" not in output_only_a:
+            findings.append("a member present only on A is not named: %s"
+                            % output_only_a.strip()[-200:])
+
+        code_only_b, output_only_b = compare_case(
+            work, "members-only-b", GOOD, OTHER, MEMBERS, MEMBERS_EXTRA)
+        if code_only_b == 0 or "only on assemble-b  zeta/extra.txt" not in output_only_b:
+            findings.append("a member present only on B is not named: %s"
+                            % output_only_b.strip()[-200:])
+
+        # The measured shape of 33967489630 as far as anyone knows it today:
+        # two hashes that differ. If every staged member agrees, the compare
+        # must say so rather than print an empty list and let a reader supply
+        # their own explanation.
+        code_container, output_container = compare_case(
+            work, "members-container", GOOD, OTHER, MEMBERS, MEMBERS)
+        if code_container == 0:
+            findings.append("two differing hashes were accepted because their members agree")
+        elif "CONTAINER" not in output_container:
+            findings.append("a disagreement whose members all agree is not diagnosed as a "
+                            "container difference: %s" % output_container.strip()[-200:])
+
+        code_same, output_same = compare_case(
+            work, "members-same", GOOD, GOOD, MEMBERS, MEMBERS)
+        if code_same != 0:
+            findings.append("an agreeing pair with agreeing members was refused: %s"
+                            % output_same.strip()[-200:])
+        elif "0 differing member(s)" not in output_same:
+            findings.append("an agreeing pair does not report zero differing members")
+
+        if findings:
+            report.record("T23", "RED", "; ".join(findings))
+        else:
+            report.record("T23", "PASS",
+                          "a changed member, a member only on one side and a member-agreeing "
+                          "container difference are each named, and an agreeing pair reports "
+                          "zero differing members")
 
     # --- T10: the epoch -------------------------------------------------------
     if selected("T10"):
@@ -1542,10 +1961,19 @@ def main(argv):
     parser.add_argument("--compare", nargs=2, metavar=("A", "B"),
                         help="compare two evidence files and exit non-zero unless they are "
                              "the same 64 lowercase hex digits")
+    parser.add_argument("--members", nargs=2, metavar=("A", "B"),
+                        help="the two member digest lists; every path whose digest differs "
+                             "is printed. Required with --compare: a hash alone cannot name "
+                             "what differs, which is what 33967489630 demonstrated")
     parser.add_argument("--label-a", default="A", help="what to call the first allocation")
     parser.add_argument("--label-b", default="B", help="what to call the second allocation")
     args = parser.parse_args(argv)
 
+    if args.compare and not args.members:
+        parser.error("--compare requires --members: a run that can only say the two "
+                     "allocations disagree is the run this slice exists to replace")
+    if args.members and not args.compare:
+        parser.error("--members is only meaningful with --compare")
     if args.compare:
         return run_compare(args)
 

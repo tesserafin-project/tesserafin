@@ -97,8 +97,12 @@ name `UtcNow`, `Get-Date`, `date +%s`, `github.run_id`, `github.run_number` or
 
 The archive therefore stays on the runner that made it. It is produced, hashed
 and abandoned; nothing downloads it, nothing extracts it and nothing feeds it to
-another job. The only bytes that leave an allocation are the **65** in
-`sha256.txt`: sixty-four lowercase hex digits and one LF.
+another job. Two small text files leave an allocation:
+
+* `sha256.txt` — **65** bytes: sixty-four lowercase hex digits and one LF;
+* `members.txt` — one line per staged file, `<sha256>` then two spaces then the
+  file's posix path relative to the stage root, sorted bytewise, LF only, no
+  BOM.
 
 That file is a statement *about* a production output, not an input to producing
 one — no job's result depends on its contents being trustworthy in the way §8.7
@@ -107,11 +111,37 @@ substituted hash file can only ever make the compare **fail**. It cannot cause a
 different archive to be built, delivered or accepted, because no archive is
 built from it.
 
-The evidence file's shape is enforced on both ends. The producing job writes it
-with `WriteAllBytes` rather than a PowerShell text writer — which would give it
-CRLF and a BOM — and fails if the result is not exactly 65 bytes. The consuming
-job runs `two-runner-controls.py --compare`, which reads the file as **bytes**
-and refuses anything that is not 64 lowercase hex digits followed by one LF.
+Both evidence files' shapes are enforced on both ends. The producing job writes
+them with `WriteAllBytes` rather than a PowerShell text writer — which would give
+them CRLF and a BOM — and fails if `sha256.txt` is not exactly 65 bytes or if
+`members.txt` is empty, carries a CR or does not end in LF. The consuming job
+runs `two-runner-controls.py --compare … --members …`, which reads both as
+**bytes** and refuses a hash that is not 64 lowercase hex digits followed by one
+LF, and a member list that is empty, BOM-prefixed, CR-bearing, unterminated,
+mis-separated, uppercase, duplicated or out of order.
+
+### 3.1 Why the member list exists (W2-A4-R1-DIAG)
+
+Run `33967489630` measured §8.1 and **it did not hold**: the same commit, the
+same `SOURCE_DATE_EPOCH` (`1788612983`) and the same `185755892` bytes produced
+two different SHA-256 values. A whole-archive hash can only report *that* two
+allocations disagree. It cannot report *about what*, and a byte count is not a
+diagnosis.
+
+So each allocation also walks the stage the frozen assembler leaves behind and
+publishes a digest for every file in it. The relative paths are the assembler's
+own entry names — `Invoke-Pack` derives both from the same stage root — so a
+line in `members.txt` **is** an archive member, and "the differing members" is
+meant literally. The walk reads the staged tree, never the archive: opening the
+ZIP would measure the pack, and what has to be separated is *the staged files
+differ* from *the container differs*. When every member agrees and the two
+hashes still do not, the compare says so in as many words, because that is a
+different defect with a different fix.
+
+This is a **diagnosis** slice. It changes no `csproj`, sets no
+`Deterministic`, `ContinuousIntegrationBuild` or `PathMap`, and edits neither
+the assembler nor any C# file. **Nothing here claims the next run will be
+identical.**
 
 ## 4. The compare cannot be skipped, and cannot conclude without both sides
 
@@ -122,12 +152,25 @@ branch-protection rule — can mistake "never ran" for "agreed".
 
 So the compare job declares `if: ${{ always() }}` and runs whatever happened
 upstream, and its **first** step fails the job unless both allocations reported
-`success`:
+`success`.
+
+That step used to carry the failure condition as its own `if:`, which meant it
+**skipped** on every run where both allocations succeeded — that is, on every
+run that has a pair to compare. A guard that is invisible on the healthy path
+cannot be read as having held, so it now runs on every path and decides in the
+shell:
 
 ```
-if: ${{ needs.assemble-a.result != 'success' || needs.assemble-b.result != 'success' }}
-run: … exit 1
+if: ${{ always() }}
+run: |
+  a='${{ needs.assemble-a.result }}'
+  b='${{ needs.assemble-b.result }}'
+  echo "assemble-a: ${a}" ; echo "assemble-b: ${b}"
+  if [ "${a}" != 'success' ] || [ "${b}" != 'success' ]; then … exit 1 ; fi
 ```
+
+Either way the missing-evidence refusal does not depend on this step: `--compare`
+is given four paths and fails on any one of them being absent or malformed.
 
 The comparison itself is a function in `ci/windows/w2/two-runner-controls.py`
 rather than a shell snippet in the YAML, for one reason: a snippet can only be
@@ -143,7 +186,7 @@ hash.
 
 `ci/windows/w2/two-runner-controls.py` runs on `ubuntu-latest`, needs nothing
 and assembles nothing, so a defective suite is visible in seconds rather than
-behind two hours of Windows time. It reports twenty rostered controls plus
+behind two hours of Windows time. It reports twenty-three rostered controls plus
 `ROSTER` and `RESTORE`; a control that is deleted or renamed makes the run fail
 rather than making the summary line shorter.
 
@@ -169,20 +212,26 @@ rather than making the summary line shorter.
 | `T18` | an unpinned action, a persisted credential |
 | `T19` | a controls job that assembles, or that hides behind a `needs:` |
 | `T20` | this document, if it drops a non-goal or claims acceptance |
+| `T21` | an allocation that publishes no member list, a walk that reads the archive instead of the stage, a non-ordinal sort, a text writer, or a compare handed no `--members` |
+| `T22` | a compare that accepts a missing, empty, BOM-prefixed, CRLF, unterminated, uppercase, short, mis-separated, path-less, backslashed, duplicated or unsorted member list |
+| `T23` | a compare that fails to name a changed member, a member present on only one side, or a disagreement whose members all agree |
 
 Every audit rule is proved load-bearing by a **mutation of a structural
 baseline** that the audit must name: a planted cache, a `needs:` edge between the
 assemble jobs, an upload of the `.zip`, a compare with its `always()` and its
-result guard removed, an epoch taken from `UtcNow`. A rule whose mutation no
+result guard removed, an epoch taken from `UtcNow`, a compare handed only the
+two hashes, an allocation that walks no stage. A rule whose mutation no
 longer applies reports `INERT` rather than passing — a refusal that cannot be
 shown to bite is a comment.
 
 ## 6. The measured result
 
-The two hosted hashes, the two archive sizes and the two runner allocations are
-cited in the pull request. They are not in this file: the document is committed
-**before** the run that produces them, and a digest written down before it is
-measured would be a prediction rather than evidence.
+The two hosted hashes, the two archive sizes, the two runner allocations and —
+since R1-DIAG — the paths of every differing member are cited in the pull
+request. They are not in this file: the document is committed **before** the run
+that produces them, and a digest written down before it is measured would be a
+prediction rather than evidence. That cuts both ways: this file does not predict
+that the members will agree, or that the next run will be identical.
 
 ## 7. Non-goals
 
@@ -199,6 +248,10 @@ This slice is deliberately narrow. It:
   registry push, no tag;
 * uses no container engine, no daemon and no CLI for one;
 * edits no previously accepted W2 file, and adds no `.ps1`;
-* does not claim the MSI, the signing story or the acceptance matrix.
+* does not claim the MSI, the signing story or the acceptance matrix;
+* **does not make the two archives identical.** It names what differs. No
+  `Deterministic`, no `ContinuousIntegrationBuild`, no `PathMap`, no `csproj`,
+  no `Directory.Build.props` and no C# change is in this slice, and it makes no
+  claim about what a later one will need.
 
 **W2 is not accepted by this slice.** Independent review is the next gate.

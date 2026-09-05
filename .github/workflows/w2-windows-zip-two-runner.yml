@@ -16,11 +16,27 @@
 # (§8.2, asserted rather than assumed).
 #
 # W0 §8.7 -- "no expiring Actions artifact is ever a production input" -- is the
-# reason the compare job receives a SHA-256 TEXT FILE and never an archive. The
-# ZIP is produced, hashed and left on the runner that made it. Nothing consumes
-# it, nothing downloads it, and the only bytes that cross a job boundary are 65:
-# sixty-four lowercase hex digits and one LF. That file is evidence about a
-# production output; it is not itself an input to producing anything.
+# reason the compare job receives TEXT FILES and never an archive. The ZIP is
+# produced, hashed and left on the runner that made it. Nothing consumes it and
+# nothing downloads it; the only things that cross a job boundary are two small
+# text files per allocation, both of them statements ABOUT a production output
+# rather than inputs to producing one:
+#
+#   * sha256.txt  -- 65 bytes: the archive's digest and one LF;
+#   * members.txt -- one line per staged file, `<sha256>  <relative path>`,
+#                    sorted, LF only, no BOM.
+#
+# The second file is what W2-A4-R1-DIAG adds. Run 33967489630 measured §8.1 and
+# it did not hold: the same commit, the same SOURCE_DATE_EPOCH and the same
+# 185755892 bytes produced two SHA-256 values. A whole-archive hash can only
+# ever report THAT two runs disagree; the member list is what reports about
+# WHAT. The paths are relative to the assembler's stage root, which is what its
+# `Invoke-Pack` names the archive's entries after, so a differing line here is
+# a differing archive member.
+#
+# This slice diagnoses. It does not make the two archives identical: no
+# Deterministic, no ContinuousIntegrationBuild, no PathMap, no csproj and no
+# edit to the frozen assembler. Nothing here claims the next run will agree.
 #
 # What this workflow deliberately does NOT do, because W2-A4 is not authorised
 # to:
@@ -273,6 +289,61 @@ jobs:
             "| runner machine | ``$env:COMPUTERNAME`` |"
           ) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
+
+      # The diagnosis. Walks the stage the frozen assembler left behind -- not
+      # the archive: opening the ZIP would measure the pack, and what has to be
+      # separated is "the staged files differ" from "the container differs".
+      # Relative paths are exactly the assembler's own entry names, so a line
+      # here is an archive member.
+      #
+      # Written with WriteAllBytes and an ordinal sort because the two lists are
+      # compared byte for byte: a culture-sensitive sort or a text writer's CRLF
+      # would make two identical trees read as two different ones.
+      - name: Walk the staged tree and write the member digest list
+        shell: pwsh
+        run: |
+          $stage = Join-Path $env:RUNNER_TEMP 'w2a4-a/work/stage'
+          if (-not (Test-Path -LiteralPath $stage -PathType Container)) {
+            throw "W2-A4 HARD STOP: the assembler left no stage at $stage"
+          }
+          $root = [System.IO.Path]::GetFullPath($stage)
+          $relative = [System.Collections.Generic.List[string]]::new()
+          foreach ($file in [System.IO.Directory]::EnumerateFiles(
+                     $root, '*', [System.IO.SearchOption]::AllDirectories)) {
+            $relative.Add(([System.IO.Path]::GetRelativePath($root, $file)).Replace('\', '/'))
+          }
+          if ($relative.Count -eq 0) { throw 'W2-A4 HARD STOP: the stage holds no files' }
+          $ordered = $relative.ToArray()
+          [System.Array]::Sort($ordered, [System.StringComparer]::Ordinal)
+
+          $builder = [System.Text.StringBuilder]::new()
+          $sha = [System.Security.Cryptography.SHA256]::Create()
+          try {
+            foreach ($name in $ordered) {
+              $path = [System.IO.Path]::Combine(
+                $root, $name.Replace('/', [System.IO.Path]::DirectorySeparatorChar))
+              $stream = [System.IO.File]::OpenRead($path)
+              try { $digest = $sha.ComputeHash($stream) } finally { $stream.Dispose() }
+              [void]$builder.Append(
+                [System.BitConverter]::ToString($digest).Replace('-', '').ToLowerInvariant())
+              [void]$builder.Append('  ')
+              [void]$builder.Append($name)
+              [void]$builder.Append("`n")
+            }
+          } finally { $sha.Dispose() }
+
+          $file = Join-Path $env:RUNNER_TEMP 'w2a4-a/evidence/members.txt'
+          [System.IO.File]::WriteAllBytes(
+            $file, [System.Text.Encoding]::UTF8.GetBytes($builder.ToString()))
+          $raw = [System.IO.File]::ReadAllBytes($file)
+          if ($raw.Length -eq 0) { throw 'the member list is empty' }
+          if ($raw[$raw.Length - 1] -ne 0x0A) { throw 'the member list does not end in LF' }
+          if ($raw -contains 0x0D) { throw 'the member list carries a CR' }
+
+          "staged members : $($ordered.Count)"
+          "list bytes     : $($raw.Length)"
+          "list sha256    : $((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant())"
+
       # The restated identities above are only worth restating if something
       # reads them. This is what reads them: the provenance manifest that ships
       # INSIDE this allocation's own archive must name the same digests, the
@@ -311,8 +382,10 @@ jobs:
       # compare job had nothing to read.
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: w2a4-sha256-a
-          path: ${{ runner.temp }}\w2a4-a\evidence\sha256.txt
+          name: w2a4-evidence-a
+          path: |
+            ${{ runner.temp }}\w2a4-a\evidence\sha256.txt
+            ${{ runner.temp }}\w2a4-a\evidence\members.txt
           if-no-files-found: error
           retention-days: 7
 
@@ -459,6 +532,61 @@ jobs:
             "| runner machine | ``$env:COMPUTERNAME`` |"
           ) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
+
+      # The diagnosis. Walks the stage the frozen assembler left behind -- not
+      # the archive: opening the ZIP would measure the pack, and what has to be
+      # separated is "the staged files differ" from "the container differs".
+      # Relative paths are exactly the assembler's own entry names, so a line
+      # here is an archive member.
+      #
+      # Written with WriteAllBytes and an ordinal sort because the two lists are
+      # compared byte for byte: a culture-sensitive sort or a text writer's CRLF
+      # would make two identical trees read as two different ones.
+      - name: Walk the staged tree and write the member digest list
+        shell: pwsh
+        run: |
+          $stage = Join-Path $env:RUNNER_TEMP 'w2a4-b/work/stage'
+          if (-not (Test-Path -LiteralPath $stage -PathType Container)) {
+            throw "W2-A4 HARD STOP: the assembler left no stage at $stage"
+          }
+          $root = [System.IO.Path]::GetFullPath($stage)
+          $relative = [System.Collections.Generic.List[string]]::new()
+          foreach ($file in [System.IO.Directory]::EnumerateFiles(
+                     $root, '*', [System.IO.SearchOption]::AllDirectories)) {
+            $relative.Add(([System.IO.Path]::GetRelativePath($root, $file)).Replace('\', '/'))
+          }
+          if ($relative.Count -eq 0) { throw 'W2-A4 HARD STOP: the stage holds no files' }
+          $ordered = $relative.ToArray()
+          [System.Array]::Sort($ordered, [System.StringComparer]::Ordinal)
+
+          $builder = [System.Text.StringBuilder]::new()
+          $sha = [System.Security.Cryptography.SHA256]::Create()
+          try {
+            foreach ($name in $ordered) {
+              $path = [System.IO.Path]::Combine(
+                $root, $name.Replace('/', [System.IO.Path]::DirectorySeparatorChar))
+              $stream = [System.IO.File]::OpenRead($path)
+              try { $digest = $sha.ComputeHash($stream) } finally { $stream.Dispose() }
+              [void]$builder.Append(
+                [System.BitConverter]::ToString($digest).Replace('-', '').ToLowerInvariant())
+              [void]$builder.Append('  ')
+              [void]$builder.Append($name)
+              [void]$builder.Append("`n")
+            }
+          } finally { $sha.Dispose() }
+
+          $file = Join-Path $env:RUNNER_TEMP 'w2a4-b/evidence/members.txt'
+          [System.IO.File]::WriteAllBytes(
+            $file, [System.Text.Encoding]::UTF8.GetBytes($builder.ToString()))
+          $raw = [System.IO.File]::ReadAllBytes($file)
+          if ($raw.Length -eq 0) { throw 'the member list is empty' }
+          if ($raw[$raw.Length - 1] -ne 0x0A) { throw 'the member list does not end in LF' }
+          if ($raw -contains 0x0D) { throw 'the member list carries a CR' }
+
+          "staged members : $($ordered.Count)"
+          "list bytes     : $($raw.Length)"
+          "list sha256    : $((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant())"
+
       - name: Require the packed manifest to name the accepted identities
         shell: pwsh
         run: |
@@ -490,8 +618,10 @@ jobs:
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: w2a4-sha256-b
-          path: ${{ runner.temp }}\w2a4-b\evidence\sha256.txt
+          name: w2a4-evidence-b
+          path: |
+            ${{ runner.temp }}\w2a4-b\evidence\sha256.txt
+            ${{ runner.temp }}\w2a4-b\evidence\members.txt
           if-no-files-found: error
           retention-days: 7
 
@@ -511,13 +641,24 @@ jobs:
     permissions:
       contents: read
     steps:
+      # `if: ${{ always() }}` on the STEP, not only on the job. Guarding this
+      # step with the failure condition itself made it SKIP whenever both
+      # allocations succeeded -- which is every run that has a pair to compare,
+      # so the one run where it mattered was the one run it never appeared in.
+      # A guard that is invisible on the healthy path cannot be read as having
+      # held. It now runs on every path and prints both results either way.
       - name: Both allocations must have succeeded
-        if: ${{ needs.assemble-a.result != 'success' || needs.assemble-b.result != 'success' }}
+        if: ${{ always() }}
         run: |
-          echo "assemble-a: ${{ needs.assemble-a.result }}"
-          echo "assemble-b: ${{ needs.assemble-b.result }}"
-          echo 'W2-A4 has no verdict: an assemble job did not succeed, so there is no pair to compare.'
-          exit 1
+          a='${{ needs.assemble-a.result }}'
+          b='${{ needs.assemble-b.result }}'
+          echo "assemble-a: ${a}"
+          echo "assemble-b: ${b}"
+          if [ "${a}" != 'success' ] || [ "${b}" != 'success' ]; then
+            echo 'W2-A4 has no verdict: an assemble job did not succeed, so there is no pair to compare.'
+            exit 1
+          fi
+          echo 'both allocations succeeded; the evidence pair below is the verdict.'
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -526,35 +667,47 @@ jobs:
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: w2a4-sha256-a
-          path: ${{ runner.temp }}/hash-a
+          name: w2a4-evidence-a
+          path: ${{ runner.temp }}/evidence-a
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: w2a4-sha256-b
-          path: ${{ runner.temp }}/hash-b
+          name: w2a4-evidence-b
+          path: ${{ runner.temp }}/evidence-b
 
-      - name: Require the two hashes to be the same 64 hex digits
+      # The audited comparison, with the member lists it now requires. It exits
+      # non-zero when the hashes differ, when either list is missing or
+      # malformed, and when any member's digest differs -- and on the way it
+      # prints every differing path. `--members` is not optional: a compare that
+      # can only say "these two runs disagree" is the compare that produced
+      # 33967489630 and no diagnosis.
+      - name: Require the two hashes to agree, and name every differing member
         id: verdict
         run: |
+          set -o pipefail
+          status=0
           python3 ci/windows/w2/two-runner-controls.py --compare \
-            "${RUNNER_TEMP}/hash-a/sha256.txt" \
-            "${RUNNER_TEMP}/hash-b/sha256.txt" \
-            --label-a assemble-a --label-b assemble-b
-
-      - name: Publish the verdict
-        run: |
-          hash="$(head -c 64 "${RUNNER_TEMP}/hash-a/sha256.txt")"
+            "${RUNNER_TEMP}/evidence-a/sha256.txt" \
+            "${RUNNER_TEMP}/evidence-b/sha256.txt" \
+            --members \
+            "${RUNNER_TEMP}/evidence-a/members.txt" \
+            "${RUNNER_TEMP}/evidence-b/members.txt" \
+            --label-a assemble-a --label-b assemble-b \
+            2>&1 | tee "${RUNNER_TEMP}/verdict.txt" || status=$?
           {
             echo "### W2-A4 two-runner win-x64 ZIP identity"
             echo ""
             echo "| what | value |"
             echo "| --- | --- |"
             echo "| commit | \`${{ github.event.pull_request.head.sha }}\` |"
-            echo "| allocation A | \`${hash}\` |"
-            echo "| allocation B | \`$(head -c 64 "${RUNNER_TEMP}/hash-b/sha256.txt")\` |"
-            echo "| verdict | the two allocations agree |"
+            echo "| compare exit | ${status} |"
             echo ""
-            echo "W0 §8.1 on the ZIP. No archive crossed a job boundary (§8.7):"
-            echo "each allocation uploaded 65 bytes of hex. W2 is not accepted by this run."
+            echo '```'
+            head -c 60000 "${RUNNER_TEMP}/verdict.txt"
+            echo '```'
+            echo ""
+            echo "No archive crossed a job boundary (§8.7): each allocation uploaded its"
+            echo "sha256.txt and its members.txt and nothing else. W2 is not accepted by"
+            echo "this run, and this run makes no claim about the next one."
           } >> "$GITHUB_STEP_SUMMARY"
+          exit "${status}"
