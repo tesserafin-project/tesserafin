@@ -745,6 +745,8 @@ def w2_directory_findings(entries):
             continue  # W2-A2's ZIP assembler, allowed by name (W2-A2-F18).
         if name == "relocate-and-start.ps1":
             continue  # W2-A3's relocate-and-start proof, by name (W2-A3-F18).
+        if name == "tesserafin-server-service.ps1":
+            continue  # W2-A5's first-party ZIP service script, by name (W2-A5 ruling).
         findings.append("ci/windows/w2/%s is a second consumer" % name)
     return findings
 

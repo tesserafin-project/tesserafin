@@ -97,12 +97,16 @@ DESCRIPTIVE_TAG = "accepted-83e23b957940"
 # true: a CRLF copy hashes identically under universal newlines, so a file
 # differing only in line endings would be called byte-identical.
 FROZEN_PINS = {
-    # Moved under W2-A4-R2-S15, which authorised this file for this pin and
-    # nothing else: W2-A4-R2 changed the assembler, and a pin that still named
-    # the pre-R2 bytes would fail A3's hosted job at its controls step and
-    # never reach the start proof. Every other pin below is unchanged.
+    # Moved again under the W2-A5 ruling, which authorises this file for this
+    # pin value and nothing else: W2-A5 changed the assembler to stage the
+    # first-party service script at its frozen relative path and to pin its
+    # bytes in the provenance manifest, and a pin that still named the pre-A5
+    # bytes would fail A3's hosted job at its controls step and never reach the
+    # start proof. It moved once before, under W2-A4-R2-S15, for the
+    # post-publish endpoints canonicalisation. Every other pin below is
+    # unchanged.
     "ci/windows/w2/assemble-server-zip.ps1":
-        "b4fbb81538e5fdefb26928373bee61969c141733b3fae91159e0198092f94f33",
+        "e26bf3b826303b04cb18bcfe77e29379cce114cab4b8da25a4eefc961b42f9b5",
     "ci/windows/w2/consume-web-payload.ps1":
         "db49f21001067a8f55ae71432ff9d47830daa454704a09800bb0e1eadf3b117c",
     "ci/windows/w2/pkg-tree-digest.py":

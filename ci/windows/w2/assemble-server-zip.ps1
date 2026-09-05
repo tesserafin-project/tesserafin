@@ -21,6 +21,10 @@
       * the FFmpeg runtime -> ci/windows/runtime-retention/consume.ps1   (W1/W2-A1)
         driven by ci/windows/runtime-retention/accepted-runtime.json
       * the server       -> dotnet publish, self-contained, win-x64
+      * the service script -> ci/windows/w2/tesserafin-server-service.ps1  (W2-A5)
+        staged at the top level of the package directory and pinned by digest in
+        the provenance manifest. It is STAGED, never run: W0 §6 carries it as a
+        convenience over the §4 service contract, not as a second installer.
 
     Both consumers are inputs to this script and never outputs of it. There is
     deliberately no wrapper around either: a wrapper is where a `-Reference`, a
@@ -134,6 +138,17 @@ $DOS_EPOCH_FLOOR = 315532800
 $WEB_SUBDIR = 'web'
 $FFMPEG_SUBDIR = 'ffmpeg'
 $LICENSES_SUBDIR = 'licenses'
+
+# W0 §6, last bullet: the ZIP "carries a first-party PowerShell script that
+# registers, starts, stops and removes the service for operators who prefer the
+# ZIP". W2-A5 (#256) freezes its relative path as the TOP LEVEL of the package
+# directory, beside tesserafin.exe, because the script derives every path it
+# gives the Service Control Manager from its own $PSScriptRoot: one level down
+# would make the package root an arithmetic result rather than the directory the
+# operator is standing in. This script only STAGES it and records its digest; it
+# never runs it, and §6 is explicit that the script "is **not** a second
+# installer".
+$SERVICE_SCRIPT_NAME = 'tesserafin-server-service.ps1'
 
 $PACKAGE_PREFIX = 'tesserafin-server'
 $RID = 'win-x64'
@@ -792,7 +807,9 @@ try {
     $runtimeConsumer = [System.IO.Path]::Combine($repo, 'ci', 'windows', 'runtime-retention', 'consume.ps1')
     $acceptedJson = [System.IO.Path]::Combine($repo, 'ci', 'windows', 'runtime-retention', 'accepted-runtime.json')
     $treeDigestScript = [System.IO.Path]::Combine($repo, 'ci', 'windows', 'w2', 'pkg-tree-digest.py')
-    foreach ($required in @($webConsumer, $runtimeConsumer, $acceptedJson, $treeDigestScript)) {
+    $serviceScript = [System.IO.Path]::Combine($repo, 'ci', 'windows', 'w2', $SERVICE_SCRIPT_NAME)
+    foreach ($required in @($webConsumer, $runtimeConsumer, $acceptedJson, $treeDigestScript,
+            $serviceScript)) {
         if (-not [System.IO.File]::Exists($required)) {
             Deny 'prerequisite' ("the frozen input '$required' is missing")
         }
@@ -920,6 +937,28 @@ try {
     Write-Note ("licences verified: $($licenceFiles.Count) component licences, the notices and " +
         "the capability manifest inside $FFMPEG_SUBDIR/, the SBOM at $LICENSES_SUBDIR/ffmpeg/")
 
+    # ── 4b. the first-party service script, at the frozen relative path ──────
+    #
+    # Staged from the checkout, so its bytes travel with the commit exactly as
+    # the assembler's own do. The digest is taken from the STAGED copy and
+    # compared with the source, because "the file was copied" and "the file in
+    # the package is that file" are two different statements and only the second
+    # is what the provenance manifest goes on to claim.
+    $stagedServiceScript = [System.IO.Path]::Combine($packageRoot, $SERVICE_SCRIPT_NAME)
+    if ([System.IO.File]::Exists($stagedServiceScript)) {
+        Deny 'service-script' ("the publish tree already carries '$SERVICE_SCRIPT_NAME'; the " +
+            'service script must be the one this commit stages and not a second copy')
+    }
+    [System.IO.File]::Copy($serviceScript, $stagedServiceScript, $false)
+    $stagedScriptFile = Get-Item -LiteralPath $stagedServiceScript -Force
+    if ($stagedScriptFile.IsReadOnly) { $stagedScriptFile.IsReadOnly = $false }
+    $serviceScriptDigest = Get-Sha256 $stagedServiceScript
+    if ($serviceScriptDigest -cne (Get-Sha256 $serviceScript)) {
+        Deny 'service-script' ("the staged '$SERVICE_SCRIPT_NAME' does not hash to the checkout's " +
+            'copy')
+    }
+    Write-Note ("service script staged at $SERVICE_SCRIPT_NAME, sha256 $serviceScriptDigest")
+
     # ── 5. the staged Web tree is still the accepted one ─────────────────────
     #
     # Hashed at the epoch the WEB build recorded for itself, never at this
@@ -991,6 +1030,18 @@ try {
             sbomSha256 = [string]$accepted.sbomSha256
             noticesSha256 = [string]$accepted.noticesSha256
             relativePath = $LICENSES_SUBDIR
+        }
+        serviceScript = [ordered]@{
+            relativePath = $SERVICE_SCRIPT_NAME
+            sha256 = $serviceScriptDigest
+            # W0 §6 in its own words, so a reader of the manifest alone cannot
+            # mistake the script for the installer it is not.
+            contract = ('W0 §6: a first-party PowerShell script that registers, starts, stops ' +
+                'and removes the service, a convenience over the §4 service contract')
+            isInstaller = $false
+            providesRepair = $false
+            providesRollback = $false
+            writesAddRemoveProgramsEntry = $false
         }
         shipsNoState = $true
         containerRuntime = 'none'

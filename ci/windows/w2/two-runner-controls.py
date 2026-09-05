@@ -90,11 +90,13 @@ ACCEPTED_RUNTIME_SHA256 = "f28cc9186aad757491a6f44e7950d39bc39354dfe9505e278af91
 # runs. The ruling forbids editing any of them, and a pin is the only thing that
 # can say so about a file this slice never touches.
 FROZEN_PINS = {
-    # Moved under W2-A4-R2, which authorised this one file and only the
-    # post-publish canonicalisation step inside it. Every other pin below is
-    # unchanged.
+    # Moved under the W2-A5 ruling, which authorised the assembler to stage the
+    # first-party service script at its frozen relative path and to pin its
+    # bytes in the provenance manifest, and this file for the resulting pin
+    # VALUE and nothing else. It moved once before, under W2-A4-R2, for the
+    # post-publish endpoints canonicalisation.
     "ci/windows/w2/assemble-server-zip.ps1":
-        "b4fbb81538e5fdefb26928373bee61969c141733b3fae91159e0198092f94f33",
+        "e26bf3b826303b04cb18bcfe77e29379cce114cab4b8da25a4eefc961b42f9b5",
     "ci/windows/w2/consume-web-payload.ps1":
         "db49f21001067a8f55ae71432ff9d47830daa454704a09800bb0e1eadf3b117c",
     "ci/windows/w2/relocate-and-start.ps1":
@@ -103,15 +105,20 @@ FROZEN_PINS = {
         "0c70114c69e85d06bc3d95249cc1a86f917eb2b8deb44718cc05ad6f3afa70b4",
     "ci/windows/w2/zip-controls.py":
         "1cdd22612db0ae34b2234c73e57aa6b345fec931266fd94868a0bb37a94353c2",
-    # Moved under W2-A4-R2-S15 for the same reason the assembler pin above
-    # moved: that ruling authorised this file for its S15 assembler pin and
-    # nothing else, so its bytes changed and this pin must say so.
+    # Moved for the same reason the assembler pin above moved: the W2-A5
+    # ruling authorises start-controls.py for its S15 assembler pin value and
+    # nothing else, so its bytes changed and this pin must say so. It moved
+    # once before under W2-A4-R2-S15, for the same one pin.
     "ci/windows/w2/start-controls.py":
-        "ae1bfb060dcb224b5da2a5724dbaa44b28e8b0b2b775fb9624436ca8058cf5b0",
+        "c7e826ffa5ffa7860cda5de3cf360fc2afebb115c04861014e742d37e03c11d3",
     "ci/windows/w2/web-payload-controls.py":
         "60466ae4da90d9ed876e709c29c90fef025dc287ad8ffbaf5d64d1f053b6e9ea",
+    # Moved under the W2-A5 ruling, which authorises one exact-name F18
+    # continue for tesserafin-server-service.ps1 in that file and nothing else
+    # -- the same amendment W2-A2-F18 and W2-A3-F18 each made. F01-F17, F19,
+    # the roster, the pins and the frozen-consumer byte pins are untouched.
     "ci/windows/w2/ffmpeg-consume-controls.py":
-        "b00f03836acf765155658e24e381bd9fe65afe22f700f2bd887f157ad78bafca",
+        "fca41685c584d52b792fe190579b5bcd79d38b9f44529b33fc30ede63e9120ec",
     "ci/windows/runtime-retention/consume.ps1":
         "f19fefcc48de9ae2175aa49ecff6e732762219a3d76c38067ba4114a1924646d",
     "ci/windows/runtime-retention/accepted-runtime.json":
