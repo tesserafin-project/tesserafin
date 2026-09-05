@@ -1,0 +1,560 @@
+# W2-A4 (#256): assemble the portable, self-contained win-x64 Tesserafin server
+# ZIP once on EACH of two separate `windows-latest` runners, and require the two
+# archives to be the same 64 hex digits.
+#
+# This workflow proves exactly one thing, and it is W0 §8.1 read literally:
+#
+#     two clean assemblies of tesserafin-server_<version>_win-x64.zip from the
+#     same commit, on two SEPARATE runner allocations that share nothing, hash
+#     to the same value.
+#
+# W2-A2 already proved two assemblies into two clean trees on ONE runner. That
+# is §8's clause 1 explicitly excluded -- "Not two builds on one runner" -- so
+# this slice is the allocation boundary and nothing else. The two assemble jobs
+# below declare no `needs:` between them, share no cache, no staged runtime and
+# no compiled object, and each begins from directories that have never existed
+# (§8.2, asserted rather than assumed).
+#
+# W0 §8.7 -- "no expiring Actions artifact is ever a production input" -- is the
+# reason the compare job receives a SHA-256 TEXT FILE and never an archive. The
+# ZIP is produced, hashed and left on the runner that made it. Nothing consumes
+# it, nothing downloads it, and the only bytes that cross a job boundary are 65:
+# sixty-four lowercase hex digits and one LF. That file is evidence about a
+# production output; it is not itself an input to producing anything.
+#
+# What this workflow deliberately does NOT do, because W2-A4 is not authorised
+# to:
+#
+#   * it does not start tesserafin.exe, relocate a tree, discover a port or hit
+#     `/` -- that is W2-A3's proof and it is already on master;
+#   * it adds no first-party service script and registers no service (§6's last
+#     bullet stays deferred, and W4 owns the SCM);
+#   * it renames no .reefin marker and changes no server C# file;
+#   * it uploads no archive, downloads no archive and uses no cache;
+#   * it publishes nothing, writes no package and creates no release asset;
+#   * no container engine, no daemon and no CLI for one;
+#   * it does not claim W2 accepted. Independent review is the next gate.
+#
+# The `paths:` filter watches the whole authored directory rather than a list of
+# names -- the W2-A1-V1 NB-1 repair W2-A2 made -- plus the frozen files this
+# workflow actually runs.
+
+name: W2 Windows two-runner ZIP identity
+
+on:
+  pull_request:
+    # Draft pull requests are covered: `pull_request` fires for them unless a
+    # type filter excludes them, and W2-A4 is reviewed as a draft.
+    paths:
+      # The whole authored directory, not a list of names -- NB-1.
+      - 'ci/windows/w2/**'
+      - '.github/workflows/w2-windows-zip-two-runner.yml'
+      - 'docs/distribution/W2-A4-two-runner.md'
+      # The frozen files each assembly actually runs. A change to any of them is
+      # a change to the production acquisition path, so it must re-run this
+      # proof even though this slice authors none of them.
+      - 'ci/windows/runtime-retention/consume.ps1'
+      - 'ci/windows/runtime-retention/accepted-runtime.json'
+      - 'ci/windows/build-inputs/install-oras.sh'
+      - 'ci/windows/build-inputs/tools.lock.json'
+      # The one canonical source of the version that names the archive.
+      - 'SharedVersion.cs'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  # The accepted identities, restated so a reader of the run does not have to
+  # open two JSON documents to know what was packed. These are NOT the trust
+  # boundary: the frozen assembler reads the committed acceptance manifest and
+  # the frozen consumers refuse anything else. Each assemble job reads them back
+  # out of the manifest that ships INSIDE its own archive, so a restated
+  # identity is load-bearing here rather than decorative, and
+  # `ci/windows/w2/two-runner-controls.py` (T14) requires all four statements to
+  # agree.
+  WEB_PAYLOAD_SHA256: 4148c4bc6e0c7c2d6b35ed9992e874a06dcc11d2b6d9e0aad06719e36567be4f
+  ACCEPTED_RUNTIME_SHA256: f28cc9186aad757491a6f44e7950d39bc39354dfe9505e278af91d7619811c9e
+  SDK_VERSION: "10.0.x"
+
+jobs:
+  # ── The controls run on a cheap runner and depend on nothing, so a defective
+  #    suite is visible in seconds rather than after two hours of Windows time.
+  #    They audit text and drive this file's own compare implementation against
+  #    planted hash files; they never assemble anything, which is why they are
+  #    not on a Windows runner.
+  controls:
+    name: Hostile controls against this workflow and the compare
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Run the W2-A4 hostile controls
+        run: python3 ci/windows/w2/two-runner-controls.py
+
+  # ── Runner allocation A. No `needs:`, so it is scheduled independently of B.
+  assemble-a:
+    name: Assemble the win-x64 server ZIP on runner allocation A
+    runs-on: windows-latest
+    # One 260 MB runtime pull with a zstd stream verification, one Web pull, one
+    # self-contained publish and one pack of a ~300 MB tree.
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      # The entire write surface of this job. Read only, job scoped, and needed
+      # only because the accepted Web payload image is pulled with the job's own
+      # token: the frozen consumer has no anonymous fallback.
+      packages: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: ${{ env.SDK_VERSION }}
+
+      # Which physical allocation this job got. `RUNNER_NAME` can repeat across
+      # a fleet; the VM's own computer name does not, so both are printed and
+      # the pair is what the report cites as evidence of two allocations.
+      - name: Record this runner allocation
+        shell: pwsh
+        run: |
+          "job            : ${{ github.job }}"
+          "runner name    : $env:RUNNER_NAME"
+          "runner machine : $env:COMPUTERNAME"
+          "runner os      : $env:RUNNER_OS"
+
+      # Both interpreters are recorded rather than assumed. The frozen FFmpeg
+      # consumer verifies the corresponding source through `zstd -dc > file`,
+      # which is a native-command redirect: Windows PowerShell 5.1 would
+      # re-encode that stream and the consumer would then refuse its own
+      # accepted source. That refusal would be correct and completely illegible.
+      - name: Record the runner's interpreters
+        id: tools
+        shell: pwsh
+        run: |
+          $python = (Get-Command python -CommandType Application | Select-Object -First 1).Source
+          if (-not $python) { throw 'no python on this runner' }
+          "python=$python" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "PowerShell $($PSVersionTable.PSVersion), .NET $([System.Environment]::Version)"
+          if ($PSVersionTable.PSVersion.Major -lt 7) {
+            throw "W2-A4 HARD STOP: this job needs PowerShell 7 or newer to keep a native command's bytes intact; it has $($PSVersionTable.PSVersion)"
+          }
+          & $python --version
+          & dotnet --version
+
+      - name: Make the corresponding-source verifier available
+        shell: pwsh
+        run: |
+          $zstd = Get-Command zstd -CommandType Application -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+          if ($zstd) {
+            "zstd $((& $zstd.Source --version) -join ' ')"
+            exit 0
+          }
+          $fallback = Join-Path $env:ProgramFiles 'Git\usr\bin\zstd.exe'
+          if (Test-Path -LiteralPath $fallback) {
+            (Split-Path -Parent $fallback) | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+            "zstd taken from Git for Windows at $fallback"
+            exit 0
+          }
+          throw 'W2-A4 HARD STOP: this runner has no zstd, so the corresponding source cannot be verified'
+
+      # The same pinned client W1 installs, from the same lock file. W2 adds no
+      # second `tools.lock.json`: a second pin is a second thing to drift.
+      - name: Install the pinned ORAS
+        shell: bash
+        run: ./ci/windows/build-inputs/install-oras.sh windows-amd64 "${RUNNER_TEMP}/bin"
+
+      # SOURCE_DATE_EPOCH is the committer time of the pull request's head
+      # commit -- the same definition docker/version-contract.sh uses for every
+      # other Tesserafin artifact (`git log -1 --format=%ct`). It is never the
+      # clock, never a tag and never a run identifier. Both runners derive it
+      # from the SAME named commit rather than from anything either of them
+      # observes locally, which is what makes the two values equal by
+      # construction across two allocations that share nothing.
+      - name: Derive SOURCE_DATE_EPOCH from the commit
+        id: epoch
+        shell: pwsh
+        run: |
+          $head = '${{ github.event.pull_request.head.sha }}'
+          if ($head -notmatch '^[0-9a-f]{40}$') { throw "not a commit: $head" }
+          $checkout = (& git rev-parse HEAD).Trim()
+          if ($checkout -cne $head) {
+            throw "this job checked out $checkout, not the pull request head $head"
+          }
+          $epoch = (& git log -1 --format=%ct $head).Trim()
+          if ($epoch -notmatch '^[1-9][0-9]*$') { throw "no committer time for $head" }
+          "commit=$head"   | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "epoch=$epoch"   | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "commit            : $head"
+          "SOURCE_DATE_EPOCH : $epoch ($([System.DateTimeOffset]::FromUnixTimeSeconds([int64]$epoch).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')))"
+
+      # §8.2 asserted rather than assumed: this allocation is required to have
+      # nothing at either path before the assembler is given them.
+      - name: Require an empty work tree
+        shell: pwsh
+        run: |
+          $work = Join-Path $env:RUNNER_TEMP 'w2a4-a/work'
+          $out  = Join-Path $env:RUNNER_TEMP 'w2a4-a/out'
+          if (Test-Path -LiteralPath $work) { throw "W2-A4 HARD STOP: $work already exists" }
+          if (Test-Path -LiteralPath $out)  { throw "W2-A4 HARD STOP: $out already exists" }
+          "work tree : $work (absent)"
+          "out tree  : $out (absent)"
+
+      # ── The real thing. ONCE. The frozen assembler, which already drives the
+      #    frozen W2-A0 Web consumer and the frozen W1/W2-A1 FFmpeg consumer,
+      #    and which refuses to emit an archive at all if any input is not the
+      #    accepted thing.
+      - name: Assemble the ZIP
+        shell: pwsh
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./ci/windows/w2/assemble-server-zip.ps1 `
+            -RepoRoot $PWD `
+            -WorkDir (Join-Path $env:RUNNER_TEMP 'w2a4-a/work') `
+            -OutDir (Join-Path $env:RUNNER_TEMP 'w2a4-a/out') `
+            -SourceDateEpoch ${{ steps.epoch.outputs.epoch }} `
+            -OrasPath (Join-Path $env:RUNNER_TEMP 'bin\oras.exe') `
+            -PythonPath '${{ steps.tools.outputs.python }}'
+          if ($LASTEXITCODE -ne 0) { throw 'this allocation produced no archive' }
+
+      # The hash, and the 65 bytes that are the only thing this job hands to
+      # another job. Written with WriteAllBytes rather than Out-File because
+      # PowerShell's text writers would give it CRLF and a BOM, and the compare
+      # requires exactly 64 lowercase hex digits followed by one LF.
+      - name: Hash the archive and write the evidence file
+        id: hash
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'w2a4-a/out'
+          $archives = @(Get-ChildItem -LiteralPath $out -Filter '*.zip' -File)
+          if ($archives.Count -ne 1) { throw "this allocation wrote $($archives.Count) archives" }
+          $archive = $archives[0]
+          $hash = (Get-FileHash -LiteralPath $archive.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+
+          $evidence = Join-Path $env:RUNNER_TEMP 'w2a4-a/evidence'
+          New-Item -ItemType Directory -Force -Path $evidence | Out-Null
+          $file = Join-Path $evidence 'sha256.txt'
+          [System.IO.File]::WriteAllBytes($file, [System.Text.Encoding]::ASCII.GetBytes($hash + "`n"))
+          $written = (Get-Item -LiteralPath $file).Length
+          if ($written -ne 65) { throw "the evidence file is $written bytes, not 65" }
+
+          "archive        : $($archive.Name)"
+          "bytes          : $($archive.Length)"
+          "sha256         : $hash"
+          "runner name    : $env:RUNNER_NAME"
+          "runner machine : $env:COMPUTERNAME"
+
+          "sha256=$hash" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          @(
+            "### W2-A4 allocation A"
+            ""
+            "| what | value |"
+            "| --- | --- |"
+            "| archive | ``$($archive.Name)`` |"
+            "| bytes | $($archive.Length) |"
+            "| sha256 | ``$hash`` |"
+            "| commit | ``${{ steps.epoch.outputs.commit }}`` |"
+            "| SOURCE_DATE_EPOCH | ``${{ steps.epoch.outputs.epoch }}`` |"
+            "| runner name | ``$env:RUNNER_NAME`` |"
+            "| runner machine | ``$env:COMPUTERNAME`` |"
+          ) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+      # The restated identities above are only worth restating if something
+      # reads them. This is what reads them: the provenance manifest that ships
+      # INSIDE this allocation's own archive must name the same digests, the
+      # same epoch and the same commit.
+      - name: Require the packed manifest to name the accepted identities
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'w2a4-a/out'
+          $archive = @(Get-ChildItem -LiteralPath $out -Filter '*.zip' -File)[0]
+          $zip = [System.IO.Compression.ZipFile]::OpenRead($archive.FullName)
+          try {
+            $entry = $zip.Entries | Where-Object { $_.FullName -like '*/licenses/provenance.json' } |
+              Select-Object -First 1
+            if (-not $entry) { throw 'the archive carries no provenance manifest' }
+            $reader = New-Object System.IO.StreamReader($entry.Open())
+            try { $manifest = $reader.ReadToEnd() | ConvertFrom-Json } finally { $reader.Dispose() }
+          } finally {
+            $zip.Dispose()
+          }
+          if ($manifest.web.payloadSha256 -cne $env:WEB_PAYLOAD_SHA256) {
+            throw "the packed manifest names web payload $($manifest.web.payloadSha256)"
+          }
+          if ($manifest.ffmpegRuntime.archiveSha256 -cne $env:ACCEPTED_RUNTIME_SHA256) {
+            throw "the packed manifest names FFmpeg runtime $($manifest.ffmpegRuntime.archiveSha256)"
+          }
+          if ($manifest.sourceDateEpoch -ne [int64]'${{ steps.epoch.outputs.epoch }}') {
+            throw "the packed manifest records epoch $($manifest.sourceDateEpoch)"
+          }
+          if ($manifest.serverCommit -cne '${{ steps.epoch.outputs.commit }}') {
+            throw "the packed manifest records commit $($manifest.serverCommit)"
+          }
+          'the packed manifest names the accepted web payload, the accepted FFmpeg runtime, the derived epoch and the head commit'
+
+      # 65 bytes. `if-no-files-found: error` because the default is `warn`,
+      # which would upload an empty artifact and leave this job green while the
+      # compare job had nothing to read.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: w2a4-sha256-a
+          path: ${{ runner.temp }}\w2a4-a\evidence\sha256.txt
+          if-no-files-found: error
+          retention-days: 7
+
+  # ── Runner allocation B. Byte-for-byte the same procedure as A, with its own
+  #    directories and its own artifact name, and NO `needs:` on A. The two jobs
+  #    are scheduled independently; neither can observe the other's work tree,
+  #    its publish output or its packed archive.
+  assemble-b:
+    name: Assemble the win-x64 server ZIP on runner allocation B
+    runs-on: windows-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: ${{ env.SDK_VERSION }}
+
+      - name: Record this runner allocation
+        shell: pwsh
+        run: |
+          "job            : ${{ github.job }}"
+          "runner name    : $env:RUNNER_NAME"
+          "runner machine : $env:COMPUTERNAME"
+          "runner os      : $env:RUNNER_OS"
+
+      - name: Record the runner's interpreters
+        id: tools
+        shell: pwsh
+        run: |
+          $python = (Get-Command python -CommandType Application | Select-Object -First 1).Source
+          if (-not $python) { throw 'no python on this runner' }
+          "python=$python" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "PowerShell $($PSVersionTable.PSVersion), .NET $([System.Environment]::Version)"
+          if ($PSVersionTable.PSVersion.Major -lt 7) {
+            throw "W2-A4 HARD STOP: this job needs PowerShell 7 or newer to keep a native command's bytes intact; it has $($PSVersionTable.PSVersion)"
+          }
+          & $python --version
+          & dotnet --version
+
+      - name: Make the corresponding-source verifier available
+        shell: pwsh
+        run: |
+          $zstd = Get-Command zstd -CommandType Application -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+          if ($zstd) {
+            "zstd $((& $zstd.Source --version) -join ' ')"
+            exit 0
+          }
+          $fallback = Join-Path $env:ProgramFiles 'Git\usr\bin\zstd.exe'
+          if (Test-Path -LiteralPath $fallback) {
+            (Split-Path -Parent $fallback) | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+            "zstd taken from Git for Windows at $fallback"
+            exit 0
+          }
+          throw 'W2-A4 HARD STOP: this runner has no zstd, so the corresponding source cannot be verified'
+
+      - name: Install the pinned ORAS
+        shell: bash
+        run: ./ci/windows/build-inputs/install-oras.sh windows-amd64 "${RUNNER_TEMP}/bin"
+
+      - name: Derive SOURCE_DATE_EPOCH from the commit
+        id: epoch
+        shell: pwsh
+        run: |
+          $head = '${{ github.event.pull_request.head.sha }}'
+          if ($head -notmatch '^[0-9a-f]{40}$') { throw "not a commit: $head" }
+          $checkout = (& git rev-parse HEAD).Trim()
+          if ($checkout -cne $head) {
+            throw "this job checked out $checkout, not the pull request head $head"
+          }
+          $epoch = (& git log -1 --format=%ct $head).Trim()
+          if ($epoch -notmatch '^[1-9][0-9]*$') { throw "no committer time for $head" }
+          "commit=$head"   | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "epoch=$epoch"   | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "commit            : $head"
+          "SOURCE_DATE_EPOCH : $epoch ($([System.DateTimeOffset]::FromUnixTimeSeconds([int64]$epoch).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')))"
+
+      - name: Require an empty work tree
+        shell: pwsh
+        run: |
+          $work = Join-Path $env:RUNNER_TEMP 'w2a4-b/work'
+          $out  = Join-Path $env:RUNNER_TEMP 'w2a4-b/out'
+          if (Test-Path -LiteralPath $work) { throw "W2-A4 HARD STOP: $work already exists" }
+          if (Test-Path -LiteralPath $out)  { throw "W2-A4 HARD STOP: $out already exists" }
+          "work tree : $work (absent)"
+          "out tree  : $out (absent)"
+
+      - name: Assemble the ZIP
+        shell: pwsh
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./ci/windows/w2/assemble-server-zip.ps1 `
+            -RepoRoot $PWD `
+            -WorkDir (Join-Path $env:RUNNER_TEMP 'w2a4-b/work') `
+            -OutDir (Join-Path $env:RUNNER_TEMP 'w2a4-b/out') `
+            -SourceDateEpoch ${{ steps.epoch.outputs.epoch }} `
+            -OrasPath (Join-Path $env:RUNNER_TEMP 'bin\oras.exe') `
+            -PythonPath '${{ steps.tools.outputs.python }}'
+          if ($LASTEXITCODE -ne 0) { throw 'this allocation produced no archive' }
+
+      - name: Hash the archive and write the evidence file
+        id: hash
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'w2a4-b/out'
+          $archives = @(Get-ChildItem -LiteralPath $out -Filter '*.zip' -File)
+          if ($archives.Count -ne 1) { throw "this allocation wrote $($archives.Count) archives" }
+          $archive = $archives[0]
+          $hash = (Get-FileHash -LiteralPath $archive.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+
+          $evidence = Join-Path $env:RUNNER_TEMP 'w2a4-b/evidence'
+          New-Item -ItemType Directory -Force -Path $evidence | Out-Null
+          $file = Join-Path $evidence 'sha256.txt'
+          [System.IO.File]::WriteAllBytes($file, [System.Text.Encoding]::ASCII.GetBytes($hash + "`n"))
+          $written = (Get-Item -LiteralPath $file).Length
+          if ($written -ne 65) { throw "the evidence file is $written bytes, not 65" }
+
+          "archive        : $($archive.Name)"
+          "bytes          : $($archive.Length)"
+          "sha256         : $hash"
+          "runner name    : $env:RUNNER_NAME"
+          "runner machine : $env:COMPUTERNAME"
+
+          "sha256=$hash" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          @(
+            "### W2-A4 allocation B"
+            ""
+            "| what | value |"
+            "| --- | --- |"
+            "| archive | ``$($archive.Name)`` |"
+            "| bytes | $($archive.Length) |"
+            "| sha256 | ``$hash`` |"
+            "| commit | ``${{ steps.epoch.outputs.commit }}`` |"
+            "| SOURCE_DATE_EPOCH | ``${{ steps.epoch.outputs.epoch }}`` |"
+            "| runner name | ``$env:RUNNER_NAME`` |"
+            "| runner machine | ``$env:COMPUTERNAME`` |"
+          ) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+      - name: Require the packed manifest to name the accepted identities
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'w2a4-b/out'
+          $archive = @(Get-ChildItem -LiteralPath $out -Filter '*.zip' -File)[0]
+          $zip = [System.IO.Compression.ZipFile]::OpenRead($archive.FullName)
+          try {
+            $entry = $zip.Entries | Where-Object { $_.FullName -like '*/licenses/provenance.json' } |
+              Select-Object -First 1
+            if (-not $entry) { throw 'the archive carries no provenance manifest' }
+            $reader = New-Object System.IO.StreamReader($entry.Open())
+            try { $manifest = $reader.ReadToEnd() | ConvertFrom-Json } finally { $reader.Dispose() }
+          } finally {
+            $zip.Dispose()
+          }
+          if ($manifest.web.payloadSha256 -cne $env:WEB_PAYLOAD_SHA256) {
+            throw "the packed manifest names web payload $($manifest.web.payloadSha256)"
+          }
+          if ($manifest.ffmpegRuntime.archiveSha256 -cne $env:ACCEPTED_RUNTIME_SHA256) {
+            throw "the packed manifest names FFmpeg runtime $($manifest.ffmpegRuntime.archiveSha256)"
+          }
+          if ($manifest.sourceDateEpoch -ne [int64]'${{ steps.epoch.outputs.epoch }}') {
+            throw "the packed manifest records epoch $($manifest.sourceDateEpoch)"
+          }
+          if ($manifest.serverCommit -cne '${{ steps.epoch.outputs.commit }}') {
+            throw "the packed manifest records commit $($manifest.serverCommit)"
+          }
+          'the packed manifest names the accepted web payload, the accepted FFmpeg runtime, the derived epoch and the head commit'
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: w2a4-sha256-b
+          path: ${{ runner.temp }}\w2a4-b\evidence\sha256.txt
+          if-no-files-found: error
+          retention-days: 7
+
+  # ── The verdict. `if: always()` so this job RUNS even when an assemble job
+  #    failed or was cancelled: a compare that is SKIPPED produces no conclusion
+  #    at all, and a check that never ran must never be readable as agreement.
+  #    Its first step turns any non-success upstream into a failure of THIS job,
+  #    and the comparison itself is `two-runner-controls.py --compare`, the same
+  #    implementation the controls job drives against planted missing, empty,
+  #    truncated, uppercase, CRLF and differing hash files.
+  compare:
+    name: Require the two allocations to agree
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [assemble-a, assemble-b]
+    if: ${{ always() }}
+    permissions:
+      contents: read
+    steps:
+      - name: Both allocations must have succeeded
+        if: ${{ needs.assemble-a.result != 'success' || needs.assemble-b.result != 'success' }}
+        run: |
+          echo "assemble-a: ${{ needs.assemble-a.result }}"
+          echo "assemble-b: ${{ needs.assemble-b.result }}"
+          echo 'W2-A4 has no verdict: an assemble job did not succeed, so there is no pair to compare.'
+          exit 1
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: w2a4-sha256-a
+          path: ${{ runner.temp }}/hash-a
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: w2a4-sha256-b
+          path: ${{ runner.temp }}/hash-b
+
+      - name: Require the two hashes to be the same 64 hex digits
+        id: verdict
+        run: |
+          python3 ci/windows/w2/two-runner-controls.py --compare \
+            "${RUNNER_TEMP}/hash-a/sha256.txt" \
+            "${RUNNER_TEMP}/hash-b/sha256.txt" \
+            --label-a assemble-a --label-b assemble-b
+
+      - name: Publish the verdict
+        run: |
+          hash="$(head -c 64 "${RUNNER_TEMP}/hash-a/sha256.txt")"
+          {
+            echo "### W2-A4 two-runner win-x64 ZIP identity"
+            echo ""
+            echo "| what | value |"
+            echo "| --- | --- |"
+            echo "| commit | \`${{ github.event.pull_request.head.sha }}\` |"
+            echo "| allocation A | \`${hash}\` |"
+            echo "| allocation B | \`$(head -c 64 "${RUNNER_TEMP}/hash-b/sha256.txt")\` |"
+            echo "| verdict | the two allocations agree |"
+            echo ""
+            echo "W0 §8.1 on the ZIP. No archive crossed a job boundary (§8.7):"
+            echo "each allocation uploaded 65 bytes of hex. W2 is not accepted by this run."
+          } >> "$GITHUB_STEP_SUMMARY"
