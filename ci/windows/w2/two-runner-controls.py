@@ -90,8 +90,11 @@ ACCEPTED_RUNTIME_SHA256 = "f28cc9186aad757491a6f44e7950d39bc39354dfe9505e278af91
 # runs. The ruling forbids editing any of them, and a pin is the only thing that
 # can say so about a file this slice never touches.
 FROZEN_PINS = {
+    # Moved under W2-A4-R2, which authorised this one file and only the
+    # post-publish canonicalisation step inside it. Every other pin below is
+    # unchanged.
     "ci/windows/w2/assemble-server-zip.ps1":
-        "b2dec792d71284299602403504d6b059f45acc06aa3e53d8989716bdfc49fcc6",
+        "b4fbb81538e5fdefb26928373bee61969c141733b3fae91159e0198092f94f33",
     "ci/windows/w2/consume-web-payload.ps1":
         "db49f21001067a8f55ae71432ff9d47830daa454704a09800bb0e1eadf3b117c",
     "ci/windows/w2/relocate-and-start.ps1":
@@ -100,8 +103,11 @@ FROZEN_PINS = {
         "0c70114c69e85d06bc3d95249cc1a86f917eb2b8deb44718cc05ad6f3afa70b4",
     "ci/windows/w2/zip-controls.py":
         "1cdd22612db0ae34b2234c73e57aa6b345fec931266fd94868a0bb37a94353c2",
+    # Moved under W2-A4-R2-S15 for the same reason the assembler pin above
+    # moved: that ruling authorised this file for its S15 assembler pin and
+    # nothing else, so its bytes changed and this pin must say so.
     "ci/windows/w2/start-controls.py":
-        "585b4e740560eec6fe20ba58081eb4c1aecba8979d211d8087c1c6e66019d1c8",
+        "ae1bfb060dcb224b5da2a5724dbaa44b28e8b0b2b775fb9624436ca8058cf5b0",
     "ci/windows/w2/web-payload-controls.py":
         "60466ae4da90d9ed876e709c29c90fef025dc287ad8ffbaf5d64d1f053b6e9ea",
     "ci/windows/w2/ffmpeg-consume-controls.py":
@@ -113,7 +119,7 @@ FROZEN_PINS = {
 }
 
 # Filled in by the pinning pass below; see T01.
-WORKFLOW_SHA256 = "9aa141faf516cab591c2021a8465c49b8b31b503eba0e3640d609b2355357934"
+WORKFLOW_SHA256 = "fbfcbf19931cb5396e391443714b62da77bff43b7998b06c6999cb7c726c368b"
 
 # The .ps1 files `ci/windows/w2/` is allowed to carry. W2-A4 adds none: the
 # ruling says "no new .ps1 under ci/windows/w2/" and T16 is what says so about
@@ -158,6 +164,8 @@ ROSTER = {
     "T21": "both allocations publish a member digest list and the compare is given both",
     "T22": "the compare refuses a missing, malformed or unsorted member list",
     "T23": "the compare names every differing member, and says so when none differs",
+    "T24": "the endpoints manifest is canonicalised between publish and pack, and is still "
+           "a member the compare would name if it came back",
 }
 
 
@@ -1423,6 +1431,34 @@ MEMBERS = b"a" * 64 + b"  one/alpha.txt\n" + b"b" * 64 + b"  two/beta.txt\n"
 MEMBERS_CHANGED = b"a" * 64 + b"  one/alpha.txt\n" + b"c" * 64 + b"  two/beta.txt\n"
 MEMBERS_EXTRA = MEMBERS + b"d" * 64 + b"  zeta/extra.txt\n"
 
+# ---------------------------------------------------------------------------
+# W2-A4-R2's fixture: the ONE member run 33968944456 found differing, with the
+# digests that run actually reported. Kept as literal bytes rather than as a
+# description, so this control is a regression test against the measurement and
+# not against a paraphrase of it.
+# ---------------------------------------------------------------------------
+ENDPOINTS_MEMBER = "tesserafin-server_1.0.0_win-x64/tesserafin.staticwebassets.endpoints.json"
+ENDPOINTS_DIGEST_A = "2c74b2bd814150107dac393a346dac3aca45d6b780a735ea2d9a824fcfc7062e"
+ENDPOINTS_DIGEST_B = "fe37db3934d1fcc3c90564a98c1b40e155aa515cb55751262233b82eed25d6af"
+# `ATL.dll` really is the first member of the staged tree, and sorts before the
+# manifest, so this pair is ordered the way the reader requires.
+_OTHER_MEMBER = "tesserafin-server_1.0.0_win-x64/ATL.dll"
+
+# The production call, in full. Asserted as one string so that neither half can
+# drift without the other: a canonicalisation given the clock, and one given a
+# publish tree that is not the one just published, are both this literal
+# changing.
+CANONICALISE_CALL = "Invoke-CanonicaliseEndpoints -Publish $publish -Epoch $SourceDateEpoch"
+
+
+def _endpoints_members(digest):
+    return ((("e" * 64) + "  " + _OTHER_MEMBER + "\n"
+             + digest + "  " + ENDPOINTS_MEMBER + "\n").encode("utf-8"))
+
+
+MEMBERS_ENDPOINTS_A = _endpoints_members(ENDPOINTS_DIGEST_A)
+MEMBERS_ENDPOINTS_B = _endpoints_members(ENDPOINTS_DIGEST_B)
+
 
 def compare_case(work, name, left_bytes, right_bytes,
                  left_members=MEMBERS, right_members=MEMBERS):
@@ -1725,6 +1761,134 @@ def run_controls(work, report, only=None):
                           "a changed member, a member only on one side and a member-agreeing "
                           "container difference are each named, and an agreeing pair reports "
                           "zero differing members")
+
+    # --- T24: the endpoints manifest, and the compare that would catch it -----
+    #
+    # W2-A4-R2 authorised exactly one change to the frozen assembler: a
+    # post-publish, pre-pack step that makes
+    # `tesserafin.staticwebassets.endpoints.json` bit-identical across
+    # allocations. This control owns that file, in the two ways it can be owned:
+    #
+    #   the STATIC half says the step is really there, really between publish
+    #   and the production pack, and really given the epoch -- a canonicaliser
+    #   handed the clock instead would be a step that runs and fixes nothing;
+    #
+    #   the DYNAMIC half says that if the file ever comes back as a differing
+    #   member, THIS suite's compare names it. A gate that stops reporting the
+    #   thing it was built to report is worse than no gate, because its silence
+    #   reads as agreement.
+    #
+    # Option 1 of the ruling was taken, so the manifest must still be a staged
+    # member. The alternative -- omitting it -- would have required proving the
+    # start path never opens it; that proof exists (the server serves static
+    # content with `UseStaticFiles`, never `MapStaticAssets`, which is the only
+    # reader of this manifest) and was deliberately not relied on.
+    if selected("T24"):
+        findings = []
+
+        if not os.path.isfile(ASSEMBLER):
+            findings.append("the assembler is missing")
+        else:
+            assembler_text = read_text(ASSEMBLER)
+            assembler_code = strip_commentary(ASSEMBLER, assembler_text)
+            leaf = ENDPOINTS_MEMBER.rsplit("/", 1)[-1]
+
+            def placement(text):
+                """(finding list) for one body of assembler code."""
+                out = []
+                if leaf not in text:
+                    out.append("the assembler never names %s" % leaf)
+                    return out
+                publish_at = text.find("dotnet publish")
+                canon_at = text.find("Invoke-CanonicaliseEndpoints -Publish")
+                # `-Stage $stage ` with the trailing space, because
+                # `-Stage $stageRootFull` is the PACK-ONLY oracle earlier in the
+                # file and `$stage` is a prefix of `$stageRootFull`. Matching
+                # the shorter spelling finds the oracle, which runs before the
+                # publish, and reports the production step as too late.
+                pack_at = text.find("Invoke-Pack -Stage $stage -Destination")
+                if publish_at < 0:
+                    out.append("the assembler no longer publishes")
+                if canon_at < 0:
+                    out.append("the canonicalisation is never invoked on the publish tree")
+                if pack_at < 0:
+                    out.append("the production pack call was not found")
+                if publish_at >= 0 and canon_at >= 0 and publish_at > canon_at:
+                    out.append("the canonicalisation runs before the publish it canonicalises")
+                if canon_at >= 0 and pack_at >= 0 and canon_at > pack_at:
+                    out.append("the canonicalisation runs after the pack, too late to matter")
+                # Asserted on the CALL, not on the file. `-Epoch
+                # $SourceDateEpoch` also appears on both Invoke-Pack calls, so a
+                # whole-file search is satisfied by the packer's epoch while the
+                # canonicaliser is handed the clock -- which is exactly the
+                # mutation that has to fail here.
+                if canon_at >= 0 and CANONICALISE_CALL not in text:
+                    out.append("the canonicalisation is not given SOURCE_DATE_EPOCH, so what "
+                               "it writes can still come from the clock")
+                return out
+
+            findings.extend(placement(assembler_code))
+
+            # Option 1 keeps the file. A delete would be option 2, which this
+            # slice did not choose and did not document.
+            #
+            # Both spellings of the NAME are checked, not only the literal: the
+            # assembler refers to the manifest through `$ENDPOINTS_MANIFEST`
+            # everywhere except its own definition, so a rule that only knew the
+            # literal would miss every realistic way of writing the deletion.
+            for line in assembler_code.splitlines():
+                if not ("Remove-Item" in line or "[System.IO.File]::Delete" in line):
+                    continue
+                if leaf in line or "$ENDPOINTS_MANIFEST" in line:
+                    findings.append("the assembler deletes %s; option 1 was documented, "
+                                    "and option 2 was not" % leaf)
+
+            # Inert-proof for the static half: with the manifest unnamed, the
+            # rule must find something. A placement check that passes on an
+            # assembler that never mentions the file is not a check.
+            if not placement(assembler_code.replace(leaf, "some-other-file.json")):
+                report.record("T24", "INERT",
+                              "the placement check passes on an assembler that never names "
+                              "the endpoints manifest")
+                findings = None
+
+        if findings is not None:
+            # Dynamic half, driven through the REAL compare with the digests
+            # run 33968944456 reported.
+            code_back, output_back = compare_case(
+                work, "endpoints-regressed", GOOD, OTHER,
+                MEMBERS_ENDPOINTS_A, MEMBERS_ENDPOINTS_B)
+            if code_back == 0:
+                findings.append("the endpoints manifest came back as a differing member and "
+                                "the compare accepted it")
+            else:
+                if ("differs  " + ENDPOINTS_MEMBER) not in output_back:
+                    findings.append("the returning endpoints manifest is not named: %s"
+                                    % output_back.strip()[-200:])
+                if (ENDPOINTS_DIGEST_A not in output_back
+                        or ENDPOINTS_DIGEST_B not in output_back):
+                    findings.append("the two measured endpoints digests are not both printed")
+                if "1 differing member(s)" not in output_back:
+                    findings.append("a single differing member is not counted as one")
+
+            code_fixed, output_fixed = compare_case(
+                work, "endpoints-canonical", GOOD, GOOD,
+                MEMBERS_ENDPOINTS_A, MEMBERS_ENDPOINTS_A)
+            if code_fixed != 0:
+                findings.append("two allocations agreeing on the endpoints manifest were "
+                                "refused: %s" % output_fixed.strip()[-200:])
+            elif "0 differing member(s)" not in output_fixed:
+                findings.append("an agreeing pair does not report zero differing members")
+
+            if findings:
+                report.record("T24", "RED", "; ".join(findings))
+            else:
+                report.record("T24", "PASS",
+                              "the assembler canonicalises %s after publish and before the "
+                              "production pack, under SOURCE_DATE_EPOCH and without deleting "
+                              "it, and the compare still names that exact member -- with the "
+                              "digests run 33968944456 measured -- if it ever differs again"
+                              % ENDPOINTS_MEMBER.rsplit("/", 1)[-1])
 
     # --- T10: the epoch -------------------------------------------------------
     if selected("T10"):

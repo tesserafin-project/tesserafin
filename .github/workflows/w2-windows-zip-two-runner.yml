@@ -140,9 +140,18 @@ jobs:
         with:
           dotnet-version: ${{ env.SDK_VERSION }}
 
-      # Which physical allocation this job got. `RUNNER_NAME` can repeat across
-      # a fleet; the VM's own computer name does not, so both are printed and
-      # the pair is what the report cites as evidence of two allocations.
+      # Which physical allocation this job got. Both names are printed, and
+      # neither is load-bearing on its own.
+      #
+      # An earlier version of this comment claimed `COMPUTERNAME` cannot repeat
+      # across a fleet. That is measured to be false: run 33968944456 reported
+      # `runnervmeef0v` as the computer name of BOTH allocations, so the VM name
+      # is an image-assigned label and not an allocation identity. `RUNNER_NAME`
+      # is the allocation id. What actually makes these two separate runners is
+      # structural rather than nominal -- two independent `runs-on` jobs with no
+      # `needs:` between them, no cache and no artifact crossing from one to the
+      # other -- and that is what T03, T04 and T05 assert. The pair is printed
+      # as observation, never as the proof.
       - name: Record this runner allocation
         shell: pwsh
         run: |

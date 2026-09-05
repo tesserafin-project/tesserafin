@@ -44,6 +44,8 @@
       * the publish tree is not a self-contained win-x64 one -- the host
         components are absent, the runtimeconfig declares a shared framework, or
         tesserafin.exe is not a PE x64 image;
+      * the publish tree carries no static web assets endpoints manifest, so the
+        one file whose bytes are a function of publish TIME cannot be clamped;
       * a second top-level directory appears under the stage, so extraction
         would scatter into the current directory;
       * a configuration, database, cache or log file is about to be packed.
@@ -135,6 +137,33 @@ $LICENSES_SUBDIR = 'licenses'
 
 $PACKAGE_PREFIX = 'tesserafin-server'
 $RID = 'win-x64'
+
+# ---------------------------------------------------------------------------
+# The one publish output whose bytes are a function of WHEN it was published
+# rather than of WHAT was published (W2-A4-R2 on #256).
+#
+# Run 33968944456 compared 2868 staged members across two allocations. Exactly
+# one differed:
+#
+#   tesserafin-server_1.0.0_win-x64/tesserafin.staticwebassets.endpoints.json
+#   A 2c74b2bd814150107dac393a346dac3aca45d6b780a735ea2d9a824fcfc7062e
+#   B fe37db3934d1fcc3c90564a98c1b40e155aa515cb55751262233b82eed25d6af
+#
+# and the archives differed by one byte, 185755947 against 185755948. The
+# manifest's `Last-Modified` response headers are RFC 1123 renderings of the
+# publish-time mtime of each static asset, so they move with the clock of the
+# machine that published. They are fixed width, which is why two files of
+# identical LENGTH compress to archives one byte apart -- and why entry
+# ORDERING, which was stable, was never the cause. Sorting alone would not have
+# closed this.
+#
+# The header is rewritten to SOURCE_DATE_EPOCH rather than dropped. That is the
+# same clamp §6 already applies to every archive entry's mtime, so the value
+# still derives from the commit being built and never from the clock, and the
+# manifest stays a well-formed manifest rather than one missing a header the
+# schema declares.
+$ENDPOINTS_MANIFEST = 'tesserafin.staticwebassets.endpoints.json'
+$ENDPOINTS_TIME_HEADER = 'Last-Modified'
 
 # ---------------------------------------------------------------------------
 # State. §6: the ZIP "ships **no** state. Configuration, database, cache and
@@ -539,6 +568,104 @@ function Assert-SelfContained {
     Write-Note 'publish tree is self-contained win-x64: host components present, runtimeconfig declares no shared framework, tesserafin.exe is PE x64'
 }
 
+function ConvertTo-CanonicalNode {
+    <#
+        One JSON value, rebuilt with every object's members in ordinal order and
+        every array left exactly as it was found.
+
+        Objects are sorted because member order in a .NET-serialised manifest is
+        an artefact of the writer, not of the document. Arrays are NOT sorted:
+        `Endpoints`, `Selectors` and `ResponseHeaders` are sequences the reader
+        may take in order, and reordering them to make a digest stable would be
+        changing what the file SAYS in order to make it easier to compare. Their
+        order was measured to be stable across allocations already, so sorting
+        them would buy nothing and risk everything.
+    #>
+    param($Node)
+
+    if ($null -eq $Node) { return $null }
+    if ($Node -is [System.Management.Automation.PSCustomObject]) {
+        # Ordinal, not `Sort-Object -CaseSensitive`: that comparer is still
+        # culture-sensitive, and a member order that depends on the runner's
+        # locale is exactly the class of difference this step exists to remove.
+        # Every key here happens to be ASCII, so no culture would reorder them
+        # today -- which is precisely why the wrong comparer would survive
+        # review and then not survive some later key.
+        $names = [string[]] $Node.PSObject.Properties.Name
+        [System.Array]::Sort($names, [System.StringComparer]::Ordinal)
+        $ordered = [ordered]@{}
+        foreach ($name in $names) {
+            $ordered[$name] = ConvertTo-CanonicalNode $Node.$name
+        }
+        return $ordered
+    }
+    if ($Node -is [System.Collections.IList]) {
+        $items = @()
+        foreach ($item in $Node) { $items += , (ConvertTo-CanonicalNode $item) }
+        return , $items
+    }
+    return $Node
+}
+
+function Invoke-CanonicaliseEndpoints {
+    <#
+        Make $ENDPOINTS_MANIFEST a function of the commit alone, in place, after
+        publish and before anything is staged or packed.
+
+        This is a canonicalisation, not a deletion: the file is still the
+        manifest the publish produced, with the same endpoints in the same order
+        carrying the same selectors, properties, ETags and integrity hashes. The
+        only values that change are the ones that encoded WHEN the publish ran.
+
+        It is behaviour-neutral for a second, independent reason worth recording
+        rather than assuming: `tesserafin.staticwebassets.endpoints.json` is read
+        by `MapStaticAssets`, and the server does not call it.
+        `Tesserafin.Server/Startup.cs:238` and `:255` serve static content with
+        `UseStaticFiles`, which reads the file system through the web root
+        provider and never opens this manifest. Nothing on A3's start path names
+        it either. Omitting the file was therefore available -- the ruling's
+        option 2 -- and was NOT taken: canonicalising needs no proof of absence
+        to stay correct, and keeps the published tree the thing `dotnet publish`
+        produced.
+    #>
+    param([string] $Publish, [long] $Epoch)
+
+    $path = [System.IO.Path]::Combine($Publish, $ENDPOINTS_MANIFEST)
+    if (-not [System.IO.File]::Exists($path)) {
+        # Not a skip. A publish that stopped emitting this file is a publish
+        # whose shape changed, and silently packing whatever it did emit is how
+        # a determinism gate goes green on a tree nobody canonicalised.
+        Deny 'endpoints' ("the publish tree carries no '$ENDPOINTS_MANIFEST'; the file this " +
+            'step exists to make reproducible is not there to make reproducible')
+    }
+
+    $manifest = [System.IO.File]::ReadAllText($path) | ConvertFrom-Json
+    if ($null -eq $manifest -or -not ($manifest.PSObject.Properties.Name -contains 'Endpoints')) {
+        Deny 'endpoints' ("'$ENDPOINTS_MANIFEST' declares no Endpoints; it is not the static " +
+            'web assets manifest this step knows how to canonicalise')
+    }
+
+    $stamp = [System.DateTimeOffset]::FromUnixTimeSeconds($Epoch).UtcDateTime.ToString(
+        'R', [System.Globalization.CultureInfo]::InvariantCulture)
+    $rewritten = 0
+    foreach ($endpoint in @($manifest.Endpoints)) {
+        foreach ($header in @($endpoint.ResponseHeaders)) {
+            if ($header.Name -ceq $ENDPOINTS_TIME_HEADER) {
+                $header.Value = $stamp
+                $rewritten++
+            }
+        }
+    }
+
+    $canonical = ConvertTo-CanonicalNode $manifest
+    $json = ($canonical | ConvertTo-Json -Depth 64 -Compress) -replace "`r`n", "`n"
+    [System.IO.File]::WriteAllText($path, $json + "`n",
+        (New-Object System.Text.UTF8Encoding($false)))
+
+    Write-Note ("canonicalised ${ENDPOINTS_MANIFEST}: $rewritten $ENDPOINTS_TIME_HEADER " +
+        "header(s) clamped to $stamp, members ordered, LF, UTF-8 without a BOM")
+}
+
 function Copy-TreeInto {
     param([string] $Source, [string] $Destination)
     $null = [System.IO.Directory]::CreateDirectory($Destination)
@@ -728,6 +855,7 @@ try {
     & dotnet publish $project --configuration Release --runtime win-x64 --self-contained true --output $publish
     if ($LASTEXITCODE -ne 0) { Deny 'publish' 'dotnet publish failed' }
     Assert-SelfContained $publish
+    Invoke-CanonicaliseEndpoints -Publish $publish -Epoch $SourceDateEpoch
 
     # ── 4. one top-level directory, at the relative paths W3's MSI reuses ────
     $stage = [System.IO.Path]::Combine($work, 'stage')
