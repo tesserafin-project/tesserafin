@@ -1,0 +1,269 @@
+# W2-A3 (#256): assemble the portable win-x64 Tesserafin server ZIP with the
+# FROZEN W2-A2 assembler, start it from a hostile path, move the SAME tree to a
+# different depth and start it again.
+#
+# This workflow proves exactly one thing:
+#
+#     the tree produced by the frozen assembler starts after a hostile-path
+#     relocation, and starts again after a second move to a different depth,
+#     with fresh isolated state both times and nothing borrowed from the build
+#     tree.
+#
+# Readiness is W0 §2.3's, in full: the listening port comes from the process's
+# own TCP ports, a redirect is an answer, a 503 from the startup SetupServer is
+# not, and the process must still be running three seconds after it answers.
+# From the relocated tree the entry document must reference the hashed
+# main.tesserafin bundle, so a 200 that returns the setup page fails.
+#
+# What it deliberately does NOT do, because W2-A3 is not authorised to:
+#
+#   * §8.1 two-runner ZIP identity is NOT claimed. This job assembles ONCE, on
+#     ONE runner, and starts that tree twice; W2-A2 already made the
+#     one-runner determinism claim and made it in its own words;
+#   * it adds no first-party service script and registers no service (§6's last
+#     bullet stays deferred, and W4 owns the SCM);
+#   * it renames no .reefin marker and changes no server C# file;
+#   * no artifact upload or download and no cache, so the ZIP can never become
+#     a production input to another job -- W0 §8.7;
+#   * no container engine, no daemon and no CLI for one;
+#   * no package write, no publication, no release asset;
+#   * no third start. The pair is the proof.
+#
+# The `paths:` filter watches the whole authored directory rather than a list
+# of names, which is the W2-A1-V1 NB-1 repair W2-A2's workflow already made: a
+# file added under ci/windows/w2/ must not be reviewable without running the
+# proof that covers it.
+
+name: W2 Windows relocate and start
+
+on:
+  pull_request:
+    # Draft pull requests are covered: `pull_request` fires for them unless a
+    # type filter excludes them, and W2-A3 is reviewed as a draft.
+    paths:
+      # The whole authored directory, not a list of names -- NB-1.
+      - 'ci/windows/w2/**'
+      - '.github/workflows/w2-windows-relocate-start.yml'
+      - 'docs/distribution/W2-A3-relocate-start.md'
+      # The frozen files this workflow's assembly actually runs. A change to
+      # any of them is a change to the production acquisition path, so it must
+      # re-run this proof even though this slice authors none of them.
+      - 'ci/windows/runtime-retention/consume.ps1'
+      - 'ci/windows/runtime-retention/accepted-runtime.json'
+      # The one canonical source of the version that names the archive.
+      - 'SharedVersion.cs'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  # Restated so a reader of the run does not have to open two JSON documents to
+  # know what was started. These are NOT the trust boundary: the frozen
+  # assembler reads the committed acceptance manifest and refuses anything
+  # else, and `ci/windows/w2/start-controls.py` (S12) asserts all three
+  # statements agree rather than believing any one of them on its own.
+  WEB_PAYLOAD_SHA256: 4148c4bc6e0c7c2d6b35ed9992e874a06dcc11d2b6d9e0aad06719e36567be4f
+  ACCEPTED_RUNTIME_SHA256: f28cc9186aad757491a6f44e7950d39bc39354dfe9505e278af91d7619811c9e
+  SDK_VERSION: "10.0.x"
+
+jobs:
+  relocate-start:
+    name: Start the win-x64 server ZIP from a hostile path and after a move
+    runs-on: windows-latest
+    # One 260 MB runtime pull with a zstd stream verification, one Web pull,
+    # one self-contained publish, one pack of a ~300 MB tree, then two starts
+    # each allowed 600 s to leave the startup SetupServer -- the first of which
+    # creates the database and applies every migration.
+    timeout-minutes: 150
+    permissions:
+      contents: read
+      # The entire write surface of this workflow. Read only, job scoped, and
+      # needed only because the accepted Web payload image is pulled with the
+      # job's own token.
+      packages: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: ${{ env.SDK_VERSION }}
+
+      # Both interpreters are recorded rather than assumed. The frozen FFmpeg
+      # consumer verifies the corresponding source through `zstd -dc > file`,
+      # which is a native-command redirect: Windows PowerShell 5.1 would
+      # re-encode that stream and the consumer would then refuse its own
+      # accepted source. That refusal would be correct and completely
+      # illegible.
+      - name: Record the runner's interpreters
+        id: tools
+        shell: pwsh
+        run: |
+          $python = (Get-Command python -CommandType Application | Select-Object -First 1).Source
+          if (-not $python) { throw 'no python on this runner' }
+          "python=$python" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "PowerShell $($PSVersionTable.PSVersion), .NET $([System.Environment]::Version)"
+          if ($PSVersionTable.PSVersion.Major -lt 7) {
+            throw "W2-A3 HARD STOP: this job needs PowerShell 7 or newer to keep a native command's bytes intact; it has $($PSVersionTable.PSVersion)"
+          }
+          & $python --version
+          & dotnet --version
+
+      - name: Make the corresponding-source verifier available
+        shell: pwsh
+        run: |
+          $zstd = Get-Command zstd -CommandType Application -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+          if ($zstd) {
+            "zstd $((& $zstd.Source --version) -join ' ')"
+            exit 0
+          }
+          $fallback = Join-Path $env:ProgramFiles 'Git\usr\bin\zstd.exe'
+          if (Test-Path -LiteralPath $fallback) {
+            (Split-Path -Parent $fallback) | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+            "zstd taken from Git for Windows at $fallback"
+            exit 0
+          }
+          throw 'W2-A3 HARD STOP: this runner has no zstd, so the corresponding source cannot be verified'
+
+      # The same pinned client W1 installs, from the same lock file. W2 adds no
+      # second `tools.lock.json`: a second pin is a second thing to drift.
+      - name: Install the pinned ORAS
+        shell: bash
+        run: ./ci/windows/build-inputs/install-oras.sh windows-amd64 "${RUNNER_TEMP}/bin"
+
+      # SOURCE_DATE_EPOCH is the committer time of the commit being built --
+      # the same definition docker/version-contract.sh uses for every other
+      # Tesserafin artifact (`git log -1 --format=%ct`). It is never the clock,
+      # never a tag and never a run identifier.
+      - name: Derive SOURCE_DATE_EPOCH from the commit
+        id: epoch
+        shell: pwsh
+        run: |
+          $commit = (& git rev-parse HEAD).Trim()
+          if ($commit -notmatch '^[0-9a-f]{40}$') { throw "not a commit: $commit" }
+          $epoch = (& git log -1 --format=%ct $commit).Trim()
+          if ($epoch -notmatch '^[1-9][0-9]*$') { throw "no committer time for $commit" }
+          "commit=$commit" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "epoch=$epoch"   | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "commit            : $commit"
+          "SOURCE_DATE_EPOCH : $epoch ($([System.DateTimeOffset]::FromUnixTimeSeconds([int64]$epoch).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')))"
+
+      # Everything the controls can prove without a server and without the
+      # network: every named readiness, port, relocation and state refusal
+      # driven against the REAL decision functions through the oracle, each
+      # paired with a mutant that must accept what the real one refused; an
+      # audit of the production path; and a raw-byte pin over this workflow.
+      # If any of these is ineffective, the run below proves much less. They
+      # run FIRST so a defective suite costs seconds rather than two hours.
+      - name: Hostile controls against the start proof and this workflow
+        shell: pwsh
+        run: |
+          & '${{ steps.tools.outputs.python }}' ci/windows/w2/start-controls.py
+          if ($LASTEXITCODE -ne 0) { throw 'the W2-A3 hostile controls failed' }
+
+      # ── The real thing: assemble once, start twice, moving in between.
+      - name: Assemble, start from a hostile path, relocate, start again
+        shell: pwsh
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./ci/windows/w2/relocate-and-start.ps1 `
+            -RepoRoot $PWD `
+            -WorkDir (Join-Path $env:RUNNER_TEMP 'w2a3/work') `
+            -EvidencePath (Join-Path $env:RUNNER_TEMP 'w2a3/relocate-start.json') `
+            -SourceDateEpoch ${{ steps.epoch.outputs.epoch }} `
+            -OrasPath (Join-Path $env:RUNNER_TEMP 'bin\oras.exe') `
+            -PythonPath '${{ steps.tools.outputs.python }}'
+          if ($LASTEXITCODE -ne 0) { throw 'the relocate-and-start proof refused' }
+
+      # Both discovered ports and both readiness status codes, printed rather
+      # than left inside an evidence file nobody opens. The evidence document
+      # records identities, ports and status codes only -- no host path, no run
+      # identifier -- which is why it can be printed whole.
+      - name: Report both starts
+        shell: pwsh
+        run: |
+          $evidencePath = Join-Path $env:RUNNER_TEMP 'w2a3/relocate-start.json'
+          if (-not (Test-Path -LiteralPath $evidencePath)) {
+            throw 'the proof wrote no evidence document, so it did not complete both starts'
+          }
+          $json = Get-Content -LiteralPath $evidencePath -Raw
+          $evidence = $json | ConvertFrom-Json
+
+          if ($evidence.extractions -ne 1) {
+            throw "the archive was extracted $($evidence.extractions) times; the second start must be the SAME tree moved"
+          }
+          if (-not $evidence.relocation.sameTree) { throw 'the two starts did not run the same tree' }
+          if ($evidence.relocation.reExtracted) { throw 'the second start ran a re-extracted tree' }
+          if ($evidence.relocation.firstDepth -eq $evidence.relocation.secondDepth) {
+            throw 'the second location sits at the same depth as the first'
+          }
+          if ($evidence.starts.Count -ne 2) { throw "the proof recorded $($evidence.starts.Count) starts" }
+          if ($evidence.serviceRegistered) { throw 'this slice registers no service' }
+          if ($evidence.published) { throw 'this slice publishes nothing' }
+          if ($evidence.actionsArtifactHandoff) { throw 'this slice takes no Actions artifact handover' }
+
+          # The restated identities above are read HERE, against the manifest
+          # that shipped inside the archive that was actually started -- three
+          # independent statements of one identity rather than one statement
+          # read three times.
+          $packed = Join-Path $env:RUNNER_TEMP 'w2a3/work/reloc/deeper'
+          $manifestPath = Join-Path $packed "$($evidence.topLevelDirectory)/licenses/provenance.json"
+          if (-not (Test-Path -LiteralPath $manifestPath)) {
+            throw "the started tree carries no provenance manifest at $manifestPath"
+          }
+          $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+          if ($manifest.web.payloadSha256 -cne $env:WEB_PAYLOAD_SHA256) {
+            throw "the started tree names web payload $($manifest.web.payloadSha256)"
+          }
+          if ($manifest.ffmpegRuntime.archiveSha256 -cne $env:ACCEPTED_RUNTIME_SHA256) {
+            throw "the started tree names FFmpeg runtime $($manifest.ffmpegRuntime.archiveSha256)"
+          }
+          if ($manifest.serverCommit -cne '${{ steps.epoch.outputs.commit }}') {
+            throw "the started tree records commit $($manifest.serverCommit)"
+          }
+
+          $first = $evidence.starts[0]
+          $second = $evidence.starts[1]
+          "archive           : $($evidence.archiveName)"
+          "sha256            : $($evidence.archiveSha256)"
+          "start-1 port      : $($first.discoveredPort)   '/' -> $($first.rootStatus) (Location: '$($first.rootLocation)')"
+          "start-2 port      : $($second.discoveredPort)   '/' -> $($second.rootStatus) (Location: '$($second.rootLocation)')"
+          "entry document    : $($first.entryDocumentStatus) / $($second.entryDocumentStatus)"
+
+          @(
+            "### W2-A3 relocate and start"
+            ""
+            "| what | start 1 (hostile path) | start 2 (relocated, deeper) |"
+            "| --- | --- | --- |"
+            "| discovered port | ``$($first.discoveredPort)`` | ``$($second.discoveredPort)`` |"
+            "| ``/`` status | ``$($first.rootStatus)`` | ``$($second.rootStatus)`` |"
+            "| ``/`` Location | ``$($first.rootLocation)`` | ``$($second.rootLocation)`` |"
+            "| liveness after the answer | $($first.livenessSeconds)s | $($second.livenessSeconds)s |"
+            "| ``web/index.html`` | ``$($first.entryDocumentStatus)`` | ``$($second.entryDocumentStatus)`` |"
+            ""
+            "| what | value |"
+            "| --- | --- |"
+            "| archive | ``$($evidence.archiveName)`` |"
+            "| sha256 | ``$($evidence.archiveSha256)`` |"
+            "| commit | ``${{ steps.epoch.outputs.commit }}`` |"
+            "| SOURCE_DATE_EPOCH | ``${{ steps.epoch.outputs.epoch }}`` |"
+            "| extractions | $($evidence.extractions) |"
+            "| depth | $($evidence.relocation.firstDepth) -> $($evidence.relocation.secondDepth) |"
+            "| port source | $($evidence.portSource) |"
+            ""
+            "The port is read from the process, a redirect is an answer, 503 is not ready, and the"
+            "process was still running $($first.livenessSeconds)s after each answer. One runner, one"
+            "assembly: §8.1 two-runner ZIP identity is not claimed."
+            ""
+            "``````json"
+            $json.TrimEnd()
+            "``````"
+          ) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
