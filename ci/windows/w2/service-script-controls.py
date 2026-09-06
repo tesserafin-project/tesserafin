@@ -510,6 +510,64 @@ function Get-NamedArgument {
     return $null
 }
 
+function Test-InParamBlock {
+    # A parameter's own `$Name` node DECLARES a name; it reads nothing, and
+    # neither does a variable inside that parameter's attributes. Counting
+    # either as a use would make every rule below fire on the declaration it
+    # exists to trust.
+    param($Node)
+    $current = $Node
+    while ($null -ne $current) {
+        if ($current -is [System.Management.Automation.Language.ParamBlockAst]) { return $true }
+        $current = $current.Parent
+    }
+    return $false
+}
+
+function Get-VariableUses {
+    # Every variable a function reads or writes ANYWHERE in its body -- not
+    # only in an assignment. `$Arguments.SetValue('auto', 5)` is an
+    # InvokeMemberExpressionAst and `[array]::Reverse($Arguments)` is an
+    # argument to one; neither is an AssignmentStatementAst, and an audit that
+    # only walks assignments cannot see either. `splatted` is carried because
+    # splatting is the ONE shape in which a value reaches a native command
+    # without first being reachable as a value that could be changed.
+    param($Function)
+    $uses = @()
+    foreach ($node in $Function.FindAll({
+            param($n) $n -is [System.Management.Automation.Language.VariableExpressionAst] },
+            $true)) {
+        if (Test-InParamBlock -Node $node) { continue }
+        # The smallest enclosing statement that says MORE than the variable
+        # itself: `if ($Plan)` renders its condition as a one-element pipeline,
+        # which is a statement whose whole text is `$Plan`, and a finding that
+        # quoted that would name the mechanism without showing it.
+        $statement = $node.Parent
+        while ($null -ne $statement -and
+               ($statement -isnot [System.Management.Automation.Language.StatementAst] -or
+                $statement.Extent.Text -eq $node.Extent.Text)) {
+            $statement = $statement.Parent
+        }
+        $text = $node.Extent.Text
+        if ($null -ne $statement) { $text = $statement.Extent.Text }
+        $uses += [ordered]@{
+            name = $node.VariablePath.UserPath
+            splatted = [bool] $node.Splatted
+            text = $text
+        }
+    }
+    return $uses
+}
+
+function Get-CommandNames {
+    # Every command a function runs. A rule about which VARIABLES a function may
+    # read is blind to `Set-Variable Arguments @(...)`, which names none.
+    param($Function)
+    return @($Function.FindAll({
+        param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $true) |
+        ForEach-Object { Get-CommandName -Command $_ })
+}
+
 $switches = $ast.FindAll({
     param($n) $n -is [System.Management.Automation.Language.SwitchStatementAst] }, $true)
 
@@ -526,9 +584,13 @@ foreach ($switch in $switches) {
 }
 
 $functions = [ordered]@{}
+$invokeScFunction = $null
+$invocationsFunction = $null
 foreach ($function in $ast.FindAll({
         param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true)) {
     $functions[$function.Name] = $function.Extent.Text
+    if ($function.Name -eq 'Invoke-Sc') { $invokeScFunction = $function }
+    if ($function.Name -eq 'Get-ScInvocations') { $invocationsFunction = $function }
 }
 
 $parameters = @($ast.ParamBlock.Parameters | ForEach-Object { $_.Name.VariablePath.UserPath })
@@ -595,6 +657,9 @@ foreach ($assignment in $ast.FindAll({
         rightHasBinary = @($assignment.Right.FindAll({
             param($n) $n -is [System.Management.Automation.Language.BinaryExpressionAst] },
             $true)).Count -gt 0
+        rightVariables = @($assignment.Right.FindAll({
+            param($n) $n -is [System.Management.Automation.Language.VariableExpressionAst] },
+            $true) | ForEach-Object { $_.VariablePath.UserPath })
         action = $action
     }
 }
@@ -628,6 +693,41 @@ foreach ($hashtable in $ast.FindAll({
     }
 }
 
+# Inside `Invoke-Sc`: every use of the parameter that becomes sc.exe's argv,
+# and every command that runs beside it. The splat check above says the CALL
+# hands over `$Arguments`; these say nothing reached that variable first.
+$invokeScArgumentUses = @()
+$invokeScCommands = @()
+if ($null -ne $invokeScFunction) {
+    $invokeScArgumentUses = @(Get-VariableUses -Function $invokeScFunction |
+        Where-Object { $_.name -ieq 'Arguments' })
+    $invokeScCommands = @(Get-CommandNames -Function $invokeScFunction)
+}
+
+# Inside `Get-ScInvocations`: what it may legitimately see. PowerShell's scoping
+# means an unqualified `$Plan` inside this function resolves to the SCRIPT's
+# `-Plan` switch, so the one definition can be made to return one argv while
+# `-Plan` is printing and another while a verb is running -- without a single
+# character changing at either call site.
+$invocationParameters = @()
+$invocationVariableUses = @()
+$invocationAssigned = @()
+$invocationCommands = @()
+if ($null -ne $invocationsFunction) {
+    if ($null -ne $invocationsFunction.Body.ParamBlock) {
+        $invocationParameters = @($invocationsFunction.Body.ParamBlock.Parameters |
+            ForEach-Object { $_.Name.VariablePath.UserPath })
+    }
+    $invocationVariableUses = @(Get-VariableUses -Function $invocationsFunction)
+    $invocationAssigned = @($invocationsFunction.FindAll({
+        param($n) $n -is [System.Management.Automation.Language.AssignmentStatementAst] },
+        $true) | ForEach-Object { Get-RootVariable -Node $_.Left })
+    $invocationAssigned += @($invocationsFunction.FindAll({
+        param($n) $n -is [System.Management.Automation.Language.ForEachStatementAst] },
+        $true) | ForEach-Object { $_.Variable.VariablePath.UserPath })
+    $invocationCommands = @(Get-CommandNames -Function $invocationsFunction)
+}
+
 [ordered]@{
     verbClauses = $verbClauses
     invocationClauses = $invocationClauses
@@ -638,6 +738,12 @@ foreach ($hashtable in $ast.FindAll({
     assignments = $assignments
     foreaches = $foreaches
     planFields = $planFields
+    invokeScArgumentUses = $invokeScArgumentUses
+    invokeScCommands = $invokeScCommands
+    invocationParameters = $invocationParameters
+    invocationVariableUses = $invocationVariableUses
+    invocationAssigned = $invocationAssigned
+    invocationCommands = $invocationCommands
 } | ConvertTo-Json -Depth 8
 '''
 
@@ -713,6 +819,173 @@ V1_PLANTS = (
 )
 
 
+# The W2-A5-R2 ruling measured a second pair, on this same HEAD, that the rules
+# above are blind to for the same reason V1's pair was: each reads a SHAPE. The
+# splat check asks what the sc.exe call hands over and the rebinding check asks
+# what assignments target `$Arguments`, so a mutation that is neither an
+# assignment nor a change to the call site passes both; and every rule about the
+# one definition asked WHO calls `Get-ScInvocations`, never what that function
+# reads, so a body that can see the script's own `-Plan` switch passes all of
+# them. Both were measured leaving the suite at 25 PASS / 0 RED / 0 INERT while
+# `-Plan register` printed `start= delayed-auto` and the verb path built
+# `start= auto`.
+R2_PLANTS = (
+    ("an Invoke-Sc that rewrites element 5 of $Arguments in place, with no assignment",
+     [("    $output = & sc.exe @Arguments 2>&1 | Out-String\n",
+       "    $Arguments.SetValue('auto', 5)\n"
+       "    $output = & sc.exe @Arguments 2>&1 | Out-String\n")]),
+    ("a Get-ScInvocations whose register clause branches on the script's own -Plan switch",
+     [("                    'start=', $SERVICE_START_TYPE,\n",
+       "                    'start=', $(if ($Plan) { $SERVICE_START_TYPE } else { 'auto' }),\n")]),
+)
+
+# Every plant M12 is required to detect on the real script's bytes. A plant that
+# can no longer be applied is reported as an unmeasured rule, not as a pass.
+M12_PLANTS = V1_PLANTS + R2_PLANTS
+
+# `$true`, `$false`, `$null` and the pipeline's `$_` carry nothing about HOW the
+# script was invoked, so reading one inside `Get-ScInvocations` says nothing
+# about whether that function is the one definition.
+SCOPE_FREE_VARIABLES = ("true", "false", "null", "_")
+
+# Reading any of these inside `Get-ScInvocations` would let it answer `-Plan`
+# and a verb differently even with no script variable named at all. They are
+# named here so the finding can say WHICH mechanism it refused rather than only
+# that a whitelist rejected a name.
+DYNAMIC_SCOPE_VARIABLES = {
+    "PSCmdlet": "the cmdlet's own invocation state, which names the parameter set",
+    "PSBoundParameters": "the parameters the caller actually bound",
+    "MyInvocation": "how this script was invoked",
+    "args": "the caller's unbound arguments",
+    "PSScriptRoot": "the script's location rather than anything it was asked for",
+}
+
+# The only commands `Invoke-Sc` and `Get-ScInvocations` may run. Without this,
+# a rule about which variables a function reads is blind to `Set-Variable
+# Arguments @(...)`, which replaces the splat source and names no variable at
+# all, and to `Get-Variable Plan -Scope 1`, which reads the caller's scope
+# without writing `$Plan`.
+INVOKE_SC_COMMANDS = ("sc", "sc.exe", "out-string", "deny")
+GET_SC_INVOCATIONS_COMMANDS = ("deny",)
+
+
+def _script_constants(assignments):
+    """Top-level names whose value cannot depend on how the script was invoked.
+
+    A name qualifies when it is assigned exactly once in the WHOLE script, at
+    the top level, by an expression that runs no command and reads only other
+    names that already qualify. That is a fixed point rather than a list, so
+    `$SERVICE_START_TYPE = 'delayed-auto'` qualifies, `$action = $Verb.Trim()`
+    does not (it reads a script parameter), `$packageRoot = Get-PackageRoot`
+    does not (it runs a command), and a `$SERVICE_START_TYPE` that a verb clause
+    rebinds before calling `Invoke-Sc` stops qualifying for every reader.
+    """
+    counts = {}
+    for row in assignments:
+        if row["leftRoot"]:
+            counts[row["leftRoot"]] = counts.get(row["leftRoot"], 0) + 1
+    top = [row for row in assignments
+           if not row["function"] and not row["clause"]
+           and row["leftRoot"] and counts.get(row["leftRoot"]) == 1
+           and row["operator"] == "Equals"]
+    constants = set()
+    growing = True
+    while growing:
+        growing = False
+        for row in top:
+            name = row["leftRoot"]
+            if name in constants or as_list(row["rightCommands"]):
+                continue
+            reads = [used for used in as_list(row["rightVariables"])
+                     if used.lower() not in SCOPE_FREE_VARIABLES]
+            if all(used in constants for used in reads):
+                constants.add(name)
+                growing = True
+    return constants
+
+
+def audit_invoke_sc_arguments(tree):
+    """Every finding that says sc.exe can be handed something no plan printed.
+
+    The splat check in `audit_one_definition` reads the CALL: `& sc.exe
+    @Arguments`, two elements, that parameter splatted alone. It is silent about
+    everything that happens to `$Arguments` before that line, and PowerShell
+    gives a plant three shapes there that are not assignments -- an in-place
+    method on the array (`SetValue`, `Add`, `Insert`, `Clear`), a static helper
+    taking it by reference, and `Set-Variable`, which names no variable at all.
+
+    So this does not enumerate the shapes. It requires the opposite: inside
+    `Invoke-Sc`, `$Arguments` may be SPLATTED and may be nothing else, and no
+    command may run there but sc.exe, the pipeline it is read through and the
+    script's own refusal. An indexed assignment is caught here as well as by the
+    rebinding rule, because it is a use that is not a splat.
+    """
+    findings = []
+    uses = as_list(tree["invokeScArgumentUses"])
+    if not uses:
+        return ["Invoke-Sc never mentions its own $Arguments, so whatever it hands the Service "
+                "Control Manager comes from somewhere no plan describes"]
+    for use in uses:
+        if not use["splatted"]:
+            findings.append("Invoke-Sc reaches into its own $Arguments other than by splatting "
+                            "them at sc.exe, so the argument list can be changed after the plan "
+                            "printed it and before the Service Control Manager sees it: %s"
+                            % _clip(use["text"]))
+    for name in as_list(tree["invokeScCommands"]):
+        bare = os.path.splitext(name.strip("'\"").lower())[0]
+        if bare not in INVOKE_SC_COMMANDS:
+            findings.append("Invoke-Sc runs '%s', which can replace the value splatted at sc.exe "
+                            "without naming $Arguments anywhere" % name)
+    return findings
+
+
+def audit_invocations_scope(tree, assignments):
+    """Every finding that says the one definition can tell `-Plan` from a verb.
+
+    `New-Plan` and the four verb clauses call the same function, which is what
+    makes the printed argv evidence about the executed one -- but only while
+    that function answers the same way to both. PowerShell resolves an
+    unqualified `$Plan` inside `Get-ScInvocations` to the SCRIPT's `-Plan`
+    switch, so the function can branch on which of its two callers is asking
+    with no change at either call site and no assignment anywhere.
+
+    The rule is therefore about what the function may READ, not about which
+    names are forbidden: its own parameters, values it binds itself, and script
+    constants -- names assigned once, at the top level, from an expression that
+    runs nothing and reads only other constants. A script parameter is refused
+    even if it were somehow also a constant, and the five dynamic-scope
+    automatics are named so the finding can say which mechanism it refused.
+    """
+    findings = []
+    parameters = set(as_list(tree["invocationParameters"]))
+    bound_here = set(name for name in as_list(tree["invocationAssigned"]) if name)
+    constants = _script_constants(assignments)
+    script_parameters = set(as_list(tree["parameters"]))
+    for use in as_list(tree["invocationVariableUses"]):
+        name = use["name"]
+        if name.lower() in SCOPE_FREE_VARIABLES or name in parameters or name in bound_here:
+            continue
+        if name in DYNAMIC_SCOPE_VARIABLES:
+            findings.append("Get-ScInvocations reads $%s -- %s -- so the one definition can "
+                            "return one argument list while -Plan is printing and another while "
+                            "a verb is running: %s"
+                            % (name, DYNAMIC_SCOPE_VARIABLES[name], _clip(use["text"])))
+        elif name in script_parameters:
+            findings.append("Get-ScInvocations reads the script parameter $%s, so the one "
+                            "definition can answer -Plan and a verb differently: %s"
+                            % (name, _clip(use["text"])))
+        elif name not in constants:
+            findings.append("Get-ScInvocations reads $%s, which is neither one of its own "
+                            "parameters, nor a value it binds itself, nor a script constant, so "
+                            "what it returns is not fixed by the action it was asked for: %s"
+                            % (name, _clip(use["text"])))
+    for name in as_list(tree["invocationCommands"]):
+        if name.strip("'\"").lower() not in GET_SC_INVOCATIONS_COMMANDS:
+            findings.append("Get-ScInvocations runs '%s', which can read the caller's scope "
+                            "without naming a variable this rule could refuse" % name)
+    return findings
+
+
 def _trace_arguments(verb, call, clause_assignments, clause_foreaches):
     """Follow one Invoke-Sc `-Arguments` expression back to what defines it.
 
@@ -776,6 +1049,13 @@ def audit_one_definition(tree):
     Invoke-Sc that grows tokens is off it at the splat; and a clause that calls
     sc.exe directly is off it at the call site. None of the three can be
     reached by editing a line that still reads `-Arguments $invocation`.
+
+    Two further questions are asked by `audit_invoke_sc_arguments` and
+    `audit_invocations_scope`, because the walk above cannot ask either. It
+    reads the SHAPE of the call and of the assignments around it, so it is
+    silent about a mutation of `$Arguments` that is neither -- and it reads WHO
+    calls `Get-ScInvocations`, never what that function is allowed to see, so it
+    is silent about a body that can tell `-Plan` from a verb.
     """
     findings = []
     clauses = tree["verbClauses"]
@@ -840,6 +1120,11 @@ def audit_one_definition(tree):
             findings.append("Invoke-Sc rebinds its own $Arguments before sc.exe sees them: "
                             "%s %s %s" % (row["leftText"], row["operator"],
                                           _clip(row["rightText"])))
+    # ...and nothing reaches that parameter before the splat by any other shape.
+    findings += audit_invoke_sc_arguments(tree)
+
+    # 2b. The one definition answers the action it was asked for and nothing else.
+    findings += audit_invocations_scope(tree, assignments)
 
     # 3. The plan document describes that same function, for the action asked of it.
     fields = [row for row in as_list(tree["planFields"]) if row["key"] == "scInvocations"]
@@ -1287,12 +1572,15 @@ def run_controls(work, report, only=None):
             # into a shrug.
             report.record("M12", "RED", "; ".join(findings[:3]))
         else:
-            # The INERT-proof: the two rebindings W2-A5-R1 measured passing V1,
-            # applied to the REAL script's bytes and audited by the function
-            # above. Each must produce at least one finding on its own, or this
-            # rule has stopped owning the property and says so.
+            # The INERT-proof: the two rebindings W2-A5-R1 measured passing V1
+            # and the two W2-A5-R2 measured passing V2, applied to the REAL
+            # script's bytes and audited by the functions above. Each must
+            # produce at least one finding on its own, or this rule has stopped
+            # owning the property and says so. Deleting any one of the four new
+            # or old checks therefore turns M12 INERT rather than leaving the
+            # suite green.
             blind = []
-            for label, mutation in V1_PLANTS:
+            for label, mutation in M12_PLANTS:
                 planted_text, applied = mutate(read_text(SCRIPT), mutation)
                 if not all(applied):
                     blind.append("%s can no longer be planted (%s), so the rule is unmeasured "
@@ -1316,8 +1604,12 @@ def run_controls(work, report, only=None):
                               "splatted alone and rebinds it nowhere; nothing else in the "
                               "script reaches sc.exe but the read-only query; and New-Plan's "
                               "scInvocations begins at the same function for the action it was "
-                              "asked to describe -- so the plan is the argv, and both V1 "
-                              "rebindings are detected on the real bytes")
+                              "asked to describe. Inside Invoke-Sc, $Arguments is splatted and "
+                              "never otherwise reached, and no command runs beside sc.exe; "
+                              "inside Get-ScInvocations, every variable is one of its own "
+                              "parameters or a script constant, so it cannot see whether -Plan "
+                              "or a verb is asking -- so the plan is the argv, and all four "
+                              "measured plants are detected on the real bytes")
 
     # --- M13: no repair -------------------------------------------------------
     if selected("M13"):
