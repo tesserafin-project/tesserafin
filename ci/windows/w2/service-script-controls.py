@@ -431,6 +431,28 @@ function Get-EnclosingClause {
     return ''
 }
 
+function Get-VariableName {
+    # The name a variable node reaches, with a SCOPE qualifier removed.
+    # `VariablePath.UserPath` keeps it, so `$script:SERVICE_START_TYPE` and
+    # `$SERVICE_START_TYPE` read as two names -- and a verb clause that writes
+    # the qualified spelling would be counted as the FIRST binding of a name
+    # nothing else assigns, leaving the unqualified one a script constant and
+    # every rule below silent. At the top level, where this script's constants
+    # live, the two spellings are one variable. `variable:` is the same
+    # variable again through its provider name; `env:` and any other drive are
+    # a different namespace and are left alone, because flattening those would
+    # read two unrelated things as one.
+    param($Path)
+    $text = $Path.UserPath
+    $colon = $text.IndexOf(':')
+    if ($colon -lt 0) { return $text }
+    $qualifier = $text.Substring(0, $colon)
+    if ($qualifier -in @('global', 'script', 'local', 'private', 'variable')) {
+        return $text.Substring($colon + 1)
+    }
+    return $text
+}
+
 function Get-RootVariable {
     # The variable an expression REACHES INTO. `$invocations[0].arguments` is a
     # use of `$invocations`, and `$invocation.arguments` is a use of
@@ -440,7 +462,7 @@ function Get-RootVariable {
     $current = $Node
     while ($null -ne $current) {
         if ($current -is [System.Management.Automation.Language.VariableExpressionAst]) {
-            return $current.VariablePath.UserPath
+            return Get-VariableName -Path $current.VariablePath
         }
         elseif ($current -is [System.Management.Automation.Language.MemberExpressionAst]) {
             $current = $current.Expression
@@ -551,7 +573,7 @@ function Get-VariableUses {
         $text = $node.Extent.Text
         if ($null -ne $statement) { $text = $statement.Extent.Text }
         $uses += [ordered]@{
-            name = $node.VariablePath.UserPath
+            name = Get-VariableName -Path $node.VariablePath
             splatted = [bool] $node.Splatted
             text = $text
         }
@@ -647,7 +669,7 @@ foreach ($command in $ast.FindAll({
             elements = @($command.CommandElements | ForEach-Object { $_.Extent.Text })
             splatted = @($command.CommandElements | Where-Object {
                 $_ -is [System.Management.Automation.Language.VariableExpressionAst] -and
-                $_.Splatted } | ForEach-Object { $_.VariablePath.UserPath })
+                $_.Splatted } | ForEach-Object { Get-VariableName -Path $_.VariablePath })
             text = $command.Extent.Text
         }
     }
@@ -695,7 +717,7 @@ foreach ($assignment in $ast.FindAll({
             $true)).Count -gt 0
         rightVariables = @($assignment.Right.FindAll({
             param($n) $n -is [System.Management.Automation.Language.VariableExpressionAst] },
-            $true) | ForEach-Object { $_.VariablePath.UserPath })
+            $true) | ForEach-Object { Get-VariableName -Path $_.VariablePath })
         action = $action
     }
 }
@@ -708,7 +730,7 @@ foreach ($loop in $ast.FindAll({
     $foreaches += [ordered]@{
         function = Get-EnclosingFunction -Node $loop
         clause = Get-EnclosingClause -Node $loop
-        variable = $loop.Variable.VariablePath.UserPath
+        variable = Get-VariableName -Path $loop.Variable.VariablePath
         conditionRoot = Get-RootVariable -Node $loop.Condition
         conditionText = $loop.Condition.Extent.Text
     }
@@ -760,7 +782,7 @@ if ($null -ne $invocationsFunction) {
         $true) | ForEach-Object { Get-RootVariable -Node $_.Left })
     $invocationAssigned += @($invocationsFunction.FindAll({
         param($n) $n -is [System.Management.Automation.Language.ForEachStatementAst] },
-        $true) | ForEach-Object { $_.Variable.VariablePath.UserPath })
+        $true) | ForEach-Object { Get-VariableName -Path $_.Variable.VariablePath })
     $invocationCommands = @(Get-CommandNames -Function $invocationsFunction)
 }
 
@@ -817,7 +839,7 @@ foreach ($command in $ast.FindAll({
 $scopeTableUses = @()
 foreach ($node in $ast.FindAll({
         param($n) $n -is [System.Management.Automation.Language.VariableExpressionAst] }, $true)) {
-    $name = $node.VariablePath.UserPath
+    $name = Get-VariableName -Path $node.VariablePath
     if ($name -notin @('ExecutionContext', 'SessionState', 'PSCmdlet')) { continue }
     if (Test-InParamBlock -Node $node) { continue }
     $statement = $node.Parent
@@ -854,7 +876,7 @@ foreach ($node in $ast.FindAll({
     $text = $node.Extent.Text
     if ($null -ne $statement) { $text = $statement.Extent.Text }
     $clauseVariableUses += [ordered]@{
-        name = $node.VariablePath.UserPath
+        name = Get-VariableName -Path $node.VariablePath
         clause = $clause
         context = Get-UseContext -Node $node
         text = $text
@@ -1055,6 +1077,27 @@ R3_PLANTS = (
      [("            $invocations = @(Get-ScInvocations -Action 'register' "
        "-BinaryPath $binaryPath)\n",
        "            (Get-Variable SERVICE_START_TYPE -Scope Script).Value = 'auto'\n"
+       "            $invocations = @(Get-ScInvocations -Action 'register' "
+       "-BinaryPath $binaryPath)\n")]),
+    # Found while measuring the three above, and the cheapest of them all: an
+    # ORDINARY assignment, which every ruling since W2-A5-R1 has treated as the
+    # closed case. `VariablePath.UserPath` keeps the scope qualifier, so
+    # `$script:SERVICE_START_TYPE` was a different name from
+    # `$SERVICE_START_TYPE`: the clause counted as the only binding of a name
+    # nothing reads, the unqualified one kept its single top-level binding and
+    # stayed a script constant, and the suite stayed at 25 PASS. Both spellings
+    # are planted, because `$global:` reaches the same variable from a script
+    # whose top level IS the script scope.
+    ("a register clause that assigns the script-qualified spelling of a constant",
+     [("            $invocations = @(Get-ScInvocations -Action 'register' "
+       "-BinaryPath $binaryPath)\n",
+       "            $script:SERVICE_START_TYPE = 'auto'\n"
+       "            $invocations = @(Get-ScInvocations -Action 'register' "
+       "-BinaryPath $binaryPath)\n")]),
+    ("a register clause that assigns the global-qualified spelling of a constant",
+     [("            $invocations = @(Get-ScInvocations -Action 'register' "
+       "-BinaryPath $binaryPath)\n",
+       "            $global:SERVICE_START_TYPE = 'auto'\n"
        "            $invocations = @(Get-ScInvocations -Action 'register' "
        "-BinaryPath $binaryPath)\n")]),
 )
@@ -2010,7 +2053,8 @@ def run_controls(work, report, only=None):
                               "parameters or a script constant, so it cannot see whether -Plan "
                               "or a verb is asking; and no verb clause can rebind what that "
                               "function reads through the session's variable table, the "
-                              "Variable: provider or an assignment naming no variable -- so the "
+                              "Variable: provider, an assignment naming no variable or a "
+                              "scope-qualified spelling of the name -- so the "
                               "plan is the argv, and every one of the %d measured plants is "
                               "detected on the real bytes" % len(M12_PLANTS))
 
