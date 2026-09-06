@@ -131,8 +131,14 @@ WORKFLOW_SHA256 = "fbfcbf19931cb5396e391443714b62da77bff43b7998b06c6999cb7c726c3
 # The .ps1 files `ci/windows/w2/` is allowed to carry. W2-A4 adds none: the
 # ruling says "no new .ps1 under ci/windows/w2/" and T16 is what says so about
 # the directory rather than about the diff.
+#
+# Amended by W2-A5-T16 on #256, for one exact name and nothing else. This is a
+# directory allowlist rather than a pin value, which is why the W2-A5 ruling's
+# "pin-value-only" authority over this file did not reach it and a separate
+# amendment was required -- the same stop W2-A2-F18 and W2-A3-F18 each fired.
+# It is NOT widened to "any .ps1 under w2/": every other new .ps1 still REDs.
 ALLOWED_PS1 = ("assemble-server-zip.ps1", "consume-web-payload.ps1",
-               "relocate-and-start.ps1")
+               "relocate-and-start.ps1", "tesserafin-server-service.ps1")
 
 WORKFLOW_ALLOWED_TRIGGERS = ("pull_request",)
 WORKFLOW_ALLOWED_JOBS = ("controls", "assemble-a", "assemble-b", "compare")
@@ -2042,7 +2048,7 @@ def run_controls(work, report, only=None):
                 report.record("T16", "RED", "; ".join(findings))
             else:
                 report.record("T16", "PASS",
-                              "ci/windows/w2 carries exactly the three accepted .ps1 files; "
+                              "ci/windows/w2 carries exactly the four accepted .ps1 files; "
                               "W2-A4 adds a .py and a workflow and nothing else")
 
     # --- T17: the paths filter ------------------------------------------------

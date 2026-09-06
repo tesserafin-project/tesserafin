@@ -229,6 +229,25 @@ exact-name `continue` for `tesserafin-server-service.ps1`, and nothing else.
 untouched, and `F18` still REDs every other new `.ps1` — `M21` measures that
 rather than assuming it.
 
+### The `T16` amendment (W2-A5-T16)
+
+`F18` was not the only directory rule that REDs a new sibling by filename.
+`T16` in `ci/windows/w2/two-runner-controls.py` carries `ALLOWED_PS1`, the list
+of `.ps1` files `ci/windows/w2/` may hold, and it REDed
+`tesserafin-server-service.ps1` for the same reason `F18` did:
+
+```
+T16   RED   ci/windows/w2/tesserafin-server-service.ps1 is a .ps1 W2-A4 is not authorised to add
+```
+
+That is a **directory allowlist, not a pin value**, so the W2-A5 ruling's
+pin-value-only authority over that file did not reach it. It was measured,
+reported and stopped on rather than edited away, and **W2-A5-T16** on #256
+authorises the one exact-name addition — plus the `PASS` sentence, which counted
+three accepted `.ps1` files and now counts four. `T16` is **not** widened to
+"any `.ps1` under `w2/`": its own inert-proof plants `two-runner-compare.ps1`
+and still requires it to be found, so every other new `.ps1` still REDs.
+
 ---
 
 ## 6. Non-goals
@@ -254,9 +273,12 @@ This slice is deliberately narrow. It:
 * edits previously accepted W2 files only where the ruling names them:
   `assemble-server-zip.ps1`, to stage the script at the frozen relative path and
   pin its bytes in the provenance manifest and for no other pack behaviour;
-  `ffmpeg-consume-controls.py`, for the one `F18` exact-name `continue`; and
-  `start-controls.py` and `two-runner-controls.py` for **pin values only**,
-  because `S15` and `T15` pin the files the first two edits change.
+  `ffmpeg-consume-controls.py`, for the one `F18` exact-name `continue`;
+  `start-controls.py` for **pin values only**, because `S15` pins the assembler;
+  and `two-runner-controls.py` for its `T15` pin values — the assembler,
+  `start-controls.py` and `ffmpeg-consume-controls.py`, all three of which this
+  slice changes — plus, under **W2-A5-T16**, the one exact name in `T16`'s
+  `ALLOWED_PS1` and the `PASS` sentence that counts it.
   `consume-web-payload.ps1`, `relocate-and-start.ps1`, `pkg-tree-digest.py`,
   `zip-controls.py`, `web-payload-controls.py`, the runtime-retention consumer
   and the acceptance manifest are all untouched, and `M23` pins them.
