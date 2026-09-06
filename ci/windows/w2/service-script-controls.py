@@ -98,6 +98,11 @@ FAILURE_ACTIONS = "restart/60000/restart/60000//0"
 
 VERBS = ("register", "start", "stop", "remove")
 
+# The script names its service through this variable, so M12 can require
+# `Get-ServiceRecord`'s sc.exe call to still be the read-only query over it and
+# nothing else.
+SERVICE_NAME_VARIABLE = "$SERVICE_NAME"
+
 # The four state directories §6 requires to be "always given by argument".
 STATE_PARAMETERS = ("-DataDir", "-ConfigDir", "-CacheDir", "-LogDir")
 
@@ -406,6 +411,105 @@ function Get-EnclosingFunction {
     return ''
 }
 
+function Get-EnclosingClause {
+    # The label of the TOP-LEVEL switch clause a node sits in, or ''. The four
+    # verbs are one switch outside every function, so this is what lets a fact
+    # say "this sc.exe call belongs to `remove`" without reading clause text.
+    param($Node)
+    $current = $Node
+    while ($null -ne $current) {
+        $parent = $current.Parent
+        if ($parent -is [System.Management.Automation.Language.SwitchStatementAst]) {
+            foreach ($clause in $parent.Clauses) {
+                if ($clause.Item2 -eq $current) {
+                    return $clause.Item1.Extent.Text.Trim("'", '"')
+                }
+            }
+        }
+        $current = $parent
+    }
+    return ''
+}
+
+function Get-RootVariable {
+    # The variable an expression REACHES INTO. `$invocations[0].arguments` is a
+    # use of `$invocations`, and `$invocation.arguments` is a use of
+    # `$invocation`. Without this the audit could only compare strings, and a
+    # rebinding would hide behind any index or member access it liked.
+    param($Node)
+    $current = $Node
+    while ($null -ne $current) {
+        if ($current -is [System.Management.Automation.Language.VariableExpressionAst]) {
+            return $current.VariablePath.UserPath
+        }
+        elseif ($current -is [System.Management.Automation.Language.MemberExpressionAst]) {
+            $current = $current.Expression
+        }
+        elseif ($current -is [System.Management.Automation.Language.IndexExpressionAst]) {
+            $current = $current.Target
+        }
+        elseif ($current -is [System.Management.Automation.Language.ParenExpressionAst]) {
+            $current = $current.Pipeline
+        }
+        elseif ($current -is [System.Management.Automation.Language.ArrayExpressionAst]) {
+            $current = $current.SubExpression
+        }
+        elseif ($current -is [System.Management.Automation.Language.SubExpressionAst]) {
+            $current = $current.SubExpression
+        }
+        elseif ($current -is [System.Management.Automation.Language.ConvertExpressionAst]) {
+            $current = $current.Child
+        }
+        elseif ($current -is [System.Management.Automation.Language.AttributedExpressionAst]) {
+            $current = $current.Child
+        }
+        elseif ($current -is [System.Management.Automation.Language.CommandExpressionAst]) {
+            $current = $current.Expression
+        }
+        elseif ($current -is [System.Management.Automation.Language.PipelineAst]) {
+            if ($current.PipelineElements.Count -ne 1) { return '' }
+            $current = $current.PipelineElements[0]
+        }
+        elseif ($current -is [System.Management.Automation.Language.StatementBlockAst]) {
+            if ($current.Statements.Count -ne 1) { return '' }
+            $current = $current.Statements[0]
+        }
+        else { return '' }
+    }
+    return ''
+}
+
+function Get-CommandName {
+    param($Command)
+    $element = $Command.CommandElements[0]
+    if ($element -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+        return $element.Value
+    }
+    return $element.Extent.Text
+}
+
+function Get-NamedArgument {
+    # The expression a NAMED parameter carries. A positional argument returns
+    # nothing on purpose: `Invoke-Sc $x $y` is not the same claim as
+    # `Invoke-Sc -Arguments $y`, and the audit must not read one as the other.
+    param($Command, [string] $Name)
+    for ($index = 0; $index -lt $Command.CommandElements.Count; $index++) {
+        $element = $Command.CommandElements[$index]
+        if ($element -is [System.Management.Automation.Language.CommandParameterAst] -and
+            $element.ParameterName -ieq $Name) {
+            if ($null -ne $element.Argument) { return $element.Argument }
+            if ($index + 1 -lt $Command.CommandElements.Count) {
+                $next = $Command.CommandElements[$index + 1]
+                if ($next -isnot [System.Management.Automation.Language.CommandParameterAst]) {
+                    return $next
+                }
+            }
+            return $null
+        }
+    }
+    return $null
+}
+
 $switches = $ast.FindAll({
     param($n) $n -is [System.Management.Automation.Language.SwitchStatementAst] }, $true)
 
@@ -429,11 +533,111 @@ foreach ($function in $ast.FindAll({
 
 $parameters = @($ast.ParamBlock.Parameters | ForEach-Object { $_.Name.VariablePath.UserPath })
 
+# Every command the script runs, reduced to the few facts M12 joins: WHERE it
+# sits, WHAT it names, and -- for the two that matter -- which variable the
+# argument list it hands on reaches into. Extents are carried too, so a finding
+# can quote the offending line rather than assert it.
+$scCalls = @()
+$invokeScCalls = @()
+foreach ($command in $ast.FindAll({
+        param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $true)) {
+    $name = Get-CommandName -Command $command
+    $bare = [System.IO.Path]::GetFileNameWithoutExtension($name.Trim("'", '"'))
+    if ($bare -ieq 'sc') {
+        $scCalls += [ordered]@{
+            function = Get-EnclosingFunction -Node $command
+            clause = Get-EnclosingClause -Node $command
+            elements = @($command.CommandElements | ForEach-Object { $_.Extent.Text })
+            splatted = @($command.CommandElements | Where-Object {
+                $_ -is [System.Management.Automation.Language.VariableExpressionAst] -and
+                $_.Splatted } | ForEach-Object { $_.VariablePath.UserPath })
+            text = $command.Extent.Text
+        }
+    }
+    if ($name -ieq 'Invoke-Sc') {
+        $argument = Get-NamedArgument -Command $command -Name 'Arguments'
+        $invokeScCalls += [ordered]@{
+            function = Get-EnclosingFunction -Node $command
+            clause = Get-EnclosingClause -Node $command
+            named = ($null -ne $argument)
+            argumentsText = $(if ($null -ne $argument) { $argument.Extent.Text } else { '' })
+            argumentsRoot = $(if ($null -ne $argument) { Get-RootVariable -Node $argument }
+                              else { '' })
+            text = $command.Extent.Text
+        }
+    }
+}
+
+# Every assignment, with the ROOT of its target -- so `$invocations[0].x = ...`
+# counts as a second binding of `$invocations` rather than as a different name.
+$assignments = @()
+foreach ($assignment in $ast.FindAll({
+        param($n) $n -is [System.Management.Automation.Language.AssignmentStatementAst] }, $true)) {
+    $rightCommands = @()
+    $action = ''
+    foreach ($command in $assignment.Right.FindAll({
+            param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $true)) {
+        $commandName = Get-CommandName -Command $command
+        $rightCommands += $commandName
+        if ($commandName -ieq 'Get-ScInvocations' -and $action -eq '') {
+            $value = Get-NamedArgument -Command $command -Name 'Action'
+            if ($null -ne $value) { $action = $value.Extent.Text }
+        }
+    }
+    $assignments += [ordered]@{
+        function = Get-EnclosingFunction -Node $assignment
+        clause = Get-EnclosingClause -Node $assignment
+        leftRoot = Get-RootVariable -Node $assignment.Left
+        leftText = $assignment.Left.Extent.Text
+        operator = $assignment.Operator.ToString()
+        rightText = $assignment.Right.Extent.Text
+        rightCommands = $rightCommands
+        rightHasBinary = @($assignment.Right.FindAll({
+            param($n) $n -is [System.Management.Automation.Language.BinaryExpressionAst] },
+            $true)).Count -gt 0
+        action = $action
+    }
+}
+
+# `foreach ($invocation in $invocations[1..N])` is the second hop between the
+# binding and the call, so the audit has to be able to walk it.
+$foreaches = @()
+foreach ($loop in $ast.FindAll({
+        param($n) $n -is [System.Management.Automation.Language.ForEachStatementAst] }, $true)) {
+    $foreaches += [ordered]@{
+        function = Get-EnclosingFunction -Node $loop
+        clause = Get-EnclosingClause -Node $loop
+        variable = $loop.Variable.VariablePath.UserPath
+        conditionRoot = Get-RootVariable -Node $loop.Condition
+        conditionText = $loop.Condition.Extent.Text
+    }
+}
+
+# The plan document's own fields, so `scInvocations` can be traced back to the
+# same function the verbs run rather than assumed to describe it.
+$planFields = @()
+foreach ($hashtable in $ast.FindAll({
+        param($n) $n -is [System.Management.Automation.Language.HashtableAst] }, $true)) {
+    if ((Get-EnclosingFunction -Node $hashtable) -ne 'New-Plan') { continue }
+    foreach ($pair in $hashtable.KeyValuePairs) {
+        $planFields += [ordered]@{
+            key = $pair.Item1.Extent.Text.Trim("'", '"')
+            valueText = $pair.Item2.Extent.Text
+            valueRoot = Get-RootVariable -Node $pair.Item2
+        }
+    }
+}
+
 [ordered]@{
     verbClauses = $verbClauses
     invocationClauses = $invocationClauses
     functions = $functions
     parameters = $parameters
+    scCalls = $scCalls
+    invokeScCalls = $invokeScCalls
+    assignments = $assignments
+    foreaches = $foreaches
+    planFields = $planFields
 } | ConvertTo-Json -Depth 8
 '''
 
@@ -454,6 +658,213 @@ def ast_query(work, path):
 def clause_code(clause_text):
     """A switch clause's executable text, with its comments blanked."""
     return strip_commentary("x.ps1", clause_text)
+
+
+def as_list(value):
+    """ConvertTo-Json renders a one-element array as a scalar and an empty one as null."""
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    return [value]
+
+
+def _clip(text):
+    return " ".join(str(text).split())[:120]
+
+
+def _unique(findings):
+    """Findings in order, each once: one bad binding read by two calls is one fact."""
+    seen = set()
+    return [f for f in findings if not (f in seen or seen.add(f))]
+
+
+# ---------------------------------------------------------------------------
+# M12: does the SCM get the argument list `-Plan` printed?
+#
+# W2-A5-V1 answered this with a substring -- `-Arguments $invocation` had to
+# appear on every line that called Invoke-Sc -- and the W2-A5-R1 ruling measured
+# what that buys: a `register` that rebinds $invocations to a literal still
+# writes `-Arguments $invocations[0].arguments`, and an Invoke-Sc that appends
+# `obj= LocalSystem` never touches the line at all. Both left 25 PASS while
+# `-Plan` printed something else. A rule that reads the shape of a line cannot
+# own a claim about the VALUE that line carries.
+#
+# So the two plants below are not a hardcoded probe string: they are applied to
+# the real script's own bytes and audited by the same function that audits the
+# real script, which is what makes the INERT-proof a measurement rather than a
+# tautology about a literal the control wrote itself.
+# ---------------------------------------------------------------------------
+V1_PLANTS = (
+    ("a register clause that rebinds $invocations to a literal",
+     [("            $invocations = @(Get-ScInvocations -Action 'register' "
+       "-BinaryPath $binaryPath)\n",
+       "            $invocations = @(\n"
+       "                [ordered]@{ what = \"sc.exe create $SERVICE_NAME\"; arguments = @(\n"
+       "                    'create', $SERVICE_NAME,\n"
+       "                    'binPath=', $binaryPath,\n"
+       "                    'start=', 'auto',\n"
+       "                    'DisplayName=', $SERVICE_DISPLAY_NAME) }\n"
+       "            )\n")]),
+    ("an Invoke-Sc that appends obj= LocalSystem on the way to sc.exe",
+     [("    $output = & sc.exe @Arguments 2>&1 | Out-String\n",
+       "    $Arguments = @($Arguments) + @('obj=', 'LocalSystem')\n"
+       "    $output = & sc.exe @Arguments 2>&1 | Out-String\n")]),
+)
+
+
+def _trace_arguments(verb, call, clause_assignments, clause_foreaches):
+    """Follow one Invoke-Sc `-Arguments` expression back to what defines it.
+
+    Returns findings, empty when the expression reaches Get-ScInvocations for
+    this verb and nothing else has touched it inside the clause.
+    """
+    root = call["argumentsRoot"]
+    if not root:
+        return ["the %s clause hands Invoke-Sc an -Arguments expression that reaches no "
+                "variable: %s" % (verb, _clip(call["argumentsText"]))]
+    seen = []
+    while True:
+        if root in seen:
+            return ["the %s clause defines $%s in terms of itself" % (verb, root)]
+        seen.append(root)
+        bindings = [row for row in clause_assignments if row["leftRoot"] == root]
+        loops = [row for row in clause_foreaches if row["variable"] == root]
+        if len(bindings) + len(loops) != 1:
+            return ["$%s reaches Invoke-Sc in the %s clause with %d definitions in that clause, "
+                    "so no single one owns what the Service Control Manager is handed"
+                    % (root, verb, len(bindings) + len(loops))]
+        if loops:
+            nxt = loops[0]["conditionRoot"]
+            if not nxt:
+                return ["the %s clause iterates an expression that reaches no variable: %s"
+                        % (verb, _clip(loops[0]["conditionText"]))]
+            root = nxt
+            continue
+        binding = bindings[0]
+        commands = as_list(binding["rightCommands"])
+        if commands != ["Get-ScInvocations"]:
+            return ["the %s clause builds its own sc.exe argument list rather than reading the "
+                    "one definition: $%s = %s" % (verb, root, _clip(binding["rightText"]))]
+        if binding["rightHasBinary"]:
+            return ["the %s clause extends what Get-ScInvocations returned: $%s = %s"
+                    % (verb, root, _clip(binding["rightText"]))]
+        if binding["operator"] != "Equals":
+            return ["the %s clause binds $%s with %s, so the one definition is not the whole "
+                    "value" % (verb, root, binding["operator"])]
+        if binding["action"].strip("'\"") != verb:
+            return ["the %s clause reads Get-ScInvocations -Action %s, so it performs a verb "
+                    "other than the one -Plan would describe"
+                    % (verb, binding["action"] or "(nothing)")]
+        return []
+
+
+def audit_one_definition(tree):
+    """Every finding that says the verbs and `-Plan` are not the same claim.
+
+    This walks the script's dataflow rather than its text. For each verb clause
+    it takes the expression that clause passes to `Invoke-Sc` as `-Arguments`,
+    reduces it to the variable it reaches into, follows that variable back
+    through the clause's `foreach` iterators to the assignment that binds it,
+    and requires that assignment to be a call to the one function `New-Plan`
+    also reads, for the verb the clause actually is. It then requires
+    `Invoke-Sc` to hand sc.exe exactly the parameter it was given -- unmodified
+    and splatted alone -- and requires that no other place in the script reaches
+    sc.exe at all, except `Get-ServiceRecord`'s read-only query.
+
+    A verb that builds its own list is off that path at the assignment; an
+    Invoke-Sc that grows tokens is off it at the splat; and a clause that calls
+    sc.exe directly is off it at the call site. None of the three can be
+    reached by editing a line that still reads `-Arguments $invocation`.
+    """
+    findings = []
+    clauses = tree["verbClauses"]
+    if sorted(clauses) != sorted(VERBS):
+        findings.append("the verb switch has clauses %s" % sorted(clauses))
+    if sorted(tree["invocationClauses"]) != sorted(VERBS):
+        findings.append("Get-ScInvocations defines %s" % sorted(tree["invocationClauses"]))
+    for required in ("Get-ScInvocations", "Invoke-Sc", "New-Plan", "Get-ServiceRecord"):
+        if required not in tree["functions"]:
+            findings.append("%s does not exist" % required)
+    if findings:
+        # The shape every join below assumes is already gone; more findings
+        # derived from it would describe the audit, not the script.
+        return _unique(findings)
+
+    assignments = as_list(tree["assignments"])
+    foreaches = as_list(tree["foreaches"])
+    invoke_calls = as_list(tree["invokeScCalls"])
+
+    # 1. Each verb's argument list comes from Get-ScInvocations, for that verb.
+    for verb in VERBS:
+        calls = [row for row in invoke_calls if not row["function"] and row["clause"] == verb]
+        if not calls:
+            findings.append("the %s clause calls Invoke-Sc nowhere, so whatever it asks of the "
+                            "Service Control Manager does not go through the one definition"
+                            % verb)
+            continue
+        clause_assignments = [row for row in assignments
+                              if not row["function"] and row["clause"] == verb]
+        clause_foreaches = [row for row in foreaches
+                            if not row["function"] and row["clause"] == verb]
+        for call in calls:
+            if not call["named"]:
+                findings.append("the %s clause calls Invoke-Sc without a named -Arguments: %s"
+                                % (verb, _clip(call["text"])))
+                continue
+            findings += _trace_arguments(verb, call, clause_assignments, clause_foreaches)
+
+    # 2. Invoke-Sc passes that list to sc.exe unchanged, and nothing else runs sc.exe.
+    sc_calls = as_list(tree["scCalls"])
+    if not sc_calls:
+        findings.append("nothing in the script reaches sc.exe, so the verbs perform no "
+                        "registration at all")
+    for call in sc_calls:
+        elements = as_list(call["elements"])
+        if call["function"] == "Invoke-Sc":
+            if len(elements) != 2 or as_list(call["splatted"]) != ["Arguments"]:
+                findings.append("Invoke-Sc hands sc.exe %d element(s) rather than its own "
+                                "$Arguments splatted alone, so the Service Control Manager sees "
+                                "tokens no plan printed: %s" % (len(elements), _clip(call["text"])))
+        elif call["function"] == "Get-ServiceRecord":
+            if elements != ["sc.exe", "query", SERVICE_NAME_VARIABLE]:
+                findings.append("Get-ServiceRecord's sc.exe call is no longer the read-only "
+                                "query: %s" % _clip(call["text"]))
+        else:
+            where = call["function"] or (("the %s clause" % call["clause"]) if call["clause"]
+                                         else "the script body")
+            findings.append("%s reaches sc.exe outside Invoke-Sc, where no plan describes it: %s"
+                            % (where, _clip(call["text"])))
+    for row in assignments:
+        if row["function"] == "Invoke-Sc" and row["leftRoot"] == "Arguments":
+            findings.append("Invoke-Sc rebinds its own $Arguments before sc.exe sees them: "
+                            "%s %s %s" % (row["leftText"], row["operator"],
+                                          _clip(row["rightText"])))
+
+    # 3. The plan document describes that same function, for the action asked of it.
+    fields = [row for row in as_list(tree["planFields"]) if row["key"] == "scInvocations"]
+    if len(fields) != 1:
+        findings.append("New-Plan states scInvocations %d time(s)" % len(fields))
+    else:
+        root = fields[0]["valueRoot"]
+        bindings = [row for row in assignments
+                    if row["function"] == "New-Plan" and row["leftRoot"] == root]
+        if not root:
+            findings.append("New-Plan's scInvocations reaches no variable: %s"
+                            % _clip(fields[0]["valueText"]))
+        elif len(bindings) != 1:
+            findings.append("$%s has %d definitions in New-Plan, so the plan's scInvocations is "
+                            "not one value" % (root, len(bindings)))
+        else:
+            commands = as_list(bindings[0]["rightCommands"])
+            if not commands or commands[0] != "Get-ScInvocations":
+                findings.append("New-Plan's scInvocations does not begin at Get-ScInvocations: "
+                                "%s" % _clip(bindings[0]["rightText"]))
+            elif bindings[0]["action"] != "$Action":
+                findings.append("New-Plan reads Get-ScInvocations -Action %s rather than the "
+                                "action it was asked to describe"
+                                % (bindings[0]["action"] or "(nothing)"))
+    return _unique(findings)
 
 
 # ===========================================================================
@@ -868,36 +1279,45 @@ def run_controls(work, report, only=None):
 
     # --- M12: one definition of the SCM calls ---------------------------------
     if selected("M12"):
-        findings = []
-        clauses = tree["verbClauses"]
-        if sorted(clauses) != sorted(VERBS):
-            findings.append("the verb switch has clauses %s" % sorted(clauses))
-        if sorted(tree["invocationClauses"]) != sorted(VERBS):
-            findings.append("Get-ScInvocations defines %s" % sorted(tree["invocationClauses"]))
-        if "Get-ScInvocations" not in tree["functions"]:
-            findings.append("Get-ScInvocations does not exist")
-        elif "Get-ScInvocations" not in strip_commentary("x.ps1", tree["functions"]["New-Plan"]):
-            findings.append("New-Plan does not read Get-ScInvocations")
-        for verb in VERBS:
-            body = clause_code(clauses.get(verb, ""))
-            for line in body.splitlines():
-                if "Invoke-Sc" not in line:
-                    continue
-                if "-Arguments $invocation" not in line:
-                    findings.append("the %s clause calls Invoke-Sc with its own argument list: %s"
-                                    % (verb, line.strip()[:120]))
-        planted = "$null = Invoke-Sc -What 'x' -Arguments @('delete', $SERVICE_NAME)\n"
-        detects = "-Arguments $invocation" not in planted and "Invoke-Sc" in planted
-        if not detects:
-            report.record("M12", "INERT", "the one-definition rule cannot detect a literal call")
-        elif findings:
+        findings = audit_one_definition(tree)
+        if findings:
+            # Ordered before the INERT-proof deliberately. A planted script is
+            # a script whose text has moved, so the proof's own anchors may no
+            # longer apply to it; reporting INERT there would turn a detection
+            # into a shrug.
             report.record("M12", "RED", "; ".join(findings[:3]))
         else:
-            report.record("M12", "PASS",
-                          "the four verbs and Get-ScInvocations define the same four actions, "
-                          "New-Plan reads that one function, and no verb builds an sc.exe "
-                          "argument list of its own -- so the dry plan is about the production "
-                          "call rather than beside it")
+            # The INERT-proof: the two rebindings W2-A5-R1 measured passing V1,
+            # applied to the REAL script's bytes and audited by the function
+            # above. Each must produce at least one finding on its own, or this
+            # rule has stopped owning the property and says so.
+            blind = []
+            for label, mutation in V1_PLANTS:
+                planted_text, applied = mutate(read_text(SCRIPT), mutation)
+                if not all(applied):
+                    blind.append("%s can no longer be planted (%s), so the rule is unmeasured "
+                                 "rather than sound"
+                                 % (label, ", ".join("%dx" % n for n in applied)))
+                    continue
+                directory = os.path.join(work, "M12")
+                os.makedirs(directory, exist_ok=True)
+                planted_path = os.path.join(directory, "%d.ps1" % (len(blind) + 1))
+                with open(planted_path, "w", encoding="utf-8", newline="\n") as handle:
+                    handle.write(planted_text)
+                if not audit_one_definition(ast_query(work, planted_path)):
+                    blind.append("%s is not detected" % label)
+            if blind:
+                report.record("M12", "INERT", "; ".join(blind))
+            else:
+                report.record("M12", "PASS",
+                              "every -Arguments the four verbs hand Invoke-Sc traces back, "
+                              "through the clause's own foreach, to one Get-ScInvocations call "
+                              "for that same verb; Invoke-Sc hands sc.exe that parameter "
+                              "splatted alone and rebinds it nowhere; nothing else in the "
+                              "script reaches sc.exe but the read-only query; and New-Plan's "
+                              "scInvocations begins at the same function for the action it was "
+                              "asked to describe -- so the plan is the argv, and both V1 "
+                              "rebindings are detected on the real bytes")
 
     # --- M13: no repair -------------------------------------------------------
     if selected("M13"):
