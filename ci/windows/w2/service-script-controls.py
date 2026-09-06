@@ -767,25 +767,72 @@ if ($null -ne $invocationsFunction) {
 # `$SERVICE_START_TYPE = 'auto'` in a verb clause is an AssignmentStatementAst
 # and stops that name being a constant. `Set-Variable -Name SERVICE_START_TYPE`
 # does the same thing and is not an assignment at all, so the name it binds has
-# to be read off the command.
+# to be read off the command -- and `Set-Item Variable:SERVICE_START_TYPE auto`
+# does it a third way, through the variable PROVIDER, where the name is not
+# even a parameter called Name. The item family is read here on its Path, and
+# only when that path names the Variable: drive: refusing `Remove-Item` on a
+# file would refuse ordinary work this script has every right to do.
+$variableItemCommands = @('set-item', 'new-item', 'remove-item', 'clear-item',
+                          'si', 'ni', 'ri', 'rni', 'cli')
 $variableCommands = @()
 foreach ($command in $ast.FindAll({
         param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $true)) {
     $bare = (Get-CommandName -Command $command).Trim("'", '"').ToLowerInvariant()
-    if ($bare -notin @('set-variable', 'new-variable', 'remove-variable', 'clear-variable',
-                       'sv', 'nv', 'rv', 'clv')) { continue }
-    $target = Get-NamedArgument -Command $command -Name 'Name'
+    $isItem = $bare -in $variableItemCommands
+    if (-not $isItem -and $bare -notin @('set-variable', 'new-variable', 'remove-variable',
+                                         'clear-variable', 'sv', 'nv', 'rv', 'clv')) { continue }
+    $parameterName = $(if ($isItem) { 'Path' } else { 'Name' })
+    $target = Get-NamedArgument -Command $command -Name $parameterName
     $text = ''
     if ($null -ne $target) { $text = $target.Extent.Text }
     elseif ($command.CommandElements.Count -gt 1) {
         $text = $command.CommandElements[1].Extent.Text
     }
+    $bound = $text.Trim("'", '"')
+    if ($isItem) {
+        if ($bound -notmatch '^variable:') { continue }
+        $bound = $bound -replace '^variable:[\\/]*', ''
+    }
     $variableCommands += [ordered]@{
         command = Get-CommandName -Command $command
-        target = $text.Trim("'", '"')
+        target = $bound
         function = Get-EnclosingFunction -Node $command
         clause = Get-EnclosingClause -Node $command
         text = $command.Extent.Text
+    }
+}
+
+# The session's own variable table, reached as an OBJECT rather than through a
+# command. `$ExecutionContext.SessionState.PSVariable.Set('SERVICE_START_TYPE',
+# 'auto')` binds a script-scope name from a method call: it is not an
+# AssignmentStatementAst, so `$assignments` is blind to it; it runs no command,
+# so `$variableCommands` is blind to it; and the name it binds is a string
+# argument, not a variable node, so no rule that reads variable nodes can
+# attribute it -- and a name computed at run time could not be attributed at
+# all. W2-A5-R3 measured exactly that statement, in the `register` clause,
+# leaving the suite at 25 PASS while `-Plan` printed `start= delayed-auto` and
+# the verb built `start= auto`. This script needs none of these three
+# automatics, so every use is collected and the audit refuses the MECHANISM
+# rather than guessing which name a run-time string will reach.
+$scopeTableUses = @()
+foreach ($node in $ast.FindAll({
+        param($n) $n -is [System.Management.Automation.Language.VariableExpressionAst] }, $true)) {
+    $name = $node.VariablePath.UserPath
+    if ($name -notin @('ExecutionContext', 'SessionState', 'PSCmdlet')) { continue }
+    if (Test-InParamBlock -Node $node) { continue }
+    $statement = $node.Parent
+    while ($null -ne $statement -and
+           ($statement -isnot [System.Management.Automation.Language.StatementAst] -or
+            $statement.Extent.Text -eq $node.Extent.Text)) {
+        $statement = $statement.Parent
+    }
+    $text = $node.Extent.Text
+    if ($null -ne $statement) { $text = $statement.Extent.Text }
+    $scopeTableUses += [ordered]@{
+        name = $name
+        function = Get-EnclosingFunction -Node $node
+        clause = Get-EnclosingClause -Node $node
+        text = $text
     }
 }
 
@@ -852,6 +899,7 @@ foreach ($command in $ast.FindAll({
     invocationAssigned = $invocationAssigned
     invocationCommands = $invocationCommands
     variableCommands = $variableCommands
+    scopeTableUses = $scopeTableUses
     clauseVariableUses = $clauseVariableUses
     binaryPathArguments = $binaryPathArguments
 } | ConvertTo-Json -Depth 8
@@ -979,9 +1027,41 @@ NEIGHBOUR_PLANTS = (
        "-BinaryPath $binaryPath)\n")]),
 )
 
+# The W2-A5-R3 ruling measured a third class on this same HEAD, and it is not a
+# neighbour of the two above but the shape they both presuppose: every rule so
+# far asks WHICH name a statement binds. `PSVariable.Set` binds one from a
+# method call, so there is no assignment for `_script_constants` to count, no
+# command for the `Set-Variable` rule to read, and no variable node naming the
+# target -- `SERVICE_START_TYPE` stayed a script constant and the suite stayed
+# at 25 PASS / 0 RED / 0 INERT while `-Plan register` printed `start=
+# delayed-auto` and the verb path built `start= auto`. The provider form and
+# the `(Get-Variable ...).Value` form reach the same table by two other routes
+# the same rules are blind to for the same reason, so all three are planted.
+R3_PLANTS = (
+    ("a register clause that binds a constant through the session's variable table",
+     [("            $invocations = @(Get-ScInvocations -Action 'register' "
+       "-BinaryPath $binaryPath)\n",
+       "            $ExecutionContext.SessionState.PSVariable.Set("
+       "'SERVICE_START_TYPE', 'auto')\n"
+       "            $invocations = @(Get-ScInvocations -Action 'register' "
+       "-BinaryPath $binaryPath)\n")]),
+    ("a register clause that binds a constant through the Variable: provider",
+     [("            $invocations = @(Get-ScInvocations -Action 'register' "
+       "-BinaryPath $binaryPath)\n",
+       "            Set-Item -Path Variable:\\SERVICE_START_TYPE -Value 'auto'\n"
+       "            $invocations = @(Get-ScInvocations -Action 'register' "
+       "-BinaryPath $binaryPath)\n")]),
+    ("a register clause that assigns through a PSVariable object, naming no variable",
+     [("            $invocations = @(Get-ScInvocations -Action 'register' "
+       "-BinaryPath $binaryPath)\n",
+       "            (Get-Variable SERVICE_START_TYPE -Scope Script).Value = 'auto'\n"
+       "            $invocations = @(Get-ScInvocations -Action 'register' "
+       "-BinaryPath $binaryPath)\n")]),
+)
+
 # Every plant M12 is required to detect on the real script's bytes. A plant that
 # can no longer be applied is reported as an unmeasured rule, not as a pass.
-M12_PLANTS = V1_PLANTS + R2_PLANTS + NEIGHBOUR_PLANTS
+M12_PLANTS = V1_PLANTS + R2_PLANTS + NEIGHBOUR_PLANTS + R3_PLANTS
 
 # `$true`, `$false`, `$null` and the pipeline's `$_` carry nothing about HOW the
 # script was invoked, so reading one inside `Get-ScInvocations` says nothing
@@ -1138,6 +1218,64 @@ def audit_invocations_scope(tree, assignments):
         if name.strip("'\"").lower() not in GET_SC_INVOCATIONS_COMMANDS:
             findings.append("Get-ScInvocations runs '%s', which can read the caller's scope "
                             "without naming a variable this rule could refuse" % name)
+    return findings
+
+
+# The three automatics that ARE the session's variable table. None of them
+# carries a value this script reads: they exist so code can look a name up and
+# BIND it without writing it, which is the one thing a verb clause must not do
+# to the constants `Get-ScInvocations` reads between the moment `-Plan` printed
+# them and the moment sc.exe is handed the result. Each is named with what it
+# reaches so a finding can say which mechanism it refused.
+SCOPE_TABLE_VARIABLES = {
+    "ExecutionContext": "the session's own variable table, whose PSVariable.Set binds a "
+                        "script-scope name from a method call",
+    "SessionState": "the same table reached directly, with the same Set",
+    "PSCmdlet": "the cmdlet's invocation state, whose SessionState is that table again",
+}
+
+
+def audit_scope_writes(tree, assignments):
+    """Every finding that says a name can be bound without an assignment.
+
+    `_script_constants` decides which names cannot depend on how the script was
+    invoked, and `audit_invocations_scope` refuses a `Get-ScInvocations` that
+    reads anything else. Both ask WHICH name a statement binds, and PowerShell
+    has two shapes where that question has no answer in the text.
+
+    The first is the session's variable table as an object:
+    `$ExecutionContext.SessionState.PSVariable.Set('SERVICE_START_TYPE',
+    'auto')` in the `register` clause binds a script constant with no
+    assignment, no `*-Variable` command and no variable node naming the target
+    -- W2-A5-R3 measured it leaving the suite at 25 PASS while `-Plan` printed
+    `start= delayed-auto` and the verb path built `start= auto`. The name is a
+    string argument there and could as easily be an expression, so the rule
+    cannot be per-name: the mechanism itself is refused, everywhere, because
+    this script has no use for any of the three automatics that reach it.
+
+    The second is an assignment whose LEFT side reaches no variable at all --
+    `(Get-Variable SERVICE_START_TYPE -Scope Script).Value = 'auto'`. That is an
+    AssignmentStatementAst, so it is collected, but its root is empty and every
+    rule keyed on a name skips it. A verb clause has no reason to assign to
+    something the audit cannot name, so those are refused too.
+    """
+    findings = []
+    for use in as_list(tree["scopeTableUses"]):
+        name = use["name"]
+        where = use["function"] or (("the %s clause" % use["clause"]) if use["clause"]
+                                    else "the script body")
+        findings.append("%s reaches $%s -- %s -- so it can rebind any script-scope name the one "
+                        "definition reads without writing an assignment and without naming a "
+                        "command this audit could refuse: %s"
+                        % (where, name, SCOPE_TABLE_VARIABLES[name], _clip(use["text"])))
+    for row in assignments:
+        if row["function"] or row["clause"] not in VERBS or row["leftRoot"]:
+            continue
+        findings.append("the %s clause assigns to an expression that reaches no variable, so "
+                        "the name it binds is not fixed by the text and no rule above can "
+                        "refuse it by name: %s %s %s"
+                        % (row["clause"], _clip(row["leftText"]), row["operator"],
+                           _clip(row["rightText"])))
     return findings
 
 
@@ -1384,6 +1522,9 @@ def audit_one_definition(tree):
 
     # 2b. The one definition answers the action it was asked for and nothing else.
     findings += audit_invocations_scope(tree, assignments)
+
+    # ...and no clause can rebind what that function reads without an assignment.
+    findings += audit_scope_writes(tree, assignments)
 
     # 3. The plan document describes that same function, for the action asked of it.
     fields = [row for row in as_list(tree["planFields"]) if row["key"] == "scInvocations"]
@@ -1867,8 +2008,11 @@ def run_controls(work, report, only=None):
                               "never otherwise reached, and no command runs beside sc.exe; "
                               "inside Get-ScInvocations, every variable is one of its own "
                               "parameters or a script constant, so it cannot see whether -Plan "
-                              "or a verb is asking -- so the plan is the argv, and all four "
-                              "measured plants are detected on the real bytes")
+                              "or a verb is asking; and no verb clause can rebind what that "
+                              "function reads through the session's variable table, the "
+                              "Variable: provider or an assignment naming no variable -- so the "
+                              "plan is the argv, and every one of the %d measured plants is "
+                              "detected on the real bytes" % len(M12_PLANTS))
 
     # --- M13: no repair -------------------------------------------------------
     if selected("M13"):
