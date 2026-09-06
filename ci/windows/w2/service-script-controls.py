@@ -559,6 +559,41 @@ function Get-VariableUses {
     return $uses
 }
 
+function Get-UseContext {
+    # What a use of a variable IS, from its nearest enclosing node: the target
+    # of an assignment, a `foreach` header, an argument to a named command --
+    # or `other`, which is where `$invocations[0].arguments.SetValue('auto', 5)`
+    # lands. That last one is the whole point: a clause may READ its invocation
+    # list on the way into Invoke-Sc and may bind it once, and every remaining
+    # shape is a way to change what the Service Control Manager is handed after
+    # the plan described it.
+    param($Node)
+    $child = $Node
+    $current = $Node.Parent
+    while ($null -ne $current) {
+        if ($current -is [System.Management.Automation.Language.AssignmentStatementAst]) {
+            if ($current.Left.Extent.StartOffset -le $Node.Extent.StartOffset -and
+                $current.Left.Extent.EndOffset -ge $Node.Extent.EndOffset) {
+                return 'assignment-left'
+            }
+            return 'assignment-right'
+        }
+        if ($current -is [System.Management.Automation.Language.ForEachStatementAst]) {
+            if ($current.Variable.Extent.StartOffset -le $Node.Extent.StartOffset -and
+                $current.Variable.Extent.EndOffset -ge $Node.Extent.EndOffset) {
+                return 'foreach-variable'
+            }
+            return 'foreach-condition'
+        }
+        if ($current -is [System.Management.Automation.Language.CommandAst]) {
+            return 'command:' + (Get-CommandName -Command $current)
+        }
+        $child = $current
+        $current = $current.Parent
+    }
+    return 'other'
+}
+
 function Get-CommandNames {
     # Every command a function runs. A rule about which VARIABLES a function may
     # read is blind to `Set-Variable Arguments @(...)`, which names none.
@@ -647,6 +682,7 @@ foreach ($assignment in $ast.FindAll({
         }
     }
     $assignments += [ordered]@{
+        startOffset = $assignment.Extent.StartOffset
         function = Get-EnclosingFunction -Node $assignment
         clause = Get-EnclosingClause -Node $assignment
         leftRoot = Get-RootVariable -Node $assignment.Left
@@ -728,6 +764,77 @@ if ($null -ne $invocationsFunction) {
     $invocationCommands = @(Get-CommandNames -Function $invocationsFunction)
 }
 
+# `$SERVICE_START_TYPE = 'auto'` in a verb clause is an AssignmentStatementAst
+# and stops that name being a constant. `Set-Variable -Name SERVICE_START_TYPE`
+# does the same thing and is not an assignment at all, so the name it binds has
+# to be read off the command.
+$variableCommands = @()
+foreach ($command in $ast.FindAll({
+        param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $true)) {
+    $bare = (Get-CommandName -Command $command).Trim("'", '"').ToLowerInvariant()
+    if ($bare -notin @('set-variable', 'new-variable', 'remove-variable', 'clear-variable',
+                       'sv', 'nv', 'rv', 'clv')) { continue }
+    $target = Get-NamedArgument -Command $command -Name 'Name'
+    $text = ''
+    if ($null -ne $target) { $text = $target.Extent.Text }
+    elseif ($command.CommandElements.Count -gt 1) {
+        $text = $command.CommandElements[1].Extent.Text
+    }
+    $variableCommands += [ordered]@{
+        command = Get-CommandName -Command $command
+        target = $text.Trim("'", '"')
+        function = Get-EnclosingFunction -Node $command
+        clause = Get-EnclosingClause -Node $command
+        text = $command.Extent.Text
+    }
+}
+
+# Every variable use inside a top-level switch clause, tagged. The dataflow walk
+# follows bindings; this is what says nothing ELSE touched the value on its way
+# from that binding to `Invoke-Sc`.
+$clauseVariableUses = @()
+foreach ($node in $ast.FindAll({
+        param($n) $n -is [System.Management.Automation.Language.VariableExpressionAst] }, $true)) {
+    if ((Get-EnclosingFunction -Node $node) -ne '') { continue }
+    $clause = Get-EnclosingClause -Node $node
+    if ($clause -eq '') { continue }
+    $statement = $node.Parent
+    while ($null -ne $statement -and
+           ($statement -isnot [System.Management.Automation.Language.StatementAst] -or
+            $statement.Extent.Text -eq $node.Extent.Text)) {
+        $statement = $statement.Parent
+    }
+    $text = $node.Extent.Text
+    if ($null -ne $statement) { $text = $statement.Extent.Text }
+    $clauseVariableUses += [ordered]@{
+        name = $node.VariablePath.UserPath
+        clause = $clause
+        context = Get-UseContext -Node $node
+        text = $text
+    }
+}
+
+# `binPath=` is the other half of what `register` hands the Service Control
+# Manager, and it is a string built once and passed by name -- so it is diverted
+# by rebinding that name between the document and the call, without either call
+# site changing. Both call sites are collected here, with the offsets that say
+# which of them runs first.
+$binaryPathArguments = @()
+foreach ($command in $ast.FindAll({
+        param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $true)) {
+    $argument = Get-NamedArgument -Command $command -Name 'BinaryPath'
+    if ($null -eq $argument) { continue }
+    $binaryPathArguments += [ordered]@{
+        startOffset = $command.Extent.StartOffset
+        command = Get-CommandName -Command $command
+        function = Get-EnclosingFunction -Node $command
+        clause = Get-EnclosingClause -Node $command
+        text = $argument.Extent.Text
+        root = Get-RootVariable -Node $argument
+        commandText = $command.Extent.Text
+    }
+}
+
 [ordered]@{
     verbClauses = $verbClauses
     invocationClauses = $invocationClauses
@@ -744,6 +851,9 @@ if ($null -ne $invocationsFunction) {
     invocationVariableUses = $invocationVariableUses
     invocationAssigned = $invocationAssigned
     invocationCommands = $invocationCommands
+    variableCommands = $variableCommands
+    clauseVariableUses = $clauseVariableUses
+    binaryPathArguments = $binaryPathArguments
 } | ConvertTo-Json -Depth 8
 '''
 
@@ -839,9 +949,39 @@ R2_PLANTS = (
        "                    'start=', $(if ($Plan) { $SERVICE_START_TYPE } else { 'auto' }),\n")]),
 )
 
+# One neighbour of R2's pair, found while measuring them and not named by any
+# ruling: a verb clause that rebinds a constant `Get-ScInvocations` reads. The
+# assignment form is refused because it makes the name a second binding; this
+# form binds the same name through `Set-Variable`, which is not an assignment
+# and so was invisible to that rule. `-Plan` exits before the switch, so it
+# still printed `start= delayed-auto` while the verb path built `start= auto`.
+NEIGHBOUR_PLANTS = (
+    ("a register clause that rebinds a constant through Set-Variable, not by assignment",
+     [("            $invocations = @(Get-ScInvocations -Action 'register' "
+       "-BinaryPath $binaryPath)\n",
+       "            Set-Variable -Name SERVICE_START_TYPE -Value 'auto' -Scope Script\n"
+       "            $invocations = @(Get-ScInvocations -Action 'register' "
+       "-BinaryPath $binaryPath)\n")]),
+    ("a register clause that rewrites element 5 of the list it just read, in place",
+     [("            $null = Invoke-Sc -What $invocations[0].what "
+       "-Arguments $invocations[0].arguments\n",
+       "            $invocations[0].arguments.SetValue('auto', 5)\n"
+       "            $null = Invoke-Sc -What $invocations[0].what "
+       "-Arguments $invocations[0].arguments\n")]),
+    # The payload strips the quoting W0 §2.3 measured the cost of, rather than
+    # adding a token: a plant whose text another control happens to match would
+    # make this proof's "undetected without the rule" half unreadable.
+    ("a register clause that rewrites binPath= after New-Plan printed it",
+     [("            $invocations = @(Get-ScInvocations -Action 'register' "
+       "-BinaryPath $binaryPath)\n",
+       "            $binaryPath = $binaryPath.Replace('\"', '')\n"
+       "            $invocations = @(Get-ScInvocations -Action 'register' "
+       "-BinaryPath $binaryPath)\n")]),
+)
+
 # Every plant M12 is required to detect on the real script's bytes. A plant that
 # can no longer be applied is reported as an unmeasured rule, not as a pass.
-M12_PLANTS = V1_PLANTS + R2_PLANTS
+M12_PLANTS = V1_PLANTS + R2_PLANTS + NEIGHBOUR_PLANTS
 
 # `$true`, `$false`, `$null` and the pipeline's `$_` carry nothing about HOW the
 # script was invoked, so reading one inside `Get-ScInvocations` says nothing
@@ -869,16 +1009,19 @@ INVOKE_SC_COMMANDS = ("sc", "sc.exe", "out-string", "deny")
 GET_SC_INVOCATIONS_COMMANDS = ("deny",)
 
 
-def _script_constants(assignments):
+def _script_constants(assignments, rebound=()):
     """Top-level names whose value cannot depend on how the script was invoked.
 
     A name qualifies when it is assigned exactly once in the WHOLE script, at
     the top level, by an expression that runs no command and reads only other
-    names that already qualify. That is a fixed point rather than a list, so
-    `$SERVICE_START_TYPE = 'delayed-auto'` qualifies, `$action = $Verb.Trim()`
-    does not (it reads a script parameter), `$packageRoot = Get-PackageRoot`
-    does not (it runs a command), and a `$SERVICE_START_TYPE` that a verb clause
-    rebinds before calling `Invoke-Sc` stops qualifying for every reader.
+    names that already qualify, and when no command binds it by name. That is a
+    fixed point rather than a list, so `$SERVICE_START_TYPE = 'delayed-auto'`
+    qualifies, `$action = $Verb.Trim()` does not (it reads a script parameter),
+    `$packageRoot = Get-PackageRoot` does not (it runs a command), and a
+    `$SERVICE_START_TYPE` that a verb clause rebinds before calling `Invoke-Sc`
+    stops qualifying for every reader -- whether it does so by assignment or
+    through `Set-Variable`, which is not an assignment and names the variable
+    it binds in a string.
     """
     counts = {}
     for row in assignments:
@@ -901,7 +1044,7 @@ def _script_constants(assignments):
             if all(used in constants for used in reads):
                 constants.add(name)
                 growing = True
-    return constants
+    return constants - set(rebound)
 
 
 def audit_invoke_sc_arguments(tree):
@@ -959,7 +1102,11 @@ def audit_invocations_scope(tree, assignments):
     findings = []
     parameters = set(as_list(tree["invocationParameters"]))
     bound_here = set(name for name in as_list(tree["invocationAssigned"]) if name)
-    constants = _script_constants(assignments)
+    rebound = {}
+    for row in as_list(tree["variableCommands"]):
+        if row["target"]:
+            rebound.setdefault(row["target"], row)
+    constants = _script_constants(assignments, rebound)
     script_parameters = set(as_list(tree["parameters"]))
     for use in as_list(tree["invocationVariableUses"]):
         name = use["name"]
@@ -974,6 +1121,14 @@ def audit_invocations_scope(tree, assignments):
             findings.append("Get-ScInvocations reads the script parameter $%s, so the one "
                             "definition can answer -Plan and a verb differently: %s"
                             % (name, _clip(use["text"])))
+        elif name in rebound:
+            row = rebound[name]
+            where = row["function"] or (("the %s clause" % row["clause"]) if row["clause"]
+                                        else "the script body")
+            findings.append("Get-ScInvocations reads $%s, and %s binds that name with '%s' "
+                            "rather than by assignment, so the value the verb path gets need "
+                            "not be the one -Plan printed: %s"
+                            % (name, where, row["command"], _clip(row["text"])))
         elif name not in constants:
             findings.append("Get-ScInvocations reads $%s, which is neither one of its own "
                             "parameters, nor a value it binds itself, nor a script constant, so "
@@ -986,6 +1141,100 @@ def audit_invocations_scope(tree, assignments):
     return findings
 
 
+# What a verb clause may do with the invocation list the dataflow walk follows:
+# bind it once, iterate it, and read it into `Invoke-Sc`. Everything else --
+# `$invocations[0].arguments.SetValue('auto', 5)`, an `.Add`, a `[array]` helper
+# taking it by reference -- is a way to change the argv between the plan and the
+# call, and none of them is an assignment.
+CLAUSE_USE_CONTEXTS = ("assignment-left", "foreach-variable", "foreach-condition",
+                       "command:Invoke-Sc")
+
+
+def audit_clause_uses(tree, guarded):
+    """Every finding that says a verb clause touched its argv some other way.
+
+    `_trace_arguments` walks BINDINGS: it asks what defined the value a clause
+    hands `Invoke-Sc`, and it is complete about that. It is silent about a
+    statement that changes the object that value points at without binding
+    anything, which is exactly the shape the ruling's P3A used inside
+    `Invoke-Sc` and which reads the same one level out, in the clause. So for
+    each name the walk actually followed, this requires every OTHER use of that
+    name in the same clause to be one of the three the walk already accounts
+    for.
+    """
+    findings = []
+    for use in as_list(tree["clauseVariableUses"]):
+        if use["name"] not in guarded.get(use["clause"], ()):
+            continue
+        if use["context"] in CLAUSE_USE_CONTEXTS:
+            continue
+        findings.append("the %s clause reaches into $%s (%s) outside the binding, the foreach "
+                        "and the Invoke-Sc call the audit follows, so what the Service Control "
+                        "Manager is handed need not be what the plan printed: %s"
+                        % (use["clause"], use["name"], use["context"], _clip(use["text"])))
+    return findings
+
+
+def audit_binary_path(tree, assignments):
+    """Every finding that says `binPath=` can differ from the one -Plan printed.
+
+    `Get-ScInvocations` puts two things in `sc.exe create`: the start type,
+    which is a constant, and the binary path, which is a string the script body
+    builds once and passes to that function BY NAME -- once through `New-Plan`
+    while `-Plan` is printing, and once from the register clause while the verb
+    is running. Nothing above reads that argument, so rebinding the name between
+    those two call sites diverts `binPath=` with neither call site changing and
+    with the plan still printing the original.
+
+    So the argument must be a bare variable at every call site; the two the
+    script body makes must name the same one; nothing may bind that name inside
+    a clause, inside a function or through `Set-Variable`; and every binding of
+    it must run BEFORE the `New-Plan` call, which is what makes the printed
+    document a claim about the value the verb goes on to use.
+    """
+    findings = []
+    rows = as_list(tree["binaryPathArguments"])
+    if not rows:
+        return ["nothing hands Get-ScInvocations a -BinaryPath, so `binPath=` is not the path "
+                "this script resolved"]
+    for row in rows:
+        if not row["root"] or row["text"] != "$" + row["root"]:
+            findings.append("%s is given -BinaryPath %s rather than a bare variable, so the "
+                            "value can be rewritten at the call site: %s"
+                            % (row["command"], _clip(row["text"]), _clip(row["commandText"])))
+    body = [row for row in rows if not row["function"] and row["root"]]
+    roots = sorted(set(row["root"] for row in body))
+    if len(roots) > 1:
+        findings.append("the script body hands -BinaryPath %s to different commands, so the "
+                        "document and the verb describe two values"
+                        % ", ".join("$" + name for name in roots))
+    plan_calls = [row for row in body if row["command"] == "New-Plan"]
+    if not plan_calls:
+        findings.append("no New-Plan call carries a -BinaryPath, so the plan's binaryPath is "
+                        "not the one the register clause uses")
+    targets = set(row["target"] for row in as_list(tree["variableCommands"]) if row["target"])
+    for name in roots:
+        for binding in [row for row in assignments if row["leftRoot"] == name]:
+            where = binding["function"] or (("the %s clause" % binding["clause"])
+                                            if binding["clause"] else "")
+            if where:
+                findings.append("$%s is bound in %s, so the binary path the verb hands sc.exe "
+                                "need not be the one -Plan printed: %s %s %s"
+                                % (name, where, binding["leftText"], binding["operator"],
+                                   _clip(binding["rightText"])))
+            elif plan_calls and binding["startOffset"] > min(row["startOffset"]
+                                                            for row in plan_calls):
+                findings.append("$%s is bound after the New-Plan call that prints it, so the "
+                                "document describes a value the verb has already replaced: "
+                                "%s %s %s" % (name, binding["leftText"], binding["operator"],
+                                              _clip(binding["rightText"])))
+        if name in targets:
+            findings.append("$%s is bound by a variable command rather than by assignment, so "
+                            "the binary path can be replaced between the plan and the call"
+                            % name)
+    return findings
+
+
 def _trace_arguments(verb, call, clause_assignments, clause_foreaches):
     """Follow one Invoke-Sc `-Arguments` expression back to what defines it.
 
@@ -993,43 +1242,43 @@ def _trace_arguments(verb, call, clause_assignments, clause_foreaches):
     this verb and nothing else has touched it inside the clause.
     """
     root = call["argumentsRoot"]
-    if not root:
-        return ["the %s clause hands Invoke-Sc an -Arguments expression that reaches no "
-                "variable: %s" % (verb, _clip(call["argumentsText"]))]
     seen = []
+    if not root:
+        return (["the %s clause hands Invoke-Sc an -Arguments expression that reaches no "
+                 "variable: %s" % (verb, _clip(call["argumentsText"]))], seen)
     while True:
         if root in seen:
-            return ["the %s clause defines $%s in terms of itself" % (verb, root)]
+            return (["the %s clause defines $%s in terms of itself" % (verb, root)], seen)
         seen.append(root)
         bindings = [row for row in clause_assignments if row["leftRoot"] == root]
         loops = [row for row in clause_foreaches if row["variable"] == root]
         if len(bindings) + len(loops) != 1:
-            return ["$%s reaches Invoke-Sc in the %s clause with %d definitions in that clause, "
+            return (["$%s reaches Invoke-Sc in the %s clause with %d definitions in that clause, "
                     "so no single one owns what the Service Control Manager is handed"
-                    % (root, verb, len(bindings) + len(loops))]
+                    % (root, verb, len(bindings) + len(loops))], seen)
         if loops:
             nxt = loops[0]["conditionRoot"]
             if not nxt:
-                return ["the %s clause iterates an expression that reaches no variable: %s"
-                        % (verb, _clip(loops[0]["conditionText"]))]
+                return (["the %s clause iterates an expression that reaches no variable: %s"
+                        % (verb, _clip(loops[0]["conditionText"]))], seen)
             root = nxt
             continue
         binding = bindings[0]
         commands = as_list(binding["rightCommands"])
         if commands != ["Get-ScInvocations"]:
-            return ["the %s clause builds its own sc.exe argument list rather than reading the "
-                    "one definition: $%s = %s" % (verb, root, _clip(binding["rightText"]))]
+            return (["the %s clause builds its own sc.exe argument list rather than reading the "
+                    "one definition: $%s = %s" % (verb, root, _clip(binding["rightText"]))], seen)
         if binding["rightHasBinary"]:
-            return ["the %s clause extends what Get-ScInvocations returned: $%s = %s"
-                    % (verb, root, _clip(binding["rightText"]))]
+            return (["the %s clause extends what Get-ScInvocations returned: $%s = %s"
+                    % (verb, root, _clip(binding["rightText"]))], seen)
         if binding["operator"] != "Equals":
-            return ["the %s clause binds $%s with %s, so the one definition is not the whole "
-                    "value" % (verb, root, binding["operator"])]
+            return (["the %s clause binds $%s with %s, so the one definition is not the whole "
+                    "value" % (verb, root, binding["operator"])], seen)
         if binding["action"].strip("'\"") != verb:
-            return ["the %s clause reads Get-ScInvocations -Action %s, so it performs a verb "
+            return (["the %s clause reads Get-ScInvocations -Action %s, so it performs a verb "
                     "other than the one -Plan would describe"
-                    % (verb, binding["action"] or "(nothing)")]
-        return []
+                    % (verb, binding["action"] or "(nothing)")], seen)
+        return ([], seen)
 
 
 def audit_one_definition(tree):
@@ -1076,6 +1325,7 @@ def audit_one_definition(tree):
     invoke_calls = as_list(tree["invokeScCalls"])
 
     # 1. Each verb's argument list comes from Get-ScInvocations, for that verb.
+    guarded = {}
     for verb in VERBS:
         calls = [row for row in invoke_calls if not row["function"] and row["clause"] == verb]
         if not calls:
@@ -1092,7 +1342,10 @@ def audit_one_definition(tree):
                 findings.append("the %s clause calls Invoke-Sc without a named -Arguments: %s"
                                 % (verb, _clip(call["text"])))
                 continue
-            findings += _trace_arguments(verb, call, clause_assignments, clause_foreaches)
+            traced, roots = _trace_arguments(verb, call, clause_assignments,
+                                             clause_foreaches)
+            findings += traced
+            guarded.setdefault(verb, set()).update(roots)
 
     # 2. Invoke-Sc passes that list to sc.exe unchanged, and nothing else runs sc.exe.
     sc_calls = as_list(tree["scCalls"])
@@ -1120,8 +1373,14 @@ def audit_one_definition(tree):
             findings.append("Invoke-Sc rebinds its own $Arguments before sc.exe sees them: "
                             "%s %s %s" % (row["leftText"], row["operator"],
                                           _clip(row["rightText"])))
+    # ...and nothing else in the clause reaches the value on its way there.
+    findings += audit_clause_uses(tree, guarded)
+
     # ...and nothing reaches that parameter before the splat by any other shape.
     findings += audit_invoke_sc_arguments(tree)
+
+    # 2c. `binPath=` is the same string the plan printed.
+    findings += audit_binary_path(tree, assignments)
 
     # 2b. The one definition answers the action it was asked for and nothing else.
     findings += audit_invocations_scope(tree, assignments)
