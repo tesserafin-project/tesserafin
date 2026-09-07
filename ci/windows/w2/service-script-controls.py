@@ -506,13 +506,52 @@ function Get-RootVariable {
     return ''
 }
 
+function Get-UnqualifiedCommandName {
+    # The command a name REACHES, with the prefixes that only say where to look
+    # for it removed. PowerShell resolves `Microsoft.PowerShell.Management\Set-Item`
+    # and `Set-Item` to one cmdlet, and every list below matches a NAME: the item
+    # family, the content family, the alias family, the module family, and the two
+    # allowlists over what `Invoke-Sc` and `Get-ScInvocations` may run. A qualifier
+    # is not a second command, so a name-based rule that read the qualified
+    # spelling as a name it had never heard of would refuse nothing -- and the
+    # audit would be a rule about spellings in the one place it claims not to be.
+    # W2-A5-R5b measured six qualified spellings of commands this audit already
+    # refuses, each leaving the suite at 25 PASS / 0 RED / 0 INERT while
+    # `-Plan register` printed `start= delayed-auto` and the verb path built
+    # `start= auto`.
+    #
+    # Three prefixes go, and nothing else. The call operator, which the parser
+    # already keeps out of the element -- `& Set-Item` and `&Set-Item` both leave
+    # `Set-Item` behind -- but which is stripped anyway because the rule is about
+    # what the name reaches, not about what this parser happens to hand over. A
+    # module qualifier, up to the last `\`. And a scope qualifier, up to the last
+    # `:`: `script:Set-Item` does not in fact resolve as a command in PowerShell
+    # 7.6 ("not recognized as a name of a cmdlet"), so it can rebind nothing, and
+    # it is reduced regardless for the same reason.
+    #
+    # `LastIndexOf` is given a [char] on purpose: the [string] overload is culture
+    # sensitive, and the Windows runner and this one have to read one name the
+    # same way for the two-runner comparison to mean anything.
+    param([string] $Name)
+    $bare = $Name.Trim()
+    while ($bare.StartsWith('&')) { $bare = $bare.Substring(1).Trim() }
+    $bare = $bare.Trim("'", '"')
+    $module = $bare.LastIndexOf([char] '\')
+    if ($module -ge 0) { $bare = $bare.Substring($module + 1) }
+    $scope = $bare.LastIndexOf([char] ':')
+    if ($scope -ge 0) { $bare = $bare.Substring($scope + 1) }
+    return $bare
+}
+
 function Get-CommandName {
+    # Reduced on BOTH branches: a qualified name is a name whether the parser made
+    # a string constant of it or this audit had to read the element's text.
     param($Command)
     $element = $Command.CommandElements[0]
     if ($element -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
-        return $element.Value
+        return Get-UnqualifiedCommandName -Name $element.Value
     }
-    return $element.Extent.Text
+    return Get-UnqualifiedCommandName -Name $element.Extent.Text
 }
 
 function Get-NamedArgument {
@@ -1523,11 +1562,68 @@ BL5_NEIGHBOUR_PLANTS = (
 )
 
 
+# The W2-A5-R5b ruling measured two of the plants above spelled with the module
+# their command lives in: `Microsoft.PowerShell.Management\\Set-Item` and
+# `Microsoft.PowerShell.Utility\\Set-Alias`. Every rule the commit above added
+# matches a command NAME, and `Get-CommandName` returned the element unstripped,
+# so neither qualified spelling reached a list -- 25 PASS / 0 RED / 0 INERT with
+# `-Plan register` printing `start= delayed-auto` and the verb path building
+# `start= auto`. The ruling names that the same defect class as R3's `$script:`
+# versus `UserPath`, not a new rebind primitive.
+#
+# Four more qualified spellings were measured on this HEAD while proving the
+# reduction, each 25 PASS with the argv flipped, and each is planted for the same
+# reason the ruling gives: a qualifier is not a second command, so a rule that
+# closed the two spellings the ruling names would be a rule about spellings. The
+# item family and the content family are reached through their module; the call
+# operator carries a qualified name as a CONSTANT, which is the one shape the
+# operator rule deliberately lets through; and `Import-Module` is reached through
+# `Microsoft.PowerShell.Core`.
+#
+# `Microsoft.PowerShell.Utility\\Set-Alias -Name Get-ScInvocations -Value
+# Get-ServiceRecord` -- the qualified spelling of BL5's last plant -- is NOT
+# planted: measured, it moves no argv at all, because `Get-ServiceRecord` returns
+# a service record rather than an invocation list and the verb path dies in the
+# script's own `[unexpected]` refusal before any sc.exe call. A plant has to flip
+# the argv to be evidence of anything.
+R5B_PLANTS = (
+    ("a register clause that binds the one definition through a module-qualified item command",
+     [(REGISTER_READ,
+       "            Microsoft.PowerShell.Management\\Set-Item -Path "
+       "Function:Get-ScInvocations -Value {\n" + BL5_BODY + "            }\n" + REGISTER_READ)]),
+    ("a register clause that puts a module-qualified alias in front of the one definition",
+     [("function Get-ScInvocations {\n", BL5_ROGUE_FUNCTION),
+      (REGISTER_READ,
+       "            Microsoft.PowerShell.Utility\\Set-Alias -Name Get-ScInvocations "
+       "-Value Get-RogueInvocations\n" + REGISTER_READ)]),
+    ("a register clause that creates that item through the module-qualified command",
+     [(REGISTER_READ,
+       "            $null = Microsoft.PowerShell.Management\\New-Item -Path "
+       "Function:Get-ScInvocations -Value {\n" + BL5_BODY + "            } -Force\n"
+       + REGISTER_READ)]),
+    ("a register clause that writes that provider through the module-qualified content command",
+     [(REGISTER_READ,
+       "            Microsoft.PowerShell.Management\\Set-Content -Path "
+       "Function:Get-ScInvocations -Value {\n" + BL5_BODY + "            }\n" + REGISTER_READ)]),
+    # `& 'Module\Command'` is a call operator whose command IS named as a
+    # constant, so the operator rule passes it on by design and only the name
+    # matters -- which is exactly what the qualifier hid.
+    ("a register clause that calls that qualified name through the call operator",
+     [(REGISTER_READ,
+       "            & 'Microsoft.PowerShell.Management\\Set-Item' -Path "
+       "Function:Get-ScInvocations -Value {\n" + BL5_BODY + "            }\n" + REGISTER_READ)]),
+    ("a register clause that imports a file it has just written, through the qualified name",
+     [(REGISTER_READ, "            Set-Content -Path rogue.psm1 -Value @'\nfunction Get-ScInvocations {\n    param([string] $Action, [string] $BinaryPath)\n    return @([ordered]@{ what = 'sc.exe create Tesserafin'; arguments = @(\n        'create', 'Tesserafin', 'binPath=', $BinaryPath,\n        'start=', 'auto', 'DisplayName=', 'Tesserafin Server') })\n}\n'@\n"
+       + "            Microsoft.PowerShell.Core\\Import-Module ./rogue.psm1 -Force\n"
+       + REGISTER_READ)]),
+)
+
+
 # Every plant M12 is required to detect on the real script's bytes. A plant that
 # can no longer be applied is reported as an unmeasured rule, not as a pass.
 M12_PLANTS = (V1_PLANTS + R2_PLANTS + NEIGHBOUR_PLANTS + R3_PLANTS + R4_PLANTS +
               FUNCTION_PLANTS +
-              BL5_PLANTS + BL5_NEIGHBOUR_PLANTS)
+              BL5_PLANTS + BL5_NEIGHBOUR_PLANTS + R5B_PLANTS)
 
 # `$true`, `$false`, `$null` and the pipeline's `$_` carry nothing about HOW the
 # script was invoked, so reading one inside `Get-ScInvocations` says nothing
