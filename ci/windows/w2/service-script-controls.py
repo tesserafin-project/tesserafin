@@ -809,7 +809,10 @@ if ($null -ne $invocationsFunction) {
 # does it a third way, through the variable PROVIDER, where the name is not
 # even a parameter called Name. The item family is read here on its Path, and
 # only when that path names the Variable: drive: refusing `Remove-Item` on a
-# file would refuse ordinary work this script has every right to do.
+# file would refuse ordinary work this script has every right to do. That
+# boundary is about the VARIABLE table only -- W2-A5-V5 read it as the audit's
+# whole claim about the item family and measured `Function:` passing through it
+# untouched, so the command-table drives are collected separately below.
 $variableItemCommands = @('set-item', 'new-item', 'remove-item', 'clear-item',
                           'si', 'ni', 'ri', 'rni', 'cli')
 $variableCommands = @()
@@ -837,6 +840,193 @@ foreach ($command in $ast.FindAll({
         function = Get-EnclosingFunction -Node $command
         clause = Get-EnclosingClause -Node $command
         text = $command.Extent.Text
+    }
+}
+
+# The COMMAND table, bound the same three ways the variable table above is.
+# `audit_function_definitions` reads `FunctionDefinitionAst` and only that, and
+# a `function` statement is one way to bind a command name -- not the way. The
+# block above already knows this about variables: it reads `Set-Item`/`New-Item`
+# on their `Path`, and its own words fix the boundary it stops at, "only when
+# that path names the `Variable:` drive". `Function:` is the same command, the
+# same collector and the same statement one drive name away; `${function:X} = `
+# reaches that drive as a variable path instead; and `Set-Alias` reaches command
+# resolution one step EARLIER still, because an alias wins over a function, so
+# the one definition need not be rebound at all. W2-A5-V5 measured the first,
+# second and fourth of those in the `register` clause leaving the suite at
+# 25 PASS / 0 RED / 0 INERT while `-Plan register` printed `start= delayed-auto`
+# and the verb path built `start= auto`, and W2-A5-R5 measured four more:
+# the `Alias:` drive, `-LiteralPath`, a path built at run time, and the `\`
+# spelling V5 recorded as O -- which only M05 refused, as a path SHAPE, one
+# character away from silence.
+#
+# So all three routes are collected here, wherever in the script they appear.
+# The item family is read on its path a second time, on the command-table
+# drives; the alias family is read whole, because this script defines no alias
+# at all and a rule that named one target would be a rule about a spelling; and
+# a drive-qualified variable path is collected for the same reason.
+# The item family and the CONTENT family, which is the same provider reached by
+# a different verb: `Set-Content -Path Function:Get-ScInvocations -Value { ... }`
+# installs a body exactly as `Set-Item` does, and W2-A5-R5 measured it flipping
+# the argv with the suite at 25 PASS. `sc` is Set-Content's own alias and is
+# listed; the script's calls are `sc.exe`, which is a different name.
+$commandTableItemCommands = @('set-item', 'new-item', 'remove-item', 'clear-item',
+                              'rename-item', 'copy-item', 'move-item',
+                              'si', 'ni', 'ri', 'rni', 'cli', 'cpi', 'mi',
+                              'ren', 'del', 'erase', 'rd', 'rm', 'rmdir',
+                              'copy', 'cp', 'move', 'mv',
+                              'set-content', 'add-content', 'clear-content', 'sc', 'ac', 'clc')
+$aliasFamilyCommands = @('set-alias', 'new-alias', 'remove-alias', 'export-alias',
+                         'import-alias', 'sal', 'nal', 'ral', 'epal', 'ipal')
+
+function Get-BoundArgument {
+    # The expression a parameter carries, matched by PREFIX. `Get-NamedArgument`
+    # compares the whole name, and PowerShell binds a parameter by any
+    # unambiguous prefix -- `-Pat`, `-LiteralPath`, `-LP` and `-PSPath` all
+    # reach the same path on `Set-Item`. A named argument this audit failed to
+    # recognise would fall through to the positional element and be read as a
+    # path that was never bound, so an unrecognised spelling has to make the
+    # path UNREADABLE rather than absent, and that is what the caller refuses.
+    param($Command, [string[]] $Names, [switch] $Positional)
+    for ($index = 1; $index -lt $Command.CommandElements.Count; $index++) {
+        $element = $Command.CommandElements[$index]
+        if ($element -isnot [System.Management.Automation.Language.CommandParameterAst]) {
+            continue
+        }
+        $parameter = $element.ParameterName.ToLowerInvariant()
+        if ($parameter.Length -eq 0) { continue }
+        $matched = $false
+        foreach ($name in $Names) { if ($name.StartsWith($parameter)) { $matched = $true } }
+        if (-not $matched) { continue }
+        if ($null -ne $element.Argument) { return $element.Argument }
+        if ($index + 1 -lt $Command.CommandElements.Count) {
+            $next = $Command.CommandElements[$index + 1]
+            if ($next -isnot [System.Management.Automation.Language.CommandParameterAst]) {
+                return $next
+            }
+        }
+        return $null
+    }
+    if (-not $Positional) { return $null }
+    for ($index = 1; $index -lt $Command.CommandElements.Count; $index++) {
+        $element = $Command.CommandElements[$index]
+        if ($element -isnot [System.Management.Automation.Language.CommandParameterAst]) {
+            return $element
+        }
+    }
+    return $null
+}
+
+$commandTableItems = @()
+$aliasCommands = @()
+foreach ($command in $ast.FindAll({
+        param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $true)) {
+    $bare = (Get-CommandName -Command $command).Trim("'", '"').ToLowerInvariant()
+    $isItem = $bare -in $commandTableItemCommands
+    $isAlias = $bare -in $aliasFamilyCommands
+    if (-not $isItem -and -not $isAlias) { continue }
+    $names = $(if ($isItem) { @('path', 'literalpath', 'pspath', 'lp') } else { @('name') })
+    $argument = Get-BoundArgument -Command $command -Names $names -Positional
+    $constant = $false
+    $value = ''
+    if ($argument -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+        $constant = $true
+        $value = $argument.Value
+    }
+    elseif ($null -ne $argument) { $value = $argument.Extent.Text }
+    $row = [ordered]@{
+        command = Get-CommandName -Command $command
+        target = $value
+        constant = $constant
+        function = Get-EnclosingFunction -Node $command
+        clause = Get-EnclosingClause -Node $command
+        text = $command.Extent.Text
+    }
+    if ($isItem) { $commandTableItems += $row } else { $aliasCommands += $row }
+}
+
+# Every rule above reads a command's NAME, and `& (Get-Command Set-Item) -Path
+# Function:Get-ScInvocations -Value { ... }` runs the identical command with
+# that name spelled as a VALUE -- so `Get-CommandName` sees an expression and
+# no name-based rule can attribute it. W2-A5-R5 measured it flipping the argv
+# with the suite at 25 PASS. This is the shape the W2-A5-R4 ruling refused to
+# keep patching for the variable table, and it refused it because the RECEIVER
+# is an arbitrary expression. Here it is not the receiver that is arbitrary but
+# the command, and there the audit can say something total: this script's only
+# two `&` calls name `sc.exe` as a constant, so a call operator whose command
+# this audit cannot READ is refused, whatever it turns out to name.
+#
+# The DOT operator is refused whatever it names, constant or not: dot-sourcing
+# runs a file's `function` statements in the CALLER's scope, so a clause that
+# writes a file and dot-sources it rebinds the one definition with no provider,
+# no alias and no `function` statement of its own anywhere in this script.
+# W2-A5-R5 measured that at 25 PASS with the argv flipped, and `Import-Module`
+# on the same written file a second time; the commands that import definitions
+# are refused by name just below. `sc.exe` is reached with `&` and is named as
+# a constant, so the one operator this script needs is the one left alone.
+$invocationOperators = @()
+foreach ($command in $ast.FindAll({
+        param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $true)) {
+    $operator = $command.InvocationOperator
+    if ($operator -eq [System.Management.Automation.Language.TokenKind]::Unknown) { continue }
+    $named = ($command.CommandElements.Count -gt 0 -and $command.CommandElements[0] -is
+              [System.Management.Automation.Language.StringConstantExpressionAst])
+    if ($named -and $operator -ne [System.Management.Automation.Language.TokenKind]::Dot) {
+        continue
+    }
+    $invocationOperators += [ordered]@{
+        operator = $operator.ToString()
+        function = Get-EnclosingFunction -Node $command
+        clause = Get-EnclosingClause -Node $command
+        text = $command.Extent.Text
+    }
+}
+
+# The commands that import a set of definitions wholesale. `Import-Module` on a
+# file the clause has just written defines whatever that file defines, and
+# `New-Module` does it from a script block with no file at all. This script
+# imports nothing, so both are refused wherever they appear. (`using module`
+# reaches the same table and cannot appear in a verb clause: it is only legal
+# before any other statement, which here is the `#Requires` and the param block.)
+$moduleCommands = @()
+foreach ($command in $ast.FindAll({
+        param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $true)) {
+    $bare = (Get-CommandName -Command $command).Trim("'", '"').ToLowerInvariant()
+    if ($bare -notin @('import-module', 'ipmo', 'new-module', 'nmo')) { continue }
+    $moduleCommands += [ordered]@{
+        command = Get-CommandName -Command $command
+        function = Get-EnclosingFunction -Node $command
+        clause = Get-EnclosingClause -Node $command
+        text = $command.Extent.Text
+    }
+}
+
+# `${function:Get-ScInvocations} = { ... }` binds the same table with no command
+# at all: it is an assignment whose target is a DRIVE-qualified variable path,
+# which `Get-VariableName` deliberately leaves alone because `env:` and the rest
+# are other namespaces. `$function:Get-ScInvocations` without the braces cannot
+# be written -- the path stops at the hyphen and the file does not parse -- but
+# the braced spelling parses, and W2-A5-R5 measured it flipping the argv with
+# the suite at 25 PASS. Every drive-qualified use of the two command-table
+# drives is collected, read or write: this script has no use for either.
+$commandTableVariables = @()
+foreach ($node in $ast.FindAll({
+        param($n) $n -is [System.Management.Automation.Language.VariableExpressionAst] }, $true)) {
+    if (-not $node.VariablePath.IsDriveQualified) { continue }
+    if ($node.VariablePath.DriveName.ToLowerInvariant() -notin @('function', 'alias')) { continue }
+    $statement = $node.Parent
+    while ($null -ne $statement -and
+           ($statement -isnot [System.Management.Automation.Language.StatementAst] -or
+            $statement.Extent.Text -eq $node.Extent.Text)) {
+        $statement = $statement.Parent
+    }
+    $text = $node.Extent.Text
+    if ($null -ne $statement) { $text = $statement.Extent.Text }
+    $commandTableVariables += [ordered]@{
+        name = $node.VariablePath.UserPath
+        function = Get-EnclosingFunction -Node $node
+        clause = Get-EnclosingClause -Node $node
+        text = $text
     }
 }
 
@@ -985,6 +1175,11 @@ foreach ($command in $ast.FindAll({
     invocationAssigned = $invocationAssigned
     invocationCommands = $invocationCommands
     variableCommands = $variableCommands
+    commandTableItems = $commandTableItems
+    aliasCommands = $aliasCommands
+    commandTableVariables = $commandTableVariables
+    invocationOperators = $invocationOperators
+    moduleCommands = $moduleCommands
     scopeTableUses = $scopeTableUses
     scopeTableMembers = $scopeTableMembers
     clauseVariableUses = $clauseVariableUses
@@ -1221,10 +1416,118 @@ FUNCTION_PLANTS = (
        "            }\n" + REGISTER_READ)]),
 )
 
+# The W2-A5-R5 ruling measured three more spellings of the class the plant above
+# opened, on this same HEAD. `FUNCTION_PLANTS` closes the `function` STATEMENT;
+# these bind the same name without one -- through the `Function:` provider, and
+# through an alias, which is resolved before a function of the same name. Each
+# was 25 PASS / 0 RED / 0 INERT with `-Plan register` printing
+# `start= delayed-auto` while the verb path built `start= auto`.
+#
+# Every body below returns the script's own register argv with `start= auto` in
+# place of `delayed-auto`, and is a `param()` plus one `return` rather than a
+# `switch`: a nested `switch` outside any function would land in `$verbClauses`
+# and make the plant a different mutation from the one that was measured.
+BL5_BODY = ("                param([string] $Action, [string] $BinaryPath)\n"
+            "                return @([ordered]@{ what = 'sc.exe create Tesserafin'; "
+            "arguments = @(\n"
+            "                    'create', 'Tesserafin', 'binPath=', $BinaryPath,\n"
+            "                    'start=', 'auto', 'DisplayName=', 'Tesserafin Server') })\n")
+
+# `Set-Alias` needs something to point AT, and a second top-level function is
+# legal by every rule above: both are defined once, at the top level. Nothing
+# said which of them a call reaches.
+BL5_ROGUE_FUNCTION = (
+    "function Get-RogueInvocations {\n"
+    "    param([string] $Action, [string] $BinaryPath)\n"
+    "    return @([ordered]@{ what = 'sc.exe create Tesserafin'; arguments = @(\n"
+    "        'create', 'Tesserafin', 'binPath=', $BinaryPath,\n"
+    "        'start=', 'auto', 'DisplayName=', 'Tesserafin Server') })\n"
+    "}\n\n"
+    "function Get-ScInvocations {\n")
+
+BL5_PLANTS = (
+    ("a register clause that binds the one definition through the Function: provider",
+     [(REGISTER_READ,
+       "            Set-Item -Path Function:Get-ScInvocations -Value {\n" + BL5_BODY
+       + "            }\n" + REGISTER_READ)]),
+    # V5 recorded this one as O: it was REDed, but by M05's machine-path shape
+    # rather than by anything about the one definition, and deleting the `\`
+    # made it the plant above and 25 green. The ruling requires M12 to own it.
+    ("a register clause that binds it through that provider with the separator spelled",
+     [(REGISTER_READ,
+       "            Set-Item -Path Function:\\Get-ScInvocations -Value {\n" + BL5_BODY
+       + "            }\n" + REGISTER_READ)]),
+    ("a register clause that creates the item instead of setting it",
+     [(REGISTER_READ,
+       "            $null = New-Item -Path Function:Get-ScInvocations -Value {\n" + BL5_BODY
+       + "            } -Force\n" + REGISTER_READ)]),
+    ("a register clause that puts an alias in front of the one definition",
+     [("function Get-ScInvocations {\n", BL5_ROGUE_FUNCTION),
+      (REGISTER_READ,
+       "            Set-Alias -Name Get-ScInvocations -Value Get-RogueInvocations\n"
+       + REGISTER_READ)]),
+    # The same move with the alias pointed at a function the script ALREADY
+    # defines. The plant above is V5's spelling and it carries its own target,
+    # so the INERT-proof -- which applies every plant to the script as it finds
+    # it -- would report it detected on a script that already has one, by the
+    # duplicate-definition rule rather than by anything about aliases. This one
+    # adds no definition, so nothing but the alias rule can refuse it and the
+    # proof that that rule is load-bearing is a measurement rather than a claim.
+    ("a register clause that aliases the one definition onto another top-level function",
+     [(REGISTER_READ,
+       "            Set-Alias -Name Get-ScInvocations -Value Get-ServiceRecord\n"
+       + REGISTER_READ)]),
+)
+
+# Found while measuring the four above, and named by no ruling -- the same
+# footing as NEIGHBOUR_PLANTS. Each reaches the same command table by a route
+# the ruling's own wording does not name, and each was measured on this HEAD at
+# 25 PASS / 0 RED / 0 INERT with `-Plan register` printing `start= delayed-auto`
+# and the verb path building `start= auto`. They are planted because a rule that
+# stopped at the three spellings the ruling names would be a rule about
+# spellings, and the ruling's STOP clause is about exactly that.
+BL5_NEIGHBOUR_PLANTS = (
+    ("a register clause that writes the Alias: drive rather than running Set-Alias",
+     [("function Get-ScInvocations {\n", BL5_ROGUE_FUNCTION),
+      (REGISTER_READ,
+       "            Set-Item -Path Alias:Get-ScInvocations -Value Get-RogueInvocations\n"
+       + REGISTER_READ)]),
+    ("a register clause that names the path parameter -LiteralPath instead of -Path",
+     [(REGISTER_READ,
+       "            Set-Item -LiteralPath Function:Get-ScInvocations -Value {\n" + BL5_BODY
+       + "            }\n" + REGISTER_READ)]),
+    ("a register clause that builds that path at run time, so no rule can read the drive",
+     [(REGISTER_READ,
+       "            $drive = 'Function:'\n"
+       "            Set-Item -Path ($drive + 'Get-ScInvocations') -Value {\n" + BL5_BODY
+       + "            }\n" + REGISTER_READ)]),
+    ("a register clause that assigns the Function: drive as a variable, running no command",
+     [(REGISTER_READ,
+       "            ${function:Get-ScInvocations} = {\n" + BL5_BODY
+       + "            }\n" + REGISTER_READ)]),
+    ("a register clause that writes that provider with the content family, not the item family",
+     [(REGISTER_READ,
+       "            Set-Content -Path Function:Get-ScInvocations -Value {\n" + BL5_BODY
+       + "            }\n" + REGISTER_READ)]),
+    ("a register clause that runs the same command through a handle, naming it nowhere",
+     [(REGISTER_READ,
+       "            & (Get-Command Set-Item) -Path Function:Get-ScInvocations -Value {\n"
+       + BL5_BODY + "            }\n" + REGISTER_READ)]),
+    # No provider, no alias and no `function` statement in this script at all:
+    # the definition is in a file the clause writes one line earlier.
+    ("a register clause that dot-sources a file it has just written",
+     [(REGISTER_READ, "            Set-Content -Path rogue.ps1 -Value @'\nfunction Get-ScInvocations {\n    param([string] $Action, [string] $BinaryPath)\n    return @([ordered]@{ what = 'sc.exe create Tesserafin'; arguments = @(\n        'create', 'Tesserafin', 'binPath=', $BinaryPath,\n        'start=', 'auto', 'DisplayName=', 'Tesserafin Server') })\n}\n'@\n" + "            . ./rogue.ps1\n" + REGISTER_READ)]),
+    ("a register clause that imports that file as a module instead",
+     [(REGISTER_READ, "            Set-Content -Path rogue.psm1 -Value @'\nfunction Get-ScInvocations {\n    param([string] $Action, [string] $BinaryPath)\n    return @([ordered]@{ what = 'sc.exe create Tesserafin'; arguments = @(\n        'create', 'Tesserafin', 'binPath=', $BinaryPath,\n        'start=', 'auto', 'DisplayName=', 'Tesserafin Server') })\n}\n'@\n" + "            Import-Module ./rogue.psm1 -Force\n"
+       + REGISTER_READ)]),
+)
+
+
 # Every plant M12 is required to detect on the real script's bytes. A plant that
 # can no longer be applied is reported as an unmeasured rule, not as a pass.
 M12_PLANTS = (V1_PLANTS + R2_PLANTS + NEIGHBOUR_PLANTS + R3_PLANTS + R4_PLANTS +
-              FUNCTION_PLANTS)
+              FUNCTION_PLANTS +
+              BL5_PLANTS + BL5_NEIGHBOUR_PLANTS)
 
 # `$true`, `$false`, `$null` and the pipeline's `$_` carry nothing about HOW the
 # script was invoked, so reading one inside `Get-ScInvocations` says nothing
@@ -1530,6 +1833,94 @@ def audit_function_definitions(tree):
         if count > 1:
             findings.append("'%s' is defined %d times, so which body a call reaches depends on "
                             "what has run before it" % (name, count))
+    return findings
+
+
+# A path naming one of the two drives the command table lives on, with or
+# without the provider's separator and with or without the provider qualifier
+# PowerShell also accepts (`Microsoft.PowerShell.Core\Function::name`). The `\`
+# spelling is here because W2-A5-V5 measured it REDed by M05 alone -- as a
+# machine-path SHAPE, which is one character away from silence -- and the
+# W2-A5-R5 ruling requires M12 to own it.
+COMMAND_TABLE_PATH = re.compile(r"^(?:[\w.]+\\)?(function|alias):", re.IGNORECASE)
+
+
+def _where(row):
+    """WHERE a statement sits, in the words the other findings use."""
+    if row["function"]:
+        return row["function"]
+    if row["clause"]:
+        return "the %s clause" % row["clause"]
+    return "the script's top level"
+
+
+def audit_command_table_writes(tree):
+    """Every finding that says the NAME a call reaches can be rebound.
+
+    `audit_function_definitions` above requires one `function` statement per
+    name, at the top level -- and a `function` statement is one way to bind a
+    command name, not the way. The audit already knows this about the VARIABLE
+    table: an assignment, `Set-Variable`, the `Variable:` provider and
+    `PSVariable.Set` are four spellings of one move and each has its own rule.
+    The command table has the same three routes and W2-A5-V5 measured all of
+    them, in the `register` clause one statement before the call, each leaving
+    the suite at 25 PASS / 0 RED / 0 INERT while `-Plan register` printed
+    `start= delayed-auto` and the verb path built `start= auto`:
+
+      Set-Item  -Path Function:Get-ScInvocations -Value { ... }
+      New-Item  -Path Function:Get-ScInvocations -Value { ... } -Force
+      Set-Alias -Name Get-ScInvocations -Value Get-RogueInvocations
+
+    So the rule refuses the MECHANISM rather than the three spellings. This
+    script creates no item, defines no alias and reaches neither command-table
+    drive as a variable, so every use of any of the three is refused -- and an
+    item whose path this audit cannot READ is refused too, because a path built
+    at run time names a drive no rule can attribute. That last clause is not
+    theoretical: `$drive = 'Function:'` one line above the call was measured at
+    25 PASS with the argv flipped, exactly like the three the ruling names.
+
+    The alias family is refused whole rather than on the name it binds. The
+    ruling's floor is "whose Name is Get-ScInvocations", and a rule written to
+    that floor would be a rule about a spelling: an alias named `Invoke-Sc`
+    diverts the same argv one call later, and a name assembled at run time
+    could not be attributed at all.
+    """
+    findings = []
+    for row in as_list(tree["commandTableItems"]):
+        if not row["constant"]:
+            findings.append("%s runs %s on an item whose path is not fixed by the text, so the "
+                            "drive it binds cannot be read and no rule can refuse it by name: "
+                            "%s" % (_where(row), row["command"], _clip(row["text"])))
+        elif COMMAND_TABLE_PATH.match(row["target"].strip()):
+            findings.append("%s binds a command name through the %s provider, so the body that "
+                            "name reaches when the verb runs need not be the one -Plan printed "
+                            "from and the one this audit read: %s"
+                            % (_where(row), row["target"].strip().split(":")[0],
+                               _clip(row["text"])))
+    for row in as_list(tree["aliasCommands"]):
+        findings.append("%s binds the alias '%s', and an alias is resolved BEFORE a function of "
+                        "the same name, so the body that name reaches when the verb runs need "
+                        "not be the one -Plan printed from and the one this audit read: %s"
+                        % (_where(row), row["target"] or "(a name this audit cannot read)",
+                           _clip(row["text"])))
+    for row in as_list(tree["commandTableVariables"]):
+        findings.append("%s reaches the command table as the variable $%s, which binds the same "
+                        "name the plan was printed from without a function statement or a "
+                        "command: %s" % (_where(row), row["name"], _clip(row["text"])))
+    for row in as_list(tree["invocationOperators"]):
+        if row["operator"] == "Dot":
+            findings.append("%s dot-sources, which runs another file's function statements in "
+                            "THIS scope, so the body the plan was printed from can be replaced "
+                            "with no statement in this script binding that name: %s"
+                            % (_where(row), _clip(row["text"])))
+        else:
+            findings.append("%s runs a command this audit cannot name, so every rule above -- "
+                            "each of which reads a command NAME -- is blind to whatever it turns "
+                            "out to be: %s" % (_where(row), _clip(row["text"])))
+    for row in as_list(tree["moduleCommands"]):
+        findings.append("%s runs %s, which imports a whole set of definitions and can put any of "
+                        "them in front of the one this audit read: %s"
+                        % (_where(row), row["command"], _clip(row["text"])))
     return findings
 
 
@@ -1841,6 +2232,10 @@ def audit_one_definition(tree):
 
     # 2e. ...and the one definition is a function no clause can redefine.
     findings += audit_function_definitions(tree)
+
+    # ...and no statement rebinds the NAME that function is reached by, through
+    #     either of the two drives the command table lives on or through an alias.
+    findings += audit_command_table_writes(tree)
 
     # 3. The plan document describes that same function, for the action asked of it.
     fields = [row for row in as_list(tree["planFields"]) if row["key"] == "scInvocations"]
@@ -2354,8 +2749,15 @@ def run_controls(work, report, only=None):
                               "assignment naming no variable, through a scope-qualified "
                               "spelling, or by reading the table's own members off a handle it "
                               "looked up rather than wrote; every function is defined once "
-                              "and at the top level, so no clause can put its own body behind "
-                              "the name the plan was printed from -- so the plan is the argv, "
+                              "and at the top level, and no statement anywhere in the script "
+                              "rebinds the NAME that function is reached by -- no item on the "
+                              "Function: or Alias: drive in any spelling of the path, by the "
+                              "item family or the content family, none on a path built at run "
+                              "time, no alias at all, no drive-qualified variable, and no call "
+                              "operator running a command this audit cannot name, no dot-source "
+                              "and no module import -- so no clause "
+                              "can put its own body behind the name "
+                              "the plan was printed from -- so the plan is the argv, "
                               "and every one of the %d measured plants is detected on the real "
                               "bytes" % len(M12_PLANTS))
 
