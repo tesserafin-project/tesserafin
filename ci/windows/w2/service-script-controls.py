@@ -520,26 +520,72 @@ function Get-UnqualifiedCommandName {
     # `-Plan register` printed `start= delayed-auto` and the verb path built
     # `start= auto`.
     #
-    # Three prefixes go, and nothing else. The call operator, which the parser
-    # already keeps out of the element -- `& Set-Item` and `&Set-Item` both leave
-    # `Set-Item` behind -- but which is stripped anyway because the rule is about
-    # what the name reaches, not about what this parser happens to hand over. A
-    # module qualifier, up to the last `\`. And a scope qualifier, up to the last
-    # `:`: `script:Set-Item` does not in fact resolve as a command in PowerShell
-    # 7.6 ("not recognized as a name of a cmdlet"), so it can rebind nothing, and
-    # it is reduced regardless for the same reason.
+    # A PATH is not a qualifier, and that is what W2-A5-R5c corrects. Reducing at
+    # the last `\` whatever preceded it turned `tools\sc.exe` -- a different
+    # program, not another spelling of `sc.exe` -- into a name on
+    # INVOKE_SC_COMMANDS, so `$null = & 'tools\sc.exe' @Arguments` planted beside
+    # the real call left the suite at 25 PASS / 0 RED / 0 INERT where the parent
+    # commit REDed it: the whole planned argument list reaches a foreign binary
+    # while M12 still asserts that no command runs beside sc.exe.
+    #
+    # So `\` is reduced only where it is the module separator, on the two
+    # definitions the ruling gives. The left side is ONE module name: at least one
+    # `.`, no `/`, no `:`, no `\` of its own, and no leading `.`. The right side is
+    # a command identifier, `^[A-Za-z][A-Za-z0-9-]*$`, which carries neither a `.`
+    # nor a path character. Measured in PowerShell 7.6, only that shape resolves:
+    # `Microsoft.PowerShell.Management\Get-Item` is the cmdlet, while
+    # `x\Microsoft.PowerShell.Management\Get-Item`,
+    # `Microsoft.PowerShell.Management\x\Get-Item` and
+    # `MicrosoftPowerShellManagement\Get-Item` are each "not recognized" -- so a
+    # name carrying a second `\` is a path in every case, and refusing to reduce
+    # it takes no qualified spelling away from the lists. `tools\sc.exe`,
+    # `.\sc.exe` and `C:\Windows\System32\sc.exe` stay whole.
+    #
+    # The scope `:` is reduced on the same terms, and for the reason the ruling's
+    # own `C:\Windows\System32\sc.exe` example requires: the left side must be one
+    # of the five scope names it lists. Reducing at the last `:` regardless left
+    # that path as `\Windows\System32\sc.exe` rather than whole and -- the same
+    # defect spelled with `:` instead of `\` -- reduced the drive-relative
+    # `C:sc.exe` all the way onto INVOKE_SC_COMMANDS. `script:Set-Item` still
+    # reduces, exactly as W2-A5-R5b specified; it does not in fact resolve as a
+    # command in PowerShell 7.6 ("not recognized as a name of a cmdlet"), so it
+    # can rebind nothing, and it is reduced for the same reason as before.
+    #
+    # The call operator is unchanged. The parser already keeps it out of the
+    # element -- `& Set-Item` and `&Set-Item` both leave `Set-Item` behind -- but
+    # it is stripped anyway because the rule is about what the name reaches, not
+    # about what this parser happens to hand over.
     #
     # `LastIndexOf` is given a [char] on purpose: the [string] overload is culture
     # sensitive, and the Windows runner and this one have to read one name the
-    # same way for the two-runner comparison to mean anything.
+    # same way for the two-runner comparison to mean anything. `-cmatch` is
+    # ordinal for the same reason: `-match` folds case, and a fold of a non-ASCII
+    # letter is not a spelling of `[A-Za-z]`.
     param([string] $Name)
     $bare = $Name.Trim()
     while ($bare.StartsWith('&')) { $bare = $bare.Substring(1).Trim() }
     $bare = $bare.Trim("'", '"')
-    $module = $bare.LastIndexOf([char] '\')
-    if ($module -ge 0) { $bare = $bare.Substring($module + 1) }
+    $separator = $bare.LastIndexOf([char] '\')
+    if ($separator -ge 0) {
+        $left = $bare.Substring(0, $separator)
+        $right = $bare.Substring($separator + 1)
+        if ($left.Length -gt 0 -and
+            $left.IndexOf([char] '.') -ge 0 -and
+            $left.IndexOf([char] '/') -lt 0 -and
+            $left.IndexOf([char] ':') -lt 0 -and
+            $left.IndexOf([char] '\') -lt 0 -and
+            $left[0] -ne [char] '.' -and
+            $right -cmatch '^[A-Za-z][A-Za-z0-9-]*$') {
+            $bare = $right
+        }
+    }
     $scope = $bare.LastIndexOf([char] ':')
-    if ($scope -ge 0) { $bare = $bare.Substring($scope + 1) }
+    if ($scope -ge 0) {
+        $qualifier = $bare.Substring(0, $scope)
+        if (@('global', 'script', 'local', 'private', 'variable') -icontains $qualifier) {
+            $bare = $bare.Substring($scope + 1)
+        }
+    }
     return $bare
 }
 
@@ -1619,11 +1665,44 @@ R5B_PLANTS = (
 )
 
 
+# The line `Invoke-Sc` hands the planned argument list to. Every plant below sits
+# immediately before it and leaves it untouched, so the real call is still there
+# and every other M12 plant still applies to the same bytes.
+INVOKE_SC_CALL = "    $output = & sc.exe @Arguments 2>&1 | Out-String\n"
+
+
+# W2-A5-R5c measured the reduction above eating a PATH. `tools\sc.exe` is not a
+# qualified spelling of `sc.exe`; it is a different program, and reducing it to a
+# name on INVOKE_SC_COMMANDS let `$null = & 'tools\sc.exe' @Arguments` stand
+# beside the real call at 25 PASS / 0 RED / 0 INERT where the parent commit
+# a7a10b4077 REDed it at 24/1/0. The whole planned argv reaches that binary, and
+# M12's own PASS text still said that nothing else in the script reaches sc.exe.
+#
+# The first plant is the ruling's own insertion, byte for byte. The other three
+# are the same defect in the spellings the ruling names as having to stay whole,
+# planted for the reason the ruling gives for the rest: a path is not a qualifier
+# whichever prefix it carries, so closing only `tools\` would be a rule about one
+# spelling. `C:sc.exe` is the `:` half of it -- drive-relative, no `\` at all, and
+# reduced onto the allowlist by the scope strip rather than the module strip.
+R5C_PLANTS = (
+    ("Invoke-Sc running a relative path beside the real sc.exe",
+     [(INVOKE_SC_CALL, "    $null = & 'tools\\sc.exe' @Arguments\n" + INVOKE_SC_CALL)]),
+    ("Invoke-Sc running a dot-relative path beside the real sc.exe",
+     [(INVOKE_SC_CALL, "    $null = & '.\\sc.exe' @Arguments\n" + INVOKE_SC_CALL)]),
+    ("Invoke-Sc running an absolute machine path beside the real sc.exe",
+     [(INVOKE_SC_CALL,
+       "    $null = & 'C:\\Windows\\System32\\sc.exe' @Arguments\n" + INVOKE_SC_CALL)]),
+    ("Invoke-Sc running a drive-relative path beside the real sc.exe",
+     [(INVOKE_SC_CALL, "    $null = & 'C:sc.exe' @Arguments\n" + INVOKE_SC_CALL)]),
+)
+
+
 # Every plant M12 is required to detect on the real script's bytes. A plant that
 # can no longer be applied is reported as an unmeasured rule, not as a pass.
 M12_PLANTS = (V1_PLANTS + R2_PLANTS + NEIGHBOUR_PLANTS + R3_PLANTS + R4_PLANTS +
               FUNCTION_PLANTS +
-              BL5_PLANTS + BL5_NEIGHBOUR_PLANTS + R5B_PLANTS)
+              BL5_PLANTS + BL5_NEIGHBOUR_PLANTS + R5B_PLANTS +
+              R5C_PLANTS)
 
 # `$true`, `$false`, `$null` and the pipeline's `$_` carry nothing about HOW the
 # script was invoked, so reading one inside `Get-ScInvocations` says nothing
