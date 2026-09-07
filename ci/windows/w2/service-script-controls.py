@@ -646,11 +646,22 @@ foreach ($switch in $switches) {
 }
 
 $functions = [ordered]@{}
+$functionDefinitions = @()
 $invokeScFunction = $null
 $invocationsFunction = $null
 foreach ($function in $ast.FindAll({
         param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true)) {
     $functions[$function.Name] = $function.Extent.Text
+    # WHERE it is defined, not only that it exists. A `function` statement is
+    # executed, so one inside a verb clause replaces the script's own definition
+    # of that name at the moment the clause runs -- after `-Plan` has printed
+    # what the original returned.
+    $functionDefinitions += [ordered]@{
+        name = $function.Name
+        function = Get-EnclosingFunction -Node $function
+        clause = Get-EnclosingClause -Node $function
+        text = $function.Extent.Text.Split("`n")[0]
+    }
     if ($function.Name -eq 'Invoke-Sc') { $invokeScFunction = $function }
     if ($function.Name -eq 'Get-ScInvocations') { $invocationsFunction = $function }
 }
@@ -960,6 +971,7 @@ foreach ($command in $ast.FindAll({
     verbClauses = $verbClauses
     invocationClauses = $invocationClauses
     functions = $functions
+    functionDefinitions = $functionDefinitions
     parameters = $parameters
     scCalls = $scCalls
     invokeScCalls = $invokeScCalls
@@ -1189,9 +1201,30 @@ R4_PLANTS = (
        + REGISTER_READ)]),
 )
 
+# Found while measuring the two above, and named by no ruling -- the same
+# footing as NEIGHBOUR_PLANTS. Every rule about the one definition reads the
+# function this script DEFINES; a `function` statement is executed, so a verb
+# clause can carry its own and rebind that name one statement before calling it.
+# Measured on the post-R4 script: the verb path built `start= auto` while `-Plan
+# register` printed `start= delayed-auto`. It did NOT leave the suite green --
+# a second definition also blinds the R2 plant, so the suite reported 24 PASS /
+# 0 RED / 1 INERT -- but an INERT is a rule reporting that it is unmeasured, not
+# a control refusing the plant, so it is closed here rather than left as one.
+FUNCTION_PLANTS = (
+    ("a register clause that defines its own Get-ScInvocations over the script's",
+     [(REGISTER_READ,
+       "            function Get-ScInvocations {\n"
+       "                param([string] $Action, [string] $BinaryPath)\n"
+       "                return @([ordered]@{ what = 'sc.exe create Tesserafin'; arguments = @(\n"
+       "                    'create', 'Tesserafin', 'binPath=', $BinaryPath,\n"
+       "                    'start=', 'auto', 'DisplayName=', 'Tesserafin Server') })\n"
+       "            }\n" + REGISTER_READ)]),
+)
+
 # Every plant M12 is required to detect on the real script's bytes. A plant that
 # can no longer be applied is reported as an unmeasured rule, not as a pass.
-M12_PLANTS = V1_PLANTS + R2_PLANTS + NEIGHBOUR_PLANTS + R3_PLANTS + R4_PLANTS
+M12_PLANTS = (V1_PLANTS + R2_PLANTS + NEIGHBOUR_PLANTS + R3_PLANTS + R4_PLANTS +
+              FUNCTION_PLANTS)
 
 # `$true`, `$false`, `$null` and the pipeline's `$_` carry nothing about HOW the
 # script was invoked, so reading one inside `Get-ScInvocations` says nothing
@@ -1462,6 +1495,41 @@ def audit_scope_writes(tree, assignments):
                         "refuse it by name: %s %s %s"
                         % (row["clause"], _clip(row["leftText"]), row["operator"],
                            _clip(row["rightText"])))
+    return findings
+
+
+def audit_function_definitions(tree):
+    """Every finding that says the one definition is not the one that runs.
+
+    Every rule about `Get-ScInvocations` reads the function this script DEFINES,
+    and a `function` statement is not a declaration: it is executed, and it
+    replaces whatever that name meant before. A verb clause carrying its own
+    `function Get-ScInvocations { ... }` therefore rebinds the one definition
+    itself, one statement before calling it -- `-Plan` has already exited by
+    then, so it printed the original -- and neither the reads rule nor the
+    literals it now returns has anything to say about it, because the body being
+    audited is no longer the body being run.
+
+    Found while measuring W2-A5-R4's plant rather than named by that ruling, and
+    it is a different class from the constants that ruling closes: the name
+    rebound is a FUNCTION, not a value the argv is built from. So every function
+    is required to be defined once, at the top level -- this script nests none
+    and needs none -- rather than the audit trying to decide which of two bodies
+    a call reaches.
+    """
+    findings = []
+    seen = {}
+    for row in as_list(tree["functionDefinitions"]):
+        seen[row["name"]] = seen.get(row["name"], 0) + 1
+        where = row["function"] or (("the %s clause" % row["clause"]) if row["clause"] else "")
+        if where:
+            findings.append("%s defines '%s', so the body that name reaches when the verb runs "
+                            "need not be the one -Plan printed from and the one this audit "
+                            "read: %s" % (where, row["name"], _clip(row["text"])))
+    for name, count in sorted(seen.items()):
+        if count > 1:
+            findings.append("'%s' is defined %d times, so which body a call reaches depends on "
+                            "what has run before it" % (name, count))
     return findings
 
 
@@ -1770,6 +1838,9 @@ def audit_one_definition(tree):
     # 2d. The §4 values the plan document reports beside that argv are constants
     #     too, whether or not the one definition reads any of them.
     findings += audit_service_constants(tree, assignments)
+
+    # 2e. ...and the one definition is a function no clause can redefine.
+    findings += audit_function_definitions(tree)
 
     # 3. The plan document describes that same function, for the action asked of it.
     fields = [row for row in as_list(tree["planFields"]) if row["key"] == "scInvocations"]
@@ -2282,8 +2353,10 @@ def run_controls(work, report, only=None):
                               "automatics, through the Variable: provider, through an "
                               "assignment naming no variable, through a scope-qualified "
                               "spelling, or by reading the table's own members off a handle it "
-                              "looked up rather than wrote -- so the plan is the argv, and "
-                              "every one of the %d measured plants is detected on the real "
+                              "looked up rather than wrote; every function is defined once "
+                              "and at the top level, so no clause can put its own body behind "
+                              "the name the plan was printed from -- so the plan is the argv, "
+                              "and every one of the %d measured plants is detected on the real "
                               "bytes" % len(M12_PLANTS))
 
     # --- M13: no repair -------------------------------------------------------
