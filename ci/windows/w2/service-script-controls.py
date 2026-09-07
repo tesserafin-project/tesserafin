@@ -95,6 +95,11 @@ SERVICE_DISPLAY_NAME = "Tesserafin Server"
 SERVICE_DESCRIPTION = "Tesserafin media server. Manage it at http://localhost:8096."
 SERVICE_START_TYPE = "delayed-auto"
 FAILURE_ACTIONS = "restart/60000/restart/60000//0"
+# §4's `reset=` window: the time after which the Service Control Manager forgets
+# earlier failures. Transcribed here for the same reason as the four above --
+# W2-A5-R4 made it a literal in the script's argv, so M07 is what says the two
+# still agree.
+FAILURE_RESET_SECONDS = "86400"
 
 VERBS = ("register", "start", "stop", "remove")
 
@@ -858,6 +863,53 @@ foreach ($node in $ast.FindAll({
     }
 }
 
+# The same table reached as a MEMBER, whatever its receiver is spelled as.
+# `$scopeTableUses` above reads variable NODES, so it sees
+# `$ExecutionContext.SessionState.PSVariable.Set(...)` and is blind to
+# `(Get-Variable -Name ExecutionContext -ValueOnly).SessionState.PSVariable.Set(
+# ...)`, which reaches the IDENTICAL object with the handle spelled as a string
+# argument to a command -- W2-A5-R4 measured that in the `register` clause
+# leaving the suite at 25 PASS while `-Plan` printed `start= delayed-auto` and
+# the verb path built `start= auto`. Refusing one more spelling of the receiver
+# cannot end, because the receiver is an arbitrary expression: a parameter, a
+# field of something else, a value returned by a function. The MEMBERS are not
+# arbitrary. Every route from any handle to the session's variable table passes
+# through one of the names below, so they are collected wherever they appear and
+# whatever they are read off -- and a member named by an expression rather than
+# by a constant is collected too, because a name this audit cannot read is a
+# name it cannot refuse.
+$scopeTableMemberNames = @('sessionstate', 'sessionstateproxy', 'psvariable',
+                           'getvariable', 'setvariable', 'getvariablevalue',
+                           'setvariablevalue')
+$scopeTableMembers = @()
+foreach ($node in $ast.FindAll({
+        param($n) $n -is [System.Management.Automation.Language.MemberExpressionAst] }, $true)) {
+    $member = ''
+    $computed = $true
+    if ($node.Member -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+        $member = $node.Member.Value
+        $computed = $false
+    }
+    if (-not $computed -and $member.ToLowerInvariant() -notin $scopeTableMemberNames) { continue }
+    if ($computed) { $member = $node.Member.Extent.Text }
+    $statement = $node.Parent
+    while ($null -ne $statement -and
+           ($statement -isnot [System.Management.Automation.Language.StatementAst] -or
+            $statement.Extent.Text -eq $node.Extent.Text)) {
+        $statement = $statement.Parent
+    }
+    $text = $node.Extent.Text
+    if ($null -ne $statement) { $text = $statement.Extent.Text }
+    $scopeTableMembers += [ordered]@{
+        member = $member
+        computed = $computed
+        receiver = $node.Expression.Extent.Text
+        function = Get-EnclosingFunction -Node $node
+        clause = Get-EnclosingClause -Node $node
+        text = $text
+    }
+}
+
 # Every variable use inside a top-level switch clause, tagged. The dataflow walk
 # follows bindings; this is what says nothing ELSE touched the value on its way
 # from that binding to `Invoke-Sc`.
@@ -922,6 +974,7 @@ foreach ($command in $ast.FindAll({
     invocationCommands = $invocationCommands
     variableCommands = $variableCommands
     scopeTableUses = $scopeTableUses
+    scopeTableMembers = $scopeTableMembers
     clauseVariableUses = $clauseVariableUses
     binaryPathArguments = $binaryPathArguments
 } | ConvertTo-Json -Depth 8
@@ -1014,9 +1067,13 @@ R2_PLANTS = (
      [("    $output = & sc.exe @Arguments 2>&1 | Out-String\n",
        "    $Arguments.SetValue('auto', 5)\n"
        "    $output = & sc.exe @Arguments 2>&1 | Out-String\n")]),
+    # Re-anchored under W2-A5-R4, which literalised the token this plant used to
+    # replace. The mechanism is unchanged and so is what detects it: the body
+    # reads the SCRIPT's own `-Plan` switch, which is a script parameter and
+    # never one of this function's own bindings.
     ("a Get-ScInvocations whose register clause branches on the script's own -Plan switch",
-     [("                    'start=', $SERVICE_START_TYPE,\n",
-       "                    'start=', $(if ($Plan) { $SERVICE_START_TYPE } else { 'auto' }),\n")]),
+     [("                    'start=', 'delayed-auto',\n",
+       "                    'start=', $(if ($Plan) { 'delayed-auto' } else { 'auto' }),\n")]),
 )
 
 # One neighbour of R2's pair, found while measuring them and not named by any
@@ -1102,9 +1159,39 @@ R3_PLANTS = (
        "-BinaryPath $binaryPath)\n")]),
 )
 
+REGISTER_READ = ("            $invocations = @(Get-ScInvocations -Action 'register' "
+                 "-BinaryPath $binaryPath)\n")
+
+# The W2-A5-R4 ruling measured a fifth shape, on this same HEAD. It is not a new
+# mechanism -- it is R3's first plant with the HANDLE spelled differently. The
+# object whose `.SessionState.PSVariable.Set` binds a script-scope name is
+# `$ExecutionContext`, and `Get-Variable -Name ExecutionContext -ValueOnly`
+# returns that same object with the name written as a string argument to a
+# command: no variable node names it, so the rule that collected the three
+# automatics saw nothing, `Get-Variable` binds nothing so no `*-Variable` rule
+# saw it either, and the suite stayed at 25 PASS / 0 RED / 0 INERT while `-Plan
+# register` printed `start= delayed-auto` and the verb path built `start= auto`.
+# The ruling refused another handle-spelling patch, and it is right that one
+# cannot end: the receiver is an arbitrary expression. So the argv is literals
+# now -- neither plant below can move it -- and what the audit refuses is the
+# table's own members, off any receiver at all. The second plant is the same
+# reach through a local, which is what makes the rule's independence from the
+# receiver a measurement rather than a claim.
+R4_PLANTS = (
+    ("a register clause that reaches the variable table through a handle it looks up by name",
+     [(REGISTER_READ,
+       "            (Get-Variable -Name ExecutionContext -ValueOnly)"
+       ".SessionState.PSVariable.Set('SERVICE_START_TYPE', 'auto')\n" + REGISTER_READ)]),
+    ("a register clause that parks that handle in a local first",
+     [(REGISTER_READ,
+       "            $table = Get-Variable -Name ExecutionContext -ValueOnly\n"
+       "            $table.SessionState.PSVariable.Set('SERVICE_START_TYPE', 'auto')\n"
+       + REGISTER_READ)]),
+)
+
 # Every plant M12 is required to detect on the real script's bytes. A plant that
 # can no longer be applied is reported as an unmeasured rule, not as a pass.
-M12_PLANTS = V1_PLANTS + R2_PLANTS + NEIGHBOUR_PLANTS + R3_PLANTS
+M12_PLANTS = V1_PLANTS + R2_PLANTS + NEIGHBOUR_PLANTS + R3_PLANTS + R4_PLANTS
 
 # `$true`, `$false`, `$null` and the pipeline's `$_` carry nothing about HOW the
 # script was invoked, so reading one inside `Get-ScInvocations` says nothing
@@ -1205,6 +1292,15 @@ def audit_invoke_sc_arguments(tree):
     return findings
 
 
+def _rebound_names(tree):
+    """Every name a `*-Variable` command or the `Variable:` provider binds."""
+    rebound = {}
+    for row in as_list(tree["variableCommands"]):
+        if row["target"]:
+            rebound.setdefault(row["target"], row)
+    return rebound
+
+
 def audit_invocations_scope(tree, assignments):
     """Every finding that says the one definition can tell `-Plan` from a verb.
 
@@ -1216,20 +1312,22 @@ def audit_invocations_scope(tree, assignments):
     with no change at either call site and no assignment anywhere.
 
     The rule is therefore about what the function may READ, not about which
-    names are forbidden: its own parameters, values it binds itself, and script
-    constants -- names assigned once, at the top level, from an expression that
-    runs nothing and reads only other constants. A script parameter is refused
-    even if it were somehow also a constant, and the five dynamic-scope
-    automatics are named so the finding can say which mechanism it refused.
+    names are forbidden: its own parameters and values it binds itself, and
+    nothing else at all. W2-A5-R4 closed the one allowance that used to sit
+    beside those two -- a script CONSTANT, a name assigned once at the top level
+    from an expression that runs nothing. Four rulings in a row measured the
+    same defect through that allowance: a constant is a name, a name can be
+    bound, and each spelling of the binding needed its own rule. The §4 values
+    this function used to read are literals in its body now, so the allowance
+    buys nothing and its absence is what stops the next spelling. The five
+    dynamic-scope automatics are still named individually so the finding can say
+    which mechanism it refused, and a script parameter still gets its own
+    sentence.
     """
     findings = []
     parameters = set(as_list(tree["invocationParameters"]))
     bound_here = set(name for name in as_list(tree["invocationAssigned"]) if name)
-    rebound = {}
-    for row in as_list(tree["variableCommands"]):
-        if row["target"]:
-            rebound.setdefault(row["target"], row)
-    constants = _script_constants(assignments, rebound)
+    rebound = _rebound_names(tree)
     script_parameters = set(as_list(tree["parameters"]))
     for use in as_list(tree["invocationVariableUses"]):
         name = use["name"]
@@ -1252,10 +1350,10 @@ def audit_invocations_scope(tree, assignments):
                             "rather than by assignment, so the value the verb path gets need "
                             "not be the one -Plan printed: %s"
                             % (name, where, row["command"], _clip(row["text"])))
-        elif name not in constants:
+        else:
             findings.append("Get-ScInvocations reads $%s, which is neither one of its own "
-                            "parameters, nor a value it binds itself, nor a script constant, so "
-                            "what it returns is not fixed by the action it was asked for: %s"
+                            "parameters nor a value it binds itself, so what it returns is not "
+                            "fixed by the action it was asked for: %s"
                             % (name, _clip(use["text"])))
     for name in as_list(tree["invocationCommands"]):
         if name.strip("'\"").lower() not in GET_SC_INVOCATIONS_COMMANDS:
@@ -1276,6 +1374,26 @@ SCOPE_TABLE_VARIABLES = {
     "SessionState": "the same table reached directly, with the same Set",
     "PSCmdlet": "the cmdlet's invocation state, whose SessionState is that table again",
 }
+
+# The members every one of those routes passes through, whatever the object it
+# is read off is called. `SCOPE_TABLE_VARIABLES` names three handles; this names
+# the table's own surface, which is what a handle is looked up in order to
+# reach. W2-A5-R4 measured why the distinction matters: the handle can be
+# obtained without ever writing its name, and then no rule that reads variable
+# nodes has anything to refuse.
+SCOPE_TABLE_MEMBERS = {
+    "SessionState": "the session state whose PSVariable table binds script-scope names",
+    "SessionStateProxy": "the same state through a runspace's proxy",
+    "PSVariable": "the variable table itself, whose Set binds a name from a method call",
+    "GetVariable": "a read of that table by name",
+    "SetVariable": "a write to that table by name",
+    "GetVariableValue": "a read of that table by name",
+    "SetVariableValue": "a write to that table by name",
+}
+
+# PowerShell member access is case-insensitive, so the audit reads the name the
+# script wrote and looks it up by its lowered form.
+SCOPE_TABLE_MEMBERS_LOWER = {name.lower(): what for name, what in SCOPE_TABLE_MEMBERS.items()}
 
 
 def audit_scope_writes(tree, assignments):
@@ -1311,6 +1429,31 @@ def audit_scope_writes(tree, assignments):
                         "definition reads without writing an assignment and without naming a "
                         "command this audit could refuse: %s"
                         % (where, name, SCOPE_TABLE_VARIABLES[name], _clip(use["text"])))
+    # The third shape, and the one the two rules above are blind to for the same
+    # reason as each other: the HANDLE need not be written. W2-A5-R4's plant
+    # looks `$ExecutionContext` up by name -- `(Get-Variable -Name
+    # ExecutionContext -ValueOnly)` -- so there is no variable node named
+    # ExecutionContext for the loop above, no assignment, and no *-Variable
+    # command binding anything. What it cannot avoid is going through the
+    # table's own members, so those are refused wherever they appear and off
+    # whatever receiver; a member named by an expression rather than by a
+    # constant is refused too, because this audit cannot read what it would
+    # reach.
+    for use in as_list(tree["scopeTableMembers"]):
+        where = use["function"] or (("the %s clause" % use["clause"]) if use["clause"]
+                                    else "the script body")
+        if use["computed"]:
+            findings.append("%s reads a member named by an expression (%s) off %s, so what it "
+                            "reaches is not fixed by the text and no rule here can refuse it by "
+                            "name: %s" % (where, _clip(use["member"]), _clip(use["receiver"]),
+                                          _clip(use["text"])))
+            continue
+        findings.append("%s reaches .%s -- %s -- off %s, so it can bind any script-scope name "
+                        "from a method call, and the handle it read that member from need not "
+                        "name the session anywhere: %s"
+                        % (where, use["member"],
+                           SCOPE_TABLE_MEMBERS_LOWER[use["member"].lower()],
+                           _clip(use["receiver"]), _clip(use["text"])))
     for row in assignments:
         if row["function"] or row["clause"] not in VERBS or row["leftRoot"]:
             continue
@@ -1319,6 +1462,61 @@ def audit_scope_writes(tree, assignments):
                         "refuse it by name: %s %s %s"
                         % (row["clause"], _clip(row["leftText"]), row["operator"],
                            _clip(row["rightText"])))
+    return findings
+
+
+# The six §4 names the script still keeps at top level. `Get-ScInvocations` no
+# longer reads any of them -- the argv is literals -- but `New-Plan` reports
+# five of them as the plan document's own fields and the `register` clause
+# quotes two in the note it writes the operator, so a clause that rebinds one
+# still makes the EVIDENCE disagree with the call it describes. That is a
+# smaller defect than a diverted argv and it is the same move, so it is refused
+# here rather than left to be rediscovered: each of these must still be a script
+# constant, whoever reads it.
+#
+# This rule is deliberately independent of what `Get-ScInvocations` reads.
+# Until W2-A5-R4 every finding about these names was reached THROUGH that
+# function's reads, so literalising the argv would have silently retired four
+# measured plants along with the defect they demonstrate.
+SERVICE_CONSTANTS = ("SERVICE_NAME", "SERVICE_DISPLAY_NAME", "SERVICE_DESCRIPTION",
+                     "SERVICE_START_TYPE", "FAILURE_RESET_SECONDS", "FAILURE_ACTIONS")
+
+
+def audit_service_constants(tree, assignments):
+    """Every finding that says a §4 value can change while the script runs."""
+    findings = []
+    rebound = _rebound_names(tree)
+    constants = _script_constants(assignments, rebound)
+    for name in SERVICE_CONSTANTS:
+        if name in constants:
+            continue
+        if name in rebound:
+            row = rebound[name]
+            where = row["function"] or (("the %s clause" % row["clause"]) if row["clause"]
+                                        else "the script body")
+            findings.append("$%s is a §4 value the plan document and the operator note report, "
+                            "and %s binds it with '%s' rather than at the top level, so what "
+                            "they report need not be what sc.exe was handed: %s"
+                            % (name, where, row["command"], _clip(row["text"])))
+            continue
+        bindings = [row for row in assignments if row["leftRoot"] == name]
+        elsewhere = [row for row in bindings if row["function"] or row["clause"]]
+        if elsewhere:
+            row = elsewhere[0]
+            where = row["function"] or ("the %s clause" % row["clause"])
+            findings.append("$%s is a §4 value the plan document and the operator note report, "
+                            "and %s binds it a second time, so what they report need not be "
+                            "what sc.exe was handed: %s %s %s"
+                            % (name, where, row["leftText"], row["operator"],
+                               _clip(row["rightText"])))
+        elif len(bindings) != 1:
+            findings.append("$%s is a §4 value the plan document and the operator note report, "
+                            "and it has %d top-level bindings rather than one"
+                            % (name, len(bindings)))
+        else:
+            findings.append("$%s is a §4 value the plan document and the operator note report, "
+                            "and its one binding is not a fixed expression: %s"
+                            % (name, _clip(bindings[0]["rightText"])))
     return findings
 
 
@@ -1568,6 +1766,10 @@ def audit_one_definition(tree):
 
     # ...and no clause can rebind what that function reads without an assignment.
     findings += audit_scope_writes(tree, assignments)
+
+    # 2d. The §4 values the plan document reports beside that argv are constants
+    #     too, whether or not the one definition reads any of them.
+    findings += audit_service_constants(tree, assignments)
 
     # 3. The plan document describes that same function, for the action asked of it.
     fields = [row for row in as_list(tree["planFields"]) if row["key"] == "scInvocations"]
@@ -1853,6 +2055,27 @@ def run_controls(work, report, only=None):
                                      ("DisplayName=", SERVICE_DISPLAY_NAME)):
                     if token not in arguments or arguments[arguments.index(token) + 1] != value:
                         findings.append("sc.exe create does not pass %s %r" % (token, value))
+            # W2-A5-R4 made every §4 token in the argv a literal inside
+            # Get-ScInvocations, so the plan's own fields are no longer the same
+            # objects the Service Control Manager is handed. That is what stops
+            # a verb clause diverting the argv, and it is exactly why the two
+            # have to be compared HERE, on the real bytes: nothing else in this
+            # suite would notice the literals and the §4 constants drifting
+            # apart. Every argument of the other two calls is asserted, not just
+            # the ones `create` carries.
+            for action, expected in (("description",
+                                      ["description", SERVICE_NAME, SERVICE_DESCRIPTION]),
+                                     ("failure",
+                                      ["failure", SERVICE_NAME,
+                                       "reset=", FAILURE_RESET_SECONDS,
+                                       "actions=", FAILURE_ACTIONS])):
+                planned = [invocation for invocation in document["scInvocations"]
+                           if invocation["arguments"][0] == action]
+                if len(planned) != 1:
+                    findings.append("register plans %d sc.exe %s calls" % (len(planned), action))
+                elif planned[0]["arguments"] != expected:
+                    findings.append("sc.exe %s is %r, §4 requires %r"
+                                    % (action, planned[0]["arguments"], expected))
             if [invocation["arguments"][0] for invocation in document["scInvocations"]] != \
                     ["create", "description", "failure"]:
                 findings.append("register does not plan create, description and failure in order")
@@ -2049,14 +2272,19 @@ def run_controls(work, report, only=None):
                               "scInvocations begins at the same function for the action it was "
                               "asked to describe. Inside Invoke-Sc, $Arguments is splatted and "
                               "never otherwise reached, and no command runs beside sc.exe; "
-                              "inside Get-ScInvocations, every variable is one of its own "
-                              "parameters or a script constant, so it cannot see whether -Plan "
-                              "or a verb is asking; and no verb clause can rebind what that "
-                              "function reads through the session's variable table, the "
-                              "Variable: provider, an assignment naming no variable or a "
-                              "scope-qualified spelling of the name -- so the "
-                              "plan is the argv, and every one of the %d measured plants is "
-                              "detected on the real bytes" % len(M12_PLANTS))
+                              "every §4 token in that argv is a literal in Get-ScInvocations, "
+                              "which reads its own two parameters and nothing else at all, so "
+                              "there is no script-scope name left for a verb clause to bind "
+                              "between the document and the call; the six §4 constants the plan "
+                              "document and the operator note still report are each bound once, "
+                              "at the top level, and nowhere else; and no clause reaches the "
+                              "session's variable table -- by naming one of its three "
+                              "automatics, through the Variable: provider, through an "
+                              "assignment naming no variable, through a scope-qualified "
+                              "spelling, or by reading the table's own members off a handle it "
+                              "looked up rather than wrote -- so the plan is the argv, and "
+                              "every one of the %d measured plants is detected on the real "
+                              "bytes" % len(M12_PLANTS))
 
     # --- M13: no repair -------------------------------------------------------
     if selected("M13"):

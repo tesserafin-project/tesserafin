@@ -164,6 +164,13 @@ $PSNativeCommandArgumentPassing = 'Standard'
 # W0 §4, "The service contract", transcribed. These are the identity the MSI
 # will register too; the ZIP and the MSI must not disagree about what a
 # Tesserafin service IS.
+#
+# They are what the PLAN DOCUMENT reports and what the operator notes quote.
+# They are NOT what the argv handed to sc.exe is built from: `Get-ScInvocations`
+# carries its own literals, because a name that is in scope for the whole run is
+# a name a verb clause can bind between the moment the document printed the argv
+# and the moment the function built it. `ci/windows/w2/service-script-controls.py`
+# M07 asserts the two say the same thing, on the real bytes, over both.
 # ---------------------------------------------------------------------------
 $SERVICE_NAME = 'Tesserafin'
 $SERVICE_DISPLAY_NAME = 'Tesserafin Server'
@@ -408,33 +415,53 @@ function Get-ScInvocations {
     # to do. The verbs execute what this returns and `-Plan` prints what this
     # returns, so the dry evidence is about the production call rather than
     # beside it.
+    #
+    # Every token below is a LITERAL, and W2-A5-R4 measured why. While the argv
+    # was built from `$SERVICE_START_TYPE` and its siblings, this function read
+    # names that live at script scope for the whole run -- so a `register`
+    # clause could bind one of them BETWEEN the moment `-Plan` printed the argv
+    # and the moment this function built it, and sc.exe was handed
+    # `start= auto` while the document said `delayed-auto`. Assignment,
+    # `Set-Variable`, the `Variable:` provider and the session's own variable
+    # table are four spellings of that one move, and the audit that refuses
+    # them has had to grow a rule per spelling. A literal has no name to bind,
+    # so the dataflow ends here for all four and for the next one: what this
+    # function returns is fixed by the action it was asked for, and by nothing
+    # else in the session.
+    #
+    # The §4 constants above are still the identity the plan document reports
+    # and the operator notes quote. They are no longer what the argv is MADE
+    # of, and M07 asserts the two say the same thing on the real bytes -- over
+    # the plan's fields and over the argv itself -- so this duplication cannot
+    # drift silently.
     switch ($Action) {
         'register' {
             return @(
-                [ordered]@{ what = "sc.exe create $SERVICE_NAME"; arguments = @(
-                    'create', $SERVICE_NAME,
+                [ordered]@{ what = 'sc.exe create Tesserafin'; arguments = @(
+                    'create', 'Tesserafin',
                     'binPath=', $BinaryPath,
-                    'start=', $SERVICE_START_TYPE,
-                    'DisplayName=', $SERVICE_DISPLAY_NAME) }
-                [ordered]@{ what = "sc.exe description $SERVICE_NAME"; arguments = @(
-                    'description', $SERVICE_NAME, $SERVICE_DESCRIPTION) }
-                [ordered]@{ what = "sc.exe failure $SERVICE_NAME"; arguments = @(
-                    'failure', $SERVICE_NAME,
-                    'reset=', "$FAILURE_RESET_SECONDS",
-                    'actions=', $FAILURE_ACTIONS) }
+                    'start=', 'delayed-auto',
+                    'DisplayName=', 'Tesserafin Server') }
+                [ordered]@{ what = 'sc.exe description Tesserafin'; arguments = @(
+                    'description', 'Tesserafin',
+                    'Tesserafin media server. Manage it at http://localhost:8096.') }
+                [ordered]@{ what = 'sc.exe failure Tesserafin'; arguments = @(
+                    'failure', 'Tesserafin',
+                    'reset=', '86400',
+                    'actions=', 'restart/60000/restart/60000//0') }
             )
         }
         'start' {
-            return @([ordered]@{ what = "sc.exe start $SERVICE_NAME"
-                                 arguments = @('start', $SERVICE_NAME) })
+            return @([ordered]@{ what = 'sc.exe start Tesserafin'
+                                 arguments = @('start', 'Tesserafin') })
         }
         'stop' {
-            return @([ordered]@{ what = "sc.exe stop $SERVICE_NAME"
-                                 arguments = @('stop', $SERVICE_NAME) })
+            return @([ordered]@{ what = 'sc.exe stop Tesserafin'
+                                 arguments = @('stop', 'Tesserafin') })
         }
         'remove' {
-            return @([ordered]@{ what = "sc.exe delete $SERVICE_NAME"
-                                 arguments = @('delete', $SERVICE_NAME) })
+            return @([ordered]@{ what = 'sc.exe delete Tesserafin'
+                                 arguments = @('delete', 'Tesserafin') })
         }
     }
     Deny 'verb' "no Service Control Manager call is defined for '$Action'"
