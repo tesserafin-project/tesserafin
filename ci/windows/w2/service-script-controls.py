@@ -528,18 +528,32 @@ function Get-UnqualifiedCommandName {
     # commit REDed it: the whole planned argument list reaches a foreign binary
     # while M12 still asserts that no command runs beside sc.exe.
     #
-    # So `\` is reduced only where it is the module separator, on the two
-    # definitions the ruling gives. The left side is ONE module name: at least one
-    # `.`, no `/`, no `:`, no `\` of its own, and no leading `.`. The right side is
-    # a command identifier, `^[A-Za-z][A-Za-z0-9-]*$`, which carries neither a `.`
-    # nor a path character. Measured in PowerShell 7.6, only that shape resolves:
-    # `Microsoft.PowerShell.Management\Get-Item` is the cmdlet, while
-    # `x\Microsoft.PowerShell.Management\Get-Item`,
-    # `Microsoft.PowerShell.Management\x\Get-Item` and
-    # `MicrosoftPowerShellManagement\Get-Item` are each "not recognized" -- so a
-    # name carrying a second `\` is a path in every case, and refusing to reduce
-    # it takes no qualified spelling away from the lists. `tools\sc.exe`,
+    # A DOTTED NAME is not a module either, and that is what W2-A5-R5d corrects.
+    # R5c read the left side as "one module name" by SHAPE -- at least one `.`, no
+    # `/`, no `:`, no `\` of its own, no leading `.` -- and `foo.bar` satisfies
+    # every clause of it, so `$null = & 'foo.bar\deny' @Arguments` planted beside
+    # the real call reduced onto INVOKE_SC_COMMANDS and left the suite at 25 PASS
+    # / 0 RED / 0 INERT: the same primitive as the path defect one ruling earlier,
+    # reached through a prefix that merely looks like a module.
+    #
+    # So `\` is reduced only where it is the module separator, and the module is
+    # named rather than described. The left side must be exactly one of the four
+    # the ruling lists -- `Microsoft.PowerShell.Core`, `.Management`, `.Utility`
+    # and `.Security`, the modules that export every command the lists below
+    # match -- compared ORDINALLY, and no other left side loses its `\` at all.
+    # The right side is still a command identifier, `^[A-Za-z][A-Za-z0-9-]*$`,
+    # which carries neither a `.` nor a path character, so
+    # `Microsoft.PowerShell.Management\sc.exe` stays whole as well: it names a
+    # program, not a cmdlet, and it is a path. `foo.bar\deny`, `tools\sc.exe`,
     # `.\sc.exe` and `C:\Windows\System32\sc.exe` stay whole.
+    #
+    # Ordinal is the ruling's instruction and it is narrower than PowerShell's own
+    # resolution, which folds case on a module name. A qualified spelling of a
+    # refused command through some OTHER module -- a real one this script never
+    # calls, or a case-folded spelling of these four -- therefore stays whole and
+    # reaches no list. That is measured and reported on #262 rather than widened
+    # here, because a wider rule is the defect this ruling and the last one both
+    # closed.
     #
     # The scope `:` is reduced on the same terms, and for the reason the ruling's
     # own `C:\Windows\System32\sc.exe` example requires: the left side must be one
@@ -569,13 +583,16 @@ function Get-UnqualifiedCommandName {
     if ($separator -ge 0) {
         $left = $bare.Substring(0, $separator)
         $right = $bare.Substring($separator + 1)
-        if ($left.Length -gt 0 -and
-            $left.IndexOf([char] '.') -ge 0 -and
-            $left.IndexOf([char] '/') -lt 0 -and
-            $left.IndexOf([char] ':') -lt 0 -and
-            $left.IndexOf([char] '\') -lt 0 -and
-            $left[0] -ne [char] '.' -and
-            $right -cmatch '^[A-Za-z][A-Za-z0-9-]*$') {
+        $known = $false
+        foreach ($module in @('Microsoft.PowerShell.Core',
+                              'Microsoft.PowerShell.Management',
+                              'Microsoft.PowerShell.Utility',
+                              'Microsoft.PowerShell.Security')) {
+            if ([System.String]::Equals($left, $module, [System.StringComparison]::Ordinal)) {
+                $known = $true
+            }
+        }
+        if ($known -and $right -cmatch '^[A-Za-z][A-Za-z0-9-]*$') {
             $bare = $right
         }
     }
@@ -1697,12 +1714,25 @@ R5C_PLANTS = (
 )
 
 
+# W2-A5-R5d measured the R5c reduction eating a name that is not a module. Its
+# left-side test described a SHAPE -- a dot, no path character -- and `foo.bar`
+# meets it, so `$null = & 'foo.bar\deny' @Arguments` reduced to `deny`, hit
+# INVOKE_SC_COMMANDS and left the suite at 25 PASS / 0 RED / 0 INERT with the
+# whole planned argv reaching a foreign command. The plant is the ruling's own
+# insertion, byte for byte, and it is kept here so the narrowing is asserted on
+# the real bytes on both runners rather than only in a review.
+R5D_PLANTS = (
+    ("Invoke-Sc running a dotted name that is not a module beside the real sc.exe",
+     [(INVOKE_SC_CALL, "    $null = & 'foo.bar\\deny' @Arguments\n" + INVOKE_SC_CALL)]),
+)
+
+
 # Every plant M12 is required to detect on the real script's bytes. A plant that
 # can no longer be applied is reported as an unmeasured rule, not as a pass.
 M12_PLANTS = (V1_PLANTS + R2_PLANTS + NEIGHBOUR_PLANTS + R3_PLANTS + R4_PLANTS +
               FUNCTION_PLANTS +
               BL5_PLANTS + BL5_NEIGHBOUR_PLANTS + R5B_PLANTS +
-              R5C_PLANTS)
+              R5C_PLANTS + R5D_PLANTS)
 
 # `$true`, `$false`, `$null` and the pipeline's `$_` carry nothing about HOW the
 # script was invoked, so reading one inside `Get-ScInvocations` says nothing
