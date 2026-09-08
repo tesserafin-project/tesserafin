@@ -318,7 +318,7 @@ public class BackupService : IBackupService
             throw new InvalidOperationException($"The backup directory '{backupStorageSpace.Path}' does not have at least '{StorageHelper.HumanizeStorageSize(FiveGigabyte)}' free space. Cannot create backup.");
         }
 
-        var backupPath = Path.Combine(backupFolder, $"reefin-backup-{manifest.DateCreated.ToLocalTime():yyyyMMddHHmmss}.zip");
+        var backupPath = Path.Combine(backupFolder, $"tesserafin-backup-{manifest.DateCreated.ToLocalTime():yyyyMMddHHmmss}.zip");
 
         try
         {
