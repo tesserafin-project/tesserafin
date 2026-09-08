@@ -540,20 +540,29 @@ function Get-UnqualifiedCommandName {
     # named rather than described. The left side must be exactly one of the four
     # the ruling lists -- `Microsoft.PowerShell.Core`, `.Management`, `.Utility`
     # and `.Security`, the modules that export every command the lists below
-    # match -- compared ORDINALLY, and no other left side loses its `\` at all.
+    # match -- compared ordinally but WITHOUT CASE, and no other left side loses
+    # its `\` at all.
     # The right side is still a command identifier, `^[A-Za-z][A-Za-z0-9-]*$`,
     # which carries neither a `.` nor a path character, so
     # `Microsoft.PowerShell.Management\sc.exe` stays whole as well: it names a
     # program, not a cmdlet, and it is a path. `foo.bar\deny`, `tools\sc.exe`,
     # `.\sc.exe` and `C:\Windows\System32\sc.exe` stay whole.
     #
-    # Ordinal is the ruling's instruction and it is narrower than PowerShell's own
-    # resolution, which folds case on a module name. A qualified spelling of a
-    # refused command through some OTHER module -- a real one this script never
-    # calls, or a case-folded spelling of these four -- therefore stays whole and
-    # reaches no list. That is measured and reported on #262 rather than widened
-    # here, because a wider rule is the defect this ruling and the last one both
-    # closed.
+    # CASE is not a spelling this audit may be narrower about, and that is what
+    # W2-A5-R5e corrects. R5d compared the left side ORDINALLY, which is narrower
+    # than PowerShell's own resolution: pwsh 7.6 resolves
+    # `microsoft.powershell.management\Set-Item` to the same cmdlet as the
+    # canonical spelling, so the lower-cased qualifier IS the module and not some
+    # other one. Reading it as a name this audit had never heard of left
+    # `microsoft.powershell.management\Set-Item -Path Function:Get-ScInvocations`
+    # planted in the register clause at 25 PASS / 0 RED / 0 INERT -- the R5b
+    # defect exactly, reached by folding one name's case. The four names are
+    # therefore compared with `OrdinalIgnoreCase`: the LIST is unchanged and still
+    # named rather than described, and the fold is the invariant one, so the
+    # Windows runner and this one reduce one name the same way and the two-runner
+    # comparison still means something. `foo.bar\deny`, `tools\sc.exe` and every
+    # path above stay whole in any case, because folding case makes none of them
+    # one of the four.
     #
     # The scope `:` is reduced on the same terms, and for the reason the ruling's
     # own `C:\Windows\System32\sc.exe` example requires: the left side must be one
@@ -588,7 +597,8 @@ function Get-UnqualifiedCommandName {
                               'Microsoft.PowerShell.Management',
                               'Microsoft.PowerShell.Utility',
                               'Microsoft.PowerShell.Security')) {
-            if ([System.String]::Equals($left, $module, [System.StringComparison]::Ordinal)) {
+            if ([System.String]::Equals($left, $module,
+                                        [System.StringComparison]::OrdinalIgnoreCase)) {
                 $known = $true
             }
         }
@@ -1727,12 +1737,29 @@ R5D_PLANTS = (
 )
 
 
+# W2-A5-R5e measured the R5d comparison being narrower than PowerShell's. The
+# left side was matched with `StringComparison.Ordinal`, so
+# `microsoft.powershell.management\Set-Item -Path Function:Get-ScInvocations`
+# -- the first R5b plant with its module lower-cased, which pwsh 7.6 resolves to
+# the same cmdlet -- reached no list and left the suite at 25 PASS / 0 RED / 0
+# INERT with the register clause binding its own body behind the name the plan
+# was printed from. The plant is the ruling's own insertion, and it is kept here
+# so the fold is asserted on the real bytes on both runners rather than only in
+# a review.
+R5E_PLANTS = (
+    ("a register clause that binds the one definition through a case-folded module qualifier",
+     [(REGISTER_READ,
+       "            microsoft.powershell.management\\Set-Item -Path "
+       "Function:Get-ScInvocations -Value {\n" + BL5_BODY + "            }\n" + REGISTER_READ)]),
+)
+
+
 # Every plant M12 is required to detect on the real script's bytes. A plant that
 # can no longer be applied is reported as an unmeasured rule, not as a pass.
 M12_PLANTS = (V1_PLANTS + R2_PLANTS + NEIGHBOUR_PLANTS + R3_PLANTS + R4_PLANTS +
               FUNCTION_PLANTS +
               BL5_PLANTS + BL5_NEIGHBOUR_PLANTS + R5B_PLANTS +
-              R5C_PLANTS + R5D_PLANTS)
+              R5C_PLANTS + R5D_PLANTS + R5E_PLANTS)
 
 # `$true`, `$false`, `$null` and the pipeline's `$_` carry nothing about HOW the
 # script was invoked, so reading one inside `Get-ScInvocations` says nothing
