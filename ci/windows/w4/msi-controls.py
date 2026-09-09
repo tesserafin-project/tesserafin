@@ -38,6 +38,27 @@ AUTHORING = REPO_ROOT / "packaging" / "windows" / "msi" / "Tesserafin.wxs"
 BUILDER = REPO_ROOT / "ci" / "windows" / "w4" / "build-msi.ps1"
 PROBE = REPO_ROOT / "ci" / "windows" / "w4" / "probe-msi-skeleton.ps1"
 SELF_TEST = REPO_ROOT / "ci" / "windows" / "w4" / "assertion-self-test.ps1"
+A0_DOC = REPO_ROOT / "docs" / "distribution" / "W4-A0-wix-skeleton.md"
+A1_DOC = REPO_ROOT / "docs" / "distribution" / "W4-A1-upgradecode.md"
+
+# W4-A1 (#234). The owner ruling froze the GUID W4-A0 had already authored:
+# "Ordinal, lowercase, no braces. I do not authorize a new GUID." This is the
+# only place that string is stated in the controls, and the comparison below is
+# an ordinal one, so the same digits in a different case, or wrapped in braces,
+# are a different UpgradeCode and are RED -- which is what the ruling names as
+# the hostile control it expects to have been observed RED.
+FROZEN_UPGRADE_CODE = "0f0c9f4e-1c5a-4b8e-9a3d-6d1f2b7c8e05"
+
+# The ruling is equally explicit that "A comment that claims it is unfrozen is
+# RED". A pin the prose contradicts is worse than no pin: the next reader
+# believes the sentence, not the attribute. These patterns are the W4-A0-era
+# wording, so a straight revert of either document trips them.
+UNFROZEN_CLAIM_PATTERNS = (
+    r"unfrozen",
+    r"not\s+frozen",
+    r"nothing\s+in\s+this\s+slice\s+freezes",
+    r"nothing\s+here\s+freezes",
+)
 
 # The entire write surface this slice is allowed to ask for. `packages: read` is
 # needed and only needed because the frozen W2 assembler pulls the accepted Web
@@ -196,7 +217,59 @@ def findings_for_authoring(text: str) -> list[str]:
         )
     if "SuppressSignature" in text or "signtool" in text.lower():
         findings.append("authoring: signs the package, which this slice does not do")
+    findings += findings_for_upgrade_code(text)
     return findings
+
+
+def findings_for_upgrade_code(text: str) -> list[str]:
+    """W4-A1: the authored UpgradeCode is the frozen one, byte for byte.
+
+    `text` is already comment-stripped, so this grades what the package WOULD
+    build with and never the prose about it. The comparison is ordinal against
+    a single literal rather than a case-folded GUID parse, because a GUID parse
+    would accept `{0F0C9F4E-...}` as equal and the ruling does not.
+    """
+    authored = re.findall(r'UpgradeCode\s*=\s*"([^"]*)"', text)
+    if not authored:
+        return ["authoring: no UpgradeCode attribute; W4-A1 froze one and the package must carry it"]
+    if len(authored) > 1:
+        return [f"authoring: {len(authored)} UpgradeCode attributes, so the frozen identity is ambiguous"]
+    if authored[0] != FROZEN_UPGRADE_CODE:
+        return [
+            f"authoring: UpgradeCode is '{authored[0]}', but W4-A1 froze "
+            f"'{FROZEN_UPGRADE_CODE}' -- ordinal, lowercase, no braces"
+        ]
+    return []
+
+
+def findings_for_upgrade_code_prose(authoring_text: str, a0_text: str, a1_text: str) -> list[str]:
+    """W4-A1: no comment or document may still describe the UpgradeCode as open.
+
+    The authoring is read RAW here -- the comments are exactly what is being
+    graded -- and the attestation is required to live in a comment, so the
+    attribute satisfying it would not count.
+    """
+    findings: list[str] = []
+    commentary = "\n".join(re.findall(r"<!--(.*?)-->", authoring_text, flags=re.S))
+    for where, body in (("authoring comment", commentary), ("W4-A0 document", a0_text)):
+        for pattern in UNFROZEN_CLAIM_PATTERNS:
+            if re.search(pattern, body, re.I):
+                findings.append(
+                    f"{where}: still says the UpgradeCode is open ('{pattern}'); W4-A1 froze it"
+                )
+    for where, body in (("authoring comment", commentary), ("W4-A1 document", a1_text)):
+        if "W4-A1" not in body:
+            findings.append(f"{where}: does not cite the W4-A1 ruling that froze the UpgradeCode")
+        if FROZEN_UPGRADE_CODE not in body:
+            findings.append(f"{where}: does not state the frozen UpgradeCode {FROZEN_UPGRADE_CODE}")
+    return findings
+
+
+def grade_authoring(authoring_text: str, a0_text: str, a1_text: str) -> list[str]:
+    """Everything graded off the authoring, mutable as one text for the self-test."""
+    return findings_for_authoring(without_comments(authoring_text, "xml")) + findings_for_upgrade_code_prose(
+        authoring_text, a0_text, a1_text
+    )
 
 
 def findings_for_wiring(text: str) -> list[str]:
@@ -227,8 +300,71 @@ def grade_everything(workflow_text: str) -> list[str]:
     return (
         grade(workflow_text)
         + findings_for_builder(BUILDER.read_text(encoding="utf-8"))
-        + findings_for_authoring(without_comments(AUTHORING.read_text(encoding="utf-8"), "xml"))
+        + grade_authoring(
+            AUTHORING.read_text(encoding="utf-8"),
+            A0_DOC.read_text(encoding="utf-8"),
+            A1_DOC.read_text(encoding="utf-8"),
+        )
     )
+
+
+def self_test_upgrade_code(authoring_text: str, a0_text: str, a1_text: str) -> list[str]:
+    """W4-A1: the freeze gate must be reachable, in every shape the ruling names.
+
+    The ruling's hostile control is "UpgradeCode in the wxs replaced by any
+    other GUID, including the same digits with different case or braces", and
+    the case and brace variants are precisely the ones a GUID-parsing gate
+    would wave through -- so each is mutated here rather than argued about.
+    The prose mutations cover the other half of the ruling: a pin that a
+    comment or a document contradicts is not a pin.
+    """
+    attribute = f'UpgradeCode="{FROZEN_UPGRADE_CODE}"'
+    mutations = {
+        "a different GUID": lambda a, d0, d1: (
+            a.replace(attribute, 'UpgradeCode="6b1e8d37-5f92-4a04-8e7c-3d05b9f2a618"', 1),
+            d0,
+            d1,
+        ),
+        "the same digits, upper case": lambda a, d0, d1: (
+            a.replace(attribute, f'UpgradeCode="{FROZEN_UPGRADE_CODE.upper()}"', 1),
+            d0,
+            d1,
+        ),
+        "the same digits, braced": lambda a, d0, d1: (
+            a.replace(attribute, f'UpgradeCode="{{{FROZEN_UPGRADE_CODE}}}"', 1),
+            d0,
+            d1,
+        ),
+        "no UpgradeCode at all": lambda a, d0, d1: (a.replace(attribute, "", 1), d0, d1),
+        "the authoring calls it unfrozen": lambda a, d0, d1: (
+            a.replace("The freeze reaches that one string", "It is unfrozen", 1),
+            d0,
+            d1,
+        ),
+        "the W4-A0 document calls it unfrozen": lambda a, d0, d1: (
+            a,
+            d0.replace("no longer does", "no longer does. Nothing here freezes them", 1),
+            d1,
+        ),
+        "the W4-A1 document drops the GUID": lambda a, d0, d1: (
+            a,
+            d0,
+            d1.replace(FROZEN_UPGRADE_CODE, "a GUID chosen at release time"),
+        ),
+    }
+    failures: list[str] = []
+    for name, mutate in mutations.items():
+        mutated = mutate(authoring_text, a0_text, a1_text)
+        if mutated == (authoring_text, a0_text, a1_text):
+            failures.append(f"self-test '{name}': the mutation did not change the text")
+            continue
+        if not grade_authoring(*mutated):
+            failures.append(f"self-test '{name}': the UpgradeCode freeze gate did not fire")
+        else:
+            print(f"  control OK   {name}")
+    if not failures:
+        print(f"  {len(mutations)} UpgradeCode freeze controls, all RED as declared")
+    return failures
 
 
 def self_test(workflow_text: str) -> list[str]:
@@ -268,7 +404,7 @@ def main() -> int:
     parser.add_argument("--self-test", action="store_true", help="also prove each gate can fire")
     options = parser.parse_args()
 
-    for required in (WORKFLOW, AUTHORING, BUILDER, PROBE, SELF_TEST):
+    for required in (WORKFLOW, AUTHORING, BUILDER, PROBE, SELF_TEST, A0_DOC, A1_DOC):
         if not required.is_file():
             print(f"W4-A0 CONTROLS REFUSED: missing {required.relative_to(REPO_ROOT)}")
             return 1
@@ -283,7 +419,14 @@ def main() -> int:
     else:
         print("  no findings")
 
-    failures = self_test(workflow_text) if options.self_test else []
+    failures: list[str] = []
+    if options.self_test:
+        failures += self_test(workflow_text)
+        failures += self_test_upgrade_code(
+            AUTHORING.read_text(encoding="utf-8"),
+            A0_DOC.read_text(encoding="utf-8"),
+            A1_DOC.read_text(encoding="utf-8"),
+        )
     for failure in failures:
         print(f"  FINDING  {failure}")
 

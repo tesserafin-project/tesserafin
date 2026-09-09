@@ -22,11 +22,24 @@
     * it claims nothing about upgrade or repair beyond what `MajorUpgrade`
       emits by default.
 
-  The MSI identity below - product name, manufacturer and `UpgradeCode` - is
-  NOT a claim. It is the identity this skeleton happened to build with, and
-  nothing in this slice freezes it. The `UpgradeCode` in particular is the one
-  value a later slice cannot change without stranding installed machines; it is
-  written here so a reviewer sees it, not because W4-A0 ratifies it.
+  The `UpgradeCode` below is FROZEN by the W4-A1 owner ruling on #234. It is
+  the GUID W4-A0 already authored, ratified as the 1.1 identity rather than
+  re-minted:
+
+    0f0c9f4e-1c5a-4b8e-9a3d-6d1f2b7c8e05
+
+  ordinal, lowercase, no braces, exactly those bytes. It is the one value a
+  later slice cannot change without stranding machines that already have the
+  product installed, which is why it is pinned in the authoring and never
+  generated per build. `ci/windows/w4/msi-controls.py` reddens any other GUID,
+  and reddens these same digits written in a different case or wrapped in
+  braces.
+
+  The freeze reaches that one string and nothing else. The product name
+  `Tesserafin Server`, the manufacturer `Tesserafin project` and the four
+  retained-state component GUIDs are still only the identity this skeleton
+  happened to build with; W4-A1 rules on none of them, and each still needs an
+  explicit decision before 1.1 ships.
 
   Preprocessor inputs, all supplied by `ci/windows/w4/build-msi.ps1`:
 

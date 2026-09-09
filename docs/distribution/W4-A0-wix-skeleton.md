@@ -32,14 +32,18 @@ in each place a reader might otherwise infer a claim.
 | any change to `Tesserafin.Server` | none. `AddWindowsService` is consumed as W3 accepted it and is not retuned |
 | a hardware-acceleration capability | hosted runners have no GPU |
 
-**The MSI identity is not a claim either.** The package name
-`Tesserafin Server`, the manufacturer `Tesserafin project` and — the one that
-matters — the `UpgradeCode` `0f0c9f4e-1c5a-4b8e-9a3d-6d1f2b7c8e05` are the
-identity this skeleton happened to build with. Nothing here freezes them. The
-`UpgradeCode` is written into the authoring rather than generated per build
-*only* so that a reviewer can see it and rule on it; it is the one value a later
-slice cannot change without stranding machines that already have the product
-installed, and it deserves an explicit decision before 1.1 ships.
+**The MSI identity was not a claim when W4-A0 landed; the `UpgradeCode` is now
+frozen.** The package name `Tesserafin Server`, the manufacturer
+`Tesserafin project` and the four retained-state component GUIDs remain the
+identity this skeleton happened to build with, and each still deserves an
+explicit decision before 1.1 ships. The `UpgradeCode`
+`0f0c9f4e-1c5a-4b8e-9a3d-6d1f2b7c8e05` no longer does: the W4-A1 owner ruling
+on #234 ratified that exact string — ordinal, lowercase, no braces — as the 1.1
+UpgradeCode, and `ci/windows/w4/msi-controls.py` now reddens any other GUID,
+including the same digits in a different case or wrapped in braces. It is
+written into the authoring rather than generated per build because it is the one
+value a later slice cannot change without stranding machines that already have
+the product installed. See `docs/distribution/W4-A1-upgradecode.md`.
 
 The `ProductVersion` is the version the commit already declares in
 `SharedVersion.cs` — `1.0.0` — read through the same regular expression the
