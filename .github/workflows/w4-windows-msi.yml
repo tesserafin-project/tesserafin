@@ -1,0 +1,270 @@
+# W4-A0 (#234): a WiX MSI project in-tree, measured on a native Windows x64
+# runner.
+#
+# This workflow proves exactly one thing, which is the thing the W4-A0 ruling
+# authorises:
+#
+#   a WiX project in-tree produces an MSI that installs the accepted win-x64
+#   server layout, creates the service `Tesserafin` with the `service` switch
+#   and the `docs/distribution/W0-windows-server.md` §4 argument list, and
+#   uninstalls the service and the binaries while leaving the state directories.
+#
+# Four hostile controls run beside it, each a deliberately broken package built
+# from the SAME authoring through the SAME grader, and each required to redden
+# EXACTLY the predicates it declared: a package with no `tesserafin.exe`, a
+# service registration missing the `service` switch, one missing the `webdir`
+# and `ffmpeg` arguments, and one whose uninstall leaves the service registered.
+# The fifth control -- an over-permissioned workflow, or a production artifact
+# reused as a later input -- is a property of the authored files and is measured
+# by `ci/windows/w4/msi-controls.py` before any runner time is spent.
+#
+# The package under test is assembled IN THIS JOB from the pull request head,
+# through the frozen W2-A2 assembler, and is never uploaded. What is consumed by
+# accepted digest is what W2 pins -- the Web payload and the FFmpeg runtime --
+# which the frozen assembler reads from its own committed acceptance manifest.
+#
+# What this workflow deliberately does NOT do:
+#
+#   * it does not START the service. W0 §10 leaves a fresh installation
+#     installed and enabled but not started, and W3 is where the service runs;
+#   * it makes no reproducibility claim. W0 §5.6 already measured that MSI bytes
+#     are not bit-for-bit and accepted a bounded exception; nothing here builds
+#     the same package twice or compares digests;
+#   * it signs nothing and creates no certificate;
+#   * it exercises no upgrade, repair or Add/Remove Programs path beyond what
+#     `MajorUpgrade` emits by default;
+#   * it applies none of the W0 §9.3 ACLs;
+#   * it uploads no artifact, publishes nothing, and creates no tag or release;
+#   * it edits, copies or vendors none of the W1/W2/W3 files it runs;
+#   * it changes no Tesserafin.Server behaviour;
+#   * it makes no hardware-acceleration claim: hosted runners have no GPU.
+
+name: W4 Windows MSI
+
+on:
+  pull_request:
+    # Draft pull requests are covered: `pull_request` fires for them unless a
+    # type filter excludes them, and W4-A0 is reviewed as a draft.
+    paths:
+      # The whole authored surface, not a list of names, so a file added here
+      # cannot become reviewable without the proof that covers it running.
+      - 'packaging/windows/**'
+      - 'ci/windows/w4/**'
+      - '.github/workflows/w4-windows-msi.yml'
+      - 'docs/distribution/W4-A0-wix-skeleton.md'
+      # The frozen files this job actually runs. A change to any of them is a
+      # change to the path that produces the package under test. Server C# is
+      # deliberately NOT watched: this slice packages the accepted layout and
+      # measures the installer, and W3 is the workflow that watches the server.
+      - 'ci/windows/w2/assemble-server-zip.ps1'
+      - 'ci/windows/w2/tesserafin-server-service.ps1'
+      - 'ci/windows/w2/consume-web-payload.ps1'
+      - 'ci/windows/runtime-retention/consume.ps1'
+      - 'ci/windows/runtime-retention/accepted-runtime.json'
+      - 'SharedVersion.cs'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  # Restated so a reader of the run does not have to open two JSON documents to
+  # know what was packaged. These are NOT the trust boundary: the frozen
+  # assembler reads the committed acceptance manifest and refuses anything else.
+  WEB_PAYLOAD_SHA256: 4148c4bc6e0c7c2d6b35ed9992e874a06dcc11d2b6d9e0aad06719e36567be4f
+  ACCEPTED_RUNTIME_SHA256: f28cc9186aad757491a6f44e7950d39bc39354dfe9505e278af91d7619811c9e
+  SDK_VERSION: "10.0.x"
+  # W0 §5.4 records the toolset licence as something a build must pin and
+  # re-read, exactly like a component checksum. `wix` is a `dotnet tool`, so the
+  # pin lives here and in `ci/windows/w4/build-msi.ps1` -- NOT in
+  # Directory.Packages.props, which this slice does not touch.
+  WIX_VERSION: "6.0.2"
+
+jobs:
+  msi-skeleton:
+    name: Install and remove the Tesserafin service from a WiX MSI
+    runs-on: windows-latest
+    # One 260 MB runtime pull, one Web pull, one self-contained publish, one
+    # pack, then five `wix build` runs over a payload of a few thousand files
+    # and five full msiexec install/uninstall cycles.
+    timeout-minutes: 200
+    permissions:
+      contents: read
+      # The entire write surface of this workflow. Read only, job scoped, and
+      # needed only because the frozen assembler pulls the accepted Web payload
+      # image with the job's own token.
+      packages: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      # `dotnet-version`, never `global-json-file`: this repository's global.json
+      # is one setup-dotnet does not accept, and the job dies in seconds with no
+      # real step having run.
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: ${{ env.SDK_VERSION }}
+
+      # Both interpreters are recorded rather than assumed. The frozen FFmpeg
+      # consumer verifies its corresponding source through `zstd -dc > file`,
+      # which is a native-command redirect: Windows PowerShell 5.1 would
+      # re-encode that stream and the consumer would then refuse its own
+      # accepted source.
+      - name: Record the runner's interpreters
+        id: tools
+        shell: pwsh
+        run: |
+          $python = (Get-Command python -CommandType Application | Select-Object -First 1).Source
+          if (-not $python) { throw 'no python on this runner' }
+          "python=$python" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "PowerShell $($PSVersionTable.PSVersion), .NET $([System.Environment]::Version)"
+          if ($PSVersionTable.PSVersion.Major -lt 7) {
+            throw "W4-A0 HARD STOP: this job needs PowerShell 7 or newer; it has $($PSVersionTable.PSVersion)"
+          }
+          & $python --version
+          & dotnet --version
+
+      # The Windows toolcache interpreter ships pip and nothing else, so unlike
+      # the Ubuntu jobs that read YAML this one has to bring its own parser --
+      # and the permission control PARSES the workflow rather than grepping it,
+      # because `write-all` and a quoted `"packages": "write"` both grant and
+      # both slip past a grep gate. Pinned by exact version, like every other
+      # tool this packaging depends on.
+      - name: Install the pinned YAML parser
+        shell: pwsh
+        run: |
+          & '${{ steps.tools.outputs.python }}' -m pip install --disable-pip-version-check --quiet pyyaml==6.0.2
+          if ($LASTEXITCODE -ne 0) { throw 'W4-A0 HARD STOP: could not install the pinned PyYAML' }
+          & '${{ steps.tools.outputs.python }}' -c "import yaml; print(f'PyYAML {yaml.__version__}')"
+
+      # The two controls that need no Windows host and no package. They run
+      # before the package is built: an over-permissioned workflow and a grader
+      # that cannot tell its own controls apart are both findings that three
+      # hours of runner time would not make any truer.
+      - name: The controls that need no runner
+        shell: pwsh
+        run: |
+          & '${{ steps.tools.outputs.python }}' ci/windows/w4/msi-controls.py --self-test
+          if ($LASTEXITCODE -ne 0) { throw 'the W4-A0 static controls found something' }
+
+      - name: Prove the grader is not inert
+        shell: pwsh
+        run: |
+          ./ci/windows/w4/assertion-self-test.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'the W4-A0 assertion self-test failed' }
+
+      - name: Make the corresponding-source verifier available
+        shell: pwsh
+        run: |
+          $zstd = Get-Command zstd -CommandType Application -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+          if ($zstd) {
+            "zstd $((& $zstd.Source --version) -join ' ')"
+            exit 0
+          }
+          $fallback = Join-Path $env:ProgramFiles 'Git\usr\bin\zstd.exe'
+          if (Test-Path -LiteralPath $fallback) {
+            (Split-Path -Parent $fallback) | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+            "zstd taken from Git for Windows at $fallback"
+            exit 0
+          }
+          throw 'W4-A0 HARD STOP: this runner has no zstd, so the corresponding source cannot be verified'
+
+      # The same pinned client W1 installs, from the same lock file.
+      - name: Install the pinned ORAS
+        shell: bash
+        run: ./ci/windows/build-inputs/install-oras.sh windows-amd64 "${RUNNER_TEMP}/bin"
+
+      - name: Install the pinned WiX toolset
+        shell: pwsh
+        run: |
+          & dotnet tool install --global wix --version $env:WIX_VERSION *> $null
+          $raw = (& wix --version 2>&1 | Out-String)
+          $reported = (@($raw -split "\r?\n" | Where-Object { $_.Trim() -match '^[0-9]+\.[0-9]+\.[0-9]+' }) |
+            Select-Object -First 1)
+          if (-not $reported) { throw "W4-A0 HARD STOP: wix reported no version: $($raw.Trim())" }
+          $reported = $reported.Trim()
+          if (-not $reported.StartsWith($env:WIX_VERSION)) {
+            throw "W4-A0 HARD STOP: asked for WiX $($env:WIX_VERSION) and got '$reported'"
+          }
+          "wix $reported"
+
+      # SOURCE_DATE_EPOCH is the committer time of the commit being built -- the
+      # same definition every other Tesserafin artifact uses. Never the clock.
+      - name: Derive SOURCE_DATE_EPOCH from the commit
+        id: epoch
+        shell: pwsh
+        run: |
+          $commit = (& git rev-parse HEAD).Trim()
+          if ($commit -notmatch '^[0-9a-f]{40}$') { throw "not a commit: $commit" }
+          $epoch = (& git log -1 --format=%ct $commit).Trim()
+          if ($epoch -notmatch '^[1-9][0-9]*$') { throw "no committer time for $commit" }
+          "commit=$commit" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "epoch=$epoch"   | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "commit            : $commit"
+          "SOURCE_DATE_EPOCH : $epoch"
+
+      # The real thing: one accepted package, five MSIs, five install/uninstall
+      # cycles on a real Windows Installer.
+      - name: Build, install and remove the MSI, with four hostile controls
+        shell: pwsh
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./ci/windows/w4/probe-msi-skeleton.ps1 `
+            -RepoRoot $PWD `
+            -WorkDir (Join-Path $env:RUNNER_TEMP 'w4a0/work') `
+            -InstallPrefix (Join-Path $env:RUNNER_TEMP 'w4a0/prefix') `
+            -EvidencePath (Join-Path $env:RUNNER_TEMP 'w4a0/msi-skeleton.json') `
+            -SourceDateEpoch ${{ steps.epoch.outputs.epoch }} `
+            -OrasPath (Join-Path $env:RUNNER_TEMP 'bin\oras.exe') `
+            -HeadSha '${{ steps.epoch.outputs.commit }}' `
+            -PythonPath '${{ steps.tools.outputs.python }}'
+          if ($LASTEXITCODE -ne 0) { throw 'the W4-A0 MSI proof refused' }
+
+      # Printed rather than left inside an evidence file nobody opens. The
+      # document records predicates, exit codes and digests only -- no host path
+      # beyond the two the probe was given, and no run identifier -- so it can
+      # be printed whole.
+      - name: Report the five runs
+        if: always()
+        shell: pwsh
+        run: |
+          $evidencePath = Join-Path $env:RUNNER_TEMP 'w4a0/msi-skeleton.json'
+          if (-not (Test-Path -LiteralPath $evidencePath)) {
+            throw 'the proof wrote no evidence document'
+          }
+          $evidence = Get-Content -LiteralPath $evidencePath -Raw | ConvertFrom-Json
+          $evidence | ConvertTo-Json -Depth 10
+
+          if ($evidence.signed) { throw 'this slice signs nothing' }
+          if ($evidence.published) { throw 'this slice publishes nothing' }
+          if ($evidence.startedTheService) { throw 'this slice does not start the service' }
+          if ($evidence.appliedAcls) { throw 'this slice applies no ACL' }
+
+      # An SCM entry or an installed product that outlived a cancelled job would
+      # make the next run refuse on its precondition, which reads like a defect
+      # in the proof rather than like leftover state.
+      - name: Leave no service and no installed product behind
+        if: always()
+        shell: pwsh
+        run: |
+          & sc.exe stop Tesserafin *> $null
+          & sc.exe delete Tesserafin *> $null
+          Get-Process -Name 'tesserafin' -ErrorAction SilentlyContinue |
+            Stop-Process -Force -ErrorAction SilentlyContinue
+          $prefix = Join-Path $env:RUNNER_TEMP 'w4a0/prefix'
+          if (Test-Path -LiteralPath $prefix) {
+            Remove-Item -LiteralPath $prefix -Recurse -Force -ErrorAction SilentlyContinue
+          }
+          'cleanup complete'
+          # `sc.exe delete` answers 1060 for a service that is already gone,
+          # which is the SUCCESSFUL outcome of a cleanup step. The runner appends
+          # `exit $LASTEXITCODE` to every pwsh step, so without this the step
+          # reports the absence of leftover state as a failure.
+          exit 0
