@@ -111,7 +111,7 @@ $ErrorActionPreference = 'Stop'
 $SERVICE_NAME = 'Tesserafin'
 $SERVICE_KEY = "HKLM:\SYSTEM\CurrentControlSet\Services\$SERVICE_NAME"
 $MUTATIONS = @('none', 'no-exe', 'no-service-flag', 'no-path-flags', 'no-service-remove',
-    'no-failure-actions', 'first-action-not-restart', 'third-action-restart')
+    'no-util-config', 'delay-not-60s', 'third-action-restart')
 
 Import-Module ([System.IO.Path]::Combine($PSScriptRoot, 'W4MsiAssertions.psm1')) -Force
 
@@ -324,7 +324,16 @@ $MSI_FAILURE_PATTERNS = @(
     '\b1603\b'
     '\b1920\b'
     '\b1613\b'
+    # W4-A2-R1 (#234). 1939 is "Service '<display name>' (<name>) could not be
+    # configured" -- the MsiConfigureServices standard action refusing the
+    # MsiServiceConfigFailureActions row, which is the cause the owner ruling
+    # accepted for the 1603 this slice was rolled back by. It is added rather
+    # than substituted: the tail excerpt stays, and so does every other pattern,
+    # because a package that stops answering 1939 may well answer something
+    # else and the excerpt has to be able to say so.
+    '\b1939\b'
     'Error 1920'
+    'Error 1939'
     'Product:'
 )
 # The tail is what the ruling asks for by name; the matches are what carries

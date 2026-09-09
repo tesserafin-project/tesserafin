@@ -21,6 +21,14 @@ about the source text, so it is checked here rather than being left to the
 hosted run -- which measures the other half, what the Service Control Manager
 actually ended up with.
 
+W4-A2-R1 adds three more, all of them about HOW that policy is authored after
+the core `ServiceConfigFailureActions` element made `MsiConfigureServices`
+answer MSI error 1939: that the core element is GONE, that the `util` namespace
+the replacement needs is declared, and that `WixToolset.Util.wixext` is pinned
+by exact version on the `wix` command line rather than in
+`Directory.Packages.props` -- which the ruling forbids inventing an entry in,
+and which nothing on this path restores through anyway.
+
 Two modes:
 
     (default)     grade the real files; exit 1 on any finding
@@ -44,6 +52,7 @@ AUTHORING = REPO_ROOT / "packaging" / "windows" / "msi" / "Tesserafin.wxs"
 BUILDER = REPO_ROOT / "ci" / "windows" / "w4" / "build-msi.ps1"
 PROBE = REPO_ROOT / "ci" / "windows" / "w4" / "probe-msi-skeleton.ps1"
 SELF_TEST = REPO_ROOT / "ci" / "windows" / "w4" / "assertion-self-test.ps1"
+PACKAGE_PROPS = REPO_ROOT / "Directory.Packages.props"
 A0_DOC = REPO_ROOT / "docs" / "distribution" / "W4-A0-wix-skeleton.md"
 A1_DOC = REPO_ROOT / "docs" / "distribution" / "W4-A1-upgradecode.md"
 A2_DOC = REPO_ROOT / "docs" / "distribution" / "W4-A2-service-recovery.md"
@@ -100,14 +109,24 @@ CONTRACT_ARGUMENTS = (
 # refusal, for the same reason.
 FORBIDDEN_BUILDER_PARAMETERS = ("Tag", "RunId", "Reference", "Url", "Uri", "Digest", "Ref")
 
-# W4-A2 (#234). W0 §4's recovery row, as the authoring must state it:
+# W4-A2 (#234), as amended by the W4-A2-R1 ruling. W0 §4's recovery row, as the
+# authoring must state it:
 #
 #     restart after 60 s on first and second failure; no action on the third,
 #     so a crash loop is visible rather than hidden
 #
-# `Delay` is milliseconds and `ResetPeriod` is seconds, which is the SCM's own
-# split -- `sc.exe failure Tesserafin reset= 86400 actions=
-# restart/60000/restart/60000//0`.
+# The element is `util:ServiceConfig` from `WixToolset.Util.wixext`, NOT the
+# core `ServiceConfigFailureActions`. The ruling replaced the core element
+# because the `MsiServiceConfigFailureActions` table it writes made
+# `MsiConfigureServices` answer MSI error 1939 under InstallFinalize and roll
+# the install back to 1603.
+#
+# The units are the EXTENSION'S. Its custom action multiplies
+# `RestartServiceDelayInSeconds` by 1000 into SC_ACTION.Delay and
+# `ResetPeriodInDays` by 86400 into SERVICE_FAILURE_ACTIONS.dwResetPeriod, so
+# `60` and `1` here are the `restart/60000/restart/60000//0` and `reset= 86400`
+# that `W4MsiAssertions.psm1` reads back off the live service in the SCM's own
+# units. Neither file restates the other's numbers.
 #
 # The third entry is graded as hard as the first two. The SCM repeats the LAST
 # configured action for every failure past the end of the array, so an authoring
@@ -116,16 +135,36 @@ FORBIDDEN_BUILDER_PARAMETERS = ("Tag", "RunId", "Reference", "Url", "Uri", "Dige
 #
 # This is a PRESENCE gate, deliberately. The authoring carries deliberately
 # broken recovery policies too -- they are how the hostile controls drive the
-# real authoring -- so "no Failure element with the wrong delay appears" is not
-# a property this file can have. What it can have, and what is checked, is that
-# every authored ServiceInstall carries the correct policy.
+# real authoring -- so "no element with the wrong delay appears" is not a
+# property this file can have. What it can have, and what is checked, is that
+# every authored ServiceInstall carries the correct policy -- and, since the
+# ruling, that the core element is gone from the file entirely.
 CONTRACT_FAILURE_ACTIONS = (
-    '<ServiceConfigFailureActions OnInstall="yes" OnReinstall="yes" ResetPeriod="86400">'
-    ' <Failure Action="restartService" Delay="60000" />'
-    ' <Failure Action="restartService" Delay="60000" />'
-    ' <Failure Action="none" Delay="0" />'
-    " </ServiceConfigFailureActions>"
+    '<util:ServiceConfig FirstFailureActionType="restart"'
+    ' SecondFailureActionType="restart"'
+    ' ThirdFailureActionType="none"'
+    ' RestartServiceDelayInSeconds="60"'
+    ' ResetPeriodInDays="1" />'
 )
+
+# The namespace declaration the element above cannot be linked without. WiX
+# resolves an unbound prefix at compile time, so this is belt and braces -- but
+# the failure it prevents is a `wix build` error two hours into a hosted run.
+CONTRACT_UTIL_NAMESPACE = 'xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"'
+
+# The core element the ruling removed. Its presence anywhere in the executable
+# authoring is RED: it is the element that reaches 1939, and one left behind on
+# any ServiceInstall variant would put the `MsiServiceConfigFailureActions`
+# table back into the package. The ruling names this as a hostile control it
+# expects to have been observed RED.
+CORE_FAILURE_ACTIONS_ELEMENT = "<ServiceConfigFailureActions"
+
+# The extension, pinned by exact version on the `wix` command line -- which is
+# where the ruling requires the pin to live, and which `build-msi.ps1` is the
+# only file to state. `Directory.Packages.props` is not consulted by anything on
+# this path: `wix` is a `dotnet tool` and there is no `.wixproj` in the tree, so
+# there is no NuGet restore for central package management to govern.
+CONTRACT_UTIL_EXTENSION = "WixToolset.Util.wixext"
 
 # The single line the W4-A2 document must carry, in the SCM's own notation, so
 # the document and the authoring cannot drift apart silently.
@@ -238,6 +277,60 @@ def findings_for_builder(text: str) -> list[str]:
     ]
     if "Invoke-WebRequest" in text or "curl" in text or "oras " in text:
         findings.append("build-msi.ps1: reaches the network; it packages a stage it is given")
+    findings += findings_for_extension_pin(text)
+    return findings
+
+
+def findings_for_extension_pin(text: str) -> list[str]:
+    """W4-A2-R1 (#234): the extension is pinned by EXACT version, on the command line.
+
+    The ruling is specific about both halves. The pin is exact, in the same
+    style as the `wix` tool pin, and it lives on the `wix` command line -- not
+    in `Directory.Packages.props`, which the ruling forbids inventing an entry
+    in. That second half is checkable from here and is checked: `wix` is a
+    `dotnet tool` and the tree carries no `.wixproj`, so nothing on this path is
+    a NuGet restore central package management could govern, and an entry there
+    would be a pin that governs nothing while reading like the real one.
+    """
+    findings: list[str] = []
+    if CONTRACT_UTIL_EXTENSION not in text:
+        findings.append(
+            f"build-msi.ps1: never names {CONTRACT_UTIL_EXTENSION}, so util:ServiceConfig "
+            "cannot link and the W0 §4 recovery policy is not in the package"
+        )
+        return findings
+    if not re.search(r"-ext\s", text):
+        findings.append(
+            "build-msi.ps1: passes no -ext to wix build, so the extension is installed and "
+            "never used"
+        )
+    if not re.search(
+        r"\$UtilExtensionVersion\s*=\s*'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)'", text
+    ):
+        findings.append(
+            "build-msi.ps1: the extension version is not pinned to an exact MAJOR.MINOR.PATCH"
+        )
+    if "wix extension add" not in text:
+        findings.append("build-msi.ps1: never acquires the extension at the pinned version")
+    if "wix extension list" not in text:
+        findings.append(
+            "build-msi.ps1: never reads the installed extension version back, so the pin is "
+            "asserted rather than measured"
+        )
+    wixprojects = sorted(q.relative_to(REPO_ROOT).as_posix() for q in REPO_ROOT.rglob("*.wixproj"))
+    if wixprojects:
+        findings.append(
+            "the tree carries a .wixproj (" + ", ".join(wixprojects) + "), so the WiX path is a "
+            "NuGet restore after all and the command-line pin is no longer the whole pin"
+        )
+    if PACKAGE_PROPS.is_file() and CONTRACT_UTIL_EXTENSION in PACKAGE_PROPS.read_text(
+        encoding="utf-8"
+    ):
+        findings.append(
+            f"Directory.Packages.props: carries {CONTRACT_UTIL_EXTENSION}. The ruling forbids "
+            "inventing an entry there, and nothing on the wix path restores through it, so the "
+            "entry would govern nothing while reading like the pin"
+        )
     return findings
 
 
@@ -279,20 +372,32 @@ def findings_for_failure_actions(text: str) -> list[str]:
     recovery row would otherwise be invisible here and only surface on a runner.
     """
     flat = normalised(text)
+    findings: list[str] = []
+    if CORE_FAILURE_ACTIONS_ELEMENT in flat:
+        findings.append(
+            "authoring: the core ServiceConfigFailureActions element is still present. It writes "
+            "the MsiServiceConfigFailureActions table, which is what MsiConfigureServices answered "
+            "MSI error 1939 for, rolling the install back to 1603; W4-A2-R1 replaced it with "
+            "util:ServiceConfig and requires it gone"
+        )
+    if CONTRACT_UTIL_NAMESPACE not in flat:
+        findings.append(
+            "authoring: the util namespace is not declared, so util:ServiceConfig cannot link"
+        )
     authored = flat.count(CONTRACT_FAILURE_ACTIONS)
     services = flat.count("<ServiceInstall ")
     if authored == 0:
-        return [
+        return findings + [
             "authoring: no W0 §4 recovery policy is authored. The SCM's default is to do "
             "nothing on any failure, so the first and second restart would never happen"
         ]
     if authored != services:
-        return [
+        return findings + [
             f"authoring: {services} ServiceInstall element(s) but {authored} carry the W0 §4 "
             "recovery policy, so at least one registers a service the SCM would recover "
             "differently"
         ]
-    return []
+    return findings
 
 
 def findings_for_failure_actions_prose(a0_text: str, a2_text: str) -> list[str]:
@@ -471,51 +576,75 @@ def self_test_failure_actions(
 ) -> list[str]:
     """W4-A2: the recovery gate must be reachable, in each shape the ruling names.
 
-    Every mutation here replaces EVERY occurrence, never the first. The
-    authoring carries deliberately broken recovery policies of its own -- they
-    are how the hostile controls drive the real authoring -- so a
-    first-occurrence replace would land on a control branch and leave the real
-    policy, and the gate would correctly stay green while the self-test claimed
-    it had been tripped.
+    Every mutation here replaces EVERY occurrence, never the first -- with the
+    one deliberate exception of "one ServiceInstall loses its recovery row",
+    which is the whole point of that control. The authoring carries
+    deliberately broken recovery policies of its own -- they are how the
+    hostile controls drive the real authoring -- so a first-occurrence replace
+    would land on a control branch and leave the real policy, and the gate
+    would correctly stay green while the self-test claimed it had been tripped.
+
+    W4-A2-R1 (#234) added the shape the ruling names last: "core
+    ServiceConfigFailureActions still present (must be gone)". It is mutated
+    back IN rather than argued about, because a gate for the absence of
+    something is the kind that is easiest to write inert.
     """
     mutations = {
-        "no failure actions authored": lambda a, d0, d1, d2: (
-            re.sub(r"\s*<ServiceConfigFailureActions.*?</ServiceConfigFailureActions>", "", a, flags=re.S),
+        "no util:ServiceConfig authored": lambda a, d0, d1, d2: (
+            re.sub(r"\s*<util:ServiceConfig\b.*?/>", "", a, flags=re.S),
             d0,
             d1,
             d2,
         ),
-        "the first failure is not restart/60000": lambda a, d0, d1, d2: (
-            a.replace('<Failure Action="restartService" Delay="60000" />',
-                      '<Failure Action="restartService" Delay="1000" />'),
+        "the util namespace is not declared": lambda a, d0, d1, d2: (
+            a.replace("\n" + "     " + CONTRACT_UTIL_NAMESPACE, "", 1),
+            d0,
+            d1,
+            d2,
+        ),
+        "the core ServiceConfigFailureActions element is back": lambda a, d0, d1, d2: (
+            a.replace(
+                "</ServiceInstall>",
+                '  <ServiceConfigFailureActions OnInstall="yes" ResetPeriod="86400">'
+                ' <Failure Action="restartService" Delay="60000" />'
+                " </ServiceConfigFailureActions>\n          </ServiceInstall>",
+                1,
+            ),
+            d0,
+            d1,
+            d2,
+        ),
+        "the restart delay is not 60 s": lambda a, d0, d1, d2: (
+            a.replace('RestartServiceDelayInSeconds="60"', 'RestartServiceDelayInSeconds="1"'),
             d0,
             d1,
             d2,
         ),
         "the third failure is a restart": lambda a, d0, d1, d2: (
-            a.replace('<Failure Action="none" Delay="0" />',
-                      '<Failure Action="restartService" Delay="60000" />'),
+            a.replace('ThirdFailureActionType="none"', 'ThirdFailureActionType="restart"'),
             d0,
             d1,
             d2,
         ),
-        "the reset period is not 86400": lambda a, d0, d1, d2: (
-            a.replace('ResetPeriod="86400"', 'ResetPeriod="3600"'),
+        "the reset period is not one day": lambda a, d0, d1, d2: (
+            a.replace('ResetPeriodInDays="1"', 'ResetPeriodInDays="3"'),
             d0,
             d1,
             d2,
         ),
+        "the second failure is not a restart": lambda a, d0, d1, d2: (
+            a.replace('SecondFailureActionType="restart"', 'SecondFailureActionType="none"'),
+            d0,
+            d1,
+            d2,
+        ),
+        # The one mutation here that is deliberately NOT global. The first
+        # util:ServiceConfig in the file is one of the correct ones, so removing
+        # it leaves the authoring with more ServiceInstall elements than
+        # policies -- which is exactly the drift the count comparison exists to
+        # catch, and which no whole-file replace could ever produce.
         "one ServiceInstall loses its recovery row": lambda a, d0, d1, d2: (
-            a.replace(
-                """            <ServiceConfigFailureActions OnInstall="yes" OnReinstall="yes" ResetPeriod="86400">
-              <Failure Action="restartService" Delay="60000" />
-              <Failure Action="restartService" Delay="60000" />
-              <Failure Action="none" Delay="0" />
-            </ServiceConfigFailureActions>
-""",
-                "",
-                1,
-            ),
+            re.sub(r"\s*<util:ServiceConfig\b.*?/>", "", a, count=1, flags=re.S),
             d0,
             d1,
             d2,

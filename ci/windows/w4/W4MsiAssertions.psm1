@@ -28,7 +28,9 @@ $script:ContractDescription = 'Tesserafin media server. Manage it at http://loca
 # W0 §4: `Automatic (Delayed Start)`. SERVICE_AUTO_START is 2 in the SCM's own
 # encoding, and the delayed half is a separate REG_DWORD the SCM writes beside
 # it -- which is the whole reason this is read back rather than asserted from
-# the authoring. WiX answers WIX1149 for the core ServiceConfig element.
+# the authoring. WiX answers WIX1149 for the core ServiceConfig element, which
+# is the element that still carries this row; the FAILURE-ACTIONS row moved to
+# `util:ServiceConfig` under W4-A2-R1 (#234) and is read back below.
 $script:ServiceAutoStart = 2
 
 # ---------------------------------------------------------------------------
@@ -47,7 +49,11 @@ $script:ServiceAutoStart = 2
 #
 # The delay is milliseconds, which is the SCM's own unit in SC_ACTION.Delay --
 # `sc.exe failure ... actions= restart/60000/restart/60000//0`. The reset
-# period is seconds.
+# period is seconds. Both are stated here in the SCM's units and NOT in the
+# authoring's: since W4-A2-R1 (#234) the authoring says `60` seconds and `1`
+# day to `util:ServiceConfig`, and the extension's custom action does the
+# multiplication. This file grades what the SCM ended up with, so it is exactly
+# the place that must not restate the authoring's units.
 # ---------------------------------------------------------------------------
 $script:ContractResetPeriodSeconds = 86400
 $script:ContractFailureActions = @(
@@ -339,13 +345,13 @@ function Get-W4ControlExpectations {
             'serviceImagePathHasFfmpeg'
         )
         'no-service-remove' = @('uninstallRemovedService')
-        # W4-A2. `no-failure-actions` reddens six because a service with no
+        # W4-A2. `no-util-config` reddens six because a service with no
         # failure policy at all has no reset period, no count and no first,
         # second or third entry -- one defect with six visible consequences,
         # declared in full for the same reason `no-exe` declares three. A
         # declared set of only the first would pass while the grader quietly
         # stopped answering the other five.
-        'no-failure-actions' = @(
+        'no-util-config' = @(
             'serviceFailureActionsConfigured'
             'serviceFailureResetPeriodIsContract'
             'serviceFailureActionCountIsContract'
@@ -354,8 +360,22 @@ function Get-W4ControlExpectations {
             'serviceFailureThirdIsNoAction'
         )
         # Both of these leave a complete, well-formed three-entry policy behind
-        # and change ONE entry, so each is attributable to that entry alone.
-        'first-action-not-restart' = @('serviceFailureFirstIsRestartAfter60s')
+        # and change ONE thing about it.
+        #
+        # `delay-not-60s` declares TWO because W4-A2-R1 (#234) moved the
+        # authoring to `util:ServiceConfig`, which carries a single
+        # `RestartServiceDelayInSeconds` that its custom action multiplies into
+        # SC_ACTION.Delay for EVERY restart entry. There is no shape of that
+        # element in which only the first restart's delay is wrong, so a
+        # declared set of one would be a set this control can never produce --
+        # one defect, two visible consequences, declared in full the way
+        # `no-exe` declares three. The delay is still the half that changed:
+        # both entries are still restarts, so a gate that asked only which
+        # ACTION the SCM recorded would call this package correct.
+        'delay-not-60s' = @(
+            'serviceFailureFirstIsRestartAfter60s'
+            'serviceFailureSecondIsRestartAfter60s'
+        )
         'third-action-restart' = @('serviceFailureThirdIsNoAction')
     }
 }

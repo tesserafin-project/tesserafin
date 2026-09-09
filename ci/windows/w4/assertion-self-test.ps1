@@ -58,24 +58,31 @@ function New-SyntheticObservation {
 
     $imagePath = '"' + (Join-W4Path -Root $prefix -Relative $deliveredExe) + '" ' + ($arguments -join ' ')
 
-    # W4-A2. What the SCM would report for each package. `no-failure-actions`
+    # W4-A2. What the SCM would report for each package. `no-util-config`
     # leaves the service with no policy at all, which is what the SCM's default
-    # is; the other two leave a complete, well-formed three-entry policy with
-    # exactly one entry wrong, so that each reddens one predicate and the rest
-    # of the recovery row stays green under the same mutation.
+    # is; the other two leave a complete, well-formed three-entry policy and
+    # change one thing about it, so the rest of the recovery row stays green
+    # under the same mutation.
+    #
+    # `delay-not-60s` moves BOTH restart delays, and that is not a convenience:
+    # since W4-A2-R1 (#234) the authoring is `util:ServiceConfig`, whose single
+    # `RestartServiceDelayInSeconds` its custom action multiplies into
+    # SC_ACTION.Delay for every restart entry. An observation with only the
+    # first delay moved would be one no package this repository can build could
+    # ever produce, and the grader would then be proven against a fiction.
     $failureActions = $null
-    if ($Mutation -ne 'no-failure-actions') {
-        $first = $(if ($Mutation -eq 'first-action-not-restart') { 1000 } else { 60000 })
+    if ($Mutation -ne 'no-util-config') {
+        $restartDelay = $(if ($Mutation -eq 'delay-not-60s') { 1000 } else { 60000 })
         $third = $(if ($Mutation -eq 'third-action-restart') {
-            @{ type = 'restartService'; delayMs = 60000 }
+            @{ type = 'restartService'; delayMs = $restartDelay }
         } else {
             @{ type = 'none'; delayMs = 0 }
         })
         $failureActions = @{
             resetPeriodSeconds = 86400
             actions = @(
-                @{ type = 'restartService'; delayMs = $first }
-                @{ type = 'restartService'; delayMs = 60000 }
+                @{ type = 'restartService'; delayMs = $restartDelay }
+                @{ type = 'restartService'; delayMs = $restartDelay }
                 $third
             )
         }

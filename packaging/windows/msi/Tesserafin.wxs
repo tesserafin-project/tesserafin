@@ -15,6 +15,16 @@
   out of the Service Control Manager after the install rather than out of this
   file. See `docs/distribution/W4-A2-service-recovery.md`.
 
+  W4-A2-R1 (#234) changed HOW, and only how. The core
+  `ServiceConfigFailureActions` element this slice first authored writes the
+  `MsiServiceConfigFailureActions` table, and `MsiConfigureServices` answered
+  MSI error 1939 for it under InstallFinalize, rolling the install back to 1603.
+  The owner ruling authorised `util:ServiceConfig` from
+  `WixToolset.Util.wixext` in its place - the first WiX extension this packaging
+  takes a dependency on, pinned by exact version on the `wix` command line in
+  `ci/windows/w4/build-msi.ps1`. The POLICY is unchanged and so is what is
+  graded; the core element is gone from this file entirely.
+
   What this authoring deliberately does NOT claim:
 
     * it is NOT a bit-identical MSI. W0 §5.6 measured that and accepted a
@@ -69,7 +79,8 @@
                 `ci/windows/w4/msi-controls.py` asserts the hosted acceptance
                 build never passes anything but `none`.
 -->
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
 
   <?ifndef Mutation ?>
     <?define Mutation = "none" ?>
@@ -167,12 +178,15 @@
         <!-- W0 §4, the service contract, stated once and in full.
 
              `Start="auto"` plus `ServiceConfig/@DelayedAutoStart` is the
-             "Automatic (Delayed Start)" row. WiX answers WIX1149 for the core
-             ServiceConfig element - the Windows Installer SDK documents parts
-             of it as not working as expected - so the hosted proof does not
-             take the authoring's word for it: it reads
-             `DelayedAutostart` back out of the service's own registry key
-             after the install.
+             "Automatic (Delayed Start)" row. This one is the CORE ServiceConfig
+             element and it stays: W0 has been installing with it since W4-A0 and
+             the delayed-autostart half of section 4 is the half that works. WiX
+             answers WIX1149 for it - the Windows Installer SDK documents parts of
+             it as not working as expected - so the hosted proof does not take the
+             authoring's word for it: it reads `DelayedAutostart` back out of the
+             service's own registry key after the install. It is unrelated to
+             util:ServiceConfig below, which is the extension element that replaced
+             the FAILURE-ACTIONS half after it answered 1939.
 
              There is deliberately NO `Start="install"` on ServiceControl. W0
              §5.2 recorded that starting the service inside the transaction
@@ -197,11 +211,11 @@
                           Vital="yes"
                           Arguments="--configdir &quot;[DATAFOLDER]config&quot; --datadir &quot;[DATAFOLDER]data&quot; --cachedir &quot;[DATAFOLDER]cache&quot; --logdir &quot;[DATAFOLDER]log&quot; --webdir &quot;[INSTALLFOLDER]web&quot; --ffmpeg &quot;[INSTALLFOLDER]ffmpeg\bin\ffmpeg.exe&quot;">
             <ServiceConfig DelayedAutoStart="yes" OnInstall="yes" OnReinstall="yes" />
-            <ServiceConfigFailureActions OnInstall="yes" OnReinstall="yes" ResetPeriod="86400">
-              <Failure Action="restartService" Delay="60000" />
-              <Failure Action="restartService" Delay="60000" />
-              <Failure Action="none" Delay="0" />
-            </ServiceConfigFailureActions>
+            <util:ServiceConfig FirstFailureActionType="restart"
+                                SecondFailureActionType="restart"
+                                ThirdFailureActionType="none"
+                                RestartServiceDelayInSeconds="60"
+                                ResetPeriodInDays="1" />
           </ServiceInstall>
         <?elseif $(var.Mutation) = "no-path-flags" ?>
           <!-- W4-A0 hostile control 3: the binPath lacks `ffmpeg` and `webdir`. -->
@@ -216,11 +230,11 @@
                           Vital="yes"
                           Arguments="--service --configdir &quot;[DATAFOLDER]config&quot; --datadir &quot;[DATAFOLDER]data&quot; --cachedir &quot;[DATAFOLDER]cache&quot; --logdir &quot;[DATAFOLDER]log&quot;">
             <ServiceConfig DelayedAutoStart="yes" OnInstall="yes" OnReinstall="yes" />
-            <ServiceConfigFailureActions OnInstall="yes" OnReinstall="yes" ResetPeriod="86400">
-              <Failure Action="restartService" Delay="60000" />
-              <Failure Action="restartService" Delay="60000" />
-              <Failure Action="none" Delay="0" />
-            </ServiceConfigFailureActions>
+            <util:ServiceConfig FirstFailureActionType="restart"
+                                SecondFailureActionType="restart"
+                                ThirdFailureActionType="none"
+                                RestartServiceDelayInSeconds="60"
+                                ResetPeriodInDays="1" />
           </ServiceInstall>
         <?else ?>
           <ServiceInstall Id="TesserafinService"
@@ -236,53 +250,83 @@
             <ServiceConfig DelayedAutoStart="yes" OnInstall="yes" OnReinstall="yes" />
             <!-- W0 section 4, the recovery row: restart after 60 s on the first and
                  the second failure, and NO action on the third, so a crash loop is
-                 visible rather than hidden. ResetPeriod is the SCM's own failure
-                 counter reset, 86400 s, and Delay is milliseconds, which is why 60 s
-                 is written 60000.
+                 visible rather than hidden.
+
+                 W4-A2-R1 (#234) replaced the core ServiceConfigFailureActions
+                 element that used to stand here. That element writes the
+                 MsiServiceConfigFailureActions table, which the MsiConfigureServices
+                 standard action applies under InstallFinalize - and on this package
+                 that action answered MSI error 1939, "Service 'Tesserafin Server'
+                 (Tesserafin) could not be configured", which rolled the whole
+                 install back to 1603. The owner ruling accepted that diagnosis and
+                 authorised this element instead.
+
+                 util:ServiceConfig is WixToolset.Util.wixext, pinned by exact
+                 version on the `wix` command line by ci/windows/w4/build-msi.ps1 -
+                 the first WiX extension this packaging takes. It is NOT a table
+                 row: it schedules a deferred custom action that opens the service
+                 and calls ChangeServiceConfig2W(SERVICE_CONFIG_FAILURE_ACTIONS)
+                 itself, after InstallServices has created it, with the SERVICE_START
+                 access right SC_ACTION_RESTART requires.
+
+                 The units are the EXTENSION'S, not the SCM's, and the conversion is
+                 the custom action's: RestartServiceDelayInSeconds is multiplied by
+                 1000 into SC_ACTION.Delay, so 60 is the 60000 ms W0 section 4 asks
+                 for, and ResetPeriodInDays is multiplied by 86400 into
+                 SERVICE_FAILURE_ACTIONS.dwResetPeriod, so 1 is section 4's 86400 s.
+                 There is ONE delay attribute and it feeds every restart entry -
+                 which is why the delay control below reddens the first and the
+                 second predicate together rather than one of them.
 
                  The third entry is load-bearing and is not decoration. The SCM
                  repeats the LAST configured action for every failure beyond the
                  length of the array, so a two-entry array of restarts restarts
-                 forever - the exact outcome W0 section 4 refuses. An explicit
-                 SC_ACTION_NONE third entry is what makes the loop stop and become
-                 visible, and `third-action-restart` below is the control that
-                 proves this authoring is what produces it.
+                 forever - the exact outcome W0 section 4 refuses. The custom action
+                 always writes exactly three SC_ACTIONs and gives a non-restart entry
+                 a zero delay, so ThirdFailureActionType="none" is the explicit
+                 SC_ACTION_NONE that makes the loop stop and become visible, and
+                 `third-action-restart` below is the control that proves this
+                 authoring is what produces it.
 
-                 WiX answers WIX1149 for this element too, for the same reason it
-                 answers it for ServiceConfig, so the hosted proof does not take the
-                 authoring's word for any of it: it reads the failure policy back out
-                 of the Service Control Manager with QueryServiceConfig2W after the
-                 install, and grades THAT. -->
-            <?if $(var.Mutation) = "no-failure-actions" ?>
-              <!-- W4-A2 hostile control 1: no failure actions authored at all. The
-                   SCM then takes its default, which is to do nothing on any failure,
-                   and W0 section 4's first and second restart never happen. -->
-            <?elseif $(var.Mutation) = "first-action-not-restart" ?>
-              <!-- W4-A2 hostile control 2: the first failure is not restart/60000.
-                   It is still a restart, and still an authored one, so a gate that
-                   only asked which ACTION the SCM recorded would call this correct;
-                   the delay is the half that changed. -->
-              <ServiceConfigFailureActions OnInstall="yes" OnReinstall="yes" ResetPeriod="86400">
-                <Failure Action="restartService" Delay="1000" />
-                <Failure Action="restartService" Delay="60000" />
-                <Failure Action="none" Delay="0" />
-              </ServiceConfigFailureActions>
+                 Nothing here is graded from the authoring. The hosted proof reads
+                 the failure policy back out of the Service Control Manager with
+                 QueryServiceConfig2W after the install, and grades THAT. -->
+            <?if $(var.Mutation) = "no-util-config" ?>
+              <!-- W4-A2 hostile control 1: no util:ServiceConfig authored at all,
+                   so the extension's custom action is never scheduled for this
+                   service. The SCM then takes its default, which is to do nothing on
+                   any failure, and W0 section 4's first and second restart never
+                   happen. -->
+            <?elseif $(var.Mutation) = "delay-not-60s" ?>
+              <!-- W4-A2 hostile control 2: the restart delay is not 60 s. Both
+                   failures are still restarts, and still authored ones, so a gate
+                   that only asked which ACTION the SCM recorded would call this
+                   correct; the delay is the half that changed. util:ServiceConfig
+                   carries ONE delay for every restart entry, so this one defect has
+                   two visible consequences - the first AND the second predicate -
+                   and it is declared with both, the way `no-exe` is declared with
+                   three. -->
+              <util:ServiceConfig FirstFailureActionType="restart"
+                                  SecondFailureActionType="restart"
+                                  ThirdFailureActionType="none"
+                                  RestartServiceDelayInSeconds="1"
+                                  ResetPeriodInDays="1" />
             <?elseif $(var.Mutation) = "third-action-restart" ?>
               <!-- W4-A2 hostile control 3: the third failure restarts, so the crash
                    loop W0 section 4 wants visible is hidden behind an indefinite
                    restart. Every other row of the policy is correct, which is what
                    makes this control attributable to the third entry alone. -->
-              <ServiceConfigFailureActions OnInstall="yes" OnReinstall="yes" ResetPeriod="86400">
-                <Failure Action="restartService" Delay="60000" />
-                <Failure Action="restartService" Delay="60000" />
-                <Failure Action="restartService" Delay="60000" />
-              </ServiceConfigFailureActions>
+              <util:ServiceConfig FirstFailureActionType="restart"
+                                  SecondFailureActionType="restart"
+                                  ThirdFailureActionType="restart"
+                                  RestartServiceDelayInSeconds="60"
+                                  ResetPeriodInDays="1" />
             <?else ?>
-              <ServiceConfigFailureActions OnInstall="yes" OnReinstall="yes" ResetPeriod="86400">
-                <Failure Action="restartService" Delay="60000" />
-                <Failure Action="restartService" Delay="60000" />
-                <Failure Action="none" Delay="0" />
-              </ServiceConfigFailureActions>
+              <util:ServiceConfig FirstFailureActionType="restart"
+                                  SecondFailureActionType="restart"
+                                  ThirdFailureActionType="none"
+                                  RestartServiceDelayInSeconds="60"
+                                  ResetPeriodInDays="1" />
             <?endif ?>
           </ServiceInstall>
         <?endif ?>

@@ -14,9 +14,15 @@
 
     What it does, in the order the checks can first be made:
 
-      * pins and installs the WiX toolset by exact version. `wix` is a
-        `dotnet tool`, so the pin lives on this command line and NOT in
-        Directory.Packages.props, which this slice does not touch;
+      * pins and installs the WiX toolset by exact version, and -- since
+        W4-A2-R1 (#234) -- the WixToolset.Util.wixext extension the §4 failure
+        actions are authored with. BOTH pins live on a `wix` command line and
+        NOT in Directory.Packages.props. That is not a preference: `wix` is a
+        `dotnet tool` and there is no `.wixproj` anywhere in this repository, so
+        nothing on this path is a NuGet restore that central package management
+        could reach. The extension is acquired by `wix extension add -g` at the
+        exact version, and the installed version is then READ BACK and refused
+        if it is not the one asked for, exactly as the toolset version is;
       * reads the package layout out of `ci/windows/w2/tesserafin-server-service.ps1`
         -- the accepted W2-A5 script, which is what actually registers the
         service for the portable ZIP -- and refuses if the authoring's paths
@@ -70,6 +76,14 @@
 .PARAMETER WixVersion
     The pinned WiX toolset version. W0 §5.4 records that this is a value a build
     must pin and re-read, exactly like a component checksum.
+
+.PARAMETER UtilExtensionVersion
+    The pinned `WixToolset.Util.wixext` version -- the extension that carries
+    `util:ServiceConfig`, which W4-A2-R1 (#234) authorised in place of the core
+    `ServiceConfigFailureActions` element after `MsiConfigureServices` answered
+    MSI error 1939 for it. It is pinned and re-read for the same reason the
+    toolset is, and it ships in lockstep with the toolset, so the two default to
+    the same version rather than drifting apart silently.
 #>
 
 [CmdletBinding()]
@@ -79,9 +93,10 @@ param(
     [Parameter(Mandatory = $true)] [string] $HarvestRoot,
     [Parameter(Mandatory = $true)] [string] $OutPath,
     [ValidateSet('none', 'no-exe', 'no-service-flag', 'no-path-flags', 'no-service-remove',
-        'no-failure-actions', 'first-action-not-restart', 'third-action-restart')]
+        'no-util-config', 'delay-not-60s', 'third-action-restart')]
     [string] $Mutation = 'none',
-    [ValidateNotNullOrEmpty()] [string] $WixVersion = '6.0.2'
+    [ValidateNotNullOrEmpty()] [string] $WixVersion = '6.0.2',
+    [ValidateNotNullOrEmpty()] [string] $UtilExtensionVersion = '6.0.2'
 )
 
 Set-StrictMode -Version 3.0
@@ -245,15 +260,48 @@ if (-not $reported.StartsWith($WixVersion)) {
     Deny 'toolset' "asked for WiX $WixVersion and got '$reported'"
 }
 
+# ---------------------------------------------------------------------------
+# The extension, pinned the same way and re-read the same way. W4-A2-R1 (#234)
+# authorised `util:ServiceConfig` in place of the core element that reached
+# MSI 1939, and this is the first WiX extension this packaging depends on.
+#
+# `wix extension add -g` is idempotent, and like `dotnet tool install` above it
+# can answer non-zero for something that is already present -- so what is graded
+# is not its exit code but the version `wix extension list -g` then reports. A
+# pin nobody reads back is not a pin: an extension resolved to some other
+# version would author a policy this script never asked for, and that would
+# surface as a live service with the wrong recovery row rather than as a
+# refusal here.
+# ---------------------------------------------------------------------------
+$utilExtension = "WixToolset.Util.wixext/$UtilExtensionVersion"
+& wix extension add -g $utilExtension *> $null
+$extensionsRaw = (& wix extension list -g 2>&1 | Out-String)
+if ($LASTEXITCODE -ne 0) {
+    Deny 'extension' "could not list the installed WiX extensions: $($extensionsRaw.Trim())"
+}
+$extensionLine = @($extensionsRaw -split "\r?\n" |
+    Where-Object { $_.Trim().StartsWith('WixToolset.Util.wixext', [System.StringComparison]::OrdinalIgnoreCase) } |
+    Select-Object -First 1)
+if (-not $extensionLine) {
+    Deny 'extension' ("WixToolset.Util.wixext is not installed after asking for $utilExtension. " +
+        "wix reported: $($extensionsRaw.Trim())")
+}
+$extensionLine = ([string]$extensionLine[0]).Trim()
+if (-not $extensionLine.Contains($UtilExtensionVersion)) {
+    Deny 'extension' "asked for $utilExtension and got '$extensionLine'"
+}
+
 $outDir = [System.IO.Path]::GetDirectoryName([System.IO.Path]::GetFullPath($OutPath))
 $null = [System.IO.Directory]::CreateDirectory($outDir)
 if ([System.IO.File]::Exists($OutPath)) { [System.IO.File]::Delete($OutPath) }
 
 "W4-A0 build: version $version, mutation $Mutation, WiX $reported"
+"           extension $extensionLine"
 "           stage  $stage"
 "           output $OutPath"
 
 $buildLog = & wix build -arch x64 `
+    -ext $utilExtension `
     -d StageRoot="$stage" `
     -d HarvestRoot="$harvest" `
     -d Version="$version" `
