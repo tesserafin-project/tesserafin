@@ -157,8 +157,8 @@ function Deny {
 }
 
 function Write-Note {
-    param([string] $Message)
-    [Console]::Out.WriteLine("W3-A0: $Message")
+    param([string] $Message, [string] $Slice = 'W3-A0')
+    [Console]::Out.WriteLine("${Slice}: $Message")
 }
 
 function Invoke-Sc {
@@ -715,7 +715,7 @@ if ($preConfigOrphans.Count -ne 0) {
 }
 Write-Note ("F: fault logged at $faultSeenAtSeconds s, stopped at $stoppedAtSeconds s " +
     "(linger $lingerSeconds s of a $LINGER_BUDGET_SECONDS s budget; master waits 600 s), " +
-    "Win32 exit code $($preConfigStopped.exitCode), orphans $($preConfigOrphans.Count)")
+    "Win32 exit code $($preConfigStopped.exitCode), orphans $($preConfigOrphans.Count)") -Slice 'W3-A1'
 
 Remove-AllServices
 Save-Evidence
