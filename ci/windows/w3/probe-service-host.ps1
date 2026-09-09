@@ -174,6 +174,13 @@ function Wait-ServiceState {
 }
 
 function Get-ServerProcesses {
+    # EVERY caller wraps this in @(). `return @()` unrolls on the way out and the
+    # caller receives $null, so under Set-StrictMode the `.Count` that reads "no
+    # orphans survived" throws instead of reporting zero -- which is what turned
+    # a passing control into a crash on the first run that got this far. The
+    # `return ,@(...)` idiom fixes the assignment shape but NOT `foreach`, which
+    # then iterates once over the empty array, so it is not used here: one rule
+    # that holds for both consumption shapes beats two that each hold for one.
     return @(Get-Process -Name 'tesserafin' -ErrorAction SilentlyContinue |
         ForEach-Object { [ordered]@{ id = $_.Id; path = $_.Path } })
 }
@@ -184,7 +191,7 @@ function Remove-AllServices {
         Start-Sleep -Milliseconds 500
         & sc.exe delete $name *>&1 | Out-Null
     }
-    foreach ($orphan in Get-ServerProcesses) {
+    foreach ($orphan in @(Get-ServerProcesses)) {
         Stop-Process -Id $orphan.id -Force -ErrorAction SilentlyContinue
     }
 }
@@ -380,7 +387,7 @@ if ($null -ne $running -and $running.state -eq 'Running' -and $running.processId
 $positiveStop = Invoke-Sc -Arguments @('stop', $SERVICE_POSITIVE)
 $stopped = Wait-ServiceState -Name $SERVICE_POSITIVE -Expected 'Stopped' -TimeoutSeconds $STOP_TIMEOUT_SECONDS
 Start-Sleep -Seconds 2
-$positiveOrphans = Get-ServerProcesses
+$positiveOrphans = @(Get-ServerProcesses)
 
 $evidence.controls['P.positive'] = [ordered]@{
     intent = 'the accepted W2 script registers with --service, --webdir and --ffmpeg; SCM start succeeds, no 1053, the server answers, and a clean stop reports exit code 0'
@@ -450,7 +457,7 @@ if ($negativeCreate.exitCode -ne 0) { Deny 'negative' "sc create failed: $($nega
 $negativeStart = Invoke-Sc -Arguments @('start', $SERVICE_NEGATIVE)
 $negativeStopped = Wait-ServiceState -Name $SERVICE_NEGATIVE -Expected 'Stopped' -TimeoutSeconds $READY_TIMEOUT_SECONDS
 Start-Sleep -Seconds 2
-$negativeOrphans = Get-ServerProcesses
+$negativeOrphans = @(Get-ServerProcesses)
 $negativeFfmpeg = Get-FfmpegExceptionSeen -LogDir $negativeState.log
 
 $evidence.controls['N.negative'] = [ordered]@{
@@ -506,7 +513,7 @@ $boundaryStart = Invoke-Sc -Arguments @('start', $SERVICE_BOUNDARY)
 $boundaryWatch.Stop()
 Start-Sleep -Seconds 3
 $boundaryFacts = Get-ServiceFacts -Name $SERVICE_BOUNDARY
-$boundaryOrphans = Get-ServerProcesses
+$boundaryOrphans = @(Get-ServerProcesses)
 
 $evidence.controls['C.boundary'] = [ordered]@{
     intent = "the negative control's command line with --service removed: W0 §4's error 1053 must still reproduce, so P is attributable to the flag"
