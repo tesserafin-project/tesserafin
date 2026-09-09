@@ -221,3 +221,8 @@ jobs:
           Get-Process -Name 'tesserafin' -ErrorAction SilentlyContinue |
             Stop-Process -Force -ErrorAction SilentlyContinue
           'cleanup complete'
+          # `sc.exe delete` answers 1060 for a service that is already gone, which
+          # is the SUCCESSFUL outcome of a cleanup step. The runner appends
+          # `exit $LASTEXITCODE` to every pwsh step, so without this the step
+          # reports the absence of leftover state as a failure.
+          exit 0

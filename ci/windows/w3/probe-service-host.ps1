@@ -314,9 +314,31 @@ if ($tops.Count -ne 1 -or -not $tops[0].PSIsContainer) {
     Deny 'top-level' "the archive extracted $($tops.Count) top-level entries"
 }
 $packageRoot = $tops[0].FullName
-$serverExe = [System.IO.Path]::Combine($packageRoot, 'tesserafin.exe')
-$webDir = [System.IO.Path]::Combine($packageRoot, 'web')
-$ffmpegExe = [System.IO.Path]::Combine($packageRoot, 'ffmpeg', 'ffmpeg.exe')
+
+$serviceScript = [System.IO.Path]::Combine($packageRoot, 'tesserafin-server-service.ps1')
+if (-not [System.IO.File]::Exists($serviceScript)) {
+    Deny 'package' 'the package carries no tesserafin-server-service.ps1'
+}
+
+function Get-PackageRelativePath {
+    param([Parameter(Mandatory = $true)] [string] $Constant)
+    # Read from the accepted W2-A5 script rather than restated here. The
+    # positive control registers through that script, so a second statement of
+    # the layout in this file could disagree with the one actually used and the
+    # disagreement would surface as a refusal about a path nothing registers.
+    $match = [regex]::Match(
+        [System.IO.File]::ReadAllText($serviceScript),
+        "(?m)^\`$$Constant\s*=\s*'([^']+)'\s*$")
+    if (-not $match.Success) {
+        Deny 'package' ("the packaged service script does not define `$$Constant, so the package " +
+            'layout cannot be read from the script that registers it')
+    }
+    return ($match.Groups[1].Value -replace '/', [System.IO.Path]::DirectorySeparatorChar)
+}
+
+$serverExe = [System.IO.Path]::Combine($packageRoot, (Get-PackageRelativePath 'SERVER_RELATIVE_EXE'))
+$webDir = [System.IO.Path]::Combine($packageRoot, (Get-PackageRelativePath 'WEB_RELATIVE_DIR'))
+$ffmpegExe = [System.IO.Path]::Combine($packageRoot, (Get-PackageRelativePath 'FFMPEG_RELATIVE_EXE'))
 foreach ($required in $serverExe, $ffmpegExe) {
     if (-not [System.IO.File]::Exists($required)) { Deny 'package' "the package has no '$required'" }
 }
@@ -334,11 +356,6 @@ $evidence.package = [ordered]@{
 Write-Note "package $($archive.Name), server exe $($evidence.package.serverExeSha256)"
 
 # ── 2. P: the accepted W2 service script, unmodified ────────────────────────
-
-$serviceScript = [System.IO.Path]::Combine($packageRoot, 'tesserafin-server-service.ps1')
-if (-not [System.IO.File]::Exists($serviceScript)) {
-    Deny 'package' 'the package carries no tesserafin-server-service.ps1'
-}
 
 $positiveState = New-StateDirectories ([System.IO.Path]::Combine($work, 'state-positive'))
 & $serviceScript register `
