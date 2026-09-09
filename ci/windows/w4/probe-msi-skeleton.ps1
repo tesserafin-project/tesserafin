@@ -30,9 +30,11 @@
     W4-A2-DIAG (#234): a non-zero `msiexec /i` or `/x` prints the decisive lines
     of its own verbose log before this script refuses. `1603` is "fatal error
     during installation" and names nothing by itself; the log already being
-    written knows which action failed, and was simply never read. The excerpt is
-    capped, goes to the step log rather than into the evidence document, and the
-    log itself is never uploaded.
+    written knows which action failed, and was simply never read. W4-A2-DIAG2:
+    the excerpt is anchored at the END of the log -- its tail, plus every line
+    naming a failure -- because an MSI log is chronological and the front of it
+    is routine chatter. It goes to the step log rather than into the evidence
+    document, and the log itself is never uploaded.
 
     What it deliberately does NOT do:
 
@@ -306,18 +308,33 @@ function Get-MsiFileNames {
 # artifact must never become a later input. The excerpt goes to the step log,
 # never into the evidence document, so that document keeps its property of
 # carrying no host path beyond the two this script was given.
+#
+# W4-A2-DIAG2 (#234). The first excerpt read the log from the front and capped
+# at 120 lines, and 'Note: 1:' matched 3063 of 23873 lines -- so the cap was
+# spent entirely on MSI's routine "table not found" chatter from the opening
+# seconds, and the run that fails at the end was never quoted. An MSI log is
+# chronological: the failing action, its return value and the engine's exit
+# code all sit at the END. So the excerpt is now anchored there -- the tail of
+# the log unconditionally, plus every line that names a failure wherever it
+# falls -- and 'Note: 1:' is no longer a pattern at all.
 $MSI_FAILURE_PATTERNS = @(
+    'InstallFinalize'
+    'MainEngineThread'
     'Return value 3'
-    'MsiConfigureServices'
-    'ServiceConfig'
     '\b1603\b'
     '\b1920\b'
     '\b1613\b'
-    'Error status'
-    'Product: .*-- Error'
-    'Note: 1:'
+    'Error 1920'
+    'Product:'
 )
-$MSI_EXCERPT_MAX_LINES = 120
+# The tail is what the ruling asks for by name; the matches are what carries
+# the action name when the tail is a property dump.
+$MSI_EXCERPT_TAIL_LINES = 80
+# A safety valve only: the pattern set above matches single digits of lines in
+# the observed log, and 'every line matching' is the instruction. If a log ever
+# does exceed this, the excerpt keeps the LAST lines and says how many it
+# dropped -- truncating from the front is the defect being repaired here.
+$MSI_EXCERPT_MAX_LINES = 300
 $MSI_EXCERPT_MAX_LINE_LENGTH = 400
 
 function Show-MsiFailureExcerpt {
@@ -329,8 +346,12 @@ function Show-MsiFailureExcerpt {
         code page for others, and `Get-Content` under PowerShell 7 would decode
         the first as mojibake and find no match in a log that is full of them.
 
-        Capped in both directions -- a bounded number of lines, each truncated
-        -- because an uncapped excerpt of an MSI log is the whole MSI log.
+        Two things are printed, merged in log order and each printed once: the
+        LAST $MSI_EXCERPT_TAIL_LINES lines, which is where the engine records
+        the action that failed and the code it returned, and every line matching
+        $MSI_FAILURE_PATTERNS wherever it falls. Lines are truncated at
+        $MSI_EXCERPT_MAX_LINE_LENGTH and gaps between kept lines are announced,
+        because an uncapped excerpt of an MSI log is the whole MSI log.
     #>
     param(
         [Parameter(Mandatory = $true)] [string] $LogPath,
@@ -351,27 +372,45 @@ function Show-MsiFailureExcerpt {
     })
 
     $pattern = ($MSI_FAILURE_PATTERNS -join '|')
-    $matched = @($lines | Where-Object { $_ -match $pattern })
-    Write-Host "  $($lines.Count) log line(s), $($matched.Count) naming the failure"
-    if ($matched.Count -eq 0) {
-        # A refusal whose log names none of the patterns is itself the finding:
-        # the tail is printed so the run is not silent about it.
-        Write-Host '  no line matched; last 20 lines instead:'
-        $matched = @($lines | Select-Object -Last 20)
+
+    # Indices, not lines: the tail and the matches overlap, and the excerpt has
+    # to print each line once, in the order the installer wrote it.
+    $tailStart = [Math]::Max(0, $lines.Count - $MSI_EXCERPT_TAIL_LINES)
+    $keep = [System.Collections.Generic.SortedSet[int]]::new()
+    for ($i = $tailStart; $i -lt $lines.Count; $i++) { $null = $keep.Add($i) }
+    $matchCount = 0
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -match $pattern) {
+            $matchCount++
+            $null = $keep.Add($i)
+        }
     }
 
-    $shown = 0
-    foreach ($line in $matched) {
-        if ($shown -ge $MSI_EXCERPT_MAX_LINES) {
-            Write-Host "  ... $($matched.Count - $shown) further matching line(s) not shown"
-            break
+    Write-Host ("  {0} log line(s); {1} naming the failure; tail is line(s) {2}-{3}" -f `
+        $lines.Count, $matchCount, ($tailStart + 1), $lines.Count)
+
+    $selected = @($keep)
+    if ($selected.Count -gt $MSI_EXCERPT_MAX_LINES) {
+        # Drop from the FRONT. The end of the log is the part that decides.
+        $dropped = $selected.Count - $MSI_EXCERPT_MAX_LINES
+        Write-Host ("  ... {0} earlier selected line(s) not shown (log line(s) {1}-{2})" -f `
+            $dropped, ($selected[0] + 1), ($selected[$dropped - 1] + 1))
+        $selected = @($selected | Select-Object -Last $MSI_EXCERPT_MAX_LINES)
+    }
+
+    $previous = -1
+    foreach ($index in $selected) {
+        # A gap means skipped log lines. Say so, so nobody reads the excerpt as
+        # a contiguous transcript.
+        if ($previous -ge 0 -and $index -ne ($previous + 1)) {
+            Write-Host ("  ... {0} line(s) skipped" -f ($index - $previous - 1))
         }
-        $text = $line.TrimEnd()
+        $text = $lines[$index].TrimEnd()
         if ($text.Length -gt $MSI_EXCERPT_MAX_LINE_LENGTH) {
             $text = $text.Substring(0, $MSI_EXCERPT_MAX_LINE_LENGTH) + ' ...'
         }
-        Write-Host "  | $text"
-        $shown++
+        Write-Host ("  {0,6} | {1}" -f ($index + 1), $text)
+        $previous = $index
     }
 }
 
