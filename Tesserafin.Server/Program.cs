@@ -68,6 +68,18 @@ namespace Tesserafin.Server
         /// </remarks>
         internal const int StartupFailureExitCode = 1;
 
+        /// <summary>
+        /// How long a failed start keeps the setup server alive when the failure happened before
+        /// the setup server handed over.
+        /// </summary>
+        /// <remarks>
+        /// This is the operator's only account of what went wrong on a headless first start: the
+        /// setup server goes unhealthy and keeps serving its error page so that whoever opened the
+        /// browser to finish configuring the server sees a reason instead of a refused connection.
+        /// It is deliberately long, and it is deliberately only for a console.
+        /// </remarks>
+        internal static readonly TimeSpan PreConfigurationFailureLinger = TimeSpan.FromMinutes(10);
+
         private static readonly SerilogLoggerFactory _loggerFactory = new SerilogLoggerFactory();
 
         /// <summary>
@@ -126,14 +138,62 @@ namespace Tesserafin.Server
             }
         }
 
+        /// <summary>
+        /// Whether this process is a Windows Service Control Manager service process.
+        /// </summary>
+        /// <param name="options">The parsed startup options.</param>
+        /// <returns><c>true</c> when the SCM started this process with <c>--service</c>.</returns>
+        /// <remarks>
+        /// <c>--service</c> is the operator's declaration and <c>IsWindowsService()</c> is the
+        /// environment's answer; both are required. The framework's own <c>AddWindowsService</c> is
+        /// inert unless the process really is an SCM service process, so demanding the flag as well
+        /// is what keeps <c>tesserafin --service</c> from a console byte-for-byte the behaviour it
+        /// has today. It is one method rather than a repeated conjunction because every place that
+        /// asks the question has to get the same answer: a service that took the service host but
+        /// not the service failure semantics is the orphan this contract exists to prevent.
+        /// <para>
+        /// The guard attribute is what lets the platform analyzer keep seeing the
+        /// <c>OperatingSystem.IsWindows()</c> it used to read inline; without it, extracting the
+        /// conjunction turns the Windows-only service host into a CA1416 error.
+        /// </para>
+        /// </remarks>
+        [SupportedOSPlatformGuard("windows")]
+        internal static bool IsRunningAsWindowsService(StartupOptions options)
+            => OperatingSystem.IsWindows() && options.IsService && WindowsServiceHelpers.IsWindowsService();
+
+        /// <summary>
+        /// Whether a startup that failed before <c>configurationCompleted</c> may keep the setup
+        /// server alive for <see cref="PreConfigurationFailureLinger"/> before the process ends.
+        /// </summary>
+        /// <param name="options">The parsed startup options.</param>
+        /// <param name="runningAsWindowsService">
+        /// <see cref="IsRunningAsWindowsService(StartupOptions)"/>, passed in so the decision can be
+        /// exercised for both environments from a test on any platform.
+        /// </param>
+        /// <returns><c>true</c> when the failed start should linger.</returns>
+        /// <remarks>
+        /// <para>
+        /// Under the Service Control Manager nobody is holding a browser open. The linger leaves the
+        /// service reported <c>RUNNING</c> with a dead server behind it for ten minutes; a stop
+        /// issued in that window has to wait out the shell's shutdown budget and then abandons the
+        /// process, which is W0 §4's orphaned <c>tesserafin.exe</c> — worse than a clean failure,
+        /// because the SCM's failure actions never fire and the next start races a process that is
+        /// still holding the ports and the database.
+        /// </para>
+        /// <para>
+        /// A console keeps it. There the linger is the whole point: a first start that fails before
+        /// the setup server hands over is exactly the case where the operator has nothing else to
+        /// read, and shortening it there would trade one defect for another.
+        /// </para>
+        /// </remarks>
+        internal static bool ShouldLingerAfterPreConfigurationFailure(StartupOptions options, bool runningAsWindowsService)
+            => !runningAsWindowsService
+                && options.StartupMode is null or Configuration.StartupMode.MediaServer;
+
         private static async Task StartApp(StartupOptions options)
         {
-            // `--service` is the operator's declaration and `IsWindowsService()` is the environment's
-            // answer; both are required. The framework's own AddWindowsService is inert unless the
-            // process really is an SCM service process, so demanding the flag as well is what keeps
-            // `tesserafin --service` from a console byte-for-byte the behaviour it has today.
             int exitCode;
-            if (OperatingSystem.IsWindows() && options.IsService && WindowsServiceHelpers.IsWindowsService())
+            if (IsRunningAsWindowsService(options))
             {
                 exitCode = await WindowsServiceEntryPoint.RunAsync(options, RunServerAsync).ConfigureAwait(false);
             }
@@ -348,9 +408,15 @@ namespace Tesserafin.Server
                 if (_setupServer!.IsAlive && !configurationCompleted)
                 {
                     _setupServer!.SoftStop();
-                    if (options.StartupMode is null or Configuration.StartupMode.MediaServer)
+
+                    // W3-A0 §3's named residual. The setup server is still the one serving the
+                    // browser here, so a console holds it open; under the SCM the same wait is a
+                    // service reported RUNNING with nothing behind it, and then an orphan. The stop
+                    // below is not skipped in either case — the port has to be released before this
+                    // method returns its non-zero code.
+                    if (ShouldLingerAfterPreConfigurationFailure(options, IsRunningAsWindowsService(options)))
                     {
-                        await Task.Delay(TimeSpan.FromMinutes(10)).ConfigureAwait(false);
+                        await Task.Delay(PreConfigurationFailureLinger).ConfigureAwait(false);
                     }
 
                     await _setupServer!.StopAsync().ConfigureAwait(false);
