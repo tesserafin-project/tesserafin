@@ -78,7 +78,23 @@ been shown to be a gate.
 
 ## 5. Observed RED
 
-See §7.
+Each mutation below was written to disk, graded by
+`python3 ci/windows/w4/msi-controls.py` with no arguments — the ordinary
+grading path, not the self-test — and reverted with `git checkout --` from the
+commit that carries this document. All six exited 1. The tree was clean
+afterwards, and the controls were green again on the restored tree.
+
+| Mutation | Exit | Finding |
+| --- | --- | --- |
+| `UpgradeCode` replaced with `6b1e8d37-5f92-4a04-8e7c-3d05b9f2a618` | 1 | `authoring: UpgradeCode is '6b1e8d37-…', but W4-A1 froze '0f0c9f4e-…' -- ordinal, lowercase, no braces` |
+| same digits, upper case | 1 | `authoring: UpgradeCode is '0F0C9F4E-1C5A-4B8E-9A3D-6D1F2B7C8E05', but W4-A1 froze '0f0c9f4e-…'` |
+| same digits, braced | 1 | `authoring: UpgradeCode is '{0f0c9f4e-…}', but W4-A1 froze '0f0c9f4e-…'` |
+| the attribute removed | 1 | `authoring: no UpgradeCode attribute; W4-A1 froze one and the package must carry it` |
+| the authoring's comment calls it unfrozen | 1 | `authoring comment: still says the UpgradeCode is open ('unfrozen'); W4-A1 froze it` |
+| `W4-A0-wix-skeleton.md` reverted to "Nothing here freezes them" | 1 | `W4-A0 document: still says the UpgradeCode is open ('nothing\s+here\s+freezes'); W4-A1 froze it` |
+
+The upper-case and braced rows are the ones that matter most: they are the two
+a GUID-parsing gate would have accepted, and the ruling names them explicitly.
 
 ## 6. What this slice is not
 
@@ -105,3 +121,29 @@ widened into silently.
 
 ## 7. Evidence
 
+**Base.** Branched from `051699200423c0b055ba9599e62ab8041bdcfd3e`, the
+accepted W4-A0 master named by the ruling, confirmed equal to `origin/master`
+before any file was touched.
+
+**The value was recomputed, not restated.** The attribute was read out of the
+base commit and dumped byte for byte: `UpgradeCode="0f0c9f4e-1c5a-4b8e-9a3d-6d1f2b7c8e05"`,
+63 bytes, lowercase, unbraced. It matches the ruling, so nothing was "fixed".
+
+**The `.wxs` change is comment-only.** Stripping `<!--…-->` (dot-matches-all)
+from the base authoring and from this branch's authoring yields identical text,
+so no element, attribute or attribute value moved — including the frozen one.
+The file is well formed, and no XML comment contains a double hyphen.
+
+**Baseline.** `msi-controls.py --self-test` was run on the untouched base
+commit first and was clean with its five original controls. Without that, a
+green run afterwards would prove nothing.
+
+**After.** `msi-controls.py --self-test` is clean, with 5 original controls and
+7 UpgradeCode freeze controls, all RED as declared.
+
+**Changed paths.** Exactly the four the ruling authorizes:
+`packaging/windows/msi/Tesserafin.wxs`, `ci/windows/w4/msi-controls.py`,
+`docs/distribution/W4-A0-wix-skeleton.md` and this document.
+
+**Secret scan.** `ci/secret-scan.sh --mode tree` — `CLEAN: the current tree
+contains no findings`, exit 0, on a worktree with no build output present.
