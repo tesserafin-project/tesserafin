@@ -31,6 +31,31 @@ $script:ContractDescription = 'Tesserafin media server. Manage it at http://loca
 # the authoring. WiX answers WIX1149 for the core ServiceConfig element.
 $script:ServiceAutoStart = 2
 
+# ---------------------------------------------------------------------------
+# W0 §4, the recovery row, restated ONCE for the grader (W4-A2):
+#
+#     restart after 60 s on first and second failure; no action on the third,
+#     so a crash loop is visible rather than hidden
+#
+# Like the display name and the description above, this is a part of §4 that
+# cannot be read out of an accepted script -- the W2-A5 portable-ZIP script
+# registers a service and sets no failure policy at all, so the MSI is the
+# first artifact to carry this row. `ci/windows/w4/msi-controls.py` states the
+# same three actions against the AUTHORING; this file states them against the
+# SERVICE the SCM actually ended up with, and the two are only ever both green
+# when the authoring and the installed service agree.
+#
+# The delay is milliseconds, which is the SCM's own unit in SC_ACTION.Delay --
+# `sc.exe failure ... actions= restart/60000/restart/60000//0`. The reset
+# period is seconds.
+# ---------------------------------------------------------------------------
+$script:ContractResetPeriodSeconds = 86400
+$script:ContractFailureActions = @(
+    @{ type = 'restartService'; delayMs = 60000 }
+    @{ type = 'restartService'; delayMs = 60000 }
+    @{ type = 'none'; delayMs = 0 }
+)
+
 function Split-W4CommandLine {
     <#
         Split a Windows command line into tokens, honouring double quotes. The
@@ -106,6 +131,48 @@ function Join-W4Path {
     return ($Root.TrimEnd('\', '/') + '\' + $Relative.Replace('/', '\').TrimStart('\'))
 }
 
+function Get-W4FailureAction {
+    <#
+        One entry of the failure-action array the SCM reported, or $null when
+        the service has no policy at all or the array is shorter than the index
+        asked for. Absent is never equal to anything: a policy with two entries
+        has no third entry, and "the third entry is not a restart" must NOT be
+        satisfied by there being no third entry -- the SCM repeats the LAST
+        configured action for every failure past the end of the array, so a
+        two-entry array of restarts restarts forever.
+    #>
+    param(
+        [Parameter(Mandatory = $true)] [AllowNull()] $FailureActions,
+        [Parameter(Mandatory = $true)] [int] $Index
+    )
+    if ($null -eq $FailureActions) { return $null }
+    if (-not $FailureActions.ContainsKey('actions')) { return $null }
+    $actions = @($FailureActions.actions)
+    if ($Index -lt 0 -or $Index -ge $actions.Count) { return $null }
+    return $actions[$Index]
+}
+
+function Test-W4FailureAction {
+    <#
+        Does entry $Index of the reported policy match the §4 row at the same
+        index, in BOTH halves -- the action the SCM will take and the delay
+        before it takes it? A gate that compared only the action would call
+        `restart after 1 s` correct, and a restart loop with a one-second delay
+        is the thing §4's 60 s exists to rule out.
+    #>
+    param(
+        [Parameter(Mandatory = $true)] [AllowNull()] $FailureActions,
+        [Parameter(Mandatory = $true)] [int] $Index
+    )
+    $observed = Get-W4FailureAction -FailureActions $FailureActions -Index $Index
+    if ($null -eq $observed) { return $false }
+    if ($Index -ge $script:ContractFailureActions.Count) { return $false }
+    $expected = $script:ContractFailureActions[$Index]
+    if (-not $observed.ContainsKey('type') -or -not $observed.ContainsKey('delayMs')) { return $false }
+    return (([string]$observed.type -ceq [string]$expected.type) -and
+        ([int]$observed.delayMs -eq [int]$expected.delayMs))
+}
+
 function Get-W4Predicates {
     <#
         Grade one observation. Every predicate is answered for every run,
@@ -130,6 +197,14 @@ function Get-W4Predicates {
                                        DelayedAutostart, ObjectName, DisplayName,
                                        Description
           serviceState                 [string]   'Stopped' / 'Running' / 'Absent'
+          failureActions               [hashtable] or $null -- what the SCM
+                                       reported through QueryServiceConfig2W
+                                       after the install:
+                                         resetPeriodSeconds [int]
+                                         actions [array] of
+                                           @{ type = [string]; delayMs = [int] }
+                                       $null when the service carries no
+                                       failure policy at all
           serviceKeyAfterUninstall     [bool]     the SCM key still exists
           filesUnderPrefixAfterUninstall [int]
           stateAfterUninstall          [hashtable] name -> @{ directory = [bool]; sentinel = [bool] }
@@ -207,6 +282,32 @@ function Get-W4Predicates {
     # NOT started -- an operator decides when a media server begins serving.
     $predicates['serviceNotStartedByInstall'] = ([string]$o.serviceState -eq 'Stopped')
 
+    # ── W0 §4's recovery row, read back from the SCM (W4-A2) ────────────────
+    # `failureActions` is absent from a W4-A0-era observation, so the key is
+    # asked for rather than indexed: StrictMode 3 makes a missing key an error,
+    # and a grader that threw would be indistinguishable from a policy that was
+    # never applied.
+    $failureActions = $(if ($o.ContainsKey('failureActions')) { $o.failureActions } else { $null })
+
+    $predicates['serviceFailureActionsConfigured'] = ($null -ne $failureActions)
+    $predicates['serviceFailureResetPeriodIsContract'] =
+        ($null -ne $failureActions -and $failureActions.ContainsKey('resetPeriodSeconds') -and
+            [int]$failureActions.resetPeriodSeconds -eq $script:ContractResetPeriodSeconds)
+    # EXACTLY three. Not "at least three": the SCM repeats the last configured
+    # action for every failure beyond the end of the array, so a fourth entry
+    # would change what the fourth failure does, and a trimmed third would turn
+    # the second restart into an indefinite one. Either way the crash loop W0 §4
+    # wants visible stops being visible.
+    $predicates['serviceFailureActionCountIsContract'] =
+        ($null -ne $failureActions -and $failureActions.ContainsKey('actions') -and
+            @($failureActions.actions).Count -eq $script:ContractFailureActions.Count)
+    $predicates['serviceFailureFirstIsRestartAfter60s'] =
+        (Test-W4FailureAction -FailureActions $failureActions -Index 0)
+    $predicates['serviceFailureSecondIsRestartAfter60s'] =
+        (Test-W4FailureAction -FailureActions $failureActions -Index 1)
+    $predicates['serviceFailureThirdIsNoAction'] =
+        (Test-W4FailureAction -FailureActions $failureActions -Index 2)
+
     # ── uninstall ───────────────────────────────────────────────────────────
     $predicates['uninstallRemovedService'] = -not [bool]$o.serviceKeyAfterUninstall
     $predicates['uninstallRemovedBinaries'] = ([int]$o.filesUnderPrefixAfterUninstall -eq 0)
@@ -238,6 +339,24 @@ function Get-W4ControlExpectations {
             'serviceImagePathHasFfmpeg'
         )
         'no-service-remove' = @('uninstallRemovedService')
+        # W4-A2. `no-failure-actions` reddens six because a service with no
+        # failure policy at all has no reset period, no count and no first,
+        # second or third entry -- one defect with six visible consequences,
+        # declared in full for the same reason `no-exe` declares three. A
+        # declared set of only the first would pass while the grader quietly
+        # stopped answering the other five.
+        'no-failure-actions' = @(
+            'serviceFailureActionsConfigured'
+            'serviceFailureResetPeriodIsContract'
+            'serviceFailureActionCountIsContract'
+            'serviceFailureFirstIsRestartAfter60s'
+            'serviceFailureSecondIsRestartAfter60s'
+            'serviceFailureThirdIsNoAction'
+        )
+        # Both of these leave a complete, well-formed three-entry policy behind
+        # and change ONE entry, so each is attributable to that entry alone.
+        'first-action-not-restart' = @('serviceFailureFirstIsRestartAfter60s')
+        'third-action-restart' = @('serviceFailureThirdIsNoAction')
     }
 }
 
@@ -297,4 +416,5 @@ function Get-W4Verdict {
 }
 
 Export-ModuleMember -Function Split-W4CommandLine, Get-W4PathArgument, Test-W4SamePath,
-    Join-W4Path, Get-W4Predicates, Get-W4ControlExpectations, Get-W4Verdict
+    Join-W4Path, Get-W4FailureAction, Test-W4FailureAction, Get-W4Predicates,
+    Get-W4ControlExpectations, Get-W4Verdict

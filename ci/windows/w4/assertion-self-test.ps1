@@ -58,7 +58,31 @@ function New-SyntheticObservation {
 
     $imagePath = '"' + (Join-W4Path -Root $prefix -Relative $deliveredExe) + '" ' + ($arguments -join ' ')
 
+    # W4-A2. What the SCM would report for each package. `no-failure-actions`
+    # leaves the service with no policy at all, which is what the SCM's default
+    # is; the other two leave a complete, well-formed three-entry policy with
+    # exactly one entry wrong, so that each reddens one predicate and the rest
+    # of the recovery row stays green under the same mutation.
+    $failureActions = $null
+    if ($Mutation -ne 'no-failure-actions') {
+        $first = $(if ($Mutation -eq 'first-action-not-restart') { 1000 } else { 60000 })
+        $third = $(if ($Mutation -eq 'third-action-restart') {
+            @{ type = 'restartService'; delayMs = 60000 }
+        } else {
+            @{ type = 'none'; delayMs = 0 }
+        })
+        $failureActions = @{
+            resetPeriodSeconds = 86400
+            actions = @(
+                @{ type = 'restartService'; delayMs = $first }
+                @{ type = 'restartService'; delayMs = 60000 }
+                $third
+            )
+        }
+    }
+
     return @{
+        failureActions = $failureActions
         msiFileNames = @($deliveredExe, 'ffmpeg.exe', 'index.html', 'LICENSE')
         installPrefix = $prefix
         programDataRoot = $dataRoot

@@ -60,9 +60,10 @@
 
 .PARAMETER Mutation
     CONTROL-ONLY. `none` builds the real package. Every other value builds a
-    deliberately broken one for a single W4-A0 hostile control, so those
-    controls drive the REAL authoring rather than a second copy of it written
-    for the test -- the same reason the frozen W2-A2 assembler carries a
+    deliberately broken one for a single hostile control -- four from W4-A0 over
+    containment, the argument list and the uninstall, and three from W4-A2 over
+    the W0 §4 recovery policy -- so those controls drive the REAL authoring
+    rather than a second copy of it written for the test -- the same reason the frozen W2-A2 assembler carries a
     PACK-ONLY parameter set. `ci/windows/w4/msi-controls.py` asserts the hosted
     acceptance build passes nothing but `none`.
 
@@ -77,7 +78,8 @@ param(
     [Parameter(Mandatory = $true)] [string] $StageRoot,
     [Parameter(Mandatory = $true)] [string] $HarvestRoot,
     [Parameter(Mandatory = $true)] [string] $OutPath,
-    [ValidateSet('none', 'no-exe', 'no-service-flag', 'no-path-flags', 'no-service-remove')]
+    [ValidateSet('none', 'no-exe', 'no-service-flag', 'no-path-flags', 'no-service-remove',
+        'no-failure-actions', 'first-action-not-restart', 'third-action-restart')]
     [string] $Mutation = 'none',
     [ValidateNotNullOrEmpty()] [string] $WixVersion = '6.0.2'
 )

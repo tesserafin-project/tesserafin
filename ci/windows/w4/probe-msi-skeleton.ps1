@@ -14,6 +14,19 @@
         `--service` and the W0 §4 argument list, and uninstalls the service and
         the binaries while leaving the state directories.
 
+    W4-A2 (#234) adds one property to the same run, measured the same way:
+
+        the installed service carries the W0 §4 recovery policy -- restart
+        after 60 s on the first and the second failure, no action on the third
+        -- read back out of the Service Control Manager with
+        QueryServiceConfig2W AFTER the install, never out of the authoring.
+
+    The SCM is asked rather than the registry parsed: `FailureActions` is a
+    REG_BINARY whose layout Microsoft does not document, and
+    `QueryServiceConfig2` is the API whose SERVICE_FAILURE_ACTIONS shape is.
+    `sc.exe qfailure` is captured verbatim beside it, as evidence a reviewer can
+    read, and is deliberately NOT graded -- its output is localised.
+
     What it deliberately does NOT do:
 
       * it does not START the service. W0 §10: a fresh installation leaves it
@@ -88,7 +101,8 @@ $ErrorActionPreference = 'Stop'
 
 $SERVICE_NAME = 'Tesserafin'
 $SERVICE_KEY = "HKLM:\SYSTEM\CurrentControlSet\Services\$SERVICE_NAME"
-$MUTATIONS = @('none', 'no-exe', 'no-service-flag', 'no-path-flags', 'no-service-remove')
+$MUTATIONS = @('none', 'no-exe', 'no-service-flag', 'no-path-flags', 'no-service-remove',
+    'no-failure-actions', 'first-action-not-restart', 'third-action-restart')
 
 Import-Module ([System.IO.Path]::Combine($PSScriptRoot, 'W4MsiAssertions.psm1')) -Force
 
@@ -295,6 +309,192 @@ function Get-ServiceRegistry {
     }
 }
 
+# ---------------------------------------------------------------------------
+# W4-A2: the failure policy, asked of the Service Control Manager itself.
+#
+# `QueryServiceConfig2(SERVICE_CONFIG_FAILURE_ACTIONS)` is the documented way to
+# read what an installed service will actually do when it dies. The alternatives
+# were both worse: the `FailureActions` REG_BINARY under the service key has no
+# documented layout, and `sc.exe qfailure` prints localised text. Both are still
+# recorded in the evidence -- they are just not what the predicates are graded
+# on.
+#
+# The two-call shape is the Win32 idiom: ask with a null buffer, be told
+# ERROR_INSUFFICIENT_BUFFER and how many bytes are needed, then ask again.
+# ---------------------------------------------------------------------------
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+
+public static class W4Scm
+{
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr OpenSCManagerW(string machineName, string databaseName, uint access);
+
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr OpenServiceW(IntPtr manager, string serviceName, uint access);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool CloseServiceHandle(IntPtr handle);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool QueryServiceConfig2W(IntPtr service, uint level, IntPtr buffer,
+        uint bufferSize, out uint bytesNeeded);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct SERVICE_FAILURE_ACTIONS
+    {
+        public uint dwResetPeriod;
+        public IntPtr lpRebootMsg;
+        public IntPtr lpCommand;
+        public uint cActions;
+        public IntPtr lpsaActions;
+    }
+
+    private const uint SC_MANAGER_CONNECT = 0x0001;
+    private const uint SERVICE_QUERY_CONFIG = 0x0001;
+    private const uint SERVICE_CONFIG_FAILURE_ACTIONS = 2;
+    private const int ERROR_INSUFFICIENT_BUFFER = 122;
+
+    // "<resetPeriodSeconds>;<type>/<delayMs>,<type>/<delayMs>,..." or null when
+    // the service carries no failure policy at all. A string rather than a
+    // structure so the caller parses one documented shape instead of marshalling
+    // a second time.
+    public static string ReadFailureActions(string serviceName)
+    {
+        IntPtr manager = OpenSCManagerW(null, null, SC_MANAGER_CONNECT);
+        if (manager == IntPtr.Zero)
+        {
+            throw new Exception("OpenSCManager failed with " + Marshal.GetLastWin32Error());
+        }
+        try
+        {
+            IntPtr service = OpenServiceW(manager, serviceName, SERVICE_QUERY_CONFIG);
+            if (service == IntPtr.Zero)
+            {
+                throw new Exception("OpenService '" + serviceName + "' failed with " +
+                    Marshal.GetLastWin32Error());
+            }
+            try
+            {
+                uint needed = 0;
+                if (QueryServiceConfig2W(service, SERVICE_CONFIG_FAILURE_ACTIONS, IntPtr.Zero, 0, out needed))
+                {
+                    return null;
+                }
+                int error = Marshal.GetLastWin32Error();
+                if (error != ERROR_INSUFFICIENT_BUFFER)
+                {
+                    throw new Exception("QueryServiceConfig2 sizing failed with " + error);
+                }
+                IntPtr buffer = Marshal.AllocHGlobal((int)needed);
+                try
+                {
+                    if (!QueryServiceConfig2W(service, SERVICE_CONFIG_FAILURE_ACTIONS, buffer, needed, out needed))
+                    {
+                        throw new Exception("QueryServiceConfig2 failed with " + Marshal.GetLastWin32Error());
+                    }
+                    SERVICE_FAILURE_ACTIONS actions =
+                        (SERVICE_FAILURE_ACTIONS)Marshal.PtrToStructure(buffer, typeof(SERVICE_FAILURE_ACTIONS));
+                    if (actions.cActions == 0 || actions.lpsaActions == IntPtr.Zero)
+                    {
+                        return null;
+                    }
+                    string rendered = actions.dwResetPeriod.ToString() + ";";
+                    for (int i = 0; i < actions.cActions; i++)
+                    {
+                        IntPtr entry = new IntPtr(actions.lpsaActions.ToInt64() + (i * 8));
+                        int type = Marshal.ReadInt32(entry);
+                        uint delay = (uint)Marshal.ReadInt32(entry, 4);
+                        string name;
+                        switch (type)
+                        {
+                            case 0: name = "none"; break;
+                            case 1: name = "restartService"; break;
+                            case 2: name = "restartComputer"; break;
+                            case 3: name = "runCommand"; break;
+                            default: name = "unknown(" + type + ")"; break;
+                        }
+                        if (i > 0) { rendered += ","; }
+                        rendered += name + "/" + delay.ToString();
+                    }
+                    return rendered;
+                }
+                finally
+                {
+                    Marshal.FreeHGlobal(buffer);
+                }
+            }
+            finally
+            {
+                CloseServiceHandle(service);
+            }
+        }
+        finally
+        {
+            CloseServiceHandle(manager);
+        }
+    }
+}
+'@
+
+function Get-ServiceFailureActions {
+    <#
+        The SCM's answer, as the pure grader's observation shape, or $null when
+        the service has no failure policy. `$null` is the honest answer for a
+        service the SCM would do nothing for, and it is what
+        `serviceFailureActionsConfigured` exists to redden.
+    #>
+    if (-not (Test-Path -LiteralPath $SERVICE_KEY)) { return $null }
+    $rendered = [W4Scm]::ReadFailureActions($SERVICE_NAME)
+    if ([string]::IsNullOrWhiteSpace($rendered)) { return $null }
+    $halves = $rendered.Split(';')
+    if ($halves.Count -ne 2) { return $null }
+    $actions = @(
+        foreach ($entry in $halves[1].Split(',')) {
+            $pair = $entry.Split('/')
+            if ($pair.Count -ne 2) { continue }
+            @{ type = $pair[0]; delayMs = [int]$pair[1] }
+        }
+    )
+    return @{
+        resetPeriodSeconds = [int]$halves[0]
+        actions = $actions
+        rendered = $rendered
+    }
+}
+
+function Get-ServiceFailureEvidence {
+    <#
+        The same policy in the two forms a reviewer can read directly, recorded
+        and never graded: `sc.exe qfailure`, whose text is localised, and the
+        undocumented `FailureActions` REG_BINARY as hex. `FailureActionsOnNonCrashFailures`
+        comes along because it decides whether a NON-crash exit -- which is what
+        W3's non-zero exit on a fatal startup failure is -- counts as a failure
+        at all. W0 §4 is silent on it and this slice does not set it, so it is
+        reported rather than asserted.
+    #>
+    $scText = $(try { (& sc.exe qfailure $SERVICE_NAME 2>&1 | Out-String).Trim() } catch { "sc.exe qfailure threw: $_" })
+    $binary = $null
+    $onNonCrash = $null
+    if (Test-Path -LiteralPath $SERVICE_KEY) {
+        $raw = Get-ItemProperty -LiteralPath $SERVICE_KEY
+        if ($raw.PSObject.Properties.Name -contains 'FailureActions') {
+            $binary = -join (@($raw.FailureActions) | ForEach-Object { '{0:x2}' -f $_ })
+        }
+        if ($raw.PSObject.Properties.Name -contains 'FailureActionsOnNonCrashFailures') {
+            $onNonCrash = $raw.FailureActionsOnNonCrashFailures
+        }
+    }
+    return [ordered]@{
+        scQueryFailure = $scText
+        registryFailureActionsHex = $binary
+        failureActionsOnNonCrashFailures = $onNonCrash
+    }
+}
+
 function Get-ServiceState {
     $service = Get-Service -Name $SERVICE_NAME -ErrorAction SilentlyContinue
     if ($null -eq $service) { return 'Absent' }
@@ -356,6 +556,11 @@ foreach ($mutation in $MUTATIONS) {
     $service = Get-ServiceRegistry
     $run.serviceImagePath = $(if ($null -eq $service) { $null } else { $service.ImagePath })
     $run.serviceState = Get-ServiceState
+    # W4-A2: read BEFORE the uninstall, while the service the installer created
+    # still exists. Asking afterwards would answer about nothing.
+    $failureActions = Get-ServiceFailureActions
+    $run.failureActions = $failureActions
+    $run.failureActionsEvidence = Get-ServiceFailureEvidence
     $run.installPrefixUsed = $prefix
     $run.programFilesTesserafinExists = [System.IO.Directory]::Exists($programFilesTesserafin)
 
@@ -382,6 +587,7 @@ foreach ($mutation in $MUTATIONS) {
         installedFfmpegExe = [System.IO.File]::Exists([System.IO.Path]::Combine($prefix, $ffmpegRelativeExe))
         service = $service
         serviceState = $run.serviceState
+        failureActions = $failureActions
     }
     $run.installedFileCount = $(if ([System.IO.Directory]::Exists($prefix)) {
         @(Get-ChildItem -LiteralPath $prefix -Recurse -File -Force).Count } else { 0 })
@@ -437,6 +643,9 @@ $evidence.installPrefixKind = $(if ($evidence.runs['none'].programFilesTesserafi
     'disposable prefix, %ProgramFiles% untouched'
 })
 $evidence.installPrefixUsed = $evidence.runs['none'].installPrefixUsed
+# W4-A2's stop condition, answered from the measurement rather than from the
+# authoring: what the SCM said the real package's service would do when it dies.
+$evidence.failureActionsObserved = $evidence.runs['none'].failureActions
 $evidence.allPassed = $allPassed
 Save-Evidence
 

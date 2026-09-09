@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""W4-A0 (#234) -- the controls that do not need a Windows host.
+"""W4-A0 and W4-A2 (#234) -- the controls that do not need a Windows host.
 
 The four hostile controls the ruling names first are properties of an installed
 package and can only be measured on a native runner. The fifth is not:
@@ -15,12 +15,18 @@ Everything below is read out of the files. Nothing is asserted from memory, and
 the permission check parses YAML rather than grepping it: `write-all` and a
 quoted `"packages": "write"` both grant and both slip past a grep gate.
 
+W4-A2 adds one more property of the authored files: that every `ServiceInstall`
+the authoring states carries the W0 §4 recovery policy. That is a statement
+about the source text, so it is checked here rather than being left to the
+hosted run -- which measures the other half, what the Service Control Manager
+actually ended up with.
+
 Two modes:
 
     (default)     grade the real files; exit 1 on any finding
-    --self-test   ALSO mutate a copy of the workflow four ways and require each
-                  mutation to be caught. A gate that cannot be made to fail has
-                  not been shown to be a gate.
+    --self-test   ALSO mutate copies of the workflow, the authoring and the
+                  documents and require each mutation to be caught. A gate that
+                  cannot be made to fail has not been shown to be a gate.
 """
 
 from __future__ import annotations
@@ -40,6 +46,7 @@ PROBE = REPO_ROOT / "ci" / "windows" / "w4" / "probe-msi-skeleton.ps1"
 SELF_TEST = REPO_ROOT / "ci" / "windows" / "w4" / "assertion-self-test.ps1"
 A0_DOC = REPO_ROOT / "docs" / "distribution" / "W4-A0-wix-skeleton.md"
 A1_DOC = REPO_ROOT / "docs" / "distribution" / "W4-A1-upgradecode.md"
+A2_DOC = REPO_ROOT / "docs" / "distribution" / "W4-A2-service-recovery.md"
 
 # W4-A1 (#234). The owner ruling froze the GUID W4-A0 had already authored:
 # "Ordinal, lowercase, no braces. I do not authorize a new GUID." This is the
@@ -92,6 +99,41 @@ CONTRACT_ARGUMENTS = (
 # time instead of travelling with the commit. The MSI builder gets the same
 # refusal, for the same reason.
 FORBIDDEN_BUILDER_PARAMETERS = ("Tag", "RunId", "Reference", "Url", "Uri", "Digest", "Ref")
+
+# W4-A2 (#234). W0 §4's recovery row, as the authoring must state it:
+#
+#     restart after 60 s on first and second failure; no action on the third,
+#     so a crash loop is visible rather than hidden
+#
+# `Delay` is milliseconds and `ResetPeriod` is seconds, which is the SCM's own
+# split -- `sc.exe failure Tesserafin reset= 86400 actions=
+# restart/60000/restart/60000//0`.
+#
+# The third entry is graded as hard as the first two. The SCM repeats the LAST
+# configured action for every failure past the end of the array, so an authoring
+# that stopped after two restarts would restart forever, which is the outcome
+# §4's third row exists to refuse.
+#
+# This is a PRESENCE gate, deliberately. The authoring carries deliberately
+# broken recovery policies too -- they are how the hostile controls drive the
+# real authoring -- so "no Failure element with the wrong delay appears" is not
+# a property this file can have. What it can have, and what is checked, is that
+# every authored ServiceInstall carries the correct policy.
+CONTRACT_FAILURE_ACTIONS = (
+    '<ServiceConfigFailureActions OnInstall="yes" OnReinstall="yes" ResetPeriod="86400">'
+    ' <Failure Action="restartService" Delay="60000" />'
+    ' <Failure Action="restartService" Delay="60000" />'
+    ' <Failure Action="none" Delay="0" />'
+    " </ServiceConfigFailureActions>"
+)
+
+# The single line the W4-A2 document must carry, in the SCM's own notation, so
+# the document and the authoring cannot drift apart silently.
+CONTRACT_SC_POLICY = "restart/60000/restart/60000//0"
+
+# W4-A0 §3 originally claimed all of W0 §4's table. The ruling names that
+# over-claim, and a straight revert of the corrected sentence trips this.
+A0_OVERCLAIM_PATTERN = r"W0\s+§4's\s+table\s+is\s+implemented\s+as\s+written"
 
 
 def without_comments(text: str, kind: str) -> str:
@@ -218,6 +260,62 @@ def findings_for_authoring(text: str) -> list[str]:
     if "SuppressSignature" in text or "signtool" in text.lower():
         findings.append("authoring: signs the package, which this slice does not do")
     findings += findings_for_upgrade_code(text)
+    findings += findings_for_failure_actions(text)
+    return findings
+
+
+def normalised(text: str) -> str:
+    """Collapse runs of whitespace, so an indentation change is not a finding."""
+    return re.sub(r"\s+", " ", text)
+
+
+def findings_for_failure_actions(text: str) -> list[str]:
+    """W4-A2: every authored ServiceInstall carries the W0 §4 recovery policy.
+
+    `text` is already comment-stripped, so this grades what the package WOULD
+    build with. The count is compared against the number of `ServiceInstall`
+    elements rather than against a fixed number: the authoring states the
+    service once per argument variant, and a variant that quietly lost its
+    recovery row would otherwise be invisible here and only surface on a runner.
+    """
+    flat = normalised(text)
+    authored = flat.count(CONTRACT_FAILURE_ACTIONS)
+    services = flat.count("<ServiceInstall ")
+    if authored == 0:
+        return [
+            "authoring: no W0 §4 recovery policy is authored. The SCM's default is to do "
+            "nothing on any failure, so the first and second restart would never happen"
+        ]
+    if authored != services:
+        return [
+            f"authoring: {services} ServiceInstall element(s) but {authored} carry the W0 §4 "
+            "recovery policy, so at least one registers a service the SCM would recover "
+            "differently"
+        ]
+    return []
+
+
+def findings_for_failure_actions_prose(a0_text: str, a2_text: str) -> list[str]:
+    """W4-A2: the documents say what the package does, and no more.
+
+    The W4-A0 document's §3 originally claimed W0 §4's table whole. It never
+    implemented the recovery, stop-timeout or logging rows, and the ruling
+    authorises correcting exactly that sentence -- so a revert of it is RED.
+    """
+    findings: list[str] = []
+    if re.search(A0_OVERCLAIM_PATTERN, a0_text):
+        findings.append(
+            "W4-A0 document: still claims W0 §4's table is implemented as written, but W4-A0 "
+            "implemented neither the recovery row (W4-A2) nor the stop-timeout and logging rows"
+        )
+    if "W4-A2" not in a2_text:
+        findings.append("W4-A2 document: does not cite the W4-A2 ruling it records")
+    if CONTRACT_SC_POLICY not in a2_text:
+        findings.append(
+            f"W4-A2 document: does not state the W0 §4 failure policy '{CONTRACT_SC_POLICY}'"
+        )
+    if "86400" not in a2_text:
+        findings.append("W4-A2 document: does not state the W0 §4 reset period 86400")
     return findings
 
 
@@ -265,10 +363,12 @@ def findings_for_upgrade_code_prose(authoring_text: str, a0_text: str, a1_text: 
     return findings
 
 
-def grade_authoring(authoring_text: str, a0_text: str, a1_text: str) -> list[str]:
+def grade_authoring(authoring_text: str, a0_text: str, a1_text: str, a2_text: str) -> list[str]:
     """Everything graded off the authoring, mutable as one text for the self-test."""
-    return findings_for_authoring(without_comments(authoring_text, "xml")) + findings_for_upgrade_code_prose(
-        authoring_text, a0_text, a1_text
+    return (
+        findings_for_authoring(without_comments(authoring_text, "xml"))
+        + findings_for_upgrade_code_prose(authoring_text, a0_text, a1_text)
+        + findings_for_failure_actions_prose(a0_text, a2_text)
     )
 
 
@@ -304,11 +404,14 @@ def grade_everything(workflow_text: str) -> list[str]:
             AUTHORING.read_text(encoding="utf-8"),
             A0_DOC.read_text(encoding="utf-8"),
             A1_DOC.read_text(encoding="utf-8"),
+            A2_DOC.read_text(encoding="utf-8"),
         )
     )
 
 
-def self_test_upgrade_code(authoring_text: str, a0_text: str, a1_text: str) -> list[str]:
+def self_test_upgrade_code(
+    authoring_text: str, a0_text: str, a1_text: str, a2_text: str
+) -> list[str]:
     """W4-A1: the freeze gate must be reachable, in every shape the ruling names.
 
     The ruling's hostile control is "UpgradeCode in the wxs replaced by any
@@ -320,50 +423,147 @@ def self_test_upgrade_code(authoring_text: str, a0_text: str, a1_text: str) -> l
     """
     attribute = f'UpgradeCode="{FROZEN_UPGRADE_CODE}"'
     mutations = {
-        "a different GUID": lambda a, d0, d1: (
+        "a different GUID": lambda a, d0, d1, d2: (
             a.replace(attribute, 'UpgradeCode="6b1e8d37-5f92-4a04-8e7c-3d05b9f2a618"', 1),
             d0,
             d1,
+            d2,
         ),
-        "the same digits, upper case": lambda a, d0, d1: (
+        "the same digits, upper case": lambda a, d0, d1, d2: (
             a.replace(attribute, f'UpgradeCode="{FROZEN_UPGRADE_CODE.upper()}"', 1),
             d0,
             d1,
+            d2,
         ),
-        "the same digits, braced": lambda a, d0, d1: (
+        "the same digits, braced": lambda a, d0, d1, d2: (
             a.replace(attribute, f'UpgradeCode="{{{FROZEN_UPGRADE_CODE}}}"', 1),
             d0,
             d1,
+            d2,
         ),
-        "no UpgradeCode at all": lambda a, d0, d1: (a.replace(attribute, "", 1), d0, d1),
-        "the authoring calls it unfrozen": lambda a, d0, d1: (
+        "no UpgradeCode at all": lambda a, d0, d1, d2: (a.replace(attribute, "", 1), d0, d1, d2),
+        "the authoring calls it unfrozen": lambda a, d0, d1, d2: (
             a.replace("The freeze reaches that one string", "It is unfrozen", 1),
             d0,
             d1,
+            d2,
         ),
-        "the W4-A0 document calls it unfrozen": lambda a, d0, d1: (
+        "the W4-A0 document calls it unfrozen": lambda a, d0, d1, d2: (
             a,
             d0.replace("no longer does", "no longer does. Nothing here freezes them", 1),
             d1,
+            d2,
         ),
-        "the W4-A1 document drops the GUID": lambda a, d0, d1: (
+        "the W4-A1 document drops the GUID": lambda a, d0, d1, d2: (
             a,
             d0,
             d1.replace(FROZEN_UPGRADE_CODE, "a GUID chosen at release time"),
+            d2,
         ),
     }
+    return run_authoring_self_test(
+        "UpgradeCode freeze", mutations, authoring_text, a0_text, a1_text, a2_text
+    )
+
+
+def self_test_failure_actions(
+    authoring_text: str, a0_text: str, a1_text: str, a2_text: str
+) -> list[str]:
+    """W4-A2: the recovery gate must be reachable, in each shape the ruling names.
+
+    Every mutation here replaces EVERY occurrence, never the first. The
+    authoring carries deliberately broken recovery policies of its own -- they
+    are how the hostile controls drive the real authoring -- so a
+    first-occurrence replace would land on a control branch and leave the real
+    policy, and the gate would correctly stay green while the self-test claimed
+    it had been tripped.
+    """
+    mutations = {
+        "no failure actions authored": lambda a, d0, d1, d2: (
+            re.sub(r"\s*<ServiceConfigFailureActions.*?</ServiceConfigFailureActions>", "", a, flags=re.S),
+            d0,
+            d1,
+            d2,
+        ),
+        "the first failure is not restart/60000": lambda a, d0, d1, d2: (
+            a.replace('<Failure Action="restartService" Delay="60000" />',
+                      '<Failure Action="restartService" Delay="1000" />'),
+            d0,
+            d1,
+            d2,
+        ),
+        "the third failure is a restart": lambda a, d0, d1, d2: (
+            a.replace('<Failure Action="none" Delay="0" />',
+                      '<Failure Action="restartService" Delay="60000" />'),
+            d0,
+            d1,
+            d2,
+        ),
+        "the reset period is not 86400": lambda a, d0, d1, d2: (
+            a.replace('ResetPeriod="86400"', 'ResetPeriod="3600"'),
+            d0,
+            d1,
+            d2,
+        ),
+        "one ServiceInstall loses its recovery row": lambda a, d0, d1, d2: (
+            a.replace(
+                """            <ServiceConfigFailureActions OnInstall="yes" OnReinstall="yes" ResetPeriod="86400">
+              <Failure Action="restartService" Delay="60000" />
+              <Failure Action="restartService" Delay="60000" />
+              <Failure Action="none" Delay="0" />
+            </ServiceConfigFailureActions>
+""",
+                "",
+                1,
+            ),
+            d0,
+            d1,
+            d2,
+        ),
+        "the W4-A0 document reclaims the whole §4 table": lambda a, d0, d1, d2: (
+            a,
+            d0.replace(
+                "The six rows W4-A0 implements are implemented as written",
+                "W0 §4's table is implemented as written",
+                1,
+            ),
+            d1,
+            d2,
+        ),
+        "the W4-A2 document drops the policy": lambda a, d0, d1, d2: (
+            a,
+            d0,
+            d1,
+            d2.replace(CONTRACT_SC_POLICY, "a policy chosen at install time"),
+        ),
+    }
+    return run_authoring_self_test(
+        "recovery", mutations, authoring_text, a0_text, a1_text, a2_text
+    )
+
+
+def run_authoring_self_test(
+    label: str,
+    mutations: dict,
+    authoring_text: str,
+    a0_text: str,
+    a1_text: str,
+    a2_text: str,
+) -> list[str]:
+    """Apply each mutation and require the authoring gates to catch every one."""
+    original = (authoring_text, a0_text, a1_text, a2_text)
     failures: list[str] = []
     for name, mutate in mutations.items():
-        mutated = mutate(authoring_text, a0_text, a1_text)
-        if mutated == (authoring_text, a0_text, a1_text):
+        mutated = mutate(*original)
+        if mutated == original:
             failures.append(f"self-test '{name}': the mutation did not change the text")
             continue
         if not grade_authoring(*mutated):
-            failures.append(f"self-test '{name}': the UpgradeCode freeze gate did not fire")
+            failures.append(f"self-test '{name}': the {label} gate did not fire")
         else:
             print(f"  control OK   {name}")
     if not failures:
-        print(f"  {len(mutations)} UpgradeCode freeze controls, all RED as declared")
+        print(f"  {len(mutations)} {label} controls, all RED as declared")
     return failures
 
 
@@ -404,15 +604,15 @@ def main() -> int:
     parser.add_argument("--self-test", action="store_true", help="also prove each gate can fire")
     options = parser.parse_args()
 
-    for required in (WORKFLOW, AUTHORING, BUILDER, PROBE, SELF_TEST, A0_DOC, A1_DOC):
+    for required in (WORKFLOW, AUTHORING, BUILDER, PROBE, SELF_TEST, A0_DOC, A1_DOC, A2_DOC):
         if not required.is_file():
-            print(f"W4-A0 CONTROLS REFUSED: missing {required.relative_to(REPO_ROOT)}")
+            print(f"W4 CONTROLS REFUSED: missing {required.relative_to(REPO_ROOT)}")
             return 1
 
     workflow_text = WORKFLOW.read_text(encoding="utf-8")
     findings = grade_everything(workflow_text)
 
-    print("W4-A0 static controls")
+    print("W4-A0 / W4-A2 static controls")
     if findings:
         for finding in findings:
             print(f"  FINDING  {finding}")
@@ -422,18 +622,21 @@ def main() -> int:
     failures: list[str] = []
     if options.self_test:
         failures += self_test(workflow_text)
-        failures += self_test_upgrade_code(
+        documents = (
             AUTHORING.read_text(encoding="utf-8"),
             A0_DOC.read_text(encoding="utf-8"),
             A1_DOC.read_text(encoding="utf-8"),
+            A2_DOC.read_text(encoding="utf-8"),
         )
+        failures += self_test_upgrade_code(*documents)
+        failures += self_test_failure_actions(*documents)
     for failure in failures:
         print(f"  FINDING  {failure}")
 
     if findings or failures:
-        print(f"W4-A0 static controls FAILED: {len(findings) + len(failures)} finding(s)")
+        print(f"W4 static controls FAILED: {len(findings) + len(failures)} finding(s)")
         return 1
-    print("W4-A0 static controls: clean")
+    print("W4 static controls: clean")
     return 0
 
 

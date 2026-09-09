@@ -75,7 +75,17 @@ is not.
 
 ## 3. The service contract, and the one place §4 is not literal
 
-W0 §4's table is implemented as written, with one deliberate substitution.
+**NB-1, corrected by W4-A2 (#234).** This section originally said W0 §4's table
+was "implemented as written, with one deliberate substitution". That over-claimed:
+the six rows below are the ones W4-A0 implemented, and §4's table has three more
+— **recovery**, **stop timeout** and **logging** — that W4-A0 authored nothing
+for and measured nothing about. The recovery row is implemented and read back
+from the Service Control Manager by W4-A2; see
+`docs/distribution/W4-A2-service-recovery.md`. The stop-timeout and logging rows
+are still unimplemented and remain open.
+
+The six rows W4-A0 implements are implemented as written, with one deliberate
+substitution.
 
 | §4 row | In the package |
 | --- | --- |
