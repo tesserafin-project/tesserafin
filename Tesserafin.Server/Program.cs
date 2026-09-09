@@ -5,6 +5,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.Versioning;
 using System.Threading;
 using System.Threading.Tasks;
 using CommandLine;
@@ -13,6 +14,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Hosting.WindowsServices;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Serilog;
@@ -33,6 +35,7 @@ using Tesserafin.Server.Implementations.SystemBackupService;
 using Tesserafin.Server.Migrations;
 using Tesserafin.Server.Migrations.Stages;
 using Tesserafin.Server.ServerSetupApp;
+using Tesserafin.Server.ServiceHost;
 using static Tesserafin.Controller.Extensions.ConfigurationExtensions;
 using ILogger = Microsoft.Extensions.Logging.ILogger;
 
@@ -53,7 +56,32 @@ namespace Tesserafin.Server
         /// </summary>
         public const string LoggingConfigFileSystem = "logging.json";
 
+        /// <summary>
+        /// The process exit code reported when startup fails fatally.
+        /// </summary>
+        /// <remarks>
+        /// W0 §2.5 measured the unmodified server exiting <c>0</c> after
+        /// <see cref="Common.FfmpegException"/> killed startup, which the Windows Service Control
+        /// Manager reads as a service that stopped normally: no failure action fires and nothing
+        /// records that the server never came up. Every fatal startup path therefore has to leave a
+        /// non-zero code behind.
+        /// </remarks>
+        internal const int StartupFailureExitCode = 1;
+
         private static readonly SerilogLoggerFactory _loggerFactory = new SerilogLoggerFactory();
+
+        /// <summary>
+        /// Cancelled when something outside the server asks it to shut down — currently only the
+        /// Windows Service Control Manager, by way of <see cref="WindowsServiceServerRunner"/>.
+        /// </summary>
+        /// <remarks>
+        /// A stop can arrive while the server is still applying database migrations, long before
+        /// <see cref="_reefinHost"/> exists. Holding the request in a token rather than reaching for
+        /// the host means the registration made in <see cref="StartServer"/> fires immediately when
+        /// the request already arrived, instead of the stop being silently dropped.
+        /// </remarks>
+        private static readonly CancellationTokenSource _serviceShutdownRequested = new();
+
         private static SetupServer? _setupServer;
         private static CoreAppHost? _appHost;
         private static IHost? _reefinHost = null;
@@ -81,7 +109,51 @@ namespace Tesserafin.Server
                 .MapResult(StartApp, ErrorParsingArguments);
         }
 
+        /// <summary>
+        /// Asks the running server to shut down on behalf of something that is not the console
+        /// lifetime.
+        /// </summary>
+        /// <remarks>
+        /// Called by <see cref="WindowsServiceServerRunner"/> when the Service Control Manager sends
+        /// a stop. It is deliberately request-shaped and does not wait: the caller owns the timeout,
+        /// because only the caller knows what the SCM is prepared to wait for.
+        /// </remarks>
+        internal static void RequestShutdown()
+        {
+            if (!_serviceShutdownRequested.IsCancellationRequested)
+            {
+                _serviceShutdownRequested.Cancel();
+            }
+        }
+
         private static async Task StartApp(StartupOptions options)
+        {
+            // `--service` is the operator's declaration and `IsWindowsService()` is the environment's
+            // answer; both are required. The framework's own AddWindowsService is inert unless the
+            // process really is an SCM service process, so demanding the flag as well is what keeps
+            // `tesserafin --service` from a console byte-for-byte the behaviour it has today.
+            int exitCode;
+            if (OperatingSystem.IsWindows() && options.IsService && WindowsServiceHelpers.IsWindowsService())
+            {
+                exitCode = await WindowsServiceEntryPoint.RunAsync(options, RunServerAsync).ConfigureAwait(false);
+            }
+            else
+            {
+                exitCode = await RunServerAsync(options).ConfigureAwait(false);
+            }
+
+            if (exitCode != 0)
+            {
+                // Environment.ExitCode alone is a promise kept only if nothing else keeps the
+                // process alive. A fatal startup has already torn down the host, so exiting here
+                // makes the non-zero code a fact rather than an intention. A clean stop returns
+                // normally and keeps the existing exit 0.
+                Environment.ExitCode = exitCode;
+                Environment.Exit(exitCode);
+            }
+        }
+
+        private static async Task<int> RunServerAsync(StartupOptions options)
         {
             _restoreFromBackup = options.RestoreArchive;
             _startTimestamp = Stopwatch.GetTimestamp();
@@ -128,8 +200,7 @@ namespace Tesserafin.Server
                         "'{ConfigKey}=false' in your config settings",
                         webContentPath,
                         HostWebClientKey);
-                    Environment.ExitCode = 1;
-                    return;
+                    return StartupFailureExitCode;
                 }
             }
 
@@ -141,9 +212,10 @@ namespace Tesserafin.Server
             SetupServer.ReportActivity(StartupActivity.Initializing);
             await ApplyStartupMigrationAsync(appPaths, startupConfig, options).ConfigureAwait(false);
 
+            int exitCode;
             do
             {
-                await StartServer(appPaths, options, startupConfig).ConfigureAwait(false);
+                exitCode = await StartServer(appPaths, options, startupConfig).ConfigureAwait(false);
 
                 if (_restartOnShutdown)
                 {
@@ -154,9 +226,10 @@ namespace Tesserafin.Server
             } while (_restartOnShutdown);
 
             _setupServer.Dispose();
+            return exitCode;
         }
 
-        private static async Task StartServer(IServerApplicationPaths appPaths, StartupOptions options, IConfiguration startupConfig)
+        private static async Task<int> StartServer(IServerApplicationPaths appPaths, StartupOptions options, IConfiguration startupConfig)
         {
             using CoreAppHost appHost = new CoreAppHost(
                             appPaths,
@@ -164,6 +237,8 @@ namespace Tesserafin.Server
                             options,
                             startupConfig);
             var configurationCompleted = false;
+            var exitCode = 0;
+            CancellationTokenRegistration shutdownRegistration = default;
             try
             {
                 _reefinHost = Host.CreateDefaultBuilder()
@@ -185,6 +260,13 @@ namespace Tesserafin.Server
                         .AddSingleton<IServiceCollection>(e))
                     .Build();
 
+                // Registering after Build() rather than reaching for `_reefinHost` from
+                // `RequestShutdown` closes the window in which a stop arrives while the server is
+                // still migrating: an already-cancelled token runs its callback inline here, so the
+                // request cannot be dropped on the floor because the host did not exist yet.
+                shutdownRegistration = _serviceShutdownRequested.Token.Register(
+                    static () => _reefinHost?.Services.GetService<IHostApplicationLifetime>()?.StopApplication());
+
                 /*
                  * Initialize the transcode path marker so we avoid starting Tesserafin in a broken state.
                  * This should really be a part of IApplicationPaths but this path is configured differently.
@@ -201,7 +283,7 @@ namespace Tesserafin.Server
                     await appHost.ServiceProvider.GetService<IBackupService>()!.RestoreBackupAsync(_restoreFromBackup).ConfigureAwait(false);
                     _restoreFromBackup = null;
                     _restartOnShutdown = true;
-                    return;
+                    return exitCode;
                 }
 
                 var reefinMigrationService = ActivatorUtilities.CreateInstance<TesserafinMigrationService>(appHost.ServiceProvider);
@@ -255,6 +337,14 @@ namespace Tesserafin.Server
             {
                 _restartOnShutdown = false;
                 _logger.LogCritical(ex, "Error while starting server");
+
+                // W0 §2.5: reaching here and returning 0 is what tells the SCM the service stopped
+                // normally after `FfmpegException` killed startup. This is the exit contract W3
+                // owes, and it deliberately covers every fatal startup exception rather than
+                // special-casing the encoder — a server that could not start is a failed start
+                // whatever killed it. The clean-shutdown path never runs this block, so a console
+                // Ctrl+C after a successful start still exits 0.
+                exitCode = StartupFailureExitCode;
                 if (_setupServer!.IsAlive && !configurationCompleted)
                 {
                     _setupServer!.SoftStop();
@@ -282,7 +372,10 @@ namespace Tesserafin.Server
                 _appHost = null;
                 _reefinHost?.Dispose();
                 _reefinHost = null;
+                await shutdownRegistration.DisposeAsync().ConfigureAwait(false);
             }
+
+            return exitCode;
         }
 
         /// <summary>
