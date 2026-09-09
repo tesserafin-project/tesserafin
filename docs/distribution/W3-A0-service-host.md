@@ -176,6 +176,28 @@ Web payload pull. Three controls, one package:
 | **N** | the same exe and `--service`, `--ffmpeg` withheld | ends `Stopped` with a **non-zero** exit code, `FfmpegException` in the service's log, no surviving process |
 | **C** | N's command line with `--service` removed | **1053 still reproduces** |
 
+#### Measured
+
+On head `b8f72ecd31`, `windows-latest` (`Microsoft Windows NT 10.0.26100.0`,
+PowerShell 7.6.5), package `451cd38a…` / server exe `552bd718…` built in-job,
+web payload `4148c4bc…` and FFmpeg runtime `f28cc918…` consumed by accepted
+digest. The runner carried **no** `ffmpeg` on `PATH`, so N's premise held.
+
+| | P | N | C |
+| --- | --- | --- | --- |
+| `sc start` | exit `0`, `START_PENDING`, 0.3 s | exit `0` (expected) | **exit `1053`, 6.1 s** |
+| error 1053 | **false** | — | **true** |
+| state reached | `Running`, PID 3460 | `Stopped` | `Stopped` |
+| readiness | `/` → `302` on 8096, alive 3 s later | — | — |
+| exit code seen by the SCM | `0` after `sc stop` | **`1`** | — |
+| `FfmpegException` in the log | — | **yes** | — |
+| orphaned processes | `0` | `0` | `0` |
+
+W0 §4 measured this same executable failing SCM start with **1053 after 7 s**.
+With `--service` the handshake completes in **0.3 s**; without it, on a command
+line otherwise identical to N's, 1053 still reproduces. The fatal startup that
+master exits `0` on is now `Stopped` with `WIN32_EXIT_CODE 1`.
+
 **C is what makes P attributable.** Without it, P proves only that the server
 starts; a build in which the boundary had been wired unconditionally — or a
 runner on which 1053 had stopped happening for an unrelated reason — would be
@@ -254,5 +276,6 @@ None of these is a condition of this slice, and none is authorized here.
 
 ## 4. Status
 
-Local evidence is green and the hosted SCM evidence is the acceptance gate. #234
-stays open; this slice claims W3-A0 only, and claims no part of W3 accepted.
+Both halves are measured: the process-level exit contract on Linux and on
+`windows-latest`, and all three SCM controls on a native Windows host. #234 stays
+open; this slice claims W3-A0 only, and claims no part of W3 accepted.

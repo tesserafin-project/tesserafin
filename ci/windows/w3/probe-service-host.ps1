@@ -539,3 +539,10 @@ Write-Note "C: 1053 reproduced in $($evidence.controls['C.boundary'].startSecond
 Remove-AllServices
 Save-Evidence
 Write-Note "evidence written to $EvidencePath"
+
+# `sc.exe delete` answers 1060 for a service that is already gone, which is the
+# SUCCESSFUL outcome of the cleanup above and is also the last native command
+# this script runs. Without an explicit exit the caller reads that 1060 out of
+# $LASTEXITCODE and reports three passing controls as a refusal. Every refusal
+# path throws, so reaching this line means the proof held.
+exit 0
