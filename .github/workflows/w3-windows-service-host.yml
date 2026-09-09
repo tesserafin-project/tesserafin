@@ -1,0 +1,223 @@
+# W3-A0 (#234): the Windows Service Control Manager boundary and the
+# fatal-startup exit contract, measured on a native Windows x64 runner.
+#
+# This workflow proves exactly two things, which are the two things the W3-A0
+# ruling authorises:
+#
+#   1. `tesserafin.exe --service` talks to the Service Control Manager. W0 §4
+#      measured the unmodified executable failing `sc start` with error 1053
+#      after 7 seconds because a plain console process never calls
+#      `StartServiceCtrlDispatcher`. That result must NOT reproduce on this head
+#      when `--service` is passed -- and must STILL reproduce when it is not,
+#      which is the control that makes the first half attributable.
+#
+#   2. A fatal startup exits non-zero. W0 §2.5 measured the server logging
+#      `FfmpegException: Failed to find valid ffmpeg` and then exiting 0, which
+#      the SCM reads as a service that stopped normally: no failure action, no
+#      record that the server never came up.
+#
+# The executable under test is published IN THIS JOB from the pull request head,
+# through the frozen W2-A2 assembler, and is never uploaded. That is deliberate
+# and it is not a relaxation of "prefer the accepted W2 consume path": what W2
+# pins and what this job consumes by accepted digest are the Web payload and the
+# FFmpeg runtime, which the frozen assembler reads from its own committed
+# acceptance manifest. The archive's `tesserafin.exe` has always been built from
+# the tree being tested, and at the accepted W2 master that exe is the stock one
+# -- it reproduces 1053 by construction, so a run against it could only ever be
+# a false red.
+#
+# What this workflow deliberately does NOT do:
+#
+#   * it builds no MSI, writes no Add/Remove Programs entry and runs no
+#     installer engine -- W4;
+#   * it registers no `NT SERVICE\Tesserafin` identity and grants no ACL --
+#     W0 §9, W4;
+#   * it writes no `ServicesPipeTimeout` and no other machine-wide setting;
+#   * it uploads no artifact, publishes nothing, and creates no tag or release;
+#   * it edits, copies or vendors none of the W2 scripts it runs;
+#   * it makes no hardware-acceleration claim: hosted runners have no GPU.
+
+name: W3 Windows service host
+
+on:
+  pull_request:
+    # Draft pull requests are covered: `pull_request` fires for them unless a
+    # type filter excludes them, and W3-A0 is reviewed as a draft.
+    paths:
+      # The whole authored directory, not a list of names -- the W2-A1-V1 NB-1
+      # repair: a file added here must not be reviewable without running the
+      # proof that covers it.
+      - 'ci/windows/w3/**'
+      - '.github/workflows/w3-windows-service-host.yml'
+      - 'docs/distribution/W3-A0-service-host.md'
+      # The production change under test. Unlike W2-A3's filter, server C# IS
+      # watched here, because the whole slice is a server C# change.
+      - 'Tesserafin.Server/**'
+      - 'tests/Tesserafin.Server.Tests/ServiceHost/**'
+      - 'Directory.Packages.props'
+      # The frozen files this job actually runs. A change to any of them is a
+      # change to the path that produces the executable under test.
+      - 'ci/windows/w2/assemble-server-zip.ps1'
+      - 'ci/windows/w2/tesserafin-server-service.ps1'
+      - 'ci/windows/runtime-retention/consume.ps1'
+      - 'ci/windows/runtime-retention/accepted-runtime.json'
+      - 'SharedVersion.cs'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  # Restated so a reader of the run does not have to open two JSON documents to
+  # know what was started. These are NOT the trust boundary: the frozen
+  # assembler reads the committed acceptance manifest and refuses anything else.
+  WEB_PAYLOAD_SHA256: 4148c4bc6e0c7c2d6b35ed9992e874a06dcc11d2b6d9e0aad06719e36567be4f
+  ACCEPTED_RUNTIME_SHA256: f28cc9186aad757491a6f44e7950d39bc39354dfe9505e278af91d7619811c9e
+  SDK_VERSION: "10.0.x"
+
+jobs:
+  service-host:
+    name: Register, start and stop the win-x64 server as a Windows service
+    runs-on: windows-latest
+    # One 260 MB runtime pull, one Web pull, one self-contained publish, one
+    # pack, then a cold first service start that creates the database and
+    # applies every migration, plus two further starts.
+    timeout-minutes: 150
+    permissions:
+      contents: read
+      # The entire write surface of this workflow. Read only, job scoped, and
+      # needed only because the accepted Web payload image is pulled with the
+      # job's own token.
+      packages: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      # `dotnet-version`, never `global-json-file`: this repository's global.json
+      # is one setup-dotnet does not accept, and the job dies in seconds with no
+      # real step having run.
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: ${{ env.SDK_VERSION }}
+
+      # Both interpreters are recorded rather than assumed. The frozen FFmpeg
+      # consumer verifies its corresponding source through `zstd -dc > file`,
+      # which is a native-command redirect: Windows PowerShell 5.1 would
+      # re-encode that stream and the consumer would then refuse its own
+      # accepted source.
+      - name: Record the runner's interpreters
+        id: tools
+        shell: pwsh
+        run: |
+          $python = (Get-Command python -CommandType Application | Select-Object -First 1).Source
+          if (-not $python) { throw 'no python on this runner' }
+          "python=$python" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "PowerShell $($PSVersionTable.PSVersion), .NET $([System.Environment]::Version)"
+          if ($PSVersionTable.PSVersion.Major -lt 7) {
+            throw "W3-A0 HARD STOP: this job needs PowerShell 7 or newer; it has $($PSVersionTable.PSVersion)"
+          }
+          & $python --version
+          & dotnet --version
+
+      - name: Make the corresponding-source verifier available
+        shell: pwsh
+        run: |
+          $zstd = Get-Command zstd -CommandType Application -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+          if ($zstd) {
+            "zstd $((& $zstd.Source --version) -join ' ')"
+            exit 0
+          }
+          $fallback = Join-Path $env:ProgramFiles 'Git\usr\bin\zstd.exe'
+          if (Test-Path -LiteralPath $fallback) {
+            (Split-Path -Parent $fallback) | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+            "zstd taken from Git for Windows at $fallback"
+            exit 0
+          }
+          throw 'W3-A0 HARD STOP: this runner has no zstd, so the corresponding source cannot be verified'
+
+      # The same pinned client W1 installs, from the same lock file.
+      - name: Install the pinned ORAS
+        shell: bash
+        run: ./ci/windows/build-inputs/install-oras.sh windows-amd64 "${RUNNER_TEMP}/bin"
+
+      # SOURCE_DATE_EPOCH is the committer time of the commit being built -- the
+      # same definition every other Tesserafin artifact uses. Never the clock.
+      - name: Derive SOURCE_DATE_EPOCH from the commit
+        id: epoch
+        shell: pwsh
+        run: |
+          $commit = (& git rev-parse HEAD).Trim()
+          if ($commit -notmatch '^[0-9a-f]{40}$') { throw "not a commit: $commit" }
+          $epoch = (& git log -1 --format=%ct $commit).Trim()
+          if ($epoch -notmatch '^[1-9][0-9]*$') { throw "no committer time for $commit" }
+          "commit=$commit" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "epoch=$epoch"   | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "commit            : $commit"
+          "SOURCE_DATE_EPOCH : $epoch"
+
+      # The process-level half of the exit contract, on the same head, before
+      # two hours of runner time are spent on the SCM half. It needs no service
+      # and no administrator, and a failure here means the SCM run would only
+      # measure the same defect more expensively.
+      - name: The exit contract as unit evidence
+        shell: pwsh
+        run: |
+          dotnet test tests/Tesserafin.Server.Tests/Tesserafin.Server.Tests.csproj `
+            -c Debug --filter 'FullyQualifiedName~FatalStartupExitCodeTests'
+          if ($LASTEXITCODE -ne 0) { throw 'the W3-A0 exit-contract tests failed' }
+
+      # ── The real thing: one package, three services, on the SCM.
+      - name: Register, start, stop and fail the service on a real SCM
+        shell: pwsh
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./ci/windows/w3/probe-service-host.ps1 `
+            -RepoRoot $PWD `
+            -WorkDir (Join-Path $env:RUNNER_TEMP 'w3a0/work') `
+            -EvidencePath (Join-Path $env:RUNNER_TEMP 'w3a0/service-host.json') `
+            -SourceDateEpoch ${{ steps.epoch.outputs.epoch }} `
+            -OrasPath (Join-Path $env:RUNNER_TEMP 'bin\oras.exe') `
+            -HeadSha '${{ steps.epoch.outputs.commit }}' `
+            -PythonPath '${{ steps.tools.outputs.python }}'
+          if ($LASTEXITCODE -ne 0) { throw 'the W3-A0 service-host proof refused' }
+
+      # Printed rather than left inside an evidence file nobody opens. The
+      # document records states, exit codes, ports and digests only -- no host
+      # path and no run identifier -- so it can be printed whole.
+      - name: Report the three controls
+        if: always()
+        shell: pwsh
+        run: |
+          $evidencePath = Join-Path $env:RUNNER_TEMP 'w3a0/service-host.json'
+          if (-not (Test-Path -LiteralPath $evidencePath)) {
+            throw 'the proof wrote no evidence document'
+          }
+          $evidence = Get-Content -LiteralPath $evidencePath -Raw | ConvertFrom-Json
+          $evidence | ConvertTo-Json -Depth 8
+
+          if ($evidence.published) { throw 'this slice publishes nothing' }
+          if ($evidence.builtInstaller) { throw 'this slice builds no installer' }
+          if ($evidence.registeredIdentity) { throw 'this slice registers no service identity' }
+          if ($evidence.wroteMachineWideSettings) { throw 'this slice writes no machine-wide setting' }
+
+      # An SCM entry that outlived a cancelled job would make the next run's
+      # `sc create` fail with "the specified service already exists", which reads
+      # like a defect in the proof rather than like leftover state.
+      - name: Leave no service behind
+        if: always()
+        shell: pwsh
+        run: |
+          foreach ($name in 'Tesserafin', 'TesserafinW3NoEncoder', 'TesserafinW3NoFlag') {
+            & sc.exe stop $name *> $null
+            & sc.exe delete $name *> $null
+          }
+          Get-Process -Name 'tesserafin' -ErrorAction SilentlyContinue |
+            Stop-Process -Force -ErrorAction SilentlyContinue
+          'cleanup complete'
