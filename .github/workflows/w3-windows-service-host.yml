@@ -1,8 +1,9 @@
-# W3-A0 (#234): the Windows Service Control Manager boundary and the
-# fatal-startup exit contract, measured on a native Windows x64 runner.
+# W3-A0 and W3-A1 (#234): the Windows Service Control Manager boundary, the
+# fatal-startup exit contract, and the absence of a linger after a
+# pre-configuration failure, measured on a native Windows x64 runner.
 #
-# This workflow proves exactly two things, which are the two things the W3-A0
-# ruling authorises:
+# This workflow proves exactly three things, which are the things the W3-A0 and
+# W3-A1 rulings authorise:
 #
 #   1. `tesserafin.exe --service` talks to the Service Control Manager. W0 §4
 #      measured the unmodified executable failing `sc start` with error 1053
@@ -15,6 +16,14 @@
 #      `FfmpegException: Failed to find valid ffmpeg` and then exiting 0, which
 #      the SCM reads as a service that stopped normally: no failure action, no
 #      record that the server never came up.
+#
+#   3. A startup that fails BEFORE `configurationCompleted` does not linger.
+#      W3-A0 §3 recorded that path waiting ten minutes serving its error page:
+#      under the SCM that is a service reported RUNNING with a dead server
+#      behind it, and then W0 §4's orphaned `tesserafin.exe`. Control F is that
+#      measurement, and it is the only place it can be made -- the decision is
+#      unit-testable, but `WindowsServiceHelpers.IsWindowsService()` answers
+#      false in every test process, including `dotnet test` on this runner.
 #
 # The executable under test is published IN THIS JOB from the pull request head,
 # through the frozen W2-A2 assembler, and is never uploaded. That is deliberate
@@ -50,6 +59,7 @@ on:
       - 'ci/windows/w3/**'
       - '.github/workflows/w3-windows-service-host.yml'
       - 'docs/distribution/W3-A0-service-host.md'
+      - 'docs/distribution/W3-A1-preconfig-failure.md'
       # The production change under test. Unlike W2-A3's filter, server C# IS
       # watched here, because the whole slice is a server C# change.
       - 'Tesserafin.Server/**'
@@ -80,12 +90,13 @@ env:
 
 jobs:
   service-host:
-    name: Register, start and stop the win-x64 server as a Windows service
+    name: Register, start, stop and fail the win-x64 server as a Windows service
     runs-on: windows-latest
     # One 260 MB runtime pull, one Web pull, one self-contained publish, one
     # pack, then a cold first service start that creates the database and
-    # applies every migration, plus two further starts.
-    timeout-minutes: 150
+    # applies every migration, plus three further starts. W3-A1 added the fourth
+    # start and two more process-level tests; the budget moved with them.
+    timeout-minutes: 170
     permissions:
       contents: read
       # The entire write surface of this workflow. Read only, job scoped, and
@@ -164,16 +175,18 @@ jobs:
       # The process-level half of the exit contract, on the same head, before
       # two hours of runner time are spent on the SCM half. It needs no service
       # and no administrator, and a failure here means the SCM run would only
-      # measure the same defect more expensively.
+      # measure the same defect more expensively. W3-A1's two tests are in the
+      # same class deliberately: this filter is by class name, and a new class
+      # would have been reviewable without ever running here.
       - name: The exit contract as unit evidence
         shell: pwsh
         run: |
           dotnet test tests/Tesserafin.Server.Tests/Tesserafin.Server.Tests.csproj `
             -c Debug --filter 'FullyQualifiedName~FatalStartupExitCodeTests'
-          if ($LASTEXITCODE -ne 0) { throw 'the W3-A0 exit-contract tests failed' }
+          if ($LASTEXITCODE -ne 0) { throw 'the W3 exit-contract tests failed' }
 
       # ── The real thing: one package, three services, on the SCM.
-      - name: Register, start, stop and fail the service on a real SCM
+      - name: Register, start, stop and fail the service on a real SCM, four controls
         shell: pwsh
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -186,12 +199,12 @@ jobs:
             -OrasPath (Join-Path $env:RUNNER_TEMP 'bin\oras.exe') `
             -HeadSha '${{ steps.epoch.outputs.commit }}' `
             -PythonPath '${{ steps.tools.outputs.python }}'
-          if ($LASTEXITCODE -ne 0) { throw 'the W3-A0 service-host proof refused' }
+          if ($LASTEXITCODE -ne 0) { throw 'the W3 service-host proof refused' }
 
       # Printed rather than left inside an evidence file nobody opens. The
       # document records states, exit codes, ports and digests only -- no host
       # path and no run identifier -- so it can be printed whole.
-      - name: Report the three controls
+      - name: Report the four controls
         if: always()
         shell: pwsh
         run: |
@@ -214,7 +227,7 @@ jobs:
         if: always()
         shell: pwsh
         run: |
-          foreach ($name in 'Tesserafin', 'TesserafinW3NoEncoder', 'TesserafinW3NoFlag') {
+          foreach ($name in 'Tesserafin', 'TesserafinW3NoEncoder', 'TesserafinW3NoFlag', 'TesserafinW3PreConfig') {
             & sc.exe stop $name *> $null
             & sc.exe delete $name *> $null
           }

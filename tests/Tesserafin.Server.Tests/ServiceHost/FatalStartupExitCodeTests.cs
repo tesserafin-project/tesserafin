@@ -148,7 +148,7 @@ public sealed class FatalStartupExitCodeTests
         // The setup server binds this port to serve the error page the linger exists for, so it is
         // pinned away from 8096 for the same reason the encoder test pins it.
         sandbox.PinHttpPort(FreeTcpPort());
-        var transcodePath = sandbox.BreakTranscodePath();
+        var blockedBy = sandbox.BreakTranscodePath();
 
         var result = await sandbox.RunUntilLoggedAsync("Error while starting server", _lingerObservationWindow);
 
@@ -160,7 +160,7 @@ public sealed class FatalStartupExitCodeTests
         // happens to be fatal. The path is in the exception message; the encoder is not involved,
         // and asserting its absence is what keeps this from silently becoming a second copy of
         // MissingEncoder_FatalStartup_ExitsNonZero.
-        Assert.Contains(transcodePath, result.Output, StringComparison.Ordinal);
+        Assert.Contains(blockedBy, result.Output, StringComparison.Ordinal);
         Assert.DoesNotContain("FfmpegException", result.Output, StringComparison.Ordinal);
 
         Assert.True(
@@ -214,7 +214,13 @@ public sealed class FatalStartupExitCodeTests
         /// Points <c>TranscodingTempPath</c> at a directory that cannot be created, because a file
         /// already occupies its parent's name.
         /// </summary>
-        /// <returns>The unreachable path, which the fatal startup names in its message.</returns>
+        /// <returns>
+        /// The path of the file that blocks it. That is the file, not the transcode directory: .NET
+        /// names the unreachable path on Unix ("Could not find a part of the path '…/transcodes'")
+        /// and the colliding entry on Windows ("Cannot create '…/not-a-directory' because a file or
+        /// directory with the same name already exists"), and the file's path is the one substring
+        /// both messages carry.
+        /// </returns>
         /// <remarks>
         /// <para>
         /// The hook is <c>EncodingConfigurationExtensions.GetTranscodePath</c>, called from
@@ -247,7 +253,7 @@ public sealed class FatalStartupExitCodeTests
                 new XmlSerializer(typeof(EncodingOptions)).Serialize(stream, configuration);
             }
 
-            return transcodePath;
+            return occupied;
         }
 
         /// <summary>

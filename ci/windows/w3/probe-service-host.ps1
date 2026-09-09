@@ -1,15 +1,17 @@
 #Requires -Version 7.2
 <#
 .SYNOPSIS
-    W3-A0 (#234): measure the Windows Service Control Manager boundary and the
-    fatal-startup exit contract on a native Windows host.
+    W3-A0 and W3-A1 (#234): measure the Windows Service Control Manager
+    boundary, the fatal-startup exit contract, and the absence of a linger after
+    a pre-configuration failure, on a native Windows host.
 
 .DESCRIPTION
-    This script proves the two things the W3-A0 ruling authorises, and nothing
-    else. It installs nothing outside the Service Control Manager, writes no
-    machine-wide setting, publishes nothing, and deletes every service it makes.
+    This script proves the things the W3-A0 and W3-A1 rulings authorise, and
+    nothing else. It installs nothing outside the Service Control Manager,
+    writes no machine-wide setting, publishes nothing, and deletes every service
+    it makes.
 
-    ── The three controls ───────────────────────────────────────────────────
+    ── The four controls ────────────────────────────────────────────────────
 
     P  POSITIVE. The package's own `tesserafin-server-service.ps1` -- the
        accepted W2-A5 script, run unmodified from inside the extracted archive
@@ -41,6 +43,27 @@
        it, P proves only that the server starts, not that `--service` is what
        makes it a service: a build in which the boundary had been wired
        unconditionally, or not at all, would be indistinguishable.
+
+    F  W3-A1. The same `--service` command line as P, `--ffmpeg` INCLUDED, and
+       an `encoding.xml` whose `TranscodingTempPath` cannot be created because a
+       regular file already occupies its parent's name. That makes
+       `EncodingConfigurationExtensions.GetTranscodePath` throw at the first
+       statement after the host is built, which is before
+       `configurationCompleted` -- the path W3-A0 §3 recorded as still lingering
+       for ten minutes and orphaning under the SCM. The service must end STOPPED
+       with a non-zero exit code, no process may survive, and the time from the
+       failure appearing in the log to the service reaching STOPPED must be a
+       small fraction of ten minutes.
+
+       That last measurement is deliberately taken from the FAILURE and not from
+       `sc start`. F's fault fires after the startup migrations, so a bound
+       measured from the start would be a bound on how fast the runner creates a
+       database; measured from the failure, it is the linger and only the
+       linger.
+
+       The encoder is present here, and `FfmpegException` must NOT appear. N is
+       the encoder control; F is a different hook, and asserting the encoder's
+       absence from F's log is what keeps the two from quietly becoming one.
 
     ── What this script deliberately does not do ────────────────────────────
 
@@ -75,7 +98,8 @@ $PSNativeCommandArgumentPassing = 'Standard'
 $SERVICE_POSITIVE = 'Tesserafin'
 $SERVICE_NEGATIVE = 'TesserafinW3NoEncoder'
 $SERVICE_BOUNDARY = 'TesserafinW3NoFlag'
-$ALL_SERVICES = @($SERVICE_POSITIVE, $SERVICE_NEGATIVE, $SERVICE_BOUNDARY)
+$SERVICE_PRECONFIG = 'TesserafinW3PreConfig'
+$ALL_SERVICES = @($SERVICE_POSITIVE, $SERVICE_NEGATIVE, $SERVICE_BOUNDARY, $SERVICE_PRECONFIG)
 
 # A cold first start creates the database and applies every migration. W0 §2.3
 # allowed 600 s for exactly that on this runner image and recorded a run still
@@ -83,12 +107,18 @@ $ALL_SERVICES = @($SERVICE_POSITIVE, $SERVICE_NEGATIVE, $SERVICE_BOUNDARY)
 $READY_TIMEOUT_SECONDS = 900
 $STOP_TIMEOUT_SECONDS = 300
 
+# W3-A1. `Program.PreConfigurationFailureLinger` is ten minutes; master waits all
+# of it before the process ends. This is the bound on what F is allowed to be,
+# measured from the failure rather than from the start, and it is five times the
+# whole of what the repaired path actually needs.
+$LINGER_BUDGET_SECONDS = 120
+
 $evidence = [ordered]@{
-    schemaVersion = 1
+    schemaVersion = 2
     document = 'tesserafin-w3-a0-service-host'
-    slice = 'W3-A0'
+    slice = 'W3-A0 + W3-A1'
     tracker = 'https://github.com/tesserafin-project/tesserafin/issues/234'
-    contract = 'docs/distribution/W0-windows-server.md §2.5 and §4'
+    contract = 'docs/distribution/W0-windows-server.md §2.5 and §4; W3-A0 §3'
     headSha = $HeadSha
     runner = [ordered]@{
         os = [System.Environment]::OSVersion.VersionString
@@ -122,8 +152,8 @@ trap {
 }
 
 function Deny {
-    param([string] $Category, [string] $Message)
-    throw "W3-A0 REFUSED [$Category]: $Message"
+    param([string] $Category, [string] $Message, [string] $Slice = 'W3-A0')
+    throw "$Slice REFUSED [$Category]: $Message"
 }
 
 function Write-Note {
@@ -212,6 +242,21 @@ function Get-FfmpegExceptionSeen {
     if (-not [System.IO.Directory]::Exists($LogDir)) { return $false }
     foreach ($file in Get-ChildItem -LiteralPath $LogDir -Filter '*.log' -File -ErrorAction SilentlyContinue) {
         if ((Get-Content -LiteralPath $file.FullName -Raw -ErrorAction SilentlyContinue) -match 'FfmpegException') {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Test-LogContains {
+    param(
+        [Parameter(Mandatory = $true)] [string] $LogDir,
+        [Parameter(Mandatory = $true)] [string] $Pattern
+    )
+    if (-not [System.IO.Directory]::Exists($LogDir)) { return $false }
+    foreach ($file in Get-ChildItem -LiteralPath $LogDir -Filter '*.log' -File -ErrorAction SilentlyContinue) {
+        $text = Get-Content -LiteralPath $file.FullName -Raw -ErrorAction SilentlyContinue
+        if ($null -ne $text -and $text.Contains($Pattern, [System.StringComparison]::Ordinal)) {
             return $true
         }
     }
@@ -535,6 +580,142 @@ if (-not $evidence.controls['C.boundary'].error1053) {
         'regardless of the flag, or this control no longer measures it.')
 }
 Write-Note "C: 1053 reproduced in $($evidence.controls['C.boundary'].startSeconds)s without --service"
+
+# ── 5. F: a fault before configurationCompleted, under --service ────────────
+#
+# W3-A0 §3's named residual. The hook is real and is named here rather than
+# invented: `Program.StartServer` calls
+# `EncodingConfigurationExtensions.GetTranscodePath` as its first statement
+# after `Host...Build()`, and that helper creates the configured
+# `TranscodingTempPath` if it is missing. A path whose parent is a regular file
+# cannot be created, so the call throws -- before `configurationCompleted`, with
+# no encoder involved and no database work between the two.
+
+$preConfigState = New-StateDirectories ([System.IO.Path]::Combine($work, 'state-preconfig'))
+
+# A file, not a directory, standing exactly where a directory has to be made.
+# This is a real operator misconfiguration reached through the real encoding.xml
+# -- the shape a moved or half-restored library takes -- and not a flag added to
+# the server to make a control fail.
+$occupied = [System.IO.Path]::Combine($work, 'state-preconfig', 'not-a-directory')
+[System.IO.File]::WriteAllText($occupied, '')
+$unreachableTranscodePath = [System.IO.Path]::Combine($occupied, 'transcodes')
+[System.IO.File]::WriteAllText(
+    [System.IO.Path]::Combine($preConfigState.config, 'encoding.xml'),
+    @"
+<?xml version="1.0" encoding="utf-8"?>
+<EncodingOptions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <TranscodingTempPath>$unreachableTranscodePath</TranscodingTempPath>
+</EncodingOptions>
+"@)
+
+# P's argument list, `--ffmpeg` included. F is not a second encoder control.
+$preConfigArguments = @(
+    '--service'
+    '--configdir', $preConfigState.config
+    '--datadir', $preConfigState.data
+    '--cachedir', $preConfigState.cache
+    '--logdir', $preConfigState.log
+    '--webdir', $webDir
+    '--ffmpeg', $ffmpegExe
+)
+$preConfigBinPath = Format-BinPath -Executable $serverExe -Arguments $preConfigArguments
+$preConfigCreate = Invoke-Sc -Arguments @(
+    'create', $SERVICE_PRECONFIG, 'binPath=', $preConfigBinPath, 'start=', 'demand',
+    'DisplayName=', 'Tesserafin W3-A1 pre-configuration failure control')
+if ($preConfigCreate.exitCode -ne 0) {
+    Deny 'preconfig' "sc create failed: $($preConfigCreate.output)" -Slice 'W3-A1'
+}
+
+$preConfigWatch = [System.Diagnostics.Stopwatch]::StartNew()
+$preConfigStart = Invoke-Sc -Arguments @('start', $SERVICE_PRECONFIG)
+
+# One loop, two stamps. The failure stamp is what makes the linger measurable
+# independently of how long this runner takes to reach the fault: F's hook fires
+# after the startup migrations, so a budget counted from `sc start` would be a
+# budget on database creation.
+$faultSeenAtSeconds = $null
+$preConfigStopped = $null
+$deadline = [DateTime]::UtcNow.AddSeconds($READY_TIMEOUT_SECONDS)
+while ([DateTime]::UtcNow -lt $deadline) {
+    if ($null -eq $faultSeenAtSeconds -and
+        (Test-LogContains -LogDir $preConfigState.log -Pattern 'Error while starting server')) {
+        $faultSeenAtSeconds = [math]::Round($preConfigWatch.Elapsed.TotalSeconds, 1)
+    }
+
+    $facts = Get-ServiceFacts -Name $SERVICE_PRECONFIG
+    if ($null -eq $facts) { break }
+    if ($facts.state -eq 'Stopped') { $preConfigStopped = $facts; break }
+    Start-Sleep -Seconds 1
+}
+$preConfigWatch.Stop()
+$stoppedAtSeconds = [math]::Round($preConfigWatch.Elapsed.TotalSeconds, 1)
+if ($null -eq $preConfigStopped) { $preConfigStopped = Get-ServiceFacts -Name $SERVICE_PRECONFIG }
+Start-Sleep -Seconds 2
+$preConfigOrphans = @(Get-ServerProcesses)
+$preConfigFfmpeg = Get-FfmpegExceptionSeen -LogDir $preConfigState.log
+# The FILE, not the full transcode path. .NET names the unreachable path on
+# Unix ("Could not find a part of the path '<transcodes>'") and the colliding
+# entry on Windows ("Cannot create '<not-a-directory>' because a file or
+# directory with the same name already exists"). The file's path is a prefix of
+# the transcode path, so it is the one substring both messages carry.
+$preConfigHookSeen = Test-LogContains -LogDir $preConfigState.log -Pattern $occupied
+
+$evidence.controls['F.preconfig'] = [ordered]@{
+    intent = 'a fault before configurationCompleted, under --service and with an encoder present: the service must end STOPPED with a non-zero exit code and no orphan, and it must not wait out the ten-minute linger'
+    hook = 'Tesserafin.Common.Configuration.EncodingConfigurationExtensions.GetTranscodePath, called from Program.StartServer immediately after the host is built'
+    unreachableTranscodePath = $unreachableTranscodePath
+    occupiedByFile = $occupied
+    binPath = $preConfigBinPath
+    start = $preConfigStart
+    # Recorded, never asserted, for N's reason: the SCM handshake completes
+    # before the hosted service starts the server at all.
+    startSucceeded = ($preConfigStart.exitCode -eq 0)
+    faultLoggedAfterSeconds = $faultSeenAtSeconds
+    stoppedAfterSeconds = $stoppedAtSeconds
+    lingerSeconds = $(if ($null -eq $faultSeenAtSeconds) { $null } else { [math]::Round($stoppedAtSeconds - $faultSeenAtSeconds, 1) })
+    lingerBudgetSeconds = $LINGER_BUDGET_SECONDS
+    masterLingerSeconds = 600
+    stopped = $preConfigStopped
+    hookInLog = $preConfigHookSeen
+    ffmpegExceptionInLog = $preConfigFfmpeg
+    orphans = $preConfigOrphans
+}
+
+$null = Invoke-Sc -Arguments @('delete', $SERVICE_PRECONFIG)
+
+if (-not $preConfigHookSeen) {
+    Deny 'preconfig' ("the blocked transcode path never appears in the service log, so whatever " +
+        'happened here was not the pre-configurationCompleted hook and this control proves nothing') -Slice 'W3-A1'
+}
+if ($preConfigFfmpeg) {
+    Deny 'preconfig' ('FfmpegException appears in the log of a control that was given --ffmpeg. F ' +
+        'measures a different hook from N; if the encoder path fired, the fault under test did not.') -Slice 'W3-A1'
+}
+if ($null -eq $preConfigStopped -or $preConfigStopped.state -ne 'Stopped') {
+    Deny 'preconfig' ("the service never reached STOPPED within $READY_TIMEOUT_SECONDS s (state " +
+        "'$(if ($preConfigStopped) { $preConfigStopped.state } else { 'absent' })'). That is the " +
+        'W3-A0 §3 residual: a service reported RUNNING with a dead server behind it.') -Slice 'W3-A1'
+}
+if ($null -eq $faultSeenAtSeconds) {
+    Deny 'preconfig' 'the service stopped without ever logging a fatal startup' -Slice 'W3-A1'
+}
+$lingerSeconds = $evidence.controls['F.preconfig'].lingerSeconds
+if ($lingerSeconds -gt $LINGER_BUDGET_SECONDS) {
+    Deny 'preconfig' ("the service took $lingerSeconds s to stop after logging its failure, over the " +
+        "$LINGER_BUDGET_SECONDS s budget. Master waits 600 s here, which under the SCM is a RUNNING " +
+        'service with nothing behind it and then an orphaned tesserafin.exe.') -Slice 'W3-A1'
+}
+if ($preConfigStopped.exitCode -eq 0 -and $preConfigStopped.serviceSpecificExitCode -eq 0) {
+    Deny 'preconfig' ('the SCM recorded exit code 0 for a startup that failed before ' +
+        'configurationCompleted') -Slice 'W3-A1'
+}
+if ($preConfigOrphans.Count -ne 0) {
+    Deny 'preconfig' "$($preConfigOrphans.Count) tesserafin process(es) survived the failed start" -Slice 'W3-A1'
+}
+Write-Note ("F: fault logged at $faultSeenAtSeconds s, stopped at $stoppedAtSeconds s " +
+    "(linger $lingerSeconds s of a $LINGER_BUDGET_SECONDS s budget; master waits 600 s), " +
+    "Win32 exit code $($preConfigStopped.exitCode), orphans $($preConfigOrphans.Count)")
 
 Remove-AllServices
 Save-Evidence
