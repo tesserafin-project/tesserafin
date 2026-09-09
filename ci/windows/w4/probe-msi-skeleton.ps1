@@ -27,6 +27,13 @@
     `sc.exe qfailure` is captured verbatim beside it, as evidence a reviewer can
     read, and is deliberately NOT graded -- its output is localised.
 
+    W4-A2-DIAG (#234): a non-zero `msiexec /i` or `/x` prints the decisive lines
+    of its own verbose log before this script refuses. `1603` is "fatal error
+    during installation" and names nothing by itself; the log already being
+    written knows which action failed, and was simply never read. The excerpt is
+    capped, goes to the step log rather than into the evidence document, and the
+    log itself is never uploaded.
+
     What it deliberately does NOT do:
 
       * it does not START the service. W0 §10: a fresh installation leaves it
@@ -287,11 +294,99 @@ function Get-MsiFileNames {
     }
 }
 
+# W4-A2-DIAG (#234). msiexec answers a single number. 1603 is "fatal error
+# during installation", which is every failure the installer decided to roll
+# back, and on its own it names nothing -- a package that installs 2871 files
+# and configures a service can reach it a dozen ways. The verbose log knows
+# which one, and it is already being written; it was simply never read.
+#
+# So a refused msiexec now prints the lines of its OWN log that name the
+# failure, and nothing else. The full log is NOT uploaded: it is hundreds of
+# thousands of lines, it is not evidence anyone would read, and an accepted
+# artifact must never become a later input. The excerpt goes to the step log,
+# never into the evidence document, so that document keeps its property of
+# carrying no host path beyond the two this script was given.
+$MSI_FAILURE_PATTERNS = @(
+    'Return value 3'
+    'MsiConfigureServices'
+    'ServiceConfig'
+    '\b1603\b'
+    '\b1920\b'
+    '\b1613\b'
+    'Error status'
+    'Product: .*-- Error'
+    'Note: 1:'
+)
+$MSI_EXCERPT_MAX_LINES = 120
+$MSI_EXCERPT_MAX_LINE_LENGTH = 400
+
+function Show-MsiFailureExcerpt {
+    <#
+        Print the decisive lines of one msiexec verbose log.
+
+        The log is read through [System.IO.File]::ReadAllLines, which honours a
+        byte-order mark: msiexec writes UTF-16 for some packages and the system
+        code page for others, and `Get-Content` under PowerShell 7 would decode
+        the first as mojibake and find no match in a log that is full of them.
+
+        Capped in both directions -- a bounded number of lines, each truncated
+        -- because an uncapped excerpt of an MSI log is the whole MSI log.
+    #>
+    param(
+        [Parameter(Mandatory = $true)] [string] $LogPath,
+        [Parameter(Mandatory = $true)] [string] $Label
+    )
+
+    Write-Host "W4-A2-DIAG :: msiexec log excerpt for $Label"
+    if (-not [System.IO.File]::Exists($LogPath)) {
+        Write-Host '  (msiexec wrote no log at all)'
+        return
+    }
+
+    $lines = $(try {
+        [System.IO.File]::ReadAllLines($LogPath)
+    } catch {
+        Write-Host "  (the log could not be read: $($_.Exception.Message))"
+        return
+    })
+
+    $pattern = ($MSI_FAILURE_PATTERNS -join '|')
+    $matched = @($lines | Where-Object { $_ -match $pattern })
+    Write-Host "  $($lines.Count) log line(s), $($matched.Count) naming the failure"
+    if ($matched.Count -eq 0) {
+        # A refusal whose log names none of the patterns is itself the finding:
+        # the tail is printed so the run is not silent about it.
+        Write-Host '  no line matched; last 20 lines instead:'
+        $matched = @($lines | Select-Object -Last 20)
+    }
+
+    $shown = 0
+    foreach ($line in $matched) {
+        if ($shown -ge $MSI_EXCERPT_MAX_LINES) {
+            Write-Host "  ... $($matched.Count - $shown) further matching line(s) not shown"
+            break
+        }
+        $text = $line.TrimEnd()
+        if ($text.Length -gt $MSI_EXCERPT_MAX_LINE_LENGTH) {
+            $text = $text.Substring(0, $MSI_EXCERPT_MAX_LINE_LENGTH) + ' ...'
+        }
+        Write-Host "  | $text"
+        $shown++
+    }
+}
+
 function Invoke-Msi {
     param([Parameter(Mandatory = $true)] [string[]] $Arguments,
-          [Parameter(Mandatory = $true)] [string] $LogPath)
+          [Parameter(Mandatory = $true)] [string] $LogPath,
+          [Parameter(Mandatory = $true)] [string] $Label)
     $process = Start-Process -FilePath msiexec.exe `
         -ArgumentList (@($Arguments) + @('/qn', '/norestart', '/l*v', "`"$LogPath`"")) -Wait -PassThru
+    # W4-A2-DIAG: a non-zero msiexec explains itself before this run refuses.
+    # Printed here rather than at the refusal site so that /i and /x are covered
+    # by construction and neither can be forgotten.
+    if ($process.ExitCode -ne 0) {
+        Show-MsiFailureExcerpt -LogPath $LogPath -Label "$Label (msiexec exited $($process.ExitCode))"
+    }
     return $process.ExitCode
 }
 
@@ -547,7 +642,8 @@ foreach ($mutation in $MUTATIONS) {
     $run.msiFileCount = $msiFileNames.Count
 
     $run.installExit = Invoke-Msi -Arguments @('/i', "`"$msiPath`"", "INSTALLFOLDER=`"$prefix`"") `
-        -LogPath ([System.IO.Path]::Combine($logDir, "install-$mutation.log"))
+        -LogPath ([System.IO.Path]::Combine($logDir, "install-$mutation.log")) `
+        -Label "install of mutation '$mutation'"
     if ($run.installExit -ne 0) {
         Deny 'install' ("msiexec /i exited $($run.installExit) for mutation '$mutation'. Every control " +
             'in this slice is a control over an INSTALLED package; a refused install measures nothing')
@@ -593,7 +689,8 @@ foreach ($mutation in $MUTATIONS) {
         @(Get-ChildItem -LiteralPath $prefix -Recurse -File -Force).Count } else { 0 })
 
     $run.uninstallExit = Invoke-Msi -Arguments @('/x', "`"$msiPath`"") `
-        -LogPath ([System.IO.Path]::Combine($logDir, "uninstall-$mutation.log"))
+        -LogPath ([System.IO.Path]::Combine($logDir, "uninstall-$mutation.log")) `
+        -Label "uninstall of mutation '$mutation'"
     if ($run.uninstallExit -ne 0) {
         Deny 'uninstall' "msiexec /x exited $($run.uninstallExit) for mutation '$mutation'"
     }
