@@ -1,0 +1,126 @@
+#Requires -Version 7.2
+<#
+.SYNOPSIS
+    Drive `W4MsiAssertions.psm1` over synthetic observations and prove the
+    grader is not inert -- on any platform, in under a second, with no MSI.
+
+.DESCRIPTION
+    W4-A0 (#234). The hostile controls are only evidence if the predicates they
+    are supposed to redden are the predicates that actually go red. That
+    property cannot be established by the hosted run itself: a grader that
+    answered "red" to everything, or "green" to everything, would produce a
+    control table that looks exactly as convincing.
+
+    So the grader is exercised here first, against observations written to be
+    what each mutated package genuinely produces -- a renamed executable, an
+    argument list missing `--service`, an argument list missing the two path
+    arguments, an SCM key that survives the uninstall. Each must redden EXACTLY
+    its declared set, and the correct package must redden nothing.
+
+    This is not a substitute for the hosted measurement and proves nothing about
+    WiX, msiexec or the SCM. It proves that the instrument reads.
+#>
+
+[CmdletBinding()]
+param()
+
+Set-StrictMode -Version 3.0
+$ErrorActionPreference = 'Stop'
+
+Import-Module ([System.IO.Path]::Combine($PSScriptRoot, 'W4MsiAssertions.psm1')) -Force
+
+$prefix = 'D:\a\_temp\w4a0\prefix'
+$dataRoot = 'C:\ProgramData\Tesserafin\Server'
+$serverExe = 'tesserafin.exe'
+$webDir = 'web'
+$ffmpegExe = 'ffmpeg\bin\ffmpeg.exe'
+
+function New-SyntheticObservation {
+    param([Parameter(Mandatory = $true)] [string] $Mutation)
+
+    # The delivered executable. The `no-exe` control does not delete it -- it
+    # delivers it under a different name, so that containment reddens and the
+    # argument list does not, which is what makes the control attributable.
+    $deliveredExe = if ($Mutation -eq 'no-exe') { 'tesserafin-w4control.exe' } else { $serverExe }
+
+    $arguments = [System.Collections.Generic.List[string]]::new()
+    if ($Mutation -ne 'no-service-flag') { $null = $arguments.Add('--service') }
+    foreach ($pair in @(@('--configdir', 'config'), @('--datadir', 'data'), @('--cachedir', 'cache'), @('--logdir', 'log'))) {
+        $null = $arguments.Add($pair[0])
+        $null = $arguments.Add('"' + (Join-W4Path -Root $dataRoot -Relative $pair[1]) + '"')
+    }
+    if ($Mutation -ne 'no-path-flags') {
+        $null = $arguments.Add('--webdir')
+        $null = $arguments.Add('"' + (Join-W4Path -Root $prefix -Relative $webDir) + '"')
+        $null = $arguments.Add('--ffmpeg')
+        $null = $arguments.Add('"' + (Join-W4Path -Root $prefix -Relative $ffmpegExe) + '"')
+    }
+
+    $imagePath = '"' + (Join-W4Path -Root $prefix -Relative $deliveredExe) + '" ' + ($arguments -join ' ')
+
+    return @{
+        msiFileNames = @($deliveredExe, 'ffmpeg.exe', 'index.html', 'LICENSE')
+        installPrefix = $prefix
+        programDataRoot = $dataRoot
+        serverRelativeExe = $serverExe
+        webRelativeDir = $webDir
+        ffmpegRelativeExe = $ffmpegExe
+        programFilesTesserafinExists = $false
+        installedServerExe = ($Mutation -ne 'no-exe')
+        installedWebDir = $true
+        installedFfmpegExe = $true
+        serviceState = 'Stopped'
+        service = @{
+            ImagePath = $imagePath
+            Start = 2
+            DelayedAutostart = 1
+            ObjectName = 'NT SERVICE\Tesserafin'
+            DisplayName = 'Tesserafin Server'
+            Description = 'Tesserafin media server. Manage it at http://localhost:8096.'
+        }
+        serviceKeyAfterUninstall = ($Mutation -eq 'no-service-remove')
+        filesUnderPrefixAfterUninstall = 0
+        stateAfterUninstall = @{
+            config = @{ directory = $true; sentinel = $true }
+            data   = @{ directory = $true; sentinel = $true }
+            cache  = @{ directory = $true; sentinel = $true }
+            log    = @{ directory = $true; sentinel = $true }
+        }
+    }
+}
+
+$mutations = @('none') + @((Get-W4ControlExpectations).Keys)
+$failures = 0
+$distinctRedSets = @{}
+
+foreach ($mutation in $mutations) {
+    $predicates = Get-W4Predicates -Observation (New-SyntheticObservation -Mutation $mutation)
+    $verdict = Get-W4Verdict -Predicates $predicates -Mutation $mutation
+    $status = if ($verdict.passed) { 'OK  ' } else { 'FAIL' }
+    "$status $($mutation.PadRight(18)) $($verdict.detail)"
+    if (-not $verdict.passed) { $failures++ }
+    $distinctRedSets[($verdict.red -join '|')] = $true
+}
+
+# Two controls with identical failure lists is the tell that the harness graded
+# nothing. Every mutation here must produce a DIFFERENT red set, including the
+# empty one the correct package produces.
+if ($distinctRedSets.Count -ne $mutations.Count) {
+    "FAIL distinct red sets: $($distinctRedSets.Count) across $($mutations.Count) mutations"
+    $failures++
+}
+
+# The predicate list itself must not be empty or trivially short: a grader that
+# answered one question would satisfy every check above.
+$allPredicates = Get-W4Predicates -Observation (New-SyntheticObservation -Mutation 'none')
+if ($allPredicates.Count -lt 20) {
+    "FAIL the grader answers only $($allPredicates.Count) predicates"
+    $failures++
+}
+
+if ($failures -gt 0) {
+    "W4-A0 assertion self-test FAILED with $failures problem(s)"
+    exit 1
+}
+"W4-A0 assertion self-test: $($mutations.Count) mutations, $($allPredicates.Count) predicates, all as declared"
+exit 0
