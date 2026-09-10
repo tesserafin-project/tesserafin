@@ -234,10 +234,17 @@ CORE_PERMISSION_ELEMENT = "<Permission "
 CORE_PERMISSION_EX_ELEMENT = "<PermissionEx "
 UTIL_PERMISSION_EX_ELEMENT = "<util:PermissionEx"
 
-# The two preprocessor variables every authored descriptor must come from. An
-# SDDL written inline at a PermissionEx would be a descriptor no mutation
-# reaches and no gate below parses.
-SDDL_DEFINE_NAMES = ("DataRootSddl", "InstallFolderSddl")
+# The preprocessor variables every authored descriptor must come from. An SDDL
+# written inline at a PermissionEx would be a descriptor no mutation reaches and
+# no gate below parses.
+#
+# There are three since W4-A3-R2 (#234). W4-A3 had two and let OICI inheritance
+# carry the data root's descriptor down to the state directories; run
+# 34502732425 measured that it does not, because Windows Installer writes the
+# DACL PROTECTED and without SE_DACL_AUTO_INHERITED, so the auto-inherit pass
+# never runs and a directory that already exists keeps what it had. A grant is
+# only where it is authored.
+SDDL_DEFINE_NAMES = ("DataRootSddl", "StateDirSddl", "InstallFolderSddl")
 
 
 def service_account_sid(name: str) -> str:
@@ -431,6 +438,14 @@ def findings_for_real_descriptors(defines: dict[str, list[str]], sid: str) -> li
         # descriptor applied through MsiLockPermissionsEx replaces everything,
         # so Administrators, SYSTEM and `Users` are authored here rather than
         # left to the inheritance that run 34500789866 proved does not survive.
+        # W4-A3-R2: what every directory in the operator tree is given -- the
+        # four W0 §9.3 names and `Server` above them.
+        "StateDirSddl": (
+            "D:P"
+            f"(A;OICI;0x{RIGHTS_FULL_CONTROL:x};;;{SID_ADMINISTRATORS})"
+            f"(A;OICI;0x{RIGHTS_FULL_CONTROL:x};;;{SID_LOCAL_SYSTEM})"
+            f"(A;OICI;0x{RIGHTS_MODIFY:x};;;{sid})"
+        ),
         "InstallFolderSddl": (
             "D:"
             f"(A;OICI;0x{RIGHTS_FULL_CONTROL:x};;;{SID_ADMINISTRATORS})"
@@ -454,15 +469,24 @@ def findings_for_real_descriptors(defines: dict[str, list[str]], sid: str) -> li
 
     # The one property the string comparison above would not explain if it
     # failed, spelled out so a reviewer reading a finding knows what broke.
-    data_root = contracts["DataRootSddl"]
-    if data_root in defines["DataRootSddl"]:
-        protected, aces = parse_sddl_dacl(data_root)
+    # The two protected descriptors under %ProgramData%. Both must ask for `P`,
+    # both must grant the service account Modify, and neither may name an
+    # unprivileged identity at all. Windows Installer protects the object
+    # whatever the SDDL says -- run 34502732425 measured that, and it is why
+    # W4-A3-R2 withdrew the control that removed the `P` -- but the authoring is
+    # still required to STATE it, so a reader of this file is not left inferring
+    # the contract from installer behaviour.
+    for name in ("DataRootSddl", "StateDirSddl"):
+        contract = contracts[name]
+        if contract not in defines[name]:
+            continue
+        protected, aces = parse_sddl_dacl(contract)
         if not protected:
-            findings.append("authoring: the real DataRootSddl is not protected, so inheritance is not broken")
+            findings.append(f"authoring: the real {name} is not protected, so it does not state the break")
         if allow_mask_for(aces, {sid}) & RIGHTS_MODIFY != RIGHTS_MODIFY:
-            findings.append(f"authoring: the real DataRootSddl does not grant {sid} Modify")
+            findings.append(f"authoring: the real {name} does not grant {sid} Modify")
         if allow_mask_for(aces, UNPRIVILEGED_SDDL_SIDS) != 0:
-            findings.append("authoring: the real DataRootSddl grants an unprivileged identity rights")
+            findings.append(f"authoring: the real {name} grants an unprivileged identity rights")
     install = contracts["InstallFolderSddl"]
     if install in defines["InstallFolderSddl"]:
         protected, aces = parse_sddl_dacl(install)
@@ -1034,6 +1058,10 @@ def self_test_acls(
         f"(A;OICI;0x{RIGHTS_FULL_CONTROL:x};;;{SID_LOCAL_SYSTEM})"
         f"(A;OICI;0x{RIGHTS_MODIFY:x};;;{sid})"
     )
+    # W4-A3-R2: identical text, different variable. Both are mutated, because a
+    # gate that only watched the data root would not notice the descriptor the
+    # state directories actually get -- which is the defect R2 exists to repair.
+    real_state_dir = real_data_root
     real_install = (
         "D:"
         f"(A;OICI;0x{RIGHTS_FULL_CONTROL:x};;;{SID_ADMINISTRATORS})"
@@ -1064,13 +1092,31 @@ def self_test_acls(
         "the data root descriptor is not protected": swap_real(
             "DataRootSddl", real_data_root, real_data_root.replace("D:P", "D:", 1)
         ),
+        "the state directory descriptor is not protected": swap_real(
+            "StateDirSddl", real_state_dir, real_state_dir.replace("D:P", "D:", 1)
+        ),
         "the data root hands Users Modify": swap_real(
             "DataRootSddl", real_data_root, real_data_root + f"(A;OICI;0x{RIGHTS_MODIFY:x};;;BU)"
         ),
-        "the service account gets no grant at all": swap_real(
+        "the state directories hand Users Modify": swap_real(
+            "StateDirSddl", real_state_dir, real_state_dir + f"(A;OICI;0x{RIGHTS_MODIFY:x};;;BU)"
+        ),
+        "the service account gets no grant on the data root": swap_real(
             "DataRootSddl",
             real_data_root,
             real_data_root.replace(f"(A;OICI;0x{RIGHTS_MODIFY:x};;;{sid})", "", 1),
+        ),
+        "the service account gets no grant on the state directories": swap_real(
+            "StateDirSddl",
+            real_state_dir,
+            real_state_dir.replace(f"(A;OICI;0x{RIGHTS_MODIFY:x};;;{sid})", "", 1),
+        ),
+        "the state directories stop granting SYSTEM Full": swap_real(
+            "StateDirSddl",
+            real_state_dir,
+            real_state_dir.replace(
+                f"(A;OICI;0x{RIGHTS_FULL_CONTROL:x};;;{SID_LOCAL_SYSTEM})", "", 1
+            ),
         ),
         "the service account SID is a different one": swap(
             sid, service_account_sid("TesserafinServer")

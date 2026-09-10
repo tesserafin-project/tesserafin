@@ -401,8 +401,9 @@ function Get-W4Predicates {
                                        install and BEFORE the uninstall. The
                                        labels are `installFolder`, `dataRoot`
                                        (%ProgramData%\Tesserafin, the directory
-                                       inheritance is broken at) and the four
-                                       state directory names. A label whose
+                                       inheritance is broken at), `server` (the
+                                       intermediate directory above the state
+                                       tree) and the four state directory names. A label whose
                                        value is $null is a directory the probe
                                        could not read.
     #>
@@ -553,6 +554,18 @@ function Get-W4Predicates {
     $predicates['stateDirectoriesUsersHaveNoWrite'] = (Test-W4EveryStateDirectory -Observation $o -Test {
         param($acl) Test-W4NoWriteFor -Acl $acl -Sids $script:UnprivilegedSids })
 
+    # W4-A3-R2 (#234). `%ProgramData%\Tesserafin\Server` is not a row in W0
+    # §9.3's table, and it is measured anyway. Without a descriptor of its own it
+    # keeps %ProgramData%'s `Users` write, and the protected parent does not save
+    # it: `Users` hold SeChangeNotifyPrivilege by default, and
+    # bypass-traverse-checking takes the access decision straight to the leaf. It
+    # is graded on the one row that makes it a defect rather than on all four --
+    # the service and administrative rows are carried by the same descriptor the
+    # four state directories get and are already proven there.
+    $predicates['serverDirectoryUsersHaveNoWrite'] =
+        (Test-W4NoWriteFor -Acl (Get-W4Acl -Observation $o -Label 'server') `
+            -Sids $script:UnprivilegedSids)
+
     # ── uninstall ───────────────────────────────────────────────────────────
     $predicates['uninstallRemovedService'] = -not [bool]$o.serviceKeyAfterUninstall
     $predicates['uninstallRemovedBinaries'] = ([int]$o.filesUnderPrefixAfterUninstall -eq 0)
@@ -616,26 +629,29 @@ function Get-W4ControlExpectations {
             'serviceFailureSecondIsRestartAfter60s'
         )
         'third-action-restart' = @('serviceFailureThirdIsNoAction')
-        # W4-A3, the four ACL controls. Each changes ONE thing about the W0 §9.3
+        # W4-A3, the ACL controls. Each changes ONE thing about the W0 §9.3
         # contract, and every variant still grants Administrators and SYSTEM
         # Full, so no control reddens the administrative rows as collateral.
         #
-        # `acl-not-protected` declares TWO, and the second is not collateral: an
-        # unprotected descriptor at %ProgramData%\Tesserafin\ is only a defect
-        # BECAUSE the parent it then keeps inheriting from lets any
-        # authenticated user create files there. The authoring reproduces that
-        # `Users` grant explicitly rather than relying on the exact rows a given
-        # Windows build puts on %ProgramData%, so the control produces the same
-        # two predicates on any host -- one defect, two visible consequences,
-        # declared in full the way `no-exe` declares three.
-        'acl-not-protected' = @(
-            'dataRootInheritanceBroken'
+        # W4-A3-R2 (#234) WITHDREW `acl-not-protected`, which removed the `P`
+        # from the data root's descriptor and declared `dataRootInheritanceBroken`.
+        # Run 34502732425 measured that MsiLockPermissionsEx writes a PROTECTED
+        # DACL whatever the SDDL asks for -- `InstallFolderSddl` is authored
+        # `D:` and comes back `D:P`, and so did that mutant -- so the control
+        # graded "expected red but green" and could never do otherwise. A control
+        # that cannot fail is not a control. `dataRootInheritanceBroken` is still
+        # measured and still asserted; it is simply not falsifiable from this
+        # authoring, and saying so is better than a mutant that pretends it is.
+        #
+        # The other two now mutate the descriptor the state directories actually
+        # GET, which since R2 is their own and not one inherited from the data
+        # root. `acl-users-write` declares two because one descriptor is what all
+        # five operator-tree directories are given: the four W0 §9.3 names and
+        # `Server` above them.
+        'acl-users-write' = @(
             'stateDirectoriesUsersHaveNoWrite'
+            'serverDirectoryUsersHaveNoWrite'
         )
-        # Inheritance IS broken here and `Users` are handed Modify anyway, which
-        # is the half of §9.3 a gate that only checked the protection flag would
-        # call correct.
-        'acl-users-write' = @('stateDirectoriesUsersHaveNoWrite')
         'acl-no-service-grant' = @('stateDirectoriesServiceHasModify')
         # Read and execute still hold, so this reddens the write half alone.
         'acl-install-writable' = @('installFolderServiceCannotWrite')

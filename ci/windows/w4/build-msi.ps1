@@ -95,7 +95,7 @@ param(
     [Parameter(Mandatory = $true)] [string] $OutPath,
     [ValidateSet('none', 'no-exe', 'no-service-flag', 'no-path-flags', 'no-service-remove',
         'no-util-config', 'delay-not-60s', 'third-action-restart',
-        'acl-not-protected', 'acl-users-write', 'acl-no-service-grant', 'acl-install-writable')]
+        'acl-users-write', 'acl-no-service-grant', 'acl-install-writable')]
     [string] $Mutation = 'none',
     [ValidateNotNullOrEmpty()] [string] $WixVersion = '6.0.2',
     [ValidateNotNullOrEmpty()] [string] $UtilExtensionVersion = '6.0.2'

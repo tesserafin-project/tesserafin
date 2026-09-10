@@ -118,35 +118,40 @@ named right, so a generic alias in either descriptor is a finding.
 
 ## 4. What the package authors
 
-### 4.1 `%ProgramData%\Tesserafin\` — protected
+### 4.1 The operator tree — one protected descriptor per directory
 
 ```
-D:P(A;OICI;0x1f01ff;;;BA)(A;OICI;0x1f01ff;;;SY)(A;OICI;0x1301bf;;;S-1-5-80-761762137-1691453069-3789821951-3290391601-3361247659)
+%ProgramData%\Tesserafin\                D:P(A;OICI;0x1f01ff;;;BA)(A;OICI;0x1f01ff;;;SY)(A;OICI;0x1301bf;;;S-1-5-80-761762137-1691453069-3789821951-3290391601-3361247659)
+…\Tesserafin\Server                     the same, and
+…\Server\{config,data,cache,log}        the same on each
 ```
 
-`D:P` is the slice. `P` is `SE_DACL_PROTECTED`: the directory stops inheriting,
-so the permissive `%ProgramData%` ACL that lets any authenticated user create
-files cannot reach the tree that holds the database.
+`D:P` is the break W0 §9.3 asks for by name. Three ACEs and no fourth: there is
+no `Users`, `Authenticated Users` or `Everyone` ACE anywhere in the operator
+tree, which is a stronger statement than the "no inherited write" §9.3 asks for.
 
-Three ACEs, and no fourth. There is no `Users`, `Authenticated Users` or
-`Everyone` ACE in it at all, which is a stronger statement than the "no
-inherited write" §9.3 asks for and is what makes a protected descriptor worth
-having. Every ACE is `OICI`, so `Server\config`, `Server\data`, `Server\cache`
-and `Server\log` — the four directories W0 §9.1 names — inherit `Modify` for the
-service account and `Full` for Administrators and SYSTEM without each being
-authored separately.
+**Every directory carries its own descriptor, and that is a measurement rather
+than a preference.** W4-A3 authored one, on `%ProgramData%\Tesserafin\`, with
+every ACE `OICI`, and relied on inheritance to carry it down. Run
+**34502732425** read the live ACLs back. The parent was right; all four state
+directories came back carrying `%ProgramData%`'s **own** default, every ACE
+flagged `ID` — see §9. A grant is only where it is authored.
 
-It hangs off a component in `TesserafinProgramData` that is deliberately **not**
-`Permanent` and **not** `NeverOverwrite`, unlike the four retained-state
-components beside it. The difference is what each owns. Those four own operator
-*data*, which an ordinary uninstall must keep. This one owns a *security
-descriptor*, which is package policy and has to be re-applied by every install
-and every repair — and a `NeverOverwrite` component whose key path already
-existed would simply be **skipped**, taking its `CreateFolder` and therefore its
-descriptor with it. On uninstall the registry value goes, the directory removal
-then fails because the four `Permanent` components keep the tree from being
-empty, and the directory and its descriptor both survive: the behaviour W0 §10
-asks for.
+`Server` is in the list although §9.3's table does not name it. Without a
+descriptor it keeps `%ProgramData%`'s `Users` write, and the protected parent
+does not save it: `Users` hold `SeChangeNotifyPrivilege` by default, and
+bypass-traverse-checking takes the access decision straight to the leaf.
+
+Each descriptor hangs off its own component, and **none** of those six is
+`Permanent` or `NeverOverwrite`, unlike the four retained-state components
+beside them. The difference is what each owns. Those four own operator *data*,
+which an ordinary uninstall must keep. These own *security descriptors*, which
+are package policy: they have to be re-applied by every install and every
+repair, and a `NeverOverwrite` component whose key path already existed would be
+**skipped**, taking its `CreateFolder` and therefore its descriptor with it. On
+uninstall the registry values go, the directory removals then fail because the
+four `Permanent` components keep the tree from being empty, and the directories
+and their descriptors both survive: the behaviour W0 §10 asks for.
 
 ### 4.2 INSTALLFOLDER — the whole DACL, read and execute for the service
 
@@ -209,6 +214,7 @@ only recorded them. Since **W4-A3-R1** the package authors all three itself
 | `stateDirectoriesAdministratorsHaveFull` | all four grant `S-1-5-32-544` full control |
 | `stateDirectoriesSystemHasFull` | all four grant `S-1-5-18` full control |
 | `stateDirectoriesUsersHaveNoWrite` | none of the four grants `Users`, `Authenticated Users`, `Everyone` or `Guests` any write bit |
+| `serverDirectoryUsersHaveNoWrite` | nor does `…\Tesserafin\Server` above them |
 
 A directory the probe could not read grades every predicate about it **false**,
 including the negative ones: "the install never created it" and "it exists and
@@ -223,48 +229,57 @@ the write access §9.3 exists to refuse.
 
 ## 6. The hostile controls
 
-Four, each a deliberately broken package built from the **same** authoring
+Three, each a deliberately broken package built from the **same** authoring
 through the **same** grader, and each required to redden **exactly** the set it
 declared.
 
 | Mutation | What it authors | Declared RED |
 | --- | --- | --- |
-| `acl-not-protected` | `D:` instead of `D:P`, plus an explicit `Users` Modify ACE | `dataRootInheritanceBroken`, `stateDirectoriesUsersHaveNoWrite` |
-| `acl-users-write` | `D:P` kept, `Users` handed Modify anyway | `stateDirectoriesUsersHaveNoWrite` |
-| `acl-no-service-grant` | the protected descriptor grants the service account nothing | `stateDirectoriesServiceHasModify` |
+| `acl-users-write` | the operator-tree descriptor hands `Users` Modify | `stateDirectoriesUsersHaveNoWrite`, `serverDirectoryUsersHaveNoWrite` |
+| `acl-no-service-grant` | the operator-tree descriptor grants the service account nothing | `stateDirectoriesServiceHasModify` |
 | `acl-install-writable` | `0x1301bf` instead of `0x1200a9` on INSTALLFOLDER | `installFolderServiceCannotWrite` |
 
-Three points about that table.
+`acl-users-write` declares two because **one** descriptor is what all five
+operator-tree directories are given — the four §9.3 names and `Server` above
+them. One defect, two visible consequences, declared in full the way `no-exe`
+declares three.
 
-**`acl-not-protected` declares two, and the second is not collateral.** An
-unprotected descriptor at `%ProgramData%\Tesserafin\` is only a defect *because*
-the parent it then keeps inheriting from lets any authenticated user create
-files there. The authoring reproduces that `Users` grant **explicitly** rather
-than relying on the exact rows a given Windows build puts on `%ProgramData%`, so
-the control produces the same two predicates on any host: one defect, two
-visible consequences, declared in full the way `no-exe` declares three.
-
-**`acl-install-writable` reddens the write half alone.** Read and execute still
-hold under `Modify`, which is exactly why the two INSTALLFOLDER predicates are
+`acl-install-writable` reddens the write half alone: read and execute still hold
+under `Modify`, which is exactly why the two INSTALLFOLDER predicates are
 separate.
 
-**Every variant, mutants included, still grants Administrators and SYSTEM
-Full.** None of these controls is about the administrative rights, and a mutant
-that also dropped them would redden predicates it never declared and be
-attributable to nothing. `msi-controls.py` asserts that invariant over every
-authored variant, not just the real one.
+Every variant, mutants included, still grants Administrators and SYSTEM Full.
+None of these controls is about the administrative rights, and a mutant that
+also dropped them would redden predicates it never declared and be attributable
+to nothing. `msi-controls.py` asserts that invariant over every authored
+variant, not just the real ones.
+
+### 6.1 The control W4-A3-R2 withdrew
+
+W4-A3 authored a fourth, `acl-not-protected`, which removed the `P` from the
+data root's descriptor and declared `dataRootInheritanceBroken`. It is **gone**,
+because run 34502732425 measured that it can never fail: `MsiLockPermissionsEx`
+writes a **protected** DACL whatever the SDDL asks for. `InstallFolderSddl` is
+authored `D:` and comes back `D:P`; so did that mutant, and it graded "expected
+red but green".
+
+`dataRootInheritanceBroken` is still measured and still asserted — it is a true
+statement about the live object that §9.3 asks for, and it would go red if a
+future toolset stopped protecting. It is simply **not falsifiable from this
+authoring**, and saying so is better than keeping a control that pretends
+otherwise. The authoring is still required to *state* `D:P`, and
+`msi-controls.py` reddens a real descriptor that does not, so a reader of the
+`.wxs` is never left inferring the contract from installer behaviour.
 
 Two further controls the ruling names are already covered and are not
 re-authored here. **"UpgradeCode bytes moved"** is a static control W4-A1
-established, driven by `msi-controls.py --self-test` in four shapes including
-the same digits upper-cased and braced. **"Service started by the install"** is
-the existing `serviceNotStartedByInstall` predicate, answered on all twelve runs;
-a mutation that started the service would either fail with `1920` and roll the
-install back to `1603` — hiding every other outcome behind one identity problem,
-which W0 §5.2 already measured — or run the server, which this slice is not
-authorised to do.
-
----
+established, driven in four shapes including the same digits upper-cased and
+braced. **"Service started by the install"** is the existing
+`serviceNotStartedByInstall` predicate, answered on all eleven runs; a mutation
+that started the service would either fail with `1920` and roll the install back
+to `1603` — hiding every other outcome behind one identity problem, which W0
+§5.2 already measured — or run the server, which this slice is not authorised to
+do.
 
 ## 7. Resetting between controls
 
@@ -360,14 +375,51 @@ asks for no protection at all. The two answers together settle it:
   authoring, and that control needs a different shape or an explicit note that
   it cannot fail.
 
+Run **34502732425** answered it, and answered a second question nobody had
+asked. `INSTALLFOLDER`, authored `D:` with no protection requested, came back
+
+```
+D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1200a9;;;BU)(A;OICI;0x1200a9;;;<svc>)
+```
+
+**`P`, regardless of what the SDDL asked for.** So did the `acl-not-protected`
+mutant's data root. Protection is not a property this mechanism can be authored
+to lack, and §6.1 records what that costs the control set.
+
+The second finding was the one that mattered. The protected descriptor at
+`C:\ProgramData\Tesserafin` never reached the four state directories. Every one
+of them came back:
+
+```
+D:AI(A;OICIID;FA;;;SY)(A;OICIID;FA;;;BA)(A;OICIIOID;GA;;;CO)
+   (A;OICIID;0x1200a9;;;BU)(A;CIID;DCLCRPCR;;;BU)
+```
+
+That is `%ProgramData%`'s own default, every ACE flagged `ID`. Windows Installer
+sets the DACL `PROTECTED` and **without** `SE_DACL_AUTO_INHERITED`, so the
+auto-inherit pass never runs and a directory that already exists keeps whatever
+it had. Note the last ACE: `BUILTIN\Users` at mask **`0x116`** — add file, add
+subdirectory, write EA, write attributes. It is precisely the "any authenticated
+user can create files under `%ProgramData%`" grant W0 §9.2 warns about, and it
+was live on the directory holding the database.
+
+Files are the exception that proves the rule: the payload under `INSTALLFOLDER`
+*does* inherit correctly, because `InstallFiles` creates it **after**
+`CreateFolders` has set the directory's DACL. It is object-to-object propagation
+to things that already exist that does not happen.
+
+**W4-A3-R2 is the repair: every directory in the operator tree authors its own
+descriptor (§4.1), the intermediate `Server` included, and the control that
+could not fail is withdrawn (§6.1).**
+
 Either way the evidence is in the log: the probe **prints the full live ACL of
-all six directories for every mutation, before anything is graded**.
+all seven directories for every mutation, before anything is graded**.
 
 ## 10. Provenance
 
 * Tracker: #234. Not closed by this slice.
 * Ruling: **W4-A3 PROGRAMDATA ACLS** on #234, as amended by
-  **W4-A3-WORKFLOW GUARD** and **W4-A3-R1**.
+  **W4-A3-WORKFLOW GUARD**, **W4-A3-R1** and **W4-A3-R2**.
 * Base: `fc31d06a093e3c4f072a29be124b7c7edf1848d5` (W4-A2, accepted).
 * Files: `packaging/windows/msi/Tesserafin.wxs`, `ci/windows/w4/**`, this
   document.

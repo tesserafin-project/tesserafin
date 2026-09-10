@@ -25,20 +25,24 @@
   `ci/windows/w4/build-msi.ps1`. The POLICY is unchanged and so is what is
   graded; the core element is gone from this file entirely.
 
-  W4-A3 (#234) adds the W0 §9.3 ACL contract, and only that. Two security
-  descriptors are authored, both as SDDL on the Windows Installer 5.0
-  `MsiLockPermissionsEx` table, which WiX writes from the CORE `PermissionEx`
-  element:
+  W4-A3 (#234) adds the W0 §9.3 ACL contract, and only that. It is authored as
+  SDDL on the Windows Installer 5.0 `MsiLockPermissionsEx` table, which WiX
+  writes from the CORE `PermissionEx` element, and since W4-A3-R2 there is one
+  descriptor per directory rather than one per tree:
 
-    `%ProgramData%\Tesserafin\`  a PROTECTED descriptor. The `D:P` is the
-                                 whole point of the slice: it breaks
-                                 inheritance, so the permissive parent ACL that
-                                 lets any authenticated user create files under
-                                 `%ProgramData%` cannot reach the directory that
-                                 holds the database. Administrators and SYSTEM
-                                 get Full, `NT SERVICE\Tesserafin` gets Modify,
-                                 and every ACE is `OICI` so the four state
-                                 directories W0 §9.1 names inherit it.
+    `%ProgramData%\Tesserafin\`  a PROTECTED descriptor: Administrators and
+                                 SYSTEM Full, `NT SERVICE\Tesserafin` Modify,
+                                 and no unprivileged identity at all.
+
+    `…\Tesserafin\Server` and    the same descriptor, authored on each. W4-A3
+    its config, data, cache      relied on the OICI ACEs above to carry it down
+    and log directories          and run 34502732425 measured that they do not:
+                                 the DACL is written PROTECTED and without
+                                 SE_DACL_AUTO_INHERITED, the auto-inherit pass
+                                 never runs, and every one of the four came back
+                                 carrying `%ProgramData%`'s own default with its
+                                 `Users` write bits intact. A grant is only
+                                 where it is authored.
 
     INSTALLFOLDER                an UNPROTECTED descriptor. The row W0 §9.3 is
                                  about is `NT SERVICE\Tesserafin`, read and
@@ -164,35 +168,80 @@
        administrative rights, and a mutant that also dropped them would redden
        predicates it did not declare and be attributable to nothing. -->
 
-  <!-- The real descriptor for `%ProgramData%\Tesserafin\`. `D:P` is the
-       inheritance break W0 §9.3 asks for by name, and the three ACEs are the
-       whole of what may reach the directory that holds the database. There is
-       no ACE for `Users`, `Authenticated Users` or `Everyone` in it at all,
-       which is a stronger statement than the "no inherited write" §9.3 asks
-       for and is what makes the protected descriptor worth having. -->
-  <?if $(var.Mutation) = "acl-not-protected" ?>
-    <!-- W4-A3 hostile control 1: the descriptor is NOT protected, so the
-         directory keeps inheriting from `%ProgramData%`, whose own ACL lets any
-         authenticated user create files. The `Users` ACE is authored EXPLICITLY
-         rather than left to that inheritance because a control has to reproduce
-         its defect on the host it runs on, and the exact rows a Windows build
-         puts on `%ProgramData%` are not this repository's to depend on. It is
-         one defect with two visible consequences, declared with both. -->
-    <?define DataRootSddl = "D:(A;OICI;0x1f01ff;;;BA)(A;OICI;0x1f01ff;;;SY)(A;OICI;0x1301bf;;;S-1-5-80-761762137-1691453069-3789821951-3290391601-3361247659)(A;OICI;0x1301bf;;;BU)" ?>
-  <?elseif $(var.Mutation) = "acl-users-write" ?>
-    <!-- W4-A3 hostile control 2: inheritance IS broken, and the descriptor
-         hands `Users` Modify anyway. This is the half of §9.3 a gate that only
-         checked the protection flag would call correct. -->
-    <?define DataRootSddl = "D:P(A;OICI;0x1f01ff;;;BA)(A;OICI;0x1f01ff;;;SY)(A;OICI;0x1301bf;;;S-1-5-80-761762137-1691453069-3789821951-3290391601-3361247659)(A;OICI;0x1301bf;;;BU)" ?>
+  <!-- W4-A3-R2 (#234). TWO descriptors under `%ProgramData%`, and the reason
+       there are two is a measurement rather than a preference.
+
+       W4-A3 authored ONE, on `%ProgramData%\Tesserafin\`, with every ACE
+       `OICI`, on the reading that the four state directories W0 §9.1 names
+       would inherit it. Run 34502732425 read the live ACLs back and they had
+       not. The parent came back
+
+         D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1301bf;;;NT SERVICE)
+
+       and every one of `config`, `data`, `cache` and `log` came back
+
+         D:AI(A;OICIID;FA;;;SY)(A;OICIID;FA;;;BA)(A;OICIIOID;GA;;;CO)
+            (A;OICIID;0x1200a9;;;BU)(A;CIID;DCLCRPCR;;;BU)
+
+       which is `%ProgramData%`'s OWN default, every ACE flagged `ID`. Windows
+       Installer sets the descriptor PROTECTED and without SE_DACL_AUTO_INHERITED,
+       so the auto-inherit pass never runs and a directory that already exists
+       keeps what it had. That last ACE is `BUILTIN\Users` at mask `0x116`: add
+       file, add subdirectory, write EA, write attributes. It is exactly the
+       "any authenticated user can create files under `%ProgramData%`" grant W0
+       §9.2 warns about, and it was live on the directory holding the database.
+
+       So a grant is only where it is authored. Every directory in the operator
+       tree carries its own `PermissionEx`, and none of them relies on a parent.
+
+       The intermediate `%ProgramData%\Tesserafin\Server` gets the same
+       descriptor as the four. W0 §9.3's table does not name it, but it is the
+       same defect: without one it keeps `%ProgramData%`'s `Users` write. A
+       protected parent does not save it either, because `Users` hold
+       SeChangeNotifyPrivilege by default and bypass-traverse-checking takes the
+       access decision straight to the leaf.
+
+       Administrators and SYSTEM carry Full in EVERY variant below, mutants
+       included. None of the controls is about the administrative rights, and a
+       mutant that dropped them would redden predicates it did not declare and
+       be attributable to nothing.
+
+       There is deliberately NO control that removes the `P`. The same run
+       measured that `MsiLockPermissionsEx` writes a PROTECTED DACL whatever the
+       SDDL asks for: `InstallFolderSddl` is authored `D:` and comes back `D:P`,
+       and so did the `acl-not-protected` mutant that W4-A3-R2 withdrew. A
+       control that cannot fail is not a control, and it graded "expected red but
+       green". `dataRootInheritanceBroken` is still measured and still asserted;
+       it simply is not falsifiable from this authoring. -->
+
+  <!-- `%ProgramData%\Tesserafin\`, the directory W0 §9.3 breaks inheritance at.
+       Three ACEs and no fourth: no `Users`, `Authenticated Users` or `Everyone`
+       ACE at all, which is a stronger statement than the "no inherited write"
+       §9.3 asks for. It carries no mutation of its own since W4-A3-R2, because
+       the controls that were authored here now drive the descriptor the four
+       state directories actually get. -->
+  <?define DataRootSddl = "D:P(A;OICI;0x1f01ff;;;BA)(A;OICI;0x1f01ff;;;SY)(A;OICI;0x1301bf;;;S-1-5-80-761762137-1691453069-3789821951-3290391601-3361247659)" ?>
+
+  <!-- The descriptor every directory in the operator tree gets: the four state
+       directories W0 §9.3 names, and `Server` above them. `NT SERVICE\Tesserafin`
+       Modify is the row §9.3 states for the four. -->
+  <?if $(var.Mutation) = "acl-users-write" ?>
+    <!-- W4-A3 hostile control: the state directories hand `Users` Modify. The
+         descriptor is still protected and still grants the service account, so
+         a gate that only asked whether inheritance was broken, or only what the
+         service could do, would call this package correct. It reddens the
+         `Users` row on the four state directories AND on `Server`, because one
+         descriptor is what every one of them gets. -->
+    <?define StateDirSddl = "D:P(A;OICI;0x1f01ff;;;BA)(A;OICI;0x1f01ff;;;SY)(A;OICI;0x1301bf;;;S-1-5-80-761762137-1691453069-3789821951-3290391601-3361247659)(A;OICI;0x1301bf;;;BU)" ?>
   <?elseif $(var.Mutation) = "acl-no-service-grant" ?>
-    <!-- W4-A3 hostile control 3: the protected descriptor grants the service
+    <!-- W4-A3 hostile control: the protected descriptor grants the service
          account nothing, so `NT SERVICE\Tesserafin` has no Modify on any of the
          four state directories. W0 §9.2 measured that the default
          `%ProgramData%` ACL happens to be permissive enough for the service to
          run anyway, which is exactly why this cannot be graded by starting it. -->
-    <?define DataRootSddl = "D:P(A;OICI;0x1f01ff;;;BA)(A;OICI;0x1f01ff;;;SY)" ?>
+    <?define StateDirSddl = "D:P(A;OICI;0x1f01ff;;;BA)(A;OICI;0x1f01ff;;;SY)" ?>
   <?else ?>
-    <?define DataRootSddl = "D:P(A;OICI;0x1f01ff;;;BA)(A;OICI;0x1f01ff;;;SY)(A;OICI;0x1301bf;;;S-1-5-80-761762137-1691453069-3789821951-3290391601-3361247659)" ?>
+    <?define StateDirSddl = "D:P(A;OICI;0x1f01ff;;;BA)(A;OICI;0x1f01ff;;;SY)(A;OICI;0x1301bf;;;S-1-5-80-761762137-1691453069-3789821951-3290391601-3361247659)" ?>
   <?endif ?>
 
   <!-- The real descriptor for INSTALLFOLDER. The service account's ACE is the
@@ -500,33 +549,76 @@
       </Component>
     </ComponentGroup>
 
-    <!-- W4-A3 (#234): the inheritance break, at `%ProgramData%\Tesserafin\`
-         and at no other directory. W0 §9.3 puts it exactly here so that a
-         permissive parent ACL cannot silently widen access to the database.
+    <!-- W4-A3 (#234), reshaped by W4-A3-R2. One component per directory in the
+         operator tree, each carrying that directory's own security descriptor.
 
-         This component is deliberately NOT `Permanent` and NOT
-         `NeverOverwrite`, and the four retained-state components below
-         deliberately are. The difference is what each one owns. Those four own
-         operator DATA, which an ordinary uninstall must keep. This one owns a
-         security descriptor, which is package policy: it has to be re-applied
-         by every install and every repair, and a `NeverOverwrite` component
-         whose key path already existed would be SKIPPED, taking its
-         CreateFolder and therefore its descriptor with it. Uninstall removes
-         the registry value and then fails to remove the directory, because the
-         four Permanent components below keep it from being empty, so the
-         directory and its descriptor both survive, which is the behaviour W0
-         §10 asks for.
+         W4-A3 authored one descriptor, on `%ProgramData%\Tesserafin\`, and
+         relied on OICI inheritance to carry it down. Run 34502732425 measured
+         that it does not: Windows Installer writes the DACL PROTECTED and
+         without SE_DACL_AUTO_INHERITED, so the auto-inherit pass never runs and
+         a directory that already exists keeps whatever it had. All four state
+         directories came back carrying `%ProgramData%`'s own default, `Users`
+         write bits included. A grant is only where it is authored, so every
+         directory authors one.
 
-         The registry key path is the same shape the retained components use,
+         None of these components is `Permanent` and none is `NeverOverwrite`,
+         and the four retained-state components below deliberately are. The
+         difference is what each one owns. Those four own operator DATA, which
+         an ordinary uninstall must keep. These own security descriptors, which
+         are package policy: they have to be re-applied by every install and
+         every repair, and a `NeverOverwrite` component whose key path already
+         existed would be SKIPPED, taking its CreateFolder and therefore its
+         descriptor with it. Uninstall removes these registry values and then
+         fails to remove the directories, because the four Permanent components
+         below keep them from being empty, so the directories and their
+         descriptors both survive: the behaviour W0 §10 asks for.
+
+         `Server` is in the list although W0 §9.3's table does not name it. It
+         is the same defect: without a descriptor it keeps `%ProgramData%`'s
+         `Users` write, and the protected parent does not save it, because
+         `Users` hold SeChangeNotifyPrivilege by default and
+         bypass-traverse-checking takes the access decision straight to the leaf.
+
+         The registry key paths are the same shape the retained components use,
          for the same reason: a component whose key path is a directory is
          evaluated by directory existence, which makes its installed state
-         depend on something the operator can change. Nothing reads the value. -->
-    <ComponentGroup Id="DataRootPermissions" Directory="TesserafinProgramData">
-      <Component Id="DataRootAcl" Guid="2f6c8b41-9a03-4d17-b5e8-7c40e19d3a62">
+         depend on something the operator can change. Nothing reads the values. -->
+    <ComponentGroup Id="OperatorTreePermissions">
+      <Component Id="DataRootAcl" Directory="TesserafinProgramData" Guid="2f6c8b41-9a03-4d17-b5e8-7c40e19d3a62">
         <CreateFolder>
           <PermissionEx Sddl="$(var.DataRootSddl)" />
         </CreateFolder>
-        <RegistryValue Root="HKLM" Key="Software\Tesserafin\Server\RetainedState" Name="acl" Value="applied" Type="string" KeyPath="yes" />
+        <RegistryValue Root="HKLM" Key="Software\Tesserafin\Server\Acl" Name="dataRoot" Value="applied" Type="string" KeyPath="yes" />
+      </Component>
+      <Component Id="ServerDirAcl" Directory="DATAFOLDER" Guid="8d1a47f6-2c95-4b03-9e7a-1f62d05c8b41">
+        <CreateFolder>
+          <PermissionEx Sddl="$(var.StateDirSddl)" />
+        </CreateFolder>
+        <RegistryValue Root="HKLM" Key="Software\Tesserafin\Server\Acl" Name="server" Value="applied" Type="string" KeyPath="yes" />
+      </Component>
+      <Component Id="ConfigDirAcl" Directory="DataConfigFolder" Guid="c40e7b19-6a82-4d55-b1f3-9e2740a6c83d">
+        <CreateFolder>
+          <PermissionEx Sddl="$(var.StateDirSddl)" />
+        </CreateFolder>
+        <RegistryValue Root="HKLM" Key="Software\Tesserafin\Server\Acl" Name="config" Value="applied" Type="string" KeyPath="yes" />
+      </Component>
+      <Component Id="DataDirAcl" Directory="DataDataFolder" Guid="71b93de4-05fa-4c68-8d27-3b5e6f014a92">
+        <CreateFolder>
+          <PermissionEx Sddl="$(var.StateDirSddl)" />
+        </CreateFolder>
+        <RegistryValue Root="HKLM" Key="Software\Tesserafin\Server\Acl" Name="data" Value="applied" Type="string" KeyPath="yes" />
+      </Component>
+      <Component Id="CacheDirAcl" Directory="DataCacheFolder" Guid="e6274f0b-93d1-4a87-b52c-08fa1d6e3947">
+        <CreateFolder>
+          <PermissionEx Sddl="$(var.StateDirSddl)" />
+        </CreateFolder>
+        <RegistryValue Root="HKLM" Key="Software\Tesserafin\Server\Acl" Name="cache" Value="applied" Type="string" KeyPath="yes" />
+      </Component>
+      <Component Id="LogDirAcl" Directory="DataLogFolder" Guid="3a58c1d7-4e60-49b2-a0f8-62d7395bc108">
+        <CreateFolder>
+          <PermissionEx Sddl="$(var.StateDirSddl)" />
+        </CreateFolder>
+        <RegistryValue Root="HKLM" Key="Software\Tesserafin\Server\Acl" Name="log" Value="applied" Type="string" KeyPath="yes" />
       </Component>
     </ComponentGroup>
 
@@ -566,7 +658,7 @@
     <Feature Id="Main" Title="Tesserafin Server" Level="1">
       <ComponentGroupRef Id="PackagePayload" />
       <ComponentGroupRef Id="ServerHost" />
-      <ComponentGroupRef Id="DataRootPermissions" />
+      <ComponentGroupRef Id="OperatorTreePermissions" />
       <ComponentGroupRef Id="RetainedState" />
     </Feature>
   </Package>

@@ -137,7 +137,7 @@ $SERVICE_NAME = 'Tesserafin'
 $SERVICE_KEY = "HKLM:\SYSTEM\CurrentControlSet\Services\$SERVICE_NAME"
 $MUTATIONS = @('none', 'no-exe', 'no-service-flag', 'no-path-flags', 'no-service-remove',
     'no-util-config', 'delay-not-60s', 'third-action-restart',
-    'acl-not-protected', 'acl-users-write', 'acl-no-service-grant', 'acl-install-writable')
+    'acl-users-write', 'acl-no-service-grant', 'acl-install-writable')
 
 Import-Module ([System.IO.Path]::Combine($PSScriptRoot, 'W4MsiAssertions.psm1')) -Force
 
@@ -736,8 +736,10 @@ function Get-AclObservation {
 
 function Get-AclObservations {
     <#
-        The six directories W0 §9.3 states a row for, under the labels
-        `W4MsiAssertions.psm1` grades them by. A directory that does not exist
+        Every directory the W0 §9.3 contract reaches, under the labels
+        `W4MsiAssertions.psm1` grades them by. `server` is the intermediate
+        `%ProgramData%\Tesserafin\Server`, which §9.3's table does not name and
+        which W4-A3-R2 measures anyway. A directory that does not exist
         comes back $null rather than as an empty ACL: "the install never created
         it" and "it exists and grants nobody anything" are different findings
         and must not collapse into one.
@@ -746,6 +748,7 @@ function Get-AclObservations {
     $observations = [ordered]@{
         installFolder = Get-AclObservation -Path $InstallPrefix
         dataRoot = Get-AclObservation -Path $programDataTesserafin
+        server = Get-AclObservation -Path $programDataRoot
     }
     foreach ($name in 'config', 'data', 'cache', 'log') {
         $observations[$name] = Get-AclObservation -Path ([System.IO.Path]::Combine($programDataRoot, $name))

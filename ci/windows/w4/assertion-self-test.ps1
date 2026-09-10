@@ -111,22 +111,24 @@ function New-SyntheticObservation {
     $dataRootRules = [System.Collections.Generic.List[object]]::new()
     $null = $dataRootRules.Add([ordered]@{ sid = 'S-1-5-32-544'; rights = 0x1F01FF; type = 'Allow'; inherited = $false })
     $null = $dataRootRules.Add([ordered]@{ sid = 'S-1-5-18';     rights = 0x1F01FF; type = 'Allow'; inherited = $false })
-    if ($Mutation -ne 'acl-no-service-grant') {
-        $null = $dataRootRules.Add([ordered]@{ sid = $serviceSid; rights = 0x1301BF; type = 'Allow'; inherited = $false })
-    }
-    if ($Mutation -eq 'acl-not-protected' -or $Mutation -eq 'acl-users-write') {
-        $null = $dataRootRules.Add([ordered]@{ sid = 'S-1-5-32-545'; rights = 0x1301BF; type = 'Allow'; inherited = $false })
-    }
-    $dataRootProtected = ($Mutation -ne 'acl-not-protected')
+    $null = $dataRootRules.Add([ordered]@{ sid = $serviceSid; rights = 0x1301BF; type = 'Allow'; inherited = $false })
 
-    # The four state directories carry the data root's ACEs by inheritance --
-    # every ACE the authoring states is OICI -- so they are the same rows with
-    # `inherited` set, and their own protection flag is $false, which is what a
-    # directory that inherits looks like and is not what `dataRootInheritanceBroken`
-    # asks about.
-    $inheritedRules = @(foreach ($rule in $dataRootRules) {
-        [ordered]@{ sid = $rule.sid; rights = $rule.rights; type = $rule.type; inherited = $true }
-    })
+    # W4-A3-R2. The data root and the operator-tree directories carry SEPARATE
+    # descriptors now, and each is PROTECTED -- Windows Installer writes the
+    # DACL protected whatever the SDDL asks for, which is what run 34502732425
+    # measured and why the `acl-not-protected` control was withdrawn. So every
+    # ACE here is explicit and every directory reports protected; nothing in the
+    # operator tree inherits anything.
+    $stateRules = [System.Collections.Generic.List[object]]::new()
+    $null = $stateRules.Add([ordered]@{ sid = 'S-1-5-32-544'; rights = 0x1F01FF; type = 'Allow'; inherited = $false })
+    $null = $stateRules.Add([ordered]@{ sid = 'S-1-5-18';     rights = 0x1F01FF; type = 'Allow'; inherited = $false })
+    if ($Mutation -ne 'acl-no-service-grant') {
+        $null = $stateRules.Add([ordered]@{ sid = $serviceSid; rights = 0x1301BF; type = 'Allow'; inherited = $false })
+    }
+    if ($Mutation -eq 'acl-users-write') {
+        $null = $stateRules.Add([ordered]@{ sid = 'S-1-5-32-545'; rights = 0x1301BF; type = 'Allow'; inherited = $false })
+    }
+    $stateRules = @($stateRules)
 
     $acls = [ordered]@{
         installFolder = [ordered]@{
@@ -141,15 +143,20 @@ function New-SyntheticObservation {
         }
         dataRoot = [ordered]@{
             path = 'C:\ProgramData\Tesserafin'
-            protected = $dataRootProtected
+            protected = $true
             rules = @($dataRootRules)
+        }
+        server = [ordered]@{
+            path = $dataRoot
+            protected = $true
+            rules = $stateRules
         }
     }
     foreach ($name in @('config', 'data', 'cache', 'log')) {
         $acls[$name] = [ordered]@{
             path = (Join-W4Path -Root $dataRoot -Relative $name)
-            protected = $false
-            rules = $inheritedRules
+            protected = $true
+            rules = $stateRules
         }
     }
 
