@@ -53,12 +53,15 @@ WORKFLOW = REPO_ROOT / ".github" / "workflows" / "w4-windows-msi.yml"
 AUTHORING = REPO_ROOT / "packaging" / "windows" / "msi" / "Tesserafin.wxs"
 BUILDER = REPO_ROOT / "ci" / "windows" / "w4" / "build-msi.ps1"
 PROBE = REPO_ROOT / "ci" / "windows" / "w4" / "probe-msi-skeleton.ps1"
+PROBE_UPGRADE = REPO_ROOT / "ci" / "windows" / "w4" / "probe-msi-upgrade.ps1"
+INSTRUMENTS = REPO_ROOT / "ci" / "windows" / "w4" / "W4MsiInstruments.psm1"
 SELF_TEST = REPO_ROOT / "ci" / "windows" / "w4" / "assertion-self-test.ps1"
 PACKAGE_PROPS = REPO_ROOT / "Directory.Packages.props"
 A0_DOC = REPO_ROOT / "docs" / "distribution" / "W4-A0-wix-skeleton.md"
 A1_DOC = REPO_ROOT / "docs" / "distribution" / "W4-A1-upgradecode.md"
 A2_DOC = REPO_ROOT / "docs" / "distribution" / "W4-A2-service-recovery.md"
 A3_DOC = REPO_ROOT / "docs" / "distribution" / "W4-A3-programdata-acls.md"
+A4_DOC = REPO_ROOT / "docs" / "distribution" / "W4-A4-major-upgrade.md"
 
 # W4-A1 (#234). The owner ruling froze the GUID W4-A0 had already authored:
 # "Ordinal, lowercase, no braces. I do not authorize a new GUID." This is the
@@ -531,6 +534,15 @@ def without_comments(text: str, kind: str) -> str:
     """
     if kind == "xml":
         return re.sub(r"<!--.*?-->", "", text, flags=re.S)
+    if kind == "ps1":
+        # PowerShell has both forms and the probe uses both: `<# ... #>` for the
+        # comment-based help every function carries, and `#` for the rest. The
+        # block form goes first, so a `#` inside one is not counted as a line
+        # comment boundary.
+        stripped = re.sub(r"<#.*?#>", "", text, flags=re.S)
+        return "\n".join(
+            line for line in stripped.splitlines() if not line.lstrip().startswith("#")
+        )
     return "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
 
 
@@ -609,6 +621,14 @@ def findings_for_mutation(text: str) -> list[str]:
     if re.search(r"build-msi\.ps1", text):
         findings.append(
             "workflow: invokes build-msi.ps1 directly; the MSI under acceptance is built by the probe"
+        )
+    # W4-A4 (#234). The same affordance and the same rule. `-PatchBump` exists so
+    # the upgrade proof can build two packages from one commit; a workflow that
+    # chose the bump would be choosing the version of what is under acceptance.
+    if re.search(r"-PatchBump\b", text):
+        findings.append(
+            "workflow: passes -PatchBump, so the hosted acceptance may not be building the version "
+            "the commit declares"
         )
     return findings
 
@@ -826,6 +846,111 @@ def grade_authoring(
     )
 
 
+# W4-A4 (#234). The ruling is explicit about what this slice is NOT, and three
+# of those are checkable from the probe's own text before any runner time is
+# spent. `Start-Service` and `sc.exe start` would start the service the ruling
+# says not to start; a write to SharedVersion.cs would be the edit the ruling
+# forbids; and a repair would be a lifecycle path W4-A4 does not claim.
+FORBIDDEN_UPGRADE_PROBE_MARKERS = (
+    "Start-Service",
+    "sc.exe start",
+    "/f ",
+    "REINSTALL=",
+)
+
+# The W4-A4 document must not claim the stage above it. The ruling's "not this
+# slice" list ends with "claiming W4 accepted", and a document that said so
+# would be the finding -- the sentence, not the code, is what a later reader
+# acts on.
+W4_OVERCLAIM_PATTERNS = (
+    r"W4\s+is\s+accepted",
+    r"accepts?\s+W4\b",
+    r"W4\s+is\s+complete",
+)
+
+
+def findings_for_upgrade_probe(text: str) -> list[str]:
+    """W4-A4: the upgrade proof does what the ruling authorised, and no more.
+
+    `text` is comment-stripped, so the probe's own explanation of why it does
+    not start the service is not itself read as starting it.
+    """
+    findings: list[str] = []
+    for marker in FORBIDDEN_UPGRADE_PROBE_MARKERS:
+        if marker in text:
+            findings.append(
+                f"probe-msi-upgrade.ps1: '{marker.strip()}' -- W4-A4 does not start the service "
+                "and exercises no repair path"
+            )
+    # The FILE, not the word. The probe states `editedSharedVersion = $false` in
+    # its evidence, which is the assertion this gate exists to make checkable --
+    # not a thing the gate should refuse.
+    if "SharedVersion.cs" in text:
+        findings.append(
+            "probe-msi-upgrade.ps1: names SharedVersion.cs, but the ruling bumps the version only "
+            "through the builder's existing read and forbids touching that file"
+        )
+    # A and B, and the bump that separates them. Both literals have to be here:
+    # a probe that built both packages at the same version would be measuring a
+    # reinstall while reading like an upgrade.
+    if "-PatchBump 0" not in text:
+        findings.append("probe-msi-upgrade.ps1: never builds a package at the declared version")
+    if "-PatchBump 1" not in text:
+        findings.append("probe-msi-upgrade.ps1: never builds a package at a higher version")
+    # W0 §9.1: INSTALLFOLDER is a public property and the disposable prefix is
+    # how the runner's real %ProgramFiles% stays untouched. It has to be passed
+    # to BOTH installs -- this authoring carries no remember-property, so an
+    # upgrade that omitted it would relocate the binaries and the pair would
+    # measure two installations rather than one upgrade.
+    # EVERY install, not a count. The probe runs three `/i` msiexec calls -- A,
+    # B, and the record-only downgrade -- so "at least two mention it" stays
+    # green with one of them broken, which is precisely the defect this gate is
+    # for. Each argument array that installs is required to carry the property.
+    # Bounded by `-LogPath`, which every call in the probe passes, and NOT by the
+    # array's own closing parenthesis: the arguments interpolate PowerShell
+    # subexpressions that contain parentheses of their own, and a lazy match on
+    # `\)` stops inside the first one.
+    installs = re.findall(r"-Arguments\s+@\(\s*'/i'.*?-LogPath", text, re.S)
+    if not installs:
+        findings.append(
+            "probe-msi-upgrade.ps1: runs no msiexec install at all, so it exercises no upgrade"
+        )
+    for index, call in enumerate(installs, 1):
+        if "INSTALLFOLDER=" not in call:
+            findings.append(
+                f"probe-msi-upgrade.ps1: msiexec install {index} of {len(installs)} does not pass "
+                "INSTALLFOLDER. This authoring carries no remember-property, so an install that "
+                "omits it goes to the default location and the pair measures two installations "
+                "rather than one upgrade"
+            )
+    if FROZEN_UPGRADE_CODE not in text:
+        findings.append(
+            f"probe-msi-upgrade.ps1: never states the frozen UpgradeCode {FROZEN_UPGRADE_CODE}, so "
+            "'the UpgradeCode bytes did not move' is not a comparison against anything"
+        )
+    return findings
+
+
+def findings_for_upgrade_prose(a4_text: str) -> list[str]:
+    """W4-A4: the document records this slice and does not claim the stage."""
+    findings: list[str] = []
+    if "W4-A4" not in a4_text:
+        findings.append("W4-A4 document: does not cite the W4-A4 ruling it records")
+    if FROZEN_UPGRADE_CODE not in a4_text:
+        findings.append(
+            f"W4-A4 document: does not state the frozen UpgradeCode {FROZEN_UPGRADE_CODE}, which is "
+            "the one value the upgrade is measured against"
+        )
+    if "MajorUpgrade" not in a4_text:
+        findings.append("W4-A4 document: does not name MajorUpgrade, which is what this slice exercises")
+    for pattern in W4_OVERCLAIM_PATTERNS:
+        if re.search(pattern, a4_text, re.I):
+            findings.append(
+                f"W4-A4 document: claims the stage ('{pattern}'); the ruling excludes claiming W4 accepted"
+            )
+    return findings
+
+
 def findings_for_wiring(text: str) -> list[str]:
     """The two harnesses must actually run, or they are decoration."""
     findings: list[str] = []
@@ -835,6 +960,10 @@ def findings_for_wiring(text: str) -> list[str]:
         findings.append("workflow: never runs these controls")
     if "probe-msi-skeleton.ps1" not in text:
         findings.append("workflow: never runs the MSI proof")
+    # W4-A4. A probe the workflow never runs is decoration, exactly like a
+    # self-test nothing invokes.
+    if "probe-msi-upgrade.ps1" not in text:
+        findings.append("workflow: never runs the W4-A4 MajorUpgrade proof")
     return findings
 
 
@@ -854,6 +983,10 @@ def grade_everything(workflow_text: str) -> list[str]:
     return (
         grade(workflow_text)
         + findings_for_builder(BUILDER.read_text(encoding="utf-8"))
+        + findings_for_upgrade_probe(
+            without_comments(PROBE_UPGRADE.read_text(encoding="utf-8"), "ps1")
+        )
+        + findings_for_upgrade_prose(A4_DOC.read_text(encoding="utf-8"))
         + grade_authoring(
             AUTHORING.read_text(encoding="utf-8"),
             A0_DOC.read_text(encoding="utf-8"),
@@ -1227,6 +1360,63 @@ def run_authoring_self_test(
     return failures
 
 
+def self_test_upgrade(probe_text: str, a4_text: str) -> list[str]:
+    """W4-A4: every gate over the upgrade proof and its document must be reachable.
+
+    Each mutation below is a shape the ruling names as out of scope, or a way
+    the pair would stop being a pair. A gate none of them trips is a gate that
+    would not have caught the real thing either.
+    """
+    probe_mutations = {
+        "starts the service": lambda p: p.replace(
+            "$allPassed = $true", "Start-Service -Name $SERVICE_NAME\n$allPassed = $true", 1
+        ),
+        "repairs the installation": lambda p: p.replace(
+            "$allPassed = $true", '$null = @("/f ")\n$allPassed = $true', 1
+        ),
+        "edits the declared version": lambda p: p.replace(
+            "$allPassed = $true", "$null = 'SharedVersion.cs'\n$allPassed = $true", 1
+        ),
+        "both packages at one version": lambda p: p.replace("-PatchBump 1", "-PatchBump 0"),
+        "the upgrade forgets INSTALLFOLDER": lambda p: p.replace("INSTALLFOLDER=", "PREFIX=", 1),
+        "no frozen UpgradeCode to compare against": lambda p: p.replace(
+            FROZEN_UPGRADE_CODE, "a GUID chosen at release time"
+        ),
+    }
+    doc_mutations = {
+        "document claims the stage": lambda d: d + "\n\nW4 is accepted.\n",
+        "document drops the frozen UpgradeCode": lambda d: d.replace(
+            FROZEN_UPGRADE_CODE, "the frozen GUID"
+        ),
+        "document never names MajorUpgrade": lambda d: d.replace("MajorUpgrade", "the upgrade"),
+    }
+
+    failures: list[str] = []
+    for name, mutate in probe_mutations.items():
+        mutated = mutate(probe_text)
+        if mutated == probe_text:
+            failures.append(f"self-test '{name}': the mutation did not change the probe")
+            continue
+        if not findings_for_upgrade_probe(without_comments(mutated, "ps1")):
+            failures.append(f"self-test '{name}': the upgrade-probe gate did not fire")
+        else:
+            print(f"  control OK   {name}")
+    for name, mutate in doc_mutations.items():
+        mutated = mutate(a4_text)
+        if mutated == a4_text:
+            failures.append(f"self-test '{name}': the mutation did not change the document")
+            continue
+        if not findings_for_upgrade_prose(mutated):
+            failures.append(f"self-test '{name}': the W4-A4 prose gate did not fire")
+        else:
+            print(f"  control OK   {name}")
+    if not failures:
+        print(
+            f"  {len(probe_mutations) + len(doc_mutations)} W4-A4 controls, all RED as declared"
+        )
+    return failures
+
+
 def self_test(workflow_text: str) -> list[str]:
     """Every gate above must be reachable. A gate nothing can trip is not a gate."""
     mutations = {
@@ -1243,6 +1433,13 @@ def self_test(workflow_text: str) -> list[str]:
             1,
         ),
         "self-test dropped": lambda t: t.replace("assertion-self-test.ps1", "nothing.ps1"),
+        # W4-A4 (#234)
+        "upgrade proof dropped": lambda t: t.replace("probe-msi-upgrade.ps1", "nothing.ps1"),
+        "acceptance chooses the version": lambda t: t.replace(
+            "        run: |",
+            "        run: |\n          ./ci/windows/w4/probe-msi-upgrade.ps1 -PatchBump 1",
+            1,
+        ),
     }
     failures: list[str] = []
     for name, mutate in mutations.items():
@@ -1264,7 +1461,8 @@ def main() -> int:
     parser.add_argument("--self-test", action="store_true", help="also prove each gate can fire")
     options = parser.parse_args()
 
-    for required in (WORKFLOW, AUTHORING, BUILDER, PROBE, SELF_TEST, A0_DOC, A1_DOC, A2_DOC, A3_DOC):
+    for required in (WORKFLOW, AUTHORING, BUILDER, PROBE, PROBE_UPGRADE, INSTRUMENTS, SELF_TEST,
+                     A0_DOC, A1_DOC, A2_DOC, A3_DOC, A4_DOC):
         if not required.is_file():
             print(f"W4 CONTROLS REFUSED: missing {required.relative_to(REPO_ROOT)}")
             return 1
@@ -1272,7 +1470,7 @@ def main() -> int:
     workflow_text = WORKFLOW.read_text(encoding="utf-8")
     findings = grade_everything(workflow_text)
 
-    print("W4-A0 / W4-A2 / W4-A3 static controls")
+    print("W4-A0 / W4-A2 / W4-A3 / W4-A4 static controls")
     if findings:
         for finding in findings:
             print(f"  FINDING  {finding}")
@@ -1292,6 +1490,9 @@ def main() -> int:
         failures += self_test_upgrade_code(*documents)
         failures += self_test_failure_actions(*documents)
         failures += self_test_acls(*documents)
+        failures += self_test_upgrade(
+            PROBE_UPGRADE.read_text(encoding="utf-8"), A4_DOC.read_text(encoding="utf-8")
+        )
     for failure in failures:
         print(f"  FINDING  {failure}")
 

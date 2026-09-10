@@ -18,6 +18,27 @@
 # reused as a later input -- is a property of the authored files and is measured
 # by `ci/windows/w4/msi-controls.py` before any runner time is spent.
 #
+# W4-A4 (#234) adds a SECOND job, `msi-upgrade`, and changes nothing about the
+# first. It proves one more thing, which is the thing the W4-A4 ruling
+# authorises:
+#
+#   installing a package, writing sentinels into the four %ProgramData% state
+#   directories, and installing a second package built from the SAME authoring
+#   with the same UpgradeCode and a higher Version leaves the binaries under
+#   INSTALLFOLDER replaced, the sentinels intact, the service registered and
+#   Stopped with the W0 §4 binPath, and the W0 §9.3 descriptors still in force.
+#
+# Five hostile controls run beside it. Three are live pairs -- a second package
+# that redelivers the first's executable, one that empties the state
+# directories, one that registers no service. Two are table controls: a package
+# really built from this authoring, one cell of one table changed in a copy, and
+# deliberately never installed, because installing either would grade the
+# control by an outcome that is not the defect. `ci/windows/w4/probe-msi-upgrade.ps1`
+# says why, at length, and the evidence records which controls installed nothing.
+#
+# The two jobs are independent. Neither consumes the other's output, nothing is
+# uploaded, and each assembles its own package from the pull request head.
+#
 # The package under test is assembled IN THIS JOB from the pull request head,
 # through the frozen W2-A2 assembler, and is never uploaded. What is consumed by
 # accepted digest is what W2 pins -- the Web payload and the FFmpeg runtime --
@@ -31,8 +52,9 @@
 #     are not bit-for-bit and accepted a bounded exception; nothing here builds
 #     the same package twice or compares digests;
 #   * it signs nothing and creates no certificate;
-#   * it exercises no upgrade, repair or Add/Remove Programs path beyond what
-#     `MajorUpgrade` emits by default;
+#   * it exercises no repair, advertised repair or Add/Remove Programs path.
+#     Since W4-A4 (#234) the `msi-upgrade` job below DOES exercise the upgrade
+#     path -- that is the whole of what it adds -- and it exercises nothing else;
 #   * it applies none of the W0 §9.3 ACLs;
 #   * it uploads no artifact, publishes nothing, and creates no tag or release;
 #   * it edits, copies or vendors none of the W1/W2/W3 files it runs;
@@ -267,4 +289,189 @@ jobs:
           # which is the SUCCESSFUL outcome of a cleanup step. The runner appends
           # `exit $LASTEXITCODE` to every pwsh step, so without this the step
           # reports the absence of leftover state as a failure.
+          exit 0
+
+  msi-upgrade:
+    name: Replace the binaries and keep the state across a MajorUpgrade
+    runs-on: windows-latest
+    # One runtime pull, one Web pull, one self-contained publish, one pack, then
+    # five `wix build` runs over a payload of a few thousand files, eight full
+    # msiexec installs and four uninstalls.
+    timeout-minutes: 200
+    permissions:
+      contents: read
+      # The entire write surface of this job. Read only, job scoped, and needed
+      # only because the frozen assembler pulls the accepted Web payload image
+      # with the job's own token -- byte for byte what `msi-skeleton` asks for,
+      # and for the same reason.
+      packages: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: ${{ env.SDK_VERSION }}
+
+      - name: Record the runner's interpreters
+        id: tools
+        shell: pwsh
+        run: |
+          $python = (Get-Command python -CommandType Application | Select-Object -First 1).Source
+          if (-not $python) { throw 'no python on this runner' }
+          "python=$python" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "PowerShell $($PSVersionTable.PSVersion), .NET $([System.Environment]::Version)"
+          if ($PSVersionTable.PSVersion.Major -lt 7) {
+            throw "W4-A4 HARD STOP: this job needs PowerShell 7 or newer; it has $($PSVersionTable.PSVersion)"
+          }
+          & $python --version
+          & dotnet --version
+
+      - name: Install the pinned YAML parser
+        shell: pwsh
+        run: |
+          & '${{ steps.tools.outputs.python }}' -m pip install --disable-pip-version-check --quiet pyyaml==6.0.2
+          if ($LASTEXITCODE -ne 0) { throw 'W4-A4 HARD STOP: could not install the pinned PyYAML' }
+          & '${{ steps.tools.outputs.python }}' -c "import yaml; print(f'PyYAML {yaml.__version__}')"
+
+      # The controls that need no package. They run first here for the same
+      # reason they run first in the job above: a grader that cannot tell its own
+      # controls apart is a finding three hours of runner time would not make any
+      # truer.
+      - name: The controls that need no runner
+        shell: pwsh
+        run: |
+          & '${{ steps.tools.outputs.python }}' ci/windows/w4/msi-controls.py --self-test
+          if ($LASTEXITCODE -ne 0) { throw 'the W4 static controls found something' }
+
+      - name: Prove the grader is not inert
+        shell: pwsh
+        run: |
+          ./ci/windows/w4/assertion-self-test.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'the W4 assertion self-test failed' }
+
+      - name: Make the corresponding-source verifier available
+        shell: pwsh
+        run: |
+          $zstd = Get-Command zstd -CommandType Application -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+          if ($zstd) {
+            "zstd $((& $zstd.Source --version) -join ' ')"
+            exit 0
+          }
+          $fallback = Join-Path $env:ProgramFiles 'Git\usr\bin\zstd.exe'
+          if (Test-Path -LiteralPath $fallback) {
+            (Split-Path -Parent $fallback) | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+            "zstd taken from Git for Windows at $fallback"
+            exit 0
+          }
+          throw 'W4-A4 HARD STOP: this runner has no zstd, so the corresponding source cannot be verified'
+
+      - name: Install the pinned ORAS
+        shell: bash
+        run: ./ci/windows/build-inputs/install-oras.sh windows-amd64 "${RUNNER_TEMP}/bin"
+
+      - name: Install the pinned WiX toolset
+        shell: pwsh
+        run: |
+          & dotnet tool install --global wix --version $env:WIX_VERSION *> $null
+          $raw = (& wix --version 2>&1 | Out-String)
+          $reported = (@($raw -split "\r?\n" | Where-Object { $_.Trim() -match '^[0-9]+\.[0-9]+\.[0-9]+' }) |
+            Select-Object -First 1)
+          if (-not $reported) { throw "W4-A4 HARD STOP: wix reported no version: $($raw.Trim())" }
+          $reported = $reported.Trim()
+          if (-not $reported.StartsWith($env:WIX_VERSION)) {
+            throw "W4-A4 HARD STOP: asked for WiX $($env:WIX_VERSION) and got '$reported'"
+          }
+          "wix $reported"
+
+      - name: Derive SOURCE_DATE_EPOCH from the commit
+        id: epoch
+        shell: pwsh
+        run: |
+          $commit = (& git rev-parse HEAD).Trim()
+          if ($commit -notmatch '^[0-9a-f]{40}$') { throw "not a commit: $commit" }
+          $epoch = (& git log -1 --format=%ct $commit).Trim()
+          if ($epoch -notmatch '^[1-9][0-9]*$') { throw "no committer time for $commit" }
+          "commit=$commit" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "epoch=$epoch"   | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "commit            : $commit"
+          "SOURCE_DATE_EPOCH : $epoch"
+
+      # The real thing: one accepted package, five MSIs, six A -> B pairs.
+      - name: Install A, write sentinels, upgrade to B, with five hostile controls
+        shell: pwsh
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./ci/windows/w4/probe-msi-upgrade.ps1 `
+            -RepoRoot $PWD `
+            -WorkDir (Join-Path $env:RUNNER_TEMP 'w4a4/work') `
+            -InstallPrefix (Join-Path $env:RUNNER_TEMP 'w4a4/prefix') `
+            -EvidencePath (Join-Path $env:RUNNER_TEMP 'w4a4/msi-upgrade.json') `
+            -SourceDateEpoch ${{ steps.epoch.outputs.epoch }} `
+            -OrasPath (Join-Path $env:RUNNER_TEMP 'bin\oras.exe') `
+            -HeadSha '${{ steps.epoch.outputs.commit }}' `
+            -PythonPath '${{ steps.tools.outputs.python }}'
+          if ($LASTEXITCODE -ne 0) { throw 'the W4-A4 MajorUpgrade proof refused' }
+
+      # The ruling's report line. Printed rather than left inside an evidence
+      # file nobody opens: the document records predicates, exit codes and
+      # digests only -- no host path beyond the two the probe was given, and no
+      # run identifier -- so it can be printed whole.
+      - name: Report the six pairs
+        if: always()
+        shell: pwsh
+        run: |
+          $evidencePath = Join-Path $env:RUNNER_TEMP 'w4a4/msi-upgrade.json'
+          if (-not (Test-Path -LiteralPath $evidencePath)) {
+            throw 'the proof wrote no evidence document'
+          }
+          $evidence = Get-Content -LiteralPath $evidencePath -Raw | ConvertFrom-Json
+          $evidence | ConvertTo-Json -Depth 12
+
+          if ($evidence.signed) { throw 'this slice signs nothing' }
+          if ($evidence.published) { throw 'this slice publishes nothing' }
+          if ($evidence.startedTheService) { throw 'this slice does not start the service' }
+          if ($evidence.exercisedRepair) { throw 'this slice exercises no repair path' }
+          if ($evidence.editedSharedVersion) { throw 'this slice does not edit SharedVersion.cs' }
+          if ($evidence.installedASecondProduct) {
+            throw 'this slice installs no second product beside the first'
+          }
+          if (-not $evidence.exercisedMajorUpgrade) { throw 'W4-A4 exercises MajorUpgrade' }
+
+          # The one row a reader of the run should not have to open the document
+          # to find: what the real pair did to the service the upgrade kept.
+          $real = $evidence.runs.'none'
+          "real pair: msiexec /i B over A exited $($real.upgradeExit); service $($real.serviceState)"
+          "           binPath $($real.serviceImagePath)"
+          "           exe after A $($real.installedExeAfterA)"
+          "           exe after B $($real.installedExeAfterB)"
+          "           downgrade A over B exited $($real.downgradeExit) (recorded, not graded)"
+
+      - name: Leave no service and no installed product behind
+        if: always()
+        shell: pwsh
+        run: |
+          & sc.exe stop Tesserafin *> $null
+          & sc.exe delete Tesserafin *> $null
+          Get-Process -Name 'tesserafin' -ErrorAction SilentlyContinue |
+            Stop-Process -Force -ErrorAction SilentlyContinue
+          $prefix = Join-Path $env:RUNNER_TEMP 'w4a4/prefix'
+          if (Test-Path -LiteralPath $prefix) {
+            Remove-Item -LiteralPath $prefix -Recurse -Force -ErrorAction SilentlyContinue
+          }
+          # W4-A4 removes these two as well as the prefix. They are what the
+          # retained-state components deliberately leave behind, and a run that
+          # left them would make the NEXT run's first pair measure state it did
+          # not create -- which reads like a defect in the proof rather than like
+          # leftover state.
+          $dataRoot = Join-Path $env:ProgramData 'Tesserafin'
+          if (Test-Path -LiteralPath $dataRoot) {
+            Remove-Item -LiteralPath $dataRoot -Recurse -Force -ErrorAction SilentlyContinue
+          }
+          Remove-Item -LiteralPath 'HKLM:\SOFTWARE\Tesserafin' -Recurse -Force -ErrorAction SilentlyContinue
+          'cleanup complete'
           exit 0
