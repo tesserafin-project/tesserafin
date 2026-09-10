@@ -523,6 +523,22 @@ function Get-W4Predicates {
     $predicates['installFolderServiceCannotWrite'] =
         (Test-W4NoWriteFor -Acl $installFolderAcl -Sids @($script:ServiceAccountSid))
 
+    # W4-A3-R1 (#234). These three used to be inherited from the runner's temp
+    # tree under a disposable prefix, so grading them would have graded
+    # RUNNER_TEMP and the probe only recorded them. Run 34500789866 measured
+    # that a descriptor applied through MsiLockPermissionsEx becomes the
+    # object's WHOLE DACL -- the install died 1310 for exactly that reason --
+    # so the package authors these rows itself now, and what the package
+    # authors is graded.
+    $predicates['installFolderAdministratorsHaveFull'] =
+        (Test-W4Grants -Acl $installFolderAcl -Sid $script:SidAdministrators `
+            -Required $script:RightsFullControl)
+    $predicates['installFolderSystemHasFull'] =
+        (Test-W4Grants -Acl $installFolderAcl -Sid $script:SidLocalSystem `
+            -Required $script:RightsFullControl)
+    $predicates['installFolderUsersHaveNoWrite'] =
+        (Test-W4NoWriteFor -Acl $installFolderAcl -Sids $script:UnprivilegedSids)
+
     # The whole slice, in one bit: a protected DACL at %ProgramData%\Tesserafin\
     # so the permissive parent cannot widen access to the database.
     $predicates['dataRootInheritanceBroken'] =

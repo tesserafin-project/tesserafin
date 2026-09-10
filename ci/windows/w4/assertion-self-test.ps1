@@ -99,11 +99,12 @@ function New-SyntheticObservation {
     # and OrderedDictionary has no `ContainsKey` at all -- a grader written
     # against hashtables passes this file and dies on the runner.
     #
-    # `installFolder` is deliberately NOT given Administrators, SYSTEM or Users
-    # rows. Under the disposable prefix those are inherited from the runner's
-    # temp tree and not from %ProgramFiles%, the probe records them as evidence
-    # and no predicate grades them, so inventing them here would be inventing an
-    # answer to a question nothing asks.
+    # `installFolder` carries Administrators, SYSTEM and `Users` rows since
+    # W4-A3-R1 (#234), and they are EXPLICIT. They used to be inherited from the
+    # runner's temp tree, which is why nothing graded them; the package now
+    # authors them, because a descriptor applied through MsiLockPermissionsEx
+    # becomes the object's whole DACL and the rows a %ProgramFiles% directory
+    # already has do not survive it.
     $serviceSid = 'S-1-5-80-761762137-1691453069-3789821951-3290391601-3361247659'
     $installFolderMask = $(if ($Mutation -eq 'acl-install-writable') { 0x1301BF } else { 0x1200A9 })
 
@@ -131,7 +132,12 @@ function New-SyntheticObservation {
         installFolder = [ordered]@{
             path = $prefix
             protected = $false
-            rules = @([ordered]@{ sid = $serviceSid; rights = $installFolderMask; type = 'Allow'; inherited = $false })
+            rules = @(
+                [ordered]@{ sid = 'S-1-5-32-544'; rights = 0x1F01FF; type = 'Allow'; inherited = $false }
+                [ordered]@{ sid = 'S-1-5-18';     rights = 0x1F01FF; type = 'Allow'; inherited = $false }
+                [ordered]@{ sid = 'S-1-5-32-545'; rights = 0x1200A9; type = 'Allow'; inherited = $false }
+                [ordered]@{ sid = $serviceSid;    rights = $installFolderMask; type = 'Allow'; inherited = $false }
+            )
         }
         dataRoot = [ordered]@{
             path = 'C:\ProgramData\Tesserafin'

@@ -148,20 +148,22 @@ then fails because the four `Permanent` components keep the tree from being
 empty, and the directory and its descriptor both survive: the behaviour W0 §10
 asks for.
 
-### 4.2 INSTALLFOLDER — read and execute, not protected
+### 4.2 INSTALLFOLDER — the whole DACL, read and execute for the service
 
 ```
-D:(A;OICI;0x1200a9;;;S-1-5-80-761762137-1691453069-3789821951-3290391601-3361247659)
+D:(A;OICI;0x1f01ff;;;BA)(A;OICI;0x1f01ff;;;SY)(A;OICI;0x1200a9;;;BU)(A;OICI;0x1200a9;;;S-1-5-80-761762137-1691453069-3789821951-3290391601-3361247659)
 ```
 
-One ACE, and no write bit in it. W0 §9.3's reason is stated in the table itself:
-the service must not be able to rewrite its own binaries or its own FFmpeg.
+The last ACE is the row W0 §9.3 is about: no write bit in it, because the
+service must not be able to rewrite its own binaries or its own FFmpeg. The
+three before it are the rows every `%ProgramFiles%` directory already has, and
+they are authored here because **W4-A3-R1 measured that they are not
+inherited** — see §9.
 
-It is deliberately **unprotected**. W0 §9.3 breaks inheritance at
-`%ProgramData%\Tesserafin\` and **nowhere else**, and a protected descriptor here
-would replace whatever the parent grants Administrators, SYSTEM and `Users` with
-whatever this file happened to say. `MsiLockPermissionsEx` applied without `P`
-adds the ACE and leaves inheritance alone.
+It is still written **without `P`**. W0 §9.3 breaks inheritance at
+`%ProgramData%\Tesserafin\` and **nowhere else**, so that is what the authoring
+asks for; whether Windows Installer protects it anyway is now read back off the
+live object and reported rather than assumed.
 
 It hangs off a `CreateFolder`, not off the `File` element beside it, because the
 contract is about the **directory**: the payload is thousands of harvested files
@@ -187,11 +189,11 @@ prefix the W4-A0 ruling asked for. Every ACL graded under `%ProgramData%` is
 therefore graded on the real `%ProgramData%\Tesserafin` tree an operator would
 get, and the §4 argument list that is measured is the one an operator gets.
 
-The consequence for `INSTALLFOLDER` is stated rather than hidden. Under a
-disposable prefix its Administrators, SYSTEM and `Users` rows are inherited from
-the runner's temp tree and **not** from `%ProgramFiles%`, so they are **recorded
-as evidence and not graded** — grading them would grade `RUNNER_TEMP`. What *is*
-graded there is the one row the package itself authors: the service account's.
+Under a disposable prefix `INSTALLFOLDER`'s Administrators, SYSTEM and `Users`
+rows used to be inherited from the runner's temp tree rather than from
+`%ProgramFiles%`, so grading them would have graded `RUNNER_TEMP` and the probe
+only recorded them. Since **W4-A3-R1** the package authors all three itself
+(§4.2), so they are the package's own statement and all three are graded.
 
 ### 5.1 The predicates
 
@@ -199,6 +201,9 @@ graded there is the one row the package itself authors: the service account's.
 | --- | --- |
 | `installFolderServiceCanReadAndExecute` | the service account's allow mask covers `0x1200a9` |
 | `installFolderServiceCannotWrite` | it carries no bit that would let the holder change anything |
+| `installFolderAdministratorsHaveFull` | `S-1-5-32-544` has full control |
+| `installFolderSystemHasFull` | `S-1-5-18` has full control |
+| `installFolderUsersHaveNoWrite` | no unprivileged identity has a write bit |
 | `dataRootInheritanceBroken` | `%ProgramData%\Tesserafin` reports `AreAccessRulesProtected` |
 | `stateDirectoriesServiceHasModify` | all four of `config`, `data`, `cache`, `log` grant the service account `0x1301bf` |
 | `stateDirectoriesAdministratorsHaveFull` | all four grant `S-1-5-32-544` full control |
@@ -311,27 +316,58 @@ package keeps both and only this script removes them.
 
 ---
 
-## 9. The residual uncertainty, stated
+## 9. What the first hosted run measured (W4-A3-R1)
 
-Whether Windows Installer honours the `P` in an `MsiLockPermissionsEx` SDDL —
-that is, whether it passes `PROTECTED_DACL_SECURITY_INFORMATION` to
-`SetNamedSecurityInfo` when the descriptor asks for it — is the one thing this
-authoring cannot establish before a runner sees it. It is also the reason
-`MsiLockPermissionsEx` is documented as preferable to `LockPermissions`, which
-always discards inherited permissions and offers no choice.
+W4-A3 first authored the INSTALLFOLDER descriptor as the service account's ACE
+alone, on the reading that an **unprotected** `MsiLockPermissionsEx` descriptor
+*adds* an ACE and leaves the inherited Administrators and SYSTEM rows in place.
+§9 of the first draft named that as the one thing the authoring could not
+establish before a runner saw it.
 
-So it is measured rather than asserted, and it is measured in a way that leaves
-evidence either way: the probe **prints the full live ACL of all six directories
-for every mutation, before anything is graded**. A run that refuses still leaves
-the SID, the rights and the protection flag in the log, which is what the ruling
-asks for.
+Run **34500789866** established it. Two seconds into `InstallFinalize`, on the
+first payload file:
 
----
+```
+Product: Tesserafin Server -- Error 1310. Error writing to file:
+  D:\a\_temp\w4a0\prefix\none\ATL.dll.  System error 0.
+  Verify that you have access to that directory.
+Action ended: InstallFinalize. Return value 3.
+MainEngineThread is returning 1603
+```
+
+The standard sequence runs `CreateFolders` before `InstallFiles`. By the time
+the first of 2,871 files was copied, the directory granted nobody but the
+service account, and the installer could not write its own payload. The run
+refused at mutation `none`, and no ACL was ever read.
+
+**What that proves, whatever Windows Installer does with the protection flag:
+the DACL the object ends up with is exactly the SDDL authored, and nothing
+else.** The repair follows from that alone and is the whole of W4-A3-R1: state
+the complete descriptor (§4.2), and grade the three rows it now authors (§5.1).
+
+One question is left open, and it is now measured rather than assumed. If
+Windows Installer protects every object it applies a descriptor to — regardless
+of the SDDL's `P` — then `dataRootInheritanceBroken` is a property this
+mechanism cannot fail to have, and the first predicate `acl-not-protected`
+declares would be unfalsifiable. The probe reads `AreAccessRulesProtected` back
+off **every** measured directory, including `INSTALLFOLDER`, whose descriptor
+asks for no protection at all. The two answers together settle it:
+
+* `INSTALLFOLDER` reports **not** protected → the flag is honoured, and
+  `acl-not-protected` is a sound control;
+* `INSTALLFOLDER` reports **protected** → the flag is forced,
+  `dataRootInheritanceBroken` is satisfied by the mechanism rather than by the
+  authoring, and that control needs a different shape or an explicit note that
+  it cannot fail.
+
+Either way the evidence is in the log: the probe **prints the full live ACL of
+all six directories for every mutation, before anything is graded**.
 
 ## 10. Provenance
 
 * Tracker: #234. Not closed by this slice.
-* Ruling: **W4-A3 PROGRAMDATA ACLS** on #234.
+* Ruling: **W4-A3 PROGRAMDATA ACLS** on #234, as amended by
+  **W4-A3-WORKFLOW GUARD** and **W4-A3-R1**.
 * Base: `fc31d06a093e3c4f072a29be124b7c7edf1848d5` (W4-A2, accepted).
 * Files: `packaging/windows/msi/Tesserafin.wxs`, `ci/windows/w4/**`, this
   document.

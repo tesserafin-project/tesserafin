@@ -379,13 +379,34 @@ def findings_for_acls(text: str) -> list[str]:
                         "account, an administrative identity, or one of the unprivileged "
                         "identities a control is allowed to plant"
                     )
-            if name == "DataRootSddl":
-                for who, label in ((SID_ADMINISTRATORS, "Administrators"), (SID_LOCAL_SYSTEM, "SYSTEM")):
-                    if allow_mask_for(aces, {who}) & RIGHTS_FULL_CONTROL != RIGHTS_FULL_CONTROL:
-                        findings.append(
-                            f"authoring: {name} '{value}' does not grant {label} Full. W0 §9.3 "
-                            "requires it of every variant, so no control reddens it as collateral"
-                        )
+            # W0 §9.3 requires Administrators and SYSTEM Full on ALL of the
+            # paths, and W4-A3-R1 (#234) made that an invariant of every
+            # variant of BOTH descriptors rather than of the data root alone.
+            # Run 34500789866 measured why: a descriptor applied through
+            # MsiLockPermissionsEx becomes the object's WHOLE DACL, so an
+            # INSTALLFOLDER descriptor that omits SYSTEM leaves the installer
+            # unable to write its own payload and the install dies 1310 into
+            # 1603, two seconds into InstallFinalize, with 2871 files staged.
+            for who, label in ((SID_ADMINISTRATORS, "Administrators"), (SID_LOCAL_SYSTEM, "SYSTEM")):
+                if allow_mask_for(aces, {who}) & RIGHTS_FULL_CONTROL != RIGHTS_FULL_CONTROL:
+                    findings.append(
+                        f"authoring: {name} '{value}' does not grant {label} Full. W0 §9.3 "
+                        "requires it of every variant, so no control reddens it as collateral, "
+                        "and an installer that cannot write to the directory it is installing "
+                        "into refuses the whole package"
+                    )
+            # Scoped to INSTALLFOLDER on purpose. Two of the data-root controls
+            # plant a `Users` Modify ACE deliberately -- that IS their declared
+            # defect -- so the same assertion there would redden the authoring
+            # for carrying its own controls. No authorised control plants one
+            # here, so here it is an invariant.
+            if name == "InstallFolderSddl" and (
+                allow_mask_for(aces, UNPRIVILEGED_SDDL_SIDS) & RIGHTS_WRITE_MASK
+            ):
+                findings.append(
+                    f"authoring: {name} '{value}' grants an unprivileged identity a write bit "
+                    "under INSTALLFOLDER, which no variant may do"
+                )
 
     findings += findings_for_real_descriptors(defines, sid)
     return findings
@@ -406,7 +427,17 @@ def findings_for_real_descriptors(defines: dict[str, list[str]], sid: str) -> li
             f"(A;OICI;0x{RIGHTS_FULL_CONTROL:x};;;{SID_LOCAL_SYSTEM})"
             f"(A;OICI;0x{RIGHTS_MODIFY:x};;;{sid})"
         ),
-        "InstallFolderSddl": f"D:(A;OICI;0x{RIGHTS_READ_EXECUTE:x};;;{sid})",
+        # W4-A3-R1 (#234): the WHOLE DACL, not the one row §9.3 is about. A
+        # descriptor applied through MsiLockPermissionsEx replaces everything,
+        # so Administrators, SYSTEM and `Users` are authored here rather than
+        # left to the inheritance that run 34500789866 proved does not survive.
+        "InstallFolderSddl": (
+            "D:"
+            f"(A;OICI;0x{RIGHTS_FULL_CONTROL:x};;;{SID_ADMINISTRATORS})"
+            f"(A;OICI;0x{RIGHTS_FULL_CONTROL:x};;;{SID_LOCAL_SYSTEM})"
+            f"(A;OICI;0x{RIGHTS_READ_EXECUTE:x};;;BU)"
+            f"(A;OICI;0x{RIGHTS_READ_EXECUTE:x};;;{sid})"
+        ),
     }
     for name, contract in contracts.items():
         occurrences = defines[name].count(contract)
@@ -1003,7 +1034,13 @@ def self_test_acls(
         f"(A;OICI;0x{RIGHTS_FULL_CONTROL:x};;;{SID_LOCAL_SYSTEM})"
         f"(A;OICI;0x{RIGHTS_MODIFY:x};;;{sid})"
     )
-    real_install = f"D:(A;OICI;0x{RIGHTS_READ_EXECUTE:x};;;{sid})"
+    real_install = (
+        "D:"
+        f"(A;OICI;0x{RIGHTS_FULL_CONTROL:x};;;{SID_ADMINISTRATORS})"
+        f"(A;OICI;0x{RIGHTS_FULL_CONTROL:x};;;{SID_LOCAL_SYSTEM})"
+        f"(A;OICI;0x{RIGHTS_READ_EXECUTE:x};;;BU)"
+        f"(A;OICI;0x{RIGHTS_READ_EXECUTE:x};;;{sid})"
+    )
 
     def swap(old: str, new: str):
         return lambda a, d0, d1, d2, d3: (a.replace(old, new, 1), d0, d1, d2, d3)
@@ -1039,7 +1076,33 @@ def self_test_acls(
             sid, service_account_sid("TesserafinServer")
         ),
         "INSTALLFOLDER grants the service Modify": swap_real(
-            "InstallFolderSddl", real_install, f"D:(A;OICI;0x{RIGHTS_MODIFY:x};;;{sid})"
+            "InstallFolderSddl",
+            real_install,
+            real_install.replace(
+                f"(A;OICI;0x{RIGHTS_READ_EXECUTE:x};;;{sid})",
+                f"(A;OICI;0x{RIGHTS_MODIFY:x};;;{sid})",
+                1,
+            ),
+        ),
+        # W4-A3-R1 (#234): the shape that took the install down. A descriptor
+        # applied through MsiLockPermissionsEx becomes the object's whole DACL,
+        # so an INSTALLFOLDER descriptor without SYSTEM leaves the installer
+        # unable to write its own payload.
+        "INSTALLFOLDER drops SYSTEM": swap_real(
+            "InstallFolderSddl",
+            real_install,
+            real_install.replace(
+                f"(A;OICI;0x{RIGHTS_FULL_CONTROL:x};;;{SID_LOCAL_SYSTEM})", "", 1
+            ),
+        ),
+        "INSTALLFOLDER hands Users a write bit": swap_real(
+            "InstallFolderSddl",
+            real_install,
+            real_install.replace(
+                f"(A;OICI;0x{RIGHTS_READ_EXECUTE:x};;;BU)",
+                f"(A;OICI;0x{RIGHTS_MODIFY:x};;;BU)",
+                1,
+            ),
         ),
         "INSTALLFOLDER is protected too": swap_real(
             "InstallFolderSddl", real_install, "D:P" + real_install[2:]

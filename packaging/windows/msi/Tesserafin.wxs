@@ -40,13 +40,19 @@
                                  and every ACE is `OICI` so the four state
                                  directories W0 §9.1 names inherit it.
 
-    INSTALLFOLDER                an UNPROTECTED descriptor carrying one ACE:
-                                 `NT SERVICE\Tesserafin`, read and execute, and
-                                 no write bit at all. W0 §9.3 is explicit that
-                                 the service must not be able to rewrite its own
-                                 binaries or its own FFmpeg. Inheritance is
-                                 deliberately left alone here, because W0 §9.3
-                                 breaks it at `%ProgramData%\Tesserafin\` and
+    INSTALLFOLDER                an UNPROTECTED descriptor. The row W0 §9.3 is
+                                 about is `NT SERVICE\Tesserafin`, read and
+                                 execute, no write bit at all, because the
+                                 service must not be able to rewrite its own
+                                 binaries or its own FFmpeg. Administrators and
+                                 SYSTEM Full and `Users` read and execute are
+                                 authored beside it: W4-A3-R1 measured that a
+                                 descriptor applied through this table becomes
+                                 the object's WHOLE DACL, so the rows a
+                                 %ProgramFiles% directory already has do not
+                                 survive it and have to be stated. `P` is still
+                                 not asked for, because W0 §9.3 breaks
+                                 inheritance at `%ProgramData%\Tesserafin\` and
                                  nowhere else.
 
   The account is named by SID, not by name: `NT SERVICE\Tesserafin` is a virtual
@@ -189,19 +195,49 @@
     <?define DataRootSddl = "D:P(A;OICI;0x1f01ff;;;BA)(A;OICI;0x1f01ff;;;SY)(A;OICI;0x1301bf;;;S-1-5-80-761762137-1691453069-3789821951-3290391601-3361247659)" ?>
   <?endif ?>
 
-  <!-- The real descriptor for INSTALLFOLDER: one ACE, read and execute, no
-       write bit. It is deliberately NOT protected. W0 §9.3 breaks inheritance
-       at `%ProgramData%\Tesserafin\` and nowhere else, and a protected
-       descriptor here would replace whatever the parent grants Administrators,
-       SYSTEM and Users with whatever this file happened to say. -->
+  <!-- The real descriptor for INSTALLFOLDER. The service account's ACE is the
+       row W0 §9.3 is about: read and execute, and no write bit, so the service
+       cannot rewrite its own binaries or its own FFmpeg. The three rows before
+       it are the ones every %ProgramFiles% directory already has, and they are
+       authored here because W4-A3-R1 (#234) measured that they are NOT
+       inherited.
+
+       W4-A3 first authored this as the service ACE alone, on the reading that
+       an unprotected descriptor ADDS an ACE and leaves what the parent grants
+       Administrators and SYSTEM in place. Run 34500789866 measured otherwise:
+       the standard sequence runs CreateFolders before InstallFiles, and two
+       seconds into InstallFinalize the first payload file answered
+
+         Product: Tesserafin Server, Error 1310. Error writing to file:
+         D:\a\_temp\w4a0\prefix\none\ATL.dll. System error 0. Verify that
+         you have access to that directory.
+
+       (the installer writes a double hyphen where the comma is above; an XML
+       comment cannot carry one)
+
+       rolling the install back to 1603. What that proves, whatever Windows
+       Installer does with the protection flag, is that the DACL the object ends
+       up with is EXACTLY the SDDL authored here and nothing else. So the
+       descriptor states the whole of it.
+
+       It is still written WITHOUT `P`. W0 §9.3 breaks inheritance at
+       `%ProgramData%\Tesserafin\` and nowhere else, so that is what this file
+       asks for; whether Windows Installer protects it anyway is now read back
+       off the live object and reported rather than assumed.
+
+       One thing improves as a consequence. Under the disposable prefix the
+       Administrators, SYSTEM and `Users` rows used to be inherited from the
+       runner's temp tree, so grading them would have graded RUNNER_TEMP. They
+       are authored now, so they are the package's own statement and the hosted
+       proof grades all three. -->
   <?if $(var.Mutation) = "acl-install-writable" ?>
     <!-- W4-A3 hostile control 4: the service account gets Modify under
          INSTALLFOLDER, so it can rewrite its own binaries and its own FFmpeg.
          Read and execute still hold, so the control reddens the write half
          alone. -->
-    <?define InstallFolderSddl = "D:(A;OICI;0x1301bf;;;S-1-5-80-761762137-1691453069-3789821951-3290391601-3361247659)" ?>
+    <?define InstallFolderSddl = "D:(A;OICI;0x1f01ff;;;BA)(A;OICI;0x1f01ff;;;SY)(A;OICI;0x1200a9;;;BU)(A;OICI;0x1301bf;;;S-1-5-80-761762137-1691453069-3789821951-3290391601-3361247659)" ?>
   <?else ?>
-    <?define InstallFolderSddl = "D:(A;OICI;0x1200a9;;;S-1-5-80-761762137-1691453069-3789821951-3290391601-3361247659)" ?>
+    <?define InstallFolderSddl = "D:(A;OICI;0x1f01ff;;;BA)(A;OICI;0x1f01ff;;;SY)(A;OICI;0x1200a9;;;BU)(A;OICI;0x1200a9;;;S-1-5-80-761762137-1691453069-3789821951-3290391601-3361247659)" ?>
   <?endif ?>
 
   <Package Name="Tesserafin Server"
