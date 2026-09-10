@@ -68,11 +68,33 @@
     CONTROL-ONLY. `none` builds the real package. Every other value builds a
     deliberately broken one for a single hostile control -- four from W4-A0 over
     containment, the argument list and the uninstall, three from W4-A2 over the
-    W0 §4 recovery policy, and four from W4-A3 over the W0 §9.3 ACLs -- so those
+    W0 §4 recovery policy, four from W4-A3 over the W0 §9.3 ACLs, and two from
+    W4-A4 over what a MajorUpgrade does to the service registration and to
+    operator state -- so those
     controls drive the REAL authoring
     rather than a second copy of it written for the test -- the same reason the frozen W2-A2 assembler carries a
     PACK-ONLY parameter set. `ci/windows/w4/msi-controls.py` asserts the hosted
     acceptance build passes nothing but `none`.
+
+.PARAMETER PatchBump
+    W4-A4 (#234). How many to add to the PATCH field of the version this script
+    already reads out of SharedVersion.cs, so that W4-A4 can build two packages
+    from ONE commit whose only difference is that the second's ProductVersion is
+    higher than the first's.
+
+    It is a BUMP and not a version, deliberately. The W4-A4 ruling says to bump
+    the version "only via the existing preprocessor / SharedVersion read" and not
+    to edit SharedVersion.cs, and a `-Version` parameter would be exactly what
+    the frozen assembler's own control (`zip-controls.py` Z11) and
+    `msi-controls.py`'s FORBIDDEN_BUILDER_PARAMETERS both refuse: the identity of
+    what is packaged supplied at call time instead of travelling with the commit.
+    A bump cannot do that. MAJOR, MINOR and PATCH all still come from the commit;
+    the only thing a caller can say is "and one more than that" -- which is
+    exactly and only what proving MajorUpgrade needs.
+
+    The default is 0, so every earlier W4 slice's call is unchanged, and the
+    result is re-checked against the same SemVer-core rule the declared version
+    is, and against being higher than what it was bumped from.
 
 .PARAMETER WixVersion
     The pinned WiX toolset version. W0 §5.4 records that this is a value a build
@@ -95,8 +117,10 @@ param(
     [Parameter(Mandatory = $true)] [string] $OutPath,
     [ValidateSet('none', 'no-exe', 'no-service-flag', 'no-path-flags', 'no-service-remove',
         'no-util-config', 'delay-not-60s', 'third-action-restart',
-        'acl-users-write', 'acl-no-service-grant', 'acl-install-writable')]
+        'acl-users-write', 'acl-no-service-grant', 'acl-install-writable',
+        'upgrade-no-service', 'upgrade-wipes-state')]
     [string] $Mutation = 'none',
+    [ValidateRange(0, 1)] [int] $PatchBump = 0,
     [ValidateNotNullOrEmpty()] [string] $WixVersion = '6.0.2',
     [ValidateNotNullOrEmpty()] [string] $UtilExtensionVersion = '6.0.2'
 )
@@ -243,6 +267,27 @@ if ($version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') {
         'Windows Installer ProductVersion cannot carry anything else')
 }
 
+# W4-A4 (#234): the same read, plus a bounded bump. `$declaredVersion` is what
+# the commit says and is what every earlier W4 slice packages; `$version` is what
+# THIS build states as its ProductVersion. They are the same string whenever
+# -PatchBump is 0, which is every call this repository made before W4-A4.
+$declaredVersion = $version
+if ($PatchBump -ne 0) {
+    $fields = $declaredVersion.Split('.')
+    $version = '{0}.{1}.{2}' -f $fields[0], $fields[1], ([int]$fields[2] + $PatchBump)
+    if ($version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') {
+        Deny 'version' ("bumping the declared version '$declaredVersion' by $PatchBump produced " +
+            "'$version', which is not a MAJOR.MINOR.PATCH SemVer core")
+    }
+    # A bump that did not RAISE the ProductVersion would build a package
+    # MajorUpgrade cannot supersede, and the upgrade proof would then measure a
+    # reinstall while reading like an upgrade.
+    if ([version]$version -le [version]$declaredVersion) {
+        Deny 'version' ("bumping '$declaredVersion' by $PatchBump produced '$version', which is not " +
+            'higher, so MajorUpgrade would treat it as a reinstall or refuse it as a downgrade')
+    }
+}
+
 # ---------------------------------------------------------------------------
 # The toolset, pinned. `dotnet tool install` answers non-zero when the tool is
 # already installed at that version, which is a success for this script's
@@ -297,7 +342,7 @@ $outDir = [System.IO.Path]::GetDirectoryName([System.IO.Path]::GetFullPath($OutP
 $null = [System.IO.Directory]::CreateDirectory($outDir)
 if ([System.IO.File]::Exists($OutPath)) { [System.IO.File]::Delete($OutPath) }
 
-"W4-A0 build: version $version, mutation $Mutation, WiX $reported"
+"W4-A0 build: version $version (declared $declaredVersion, patch bump $PatchBump), mutation $Mutation, WiX $reported"
 "           extension $extensionLine"
 "           stage  $stage"
 "           output $OutPath"

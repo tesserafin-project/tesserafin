@@ -87,6 +87,50 @@
   tables, and `LockPermissions` always discards inherited permissions, which
   would take the choice this slice is about away from the authoring.
 
+  W4-A4 (#234) adds NO product behaviour at all. `MajorUpgrade` has stood in this
+  file since W4-A0 and W4-A4 is the slice that EXERCISES it: install one package,
+  write sentinels into the four `%ProgramData%` state directories, install a
+  second package built from THIS authoring with the same `UpgradeCode` and a
+  higher `Version`, and read back that the binaries under INSTALLFOLDER are the
+  second package's, that the sentinels are still there byte for byte, that the
+  service is still registered and still Stopped with the §4 binPath, and that the
+  §9.3 descriptors still hold. The two packages differ by a `Version` the builder
+  derives from the SAME `SharedVersion.cs` read it has always used - see
+  `-PatchBump` in `ci/windows/w4/build-msi.ps1` - and by nothing else. No
+  `SharedVersion.cs` edit, no second product, no new component, no moved
+  failure-action or SDDL attribute value.
+
+  Two hostile controls for that slice ARE authored here, as two more `Mutation`
+  values, because a control that drove a copy of this file would prove nothing
+  about this one:
+
+    `upgrade-no-service`   the second package registers no service at all, so
+                           after the upgrade the service the first package
+                           installed has been removed and nothing replaced it.
+                           The `ServiceControl` remove element is deliberately
+                           left in place, so the defect is attributable to the
+                           missing registration alone.
+
+    `upgrade-wipes-state`  the second package deletes the contents of the four
+                           state directories on install. It is authored as
+                           `RemoveFile` on a component the upgrade certainly
+                           installs, NOT by weakening the four retained-state
+                           components: those are `NeverOverwrite`, so with
+                           `HKLM\SOFTWARE\Tesserafin` still present from the
+                           first install the upgrade SKIPS them and anything
+                           authored inside them never runs. A control that
+                           cannot fire is not a control.
+
+  The other three W4-A4 controls are deliberately NOT authored here. "The second
+  package keeps the first's `tesserafin.exe` bytes" is a property of what the
+  builder is handed, not of this file, so it is a stage the probe supplies. A
+  differing `UpgradeCode` and a `ServiceControl` that starts the service are both
+  produced by editing the built MSI's own tables, for two reasons: a second
+  `UpgradeCode` string in this file is RED to `ci/windows/w4/msi-controls.py` and
+  so is `Start="install"` anywhere in it, and installing either one would create
+  the second product the W4-A4 ruling forbids inventing, or roll back to 1603 and
+  hide every other outcome behind one identity problem the way W0 §5.2 measured.
+
   What this authoring deliberately does NOT claim:
 
     * it is NOT a bit-identical MSI. W0 §5.6 measured that and accepted a
@@ -422,6 +466,15 @@
                                 RestartServiceDelayInSeconds="60"
                                 ResetPeriodInDays="1" />
           </ServiceInstall>
+        <?elseif $(var.Mutation) = "upgrade-no-service" ?>
+          <!-- W4-A4 hostile control: the upgrade registers NO service. This
+               branch authors no ServiceInstall at all, so after MajorUpgrade has
+               removed the first package - taking its service with it, through
+               the ServiceControl element below, which this control deliberately
+               leaves in place - nothing registers one again. The state
+               directories, the payload and the descriptors are all untouched, so
+               the control is attributable to the missing registration and to the
+               consequences that follow from it. -->
         <?elseif $(var.Mutation) = "no-path-flags" ?>
           <!-- W4-A0 hostile control 3: the binPath lacks `ffmpeg` and `webdir`. -->
           <ServiceInstall Id="TesserafinService"
@@ -534,6 +587,31 @@
                                   ResetPeriodInDays="1" />
             <?endif ?>
           </ServiceInstall>
+        <?endif ?>
+
+        <!-- W4-A4 hostile control: the upgrade destroys operator state.
+
+             It is authored HERE, on the component that owns the executable and
+             that every install of this package therefore installs, and NOT by
+             taking `Permanent` or `NeverOverwrite` off the four retained-state
+             components below. Both of those would be inert. `RemoveFolder`
+             removes only an EMPTY directory, so a state directory holding a
+             sentinel survives a non-permanent component anyway; and a
+             `NeverOverwrite` component whose registry key path already exists -
+             which it does, because the first install created it - is SKIPPED
+             outright on the upgrade, so anything authored inside it never runs.
+
+             `On="install"` puts this in the RemoveFiles standard action, which
+             the standard sequence runs before InstallFiles, so the sentinels are
+             gone by the time the upgrade has finished. The DIRECTORIES survive,
+             because the retained components below are still Permanent - which is
+             what makes this control redden the sentinel predicates and not the
+             directory ones. -->
+        <?if $(var.Mutation) = "upgrade-wipes-state" ?>
+          <RemoveFile Id="W4A4WipeConfig" Name="*" On="install" Directory="DataConfigFolder" />
+          <RemoveFile Id="W4A4WipeData" Name="*" On="install" Directory="DataDataFolder" />
+          <RemoveFile Id="W4A4WipeCache" Name="*" On="install" Directory="DataCacheFolder" />
+          <RemoveFile Id="W4A4WipeLog" Name="*" On="install" Directory="DataLogFolder" />
         <?endif ?>
 
         <!-- Removing the service is a property of the package, not of a custom
