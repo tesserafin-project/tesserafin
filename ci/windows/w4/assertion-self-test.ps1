@@ -19,6 +19,13 @@
     not the W0 §9.3 ones. Each must redden EXACTLY its declared set, and the
     correct package must redden nothing.
 
+    W4-A4 (#234) adds a SECOND grader to the same treatment: the MajorUpgrade
+    predicates, driven over synthetic A -> B pairs -- an upgrade that redelivered
+    the first package's executable, one that emptied the four state directories,
+    one that registered no service, one whose second package carries a different
+    UpgradeCode, and one whose second package asks the SCM to start the service.
+    The rule is the same and so is the inertness check.
+
     This is not a substitute for the hosted measurement and proves nothing about
     WiX, msiexec or the SCM. It proves that the instrument reads.
 #>
@@ -222,9 +229,171 @@ if ($allPredicates.Count -lt 20) {
     $failures++
 }
 
+# ===========================================================================
+# W4-A4 (#234): the MajorUpgrade grader, over the same kind of synthetic
+# observations. Written to be what each pair GENUINELY produces, not what would
+# make the grader look right.
+# ===========================================================================
+
+$FROZEN_UPGRADE_CODE = '0f0c9f4e-1c5a-4b8e-9a3d-6d1f2b7c8e05'
+$A_EXE_SHA = 'a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1'
+$B_EXE_SHA = 'b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2'
+$SENTINEL_SHA = 'c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3'
+$OTHER_SHA = 'd4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4'
+
+function New-SyntheticUpgradeObservation {
+    param([Parameter(Mandatory = $true)] [string] $Control)
+
+    # The correct pair is graded against the observation the correct fresh
+    # install produces, so the ACL, failure-action and binPath halves of the
+    # upgrade grader are exercised with the SAME data the W4-A2 and W4-A3 rows
+    # were proven with rather than with a second, looser copy of it.
+    $fresh = New-SyntheticObservation -Mutation 'none'
+
+    # `upgrade-no-service` is the pair whose second package registers nothing.
+    # The SCM key is gone, so the binPath, the start type, the account and the
+    # failure policy are all gone with it -- which is exactly the nineteen-row
+    # consequence set the control declares.
+    $service = $fresh.service
+    $serviceState = 'Stopped'
+    $failureActions = $fresh.failureActions
+    if ($Control -eq 'upgrade-no-service') {
+        $service = $null
+        $serviceState = 'Absent'
+        $failureActions = $null
+    }
+
+    # `upgrade-same-exe` is the pair whose second package was built from the
+    # first's stage: what lands on disk IS B's staged executable, and it is also
+    # A's, so `exeIsB` stays green and `exeReplaced` is the only row that can go
+    # red. An observation that reddened both would be a package that delivered
+    # no executable at all, and no B in this slice does that.
+    $aStagedExe = $A_EXE_SHA
+    $bStagedExe = $B_EXE_SHA
+    $installedExe = $B_EXE_SHA
+    if ($Control -eq 'upgrade-same-exe') {
+        $bStagedExe = $A_EXE_SHA
+        $installedExe = $A_EXE_SHA
+    }
+
+    # `upgrade-wipes-state` empties the four directories. The directories
+    # themselves survive: the retained components are still Permanent, and
+    # RemoveFile removes files.
+    $state = @{}
+    foreach ($name in @('config', 'data', 'cache', 'log')) {
+        if ($Control -eq 'upgrade-wipes-state') {
+            $state[$name] = @{ directory = $true; sentinel = $false; sha256 = $null }
+        } else {
+            $state[$name] = @{ directory = $true; sentinel = $true; sha256 = $SENTINEL_SHA }
+        }
+    }
+
+    $bUpgradeCode = $(if ($Control -eq 'upgrade-upgradecode') {
+        '6b1e8d37-5f92-4a04-8e7c-3d05b9f2a618' } else { $FROZEN_UPGRADE_CODE })
+
+    $observation = @{
+        aMsi = @{
+            productCode = '{11111111-1111-4111-8111-111111111111}'
+            productVersion = '1.0.0'
+            upgradeCode = "{$($FROZEN_UPGRADE_CODE.ToUpperInvariant())}"
+            stagedExeSha256 = $aStagedExe
+            startsServiceOnInstall = $false
+        }
+        bMsi = @{
+            productCode = '{22222222-2222-4222-8222-222222222222}'
+            productVersion = '1.0.1'
+            upgradeCode = "{$($bUpgradeCode.ToUpperInvariant())}"
+            stagedExeSha256 = $bStagedExe
+            startsServiceOnInstall = ($Control -eq 'upgrade-starts-service')
+        }
+        upgradeExit = 0
+        installPrefix = $prefix
+        programDataRoot = $dataRoot
+        serverRelativeExe = $serverExe
+        webRelativeDir = $webDir
+        ffmpegRelativeExe = $ffmpegExe
+        installedExeSha256 = $installedExe
+        installedServerExe = $true
+        installedWebDir = $true
+        installedFfmpegExe = $true
+        service = $service
+        serviceState = $serviceState
+        failureActions = $failureActions
+        acls = $fresh.acls
+        stateAfterUpgrade = $state
+        sentinelSha256 = $SENTINEL_SHA
+        aProductInstalled = $false
+        bProductInstalled = $true
+    }
+    return $observation
+}
+
+$upgradeControls = @('none') + @((Get-W4UpgradeControlExpectations).Keys)
+$upgradeRedSets = @{}
+
+foreach ($control in $upgradeControls) {
+    $predicates = Get-W4UpgradePredicates -Observation (New-SyntheticUpgradeObservation -Control $control)
+    $verdict = Get-W4UpgradeVerdict -Predicates $predicates -Control $control
+    $status = if ($verdict.passed) { 'OK  ' } else { 'FAIL' }
+    "$status upgrade/$($control.PadRight(24)) $($verdict.detail)"
+    if (-not $verdict.passed) { $failures++ }
+    $upgradeRedSets[($verdict.red -join '|')] = $true
+}
+
+if ($upgradeRedSets.Count -ne $upgradeControls.Count) {
+    "FAIL distinct upgrade red sets: $($upgradeRedSets.Count) across $($upgradeControls.Count) controls"
+    $failures++
+}
+
+$upgradePredicates = Get-W4UpgradePredicates -Observation (New-SyntheticUpgradeObservation -Control 'none')
+if ($upgradePredicates.Count -lt 20) {
+    "FAIL the upgrade grader answers only $($upgradePredicates.Count) predicates"
+    $failures++
+}
+
+# `productCodesDiffer` is the row a careless grader gets wrong in the direction
+# no control above can catch: written as "not equal" alone it grades two
+# packages that carry NO ProductCode at all as a valid upgrade pair, because an
+# absent value is not equal to anything -- including another absent one.
+$blindProductCodes = New-SyntheticUpgradeObservation -Control 'none'
+$blindProductCodes.aMsi = @{} + $blindProductCodes.aMsi
+$blindProductCodes.bMsi = @{} + $blindProductCodes.bMsi
+$blindProductCodes.aMsi.Remove('productCode')
+$blindProductCodes.bMsi.Remove('productCode')
+if ((Get-W4UpgradePredicates -Observation $blindProductCodes)['productCodesDiffer']) {
+    'FAIL productCodesDiffer is green for two packages that carry no ProductCode'
+    $failures++
+}
+
+# The two digest predicates are the ones a careless grader gets wrong in the
+# direction that CANNOT be caught by any control above: a comparison that treats
+# an absent digest as a match would call an upgrade that delivered nothing a
+# success. Neither control produces that observation, so it is asserted here.
+foreach ($case in @(
+    @{ what = 'a missing installed digest'; installed = $null }
+    @{ what = 'an empty installed digest'; installed = '' })) {
+    $blind = New-SyntheticUpgradeObservation -Control 'none'
+    $blind.installedExeSha256 = $case.installed
+    $blindPredicates = Get-W4UpgradePredicates -Observation $blind
+    if ($blindPredicates['exeIsB']) {
+        "FAIL exeIsB is green for $($case.what)"
+        $failures++
+    }
+}
+# ...and the mirror image: an installed executable that is neither package's is
+# still not B's, however different it is from A's.
+$strayObservation = New-SyntheticUpgradeObservation -Control 'none'
+$strayObservation.installedExeSha256 = $OTHER_SHA
+$strayPredicates = Get-W4UpgradePredicates -Observation $strayObservation
+if ($strayPredicates['exeIsB'] -or (-not $strayPredicates['exeReplaced'])) {
+    'FAIL a third executable does not grade as replaced-but-not-B'
+    $failures++
+}
+
 if ($failures -gt 0) {
-    "W4-A0 assertion self-test FAILED with $failures problem(s)"
+    "W4 assertion self-test FAILED with $failures problem(s)"
     exit 1
 }
-"W4-A0 assertion self-test: $($mutations.Count) mutations, $($allPredicates.Count) predicates, all as declared"
+"W4 assertion self-test: $($mutations.Count) fresh-install mutations, $($allPredicates.Count) predicates; " +
+    "$($upgradeControls.Count) upgrade controls, $($upgradePredicates.Count) predicates; all as declared"
 exit 0

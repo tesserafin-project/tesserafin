@@ -713,7 +713,397 @@ function Get-W4Verdict {
     }
 }
 
+# ===========================================================================
+# W4-A4 (#234): the MajorUpgrade grader.
+#
+# The same doctrine as everything above it. PURE: two observation hashtables in
+# -- one describing the two PACKAGES, one describing the machine AFTER the
+# second one was installed over the first -- and an ordered predicate map out.
+# No msiexec, no registry, no filesystem, so `assertion-self-test.ps1` can drive
+# every control on any host before the hosted job spends runner time.
+#
+# W4-A4 grades what the ruling names and nothing it does not: the binaries under
+# INSTALLFOLDER are the SECOND package's, the sentinels written between the two
+# installs are still there byte for byte, the service is still registered and
+# still Stopped with the §4 binPath, the §9.3 descriptors still hold, and the
+# UpgradeCode bytes did not move. The §4 recovery row and the §9.3 descriptors
+# are graded again rather than assumed: W4-A2 and W4-A3 measured them on a FRESH
+# install, and "an upgrade preserves them" is a different statement about a
+# different sequence of standard actions.
+#
+# What it deliberately does NOT grade: repair, advertised repair, downgrade, the
+# Event Log source, signing, and anything about a started service. The W4-A4
+# ruling excludes all of them.
+# ===========================================================================
+
+# W4-A1 froze this and W4-A4 reads it back off the built packages rather than
+# off the authoring, because a `Property` table row is what the machine actually
+# matches an installed product against. Windows Installer stores it braced and
+# upper-case, so the comparison below normalises before it compares -- the
+# AUTHORING gate in `ci/windows/w4/msi-controls.py` is the ordinal one.
+$script:FrozenUpgradeCode = '0f0c9f4e-1c5a-4b8e-9a3d-6d1f2b7c8e05'
+
+function Get-W4NormalisedGuid {
+    <#
+        A Windows Installer GUID as the frozen string is written: no braces,
+        lower case. `$null` in, `$null` out, so a package that carries no such
+        Property row is distinguishable from one that carries a different value.
+    #>
+    param([Parameter()] [AllowNull()] [string] $Value)
+    if ([string]::IsNullOrWhiteSpace($Value)) { return $null }
+    return $Value.Trim().Trim('{', '}').ToLowerInvariant()
+}
+
+function Test-W4SameDigest {
+    <#
+        Two SHA-256 hex digests, compared as digests rather than as strings: a
+        digest that is absent is not equal to anything, including another
+        absent one, because "the file was not there" must never grade as "the
+        file was the one we expected".
+    #>
+    param([Parameter()] [AllowNull()] [string] $Left,
+          [Parameter()] [AllowNull()] [string] $Right)
+    if ([string]::IsNullOrWhiteSpace($Left) -or [string]::IsNullOrWhiteSpace($Right)) { return $false }
+    return $Left.Trim().ToLowerInvariant() -ceq $Right.Trim().ToLowerInvariant()
+}
+
+function Get-W4UpgradePredicates {
+    <#
+        Grade one A -> B pair.
+
+        The observation is a hashtable with these keys:
+
+          aMsi, bMsi          [hashtable] read out of the BUILT packages' own
+                              tables, never out of the authoring:
+                                productCode      [string] Property/ProductCode
+                                productVersion   [string] Property/ProductVersion
+                                upgradeCode      [string] Property/UpgradeCode
+                                stagedExeSha256  [string] the tesserafin.exe the
+                                                 package was built from
+                                startsServiceOnInstall [bool] the ServiceControl
+                                                 table carries a start-on-install
+                                                 event for the Tesserafin service
+          upgradeExit         [int]      msiexec's exit code for B over A
+          installPrefix       [string]   INSTALLFOLDER, passed to BOTH installs
+          programDataRoot     [string]   %ProgramData%\Tesserafin\Server
+          serverRelativeExe   [string]   the three, from the accepted W2-A5 script
+          webRelativeDir      [string]
+          ffmpegRelativeExe   [string]
+          installedExeSha256  [string]   the exe under INSTALLFOLDER after B
+          installedServerExe / installedWebDir / installedFfmpegExe [bool]
+          service             [hashtable] or $null -- the SCM registry key after B
+          serviceState        [string]   'Stopped' / 'Running' / 'Absent'
+          failureActions      [hashtable] or $null -- QueryServiceConfig2W after B
+          acls                [ordered]  Get-Acl observations after B
+          stateAfterUpgrade   [hashtable] name -> @{ directory [bool];
+                              sentinel [bool]; sha256 [string] }
+          sentinelSha256      [string]   what was written into all four state
+                              directories BETWEEN the two installs
+          aProductInstalled   [bool]     A's ProductCode still installed after B
+          bProductInstalled   [bool]     B's ProductCode installed after B
+    #>
+    [OutputType([System.Collections.Specialized.OrderedDictionary])]
+    param([Parameter(Mandatory = $true)] [hashtable] $Observation)
+
+    $o = $Observation
+    $a = $o.aMsi
+    $b = $o.bMsi
+    $service = $o.service
+    $imagePath = if ($null -ne $service -and $service.ContainsKey('ImagePath')) { [string]$service.ImagePath } else { '' }
+    $tokens = Split-W4CommandLine -CommandLine $imagePath
+    $imageExe = if ($null -ne $tokens -and $tokens.Length -gt 0) { $tokens[0] } else { $null }
+
+    $expectedExe = Join-W4Path -Root $o.installPrefix -Relative $o.serverRelativeExe
+    $expectedWeb = Join-W4Path -Root $o.installPrefix -Relative $o.webRelativeDir
+    $expectedFfmpeg = Join-W4Path -Root $o.installPrefix -Relative $o.ffmpegRelativeExe
+
+    $aUpgradeCode = Get-W4NormalisedGuid -Value ($(if ($a.ContainsKey('upgradeCode')) { $a.upgradeCode } else { $null }))
+    $bUpgradeCode = Get-W4NormalisedGuid -Value ($(if ($b.ContainsKey('upgradeCode')) { $b.upgradeCode } else { $null }))
+
+    $stateNames = @('config', 'data', 'cache', 'log')
+    $stateDirsSurvived = $true
+    $stateSentinelsSurvived = $true
+    $stateSentinelsUnchanged = $true
+    foreach ($name in $stateNames) {
+        if (-not $o.stateAfterUpgrade.ContainsKey($name)) {
+            $stateDirsSurvived = $false; $stateSentinelsSurvived = $false
+            $stateSentinelsUnchanged = $false; continue
+        }
+        $entry = $o.stateAfterUpgrade[$name]
+        if (-not $entry.directory) { $stateDirsSurvived = $false }
+        if (-not $entry.sentinel) { $stateSentinelsSurvived = $false }
+        $digest = $(if ($entry.ContainsKey('sha256')) { $entry.sha256 } else { $null })
+        if (-not (Test-W4SameDigest -Left $digest -Right $o.sentinelSha256)) { $stateSentinelsUnchanged = $false }
+    }
+
+    $predicates = [ordered]@{}
+
+    # ── the two packages are an upgrade pair, and only that ─────────────────
+    # W4-A1's frozen GUID, read out of BOTH packages. This is the ruling's
+    # "UpgradeCode bytes unchanged", answered from the artifacts rather than
+    # from the file they were built from.
+    $predicates['upgradeCodeIsFrozenInA'] = ($aUpgradeCode -ceq $script:FrozenUpgradeCode)
+    $predicates['upgradeCodeIsFrozenInB'] = ($bUpgradeCode -ceq $script:FrozenUpgradeCode)
+    $predicates['upgradeCodeStable'] =
+        ($null -ne $aUpgradeCode -and $null -ne $bUpgradeCode -and $aUpgradeCode -ceq $bUpgradeCode)
+    # Two packages sharing an UpgradeCode AND a ProductCode are the same product
+    # and B would be a reinstall, not an upgrade -- a sequence that would keep
+    # state for a reason that has nothing to do with MajorUpgrade.
+    # Both must be PRESENT and different. `-not (equal)` alone would grade two
+    # packages that carry no ProductCode at all as a valid upgrade pair, because
+    # an absent value is not equal to anything -- including another absent one.
+    $aProductCode = Get-W4NormalisedGuid -Value ($(if ($a.ContainsKey('productCode')) { $a.productCode } else { $null }))
+    $bProductCode = Get-W4NormalisedGuid -Value ($(if ($b.ContainsKey('productCode')) { $b.productCode } else { $null }))
+    $predicates['productCodesDiffer'] =
+        ($null -ne $aProductCode -and $null -ne $bProductCode -and $aProductCode -cne $bProductCode)
+    $predicates['versionBIsHigher'] = $(
+        try { ([version]$b.productVersion) -gt ([version]$a.productVersion) } catch { $false })
+
+    # ── the upgrade itself ──────────────────────────────────────────────────
+    $predicates['upgradeInstallSucceeded'] = ([int]$o.upgradeExit -eq 0)
+    # MajorUpgrade removed A rather than installing B beside it. A machine
+    # carrying both products would keep its state and replace its binaries too,
+    # and would still be the defect W0 §10 names.
+    $predicates['previousProductRemoved'] = (-not [bool]$o.aProductInstalled)
+    $predicates['upgradedProductInstalled'] = [bool]$o.bProductInstalled
+
+    # ── the binaries are B's ────────────────────────────────────────────────
+    $predicates['installedServerExe'] = [bool]$o.installedServerExe
+    $predicates['installedWebDir'] = [bool]$o.installedWebDir
+    $predicates['installedFfmpegExe'] = [bool]$o.installedFfmpegExe
+    # Two predicates, not one. "It is not A's any more" and "it is B's" are
+    # different statements, and a package that delivered neither would satisfy
+    # the first alone.
+    $predicates['exeReplaced'] =
+        (-not (Test-W4SameDigest -Left $o.installedExeSha256 -Right $a.stagedExeSha256))
+    $predicates['exeIsB'] = (Test-W4SameDigest -Left $o.installedExeSha256 -Right $b.stagedExeSha256)
+
+    # ── the operator's state survived ───────────────────────────────────────
+    $predicates['stateDirectoriesSurvivedUpgrade'] = $stateDirsSurvived
+    $predicates['stateSentinelsSurvivedUpgrade'] = $stateSentinelsSurvived
+    # A sentinel that exists is not a sentinel that was kept: an upgrade that
+    # deleted and recreated the file would satisfy the row above.
+    $predicates['stateSentinelContentsUnchanged'] = $stateSentinelsUnchanged
+
+    # ── the service, still exactly as W0 §4 specifies it ────────────────────
+    $predicates['serviceRegisteredAfterUpgrade'] = ($null -ne $service)
+    $predicates['serviceImagePathIsInstalledExe'] = (Test-W4SamePath -Left $imageExe -Right $expectedExe)
+    $predicates['serviceImagePathHasServiceFlag'] = ($null -ne $tokens -and $tokens -contains '--service')
+    $predicates['serviceImagePathHasConfigDir'] = (Test-W4SamePath `
+        -Left (Get-W4PathArgument -Tokens $tokens -Name '--configdir') `
+        -Right (Join-W4Path -Root $o.programDataRoot -Relative 'config'))
+    $predicates['serviceImagePathHasDataDir'] = (Test-W4SamePath `
+        -Left (Get-W4PathArgument -Tokens $tokens -Name '--datadir') `
+        -Right (Join-W4Path -Root $o.programDataRoot -Relative 'data'))
+    $predicates['serviceImagePathHasCacheDir'] = (Test-W4SamePath `
+        -Left (Get-W4PathArgument -Tokens $tokens -Name '--cachedir') `
+        -Right (Join-W4Path -Root $o.programDataRoot -Relative 'cache'))
+    $predicates['serviceImagePathHasLogDir'] = (Test-W4SamePath `
+        -Left (Get-W4PathArgument -Tokens $tokens -Name '--logdir') `
+        -Right (Join-W4Path -Root $o.programDataRoot -Relative 'log'))
+    $predicates['serviceImagePathHasWebDir'] = (Test-W4SamePath `
+        -Left (Get-W4PathArgument -Tokens $tokens -Name '--webdir') -Right $expectedWeb)
+    $predicates['serviceImagePathHasFfmpeg'] = (Test-W4SamePath `
+        -Left (Get-W4PathArgument -Tokens $tokens -Name '--ffmpeg') -Right $expectedFfmpeg)
+    $predicates['serviceStartIsAutomatic'] =
+        ($null -ne $service -and [int]$service.Start -eq $script:ServiceAutoStart)
+    $predicates['serviceStartIsDelayed'] =
+        ($null -ne $service -and [int]$service.DelayedAutostart -eq 1)
+    $predicates['serviceAccountIsVirtualAccount'] =
+        ($null -ne $service -and ([string]$service.ObjectName).Equals('NT SERVICE\Tesserafin', [System.StringComparison]::OrdinalIgnoreCase))
+    $predicates['serviceStoppedAfterUpgrade'] = ([string]$o.serviceState -eq 'Stopped')
+
+    # W0 §10 leaves the service installed and enabled but NOT started, and an
+    # upgrade is not the moment to change that. This is graded on BOTH halves
+    # deliberately. The live half alone cannot be trusted: a package that asked
+    # to start the service inside the transaction and FAILED would roll the
+    # whole install back -- W0 §5.2 measured exactly that, 1920 to 1603 -- and
+    # the machine would then be left carrying A, with a Stopped service, which
+    # is the shape a green live reading has. The table half says what the
+    # package ASKED for and reddens whatever the runner did with it.
+    $predicates['bDoesNotStartService'] =
+        ((-not [bool]$b.startsServiceOnInstall) -and ([string]$o.serviceState -ne 'Running'))
+
+    # ── W0 §4's recovery row, read back from the SCM AFTER the upgrade ──────
+    $failureActions = $(if ($o.ContainsKey('failureActions')) { $o.failureActions } else { $null })
+    $predicates['serviceFailureActionsConfigured'] = ($null -ne $failureActions)
+    $predicates['serviceFailureResetPeriodIsContract'] =
+        ($null -ne $failureActions -and $failureActions.ContainsKey('resetPeriodSeconds') -and
+            [int]$failureActions.resetPeriodSeconds -eq $script:ContractResetPeriodSeconds)
+    $predicates['serviceFailureActionCountIsContract'] =
+        ($null -ne $failureActions -and $failureActions.ContainsKey('actions') -and
+            @($failureActions.actions).Count -eq $script:ContractFailureActions.Count)
+    $predicates['serviceFailureFirstIsRestartAfter60s'] =
+        (Test-W4FailureAction -FailureActions $failureActions -Index 0)
+    $predicates['serviceFailureSecondIsRestartAfter60s'] =
+        (Test-W4FailureAction -FailureActions $failureActions -Index 1)
+    $predicates['serviceFailureThirdIsNoAction'] =
+        (Test-W4FailureAction -FailureActions $failureActions -Index 2)
+
+    # ── W0 §9.3's ACLs, read back off the UPGRADED layout ───────────────────
+    # The six OperatorTreePermissions components are neither Permanent nor
+    # NeverOverwrite -- deliberately, and the authoring says why -- so the
+    # upgrade re-applies every descriptor here. These rows are B's work, not
+    # A's leftovers, and that is the whole reason they can be graded again.
+    $installFolderAcl = Get-W4Acl -Observation $o -Label 'installFolder'
+    $dataRootAcl = Get-W4Acl -Observation $o -Label 'dataRoot'
+
+    $predicates['installFolderServiceCanReadAndExecute'] =
+        (Test-W4Grants -Acl $installFolderAcl -Sid $script:ServiceAccountSid `
+            -Required $script:RightsReadExecute)
+    $predicates['installFolderServiceCannotWrite'] =
+        (Test-W4NoWriteFor -Acl $installFolderAcl -Sids @($script:ServiceAccountSid))
+    $predicates['installFolderAdministratorsHaveFull'] =
+        (Test-W4Grants -Acl $installFolderAcl -Sid $script:SidAdministrators `
+            -Required $script:RightsFullControl)
+    $predicates['installFolderSystemHasFull'] =
+        (Test-W4Grants -Acl $installFolderAcl -Sid $script:SidLocalSystem `
+            -Required $script:RightsFullControl)
+    $predicates['installFolderUsersHaveNoWrite'] =
+        (Test-W4NoWriteFor -Acl $installFolderAcl -Sids $script:UnprivilegedSids)
+    $predicates['dataRootInheritanceBroken'] =
+        ((Test-W4HasKey -Bag $dataRootAcl -Key 'protected') -and [bool]$dataRootAcl.protected)
+    $predicates['stateDirectoriesServiceHasModify'] = (Test-W4EveryStateDirectory -Observation $o -Test {
+        param($acl) Test-W4Grants -Acl $acl -Sid $script:ServiceAccountSid -Required $script:RightsModify })
+    $predicates['stateDirectoriesAdministratorsHaveFull'] = (Test-W4EveryStateDirectory -Observation $o -Test {
+        param($acl) Test-W4Grants -Acl $acl -Sid $script:SidAdministrators -Required $script:RightsFullControl })
+    $predicates['stateDirectoriesSystemHasFull'] = (Test-W4EveryStateDirectory -Observation $o -Test {
+        param($acl) Test-W4Grants -Acl $acl -Sid $script:SidLocalSystem -Required $script:RightsFullControl })
+    $predicates['stateDirectoriesUsersHaveNoWrite'] = (Test-W4EveryStateDirectory -Observation $o -Test {
+        param($acl) Test-W4NoWriteFor -Acl $acl -Sids $script:UnprivilegedSids })
+    $predicates['serverDirectoryUsersHaveNoWrite'] =
+        (Test-W4NoWriteFor -Acl (Get-W4Acl -Observation $o -Label 'server') `
+            -Sids $script:UnprivilegedSids)
+
+    return $predicates
+}
+
+function Get-W4UpgradeControlExpectations {
+    <#
+        The RED set each W4-A4 hostile control must produce -- exactly, no more
+        and no less, the same rule the fresh-install controls are held to.
+
+        The ruling names five, and they are the five below. Three of them are
+        LIVE pairs: a real A, a real deliberately broken B, a real msiexec
+        upgrade, and a real read-back. Two of them are TABLE controls: the
+        package is really built and its own tables are really read, but it is
+        deliberately never installed, and the probe says so in the evidence.
+        The reason is in the ruling rather than in convenience -- a B carrying a
+        different UpgradeCode installs BESIDE A, which is the second product the
+        ruling forbids inventing, and a B that starts the service inside the
+        transaction is the 1920-to-1603 rollback W0 §5.2 measured, which would
+        leave A on the machine and hide the defect behind an install failure.
+        Either one would grade a control by an outcome that is not the defect.
+    #>
+    [OutputType([System.Collections.Specialized.OrderedDictionary])]
+    param()
+    return [ordered]@{
+        # LIVE. B is built from the stage A was built from, so the upgrade
+        # delivers A's bytes again. `exeIsB` stays GREEN and must: B's staged
+        # executable IS that file, and a control that reddened both would be
+        # indistinguishable from a package that delivered no executable at all.
+        'upgrade-same-exe' = @('exeReplaced')
+        # LIVE. The four directories survive -- the retained components are
+        # still Permanent -- and their contents do not, which is what makes this
+        # control attributable to the operator's DATA and not to the tree.
+        'upgrade-wipes-state' = @(
+            'stateSentinelsSurvivedUpgrade'
+            'stateSentinelContentsUnchanged'
+        )
+        # LIVE. One defect, nineteen visible consequences, declared in full for
+        # the same reason `no-exe` declares three and `no-util-config` declares
+        # six: a service that is not there has no binPath, no start type, no
+        # account and no failure policy, and a declared set of only the first
+        # would pass while the grader quietly stopped answering the rest.
+        'upgrade-no-service' = @(
+            'serviceRegisteredAfterUpgrade'
+            'serviceImagePathIsInstalledExe'
+            'serviceImagePathHasServiceFlag'
+            'serviceImagePathHasConfigDir'
+            'serviceImagePathHasDataDir'
+            'serviceImagePathHasCacheDir'
+            'serviceImagePathHasLogDir'
+            'serviceImagePathHasWebDir'
+            'serviceImagePathHasFfmpeg'
+            'serviceStartIsAutomatic'
+            'serviceStartIsDelayed'
+            'serviceAccountIsVirtualAccount'
+            'serviceStoppedAfterUpgrade'
+            'serviceFailureActionsConfigured'
+            'serviceFailureResetPeriodIsContract'
+            'serviceFailureActionCountIsContract'
+            'serviceFailureFirstIsRestartAfter60s'
+            'serviceFailureSecondIsRestartAfter60s'
+            'serviceFailureThirdIsNoAction'
+        )
+        # TABLE. Only B's Property/UpgradeCode row is moved, so A is still the
+        # frozen GUID and only the two-package predicate can go red.
+        # `upgradeCodeIsFrozenInB` goes red with it: the mutant's row is not the
+        # frozen value either, and declaring one without the other would be a
+        # declared set this control can never produce.
+        'upgrade-upgradecode' = @(
+            'upgradeCodeIsFrozenInB'
+            'upgradeCodeStable'
+        )
+        # TABLE. Only B's ServiceControl start-on-install bit is set.
+        'upgrade-starts-service' = @('bDoesNotStartService')
+    }
+}
+
+function Get-W4UpgradeVerdict {
+    <#
+        Grade one A -> B pair against what it was supposed to prove. Same rule
+        as `Get-W4Verdict`: the real pair must be green everywhere, and a
+        hostile control must redden EXACTLY its declared set.
+    #>
+    param(
+        [Parameter(Mandatory = $true)] [System.Collections.Specialized.OrderedDictionary] $Predicates,
+        [Parameter(Mandatory = $true)] [string] $Control
+    )
+
+    $red = @($Predicates.Keys | Where-Object { -not $Predicates[$_] })
+    $expectations = Get-W4UpgradeControlExpectations
+
+    if ($Control -eq 'none') {
+        $expectedRed = @()
+    } elseif ($expectations.Contains($Control)) {
+        $expectedRed = @($expectations[$Control])
+    } else {
+        return [ordered]@{
+            control = $Control; passed = $false; red = $red; expectedRed = @()
+            detail = "no declared expectation for control '$Control'"
+        }
+    }
+
+    $unexpected = @($red | Where-Object { $expectedRed -notcontains $_ })
+    $missing = @($expectedRed | Where-Object { $red -notcontains $_ })
+    $passed = ($unexpected.Count -eq 0 -and $missing.Count -eq 0)
+
+    $detail = if ($passed -and $Control -eq 'none') {
+        'every predicate green'
+    } elseif ($passed) {
+        "reddened exactly its declared set: $($expectedRed -join ', ')"
+    } else {
+        $parts = @()
+        if ($unexpected.Count -gt 0) { $parts += "unexpectedly red: $($unexpected -join ', ')" }
+        if ($missing.Count -gt 0) { $parts += "expected red but green: $($missing -join ', ')" }
+        $parts -join '; '
+    }
+
+    return [ordered]@{
+        control = $Control
+        passed = $passed
+        red = $red
+        expectedRed = $expectedRed
+        unexpectedlyRed = $unexpected
+        expectedRedButGreen = $missing
+        detail = $detail
+    }
+}
+
 Export-ModuleMember -Function Split-W4CommandLine, Get-W4PathArgument, Test-W4SamePath,
     Join-W4Path, Get-W4FailureAction, Test-W4FailureAction, Get-W4Predicates,
     Get-W4ControlExpectations, Get-W4Verdict, Test-W4HasKey, Get-W4Acl, Get-W4AllowMask,
-    Test-W4Grants, Test-W4NoWriteFor, Test-W4EveryStateDirectory
+    Test-W4Grants, Test-W4NoWriteFor, Test-W4EveryStateDirectory,
+    Get-W4NormalisedGuid, Test-W4SameDigest, Get-W4UpgradePredicates,
+    Get-W4UpgradeControlExpectations, Get-W4UpgradeVerdict
