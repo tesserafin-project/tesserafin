@@ -361,10 +361,33 @@ function Build-Package {
         [Parameter(Mandatory = $true)] [int] $PatchBump
     )
     $msiPath = [System.IO.Path]::Combine($work, "$Name.msi")
-    & $builder -RepoRoot $repo -StageRoot $stageRoot -HarvestRoot $harvestRoot `
-        -OutPath $msiPath -Mutation $Mutation -PatchBump $PatchBump
-    if ($LASTEXITCODE -ne 0 -or -not [System.IO.File]::Exists($msiPath)) {
-        Deny 'build' "the MSI '$Name' (mutation '$Mutation', patch bump $PatchBump) was not built"
+
+    # W4-A4-R1 (#234). The builder TALKS: it states the version it read, the
+    # pinned toolset and extension, the stage, the output path, the linker's own
+    # log, and the digest it built. Called bare from inside a function, every one
+    # of those lines is an object on THIS function's output stream, and the
+    # `return` below then appends the path behind them -- so the caller is
+    # assigned an array whose first element is 'W4-A0 build: version ...', and
+    # the first consumer to treat it as a path (`Copy-Item -LiteralPath`) read
+    # 'W4-A0 build' as a drive name. That was the whole of the hosted red run.
+    #
+    # The chatter is therefore merged and re-emitted to the HOST, which is where
+    # a build log belongs and is where the skeleton probe's identical call has
+    # always put it, and it is kept on disk beside the msiexec logs so a failed
+    # build is still readable afterwards. The output stream carries the path and
+    # nothing else.
+    $buildLogPath = [System.IO.Path]::Combine($logDir, "build-$Name.log")
+    $buildOutput = @(& $builder -RepoRoot $repo -StageRoot $stageRoot -HarvestRoot $harvestRoot `
+            -OutPath $msiPath -Mutation $Mutation -PatchBump $PatchBump *>&1 |
+        ForEach-Object { [string]$_ })
+    $builderExit = $LASTEXITCODE
+    Set-Content -LiteralPath $buildLogPath -Value ($buildOutput -join [System.Environment]::NewLine) `
+        -Encoding utf8NoBOM
+    foreach ($line in $buildOutput) { Write-Host $line }
+
+    if ($builderExit -ne 0 -or -not [System.IO.File]::Exists($msiPath)) {
+        Deny 'build' ("the MSI '$Name' (mutation '$Mutation', patch bump $PatchBump) was not built; " +
+            "the builder exited $builderExit and its log is at '$buildLogPath'")
     }
     return $msiPath
 }
@@ -384,6 +407,49 @@ $msi['b-same-exe'] = Build-Package -Name 'b-same-exe' -Mutation 'none' -PatchBum
 
 # And back, so nothing after this point can read a marked stage by accident.
 Set-StageExecutable -Source $pristineExePath
+
+# ── what Build-Package actually returned ────────────────────────────
+# W4-A4-R1 (#234) requires a self-check that REDs when the returned object is
+# not a single existing .msi file, and it is deliberately HERE, at the call
+# site, rather than inside Build-Package.
+#
+# That placement is the point. The defect this repairs was never a bad path:
+# `$msiPath` was correct on the red run, every one of the five builds exited 0,
+# and each MSI existed on disk. What was wrong was the SHAPE of what the caller
+# was assigned. A check inside the function reads its own local scalar and would
+# have graded the red run green. This reads the assigned value, which is the one
+# place the builder's chatter is visible -- so it fires on the real defect, and
+# it fires again if a later edit calls the builder bare.
+#
+# It runs before the first consumer, which is the Copy-Item below.
+$evidence.packages.builtPaths = [ordered]@{}
+foreach ($name in @($msi.Keys | Sort-Object)) {
+    $returned = @($msi[$name])
+    if ($returned.Count -ne 1) {
+        $first = $(if ($returned.Count -gt 0) { "'$($returned[0])'" } else { '(nothing)' })
+        Deny 'build-output' ("Build-Package returned $($returned.Count) objects for '$name', not one " +
+            "MSI path. The builder's output stream is joined to the function's; the first element " +
+            "is $first")
+    }
+    $path = $returned[0]
+    if ($null -eq $path) {
+        Deny 'build-output' "Build-Package returned nothing for '$name', so there is no MSI path"
+    }
+    if ($path -isnot [string]) {
+        Deny 'build-output' ("Build-Package returned a $($path.GetType().FullName) for '$name', " +
+            'not an MSI path')
+    }
+    if (-not $path.EndsWith('.msi', [System.StringComparison]::OrdinalIgnoreCase)) {
+        Deny 'build-output' "Build-Package returned '$path' for '$name', which is not an .msi path"
+    }
+    if (-not [System.IO.File]::Exists($path)) {
+        Deny 'build-output' ("Build-Package returned '$path' for '$name', and no such file exists, " +
+            'so nothing downstream could install it')
+    }
+    $evidence.packages.builtPaths[$name] = [System.IO.Path]::GetFileName($path)
+}
+Save-Evidence
+Write-Note "Build-Package returned one existing .msi path for each of $($msi.Count) packages"
 
 # ── the two table controls ──────────────────────────────────────────────────
 # Copies of the REAL B. One cell each, changed through Windows Installer, and
