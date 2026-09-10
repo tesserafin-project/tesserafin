@@ -25,6 +25,58 @@
   `ci/windows/w4/build-msi.ps1`. The POLICY is unchanged and so is what is
   graded; the core element is gone from this file entirely.
 
+  W4-A3 (#234) adds the W0 §9.3 ACL contract, and only that. Two security
+  descriptors are authored, both as SDDL on the Windows Installer 5.0
+  `MsiLockPermissionsEx` table, which WiX writes from the CORE `PermissionEx`
+  element:
+
+    `%ProgramData%\Tesserafin\`  a PROTECTED descriptor. The `D:P` is the
+                                 whole point of the slice: it breaks
+                                 inheritance, so the permissive parent ACL that
+                                 lets any authenticated user create files under
+                                 `%ProgramData%` cannot reach the directory that
+                                 holds the database. Administrators and SYSTEM
+                                 get Full, `NT SERVICE\Tesserafin` gets Modify,
+                                 and every ACE is `OICI` so the four state
+                                 directories W0 §9.1 names inherit it.
+
+    INSTALLFOLDER                an UNPROTECTED descriptor carrying one ACE:
+                                 `NT SERVICE\Tesserafin`, read and execute, and
+                                 no write bit at all. W0 §9.3 is explicit that
+                                 the service must not be able to rewrite its own
+                                 binaries or its own FFmpeg. Inheritance is
+                                 deliberately left alone here, because W0 §9.3
+                                 breaks it at `%ProgramData%\Tesserafin\` and
+                                 nowhere else.
+
+  The account is named by SID, not by name: `NT SERVICE\Tesserafin` is a virtual
+  service account whose SID is `S-1-5-80` followed by the SHA-1 of the upper-case
+  UTF-16LE service name as five little-endian DWORDs, so it is the same value on
+  every machine and it exists before the service does. SDDL takes SIDs;
+  `ci/windows/w4/msi-controls.py` recomputes this one from the service name and
+  reddens the authoring if it does not match, because a well-formed SDDL naming
+  some other SID installs perfectly and grants nobody anything.
+
+  The rights are hexadecimal access masks, never the SDDL generic aliases: the
+  hosted proof reads them back through `Get-Acl`, which reports
+  `FileSystemRights` as the file-specific mask, and a generic alias would come
+  back as a number no predicate could compare.
+
+  The extension question the W4-A3 ruling asks was settled by measurement rather
+  than preference. `WixToolset.Util.wixext` 6.0.2 is already pinned by W4-A2, and
+  its `util:PermissionEx` cannot express this contract: the compiler answers
+  `error WIX0004: The PermissionEx element contains an unexpected attribute
+  'Sddl'` and `error WIX0010: The PermissionEx/@User attribute was not found; it
+  is required`, and it accepts no `Protected`, `DenyInheritance`, `NoInheritance`
+  or `ReplaceExisting` attribute either. It can add an ACE; it cannot break
+  inheritance. The core element needs no extension at all, so no second extension
+  is taken.
+
+  The core `Permission` element is NOT used and must not be: it writes the
+  `LockPermissions` table, Windows Installer refuses a package that carries both
+  tables, and `LockPermissions` always discards inherited permissions, which
+  would take the choice this slice is about away from the authoring.
+
   What this authoring deliberately does NOT claim:
 
     * it is NOT a bit-identical MSI. W0 §5.6 measured that and accepted a
@@ -32,9 +84,6 @@
     * it is NOT signed, and carries no certificate reference;
     * it does NOT start the service. W0 §10 is explicit that a fresh
       installation leaves the service "installed and enabled but not started";
-    * it does NOT apply the §9.3 ACLs. Breaking inheritance at
-      `%ProgramData%\Tesserafin\` and granting `NT SERVICE\Tesserafin` is a
-      later W4 slice, and this package grants nothing;
     * it does NOT implement the rest of the §4 table. The 120 s stop timeout and
       the Event Log row are neither authored here nor measured, and W4-A2 rules
       on neither. The recovery row is the only one this slice adds;
@@ -95,6 +144,64 @@
     <?define ServerExeFileName = "tesserafin-w4control.exe" ?>
   <?else ?>
     <?define ServerExeFileName = "tesserafin.exe" ?>
+  <?endif ?>
+
+  <!-- W4-A3 (#234): the W0 §9.3 ACL contract, written out in full rather than
+       assembled from parts. Every variant below is a complete SDDL DACL, so
+       `ci/windows/w4/msi-controls.py` can parse each one and say what it grants,
+       and a reviewer can read one string and know the answer. The four ACL
+       mutations are the ruling's own hostile controls, each changing ONE thing
+       about the contract.
+
+       Administrators and SYSTEM carry Full in EVERY variant, including the
+       mutants. That is deliberate: none of these controls is about the
+       administrative rights, and a mutant that also dropped them would redden
+       predicates it did not declare and be attributable to nothing. -->
+
+  <!-- The real descriptor for `%ProgramData%\Tesserafin\`. `D:P` is the
+       inheritance break W0 §9.3 asks for by name, and the three ACEs are the
+       whole of what may reach the directory that holds the database. There is
+       no ACE for `Users`, `Authenticated Users` or `Everyone` in it at all,
+       which is a stronger statement than the "no inherited write" §9.3 asks
+       for and is what makes the protected descriptor worth having. -->
+  <?if $(var.Mutation) = "acl-not-protected" ?>
+    <!-- W4-A3 hostile control 1: the descriptor is NOT protected, so the
+         directory keeps inheriting from `%ProgramData%`, whose own ACL lets any
+         authenticated user create files. The `Users` ACE is authored EXPLICITLY
+         rather than left to that inheritance because a control has to reproduce
+         its defect on the host it runs on, and the exact rows a Windows build
+         puts on `%ProgramData%` are not this repository's to depend on. It is
+         one defect with two visible consequences, declared with both. -->
+    <?define DataRootSddl = "D:(A;OICI;0x1f01ff;;;BA)(A;OICI;0x1f01ff;;;SY)(A;OICI;0x1301bf;;;S-1-5-80-761762137-1691453069-3789821951-3290391601-3361247659)(A;OICI;0x1301bf;;;BU)" ?>
+  <?elseif $(var.Mutation) = "acl-users-write" ?>
+    <!-- W4-A3 hostile control 2: inheritance IS broken, and the descriptor
+         hands `Users` Modify anyway. This is the half of §9.3 a gate that only
+         checked the protection flag would call correct. -->
+    <?define DataRootSddl = "D:P(A;OICI;0x1f01ff;;;BA)(A;OICI;0x1f01ff;;;SY)(A;OICI;0x1301bf;;;S-1-5-80-761762137-1691453069-3789821951-3290391601-3361247659)(A;OICI;0x1301bf;;;BU)" ?>
+  <?elseif $(var.Mutation) = "acl-no-service-grant" ?>
+    <!-- W4-A3 hostile control 3: the protected descriptor grants the service
+         account nothing, so `NT SERVICE\Tesserafin` has no Modify on any of the
+         four state directories. W0 §9.2 measured that the default
+         `%ProgramData%` ACL happens to be permissive enough for the service to
+         run anyway, which is exactly why this cannot be graded by starting it. -->
+    <?define DataRootSddl = "D:P(A;OICI;0x1f01ff;;;BA)(A;OICI;0x1f01ff;;;SY)" ?>
+  <?else ?>
+    <?define DataRootSddl = "D:P(A;OICI;0x1f01ff;;;BA)(A;OICI;0x1f01ff;;;SY)(A;OICI;0x1301bf;;;S-1-5-80-761762137-1691453069-3789821951-3290391601-3361247659)" ?>
+  <?endif ?>
+
+  <!-- The real descriptor for INSTALLFOLDER: one ACE, read and execute, no
+       write bit. It is deliberately NOT protected. W0 §9.3 breaks inheritance
+       at `%ProgramData%\Tesserafin\` and nowhere else, and a protected
+       descriptor here would replace whatever the parent grants Administrators,
+       SYSTEM and Users with whatever this file happened to say. -->
+  <?if $(var.Mutation) = "acl-install-writable" ?>
+    <!-- W4-A3 hostile control 4: the service account gets Modify under
+         INSTALLFOLDER, so it can rewrite its own binaries and its own FFmpeg.
+         Read and execute still hold, so the control reddens the write half
+         alone. -->
+    <?define InstallFolderSddl = "D:(A;OICI;0x1301bf;;;S-1-5-80-761762137-1691453069-3789821951-3290391601-3361247659)" ?>
+  <?else ?>
+    <?define InstallFolderSddl = "D:(A;OICI;0x1200a9;;;S-1-5-80-761762137-1691453069-3789821951-3290391601-3361247659)" ?>
   <?endif ?>
 
   <Package Name="Tesserafin Server"
@@ -174,6 +281,19 @@
               Name="$(var.ServerExeFileName)"
               Source="$(var.StageRoot)\tesserafin.exe"
               KeyPath="yes" />
+
+        <!-- W4-A3 (#234): the W0 §9.3 grant on INSTALLFOLDER itself. It hangs
+             off a CreateFolder rather than off the File above because the
+             contract is about the DIRECTORY: the payload is thousands of
+             harvested files in components of their own, and an ACE on one file
+             would say nothing about the tree beside it. Windows Installer
+             applies MsiLockPermissionsEx during CreateFolders, which the
+             standard sequence runs before InstallFiles, so the delivered tree
+             inherits the OICI ACE as it is written rather than being fixed up
+             afterwards. -->
+        <CreateFolder>
+          <PermissionEx Sddl="$(var.InstallFolderSddl)" />
+        </CreateFolder>
 
         <!-- W0 §4, the service contract, stated once and in full.
 
@@ -344,6 +464,36 @@
       </Component>
     </ComponentGroup>
 
+    <!-- W4-A3 (#234): the inheritance break, at `%ProgramData%\Tesserafin\`
+         and at no other directory. W0 §9.3 puts it exactly here so that a
+         permissive parent ACL cannot silently widen access to the database.
+
+         This component is deliberately NOT `Permanent` and NOT
+         `NeverOverwrite`, and the four retained-state components below
+         deliberately are. The difference is what each one owns. Those four own
+         operator DATA, which an ordinary uninstall must keep. This one owns a
+         security descriptor, which is package policy: it has to be re-applied
+         by every install and every repair, and a `NeverOverwrite` component
+         whose key path already existed would be SKIPPED, taking its
+         CreateFolder and therefore its descriptor with it. Uninstall removes
+         the registry value and then fails to remove the directory, because the
+         four Permanent components below keep it from being empty, so the
+         directory and its descriptor both survive, which is the behaviour W0
+         §10 asks for.
+
+         The registry key path is the same shape the retained components use,
+         for the same reason: a component whose key path is a directory is
+         evaluated by directory existence, which makes its installed state
+         depend on something the operator can change. Nothing reads the value. -->
+    <ComponentGroup Id="DataRootPermissions" Directory="TesserafinProgramData">
+      <Component Id="DataRootAcl" Guid="2f6c8b41-9a03-4d17-b5e8-7c40e19d3a62">
+        <CreateFolder>
+          <PermissionEx Sddl="$(var.DataRootSddl)" />
+        </CreateFolder>
+        <RegistryValue Root="HKLM" Key="Software\Tesserafin\Server\RetainedState" Name="acl" Value="applied" Type="string" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
     <!-- W0 §9.1 and §10: the operator-owned directories. They are created by
          the package so that "uninstall does not delete them" is a measurable
          statement rather than a vacuous one, and they are `Permanent` so that
@@ -380,6 +530,7 @@
     <Feature Id="Main" Title="Tesserafin Server" Level="1">
       <ComponentGroupRef Id="PackagePayload" />
       <ComponentGroupRef Id="ServerHost" />
+      <ComponentGroupRef Id="DataRootPermissions" />
       <ComponentGroupRef Id="RetainedState" />
     </Feature>
   </Package>
