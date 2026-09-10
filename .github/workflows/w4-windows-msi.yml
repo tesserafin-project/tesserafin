@@ -245,7 +245,7 @@ jobs:
           if ($evidence.signed) { throw 'this slice signs nothing' }
           if ($evidence.published) { throw 'this slice publishes nothing' }
           if ($evidence.startedTheService) { throw 'this slice does not start the service' }
-          if ($evidence.appliedAcls) { throw 'this slice applies no ACL' }
+          if (-not $evidence.appliedAcls) { throw 'W4-A3 applies the W0 §9.3 ACLs' }
 
       # An SCM entry or an installed product that outlived a cancelled job would
       # make the next run refuse on its precondition, which reads like a defect
