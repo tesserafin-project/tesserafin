@@ -156,6 +156,109 @@ function Invoke-W4Msi {
 # package rather than out of the authoring, because the authoring is not what
 # msiexec is handed.
 # ---------------------------------------------------------------------------
+# Every OpenDatabase in this module goes through the two helpers below.
+#
+# W4-A4-R2 (#234): the R1 run reached the table controls, `Set-W4MsiCell`
+# committed, and the very next call -- `Get-W4MsiProperty`, i.e. a read-only
+# reopen of the same file through `Invoke-W4MsiQuery` -- died with
+# `Exception calling "InvokeMember" with "5" argument(s): "OpenDatabase,
+# DatabasePath,OpenMode"`. That message is Windows Installer naming the
+# parameters of the call it refused, and it carries no reason.
+#
+# The persist mode was not the fault: `Set-W4MsiCell` already opens with 1,
+# msiOpenDatabaseModeTransact, which is a mode that allows the cell edit, and
+# the edit was never reported to fail. What was wrong is that the mode was
+# never given up. The old `finally` released the Installer object only, so the
+# database and view handles taken inside it stayed alive as RCWs awaiting a
+# collection that had not happened yet. A transact-mode handle holds the .msi
+# open, and the read-only reopen a few statements later hit that handle.
+#
+# So: release the record, the view and the database as well as the installer,
+# in that order, and force the collection rather than hoping for one. And print
+# the file's facts before every open, so that a package this module cannot open
+# is diagnosable from the log instead of from the parameter names.
+function Write-W4MsiFileFacts {
+    param(
+        [Parameter(Mandatory = $true)] [string] $Path,
+        [Parameter(Mandatory = $true)] [string] $Label
+    )
+    $info = [System.IO.FileInfo]::new($Path)
+    $length = $(if ($info.Exists) { $info.Length } else { '(no file)' })
+    $readOnly = $(if ($info.Exists) { $info.IsReadOnly } else { '(no file)' })
+    Write-Host ("W4-A4 :: {0} OpenDatabase {1}" -f $Label, $Path)
+    Write-Host ("W4-A4 ::   Length {0}  Exists {1}  IsReadOnly {2}" -f `
+        $length, $info.Exists, $readOnly)
+}
+
+function Open-W4MsiDatabase {
+    <#
+        `OpenDatabase` on a FULL path, with the file's facts printed first and
+        the refusal turned into something a reader can act on. Windows
+        Installer's own last error is asked for by hand: the interop exception
+        text is the parameter list, never the reason.
+    #>
+    param(
+        [Parameter(Mandatory = $true)] $Installer,
+        [Parameter(Mandatory = $true)] [string] $MsiPath,
+        [Parameter(Mandatory = $true)] [int] $Mode,
+        [Parameter(Mandatory = $true)] [string] $Label
+    )
+    $full = [System.IO.Path]::GetFullPath($MsiPath)
+    Write-W4MsiFileFacts -Path $full -Label $Label
+    try {
+        return $Installer.GetType().InvokeMember(
+            'OpenDatabase', 'InvokeMethod', $null, $Installer, @($full, $Mode))
+    } catch {
+        $reason = '(Windows Installer reported no last error)'
+        try {
+            $errorRecord = $Installer.GetType().InvokeMember(
+                'LastErrorRecord', 'InvokeMethod', $null, $Installer, $null)
+            if ($null -ne $errorRecord) {
+                $reason = [string]$errorRecord.GetType().InvokeMember(
+                    'FormatText', 'GetProperty', $null, $errorRecord, $null)
+                [System.Runtime.InteropServices.Marshal]::FinalReleaseComObject($errorRecord)
+            }
+        } catch {
+            $reason = "(the last error record could not be read: $($_.Exception.Message))"
+        }
+        $inner = $_.Exception.InnerException
+        $hresult = $(if ($null -ne $inner) { $inner.HResult } else { $_.Exception.HResult })
+        $info = [System.IO.FileInfo]::new($full)
+        throw ("$Label could not open '$full' in persist mode $Mode " +
+            ("(HRESULT 0x{0:x8}); " -f $hresult) +
+            "Exists $($info.Exists), " +
+            "Length $($(if ($info.Exists) { $info.Length } else { '(no file)' })), " +
+            "IsReadOnly $($(if ($info.Exists) { $info.IsReadOnly } else { '(no file)' })). " +
+            "Windows Installer says: $reason. " +
+            "The interop message was: $($_.Exception.Message)")
+    }
+}
+
+function Close-W4MsiComObject {
+    <#
+        Release every handle this module took, most-derived first, and then
+        force the collection. `FinalReleaseComObject` returns void, so none of
+        this can leak an Int32 into a caller's output stream -- which matters:
+        `Invoke-W4MsiQuery` returns its rows through that stream, and one stray
+        number ahead of them would make `$rows[0][0]` a digit.
+    #>
+    param(
+        [Parameter(Mandatory = $true)] [AllowNull()] [AllowEmptyCollection()] [object[]] $ComObject
+    )
+    foreach ($item in $ComObject) {
+        if ($null -eq $item) { continue }
+        if (-not [System.Runtime.InteropServices.Marshal]::IsComObject($item)) { continue }
+        try {
+            [System.Runtime.InteropServices.Marshal]::FinalReleaseComObject($item)
+        } catch {
+            Write-Host "W4-A4 :: a COM handle refused release: $($_.Exception.Message)"
+        }
+    }
+    [System.GC]::Collect()
+    [System.GC]::WaitForPendingFinalizers()
+    [System.GC]::Collect()
+}
+
 function Invoke-W4MsiQuery {
     <#
         Run one SQL query against an MSI and return its rows as string arrays.
@@ -170,10 +273,12 @@ function Invoke-W4MsiQuery {
     )
 
     $installer = New-Object -ComObject WindowsInstaller.Installer
+    $database = $null
+    $view = $null
     try {
         # 0 is msiOpenDatabaseModeReadOnly.
-        $database = $installer.GetType().InvokeMember(
-            'OpenDatabase', 'InvokeMethod', $null, $installer, @($MsiPath, 0))
+        $database = Open-W4MsiDatabase -Installer $installer -MsiPath $MsiPath -Mode 0 `
+            -Label 'Invoke-W4MsiQuery'
         $view = $database.GetType().InvokeMember(
             'OpenView', 'InvokeMethod', $null, $database, @($Query))
         $null = $view.GetType().InvokeMember('Execute', 'InvokeMethod', $null, $view, $null)
@@ -188,8 +293,10 @@ function Invoke-W4MsiQuery {
                     'StringData', 'GetProperty', $null, $record, @($column))
             }
             $null = $rows.Add($values)
+            # Released here rather than in the teardown: a row handle held for
+            # the length of the fetch loop is a handle on the file.
+            [System.Runtime.InteropServices.Marshal]::FinalReleaseComObject($record)
         }
-        $null = $view.GetType().InvokeMember('Close', 'InvokeMethod', $null, $view, $null)
         # The leading comma is load-bearing. PowerShell unrolls an array on
         # output, so `return $rows.ToArray()` would emit each row separately and
         # a single-row result would arrive at the caller as a bare `string[]` --
@@ -197,7 +304,16 @@ function Invoke-W4MsiQuery {
         # wraps the result so exactly one object, the jagged array, comes back.
         return ,$rows.ToArray()
     } finally {
-        [System.Runtime.InteropServices.Marshal]::ReleaseComObject($installer) | Out-Null
+        # The view is closed in the teardown, not on the success path: a query
+        # that threw mid-fetch would otherwise leave the file open behind it.
+        if ($null -ne $view) {
+            try {
+                $null = $view.GetType().InvokeMember('Close', 'InvokeMethod', $null, $view, $null)
+            } catch {
+                Write-Host "W4-A4 :: a view refused Close: $($_.Exception.Message)"
+            }
+        }
+        Close-W4MsiComObject -ComObject @($view, $database, $installer)
     }
 }
 
@@ -305,10 +421,25 @@ function Set-W4MsiCell {
         [Parameter()] [AllowNull()] [System.Nullable[int]] $IntegerValue
     )
 
+    # The copy inherits the source's attributes. A read-only .msi cannot be
+    # opened in a persist mode, and the failure would name the parameters
+    # rather than the attribute, so it is cleared here and said out loud.
+    $cellPath = [System.IO.Path]::GetFullPath($MsiPath)
+    $cellFile = [System.IO.FileInfo]::new($cellPath)
+    if ($cellFile.Exists -and $cellFile.IsReadOnly) {
+        Write-Host "W4-A4 :: Set-W4MsiCell cleared the read-only attribute on $cellPath"
+        $cellFile.IsReadOnly = $false
+    }
+
     $installer = New-Object -ComObject WindowsInstaller.Installer
+    $database = $null
+    $view = $null
+    $record = $null
     try {
-        $database = $installer.GetType().InvokeMember(
-            'OpenDatabase', 'InvokeMethod', $null, $installer, @($MsiPath, 1))
+        # 1 is msiOpenDatabaseModeTransact: a persist mode, so the cell edit is
+        # allowed, and the Commit below is what makes it durable.
+        $database = Open-W4MsiDatabase -Installer $installer -MsiPath $cellPath -Mode 1 `
+            -Label 'Set-W4MsiCell'
         $view = $database.GetType().InvokeMember(
             'OpenView', 'InvokeMethod', $null, $database, @($Query))
         $null = $view.GetType().InvokeMember('Execute', 'InvokeMethod', $null, $view, $null)
@@ -325,9 +456,20 @@ function Set-W4MsiCell {
         }
         $null = $view.GetType().InvokeMember('Modify', 'InvokeMethod', $null, $view, @(2, $record))
         $null = $view.GetType().InvokeMember('Close', 'InvokeMethod', $null, $view, $null)
+        $view = $null
         $null = $database.GetType().InvokeMember('Commit', 'InvokeMethod', $null, $database, $null)
     } finally {
-        [System.Runtime.InteropServices.Marshal]::ReleaseComObject($installer) | Out-Null
+        # The transact-mode handle holds the .msi open. The caller's very next
+        # act is a read-only reopen of this same file, so every handle taken
+        # here is given up before this function returns.
+        if ($null -ne $view) {
+            try {
+                $null = $view.GetType().InvokeMember('Close', 'InvokeMethod', $null, $view, $null)
+            } catch {
+                Write-Host "W4-A4 :: a view refused Close: $($_.Exception.Message)"
+            }
+        }
+        Close-W4MsiComObject -ComObject @($record, $view, $database, $installer)
     }
 }
 
