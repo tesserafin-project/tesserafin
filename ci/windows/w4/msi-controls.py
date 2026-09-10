@@ -40,8 +40,10 @@ Two modes:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import pathlib
 import re
+import struct
 import sys
 
 import yaml
@@ -56,6 +58,7 @@ PACKAGE_PROPS = REPO_ROOT / "Directory.Packages.props"
 A0_DOC = REPO_ROOT / "docs" / "distribution" / "W4-A0-wix-skeleton.md"
 A1_DOC = REPO_ROOT / "docs" / "distribution" / "W4-A1-upgradecode.md"
 A2_DOC = REPO_ROOT / "docs" / "distribution" / "W4-A2-service-recovery.md"
+A3_DOC = REPO_ROOT / "docs" / "distribution" / "W4-A3-programdata-acls.md"
 
 # W4-A1 (#234). The owner ruling froze the GUID W4-A0 had already authored:
 # "Ordinal, lowercase, no braces. I do not authorize a new GUID." This is the
@@ -173,6 +176,293 @@ CONTRACT_SC_POLICY = "restart/60000/restart/60000//0"
 # W4-A0 §3 originally claimed all of W0 §4's table. The ruling names that
 # over-claim, and a straight revert of the corrected sentence trips this.
 A0_OVERCLAIM_PATTERN = r"W0\s+§4's\s+table\s+is\s+implemented\s+as\s+written"
+
+
+# ---------------------------------------------------------------------------
+# W4-A3 (#234). W0 §9.3, as the authoring must state it.
+#
+# The account is a VIRTUAL SERVICE ACCOUNT, and SDDL takes SIDs. The SID of
+# `NT SERVICE\<name>` is S-1-5-80 followed by the SHA-1 of the upper-case
+# UTF-16LE service name read as five little-endian DWORDs -- deterministic, the
+# same on every machine, and valid before the service exists. It is RECOMPUTED
+# here from the service name rather than copied from the authoring, because a
+# well-formed SDDL that names some other SID installs perfectly and grants
+# nobody anything: an eyeballed 41-character number is exactly the kind of
+# constant a reviewer cannot check and a gate can.
+# ---------------------------------------------------------------------------
+SERVICE_ACCOUNT_NAME = "Tesserafin"
+
+# File-specific access masks, in the units Get-Acl reports FileSystemRights in.
+# The SDDL generic aliases (GA, GR, GX) are deliberately not used anywhere: they
+# come back off a live ACL as raw numbers no predicate could compare against a
+# named right.
+RIGHTS_FULL_CONTROL = 0x1F01FF
+RIGHTS_MODIFY = 0x1301BF
+RIGHTS_READ_EXECUTE = 0x1200A9
+
+SID_ADMINISTRATORS = "BA"
+SID_LOCAL_SYSTEM = "SY"
+
+# The SDDL abbreviations for every identity §9.3 means by `Users`, plus the
+# well-known SIDs the same grant is sometimes written with. Any of them holding
+# a write bit under %ProgramData%\Tesserafin\ is the finding.
+UNPRIVILEGED_SDDL_SIDS = frozenset(
+    {"BU", "AU", "WD", "BG", "S-1-5-32-545", "S-1-5-11", "S-1-1-0", "S-1-5-32-546"}
+)
+
+# Every bit that lets the holder change something, and the two generic aliases
+# that would smuggle all of them past a mask comparison. Stated here and in
+# `W4MsiAssertions.psm1`; neither file computes the other's value.
+RIGHTS_WRITE_MASK = (
+    0x00000002 | 0x00000004 | 0x00000010 | 0x00000040 | 0x00000100
+    | 0x00010000 | 0x00040000 | 0x00080000 | 0x10000000 | 0x40000000
+)
+
+# The mechanism, settled by measurement rather than by preference. The W4-A3
+# ruling prefers `util:PermissionEx` "if Util 6.0.2 already covers it", and it
+# does not: the compiler answers WIX0004 for `Sddl`, requires `User`, and knows
+# no Protected / DenyInheritance / NoInheritance / ReplaceExisting attribute, so
+# the element can add an ACE and cannot break inheritance. The core
+# `PermissionEx` element writes the Windows Installer 5.0 MsiLockPermissionsEx
+# table and needs no extension at all, so no second extension is taken.
+#
+# The core `Permission` element writes the OTHER table, LockPermissions.
+# Windows Installer refuses a package carrying both, and LockPermissions always
+# discards inherited permissions -- which would take the choice this slice is
+# about away from the authoring. Its presence is RED.
+CORE_PERMISSION_ELEMENT = "<Permission "
+CORE_PERMISSION_EX_ELEMENT = "<PermissionEx "
+UTIL_PERMISSION_EX_ELEMENT = "<util:PermissionEx"
+
+# The two preprocessor variables every authored descriptor must come from. An
+# SDDL written inline at a PermissionEx would be a descriptor no mutation
+# reaches and no gate below parses.
+SDDL_DEFINE_NAMES = ("DataRootSddl", "InstallFolderSddl")
+
+
+def service_account_sid(name: str) -> str:
+    """The SID of `NT SERVICE\\<name>`, computed rather than quoted."""
+    digest = hashlib.sha1(name.upper().encode("utf-16-le")).digest()
+    return "S-1-5-80-" + "-".join(
+        str(value) for value in struct.unpack("<5I", digest)
+    )
+
+
+def parse_sddl_dacl(sddl: str) -> tuple[bool, list[dict]] | None:
+    """Split an SDDL DACL into (protected, [ace, ...]), or None if malformed.
+
+    Deliberately small and deliberately strict: this parses the shape the
+    authoring is allowed to write, not the whole of SDDL. Anything it cannot
+    read is a finding rather than something to be lenient about -- an SDDL the
+    gate silently skipped would be an SDDL nothing checks.
+    """
+    if not sddl.startswith("D:"):
+        return None
+    body = sddl[2:]
+    flags = ""
+    while body and body[0] not in "(":
+        flags += body[0]
+        body = body[1:]
+    if set(flags) - set("PARI"):
+        return None
+    aces: list[dict] = []
+    for match in re.finditer(r"\(([^()]*)\)", body):
+        fields = match.group(1).split(";")
+        if len(fields) != 6:
+            return None
+        ace_type, ace_flags, rights, object_guid, inherit_guid, sid = fields
+        if object_guid or inherit_guid:
+            return None
+        try:
+            mask = int(rights, 16) if rights.lower().startswith("0x") else None
+        except ValueError:
+            return None
+        if mask is None:
+            return None
+        aces.append({"type": ace_type, "flags": ace_flags, "mask": mask, "sid": sid})
+    # Every parenthesised group has to have been an ACE, or something was
+    # dropped silently.
+    if "".join(f"({ace_text})" for ace_text in re.findall(r"\(([^()]*)\)", body)) != body:
+        return None
+    if not aces:
+        return None
+    return ("P" in flags, aces)
+
+
+def allow_mask_for(aces: list[dict], sids: set[str]) -> int:
+    mask = 0
+    for ace in aces:
+        if ace["type"] == "A" and ace["sid"] in sids:
+            mask |= ace["mask"]
+    return mask
+
+
+def sddl_defines(text: str) -> dict[str, list[str]]:
+    """Every `<?define <Name> = "<sddl>" ?>` in the authoring, by variable."""
+    found: dict[str, list[str]] = {name: [] for name in SDDL_DEFINE_NAMES}
+    for name, value in re.findall(
+        r"<\?define\s+(\w+)\s*=\s*\"([^\"]*)\"\s*\?>", text
+    ):
+        if name in found:
+            found[name].append(value)
+    return found
+
+
+def findings_for_acls(text: str) -> list[str]:
+    """W4-A3: the §9.3 descriptors, parsed rather than pattern-matched.
+
+    `text` is comment-stripped, so this grades what the package WOULD build
+    with. Like the recovery gate above it is a PRESENCE gate over a file that
+    deliberately carries broken variants too: what it can assert is that the
+    real descriptors are stated exactly once each and say exactly what §9.3
+    says, and that EVERY variant -- mutants included -- keeps the rows no
+    control is about.
+    """
+    findings: list[str] = []
+    sid = service_account_sid(SERVICE_ACCOUNT_NAME)
+
+    if CORE_PERMISSION_ELEMENT in text:
+        findings.append(
+            "authoring: the core Permission element is present. It writes the LockPermissions "
+            "table, Windows Installer refuses a package carrying both permission tables, and "
+            "LockPermissions always discards inherited permissions"
+        )
+    if UTIL_PERMISSION_EX_ELEMENT in text:
+        findings.append(
+            "authoring: util:PermissionEx is used. It cannot express W0 §9.3 -- it takes no Sddl "
+            "and knows no protection attribute, so it can add an ACE and cannot break inheritance"
+        )
+    if CORE_PERMISSION_EX_ELEMENT not in text:
+        findings.append(
+            "authoring: no PermissionEx element, so the package applies none of the W0 §9.3 ACLs"
+        )
+
+    # Every descriptor the authoring applies comes from one of the two
+    # variables the gates below parse.
+    for applied in re.findall(r"<PermissionEx\s+Sddl=\"([^\"]*)\"", text):
+        if applied not in tuple(f"$(var.{name})" for name in SDDL_DEFINE_NAMES):
+            findings.append(
+                f"authoring: a PermissionEx applies '{applied}', which is not one of the "
+                f"{' / '.join(SDDL_DEFINE_NAMES)} variables every gate here parses"
+            )
+
+    defines = sddl_defines(text)
+    for name in SDDL_DEFINE_NAMES:
+        if not defines[name]:
+            findings.append(f"authoring: no {name} is defined, so nothing states the W0 §9.3 grant")
+
+    # Invariants over EVERY variant, mutants included. None of the authorised
+    # controls is about the administrative rights or about the service account's
+    # identity, so a variant that moved either would redden predicates it never
+    # declared and be attributable to nothing.
+    for name in SDDL_DEFINE_NAMES:
+        for value in defines[name]:
+            parsed = parse_sddl_dacl(value)
+            if parsed is None:
+                findings.append(f"authoring: {name} '{value}' is not a DACL this gate can read")
+                continue
+            _, aces = parsed
+            for ace in aces:
+                if ace["type"] != "A":
+                    findings.append(
+                        f"authoring: {name} carries a '{ace['type']}' ACE. This package grants; "
+                        "it denies nothing, and a deny ACE reaches every member of the group"
+                    )
+                if "OI" not in ace["flags"] or "CI" not in ace["flags"]:
+                    findings.append(
+                        f"authoring: {name} has an ACE with flags '{ace['flags']}'. Every ACE must "
+                        "be OICI or the directories below it do not inherit the grant"
+                    )
+                if ace["sid"] not in {SID_ADMINISTRATORS, SID_LOCAL_SYSTEM, sid} | UNPRIVILEGED_SDDL_SIDS:
+                    findings.append(
+                        f"authoring: {name} names the SID '{ace['sid']}', which is not the service "
+                        "account, an administrative identity, or one of the unprivileged "
+                        "identities a control is allowed to plant"
+                    )
+            if name == "DataRootSddl":
+                for who, label in ((SID_ADMINISTRATORS, "Administrators"), (SID_LOCAL_SYSTEM, "SYSTEM")):
+                    if allow_mask_for(aces, {who}) & RIGHTS_FULL_CONTROL != RIGHTS_FULL_CONTROL:
+                        findings.append(
+                            f"authoring: {name} '{value}' does not grant {label} Full. W0 §9.3 "
+                            "requires it of every variant, so no control reddens it as collateral"
+                        )
+
+    findings += findings_for_real_descriptors(defines, sid)
+    return findings
+
+
+def findings_for_real_descriptors(defines: dict[str, list[str]], sid: str) -> list[str]:
+    """The two descriptors the REAL package installs, stated exactly.
+
+    The authoring carries deliberately broken variants, so these are asked for
+    by value: the contract string must be among the variants defined, exactly
+    once, and must say exactly what W0 §9.3 says and nothing more.
+    """
+    findings: list[str] = []
+    contracts = {
+        "DataRootSddl": (
+            "D:P"
+            f"(A;OICI;0x{RIGHTS_FULL_CONTROL:x};;;{SID_ADMINISTRATORS})"
+            f"(A;OICI;0x{RIGHTS_FULL_CONTROL:x};;;{SID_LOCAL_SYSTEM})"
+            f"(A;OICI;0x{RIGHTS_MODIFY:x};;;{sid})"
+        ),
+        "InstallFolderSddl": f"D:(A;OICI;0x{RIGHTS_READ_EXECUTE:x};;;{sid})",
+    }
+    for name, contract in contracts.items():
+        occurrences = defines[name].count(contract)
+        if occurrences == 0:
+            findings.append(
+                f"authoring: no {name} states the W0 §9.3 descriptor '{contract}'. Every variant "
+                f"defined is: {defines[name] or 'none'}"
+            )
+        elif occurrences > 1:
+            findings.append(
+                f"authoring: {name} states the W0 §9.3 descriptor {occurrences} times, so which "
+                "one the real package builds with is ambiguous"
+            )
+
+    # The one property the string comparison above would not explain if it
+    # failed, spelled out so a reviewer reading a finding knows what broke.
+    data_root = contracts["DataRootSddl"]
+    if data_root in defines["DataRootSddl"]:
+        protected, aces = parse_sddl_dacl(data_root)
+        if not protected:
+            findings.append("authoring: the real DataRootSddl is not protected, so inheritance is not broken")
+        if allow_mask_for(aces, {sid}) & RIGHTS_MODIFY != RIGHTS_MODIFY:
+            findings.append(f"authoring: the real DataRootSddl does not grant {sid} Modify")
+        if allow_mask_for(aces, UNPRIVILEGED_SDDL_SIDS) != 0:
+            findings.append("authoring: the real DataRootSddl grants an unprivileged identity rights")
+    install = contracts["InstallFolderSddl"]
+    if install in defines["InstallFolderSddl"]:
+        protected, aces = parse_sddl_dacl(install)
+        if protected:
+            findings.append(
+                "authoring: the real InstallFolderSddl is protected. W0 §9.3 breaks inheritance at "
+                "%ProgramData%\\Tesserafin\\ and nowhere else"
+            )
+        if allow_mask_for(aces, {sid}) & RIGHTS_READ_EXECUTE != RIGHTS_READ_EXECUTE:
+            findings.append(f"authoring: the real InstallFolderSddl does not grant {sid} read and execute")
+        if allow_mask_for(aces, {sid}) & RIGHTS_WRITE_MASK:
+            findings.append(
+                f"authoring: the real InstallFolderSddl grants {sid} a write bit. W0 §9.3: the "
+                "service must not be able to rewrite its own binaries or its own FFmpeg"
+            )
+    return findings
+
+
+def findings_for_acl_prose(a3_text: str) -> list[str]:
+    """The A3 document says what the package does, in the package's own terms."""
+    findings: list[str] = []
+    sid = service_account_sid(SERVICE_ACCOUNT_NAME)
+    if "W4-A3" not in a3_text:
+        findings.append("W4-A3 document: does not cite the W4-A3 ruling it records")
+    if sid not in a3_text:
+        findings.append(f"W4-A3 document: does not state the service account SID {sid}")
+    if "D:P" not in a3_text:
+        findings.append(
+            "W4-A3 document: does not state the protected DACL that breaks inheritance"
+        )
+    return findings
 
 
 def without_comments(text: str, kind: str) -> str:
@@ -354,6 +644,7 @@ def findings_for_authoring(text: str) -> list[str]:
         findings.append("authoring: signs the package, which this slice does not do")
     findings += findings_for_upgrade_code(text)
     findings += findings_for_failure_actions(text)
+    findings += findings_for_acls(text)
     return findings
 
 
@@ -468,12 +759,15 @@ def findings_for_upgrade_code_prose(authoring_text: str, a0_text: str, a1_text: 
     return findings
 
 
-def grade_authoring(authoring_text: str, a0_text: str, a1_text: str, a2_text: str) -> list[str]:
+def grade_authoring(
+    authoring_text: str, a0_text: str, a1_text: str, a2_text: str, a3_text: str
+) -> list[str]:
     """Everything graded off the authoring, mutable as one text for the self-test."""
     return (
         findings_for_authoring(without_comments(authoring_text, "xml"))
         + findings_for_upgrade_code_prose(authoring_text, a0_text, a1_text)
         + findings_for_failure_actions_prose(a0_text, a2_text)
+        + findings_for_acl_prose(a3_text)
     )
 
 
@@ -510,12 +804,13 @@ def grade_everything(workflow_text: str) -> list[str]:
             A0_DOC.read_text(encoding="utf-8"),
             A1_DOC.read_text(encoding="utf-8"),
             A2_DOC.read_text(encoding="utf-8"),
+            A3_DOC.read_text(encoding="utf-8"),
         )
     )
 
 
 def self_test_upgrade_code(
-    authoring_text: str, a0_text: str, a1_text: str, a2_text: str
+    authoring_text: str, a0_text: str, a1_text: str, a2_text: str, a3_text: str
 ) -> list[str]:
     """W4-A1: the freeze gate must be reachable, in every shape the ruling names.
 
@@ -528,51 +823,57 @@ def self_test_upgrade_code(
     """
     attribute = f'UpgradeCode="{FROZEN_UPGRADE_CODE}"'
     mutations = {
-        "a different GUID": lambda a, d0, d1, d2: (
+        "a different GUID": lambda a, d0, d1, d2, d3: (
             a.replace(attribute, 'UpgradeCode="6b1e8d37-5f92-4a04-8e7c-3d05b9f2a618"', 1),
             d0,
             d1,
             d2,
+            d3,
         ),
-        "the same digits, upper case": lambda a, d0, d1, d2: (
+        "the same digits, upper case": lambda a, d0, d1, d2, d3: (
             a.replace(attribute, f'UpgradeCode="{FROZEN_UPGRADE_CODE.upper()}"', 1),
             d0,
             d1,
             d2,
+            d3,
         ),
-        "the same digits, braced": lambda a, d0, d1, d2: (
+        "the same digits, braced": lambda a, d0, d1, d2, d3: (
             a.replace(attribute, f'UpgradeCode="{{{FROZEN_UPGRADE_CODE}}}"', 1),
             d0,
             d1,
             d2,
+            d3,
         ),
-        "no UpgradeCode at all": lambda a, d0, d1, d2: (a.replace(attribute, "", 1), d0, d1, d2),
-        "the authoring calls it unfrozen": lambda a, d0, d1, d2: (
+        "no UpgradeCode at all": lambda a, d0, d1, d2, d3: (a.replace(attribute, "", 1), d0, d1, d2, d3),
+        "the authoring calls it unfrozen": lambda a, d0, d1, d2, d3: (
             a.replace("The freeze reaches that one string", "It is unfrozen", 1),
             d0,
             d1,
             d2,
+            d3,
         ),
-        "the W4-A0 document calls it unfrozen": lambda a, d0, d1, d2: (
+        "the W4-A0 document calls it unfrozen": lambda a, d0, d1, d2, d3: (
             a,
             d0.replace("no longer does", "no longer does. Nothing here freezes them", 1),
             d1,
             d2,
+            d3,
         ),
-        "the W4-A1 document drops the GUID": lambda a, d0, d1, d2: (
+        "the W4-A1 document drops the GUID": lambda a, d0, d1, d2, d3: (
             a,
             d0,
             d1.replace(FROZEN_UPGRADE_CODE, "a GUID chosen at release time"),
             d2,
+            d3,
         ),
     }
     return run_authoring_self_test(
-        "UpgradeCode freeze", mutations, authoring_text, a0_text, a1_text, a2_text
+        "UpgradeCode freeze", mutations, authoring_text, a0_text, a1_text, a2_text, a3_text
     )
 
 
 def self_test_failure_actions(
-    authoring_text: str, a0_text: str, a1_text: str, a2_text: str
+    authoring_text: str, a0_text: str, a1_text: str, a2_text: str, a3_text: str
 ) -> list[str]:
     """W4-A2: the recovery gate must be reachable, in each shape the ruling names.
 
@@ -590,19 +891,21 @@ def self_test_failure_actions(
     something is the kind that is easiest to write inert.
     """
     mutations = {
-        "no util:ServiceConfig authored": lambda a, d0, d1, d2: (
+        "no util:ServiceConfig authored": lambda a, d0, d1, d2, d3: (
             re.sub(r"\s*<util:ServiceConfig\b.*?/>", "", a, flags=re.S),
             d0,
             d1,
             d2,
+            d3,
         ),
-        "the util namespace is not declared": lambda a, d0, d1, d2: (
+        "the util namespace is not declared": lambda a, d0, d1, d2, d3: (
             a.replace("\n" + "     " + CONTRACT_UTIL_NAMESPACE, "", 1),
             d0,
             d1,
             d2,
+            d3,
         ),
-        "the core ServiceConfigFailureActions element is back": lambda a, d0, d1, d2: (
+        "the core ServiceConfigFailureActions element is back": lambda a, d0, d1, d2, d3: (
             a.replace(
                 "</ServiceInstall>",
                 '  <ServiceConfigFailureActions OnInstall="yes" ResetPeriod="86400">'
@@ -613,43 +916,49 @@ def self_test_failure_actions(
             d0,
             d1,
             d2,
+            d3,
         ),
-        "the restart delay is not 60 s": lambda a, d0, d1, d2: (
+        "the restart delay is not 60 s": lambda a, d0, d1, d2, d3: (
             a.replace('RestartServiceDelayInSeconds="60"', 'RestartServiceDelayInSeconds="1"'),
             d0,
             d1,
             d2,
+            d3,
         ),
-        "the third failure is a restart": lambda a, d0, d1, d2: (
+        "the third failure is a restart": lambda a, d0, d1, d2, d3: (
             a.replace('ThirdFailureActionType="none"', 'ThirdFailureActionType="restart"'),
             d0,
             d1,
             d2,
+            d3,
         ),
-        "the reset period is not one day": lambda a, d0, d1, d2: (
+        "the reset period is not one day": lambda a, d0, d1, d2, d3: (
             a.replace('ResetPeriodInDays="1"', 'ResetPeriodInDays="3"'),
             d0,
             d1,
             d2,
+            d3,
         ),
-        "the second failure is not a restart": lambda a, d0, d1, d2: (
+        "the second failure is not a restart": lambda a, d0, d1, d2, d3: (
             a.replace('SecondFailureActionType="restart"', 'SecondFailureActionType="none"'),
             d0,
             d1,
             d2,
+            d3,
         ),
         # The one mutation here that is deliberately NOT global. The first
         # util:ServiceConfig in the file is one of the correct ones, so removing
         # it leaves the authoring with more ServiceInstall elements than
         # policies -- which is exactly the drift the count comparison exists to
         # catch, and which no whole-file replace could ever produce.
-        "one ServiceInstall loses its recovery row": lambda a, d0, d1, d2: (
+        "one ServiceInstall loses its recovery row": lambda a, d0, d1, d2, d3: (
             re.sub(r"\s*<util:ServiceConfig\b.*?/>", "", a, count=1, flags=re.S),
             d0,
             d1,
             d2,
+            d3,
         ),
-        "the W4-A0 document reclaims the whole §4 table": lambda a, d0, d1, d2: (
+        "the W4-A0 document reclaims the whole §4 table": lambda a, d0, d1, d2, d3: (
             a,
             d0.replace(
                 "The six rows W4-A0 implements are implemented as written",
@@ -658,16 +967,128 @@ def self_test_failure_actions(
             ),
             d1,
             d2,
+            d3,
         ),
-        "the W4-A2 document drops the policy": lambda a, d0, d1, d2: (
+        "the W4-A2 document drops the policy": lambda a, d0, d1, d2, d3: (
             a,
             d0,
             d1,
             d2.replace(CONTRACT_SC_POLICY, "a policy chosen at install time"),
+            d3,
         ),
     }
     return run_authoring_self_test(
-        "recovery", mutations, authoring_text, a0_text, a1_text, a2_text
+        "recovery", mutations, authoring_text, a0_text, a1_text, a2_text, a3_text
+    )
+
+
+def self_test_acls(
+    authoring_text: str, a0_text: str, a1_text: str, a2_text: str, a3_text: str
+) -> list[str]:
+    """W4-A3: the §9.3 gate must be reachable, in each shape §9.3 rules out.
+
+    Every mutation replaces the REAL descriptor, never the first occurrence:
+    the authoring carries four deliberately broken variants of its own, they
+    are how the hostile controls drive the real authoring, and a
+    first-occurrence replace would land on one of them and leave the real
+    descriptor standing while the self-test claimed it had been tripped.
+
+    The two "mechanism" mutations are the ones easiest to write inert, because
+    each is a gate for the ABSENCE of something.
+    """
+    sid = service_account_sid(SERVICE_ACCOUNT_NAME)
+    real_data_root = (
+        "D:P"
+        f"(A;OICI;0x{RIGHTS_FULL_CONTROL:x};;;{SID_ADMINISTRATORS})"
+        f"(A;OICI;0x{RIGHTS_FULL_CONTROL:x};;;{SID_LOCAL_SYSTEM})"
+        f"(A;OICI;0x{RIGHTS_MODIFY:x};;;{sid})"
+    )
+    real_install = f"D:(A;OICI;0x{RIGHTS_READ_EXECUTE:x};;;{sid})"
+
+    def swap(old: str, new: str):
+        return lambda a, d0, d1, d2, d3: (a.replace(old, new, 1), d0, d1, d2, d3)
+
+    def define(name: str, value: str) -> str:
+        """The whole `<?define ?>`, not the SDDL alone.
+
+        The real data-root descriptor is a PREFIX of two of the mutant ones --
+        `acl-users-write` is it plus a `Users` ACE -- and the mutants are
+        authored first, so a replace of the bare SDDL would land on a control
+        branch and leave the real descriptor standing while this self-test
+        claimed it had been tripped. That is the exact failure mode the
+        recovery self-test documents for `util:ServiceConfig`.
+        """
+        return f'<?define {name} = "{value}" ?>'
+
+    def swap_real(name: str, value: str, replacement: str):
+        return swap(define(name, value), define(name, replacement))
+
+    mutations = {
+        "the data root descriptor is not protected": swap_real(
+            "DataRootSddl", real_data_root, real_data_root.replace("D:P", "D:", 1)
+        ),
+        "the data root hands Users Modify": swap_real(
+            "DataRootSddl", real_data_root, real_data_root + f"(A;OICI;0x{RIGHTS_MODIFY:x};;;BU)"
+        ),
+        "the service account gets no grant at all": swap_real(
+            "DataRootSddl",
+            real_data_root,
+            real_data_root.replace(f"(A;OICI;0x{RIGHTS_MODIFY:x};;;{sid})", "", 1),
+        ),
+        "the service account SID is a different one": swap(
+            sid, service_account_sid("TesserafinServer")
+        ),
+        "INSTALLFOLDER grants the service Modify": swap_real(
+            "InstallFolderSddl", real_install, f"D:(A;OICI;0x{RIGHTS_MODIFY:x};;;{sid})"
+        ),
+        "INSTALLFOLDER is protected too": swap_real(
+            "InstallFolderSddl", real_install, "D:P" + real_install[2:]
+        ),
+        "an ACE is not inheritable": swap(
+            f"(A;OICI;0x{RIGHTS_MODIFY:x};;;{sid})", f"(A;;0x{RIGHTS_MODIFY:x};;;{sid})"
+        ),
+        "the data root stops granting SYSTEM Full": swap(
+            f"(A;OICI;0x{RIGHTS_FULL_CONTROL:x};;;{SID_LOCAL_SYSTEM})", ""
+        ),
+        "the rights are an SDDL generic alias": swap(
+            f"0x{RIGHTS_READ_EXECUTE:x};;;{sid}", f"GRGX;;;{sid}"
+        ),
+        "a descriptor is applied inline instead of through a variable": swap(
+            '<PermissionEx Sddl="$(var.InstallFolderSddl)" />',
+            '<PermissionEx Sddl="D:(A;OICI;0x1f01ff;;;WD)" />',
+        ),
+        "the core Permission element is used": swap(
+            '<PermissionEx Sddl="$(var.DataRootSddl)" />',
+            '<Permission User="Everyone" GenericAll="yes" />',
+        ),
+        "util:PermissionEx is used instead": swap(
+            '<PermissionEx Sddl="$(var.DataRootSddl)" />',
+            '<util:PermissionEx User="Tesserafin" Domain="NT SERVICE" GenericAll="yes" />',
+        ),
+        "no PermissionEx is authored at all": lambda a, d0, d1, d2, d3: (
+            re.sub(r"\s*<PermissionEx\b[^>]*/>", "", a),
+            d0,
+            d1,
+            d2,
+            d3,
+        ),
+        "the W4-A3 document drops the SID": lambda a, d0, d1, d2, d3: (
+            a,
+            d0,
+            d1,
+            d2,
+            d3.replace(sid, "the service account's SID"),
+        ),
+        "the W4-A3 document drops the protected DACL": lambda a, d0, d1, d2, d3: (
+            a,
+            d0,
+            d1,
+            d2,
+            d3.replace("D:P", "a descriptor"),
+        ),
+    }
+    return run_authoring_self_test(
+        "ACL", mutations, authoring_text, a0_text, a1_text, a2_text, a3_text
     )
 
 
@@ -678,9 +1099,10 @@ def run_authoring_self_test(
     a0_text: str,
     a1_text: str,
     a2_text: str,
+    a3_text: str,
 ) -> list[str]:
     """Apply each mutation and require the authoring gates to catch every one."""
-    original = (authoring_text, a0_text, a1_text, a2_text)
+    original = (authoring_text, a0_text, a1_text, a2_text, a3_text)
     failures: list[str] = []
     for name, mutate in mutations.items():
         mutated = mutate(*original)
@@ -733,7 +1155,7 @@ def main() -> int:
     parser.add_argument("--self-test", action="store_true", help="also prove each gate can fire")
     options = parser.parse_args()
 
-    for required in (WORKFLOW, AUTHORING, BUILDER, PROBE, SELF_TEST, A0_DOC, A1_DOC, A2_DOC):
+    for required in (WORKFLOW, AUTHORING, BUILDER, PROBE, SELF_TEST, A0_DOC, A1_DOC, A2_DOC, A3_DOC):
         if not required.is_file():
             print(f"W4 CONTROLS REFUSED: missing {required.relative_to(REPO_ROOT)}")
             return 1
@@ -741,7 +1163,7 @@ def main() -> int:
     workflow_text = WORKFLOW.read_text(encoding="utf-8")
     findings = grade_everything(workflow_text)
 
-    print("W4-A0 / W4-A2 static controls")
+    print("W4-A0 / W4-A2 / W4-A3 static controls")
     if findings:
         for finding in findings:
             print(f"  FINDING  {finding}")
@@ -756,9 +1178,11 @@ def main() -> int:
             A0_DOC.read_text(encoding="utf-8"),
             A1_DOC.read_text(encoding="utf-8"),
             A2_DOC.read_text(encoding="utf-8"),
+            A3_DOC.read_text(encoding="utf-8"),
         )
         failures += self_test_upgrade_code(*documents)
         failures += self_test_failure_actions(*documents)
+        failures += self_test_acls(*documents)
     for failure in failures:
         print(f"  FINDING  {failure}")
 

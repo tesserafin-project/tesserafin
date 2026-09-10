@@ -14,6 +14,21 @@
         `--service` and the W0 §4 argument list, and uninstalls the service and
         the binaries while leaving the state directories.
 
+    W4-A3 (#234) adds the last property this slice is authorised to measure,
+    and measures it the same way -- off the machine, after the install:
+
+        the installed layout carries the W0 §9.3 ACLs. Inheritance is BROKEN at
+        %ProgramData%\Tesserafin\; `NT SERVICE\Tesserafin` has Modify on
+        config, data, cache and log and read-and-execute WITHOUT any write bit
+        under INSTALLFOLDER; Administrators and SYSTEM have Full on the state
+        tree; and no unprivileged identity has a write bit anywhere in it.
+
+    Read with `Get-Acl` and graded by SID and by access mask, never from the
+    authoring, and never by starting the service: W0 §9.2 measured that the
+    default %ProgramData% ACL is already permissive enough for the service to
+    start, so a service that starts says nothing about these grants. W0 §10
+    leaves it stopped and this run leaves it stopped.
+
     W4-A2 (#234) adds one property to the same run, measured the same way:
 
         the installed service carries the W0 §4 recovery policy -- restart
@@ -46,7 +61,6 @@
         bytes are not bit-for-bit and accepted a bounded exception; this script
         does not build the same package twice and does not compare digests;
       * it signs nothing, uploads nothing and publishes nothing;
-      * it applies none of the W0 §9.3 ACLs;
       * it changes no Tesserafin.Server behaviour and edits none of the frozen
         W1/W2 scripts it runs.
 
@@ -74,6 +88,17 @@
     prefix rather than the runner's real %ProgramFiles%; this is that prefix,
     and `installedOutsideProgramFiles` is the predicate that proves the
     redirection actually took rather than being assumed.
+
+    W4-A3: only INSTALLFOLDER is redirected. DATAFOLDER is NOT, so every ACL
+    this run grades under %ProgramData% is graded on the real
+    %ProgramData%\Tesserafin tree an operator would get, and the argument list
+    W0 §4 states is the argument list that is measured. The consequence for
+    INSTALLFOLDER is stated rather than hidden: under a disposable prefix the
+    Administrators, SYSTEM and `Users` rows are inherited from the runner's temp
+    tree and not from %ProgramFiles%, so they are RECORDED as evidence and no
+    predicate grades them. What is graded there is the one row the package
+    itself authors: the service account's, which must carry read and execute
+    and no write bit at all.
 
 .PARAMETER EvidencePath
     Where the evidence document is written. It records states, exit codes,
@@ -111,19 +136,24 @@ $ErrorActionPreference = 'Stop'
 $SERVICE_NAME = 'Tesserafin'
 $SERVICE_KEY = "HKLM:\SYSTEM\CurrentControlSet\Services\$SERVICE_NAME"
 $MUTATIONS = @('none', 'no-exe', 'no-service-flag', 'no-path-flags', 'no-service-remove',
-    'no-util-config', 'delay-not-60s', 'third-action-restart')
+    'no-util-config', 'delay-not-60s', 'third-action-restart',
+    'acl-not-protected', 'acl-users-write', 'acl-no-service-grant', 'acl-install-writable')
 
 Import-Module ([System.IO.Path]::Combine($PSScriptRoot, 'W4MsiAssertions.psm1')) -Force
 
 $evidence = [ordered]@{
-    slice = 'W4-A0'
+    slice = 'W4-A3'
     tracker = 234
     headSha = $HeadSha
     # Stated as data so the closing report cannot claim more than the run did.
     signed = $false
     published = $false
     startedTheService = $false
-    appliedAcls = $false
+    # W4-A3 (#234). This slice DOES apply the W0 §9.3 ACLs, and says so here
+    # rather than leaving the closing report to infer it. Every earlier W4 slice
+    # stated `$false` and meant it; this one would be claiming less than the run
+    # did.
+    appliedAcls = $true
     reproducibilityClaim = 'none -- W0 §5.6 already measured that MSI bytes are not bit-for-bit'
     runs = [ordered]@{}
 }
@@ -188,6 +218,10 @@ if ([System.IO.Directory]::Exists($work) -and
 }
 $null = [System.IO.Directory]::CreateDirectory($work)
 
+# W4-A3. The same precondition the service key already has, for the same
+# reason: state left behind by a cancelled run would make the first control
+# measure the previous run's descriptor. Reset-InstalledState is defined below,
+# so this call is made once the instruments exist -- see 'the machine, reset'.
 $prefixRoot = [System.IO.Path]::GetFullPath($InstallPrefix)
 $programFilesTesserafin = [System.IO.Path]::Combine($env:ProgramFiles, 'Tesserafin')
 if ([System.IO.Directory]::Exists($programFilesTesserafin)) {
@@ -201,6 +235,15 @@ if ([System.IO.Directory]::Exists($programFilesTesserafin)) {
 # disposable; an operator's machine is not, which is exactly why the retained
 # components are Permanent.
 $programDataRoot = [System.IO.Path]::Combine($env:ProgramData, 'Tesserafin', 'Server')
+# W4-A3: the directory W0 §9.3 breaks inheritance AT. It is the parent of the
+# state root, not the state root itself, and the difference is the whole point:
+# %ProgramData% itself lets any authenticated user create files, and the break
+# has to happen at the first directory this package owns.
+$programDataTesserafin = [System.IO.Path]::Combine($env:ProgramData, 'Tesserafin')
+# The retained-state components' key path. It is Permanent, so it outlives an
+# uninstall by design -- see Reset-InstalledState for why that matters to a run
+# that installs twelve packages in a row.
+$RETAINED_STATE_KEY = 'HKLM:\SOFTWARE\Tesserafin'
 
 # ---------------------------------------------------------------------------
 # The accepted layout, read from the script that registers the service for the
@@ -638,6 +681,135 @@ function Get-ServiceFailureEvidence {
     }
 }
 
+# ---------------------------------------------------------------------------
+# W4-A3: the ACLs, read off the installed layout with Get-Acl.
+#
+# The ruling asks for the LIVE ACLs, named by SID and by rights, and asks
+# whether inheritance is broken -- not for a restatement of the SDDL the
+# authoring supplied. So every rule is taken as a SecurityIdentifier rather than
+# as an NTAccount: `NT SERVICE\Tesserafin` is a virtual account, its SID is what
+# the descriptor actually carries, and a name translation is one more thing that
+# can quietly fail and leave a row unattributable.
+#
+# `AreAccessRulesProtected` is the whole slice in one boolean. It is the managed
+# name for SE_DACL_PROTECTED, which is what the `D:P` in the authored SDDL asks
+# Windows Installer to set, and it is the only thing that can say whether the
+# permissive %ProgramData% parent still reaches the database.
+# ---------------------------------------------------------------------------
+function Get-AclObservation {
+    param([Parameter(Mandatory = $true)] [string] $Path)
+
+    if (-not [System.IO.Directory]::Exists($Path)) { return $null }
+    $acl = $(try { Get-Acl -LiteralPath $Path } catch { $null })
+    if ($null -eq $acl) { return $null }
+
+    $rules = @(
+        foreach ($rule in $acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])) {
+            [ordered]@{
+                sid = [string]$rule.IdentityReference.Value
+                rights = [int]$rule.FileSystemRights
+                type = [string]$rule.AccessControlType
+                inherited = [bool]$rule.IsInherited
+                inheritanceFlags = [string]$rule.InheritanceFlags
+                propagationFlags = [string]$rule.PropagationFlags
+            }
+        }
+    )
+
+    # The DACL in the notation the authoring is written in, so a reviewer can
+    # compare one string against one string. Owner and group are asked for
+    # separately; the SACL is never read, because reading it needs a privilege
+    # this proof has no reason to hold.
+    $sddl = $(try {
+        $acl.GetSecurityDescriptorSddlForm([System.Security.AccessControl.AccessControlSections]::Access)
+    } catch { $null })
+    $owner = $(try { [string]$acl.GetOwner([System.Security.Principal.SecurityIdentifier]).Value } catch { $null })
+
+    return [ordered]@{
+        path = $Path
+        protected = [bool]$acl.AreAccessRulesProtected
+        owner = $owner
+        sddl = $sddl
+        rules = $rules
+    }
+}
+
+function Get-AclObservations {
+    <#
+        The six directories W0 §9.3 states a row for, under the labels
+        `W4MsiAssertions.psm1` grades them by. A directory that does not exist
+        comes back $null rather than as an empty ACL: "the install never created
+        it" and "it exists and grants nobody anything" are different findings
+        and must not collapse into one.
+    #>
+    param([Parameter(Mandatory = $true)] [string] $InstallPrefix)
+    $observations = [ordered]@{
+        installFolder = Get-AclObservation -Path $InstallPrefix
+        dataRoot = Get-AclObservation -Path $programDataTesserafin
+    }
+    foreach ($name in 'config', 'data', 'cache', 'log') {
+        $observations[$name] = Get-AclObservation -Path ([System.IO.Path]::Combine($programDataRoot, $name))
+    }
+    return $observations
+}
+
+function Show-AclObservations {
+    <#
+        The ruling's stop condition, printed rather than left inside an evidence
+        document: the SID, the rights, and whether inheritance is broken. It goes
+        to the step log for every mutation, before anything is graded, so a run
+        that later refuses still leaves the dump the ruling asks for behind.
+    #>
+    param(
+        [Parameter(Mandatory = $true)] $Observations,
+        [Parameter(Mandatory = $true)] [string] $Label
+    )
+    Write-Host "W4-A3 :: live ACLs after installing '$Label'"
+    foreach ($name in $Observations.Keys) {
+        $acl = $Observations[$name]
+        if ($null -eq $acl) {
+            Write-Host ("  {0,-14} (the directory does not exist)" -f $name)
+            continue
+        }
+        Write-Host ("  {0,-14} inheritance broken: {1,-5}  {2}" -f $name, $acl.protected, $acl.path)
+        foreach ($rule in @($acl.rules)) {
+            Write-Host ("  {0,-14}   {1} {2,-46} 0x{3:x6} {4}" -f '', `
+                $rule.type.PadRight(5), $rule.sid, $rule.rights, `
+                $(if ($rule.inherited) { 'inherited' } else { 'explicit' }))
+        }
+        if ($acl.sddl) { Write-Host ("  {0,-14}   sddl {1}" -f '', $acl.sddl) }
+    }
+}
+
+function Reset-InstalledState {
+    <#
+        W4-A3. Put the machine back to "this package has never been installed",
+        between every control and before the first one.
+
+        Two things this proof used not to remove, and now must.
+
+        %ProgramData%\Tesserafin is where the ACL under test lives, and
+        SetNamedSecurityInfo leaves the protection flag alone unless it is told
+        otherwise -- so a directory left protected by one control would still be
+        protected when the NEXT control installs a deliberately unprotected
+        descriptor, and that control would grade green while proving nothing.
+        The four state components are Permanent by design, so an uninstall
+        deliberately will not do this and the probe has to.
+
+        HKLM\SOFTWARE\Tesserafin is the retained-state key path. Those
+        components are NeverOverwrite: with the key still present the installer
+        SKIPS them, their CreateFolder never runs, and the state directories the
+        previous control's cleanup just deleted are never recreated.
+
+        The runner is disposable and an operator's machine is not, which is
+        exactly why the package keeps both and this script does not.
+    #>
+    Remove-Item -LiteralPath $programDataTesserafin -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $RETAINED_STATE_KEY -Recurse -Force -ErrorAction SilentlyContinue
+    return (-not [System.IO.Directory]::Exists($programDataTesserafin)) -and
+        (-not (Test-Path -LiteralPath $RETAINED_STATE_KEY))
+}
+
 function Get-ServiceState {
     $service = Get-Service -Name $SERVICE_NAME -ErrorAction SilentlyContinue
     if ($null -eq $service) { return 'Absent' }
@@ -668,6 +840,15 @@ $null = [System.IO.Directory]::CreateDirectory($logDir)
 # stage minus the server executable and minus the portable ZIP's service script.
 # One copy, not five, and the builder re-validates it on every call.
 $harvestRoot = [System.IO.Path]::Combine($work, 'harvest')
+
+# W4-A3: the machine, reset. Before the first control as well as between them,
+# because a cancelled earlier run leaves exactly the state that would make the
+# first control unattributable.
+if (-not (Reset-InstalledState)) {
+    Deny 'precondition' ("'$programDataTesserafin' or '$RETAINED_STATE_KEY' is present on this host " +
+        'and could not be removed, so the first ACL control would have measured state this run did ' +
+        'not create')
+}
 
 $allPassed = $true
 
@@ -708,6 +889,13 @@ foreach ($mutation in $MUTATIONS) {
     $run.installPrefixUsed = $prefix
     $run.programFilesTesserafinExists = [System.IO.Directory]::Exists($programFilesTesserafin)
 
+    # W4-A3: read BEFORE the uninstall, while the layout the installer created
+    # still exists, and print the dump before anything is graded so that a run
+    # which later refuses still leaves the ruling's evidence behind.
+    $acls = Get-AclObservations -InstallPrefix $prefix
+    Show-AclObservations -Observations $acls -Label $mutation
+    $run.acls = $acls
+
     # The retained directories have to hold something before "the uninstall left
     # them alone" can be more than a statement about an empty directory.
     foreach ($name in 'config', 'data', 'cache', 'log') {
@@ -732,6 +920,7 @@ foreach ($mutation in $MUTATIONS) {
         service = $service
         serviceState = $run.serviceState
         failureActions = $failureActions
+        acls = $acls
     }
     $run.installedFileCount = $(if ([System.IO.Directory]::Exists($prefix)) {
         @(Get-ChildItem -LiteralPath $prefix -Recurse -File -Force).Count } else { 0 })
@@ -769,6 +958,10 @@ foreach ($mutation in $MUTATIONS) {
     }
     Remove-Item -LiteralPath $prefix -Recurse -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $msiPath -Force -ErrorAction SilentlyContinue
+    if (-not (Reset-InstalledState)) {
+        Deny 'cleanup' ("'$programDataTesserafin' survived mutation '$mutation' and could not be " +
+            'removed, so the next control would have measured this one''s security descriptor')
+    }
 }
 
 # Two controls with identical failure lists is the tell that the harness graded
@@ -791,6 +984,11 @@ $evidence.installPrefixUsed = $evidence.runs['none'].installPrefixUsed
 # W4-A2's stop condition, answered from the measurement rather than from the
 # authoring: what the SCM said the real package's service would do when it dies.
 $evidence.failureActionsObserved = $evidence.runs['none'].failureActions
+# W4-A3's stop condition, answered the same way: the live ACLs of the real
+# package's installed layout, and the one boolean the slice is about.
+$evidence.aclsObserved = $evidence.runs['none'].acls
+$evidence.dataRootInheritanceBroken = $evidence.runs['none'].predicates['dataRootInheritanceBroken']
+$evidence.serviceAccountSid = 'S-1-5-80-761762137-1691453069-3789821951-3290391601-3361247659'
 $evidence.allPassed = $allPassed
 Save-Evidence
 

@@ -1,7 +1,8 @@
 #Requires -Version 7.2
 <#
-    W4-A0 (#234). The predicates the MSI skeleton is graded on, and the RED set
-    each hostile control is expected to produce.
+    W4-A0 (#234), extended by W4-A2 with the W0 §4 recovery row and by W4-A3
+    with the W0 §9.3 ACLs. The predicates the MSI skeleton is graded on, and the
+    RED set each hostile control is expected to produce.
 
     Everything here is PURE: an observation hashtable in, an ordered
     predicate-name -> boolean map out. No msiexec, no registry, no filesystem.
@@ -61,6 +62,184 @@ $script:ContractFailureActions = @(
     @{ type = 'restartService'; delayMs = 60000 }
     @{ type = 'none'; delayMs = 0 }
 )
+
+# ---------------------------------------------------------------------------
+# W0 §9.3, the ACL contract, restated ONCE for the grader (W4-A3).
+#
+#   %ProgramFiles%\Tesserafin\Server    NT SERVICE\Tesserafin: read and execute
+#                                       ONLY -- the service must not be able to
+#                                       rewrite its own binaries or its own
+#                                       FFmpeg
+#   %ProgramData%\Tesserafin\Server\    NT SERVICE\Tesserafin: Modify, on each
+#     config, data, cache, log          of the four
+#   all of the above                    Administrators and SYSTEM: Full.
+#                                       Users: no inherited write
+#   inheritance broken at               %ProgramData%\Tesserafin\
+#
+# Everything here is a SID and an integer access mask, and NOTHING here calls
+# into System.Security.Principal or System.Security.AccessControl. Those types
+# are Windows-only, and this module is graded on Linux by
+# `ci/windows/w4/assertion-self-test.ps1` before a runner is ever asked for. The
+# probe does the extraction on the host; this file only does arithmetic.
+# ---------------------------------------------------------------------------
+
+# `NT SERVICE\Tesserafin`. A virtual service account's SID is S-1-5-80 followed
+# by the SHA-1 of the UPPER-CASE UTF-16LE service name read as five
+# little-endian DWORDs, so it is the same value on every machine and it exists
+# before the service does. It is stated here as a literal and recomputed from
+# the service name by `ci/windows/w4/msi-controls.py`, so neither file can drift
+# without the other saying so.
+$script:ServiceAccountSid = 'S-1-5-80-761762137-1691453069-3789821951-3290391601-3361247659'
+
+$script:SidAdministrators = 'S-1-5-32-544'
+$script:SidLocalSystem = 'S-1-5-18'
+
+# The identities §9.3 means by `Users`. All four are asked about rather than
+# just BUILTIN\Users, because `Authenticated Users` and `Everyone` are the two
+# ways the same grant is usually written and neither is narrower.
+$script:UnprivilegedSids = @(
+    'S-1-5-32-545'   # BUILTIN\Users
+    'S-1-5-11'       # NT AUTHORITY\Authenticated Users
+    'S-1-1-0'        # Everyone
+    'S-1-5-32-546'   # BUILTIN\Guests
+)
+
+# File-specific access masks, in the units Get-Acl reports FileSystemRights in.
+$script:RightsFullControl = 0x1F01FF
+$script:RightsModify = 0x1301BF
+$script:RightsReadExecute = 0x1200A9
+
+# Every bit that lets the holder change something. FILE_WRITE_DATA,
+# FILE_APPEND_DATA, FILE_WRITE_EA, FILE_DELETE_CHILD, FILE_WRITE_ATTRIBUTES,
+# DELETE, WRITE_DAC, WRITE_OWNER, and the two generic aliases that would
+# otherwise smuggle all of them past a mask comparison.
+$script:RightsWriteMask =
+    0x00000002 -bor 0x00000004 -bor 0x00000010 -bor 0x00000040 -bor 0x00000100 -bor
+    0x00010000 -bor 0x00040000 -bor 0x00080000 -bor 0x10000000 -bor 0x40000000
+
+$script:StateDirectoryNames = @('config', 'data', 'cache', 'log')
+
+function Test-W4HasKey {
+    <#
+        Does $Bag carry $Key? Asked through IDictionary rather than through
+        `ContainsKey`, because the two dictionary shapes this module is handed
+        do NOT share that method: the probe builds its ACL observations as
+        [ordered], which is a System.Collections.Specialized.OrderedDictionary
+        and has `Contains` and no `ContainsKey` at all, while the older
+        observations are plain hashtables. Both implement IDictionary.
+
+        This is not defensive tidiness. `ContainsKey` on an [ordered] throws a
+        method-not-found under StrictMode, on the runner, two hours in, and
+        never on any synthetic observation written as a hashtable -- so the
+        self-test builds its ACL observations as [ordered] too.
+    #>
+    param(
+        [Parameter(Mandatory = $true)] [AllowNull()] $Bag,
+        [Parameter(Mandatory = $true)] [string] $Key
+    )
+    if ($null -eq $Bag) { return $false }
+    if ($Bag -is [System.Collections.IDictionary]) { return $Bag.Contains($Key) }
+    return $false
+}
+
+function Get-W4Acl {
+    <#
+        One directory's ACL observation out of the observation hashtable, or
+        $null when the probe could not read it -- which is what a directory the
+        install never created looks like, and which must never grade as "the
+        contract holds". StrictMode 3 makes a missing key an error, so the key
+        is asked for rather than indexed.
+    #>
+    param(
+        [Parameter(Mandatory = $true)] [hashtable] $Observation,
+        [Parameter(Mandatory = $true)] [string] $Label
+    )
+    if (-not (Test-W4HasKey -Bag $Observation -Key 'acls')) { return $null }
+    $acls = $Observation.acls
+    if (-not (Test-W4HasKey -Bag $acls -Key $Label)) { return $null }
+    return $acls[$Label]
+}
+
+function Get-W4AllowMask {
+    <#
+        The union of every ALLOW mask the ACL carries for any of $Sids,
+        inherited or explicit. Zero when the ACL is missing or grants them
+        nothing.
+
+        DENY is deliberately not subtracted. Nothing this package authors denies
+        anything, so a deny ACE appearing at all is a finding rather than a
+        subtlety, and it is reported by `Test-W4NoDeny` below instead of being
+        quietly folded into a number.
+    #>
+    param(
+        [Parameter(Mandatory = $true)] [AllowNull()] $Acl,
+        [Parameter(Mandatory = $true)] [string[]] $Sids
+    )
+    if (-not (Test-W4HasKey -Bag $Acl -Key 'rules')) { return 0 }
+    $mask = 0
+    foreach ($rule in @($Acl.rules)) {
+        if (-not (Test-W4HasKey -Bag $rule -Key 'sid')) { continue }
+        if (-not (Test-W4HasKey -Bag $rule -Key 'rights')) { continue }
+        if ($Sids -notcontains [string]$rule.sid) { continue }
+        $type = $(if (Test-W4HasKey -Bag $rule -Key 'type') { [string]$rule.type } else { 'Allow' })
+        if ($type -ne 'Allow') { continue }
+        $mask = $mask -bor [int]$rule.rights
+    }
+    return $mask
+}
+
+function Test-W4Grants {
+    <#
+        Does the ACL grant $Sid at least every bit of $Required? A superset is
+        accepted for Administrators and SYSTEM -- Full IS the superset -- and for
+        the service account's Modify, because §9.3 states a floor. The one place
+        a superset is NOT accepted is the read-and-execute grant on
+        INSTALLFOLDER, and that is graded as a separate absence-of-write
+        predicate rather than by an equality that a harmless extra bit would
+        break.
+    #>
+    param(
+        [Parameter(Mandatory = $true)] [AllowNull()] $Acl,
+        [Parameter(Mandatory = $true)] [string] $Sid,
+        [Parameter(Mandatory = $true)] [int] $Required
+    )
+    if ($null -eq $Acl) { return $false }
+    $mask = Get-W4AllowMask -Acl $Acl -Sids @($Sid)
+    return (($mask -band $Required) -eq $Required)
+}
+
+function Test-W4NoWriteFor {
+    <#
+        Does the ACL grant NONE of $Sids any bit that would let them change
+        something? A missing ACL is $false, never $true: an unreadable directory
+        must not satisfy "nobody can write to it".
+    #>
+    param(
+        [Parameter(Mandatory = $true)] [AllowNull()] $Acl,
+        [Parameter(Mandatory = $true)] [string[]] $Sids
+    )
+    if ($null -eq $Acl) { return $false }
+    return ((Get-W4AllowMask -Acl $Acl -Sids $Sids) -band $script:RightsWriteMask) -eq 0
+}
+
+function Test-W4EveryStateDirectory {
+    <#
+        Answer one question about all four W0 §9.1 state directories at once.
+        The §9.3 row is stated for the four together, and a predicate per
+        directory would give one defect four visible consequences and make every
+        control declare four names.
+    #>
+    param(
+        [Parameter(Mandatory = $true)] [hashtable] $Observation,
+        [Parameter(Mandatory = $true)] [scriptblock] $Test
+    )
+    foreach ($name in $script:StateDirectoryNames) {
+        $acl = Get-W4Acl -Observation $Observation -Label $name
+        if ($null -eq $acl) { return $false }
+        if (-not (& $Test $acl)) { return $false }
+    }
+    return $true
+}
 
 function Split-W4CommandLine {
     <#
@@ -214,6 +393,18 @@ function Get-W4Predicates {
           serviceKeyAfterUninstall     [bool]     the SCM key still exists
           filesUnderPrefixAfterUninstall [int]
           stateAfterUninstall          [hashtable] name -> @{ directory = [bool]; sentinel = [bool] }
+          acls                         [ordered] or absent -- W4-A3. Label ->
+                                       @{ path; protected [bool]; owner;
+                                          sddl; rules = @( @{ sid; rights [int];
+                                          type; inherited; inheritanceFlags;
+                                          propagationFlags } ) }, read AFTER the
+                                       install and BEFORE the uninstall. The
+                                       labels are `installFolder`, `dataRoot`
+                                       (%ProgramData%\Tesserafin, the directory
+                                       inheritance is broken at) and the four
+                                       state directory names. A label whose
+                                       value is $null is a directory the probe
+                                       could not read.
     #>
     [OutputType([System.Collections.Specialized.OrderedDictionary])]
     param([Parameter(Mandatory = $true)] [hashtable] $Observation)
@@ -314,6 +505,38 @@ function Get-W4Predicates {
     $predicates['serviceFailureThirdIsNoAction'] =
         (Test-W4FailureAction -FailureActions $failureActions -Index 2)
 
+    # ── W0 §9.3's ACLs, read back off the installed layout (W4-A3) ──────────
+    # Read from `Get-Acl` after the install, never from the authoring, and never
+    # by starting the service: W0 §9.2 measured that the default %ProgramData%
+    # ACL is already permissive enough for the service to run, so a service that
+    # starts proves nothing at all about these grants.
+    $installFolderAcl = Get-W4Acl -Observation $o -Label 'installFolder'
+    $dataRootAcl = Get-W4Acl -Observation $o -Label 'dataRoot'
+
+    # The service can run the binaries it was installed with...
+    $predicates['installFolderServiceCanReadAndExecute'] =
+        (Test-W4Grants -Acl $installFolderAcl -Sid $script:ServiceAccountSid `
+            -Required $script:RightsReadExecute)
+    # ...and cannot rewrite them. W0 §9.3 states this as the reason the grant
+    # exists, so it is graded as its own predicate: a Modify grant satisfies
+    # "read and execute" and would leave the row above green on its own.
+    $predicates['installFolderServiceCannotWrite'] =
+        (Test-W4NoWriteFor -Acl $installFolderAcl -Sids @($script:ServiceAccountSid))
+
+    # The whole slice, in one bit: a protected DACL at %ProgramData%\Tesserafin\
+    # so the permissive parent cannot widen access to the database.
+    $predicates['dataRootInheritanceBroken'] =
+        ((Test-W4HasKey -Bag $dataRootAcl -Key 'protected') -and [bool]$dataRootAcl.protected)
+
+    $predicates['stateDirectoriesServiceHasModify'] = (Test-W4EveryStateDirectory -Observation $o -Test {
+        param($acl) Test-W4Grants -Acl $acl -Sid $script:ServiceAccountSid -Required $script:RightsModify })
+    $predicates['stateDirectoriesAdministratorsHaveFull'] = (Test-W4EveryStateDirectory -Observation $o -Test {
+        param($acl) Test-W4Grants -Acl $acl -Sid $script:SidAdministrators -Required $script:RightsFullControl })
+    $predicates['stateDirectoriesSystemHasFull'] = (Test-W4EveryStateDirectory -Observation $o -Test {
+        param($acl) Test-W4Grants -Acl $acl -Sid $script:SidLocalSystem -Required $script:RightsFullControl })
+    $predicates['stateDirectoriesUsersHaveNoWrite'] = (Test-W4EveryStateDirectory -Observation $o -Test {
+        param($acl) Test-W4NoWriteFor -Acl $acl -Sids $script:UnprivilegedSids })
+
     # ── uninstall ───────────────────────────────────────────────────────────
     $predicates['uninstallRemovedService'] = -not [bool]$o.serviceKeyAfterUninstall
     $predicates['uninstallRemovedBinaries'] = ([int]$o.filesUnderPrefixAfterUninstall -eq 0)
@@ -377,6 +600,29 @@ function Get-W4ControlExpectations {
             'serviceFailureSecondIsRestartAfter60s'
         )
         'third-action-restart' = @('serviceFailureThirdIsNoAction')
+        # W4-A3, the four ACL controls. Each changes ONE thing about the W0 §9.3
+        # contract, and every variant still grants Administrators and SYSTEM
+        # Full, so no control reddens the administrative rows as collateral.
+        #
+        # `acl-not-protected` declares TWO, and the second is not collateral: an
+        # unprotected descriptor at %ProgramData%\Tesserafin\ is only a defect
+        # BECAUSE the parent it then keeps inheriting from lets any
+        # authenticated user create files there. The authoring reproduces that
+        # `Users` grant explicitly rather than relying on the exact rows a given
+        # Windows build puts on %ProgramData%, so the control produces the same
+        # two predicates on any host -- one defect, two visible consequences,
+        # declared in full the way `no-exe` declares three.
+        'acl-not-protected' = @(
+            'dataRootInheritanceBroken'
+            'stateDirectoriesUsersHaveNoWrite'
+        )
+        # Inheritance IS broken here and `Users` are handed Modify anyway, which
+        # is the half of §9.3 a gate that only checked the protection flag would
+        # call correct.
+        'acl-users-write' = @('stateDirectoriesUsersHaveNoWrite')
+        'acl-no-service-grant' = @('stateDirectoriesServiceHasModify')
+        # Read and execute still hold, so this reddens the write half alone.
+        'acl-install-writable' = @('installFolderServiceCannotWrite')
     }
 }
 
@@ -437,4 +683,5 @@ function Get-W4Verdict {
 
 Export-ModuleMember -Function Split-W4CommandLine, Get-W4PathArgument, Test-W4SamePath,
     Join-W4Path, Get-W4FailureAction, Test-W4FailureAction, Get-W4Predicates,
-    Get-W4ControlExpectations, Get-W4Verdict
+    Get-W4ControlExpectations, Get-W4Verdict, Test-W4HasKey, Get-W4Acl, Get-W4AllowMask,
+    Test-W4Grants, Test-W4NoWriteFor, Test-W4EveryStateDirectory

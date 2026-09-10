@@ -14,8 +14,10 @@
     So the grader is exercised here first, against observations written to be
     what each mutated package genuinely produces -- a renamed executable, an
     argument list missing `--service`, an argument list missing the two path
-    arguments, an SCM key that survives the uninstall. Each must redden EXACTLY
-    its declared set, and the correct package must redden nothing.
+    arguments, an SCM key that survives the uninstall, a service the SCM would
+    recover differently, and -- since W4-A3 -- an installed layout whose ACLs are
+    not the W0 §9.3 ones. Each must redden EXACTLY its declared set, and the
+    correct package must redden nothing.
 
     This is not a substitute for the hosted measurement and proves nothing about
     WiX, msiexec or the SCM. It proves that the instrument reads.
@@ -88,7 +90,65 @@ function New-SyntheticObservation {
         }
     }
 
+    # W4-A3. What Get-Acl would report for each package, written to be what the
+    # authored SDDL genuinely produces rather than what would make the grader
+    # look right. The masks are the file-specific ones the authoring states:
+    # 0x1f01ff Full, 0x1301bf Modify, 0x1200a9 read and execute.
+    #
+    # Every dictionary here is [ordered], because that is what the probe emits
+    # and OrderedDictionary has no `ContainsKey` at all -- a grader written
+    # against hashtables passes this file and dies on the runner.
+    #
+    # `installFolder` is deliberately NOT given Administrators, SYSTEM or Users
+    # rows. Under the disposable prefix those are inherited from the runner's
+    # temp tree and not from %ProgramFiles%, the probe records them as evidence
+    # and no predicate grades them, so inventing them here would be inventing an
+    # answer to a question nothing asks.
+    $serviceSid = 'S-1-5-80-761762137-1691453069-3789821951-3290391601-3361247659'
+    $installFolderMask = $(if ($Mutation -eq 'acl-install-writable') { 0x1301BF } else { 0x1200A9 })
+
+    $dataRootRules = [System.Collections.Generic.List[object]]::new()
+    $null = $dataRootRules.Add([ordered]@{ sid = 'S-1-5-32-544'; rights = 0x1F01FF; type = 'Allow'; inherited = $false })
+    $null = $dataRootRules.Add([ordered]@{ sid = 'S-1-5-18';     rights = 0x1F01FF; type = 'Allow'; inherited = $false })
+    if ($Mutation -ne 'acl-no-service-grant') {
+        $null = $dataRootRules.Add([ordered]@{ sid = $serviceSid; rights = 0x1301BF; type = 'Allow'; inherited = $false })
+    }
+    if ($Mutation -eq 'acl-not-protected' -or $Mutation -eq 'acl-users-write') {
+        $null = $dataRootRules.Add([ordered]@{ sid = 'S-1-5-32-545'; rights = 0x1301BF; type = 'Allow'; inherited = $false })
+    }
+    $dataRootProtected = ($Mutation -ne 'acl-not-protected')
+
+    # The four state directories carry the data root's ACEs by inheritance --
+    # every ACE the authoring states is OICI -- so they are the same rows with
+    # `inherited` set, and their own protection flag is $false, which is what a
+    # directory that inherits looks like and is not what `dataRootInheritanceBroken`
+    # asks about.
+    $inheritedRules = @(foreach ($rule in $dataRootRules) {
+        [ordered]@{ sid = $rule.sid; rights = $rule.rights; type = $rule.type; inherited = $true }
+    })
+
+    $acls = [ordered]@{
+        installFolder = [ordered]@{
+            path = $prefix
+            protected = $false
+            rules = @([ordered]@{ sid = $serviceSid; rights = $installFolderMask; type = 'Allow'; inherited = $false })
+        }
+        dataRoot = [ordered]@{
+            path = 'C:\ProgramData\Tesserafin'
+            protected = $dataRootProtected
+            rules = @($dataRootRules)
+        }
+    }
+    foreach ($name in @('config', 'data', 'cache', 'log')) {
+        $acls[$name] = [ordered]@{
+            path = (Join-W4Path -Root $dataRoot -Relative $name)
+            protected = $false
+            rules = $inheritedRules
+        }
+    }
+
     return @{
+        acls = $acls
         failureActions = $failureActions
         msiFileNames = @($deliveredExe, 'ffmpeg.exe', 'index.html', 'LICENSE')
         installPrefix = $prefix
