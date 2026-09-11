@@ -559,20 +559,37 @@ function Test-W4MsiInstrumentType {
         records an honest-looking mismatch.
 
         So the types are asserted here, on the real package, before any grading
-        reads them. Returns the list of problems; empty means all as documented.
+        reads them. Returns the problems as loose strings; NO leading comma, so
+        a clean run emits nothing at all and the caller's `@(...)` counts 0. The
+        comma idiom used by `Invoke-W4MsiQuery` would be exactly wrong here: it
+        wraps the EMPTY array as one object, `@(...)` then counts 1, and the
+        probe would refuse every clean run for having found no problems.
     #>
     param([Parameter(Mandatory = $true)] [string] $MsiPath)
 
     $problems = [System.Collections.Generic.List[string]]::new()
 
+    # These scriptblocks are deliberately NOT closures. `.GetNewClosure()` was
+    # tried and is wrong here: it rebinds the scriptblock to a new dynamic
+    # module, which discards THIS module's session state, so an unexported
+    # function stops resolving -- `Close-W4MsiComObject` below died with "The
+    # term ... is not recognized" while the exported helpers went on working.
+    # It bought nothing either: `Get-W4MsiStreamItem` is called from this
+    # function, so a plain scriptblock already reads `$MsiPath` off the scope
+    # chain.
+
     # Invoke-W4MsiQuery: exactly one object, and that object is the jagged array.
-    # `GetNewClosure` on every one of these: the scriptblock is run from inside
-    # `Get-W4MsiStreamItem`, and an unbound `$MsiPath` would be resolved against
-    # whatever scope chain happened to be in force there rather than this one.
-    $queried = Get-W4MsiStreamItem -Call {
-        Invoke-W4MsiQuery -MsiPath $MsiPath -ColumnCount 1 `
-            -Query 'SELECT `Value` FROM `Property`'
-    }.GetNewClosure()
+    # Each case is wrapped: `Get-W4MsiProperty`'s own type guard THROWS on a
+    # polluted stream, and an escaping exception would take the probe down
+    # without reaching `Deny` -- so the refusal would never be written into the
+    # evidence document, which is the only thing a later reader has.
+    $queried = @()
+    try {
+        $queried = Get-W4MsiStreamItem -Call {
+            Invoke-W4MsiQuery -MsiPath $MsiPath -ColumnCount 1 `
+                -Query 'SELECT `Value` FROM `Property`'
+        }
+    } catch { $problems.Add("Invoke-W4MsiQuery threw: $($_.Exception.Message)") }
     if ($queried.Count -ne 1) {
         $problems.Add(("Invoke-W4MsiQuery put $($queried.Count) objects on its output stream, not 1: " +
             (($queried | ForEach-Object { $(if ($null -eq $_) { '$null' } else { $_.GetType().FullName }) }) -join ', ')))
@@ -581,8 +598,17 @@ function Test-W4MsiInstrumentType {
     }
 
     # Get-W4MsiProperty: one object, and a string for a property that exists.
-    $present = Get-W4MsiStreamItem -Call { Get-W4MsiProperty -MsiPath $MsiPath -Name 'ProductCode' }.GetNewClosure()
-    if ($present.Count -ne 1) {
+    $present = @()
+    $presentThrew = $false
+    try {
+        $present = Get-W4MsiStreamItem -Call { Get-W4MsiProperty -MsiPath $MsiPath -Name 'ProductCode' }
+    } catch {
+        $presentThrew = $true
+        $problems.Add("Get-W4MsiProperty threw for ProductCode: $($_.Exception.Message)")
+    }
+    if ($presentThrew) {
+        # the throw is the finding; a follow-on count of 0 would only repeat it
+    } elseif ($present.Count -ne 1) {
         $problems.Add("Get-W4MsiProperty put $($present.Count) objects on its output stream for ProductCode, not 1")
     } elseif ($present[0] -isnot [string]) {
         $problems.Add(("Get-W4MsiProperty returned a " +
@@ -592,25 +618,35 @@ function Test-W4MsiInstrumentType {
 
     # ...and $null, still as exactly one object, for one that does not exist.
     # `$null` is the documented answer for an absent row and is not an error.
-    $absent = Get-W4MsiStreamItem -Call {
-        Get-W4MsiProperty -MsiPath $MsiPath -Name 'W4A4NoSuchPropertyExists'
-    }.GetNewClosure()
-    if ($absent.Count -ne 1 -or $null -ne $absent[0]) {
+    $absent = @()
+    $absentThrew = $false
+    try {
+        $absent = Get-W4MsiStreamItem -Call {
+            Get-W4MsiProperty -MsiPath $MsiPath -Name 'W4A4NoSuchPropertyExists'
+        }
+    } catch {
+        $absentThrew = $true
+        $problems.Add("Get-W4MsiProperty threw for an absent property: $($_.Exception.Message)")
+    }
+    if (-not $absentThrew -and ($absent.Count -ne 1 -or $null -ne $absent[0])) {
         $problems.Add(("Get-W4MsiProperty answered an absent property with $($absent.Count) object(s) " +
             "of type $(($absent | ForEach-Object { $(if ($null -eq $_) { '$null' } else { $_.GetType().FullName }) }) -join ', '), not one `$null"))
     }
 
     # Close-W4MsiComObject: nothing at all. This is the helper whose return value
     # started the class of defect, so it is measured on a real COM handle.
-    $installer = New-Object -ComObject WindowsInstaller.Installer
-    $released = Get-W4MsiStreamItem -Call { Close-W4MsiComObject -ComObject @($installer) }.GetNewClosure()
+    $released = @()
+    try {
+        $installer = New-Object -ComObject WindowsInstaller.Installer
+        $released = Get-W4MsiStreamItem -Call { Close-W4MsiComObject -ComObject @($installer) }
+    } catch { $problems.Add("Close-W4MsiComObject threw: $($_.Exception.Message)") }
     if ($released.Count -ne 0) {
         $problems.Add(("Close-W4MsiComObject put $($released.Count) object(s) on its output stream: " +
             (($released | ForEach-Object { "$($_.GetType().FullName) '$_'" }) -join ', ') +
             '. It must emit nothing at all.'))
     }
 
-    return ,$problems.ToArray()
+    return $problems.ToArray()
 }
 
 function Get-W4ProductInstallState {
