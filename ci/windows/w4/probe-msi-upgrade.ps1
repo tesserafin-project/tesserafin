@@ -56,6 +56,39 @@
       upgrade-starts-service  B's `ServiceControl`/`Event` carries the
                             start-on-install bit.
 
+    W4-A5 (#234) -- THE OMITTED PREFIX
+
+    W4-A4 passed `INSTALLFOLDER=` on BOTH msiexec command lines, and recorded as
+    NB-3 that the authoring had no remember-property, so an operator upgrade
+    that omitted it would have relocated the binaries. W4-A5 authors that
+    property, and this probe now measures the sequence the ruling names:
+
+      A is installed with `INSTALLFOLDER=P`, a disposable prefix.
+      EVERY B is installed with NO `INSTALLFOLDER=` on its command line.
+
+    So the real pair is the ruling's pair, and the three earlier live controls
+    exercise the remembered prefix as well rather than being told it again. A
+    sixth control is added, and it is the NB-3 defect itself:
+
+      upgrade-no-remember   B carries none of the three remember elements, so
+                            an upgrade that omits INSTALLFOLDER resolves the
+                            default directory and writes the binaries to
+                            `%ProgramFiles%\Tesserafin\Server` while A's prefix
+                            is removed with A.
+
+    THE PREFIX MARKER
+
+    One file is written into P between the two installs, beside the four state
+    sentinels and for a related reason. Windows Installer removes a directory it
+    created once the last file leaves it, so in the relocating control A's
+    removal would take P with it -- and a P the probe cannot read makes
+    `Get-W4Acl` answer `$null`, which reddens all five W0 §9.3 INSTALLFOLDER
+    rows. That would give ONE defect five more consequences that are about the
+    grader's reach rather than about the defect, and the declared red set would
+    stop being attributable. The marker keeps P readable in every pair, so the
+    descriptor rows say the same thing in all of them; it is never graded, and
+    the pair's own cleanup removes it with the prefix.
+
     Both would be graded by an outcome that is NOT the defect if they were
     installed. A B with a different UpgradeCode does not upgrade A -- it
     installs beside it, which is the second product the W4-A4 ruling forbids
@@ -117,6 +150,11 @@ $ErrorActionPreference = 'Stop'
 $SERVICE_NAME = 'Tesserafin'
 $SERVICE_KEY = "HKLM:\SYSTEM\CurrentControlSet\Services\$SERVICE_NAME"
 $RETAINED_STATE_KEY = 'HKLM:\SOFTWARE\Tesserafin'
+# W4-A5 (#234). Where the authoring remembers the prefix. It is UNDER
+# `$RETAINED_STATE_KEY`, so `Reset-InstalledState` already removes it between
+# pairs and no pair can inherit the previous pair's prefix.
+$REMEMBER_KEY = 'HKLM:\SOFTWARE\Tesserafin\Server'
+$REMEMBER_VALUE_NAME = 'InstallFolder'
 $FROZEN_UPGRADE_CODE = '0f0c9f4e-1c5a-4b8e-9a3d-6d1f2b7c8e05'
 # Any GUID that is not the frozen one. It is a control input and never reaches
 # the authoring, which `ci/windows/w4/msi-controls.py` still holds to exactly
@@ -125,15 +163,18 @@ $CONTROL_UPGRADE_CODE = '6b1e8d37-5f92-4a04-8e7c-3d05b9f2a618'
 
 # The pairs, in the order they run. `none` first: a run that cannot install the
 # real package twice has nothing to say about a broken one.
-$CONTROLS = @('none', 'upgrade-same-exe', 'upgrade-wipes-state', 'upgrade-no-service',
-    'upgrade-upgradecode', 'upgrade-starts-service')
+# `upgrade-no-remember` is second, directly after the real pair it is the
+# negation of: the two differ in the authoring of three elements and in nothing
+# else, and reading them next to each other in the log is the whole argument.
+$CONTROLS = @('none', 'upgrade-no-remember', 'upgrade-same-exe', 'upgrade-wipes-state',
+    'upgrade-no-service', 'upgrade-upgradecode', 'upgrade-starts-service')
 $TABLE_CONTROLS = @('upgrade-upgradecode', 'upgrade-starts-service')
 
 Import-Module ([System.IO.Path]::Combine($PSScriptRoot, 'W4MsiAssertions.psm1')) -Force
 Import-Module ([System.IO.Path]::Combine($PSScriptRoot, 'W4MsiInstruments.psm1')) -Force
 
 $evidence = [ordered]@{
-    slice = 'W4-A4'
+    slice = 'W4-A4 + W4-A5'
     tracker = 234
     headSha = $HeadSha
     # Stated as data so the closing report cannot claim more than the run did.
@@ -142,6 +183,10 @@ $evidence = [ordered]@{
     startedTheService = $false
     appliedAcls = $true
     exercisedMajorUpgrade = $true
+    # W4-A5 (#234), stated as data: every B in this run is installed with no
+    # INSTALLFOLDER on its command line, which is the whole of what the slice
+    # proves.
+    upgradeOmittedInstallFolder = $true
     # The W4-A4 ruling's "not this slice" list, restated as data.
     exercisedRepair = $false
     installedASecondProduct = $false
@@ -172,6 +217,21 @@ function Get-Sha256 {
     param([Parameter(Mandatory = $true)] [string] $Path)
     if (-not [System.IO.File]::Exists($Path)) { return $null }
     return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+
+function Get-RememberedInstallFolder {
+    <#
+        W4-A5 (#234). What the installed package says its own prefix is, read
+        off the machine rather than off the authoring. `$null` when the value is
+        absent, which is what a package with no remember-property leaves behind
+        -- and which must never compare equal to a prefix.
+    #>
+    $item = Get-ItemProperty -LiteralPath $REMEMBER_KEY -Name $REMEMBER_VALUE_NAME `
+        -ErrorAction SilentlyContinue
+    if ($null -eq $item) { return $null }
+    $property = $item.PSObject.Properties[$REMEMBER_VALUE_NAME]
+    if ($null -eq $property) { return $null }
+    return [string]$property.Value
 }
 
 # ---------------------------------------------------------------------------
@@ -399,6 +459,7 @@ $msi = @{}
 $msi['b-none'] = Build-Package -Name 'b-none' -Mutation 'none' -PatchBump 1
 $msi['b-wipes-state'] = Build-Package -Name 'b-wipes-state' -Mutation 'upgrade-wipes-state' -PatchBump 1
 $msi['b-no-service'] = Build-Package -Name 'b-no-service' -Mutation 'upgrade-no-service' -PatchBump 1
+$msi['b-no-remember'] = Build-Package -Name 'b-no-remember' -Mutation 'upgrade-no-remember' -PatchBump 1
 
 # Then the marked stage: A, and the one B that is deliberately built from it.
 Set-StageExecutable -Source $markedExePath
@@ -533,6 +594,7 @@ $aFacts = Get-PackageFacts -MsiPath $msi['a'] -StagedExeSha256 $markedExeSha
 # from. `upgrade-same-exe` is the one whose B was built from A's stage.
 $bForControl = [ordered]@{
     'none' = @{ msi = 'b-none'; exe = $pristineExeSha }
+    'upgrade-no-remember' = @{ msi = 'b-no-remember'; exe = $pristineExeSha }
     'upgrade-same-exe' = @{ msi = 'b-same-exe'; exe = $markedExeSha }
     'upgrade-wipes-state' = @{ msi = 'b-wipes-state'; exe = $pristineExeSha }
     'upgrade-no-service' = @{ msi = 'b-no-service'; exe = $pristineExeSha }
@@ -558,6 +620,13 @@ Write-Note ("B  version $($evidence.packages.b['none'].productVersion)  " +
 # 4. The state observation
 # ---------------------------------------------------------------------------
 $SENTINEL_NAME = 'w4a4.sentinel'
+# W4-A5 (#234). One file under INSTALLFOLDER, written between the two installs.
+# It is not a sentinel and nothing grades it: it exists so that P is still a
+# readable directory after A has been removed, in the one pair where B does not
+# install into it. Without it `Get-W4Acl` answers `$null` for `installFolder`
+# and one defect acquires five §9.3 consequences that are about the grader's
+# reach rather than about the defect.
+$PREFIX_MARKER_NAME = 'w4a5.prefix-marker'
 
 function Write-Sentinels {
     <#
@@ -658,6 +727,7 @@ foreach ($control in $CONTROLS) {
     # ── a LIVE pair ─────────────────────────────────────────────────────────
     $prefix = [System.IO.Path]::Combine($prefixRoot, $control)
     $bMsiPath = $msi[$bForControl[$control].msi]
+    $run.installPrefix = $prefix
 
     # A. The same real package in every pair, and the only install this probe
     # refuses on: a pair whose FIRST package would not install has nothing to
@@ -691,12 +761,31 @@ foreach ($control in $CONTROLS) {
         [System.IO.Path]::Combine($programDataRoot, 'config', $SENTINEL_NAME))
     Show-StateObservation -Observation (Get-StateObservation) -Label "after A, sentinels written ($control)"
 
-    # B, over A, into the SAME prefix. INSTALLFOLDER is passed again explicitly:
-    # this authoring carries no remember-property, so an upgrade that omitted it
-    # would install to the default location. See the W4-A4 document.
-    $run.upgradeExit = Invoke-W4Msi -Arguments @('/i', "`"$bMsiPath`"", "INSTALLFOLDER=`"$prefix`"") `
+    # W4-A5 (#234). The prefix marker, written where the sentinels are written
+    # and for the reason the constant above states. Never graded.
+    Set-Content -LiteralPath ([System.IO.Path]::Combine($prefix, $PREFIX_MARKER_NAME)) `
+        -Value "w4a5 $control $HeadSha" -Encoding utf8NoBOM
+    $run.prefixMarkerWritten = [System.IO.File]::Exists(
+        [System.IO.Path]::Combine($prefix, $PREFIX_MARKER_NAME))
+    if (-not $run.prefixMarkerWritten) {
+        Deny 'marker' ("the prefix marker could not be written into '$prefix', so P would not survive " +
+            'a B that installs somewhere else and five §9.3 rows would redden on the grader rather ' +
+            'than on the defect')
+    }
+
+    # What A remembered. It is read BEFORE B runs so that the evidence shows the
+    # value B is about to find, rather than only the one B leaves behind.
+    $run.rememberedAfterA = Get-RememberedInstallFolder
+    Write-Note "after A, the package remembers '$($run.rememberedAfterA)'"
+
+    # B, over A, with NO INSTALLFOLDER on the command line. This is the whole
+    # of W4-A5: the prefix is not passed again, so where B lands is decided by
+    # the remember-property the authoring now carries, and by nothing else.
+    # W4-A4 passed it here; NB-3 of that slice is why this line changed.
+    $run.upgradeExit = Invoke-W4Msi -Arguments @('/i', "`"$bMsiPath`"") `
         -LogPath ([System.IO.Path]::Combine($logDir, "install-b-$control.log")) `
         -Label "upgrade to B for '$control'"
+    $run.upgradePassedInstallFolder = $false
 
     $service = Get-W4ServiceRegistry -ServiceKey $SERVICE_KEY
     $acls = Get-W4AclObservations -InstallPrefix $prefix -DataRoot $programDataTesserafin `
@@ -710,6 +799,15 @@ foreach ($control in $CONTROLS) {
     # diagnosed from the evidence rather than re-run.
     $aProductState = Get-W4ProductInstallState -ProductCode $aFacts.productCode
     $bProductState = Get-W4ProductInstallState -ProductCode $bFacts.productCode
+
+    # W4-A5 (#234). Read before the observation is assembled, because two of the
+    # new predicates are about them: where the package says it lives, and
+    # whether anything reached the default location this run was never told to
+    # use.
+    $rememberedAfterB = Get-RememberedInstallFolder
+    $programFilesExists = [System.IO.Directory]::Exists($programFilesTesserafin)
+    $defaultLocationExe = Get-Sha256 -Path (
+        [System.IO.Path]::Combine($programFilesTesserafin, 'Server', $serverRelativeExe))
 
     $observation = @{
         aMsi = $aFacts
@@ -738,6 +836,10 @@ foreach ($control in $CONTROLS) {
         sentinelSha256 = $run.sentinelSha256
         aProductInstalled = $aProductState.installed
         bProductInstalled = $bProductState.installed
+        # W4-A5 (#234)
+        bInstallOmittedInstallFolder = (-not $run.upgradePassedInstallFolder)
+        rememberedInstallFolder = $rememberedAfterB
+        programFilesTesserafinExists = $programFilesExists
     }
 
     $run.installedAnything = $true
@@ -746,7 +848,12 @@ foreach ($control in $CONTROLS) {
     $run.installedExeAfterB = $observation.installedExeSha256
     $run.installedFileCount = $(if ([System.IO.Directory]::Exists($prefix)) {
         @(Get-ChildItem -LiteralPath $prefix -Recurse -File -Force).Count } else { 0 })
-    $run.programFilesTesserafinExists = [System.IO.Directory]::Exists($programFilesTesserafin)
+    $run.programFilesTesserafinExists = $programFilesExists
+    # W4-A5 (#234). Recorded for every pair, so the one pair that relocates says
+    # so with a digest rather than only with an absence under P.
+    $run.rememberedAfterB = $rememberedAfterB
+    $run.installPrefixExistsAfterB = [System.IO.Directory]::Exists($prefix)
+    $run.defaultLocationExeSha256 = $defaultLocationExe
     $run.failureActions = $observation.failureActions
     $run.failureActionsEvidence = Get-W4ServiceFailureEvidence -ServiceName $SERVICE_NAME -ServiceKey $SERVICE_KEY
     $run.acls = $acls
@@ -797,6 +904,16 @@ foreach ($control in $CONTROLS) {
             'so the next pair would have measured this one''s leftovers')
     }
     Remove-Item -LiteralPath $prefix -Recurse -Force -ErrorAction SilentlyContinue
+    # W4-A5 (#234). One pair deliberately installs into the runner's real
+    # %ProgramFiles%. It is removed here, between pairs, because the next pair's
+    # `defaultLocationUntouched` would otherwise be red for this pair's reason --
+    # and because the run's own precondition refuses a host that already carries
+    # this directory.
+    Remove-Item -LiteralPath $programFilesTesserafin -Recurse -Force -ErrorAction SilentlyContinue
+    if ([System.IO.Directory]::Exists($programFilesTesserafin)) {
+        Deny 'cleanup' ("'$programFilesTesserafin' survived pair '$control' and could not be removed, " +
+            'so every later pair would read this one''s relocation as its own')
+    }
     if (-not (Reset-InstalledState)) {
         Deny 'cleanup' ("'$programDataTesserafin' survived pair '$control' and could not be removed, " +
             'so the next pair would have measured this one''s security descriptor')
@@ -846,6 +963,53 @@ foreach ($label in $real.acls.Keys) {
     if ($null -eq $acl) { Write-Host ('  {0,-34} (absent)' -f "acl '$label' after B"); continue }
     Write-Host ('  {0,-34} protected {1,-5} {2}' -f "acl '$label' after B", $acl.protected, $acl.sddl)
 }
+Write-Host ''
+
+# ---------------------------------------------------------------------------
+# 6b. W4-A5's stop condition: the path table, for the pair that omits
+#     INSTALLFOLDER and for the control that proves the omission is what the
+#     remember-property answers.
+# ---------------------------------------------------------------------------
+$broken = $evidence.runs['upgrade-no-remember']
+Write-Host ''
+Write-Host 'W4-A5 :: where B landed when its command line said nothing'
+Write-Host ('  {0,-30} {1,-56} {2}' -f 'row', 'real pair (remember authored)', 'upgrade-no-remember')
+foreach ($row in @(
+    @{ label = 'INSTALLFOLDER on B command line'
+       real = $(if ($real.upgradePassedInstallFolder) { 'passed' } else { 'omitted' })
+       broken = $(if ($broken.upgradePassedInstallFolder) { 'passed' } else { 'omitted' }) }
+    @{ label = 'prefix P given to A'; real = $real.installPrefix; broken = $broken.installPrefix }
+    @{ label = 'remembered after A'; real = $real.rememberedAfterA; broken = $broken.rememberedAfterA }
+    @{ label = 'remembered after B'; real = $real.rememberedAfterB; broken = $broken.rememberedAfterB }
+    @{ label = 'exe under P after A'; real = $real.installedExeAfterA; broken = $broken.installedExeAfterA }
+    @{ label = 'exe under P after B'; real = $real.installedExeAfterB; broken = $broken.installedExeAfterB }
+    @{ label = 'exe under %ProgramFiles% after B'
+       real = $real.defaultLocationExeSha256; broken = $broken.defaultLocationExeSha256 }
+    @{ label = 'accepted exe (B is built from)'; real = $pristineExeSha; broken = $pristineExeSha }
+    @{ label = 'P still a directory after B'
+       real = $real.installPrefixExistsAfterB; broken = $broken.installPrefixExistsAfterB }
+    @{ label = '%ProgramFiles%\Tesserafin exists'
+       real = $real.programFilesTesserafinExists; broken = $broken.programFilesTesserafinExists }
+    @{ label = 'service binPath after B'; real = $real.serviceImagePath; broken = $broken.serviceImagePath }
+    @{ label = 'service state after B'; real = $real.serviceState; broken = $broken.serviceState }
+    @{ label = 'msiexec /i B exit'; real = $real.upgradeExit; broken = $broken.upgradeExit }
+    @{ label = 'verdict'
+       real = $(if ($real.verdict.passed) { 'PASS' } else { 'FAIL' })
+       broken = $(if ($broken.verdict.passed) { 'PASS' } else { 'FAIL' }) })) {
+    $left = $(if ($null -eq $row.real -or "$($row.real)" -eq '') { '(none)' } else { "$($row.real)" })
+    $right = $(if ($null -eq $row.broken -or "$($row.broken)" -eq '') { '(none)' } else { "$($row.broken)" })
+    Write-Host ('  {0,-30} {1,-56} {2}' -f $row.label, $left, $right)
+}
+# Assigned before it is formatted. `-f` takes a comma-separated argument list
+# and the comma binds tighter than `-join`, so an inline join here would join
+# the LABEL to the value and print one string where two columns belong.
+$sentinelRow = @(@('config', 'data', 'cache', 'log') | ForEach-Object {
+    "$($_)=$($real.stateAfterUpgrade[$_].sentinel)" }) -join ' '
+$declaredRed = @($broken.verdict.expectedRed) -join ', '
+$observedRed = @($broken.verdict.red) -join ', '
+Write-Host ('  {0,-30} {1}' -f 'sentinels after B (real pair)', $sentinelRow)
+Write-Host ('  {0,-30} {1}' -f 'declared RED, upgrade-no-remember', $declaredRed)
+Write-Host ('  {0,-30} {1}' -f 'observed RED, upgrade-no-remember', $observedRed)
 Write-Host ''
 
 $evidence.installPrefixKind = $(if ($real.programFilesTesserafinExists) {

@@ -801,6 +801,15 @@ function Get-W4UpgradePredicates {
                               directories BETWEEN the two installs
           aProductInstalled   [bool]     A's ProductCode still installed after B
           bProductInstalled   [bool]     B's ProductCode installed after B
+
+        and, since W4-A5 (#234):
+
+          bInstallOmittedInstallFolder [bool] B's msiexec command line carried
+                              no INSTALLFOLDER at all
+          rememberedInstallFolder [string] or $null -- HKLM\Software\Tesserafin\
+                              Server\InstallFolder after B, which is where the
+                              package says its own binaries are
+          programFilesTesserafinExists [bool] %ProgramFiles%\Tesserafin after B
     #>
     [OutputType([System.Collections.Specialized.OrderedDictionary])]
     param([Parameter(Mandatory = $true)] [hashtable] $Observation)
@@ -877,6 +886,35 @@ function Get-W4UpgradePredicates {
     $predicates['exeReplaced'] =
         (-not (Test-W4SameDigest -Left $o.installedExeSha256 -Right $a.stagedExeSha256))
     $predicates['exeIsB'] = (Test-W4SameDigest -Left $o.installedExeSha256 -Right $b.stagedExeSha256)
+
+    # ── W4-A5: the prefix was REMEMBERED, not repeated ──────────────────────
+    # Every key is asked for rather than indexed: StrictMode 3 makes a missing
+    # key an error, and a grader that threw would be indistinguishable from a
+    # package that did the wrong thing.
+    #
+    # This first row is about the PROOF rather than about the package, and it is
+    # graded rather than recorded on purpose. The whole of W4-A5 is that B is
+    # not told where to install; an edit that quietly put INSTALLFOLDER back on
+    # that command line would leave every other row below green while measuring
+    # the W4-A4 sequence again, and it reddens every pair at once, which is what
+    # a change to the thing under test should look like.
+    $predicates['upgradeOmittedInstallFolder'] =
+        ((Test-W4HasKey -Bag $o -Key 'bInstallOmittedInstallFolder') -and
+            [bool]$o.bInstallOmittedInstallFolder)
+    # Nothing reached the location this run was never told to use. It is the
+    # ruling's first hostile control stated as a predicate: a B that resolved
+    # the default directory writes `%ProgramFiles%\Tesserafin\Server`, and a
+    # package that landed there is wrong even if it also left something under P.
+    $predicates['defaultLocationUntouched'] =
+        ((Test-W4HasKey -Bag $o -Key 'programFilesTesserafinExists') -and
+            (-not [bool]$o.programFilesTesserafinExists))
+    # ...and the package can still say where it is, so the NEXT upgrade can find
+    # it. An absent value is not a match: `Test-W4SamePath` refuses an empty
+    # side, which is exactly what a package with no remember-property leaves.
+    $rememberedPrefix = $(if (Test-W4HasKey -Bag $o -Key 'rememberedInstallFolder') {
+        $o.rememberedInstallFolder } else { $null })
+    $predicates['rememberedPrefixIsInstallPrefix'] =
+        (Test-W4SamePath -Left $rememberedPrefix -Right $o.installPrefix)
 
     # ── the operator's state survived ───────────────────────────────────────
     $predicates['stateDirectoriesSurvivedUpgrade'] = $stateDirsSurvived
@@ -1035,6 +1073,35 @@ function Get-W4UpgradeControlExpectations {
             'serviceFailureFirstIsRestartAfter60s'
             'serviceFailureSecondIsRestartAfter60s'
             'serviceFailureThirdIsNoAction'
+        )
+        # W4-A5 (#234). LIVE, and the ruling's first hostile control: B carries
+        # none of the three remember elements, so an upgrade whose command line
+        # says nothing resolves the DEFAULT directory and writes the binaries to
+        # `%ProgramFiles%\Tesserafin\Server`, while A's prefix is removed with A.
+        #
+        # Nine rows, declared in full for the reason `upgrade-no-service`
+        # declares nineteen: one defect, nine visible consequences. Three are the
+        # layout that is no longer under P, one is the digest that is not B's
+        # there, three are the service binPath that now names the default tree,
+        # and two are the W4-A5 rows themselves.
+        #
+        # `exeReplaced` stays GREEN and must: it asks whether what is under P is
+        # still A's bytes, and nothing is under P at all. `installedOutside...`
+        # -- the five §9.3 INSTALLFOLDER rows -- stay green because the prefix
+        # marker keeps P readable; they are A's descriptor rather than B's in
+        # this pair, which is recorded in the probe and is why they are not
+        # declared. And `upgradeOmittedInstallFolder` stays green: this control
+        # omits the property exactly as the real pair does. That is the point.
+        'upgrade-no-remember' = @(
+            'installedServerExe'
+            'installedWebDir'
+            'installedFfmpegExe'
+            'exeIsB'
+            'serviceImagePathIsInstalledExe'
+            'serviceImagePathHasWebDir'
+            'serviceImagePathHasFfmpeg'
+            'defaultLocationUntouched'
+            'rememberedPrefixIsInstallPrefix'
         )
         # TABLE. Only B's Property/UpgradeCode row is moved, so A is still the
         # frozen GUID and only the two-package predicate can go red.

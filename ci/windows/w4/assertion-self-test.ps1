@@ -24,6 +24,8 @@
     the first package's executable, one that emptied the four state directories,
     one that registered no service, one whose second package carries a different
     UpgradeCode, and one whose second package asks the SCM to start the service.
+    W4-A5 (#234) adds a sixth: a second package with no remember-property, whose
+    upgrade omits INSTALLFOLDER and therefore resolves the default directory.
     The rule is the same and so is the inertness check.
 
     This is not a substitute for the hosted measurement and proves nothing about
@@ -240,6 +242,10 @@ $A_EXE_SHA = 'a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1'
 $B_EXE_SHA = 'b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2'
 $SENTINEL_SHA = 'c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3'
 $OTHER_SHA = 'd4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4'
+# W4-A5 (#234). Where a package with no remember-property goes when its command
+# line says nothing: the resolved default, never the prefix the first install
+# was given.
+$DEFAULT_LOCATION = 'C:\Program Files\Tesserafin\Server'
 
 function New-SyntheticUpgradeObservation {
     param([Parameter(Mandatory = $true)] [string] $Control)
@@ -274,6 +280,21 @@ function New-SyntheticUpgradeObservation {
     if ($Control -eq 'upgrade-same-exe') {
         $bStagedExe = $A_EXE_SHA
         $installedExe = $A_EXE_SHA
+    }
+
+    # W4-A5. `upgrade-no-remember` is the pair whose second package resolved the
+    # DEFAULT directory, so nothing of B is under P and A's payload went with A.
+    # The service is registered and its argument list is the §4 one -- the
+    # package is correct in every way except where it put itself -- so the
+    # binPath is the same string with the prefix replaced, which is what the
+    # installed package genuinely produces. The state directories are untouched:
+    # DATAFOLDER is not redirected and never was.
+    $installedUnderPrefix = ($Control -ne 'upgrade-no-remember')
+    $remembered = $(if ($installedUnderPrefix) { $prefix } else { $null })
+    if (-not $installedUnderPrefix) {
+        $installedExe = $null
+        $service = @{} + $fresh.service
+        $service.ImagePath = ([string]$fresh.service.ImagePath).Replace($prefix, $DEFAULT_LOCATION)
     }
 
     # `upgrade-wipes-state` empties the four directories. The directories
@@ -313,9 +334,15 @@ function New-SyntheticUpgradeObservation {
         webRelativeDir = $webDir
         ffmpegRelativeExe = $ffmpegExe
         installedExeSha256 = $installedExe
-        installedServerExe = $true
-        installedWebDir = $true
-        installedFfmpegExe = $true
+        installedServerExe = $installedUnderPrefix
+        installedWebDir = $installedUnderPrefix
+        installedFfmpegExe = $installedUnderPrefix
+        # W4-A5. Every B in this slice is installed with no INSTALLFOLDER on its
+        # command line, the relocating control included: that is the sequence
+        # under test, not the defect.
+        bInstallOmittedInstallFolder = $true
+        rememberedInstallFolder = $remembered
+        programFilesTesserafinExists = (-not $installedUnderPrefix)
         service = $service
         serviceState = $serviceState
         failureActions = $failureActions
@@ -362,6 +389,27 @@ $blindProductCodes.aMsi.Remove('productCode')
 $blindProductCodes.bMsi.Remove('productCode')
 if ((Get-W4UpgradePredicates -Observation $blindProductCodes)['productCodesDiffer']) {
     'FAIL productCodesDiffer is green for two packages that carry no ProductCode'
+    $failures++
+}
+
+# W4-A5. `rememberedPrefixIsInstallPrefix` is the row a careless grader gets
+# wrong in the direction no control catches: a comparison that accepted an
+# absent value, or any value, would call a package that remembers the WRONG
+# prefix correct -- and the next upgrade would then relocate exactly as NB-3
+# describes. The absent case is covered by `upgrade-no-remember`; a remembered
+# prefix that is simply a different directory is not, so it is asserted here.
+$strayPrefix = New-SyntheticUpgradeObservation -Control 'none'
+$strayPrefix.rememberedInstallFolder = 'D:\a\_temp\w4a0\somewhere-else'
+if ((Get-W4UpgradePredicates -Observation $strayPrefix)['rememberedPrefixIsInstallPrefix']) {
+    'FAIL rememberedPrefixIsInstallPrefix is green for a remembered prefix that is not the one used'
+    $failures++
+}
+# ...and the proof-shape row: a run that put INSTALLFOLDER back on B's command
+# line is measuring the W4-A4 sequence, whatever else it grades green.
+$toldAgain = New-SyntheticUpgradeObservation -Control 'none'
+$toldAgain.bInstallOmittedInstallFolder = $false
+if ((Get-W4UpgradePredicates -Observation $toldAgain)['upgradeOmittedInstallFolder']) {
+    'FAIL upgradeOmittedInstallFolder is green for a B that was told the prefix again'
     $failures++
 }
 

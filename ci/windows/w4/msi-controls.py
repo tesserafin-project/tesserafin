@@ -62,6 +62,7 @@ A1_DOC = REPO_ROOT / "docs" / "distribution" / "W4-A1-upgradecode.md"
 A2_DOC = REPO_ROOT / "docs" / "distribution" / "W4-A2-service-recovery.md"
 A3_DOC = REPO_ROOT / "docs" / "distribution" / "W4-A3-programdata-acls.md"
 A4_DOC = REPO_ROOT / "docs" / "distribution" / "W4-A4-major-upgrade.md"
+A5_DOC = REPO_ROOT / "docs" / "distribution" / "W4-A5-remember-installfolder.md"
 
 # W4-A1 (#234). The owner ruling froze the GUID W4-A0 had already authored:
 # "Ordinal, lowercase, no braces. I do not authorize a new GUID." This is the
@@ -840,6 +841,7 @@ def grade_authoring(
     """Everything graded off the authoring, mutable as one text for the self-test."""
     return (
         findings_for_authoring(without_comments(authoring_text, "xml"))
+        + findings_for_remember_property(without_comments(authoring_text, "xml"))
         + findings_for_upgrade_code_prose(authoring_text, a0_text, a1_text)
         + findings_for_failure_actions_prose(a0_text, a2_text)
         + findings_for_acl_prose(a3_text)
@@ -897,36 +899,135 @@ def findings_for_upgrade_probe(text: str) -> list[str]:
         findings.append("probe-msi-upgrade.ps1: never builds a package at the declared version")
     if "-PatchBump 1" not in text:
         findings.append("probe-msi-upgrade.ps1: never builds a package at a higher version")
-    # W0 §9.1: INSTALLFOLDER is a public property and the disposable prefix is
-    # how the runner's real %ProgramFiles% stays untouched. It has to be passed
-    # to BOTH installs -- this authoring carries no remember-property, so an
-    # upgrade that omitted it would relocate the binaries and the pair would
-    # measure two installations rather than one upgrade.
-    # EVERY install, not a count. The probe runs three `/i` msiexec calls -- A,
-    # B, and the record-only downgrade -- so "at least two mention it" stays
-    # green with one of them broken, which is precisely the defect this gate is
-    # for. Each argument array that installs is required to carry the property.
-    # Bounded by `-LogPath`, which every call in the probe passes, and NOT by the
-    # array's own closing parenthesis: the arguments interpolate PowerShell
-    # subexpressions that contain parentheses of their own, and a lazy match on
-    # `\)` stops inside the first one.
+    findings += findings_for_omitted_install_folder(text)
+    if FROZEN_UPGRADE_CODE not in text:
+        findings.append(
+            f"probe-msi-upgrade.ps1: never states the frozen UpgradeCode {FROZEN_UPGRADE_CODE}, so "
+            "'the UpgradeCode bytes did not move' is not a comparison against anything"
+        )
+    return findings
+
+
+def findings_for_omitted_install_folder(text: str) -> list[str]:
+    r"""W4-A5 (#234): A is told the prefix, and every B is NOT.
+
+    W4-A4 required INSTALLFOLDER on EVERY msiexec install, because the authoring
+    then had no remember-property and an install that omitted it would have
+    relocated the binaries -- the defect that slice recorded as NB-3. W4-A5
+    authors the property, so the requirement inverts for exactly the installs
+    the slice is about, and stays for the others.
+
+    The rule is per CALL, not a count. The probe runs an `/i` for A, an `/i` for
+    B and a record-only `/i` that replays A over B; "some of them mention it"
+    would stay green with the wrong one broken, in either direction. Each
+    argument array is classified by the MSI it installs, which is the only thing
+    that distinguishes them: `$bMsiPath` is B, and everything else is A.
+
+    Bounded by `-LogPath`, which every call in the probe passes, and NOT by the
+    array's own closing parenthesis: the arguments interpolate PowerShell
+    subexpressions that contain parentheses of their own, and a lazy match on
+    `\)` stops inside the first one.
+    """
+    findings: list[str] = []
     installs = re.findall(r"-Arguments\s+@\(\s*'/i'.*?-LogPath", text, re.S)
     if not installs:
         findings.append(
             "probe-msi-upgrade.ps1: runs no msiexec install at all, so it exercises no upgrade"
         )
+    upgrades = 0
+    firsts = 0
     for index, call in enumerate(installs, 1):
-        if "INSTALLFOLDER=" not in call:
-            findings.append(
-                f"probe-msi-upgrade.ps1: msiexec install {index} of {len(installs)} does not pass "
-                "INSTALLFOLDER. This authoring carries no remember-property, so an install that "
-                "omits it goes to the default location and the pair measures two installations "
-                "rather than one upgrade"
-            )
-    if FROZEN_UPGRADE_CODE not in text:
+        is_upgrade = "$bMsiPath" in call
+        passes = "INSTALLFOLDER=" in call
+        if is_upgrade:
+            upgrades += 1
+            if passes:
+                findings.append(
+                    f"probe-msi-upgrade.ps1: msiexec install {index} of {len(installs)} upgrades to "
+                    "B and passes INSTALLFOLDER. W4-A5 is the slice in which B is NOT told where to "
+                    "install: a B that is told again measures the W4-A4 sequence and says nothing "
+                    "about the remember-property"
+                )
+        else:
+            firsts += 1
+            if not passes:
+                findings.append(
+                    f"probe-msi-upgrade.ps1: msiexec install {index} of {len(installs)} installs A "
+                    "and does not pass INSTALLFOLDER. A is what puts the product under the "
+                    "disposable prefix, so without it the run never leaves the runner's real "
+                    "%ProgramFiles% and there is no remembered prefix to find"
+                )
+    if installs and not upgrades:
         findings.append(
-            f"probe-msi-upgrade.ps1: never states the frozen UpgradeCode {FROZEN_UPGRADE_CODE}, so "
-            "'the UpgradeCode bytes did not move' is not a comparison against anything"
+            "probe-msi-upgrade.ps1: no msiexec install upgrades to B, so nothing exercises the "
+            "remembered prefix"
+        )
+    if installs and not firsts:
+        findings.append(
+            "probe-msi-upgrade.ps1: no msiexec install puts A under a prefix of its own"
+        )
+    return findings
+
+
+def findings_for_remember_property(text: str) -> list[str]:
+    """W4-A5 (#234): the authoring carries the remember-property, in the right shape.
+
+    `text` is comment-stripped, so this grades what the package WOULD build
+    with. Three elements have to be there, and one shape has to NOT be:
+
+      * a component that WRITES `[INSTALLFOLDER]` to the remembered value;
+      * an AppSearch `RegistrySearch` that reads it back;
+      * a `SetProperty` that copies it into INSTALLFOLDER, conditioned on
+        INSTALLFOLDER being unset.
+
+    The last condition is the gate that matters, and the shape it refuses is the
+    shorter one: a `RegistrySearch` hung directly on `Property Id="INSTALLFOLDER"`.
+    AppSearch OVERWRITES the property it searches for, command line included, so
+    that form pins the first prefix forever -- and it would pass every pair this
+    slice runs, because both halves of a hosted pair use one prefix. A defect no
+    hosted control can reach is exactly what a static gate is for.
+
+    The file carries a deliberately broken variant too -- `upgrade-no-remember`
+    authors none of the three -- so these are PRESENCE gates over the file as a
+    whole, the same rule the recovery and ACL gates are held to.
+    """
+    findings: list[str] = []
+    if not re.search(r"<RegistrySearch\b[^>]*Name=\"InstallFolder\"", text, re.S):
+        findings.append(
+            "authoring: no RegistrySearch reads the remembered install location back, so a later "
+            "install has nothing to find and an upgrade that omits INSTALLFOLDER relocates"
+        )
+    if not re.search(r"<RegistryValue\b[^>]*Value=\"\[INSTALLFOLDER\]\"", text, re.S):
+        findings.append(
+            "authoring: nothing WRITES [INSTALLFOLDER] to the registry, so the search above reads a "
+            "value no install ever stores"
+        )
+    set_property = re.search(r"<SetProperty\b[^>]*Id=\"INSTALLFOLDER\"[^>]*/>", text, re.S)
+    if not set_property:
+        findings.append(
+            "authoring: no SetProperty copies the remembered location into INSTALLFOLDER, so the "
+            "search result never reaches the Directory table"
+        )
+    else:
+        element = set_property.group(0)
+        if 'After="AppSearch"' not in element:
+            findings.append(
+                "authoring: the INSTALLFOLDER SetProperty is not scheduled After=AppSearch, so it "
+                "runs before the value it copies has been read, or after CostFinalize has already "
+                "resolved the directory"
+            )
+        if "NOT INSTALLFOLDER" not in element:
+            findings.append(
+                "authoring: the INSTALLFOLDER SetProperty is not conditioned on INSTALLFOLDER being "
+                "unset, so it overwrites a prefix the operator passed on the command line and the "
+                "remembered location can never be changed"
+            )
+    if re.search(r"<Property\b[^>]*Id=\"INSTALLFOLDER\"", text, re.S):
+        findings.append(
+            "authoring: a Property element declares INSTALLFOLDER itself. AppSearch OVERWRITES the "
+            "property it searches for, command-line values included, so a search authored there "
+            "pins the first prefix forever -- and no hosted pair can see it, because both halves of "
+            "a pair use one prefix"
         )
     return findings
 
@@ -947,6 +1048,34 @@ def findings_for_upgrade_prose(a4_text: str) -> list[str]:
         if re.search(pattern, a4_text, re.I):
             findings.append(
                 f"W4-A4 document: claims the stage ('{pattern}'); the ruling excludes claiming W4 accepted"
+            )
+    return findings
+
+
+W4A5_REQUIRED_PHRASES = (
+    ("W4-A5", "does not cite the W4-A5 ruling it records"),
+    ("INSTALLFOLDER", "does not name INSTALLFOLDER, which is the property this slice remembers"),
+    ("MajorUpgrade", "does not name MajorUpgrade, which is the path the prefix has to survive"),
+    ("upgrade-no-remember", "does not name the hostile control that proves the property is load-bearing"),
+)
+
+
+def findings_for_remember_prose(a5_text: str) -> list[str]:
+    """W4-A5: the document records this slice and does not claim the stage."""
+    findings = [
+        f"W4-A5 document: {why}"
+        for phrase, why in W4A5_REQUIRED_PHRASES
+        if phrase not in a5_text
+    ]
+    if FROZEN_UPGRADE_CODE not in a5_text:
+        findings.append(
+            f"W4-A5 document: does not state the frozen UpgradeCode {FROZEN_UPGRADE_CODE}, which "
+            "this slice leaves exactly where W4-A1 froze it"
+        )
+    for pattern in W4_OVERCLAIM_PATTERNS:
+        if re.search(pattern, a5_text, re.I):
+            findings.append(
+                f"W4-A5 document: claims the stage ('{pattern}'); the ruling excludes claiming W4 accepted"
             )
     return findings
 
@@ -987,6 +1116,7 @@ def grade_everything(workflow_text: str) -> list[str]:
             without_comments(PROBE_UPGRADE.read_text(encoding="utf-8"), "ps1")
         )
         + findings_for_upgrade_prose(A4_DOC.read_text(encoding="utf-8"))
+        + findings_for_remember_prose(A5_DOC.read_text(encoding="utf-8"))
         + grade_authoring(
             AUTHORING.read_text(encoding="utf-8"),
             A0_DOC.read_text(encoding="utf-8"),
@@ -1378,7 +1508,6 @@ def self_test_upgrade(probe_text: str, a4_text: str) -> list[str]:
             "$allPassed = $true", "$null = 'SharedVersion.cs'\n$allPassed = $true", 1
         ),
         "both packages at one version": lambda p: p.replace("-PatchBump 1", "-PatchBump 0"),
-        "the upgrade forgets INSTALLFOLDER": lambda p: p.replace("INSTALLFOLDER=", "PREFIX=", 1),
         "no frozen UpgradeCode to compare against": lambda p: p.replace(
             FROZEN_UPGRADE_CODE, "a GUID chosen at release time"
         ),
@@ -1414,6 +1543,99 @@ def self_test_upgrade(probe_text: str, a4_text: str) -> list[str]:
         print(
             f"  {len(probe_mutations) + len(doc_mutations)} W4-A4 controls, all RED as declared"
         )
+    return failures
+
+
+def self_test_remember(
+    authoring_text: str, probe_text: str, a5_text: str
+) -> list[str]:
+    """W4-A5: every gate over the remember-property must be reachable.
+
+    Each mutation is a shape that would leave the hosted pair green while the
+    property was not doing its job -- including the two the hosted pair CANNOT
+    see, because both halves of a pair use one prefix: a search authored on
+    INSTALLFOLDER itself, and a SetProperty with no condition. A gate none of
+    them trips is a gate that would not have caught the real thing either.
+    """
+    authoring_mutations = {
+        "nothing reads the remembered location": lambda a: a.replace(
+            '<RegistrySearch Id="RememberedInstallFolder"',
+            '<RegistrySearchDisabled Id="RememberedInstallFolder"',
+            1,
+        ),
+        "nothing writes the remembered location": lambda a: a.replace(
+            'Value="[INSTALLFOLDER]"', 'Value="unremembered"', 1
+        ),
+        "the remembered location never reaches INSTALLFOLDER": lambda a: a.replace(
+            "<SetProperty ", "<SetPropertyDisabled ", 1
+        ),
+        "the copy is scheduled after the directory is resolved": lambda a: a.replace(
+            'After="AppSearch"', 'After="CostFinalize"', 1
+        ),
+        "the copy overwrites the command line": lambda a: a.replace(
+            'Condition="REMEMBEREDINSTALLFOLDER AND NOT INSTALLFOLDER"', 'Condition="1"', 1
+        ),
+        "the search is authored on INSTALLFOLDER itself": lambda a: a.replace(
+            '<Property Id="REMEMBEREDINSTALLFOLDER">', '<Property Id="INSTALLFOLDER">', 1
+        ),
+    }
+    probe_mutations = {
+        "the upgrade is told the prefix again": lambda p: p.replace(
+            '@(\'/i\', "`"$bMsiPath`"")',
+            '@(\'/i\', "`"$bMsiPath`"", "INSTALLFOLDER=`"$prefix`"")',
+            1,
+        ),
+        "no install upgrades to B": lambda p: p.replace("$bMsiPath", "$someOtherMsi"),
+        # A is still required to carry the prefix, and the mutation names the
+        # WHOLE argument array rather than the first `INSTALLFOLDER=` in the
+        # file: the probe's own prose says `INSTALLFOLDER=P` before any code
+        # does, and a mutation that edited a comment would be graded on a gate
+        # that never saw it.
+        "the first install forgets the prefix": lambda p: p.replace(
+            '@(\'/i\', "`"$($msi[\'a\'])`"", "INSTALLFOLDER=`"$prefix`"")',
+            '@(\'/i\', "`"$($msi[\'a\'])`"")',
+            1,
+        ),
+    }
+    doc_mutations = {
+        "document drops the hostile control": lambda d: d.replace("upgrade-no-remember", "the control"),
+        "document claims the stage": lambda d: d + "\n\nW4 is accepted.\n",
+        "document drops the frozen UpgradeCode": lambda d: d.replace(
+            FROZEN_UPGRADE_CODE, "the frozen GUID"
+        ),
+    }
+
+    failures: list[str] = []
+    for name, mutate in authoring_mutations.items():
+        mutated = mutate(authoring_text)
+        if mutated == authoring_text:
+            failures.append(f"self-test '{name}': the mutation did not change the authoring")
+            continue
+        if not findings_for_remember_property(without_comments(mutated, "xml")):
+            failures.append(f"self-test '{name}': the remember-property gate did not fire")
+        else:
+            print(f"  control OK   {name}")
+    for name, mutate in probe_mutations.items():
+        mutated = mutate(probe_text)
+        if mutated == probe_text:
+            failures.append(f"self-test '{name}': the mutation did not change the probe")
+            continue
+        if not findings_for_omitted_install_folder(without_comments(mutated, "ps1")):
+            failures.append(f"self-test '{name}': the omitted-INSTALLFOLDER gate did not fire")
+        else:
+            print(f"  control OK   {name}")
+    for name, mutate in doc_mutations.items():
+        mutated = mutate(a5_text)
+        if mutated == a5_text:
+            failures.append(f"self-test '{name}': the mutation did not change the document")
+            continue
+        if not findings_for_remember_prose(mutated):
+            failures.append(f"self-test '{name}': the W4-A5 prose gate did not fire")
+        else:
+            print(f"  control OK   {name}")
+    if not failures:
+        total = len(authoring_mutations) + len(probe_mutations) + len(doc_mutations)
+        print(f"  {total} W4-A5 controls, all RED as declared")
     return failures
 
 
@@ -1462,7 +1684,7 @@ def main() -> int:
     options = parser.parse_args()
 
     for required in (WORKFLOW, AUTHORING, BUILDER, PROBE, PROBE_UPGRADE, INSTRUMENTS, SELF_TEST,
-                     A0_DOC, A1_DOC, A2_DOC, A3_DOC, A4_DOC):
+                     A0_DOC, A1_DOC, A2_DOC, A3_DOC, A4_DOC, A5_DOC):
         if not required.is_file():
             print(f"W4 CONTROLS REFUSED: missing {required.relative_to(REPO_ROOT)}")
             return 1
@@ -1470,7 +1692,7 @@ def main() -> int:
     workflow_text = WORKFLOW.read_text(encoding="utf-8")
     findings = grade_everything(workflow_text)
 
-    print("W4-A0 / W4-A2 / W4-A3 / W4-A4 static controls")
+    print("W4-A0 / W4-A2 / W4-A3 / W4-A4 / W4-A5 static controls")
     if findings:
         for finding in findings:
             print(f"  FINDING  {finding}")
@@ -1492,6 +1714,11 @@ def main() -> int:
         failures += self_test_acls(*documents)
         failures += self_test_upgrade(
             PROBE_UPGRADE.read_text(encoding="utf-8"), A4_DOC.read_text(encoding="utf-8")
+        )
+        failures += self_test_remember(
+            AUTHORING.read_text(encoding="utf-8"),
+            PROBE_UPGRADE.read_text(encoding="utf-8"),
+            A5_DOC.read_text(encoding="utf-8"),
         )
     for failure in failures:
         print(f"  FINDING  {failure}")

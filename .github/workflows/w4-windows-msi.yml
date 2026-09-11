@@ -36,6 +36,23 @@
 # control by an outcome that is not the defect. `ci/windows/w4/probe-msi-upgrade.ps1`
 # says why, at length, and the evidence records which controls installed nothing.
 #
+# W4-A5 (#234) extends `msi-upgrade` and adds no job. The pair it runs is the
+# one the W4-A5 ruling names:
+#
+#   A is installed with INSTALLFOLDER=P, a disposable prefix. B is installed
+#   with NO INSTALLFOLDER= on its command line at all, and the binaries are
+#   still under P afterwards, with B's bytes, the sentinels intact and the
+#   service Stopped -- because the authoring now carries the remember-property
+#   W4-A4 recorded as missing.
+#
+# Every B in the job omits the property, the three earlier live controls
+# included, so none of them is being told where to install any more. A sixth
+# hostile control runs beside them: a B carrying none of the remember elements,
+# which resolves the default directory and writes the binaries to
+# %ProgramFiles%\Tesserafin\Server while A's prefix is removed with A. The path
+# table the ruling asks for is printed by the probe and repeated in the report
+# step below.
+#
 # The two jobs are independent. Neither consumes the other's output, nothing is
 # uploaded, and each assembles its own package from the pull request head.
 #
@@ -295,9 +312,11 @@ jobs:
     name: Replace the binaries and keep the state across a MajorUpgrade
     runs-on: windows-latest
     # One runtime pull, one Web pull, one self-contained publish, one pack, then
-    # five `wix build` runs over a payload of a few thousand files, eight full
-    # msiexec installs and four uninstalls.
-    timeout-minutes: 200
+    # six `wix build` runs over a payload of a few thousand files, eleven full
+    # msiexec installs and five uninstalls. W4-A5 (#234) added one package and
+    # one live pair to that, which is why the budget is larger than the 200
+    # minutes W4-A4 asked for.
+    timeout-minutes: 240
     permissions:
       contents: read
       # The entire write surface of this job. Read only, job scoped, and needed
@@ -400,8 +419,9 @@ jobs:
           "commit            : $commit"
           "SOURCE_DATE_EPOCH : $epoch"
 
-      # The real thing: one accepted package, five MSIs, six A -> B pairs.
-      - name: Install A, write sentinels, upgrade to B, with five hostile controls
+      # The real thing: one accepted package, six MSIs, seven A -> B pairs. Only
+      # A is told where to install; every B has to find out.
+      - name: Install A, write sentinels, upgrade to B without the prefix, with six hostile controls
         shell: pwsh
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -421,7 +441,7 @@ jobs:
       # file nobody opens: the document records predicates, exit codes and
       # digests only -- no host path beyond the two the probe was given, and no
       # run identifier -- so it can be printed whole.
-      - name: Report the six pairs
+      - name: Report the seven pairs
         if: always()
         shell: pwsh
         run: |
@@ -441,6 +461,9 @@ jobs:
             throw 'this slice installs no second product beside the first'
           }
           if (-not $evidence.exercisedMajorUpgrade) { throw 'W4-A4 exercises MajorUpgrade' }
+          if (-not $evidence.upgradeOmittedInstallFolder) {
+            throw 'W4-A5 upgrades with no INSTALLFOLDER on the command line'
+          }
 
           # The one row a reader of the run should not have to open the document
           # to find: what the real pair did to the service the upgrade kept.
@@ -450,6 +473,21 @@ jobs:
           "           exe after A $($real.installedExeAfterA)"
           "           exe after B $($real.installedExeAfterB)"
           "           downgrade A over B exited $($real.downgradeExit) (recorded, not graded)"
+
+          # W4-A5's stop condition, beside the real pair rather than only inside
+          # the probe's own log: where B went when nothing told it where to go,
+          # and where the package with no remember-property went instead.
+          $broken = $evidence.runs.'upgrade-no-remember'
+          "W4-A5 path table"
+          "  remembered after A          $($real.rememberedAfterA)"
+          "  remembered after B          $($real.rememberedAfterB)"
+          "  exe under P after B         $($real.installedExeAfterB)"
+          "  P is still a directory      $($real.installPrefixExistsAfterB)"
+          "  default location reached    $($real.programFilesTesserafinExists)"
+          "  control: exe under P        $($broken.installedExeAfterB)"
+          "  control: default location   $($broken.defaultLocationExeSha256)"
+          "  control: remembered after B $($broken.rememberedAfterB)"
+          "  control: verdict            $(if ($broken.verdict.passed) { 'PASS' } else { 'FAIL' })"
 
       - name: Leave no service and no installed product behind
         if: always()
@@ -462,6 +500,14 @@ jobs:
           $prefix = Join-Path $env:RUNNER_TEMP 'w4a4/prefix'
           if (Test-Path -LiteralPath $prefix) {
             Remove-Item -LiteralPath $prefix -Recurse -Force -ErrorAction SilentlyContinue
+          }
+          # W4-A5 (#234). One pair deliberately installs into the runner's real
+          # %ProgramFiles%, so a cancelled job can leave it behind -- and the
+          # next run refuses on its precondition if it finds it, which reads
+          # like a defect in the proof rather than like leftover state.
+          $defaultLocation = Join-Path $env:ProgramFiles 'Tesserafin'
+          if (Test-Path -LiteralPath $defaultLocation) {
+            Remove-Item -LiteralPath $defaultLocation -Recurse -Force -ErrorAction SilentlyContinue
           }
           # W4-A4 removes these two as well as the prefix. They are what the
           # retained-state components deliberately leave behind, and a run that
