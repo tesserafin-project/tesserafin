@@ -451,6 +451,22 @@ foreach ($name in @($msi.Keys | Sort-Object)) {
 Save-Evidence
 Write-Note "Build-Package returned one existing .msi path for each of $($msi.Count) packages"
 
+# ── the instruments, before anything is graded with them ───────────────
+# R1 and R3 were both the same defect: a COM release return value left on an
+# output stream, which turned a helper's answer into a number without raising
+# anything at the point of the mistake. Neither red was visible to any control
+# in this probe, because a grader reading `0` where a GUID belongs records a
+# mismatch and carries on. The helpers' output types are therefore measured
+# here, on a real built package, before the mutants or the grader read them.
+$instrumentProblems = @(Test-W4MsiInstrumentType -MsiPath $msi['b-none'])
+if ($instrumentProblems.Count -gt 0) {
+    Deny 'instruments' ('the MSI instruments do not return their documented types, so nothing read ' +
+        'through them could be graded: ' + ($instrumentProblems -join '; '))
+}
+$evidence.packages.instrumentTypesAsDocumented = $true
+Save-Evidence
+Write-Note 'the MSI instruments return their documented types'
+
 # ── the two table controls ──────────────────────────────────────────────────
 # Copies of the REAL B. One cell each, changed through Windows Installer, and
 # re-read afterwards: an edit that silently did not take would leave a control

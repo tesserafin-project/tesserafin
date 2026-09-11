@@ -216,7 +216,10 @@ function Open-W4MsiDatabase {
             if ($null -ne $errorRecord) {
                 $reason = [string]$errorRecord.GetType().InvokeMember(
                     'FormatText', 'GetProperty', $null, $errorRecord, $null)
-                [System.Runtime.InteropServices.Marshal]::FinalReleaseComObject($errorRecord)
+                # `FinalReleaseComObject` returns the remaining RCW reference
+                # count, an Int32. Assigned away: this catch runs on the way to a
+                # `throw`, and a bare call would put a digit on the output stream.
+                $null = [System.Runtime.InteropServices.Marshal]::FinalReleaseComObject($errorRecord)
             }
         } catch {
             $reason = "(the last error record could not be read: $($_.Exception.Message))"
@@ -237,10 +240,19 @@ function Open-W4MsiDatabase {
 function Close-W4MsiComObject {
     <#
         Release every handle this module took, most-derived first, and then
-        force the collection. `FinalReleaseComObject` returns void, so none of
-        this can leak an Int32 into a caller's output stream -- which matters:
-        `Invoke-W4MsiQuery` returns its rows through that stream, and one stray
-        number ahead of them would make `$rows[0][0]` a digit.
+        force the collection.
+
+        `FinalReleaseComObject` does NOT return void: it returns the remaining
+        RCW reference count as an Int32, and a bare call writes that number to
+        the output stream. That is load-bearing here, because this function is
+        called from `Invoke-W4MsiQuery`'s `finally` and `Invoke-W4MsiQuery`
+        returns its rows through the same stream. One stray number turns the
+        caller's `$rows` into a mixed array, and PowerShell hides it: indexing a
+        scalar at `[0]` returns the scalar, so `$rows[0][0]` quietly becomes `0`
+        instead of a string, while `$row[1]` raises "Unable to index into an
+        object of type System.Int32" somewhere else entirely. Every release in
+        this module is therefore assigned to `$null`, and every call to this
+        function is too.
     #>
     param(
         [Parameter(Mandatory = $true)] [AllowNull()] [AllowEmptyCollection()] [object[]] $ComObject
@@ -249,7 +261,7 @@ function Close-W4MsiComObject {
         if ($null -eq $item) { continue }
         if (-not [System.Runtime.InteropServices.Marshal]::IsComObject($item)) { continue }
         try {
-            [System.Runtime.InteropServices.Marshal]::FinalReleaseComObject($item)
+            $null = [System.Runtime.InteropServices.Marshal]::FinalReleaseComObject($item)
         } catch {
             Write-Host "W4-A4 :: a COM handle refused release: $($_.Exception.Message)"
         }
@@ -294,8 +306,10 @@ function Invoke-W4MsiQuery {
             }
             $null = $rows.Add($values)
             # Released here rather than in the teardown: a row handle held for
-            # the length of the fetch loop is a handle on the file.
-            [System.Runtime.InteropServices.Marshal]::FinalReleaseComObject($record)
+            # the length of the fetch loop is a handle on the file. Assigned
+            # away: this is inside the loop that produces this function's rows,
+            # so a bare call would interleave one Int32 per row with them.
+            $null = [System.Runtime.InteropServices.Marshal]::FinalReleaseComObject($record)
         }
         # The leading comma is load-bearing. PowerShell unrolls an array on
         # output, so `return $rows.ToArray()` would emit each row separately and
@@ -313,7 +327,7 @@ function Invoke-W4MsiQuery {
                 Write-Host "W4-A4 :: a view refused Close: $($_.Exception.Message)"
             }
         }
-        Close-W4MsiComObject -ComObject @($view, $database, $installer)
+        $null = Close-W4MsiComObject -ComObject @($view, $database, $installer)
     }
 }
 
@@ -323,6 +337,14 @@ function Get-W4MsiProperty {
         no such row. `$null` and the empty string are deliberately different: a
         package with no UpgradeCode at all is not a package whose UpgradeCode is
         blank, and the grader treats them differently.
+
+        The documented output is exactly one object, and that object is a
+        `[string]` or `$null` -- nothing else, and never more than one. The type
+        is asserted rather than assumed because the failure it guards against is
+        silent: with a polluted output stream `$rows[0]` can be an Int32, and
+        PowerShell answers `(0)[0]` with `0` rather than raising, so this
+        function would return the number 0 and every caller would compare it
+        against a GUID and find an honest-looking mismatch.
     #>
     param(
         [Parameter(Mandatory = $true)] [string] $MsiPath,
@@ -331,7 +353,15 @@ function Get-W4MsiProperty {
     $rows = Invoke-W4MsiQuery -MsiPath $MsiPath -ColumnCount 1 `
         -Query "SELECT ``Value`` FROM ``Property`` WHERE ``Property`` = '$Name'"
     if (@($rows).Count -eq 0) { return $null }
-    return $rows[0][0]
+    $value = $rows[0][0]
+    if ($null -ne $value -and $value -isnot [string]) {
+        throw ("Get-W4MsiProperty read '$Name' out of '$MsiPath' and got a " +
+            "$($value.GetType().FullName) rather than a string. Invoke-W4MsiQuery must put exactly " +
+            'one jagged string array on its output stream; a COM release return value that was not ' +
+            'assigned away is the usual cause.')
+    }
+    if ($null -eq $value) { return $null }
+    return [string]$value
 }
 
 function Get-W4MsiFileNames {
@@ -469,7 +499,7 @@ function Set-W4MsiCell {
                 Write-Host "W4-A4 :: a view refused Close: $($_.Exception.Message)"
             }
         }
-        Close-W4MsiComObject -ComObject @($record, $view, $database, $installer)
+        $null = Close-W4MsiComObject -ComObject @($record, $view, $database, $installer)
     }
 }
 
@@ -495,6 +525,92 @@ function Get-W4MsiServiceControlEvent {
         }
     }
     return $null
+}
+
+function Get-W4MsiStreamItem {
+    <#
+        Every object a scriptblock put on its output stream, counted honestly.
+
+        `@( & $Call )` cannot do this job: `Invoke-W4MsiQuery` emits ONE object
+        that happens to be an array, and `@()` around an array returns that same
+        array -- so a correct one-row result and a polluted five-item stream both
+        count as 1. Piping into `ForEach-Object` counts the items the function
+        actually wrote, which is the thing under test.
+    #>
+    param([Parameter(Mandatory = $true)] [scriptblock] $Call)
+    $items = [System.Collections.Generic.List[object]]::new()
+    & $Call | ForEach-Object { $items.Add($_) }
+    return ,$items.ToArray()
+}
+
+function Test-W4MsiInstrumentType {
+    <#
+        REDs if any of these helpers puts something other than its documented
+        type on its output stream, read off a REAL package.
+
+        This exists because the defect it catches is invisible from the outside.
+        `Marshal::FinalReleaseComObject` returns an Int32, and a bare call inside
+        `Invoke-W4MsiQuery` or its teardown appends that number to the rows the
+        function returns. Nothing throws at the point of the mistake. What throws
+        is `$row[1]` in a different function several hundred lines away, while
+        `Get-W4MsiProperty` -- whose caller indexes at `[0]`, which PowerShell
+        answers for a scalar -- goes on returning the number 0 as though it were
+        a property value, and a readback check that compares it against a GUID
+        records an honest-looking mismatch.
+
+        So the types are asserted here, on the real package, before any grading
+        reads them. Returns the list of problems; empty means all as documented.
+    #>
+    param([Parameter(Mandatory = $true)] [string] $MsiPath)
+
+    $problems = [System.Collections.Generic.List[string]]::new()
+
+    # Invoke-W4MsiQuery: exactly one object, and that object is the jagged array.
+    # `GetNewClosure` on every one of these: the scriptblock is run from inside
+    # `Get-W4MsiStreamItem`, and an unbound `$MsiPath` would be resolved against
+    # whatever scope chain happened to be in force there rather than this one.
+    $queried = Get-W4MsiStreamItem -Call {
+        Invoke-W4MsiQuery -MsiPath $MsiPath -ColumnCount 1 `
+            -Query 'SELECT `Value` FROM `Property`'
+    }.GetNewClosure()
+    if ($queried.Count -ne 1) {
+        $problems.Add(("Invoke-W4MsiQuery put $($queried.Count) objects on its output stream, not 1: " +
+            (($queried | ForEach-Object { $(if ($null -eq $_) { '$null' } else { $_.GetType().FullName }) }) -join ', ')))
+    } elseif ($queried[0] -isnot [string[][]]) {
+        $problems.Add("Invoke-W4MsiQuery returned a $($queried[0].GetType().FullName), not a string[][]")
+    }
+
+    # Get-W4MsiProperty: one object, and a string for a property that exists.
+    $present = Get-W4MsiStreamItem -Call { Get-W4MsiProperty -MsiPath $MsiPath -Name 'ProductCode' }.GetNewClosure()
+    if ($present.Count -ne 1) {
+        $problems.Add("Get-W4MsiProperty put $($present.Count) objects on its output stream for ProductCode, not 1")
+    } elseif ($present[0] -isnot [string]) {
+        $problems.Add(("Get-W4MsiProperty returned a " +
+            "$($(if ($null -eq $present[0]) { '$null' } else { $present[0].GetType().FullName })) " +
+            'for ProductCode, which every built package carries, rather than a string'))
+    }
+
+    # ...and $null, still as exactly one object, for one that does not exist.
+    # `$null` is the documented answer for an absent row and is not an error.
+    $absent = Get-W4MsiStreamItem -Call {
+        Get-W4MsiProperty -MsiPath $MsiPath -Name 'W4A4NoSuchPropertyExists'
+    }.GetNewClosure()
+    if ($absent.Count -ne 1 -or $null -ne $absent[0]) {
+        $problems.Add(("Get-W4MsiProperty answered an absent property with $($absent.Count) object(s) " +
+            "of type $(($absent | ForEach-Object { $(if ($null -eq $_) { '$null' } else { $_.GetType().FullName }) }) -join ', '), not one `$null"))
+    }
+
+    # Close-W4MsiComObject: nothing at all. This is the helper whose return value
+    # started the class of defect, so it is measured on a real COM handle.
+    $installer = New-Object -ComObject WindowsInstaller.Installer
+    $released = Get-W4MsiStreamItem -Call { Close-W4MsiComObject -ComObject @($installer) }.GetNewClosure()
+    if ($released.Count -ne 0) {
+        $problems.Add(("Close-W4MsiComObject put $($released.Count) object(s) on its output stream: " +
+            (($released | ForEach-Object { "$($_.GetType().FullName) '$_'" }) -join ', ') +
+            '. It must emit nothing at all.'))
+    }
+
+    return ,$problems.ToArray()
 }
 
 function Get-W4ProductInstallState {
@@ -875,6 +991,7 @@ function Show-W4AclObservations {
 }
 
 Export-ModuleMember -Function Show-W4MsiFailureExcerpt, Invoke-W4Msi, Invoke-W4MsiQuery,
+    Test-W4MsiInstrumentType,
     Get-W4MsiProperty, Get-W4MsiFileNames, Get-W4MsiStartsServiceOnInstall, Set-W4MsiCell, Get-W4MsiServiceControlEvent,
     Get-W4ProductInstallState, Get-W4ServiceRegistry, Get-W4ServiceState, Remove-W4ServiceIfPresent,
     Get-W4ServiceFailureActions, Get-W4ServiceFailureEvidence, Get-W4AclObservation,
