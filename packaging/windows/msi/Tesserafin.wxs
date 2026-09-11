@@ -131,6 +131,56 @@
   the second product the W4-A4 ruling forbids inventing, or roll back to 1603 and
   hide every other outcome behind one identity problem the way W0 §5.2 measured.
 
+  W4-A5 (#234) repairs NB-3 of W4-A4, and only that. W4-A4 measured the upgrade
+  with INSTALLFOLDER passed again on the second msiexec command line, and
+  recorded that this authoring had no remember-property: an operator who ran the
+  upgrade without repeating the prefix would have had the binaries relocated to
+  `%ProgramFiles%\Tesserafin\Server` while the first installation's directory
+  was removed underneath them. W4-A5 authors the remember-property WiX 4 needs
+  so that a later install FINDS the prefix instead of being told it.
+
+  It is three elements and one component, and it is the standard remember
+  pattern rather than a `RegistrySearch` hung directly on `Property/@INSTALLFOLDER`:
+
+    `RememberedInstallFolder`  a component whose KEY PATH is the remembered
+                               value itself, `HKLM\Software\Tesserafin\Server`
+                               `InstallFolder` = `[INSTALLFOLDER]`. It is
+                               neither `Permanent` nor `NeverOverwrite`, so an
+                               install that IS given a prefix rewrites the value
+                               and a later upgrade remembers the NEW location.
+
+    `REMEMBEREDINSTALLFOLDER`  a private search property that reads that value
+                               back through AppSearch, `Type="raw"` so the
+                               stored trailing separator survives and so a
+                               directory that does not exist yet is still
+                               returned.
+
+    `SetProperty`              copies it into INSTALLFOLDER after AppSearch and
+                               before CostFinalize, and ONLY when INSTALLFOLDER
+                               is not already set.
+
+  That last condition is the whole reason the search is not authored on
+  `Property Id="INSTALLFOLDER"` directly, which is the shorter and wrong shape:
+  AppSearch OVERWRITES a property it finds a value for, including one the
+  operator passed on the command line, so the short form would make the
+  remembered prefix impossible to change and would still pass every pair this
+  slice runs, because both sides of a hosted pair use one prefix. The condition
+  form gives the command line precedence. That precedence is NOT proven by this
+  slice - no pair here relocates an installation - and saying so is better
+  than a claim no run backs.
+
+  One hostile control for that slice is authored here, as one more `Mutation`
+  value:
+
+    `upgrade-no-remember`  the second package carries none of the three
+                           elements above, so an upgrade that omits
+                           INSTALLFOLDER resolves the default directory and
+                           writes the binaries to `%ProgramFiles%\Tesserafin\Server`
+                           while the first installation's prefix is removed with
+                           the first package. Everything else about the package
+                           is untouched, which is what makes the control
+                           attributable to the missing remember-property.
+
   What this authoring deliberately does NOT claim:
 
     * it is NOT a bit-identical MSI. W0 §5.6 measured that and accepted a
@@ -346,6 +396,42 @@
          than no statement at all. W4-A0 exercises neither path and claims
          neither. -->
     <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+
+    <!-- W4-A5 (#234). The remember-property, in the shape that leaves the
+         command line in charge.
+
+         `Type="raw"` and not `Type="directory"`: the stored value is the
+         formatted `[INSTALLFOLDER]`, which carries Windows Installer's trailing
+         separator, and a `directory` search would additionally require the path
+         to exist at AppSearch time - which is exactly when it does not, because
+         RemoveExistingProducts has not run yet on a repair and may have removed
+         it already on another sequence.
+
+         The property is deliberately NOT called INSTALLFOLDER. AppSearch
+         OVERWRITES whatever a property already holds, command-line values
+         included, so a search authored on INSTALLFOLDER itself would pin the
+         first prefix forever. The SetProperty below is conditioned on
+         INSTALLFOLDER being unset, which at this point in the sequence - after
+         AppSearch, before CostFinalize resolves the Directory table - is true
+         exactly when the caller did not pass one. -->
+    <?if $(var.Mutation) = "upgrade-no-remember" ?>
+      <!-- W4-A5 hostile control: no remember-property at all. This is the
+           authoring as W4-A4 left it, which is precisely the NB-3 defect: an
+           upgrade that omits INSTALLFOLDER installs to the default location. -->
+    <?else ?>
+      <Property Id="REMEMBEREDINSTALLFOLDER">
+        <RegistrySearch Id="RememberedInstallFolder"
+                        Root="HKLM"
+                        Key="Software\Tesserafin\Server"
+                        Name="InstallFolder"
+                        Type="raw" />
+      </Property>
+
+      <SetProperty Id="INSTALLFOLDER"
+                   Value="[REMEMBEREDINSTALLFOLDER]"
+                   After="AppSearch"
+                   Condition="REMEMBEREDINSTALLFOLDER AND NOT INSTALLFOLDER" />
+    <?endif ?>
 
     <!-- mszip, not the LZX default. The payload is the whole self-contained
          server plus the Web tree plus the FFmpeg runtime - thousands of files
@@ -700,6 +786,40 @@
       </Component>
     </ComponentGroup>
 
+    <!-- W4-A5 (#234). Where this installation's binaries went, written by the
+         install that put them there and read back by the NEXT one.
+
+         The KeyPath IS the remembered value, not a directory and not a second
+         marker beside it: a component keyed on the thing it exists to write
+         cannot be installed while the value is absent, and cannot be absent
+         while the component is installed.
+
+         It is neither `Permanent` nor `NeverOverwrite`, and both of those would
+         be defects here rather than caution. A `Permanent` component would
+         leave the value behind after an uninstall, so a later FRESH install
+         would silently resurrect a prefix the operator had removed; a
+         `NeverOverwrite` component whose key path already exists is SKIPPED,
+         so an install that WAS given a new prefix would keep advertising the
+         old one. The value is package policy, re-stated by every install, in
+         exactly the way the six `OperatorTreePermissions` components above are.
+
+         It lives under the same `HKLM\Software\Tesserafin\Server` key the ACL
+         and retained-state components already use, so the probe's existing
+         between-pair reset and the workflow's cleanup remove it with them and
+         no pair inherits the previous pair's prefix. -->
+    <?if $(var.Mutation) != "upgrade-no-remember" ?>
+    <ComponentGroup Id="RememberedInstallLocation">
+      <Component Id="RememberedInstallFolder" Directory="INSTALLFOLDER" Guid="05a98455-58cb-4027-9d4f-602d0bf0a2e5">
+        <RegistryValue Root="HKLM"
+                       Key="Software\Tesserafin\Server"
+                       Name="InstallFolder"
+                       Value="[INSTALLFOLDER]"
+                       Type="string"
+                       KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+    <?endif ?>
+
     <!-- W0 §9.1 and §10: the operator-owned directories. They are created by
          the package so that "uninstall does not delete them" is a measurable
          statement rather than a vacuous one, and they are `Permanent` so that
@@ -738,6 +858,9 @@
       <ComponentGroupRef Id="ServerHost" />
       <ComponentGroupRef Id="OperatorTreePermissions" />
       <ComponentGroupRef Id="RetainedState" />
+      <?if $(var.Mutation) != "upgrade-no-remember" ?>
+      <ComponentGroupRef Id="RememberedInstallLocation" />
+      <?endif ?>
     </Feature>
   </Package>
 </Wix>

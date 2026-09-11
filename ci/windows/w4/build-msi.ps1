@@ -70,7 +70,8 @@
     containment, the argument list and the uninstall, three from W4-A2 over the
     W0 §4 recovery policy, four from W4-A3 over the W0 §9.3 ACLs, and two from
     W4-A4 over what a MajorUpgrade does to the service registration and to
-    operator state -- so those
+    operator state, and one from W4-A5 over whether the second package
+    remembers where the first one was installed -- so those
     controls drive the REAL authoring
     rather than a second copy of it written for the test -- the same reason the frozen W2-A2 assembler carries a
     PACK-ONLY parameter set. `ci/windows/w4/msi-controls.py` asserts the hosted
@@ -118,7 +119,7 @@ param(
     [ValidateSet('none', 'no-exe', 'no-service-flag', 'no-path-flags', 'no-service-remove',
         'no-util-config', 'delay-not-60s', 'third-action-restart',
         'acl-users-write', 'acl-no-service-grant', 'acl-install-writable',
-        'upgrade-no-service', 'upgrade-wipes-state')]
+        'upgrade-no-service', 'upgrade-wipes-state', 'upgrade-no-remember')]
     [string] $Mutation = 'none',
     [ValidateRange(0, 1)] [int] $PatchBump = 0,
     [ValidateNotNullOrEmpty()] [string] $WixVersion = '6.0.2',
