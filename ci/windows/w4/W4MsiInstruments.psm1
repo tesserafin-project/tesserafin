@@ -1085,8 +1085,21 @@ function Get-W4LifecycleEvents {
         [Parameter(Mandatory = $true)] [DateTime] $Since
     )
     $filter = @{ LogName = $LogName; ProviderName = $SourceName; StartTime = $Since }
-    $found = @(Get-WinEvent -FilterHashtable $filter -ErrorAction SilentlyContinue |
-        Sort-Object -Property TimeCreated)
+    try {
+        $found = @(Get-WinEvent -FilterHashtable $filter -ErrorAction SilentlyContinue |
+            Sort-Object -Property TimeCreated)
+    }
+    catch {
+        # An unregistered provider does not make `Get-WinEvent` answer "no events" -- it
+        # makes it THROW ERROR_INVALID_PARAMETER, and as a terminating error, which is
+        # why the `-ErrorAction` above never reached it and why `eventlog-no-source` died
+        # on the reader rather than grading. A source that is not registered has written
+        # nothing, so that is the answer. Keyed on whether the source exists rather than
+        # on the exception's text: the message is localised and the runner's display
+        # language is not part of this measurement. Any other reader failure stays loud.
+        if (Test-W4EventLogSourceExists -SourceName $SourceName) { throw }
+        return @()
+    }
     return @($found | ForEach-Object {
         [ordered]@{
             providerName = [string]$_.ProviderName
