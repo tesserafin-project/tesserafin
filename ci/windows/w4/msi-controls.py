@@ -54,6 +54,7 @@ AUTHORING = REPO_ROOT / "packaging" / "windows" / "msi" / "Tesserafin.wxs"
 BUILDER = REPO_ROOT / "ci" / "windows" / "w4" / "build-msi.ps1"
 PROBE = REPO_ROOT / "ci" / "windows" / "w4" / "probe-msi-skeleton.ps1"
 PROBE_UPGRADE = REPO_ROOT / "ci" / "windows" / "w4" / "probe-msi-upgrade.ps1"
+PROBE_EVENTLOG = REPO_ROOT / "ci" / "windows" / "w4" / "probe-msi-eventlog.ps1"
 INSTRUMENTS = REPO_ROOT / "ci" / "windows" / "w4" / "W4MsiInstruments.psm1"
 SELF_TEST = REPO_ROOT / "ci" / "windows" / "w4" / "assertion-self-test.ps1"
 PACKAGE_PROPS = REPO_ROOT / "Directory.Packages.props"
@@ -63,6 +64,7 @@ A2_DOC = REPO_ROOT / "docs" / "distribution" / "W4-A2-service-recovery.md"
 A3_DOC = REPO_ROOT / "docs" / "distribution" / "W4-A3-programdata-acls.md"
 A4_DOC = REPO_ROOT / "docs" / "distribution" / "W4-A4-major-upgrade.md"
 A5_DOC = REPO_ROOT / "docs" / "distribution" / "W4-A5-remember-installfolder.md"
+A6_DOC = REPO_ROOT / "docs" / "distribution" / "W4-A6-eventlog-source.md"
 
 # W4-A1 (#234). The owner ruling froze the GUID W4-A0 had already authored:
 # "Ordinal, lowercase, no braces. I do not authorize a new GUID." This is the
@@ -524,6 +526,287 @@ def findings_for_acl_prose(a3_text: str) -> list[str]:
     return findings
 
 
+# ---------------------------------------------------------------------------
+# W4-A6 (#234). The Event Log source, and the one gate this slice had to narrow
+# rather than add.
+# ---------------------------------------------------------------------------
+
+# The source IS this registry key. .NET's `EventLog.CreateEventSource`,
+# `EventCreate.exe` and `util:EventSource` all write the same one, which is why
+# the authoring needs no second WiX extension to register it.
+EVENTLOG_SOURCE_KEY = r"SYSTEM\CurrentControlSet\Services\EventLog\Application\Tesserafin"
+
+# The message file the package ships. `ServiceBase` writes with event id 0 and
+# the message as the single insertion string, so a source that names no message
+# file with an entry for it records events nothing can render. This one is a
+# managed file of the `Microsoft.AspNetCore.App` win-x64 runtime pack, so it is
+# already in the self-contained publish the accepted W2 layout is -- which is
+# what keeps a distribution that needs no system .NET runtime from taking a
+# dependency on the .NET Framework's copy for the sake of a string.
+EVENTLOG_MESSAGE_FILE = "System.Diagnostics.EventLog.Messages.dll"
+
+# The three W4-A6 controls, by the name `build-msi.ps1` accepts. Each must be
+# reachable from the authoring, or it is a control that cannot be built.
+EVENTLOG_MUTATIONS = (
+    "eventlog-no-source",
+    "eventlog-source-survives",
+    "eventlog-start-install",
+)
+
+# The one mutation `Start="install"` is allowed to appear under. Before W4-A6
+# the gate was "nowhere in the file"; the ruling's own hostile control is a
+# package that starts the service inside the MSI transaction, so the gate is now
+# "nowhere in the package the real build emits, and in exactly one branch".
+EVENTLOG_START_INSTALL_MUTATION = "eventlog-start-install"
+
+_PREPROCESSOR = re.compile(r"<\?(if|elseif|else|endif|ifdef|ifndef)\b([^?]*)\?>")
+_MUTATION_TEST = re.compile(r"\$\(var\.Mutation\)\s*(!?=)\s*\"([^\"]*)\"")
+
+
+def _mutation_branch_taken(condition: str) -> bool | None:
+    """Whether a `$(var.Mutation)` condition holds for the REAL package.
+
+    `None` for any other condition, which this reducer does not evaluate and
+    whose branches it therefore keeps.
+    """
+    match = _MUTATION_TEST.search(condition)
+    if not match:
+        return None
+    operator, value = match.group(1), match.group(2)
+    return value == "none" if operator == "=" else value != "none"
+
+
+def real_authoring(text: str) -> str:
+    """The authoring with every hostile-control branch removed.
+
+    `Tesserafin.wxs` carries its own hostile controls as `$(var.Mutation)`
+    branches -- which is what makes them drive the real file rather than a copy
+    of it, and what means a gate reading the raw text cannot say what the REAL
+    package is authored to be. `acl-users-write` plants a `Users` Modify ACE and
+    `eventlog-start-install` starts the service inside the transaction; both are
+    in the file on purpose.
+
+    This runs the WiX preprocessor's own branch selection for `Mutation` =
+    `none`, the value `findings_for_mutation` already proves is the only one the
+    hosted acceptance build passes. Conditions that are not a `$(var.Mutation)`
+    comparison are not evaluated and both of their branches are kept, so this is
+    a reducer for the control branches and nothing else.
+    """
+    kept: list[str] = []
+    # Each frame: [emitting, some branch of this construct was already taken,
+    # this construct's conditions are ones we evaluate].
+    stack: list[list[bool]] = []
+    position = 0
+
+    def emitting() -> bool:
+        return all(frame[0] for frame in stack)
+
+    for directive in _PREPROCESSOR.finditer(text):
+        if emitting():
+            kept.append(text[position : directive.start()])
+        position = directive.end()
+        keyword, condition = directive.group(1), directive.group(2)
+        if keyword in ("if", "ifdef", "ifndef"):
+            taken = _mutation_branch_taken(condition) if keyword == "if" else None
+            if taken is None:
+                stack.append([True, True, False])
+            else:
+                stack.append([taken, taken, True])
+        elif keyword == "elseif":
+            if not stack:
+                continue
+            frame = stack[-1]
+            taken = _mutation_branch_taken(condition)
+            if taken is None or not frame[2]:
+                frame[0], frame[1], frame[2] = True, True, False
+            else:
+                frame[0] = taken and not frame[1]
+                frame[1] = frame[1] or taken
+        elif keyword == "else":
+            if not stack:
+                continue
+            frame = stack[-1]
+            frame[0] = True if not frame[2] else not frame[1]
+            frame[1] = True
+        elif keyword == "endif":
+            if stack:
+                stack.pop()
+    if emitting():
+        kept.append(text[position:])
+    return "".join(kept)
+
+
+def findings_for_event_log_source(text: str, real: str) -> list[str]:
+    """W4-A6: the W0 §4 Event Log source, as the REAL package registers it.
+
+    `text` is the whole comment-stripped authoring, controls included; `real` is
+    what the `none` build emits. The difference matters for every predicate
+    here: two of the three controls are an ABSENT or a WEAKENED registration, so
+    asking the raw text whether the source is registered correctly would be
+    answered by a control.
+    """
+    findings: list[str] = []
+
+    if EVENTLOG_SOURCE_KEY not in real:
+        findings.append(
+            "authoring: the real package registers no Event Log source at "
+            f"HKLM\\{EVENTLOG_SOURCE_KEY}, so the service's own lifecycle events have nowhere "
+            "to go and a non-administrator service identity cannot create one"
+        )
+        return findings
+
+    if 'ForceDeleteOnUninstall="yes"' not in real:
+        findings.append(
+            "authoring: the Event Log source key is not removed on uninstall. "
+            "EventLog.SourceExists asks whether the SUBKEY exists and never reads its values, "
+            "so removing only the values leaves the source registered"
+        )
+    if EVENTLOG_MESSAGE_FILE not in real:
+        findings.append(
+            f"authoring: the source names no {EVENTLOG_MESSAGE_FILE}, so the events it carries "
+            "render as a missing description"
+        )
+    if 'Name="EventMessageFile"' not in real:
+        findings.append("authoring: the source has no EventMessageFile value")
+    if 'Name="TypesSupported"' not in real:
+        findings.append("authoring: the source has no TypesSupported value")
+
+    # The component that owns the key must be re-stated by every install and
+    # removed by the uninstall, exactly like the six OperatorTreePermissions
+    # components. `Permanent` is the whole of the `eventlog-source-survives`
+    # control, so finding it HERE means the real package carries the control.
+    for opening in re.findall(r"<Component\s+Id=\"EventLogSourceRegistration\"[^>]*>", real):
+        for attribute in ('Permanent="yes"', 'NeverOverwrite="yes"'):
+            if attribute in opening:
+                findings.append(
+                    f"authoring: the Event Log source component is {attribute} in the real "
+                    "package, so the registration outlives the product that made it"
+                )
+    if 'ComponentGroupRef Id="EventLogSource"' not in real:
+        findings.append(
+            "authoring: the EventLogSource component group is never referenced by the feature, "
+            "so nothing installs it"
+        )
+
+    # §4 gives the Event Log service-lifecycle events ONLY. A package that
+    # defined a log of its own would be claiming the application-events row this
+    # slice is explicitly not.
+    if re.search(r"EventLog\\\\(?!Application\\\\)", real):
+        findings.append(
+            "authoring: registers a source under a log other than Application. W0 §4 asks for "
+            "service-lifecycle events in the Windows Event Log, not a Tesserafin log"
+        )
+    return findings
+
+
+def findings_for_start_install(text: str, real: str) -> list[str]:
+    """W0 §5.2's 1920, and the one branch W4-A6 authorises it in.
+
+    Before W4-A6 this was `'Start="install"' in text`. The ruling's own hostile
+    control is a package that starts the service inside the MSI transaction, so
+    the property is now stated where it was always meant: the REAL package does
+    not carry it, and the one copy in the file is the declared control.
+    """
+    findings: list[str] = []
+    if 'Start="install"' in real:
+        findings.append(
+            "authoring: ServiceControl starts the service inside the transaction. W0 §5.2 "
+            "measured that failing with 1920 and rolling the whole install back to 1603, and "
+            "W0 §10 leaves a fresh installation installed and enabled but not started"
+        )
+    occurrences = text.count('Start="install"')
+    if occurrences > 1:
+        findings.append(
+            f"authoring: {occurrences} ServiceControl elements start the service inside the "
+            "transaction. One is the declared W4-A6 control; a second is not attributable to it"
+        )
+    if occurrences == 1:
+        guarded = real_authoring(
+            text.replace(
+                f'$(var.Mutation) = "{EVENTLOG_START_INSTALL_MUTATION}"',
+                '$(var.Mutation) = "none"',
+            )
+        )
+        if 'Start="install"' not in guarded:
+            findings.append(
+                'authoring: the one Start="install" is not inside the '
+                f"'{EVENTLOG_START_INSTALL_MUTATION}' branch, so it belongs to no declared control"
+            )
+    return findings
+
+
+def findings_for_event_log_mutations(text: str) -> list[str]:
+    """Every W4-A6 control must be reachable from the authoring and buildable."""
+    findings: list[str] = []
+    builder = BUILDER.read_text(encoding="utf-8")
+    for mutation in EVENTLOG_MUTATIONS:
+        if f'"{mutation}"' not in text:
+            findings.append(
+                f"authoring: no branch for the '{mutation}' control, so the control cannot drive "
+                "this authoring"
+            )
+        if f"'{mutation}'" not in builder:
+            findings.append(
+                f"build-msi.ps1: does not accept -Mutation {mutation}, so the control cannot be built"
+            )
+    return findings
+
+
+def eventlog_measurement_path() -> str:
+    """The two files W4-A6 measures through, as one executable text."""
+    return (
+        without_comments(PROBE_EVENTLOG.read_text(encoding="utf-8"), "ps1")
+        + "\n"
+        + without_comments(INSTRUMENTS.read_text(encoding="utf-8"), "ps1")
+    )
+
+
+def findings_for_eventlog_probe(text: str) -> list[str]:
+    """W4-A6: the measurement path does what the ruling authorised, and no more.
+
+    `text` is `probe-msi-eventlog.ps1` and `W4MsiInstruments.psm1` together,
+    because the measurement is split across them by design -- the probe drives
+    the sequence and the module owns the Windows-only reads -- and a gate that
+    looked at only one half would be satisfied by a probe that calls nothing or
+    by a module nothing calls.
+
+    The start is the point of this slice, so `sc.exe start` is not forbidden
+    here the way it is in the upgrade probe. What is graded instead is that the
+    source is read back, a real event is read back, and the source is looked for
+    again after the uninstall.
+    """
+    findings: list[str] = []
+    if "sc.exe start" not in text and "Start-Service" not in text:
+        findings.append(
+            "the W4-A6 measurement path never starts the service, so no lifecycle event is produced"
+        )
+    if "sc.exe stop" not in text and "Stop-Service" not in text:
+        findings.append("the W4-A6 measurement path never stops the service")
+    if "Get-WinEvent" not in text:
+        findings.append(
+            "the W4-A6 measurement path never reads an event back, so the source is asserted "
+            "rather than measured"
+        )
+    if EVENTLOG_SOURCE_KEY not in text:
+        findings.append(
+            "the W4-A6 measurement path never states the Event Log source key, so 'the source "
+            "exists' and 'the source is gone' are both unmeasured"
+        )
+    if EVENTLOG_MESSAGE_FILE not in text:
+        findings.append(
+            f"the W4-A6 measurement path never checks that {EVENTLOG_MESSAGE_FILE} is installed, "
+            "so the authoring's EventMessageFile may dangle"
+        )
+    for forbidden, why in (
+        ("signtool", "this slice signs nothing"),
+        ("REINSTALL=", "this slice exercises no repair path"),
+        ("/f ", "this slice exercises no repair path"),
+    ):
+        if forbidden in text:
+            findings.append(f"the W4-A6 measurement path: '{forbidden}' -- {why}")
+    return findings
+
+
 def without_comments(text: str, kind: str) -> str:
     """Drop commented-out text before asking what a file DOES.
 
@@ -707,11 +990,10 @@ def findings_for_authoring(text: str) -> list[str]:
             findings.append(f"authoring: the W0 §4 argument '{argument}' does not appear")
     if 'Name="Tesserafin"' not in text:
         findings.append("authoring: the service is not named Tesserafin")
-    if 'Start="install"' in text:
-        findings.append(
-            "authoring: ServiceControl starts the service inside the transaction. W0 §5.2 measured "
-            "that failing with 1920 and rolling the whole install back to 1603"
-        )
+    real = real_authoring(text)
+    findings += findings_for_start_install(text, real)
+    findings += findings_for_event_log_source(text, real)
+    findings += findings_for_event_log_mutations(text)
     if 'Permanent="yes"' not in text:
         findings.append(
             "authoring: no Permanent component, so the retained-data policy is not expressed in the package"
@@ -1080,6 +1362,35 @@ def findings_for_remember_prose(a5_text: str) -> list[str]:
     return findings
 
 
+W4A6_REQUIRED_PHRASES = (
+    ("W4-A6", "does not cite the W4-A6 ruling it records"),
+    (EVENTLOG_SOURCE_KEY, "does not state the registry key the Event Log source IS"),
+    ("AutoLog", "does not say what actually writes the lifecycle events"),
+    ("eventlog-no-source", "does not name the control that proves the registration is load-bearing"),
+    ("eventlog-start-install", "does not name the control over starting inside the transaction"),
+)
+
+
+def findings_for_eventlog_prose(a6_text: str) -> list[str]:
+    """W4-A6: the document records this slice and does not claim the stage."""
+    findings = [
+        f"W4-A6 document: {why}"
+        for phrase, why in W4A6_REQUIRED_PHRASES
+        if phrase not in a6_text
+    ]
+    if FROZEN_UPGRADE_CODE not in a6_text:
+        findings.append(
+            f"W4-A6 document: does not state the frozen UpgradeCode {FROZEN_UPGRADE_CODE}, which "
+            "this slice leaves exactly where W4-A1 froze it"
+        )
+    for pattern in W4_OVERCLAIM_PATTERNS:
+        if re.search(pattern, a6_text, re.I):
+            findings.append(
+                f"W4-A6 document: claims the stage ('{pattern}'); the ruling excludes claiming W4 accepted"
+            )
+    return findings
+
+
 def findings_for_wiring(text: str) -> list[str]:
     """The two harnesses must actually run, or they are decoration."""
     findings: list[str] = []
@@ -1093,6 +1404,9 @@ def findings_for_wiring(text: str) -> list[str]:
     # self-test nothing invokes.
     if "probe-msi-upgrade.ps1" not in text:
         findings.append("workflow: never runs the W4-A4 MajorUpgrade proof")
+    # W4-A6. Same rule again: a probe the workflow never runs is decoration.
+    if "probe-msi-eventlog.ps1" not in text:
+        findings.append("workflow: never runs the W4-A6 Event Log source proof")
     return findings
 
 
@@ -1115,8 +1429,10 @@ def grade_everything(workflow_text: str) -> list[str]:
         + findings_for_upgrade_probe(
             without_comments(PROBE_UPGRADE.read_text(encoding="utf-8"), "ps1")
         )
+        + findings_for_eventlog_probe(eventlog_measurement_path())
         + findings_for_upgrade_prose(A4_DOC.read_text(encoding="utf-8"))
         + findings_for_remember_prose(A5_DOC.read_text(encoding="utf-8"))
+        + findings_for_eventlog_prose(A6_DOC.read_text(encoding="utf-8"))
         + grade_authoring(
             AUTHORING.read_text(encoding="utf-8"),
             A0_DOC.read_text(encoding="utf-8"),
@@ -1639,6 +1955,106 @@ def self_test_remember(
     return failures
 
 
+def self_test_event_log(
+    authoring_text: str, probe_text: str, a6_text: str
+) -> list[str]:
+    """W4-A6: every gate above must be reachable.
+
+    The authoring mutations here are the shapes a slice could plausibly reach
+    for -- the registration dropped, the key left behind, the component made
+    permanent, the message file dropped, the control's `Start="install"` moved
+    out of its branch -- and each has to be RED. The last two prove the narrowed
+    `Start="install"` gate is still a gate: it must fire for a second copy and
+    for a copy that is not inside the declared control.
+    """
+    documents = (a6_text,)
+    failures: list[str] = []
+
+    def grade_one(text: str) -> list[str]:
+        real = real_authoring(text)
+        return (
+            findings_for_start_install(text, real)
+            + findings_for_event_log_source(text, real)
+            + findings_for_event_log_mutations(text)
+        )
+
+    if grade_one(without_comments(authoring_text, "xml")):
+        failures.append("self-test 'W4-A6 baseline': the real authoring is already RED")
+
+    authoring_mutations = {
+        "the source is never registered": lambda t: t.replace(EVENTLOG_SOURCE_KEY, "SOFTWARE\\Tesserafin\\NotASource"),
+        "the source key survives uninstall": lambda t: t.replace(
+            'ForceDeleteOnUninstall="yes"', 'ForceDeleteOnUninstall="no"'
+        ),
+        "the source component is permanent": lambda t: t.replace(
+            '<Component Id="EventLogSourceRegistration" Guid="55ce15a7-640d-4216-b490-0236e5948fce">',
+            '<Component Id="EventLogSourceRegistration" Guid="55ce15a7-640d-4216-b490-0236e5948fce" Permanent="yes">',
+        ),
+        "the message file is dropped": lambda t: t.replace(EVENTLOG_MESSAGE_FILE, "nothing.dll"),
+        "nothing installs the source": lambda t: t.replace(
+            '<ComponentGroupRef Id="EventLogSource" />', ""
+        ),
+        "the real package starts the service": lambda t: t.replace(
+            '<?elseif $(var.Mutation) = "eventlog-start-install" ?>',
+            '<?elseif $(var.Mutation) = "never-taken" ?>',
+        ),
+        "a second package starts the service": lambda t: t.replace(
+            '<ServiceControl Id="TesserafinServiceControl"\n                          Name="Tesserafin"\n                          Stop="both"',
+            '<ServiceControl Id="TesserafinServiceControl"\n                          Name="Tesserafin"\n                          Start="install"\n                          Stop="both"',
+        ),
+        "a control is unreachable": lambda t: t.replace('"eventlog-no-source"', '"eventlog-gone"'),
+    }
+    for name, mutate in authoring_mutations.items():
+        mutated = mutate(authoring_text)
+        if mutated == authoring_text:
+            failures.append(f"self-test '{name}': the mutation did not change the authoring")
+            continue
+        if not grade_one(without_comments(mutated, "xml")):
+            failures.append(f"self-test '{name}': the gate did not fire")
+        else:
+            print(f"  control OK   {name}")
+
+    probe_mutations = {
+        "the probe never starts the service": lambda t: t.replace("sc.exe start", "sc.exe query").replace(
+            "Start-Service", "Get-Service"
+        ),
+        "the probe reads no event": lambda t: t.replace("Get-WinEvent", "Get-Nothing"),
+        "the probe never looks at the source key": lambda t: t.replace(EVENTLOG_SOURCE_KEY, "SOFTWARE\\Elsewhere"),
+        "the probe never checks the message file": lambda t: t.replace(EVENTLOG_MESSAGE_FILE, "nothing.dll"),
+    }
+    executable_probe = probe_text
+    for name, mutate in probe_mutations.items():
+        mutated = mutate(executable_probe)
+        if mutated == executable_probe:
+            failures.append(f"self-test '{name}': the mutation did not change the probe")
+            continue
+        if not findings_for_eventlog_probe(mutated):
+            failures.append(f"self-test '{name}': the gate did not fire")
+        else:
+            print(f"  control OK   {name}")
+
+    prose_mutations = {
+        "document drops the source key": lambda t: t.replace(EVENTLOG_SOURCE_KEY, "somewhere"),
+        "document never says what writes the events": lambda t: t.replace("AutoLog", "somehow"),
+        "document claims the stage": lambda t: t + "\n\nW4 is accepted.\n",
+        "document drops the frozen UpgradeCode": lambda t: t.replace(FROZEN_UPGRADE_CODE, "0"),
+    }
+    for name, mutate in prose_mutations.items():
+        mutated = mutate(documents[0])
+        if mutated == documents[0]:
+            failures.append(f"self-test '{name}': the mutation did not change the document")
+            continue
+        if not findings_for_eventlog_prose(mutated):
+            failures.append(f"self-test '{name}': the gate did not fire")
+        else:
+            print(f"  control OK   {name}")
+
+    if not failures:
+        total = len(authoring_mutations) + len(probe_mutations) + len(prose_mutations)
+        print(f"  {total} W4-A6 controls, all RED as declared")
+    return failures
+
+
 def self_test(workflow_text: str) -> list[str]:
     """Every gate above must be reachable. A gate nothing can trip is not a gate."""
     mutations = {
@@ -1657,6 +2073,8 @@ def self_test(workflow_text: str) -> list[str]:
         "self-test dropped": lambda t: t.replace("assertion-self-test.ps1", "nothing.ps1"),
         # W4-A4 (#234)
         "upgrade proof dropped": lambda t: t.replace("probe-msi-upgrade.ps1", "nothing.ps1"),
+        # W4-A6 (#234)
+        "event log proof dropped": lambda t: t.replace("probe-msi-eventlog.ps1", "nothing.ps1"),
         "acceptance chooses the version": lambda t: t.replace(
             "        run: |",
             "        run: |\n          ./ci/windows/w4/probe-msi-upgrade.ps1 -PatchBump 1",
@@ -1683,8 +2101,9 @@ def main() -> int:
     parser.add_argument("--self-test", action="store_true", help="also prove each gate can fire")
     options = parser.parse_args()
 
-    for required in (WORKFLOW, AUTHORING, BUILDER, PROBE, PROBE_UPGRADE, INSTRUMENTS, SELF_TEST,
-                     A0_DOC, A1_DOC, A2_DOC, A3_DOC, A4_DOC, A5_DOC):
+    for required in (WORKFLOW, AUTHORING, BUILDER, PROBE, PROBE_UPGRADE, PROBE_EVENTLOG,
+                     INSTRUMENTS, SELF_TEST,
+                     A0_DOC, A1_DOC, A2_DOC, A3_DOC, A4_DOC, A5_DOC, A6_DOC):
         if not required.is_file():
             print(f"W4 CONTROLS REFUSED: missing {required.relative_to(REPO_ROOT)}")
             return 1
@@ -1692,7 +2111,7 @@ def main() -> int:
     workflow_text = WORKFLOW.read_text(encoding="utf-8")
     findings = grade_everything(workflow_text)
 
-    print("W4-A0 / W4-A2 / W4-A3 / W4-A4 / W4-A5 static controls")
+    print("W4-A0 / W4-A2 / W4-A3 / W4-A4 / W4-A5 / W4-A6 static controls")
     if findings:
         for finding in findings:
             print(f"  FINDING  {finding}")
@@ -1719,6 +2138,11 @@ def main() -> int:
             AUTHORING.read_text(encoding="utf-8"),
             PROBE_UPGRADE.read_text(encoding="utf-8"),
             A5_DOC.read_text(encoding="utf-8"),
+        )
+        failures += self_test_event_log(
+            AUTHORING.read_text(encoding="utf-8"),
+            eventlog_measurement_path(),
+            A6_DOC.read_text(encoding="utf-8"),
         )
     for failure in failures:
         print(f"  FINDING  {failure}")

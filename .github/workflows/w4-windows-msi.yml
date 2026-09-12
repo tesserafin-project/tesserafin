@@ -36,6 +36,30 @@
 # control by an outcome that is not the defect. `ci/windows/w4/probe-msi-upgrade.ps1`
 # says why, at length, and the evidence records which controls installed nothing.
 #
+# W4-A6 (#234) adds a THIRD job, `msi-eventlog`, and changes nothing about the
+# other two. It proves one more thing, which is the thing the W4-A6 ruling
+# authorises:
+#
+#   after the install there is a Windows Event Log source named `Tesserafin`
+#   under the `Application` log; `sc start` and then `sc stop`, run AFTER the
+#   install and outside the MSI transaction, write at least one
+#   service-lifecycle event under that source; and the uninstall removes it.
+#
+# The events are written by `System.ServiceProcess.ServiceBase`, whose `AutoLog`
+# defaults to true -- not by anything in this repository. The installer is what
+# has to register the source, because the W0 §9.2 service identity cannot create
+# one and `ServiceBase` swallows the failure when it tries. W3-A0 §3 recorded
+# that as W4's to close.
+#
+# The service is STILL not started by the package: this job's start is a probe
+# after the install, the same shape as W3-A0's, and two predicates -- one off the
+# live SCM, one off the package's own ServiceControl table -- say so. Three
+# hostile controls run beside the real package, all built from the SAME authoring
+# through the SAME builder: one that registers no source, one whose registration
+# survives the uninstall, and one that starts the service inside the transaction.
+# The last is a table control and `ci/windows/w4/probe-msi-eventlog.ps1` says why
+# at length.
+#
 # W4-A5 (#234) extends `msi-upgrade` and adds no job. The pair it runs is the
 # one the W4-A5 ruling names:
 #
@@ -519,5 +543,214 @@ jobs:
             Remove-Item -LiteralPath $dataRoot -Recurse -Force -ErrorAction SilentlyContinue
           }
           Remove-Item -LiteralPath 'HKLM:\SOFTWARE\Tesserafin' -Recurse -Force -ErrorAction SilentlyContinue
+          'cleanup complete'
+          exit 0
+
+  msi-eventlog:
+    name: Register the Event Log source and read one lifecycle event back
+    runs-on: windows-latest
+    # One runtime pull, one Web pull, one self-contained publish, one pack, then
+    # four `wix build` runs over a payload of a few thousand files, three full
+    # install / start / stop / uninstall cycles, and one table control that
+    # installs nothing. Each cycle is a COLD first start -- the state is reset
+    # between runs so no run inherits another's database -- and W0 §2.3 recorded
+    # a cold start still applying migrations at 180 s.
+    timeout-minutes: 240
+    permissions:
+      contents: read
+      # The entire write surface of this job. Read only, job scoped, and needed
+      # only because the frozen assembler pulls the accepted Web payload image
+      # with the job's own token -- byte for byte what the two jobs above ask
+      # for, and for the same reason.
+      packages: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: ${{ env.SDK_VERSION }}
+
+      - name: Record the runner's interpreters
+        id: tools
+        shell: pwsh
+        run: |
+          $python = (Get-Command python -CommandType Application | Select-Object -First 1).Source
+          if (-not $python) { throw 'no python on this runner' }
+          "python=$python" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "PowerShell $($PSVersionTable.PSVersion), .NET $([System.Environment]::Version)"
+          if ($PSVersionTable.PSVersion.Major -lt 7) {
+            throw "W4-A6 HARD STOP: this job needs PowerShell 7 or newer; it has $($PSVersionTable.PSVersion)"
+          }
+          & $python --version
+          & dotnet --version
+
+      - name: Install the pinned YAML parser
+        shell: pwsh
+        run: |
+          & '${{ steps.tools.outputs.python }}' -m pip install --disable-pip-version-check --quiet pyyaml==6.0.2
+          if ($LASTEXITCODE -ne 0) { throw 'W4-A6 HARD STOP: could not install the pinned PyYAML' }
+          & '${{ steps.tools.outputs.python }}' -c "import yaml; print(f'PyYAML {yaml.__version__}')"
+
+      - name: The controls that need no runner
+        shell: pwsh
+        run: |
+          & '${{ steps.tools.outputs.python }}' ci/windows/w4/msi-controls.py --self-test
+          if ($LASTEXITCODE -ne 0) { throw 'the W4 static controls found something' }
+
+      - name: Prove the grader is not inert
+        shell: pwsh
+        run: |
+          ./ci/windows/w4/assertion-self-test.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'the W4 assertion self-test failed' }
+
+      - name: Make the corresponding-source verifier available
+        shell: pwsh
+        run: |
+          $zstd = Get-Command zstd -CommandType Application -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+          if ($zstd) {
+            "zstd $((& $zstd.Source --version) -join ' ')"
+            exit 0
+          }
+          $fallback = Join-Path $env:ProgramFiles 'Git\usr\bin\zstd.exe'
+          if (Test-Path -LiteralPath $fallback) {
+            (Split-Path -Parent $fallback) | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+            "zstd taken from Git for Windows at $fallback"
+            exit 0
+          }
+          throw 'W4-A6 HARD STOP: this runner has no zstd, so the corresponding source cannot be verified'
+
+      - name: Install the pinned ORAS
+        shell: bash
+        run: ./ci/windows/build-inputs/install-oras.sh windows-amd64 "${RUNNER_TEMP}/bin"
+
+      - name: Install the pinned WiX toolset
+        shell: pwsh
+        run: |
+          & dotnet tool install --global wix --version $env:WIX_VERSION *> $null
+          $raw = (& wix --version 2>&1 | Out-String)
+          $reported = (@($raw -split "\r?\n" | Where-Object { $_.Trim() -match '^[0-9]+\.[0-9]+\.[0-9]+' }) |
+            Select-Object -First 1)
+          if (-not $reported) { throw "W4-A6 HARD STOP: wix reported no version: $($raw.Trim())" }
+          $reported = $reported.Trim()
+          if (-not $reported.StartsWith($env:WIX_VERSION)) {
+            throw "W4-A6 HARD STOP: asked for WiX $($env:WIX_VERSION) and got '$reported'"
+          }
+          "wix $reported"
+
+      - name: Derive SOURCE_DATE_EPOCH from the commit
+        id: epoch
+        shell: pwsh
+        run: |
+          $commit = (& git rev-parse HEAD).Trim()
+          if ($commit -notmatch '^[0-9a-f]{40}$') { throw "not a commit: $commit" }
+          $epoch = (& git log -1 --format=%ct $commit).Trim()
+          if ($epoch -notmatch '^[1-9][0-9]*$') { throw "no committer time for $commit" }
+          "commit=$commit" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "epoch=$epoch"   | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "commit            : $commit"
+          "SOURCE_DATE_EPOCH : $epoch"
+
+      - name: Install, start, stop, read one event and uninstall, with three hostile controls
+        shell: pwsh
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./ci/windows/w4/probe-msi-eventlog.ps1 `
+            -RepoRoot $PWD `
+            -WorkDir (Join-Path $env:RUNNER_TEMP 'w4a6/work') `
+            -InstallPrefix (Join-Path $env:RUNNER_TEMP 'w4a6/prefix') `
+            -EvidencePath (Join-Path $env:RUNNER_TEMP 'w4a6/msi-eventlog.json') `
+            -SourceDateEpoch ${{ steps.epoch.outputs.epoch }} `
+            -OrasPath (Join-Path $env:RUNNER_TEMP 'bin\oras.exe') `
+            -HeadSha '${{ steps.epoch.outputs.commit }}' `
+            -PythonPath '${{ steps.tools.outputs.python }}'
+          if ($LASTEXITCODE -ne 0) { throw 'the W4-A6 Event Log source proof refused' }
+
+      # The ruling's dump. Printed rather than left inside an evidence file
+      # nobody opens: the document records predicates, exit codes, digests and
+      # the events themselves -- no host path beyond the two the probe was given,
+      # and no run identifier -- so it can be printed whole.
+      - name: Dump the source, the events and the four verdicts
+        if: always()
+        shell: pwsh
+        run: |
+          $evidencePath = Join-Path $env:RUNNER_TEMP 'w4a6/msi-eventlog.json'
+          if (-not (Test-Path -LiteralPath $evidencePath)) {
+            throw 'the proof wrote no evidence document'
+          }
+          $evidence = Get-Content -LiteralPath $evidencePath -Raw | ConvertFrom-Json
+          $evidence | ConvertTo-Json -Depth 12
+
+          if ($evidence.signed) { throw 'this slice signs nothing' }
+          if ($evidence.published) { throw 'this slice publishes nothing' }
+          if ($evidence.exercisedRepair) { throw 'this slice exercises no repair path' }
+          if ($evidence.exercisedMajorUpgrade) { throw 'this slice exercises no upgrade path' }
+          if ($evidence.editedSharedVersion) { throw 'this slice does not edit SharedVersion.cs' }
+          if ($evidence.definedAnEventLog) { throw 'this slice defines no event log of its own' }
+          # W0 §10, stated as two different questions on purpose: the PACKAGE
+          # must not start the service, and this probe must.
+          if ($evidence.packageStartedTheService) {
+            throw 'W0 §10 leaves a fresh installation installed and enabled but not started'
+          }
+          if (-not $evidence.probeStartedTheService) {
+            throw 'W4-A6 starts the service after the install; a run that did not proves nothing'
+          }
+          if (-not $evidence.registeredEventLogSource) { throw 'W4-A6 registers the Event Log source' }
+
+          # The rows a reader of the run should not have to open the document to
+          # find: what the real run registered, and what it then read back.
+          $real = $evidence.runs.'none'
+          "W4-A6 real run"
+          "  install exited              $($real.installExit)"
+          "  source after install        $(if ($null -eq $real.sourceAfterInstall) { 'ABSENT' } else { $real.sourceAfterInstall.key })"
+          "  EventMessageFile            $(if ($null -eq $real.sourceAfterInstall) { '(none)' } else { $real.sourceAfterInstall.eventMessageFile })"
+          "  TypesSupported              $(if ($null -eq $real.sourceAfterInstall) { '(none)' } else { $real.sourceAfterInstall.typesSupported })"
+          "  message file installed      $($real.messageFileInstalled)"
+          "  service after install       $($real.serviceStateAfterInstall)"
+          "  sc start -> state           $($real.serviceStateAfterStart)"
+          "  sc stop  -> state           $($real.serviceStateAfterStop)"
+          "  orphans after stop          $($real.orphansAfterStop)"
+          "  lifecycle events            $(@($real.lifecycleEvents).Count)"
+          foreach ($entry in @($real.lifecycleEvents)) {
+            "    [$($entry.providerName)] id $($entry.id) $($entry.level) $($entry.timeCreated)"
+            "      $($entry.message)"
+          }
+          "  uninstall exited            $($real.uninstallExit)"
+          "  source after uninstall      $(if ($null -eq $real.sourceAfterUninstall) { 'GONE' } else { 'STILL PRESENT' })"
+          "  SourceExists after uninstall $($real.sourceApiAfterUninstall)"
+
+          "W4-A6 controls"
+          foreach ($name in $evidence.runs.PSObject.Properties.Name) {
+            $run = $evidence.runs.$name
+            $shape = if ($run.tableDerived) { 'table' } else { 'live ' }
+            "  $shape $($name.PadRight(26)) $(if ($run.verdict.passed) { 'PASS' } else { 'FAIL' }): $($run.verdict.detail)"
+          }
+
+      - name: Leave no service, no installed product and no Event Log source behind
+        if: always()
+        shell: pwsh
+        run: |
+          & sc.exe stop Tesserafin *> $null
+          & sc.exe delete Tesserafin *> $null
+          Get-Process -Name 'tesserafin' -ErrorAction SilentlyContinue |
+            Stop-Process -Force -ErrorAction SilentlyContinue
+          $prefix = Join-Path $env:RUNNER_TEMP 'w4a6/prefix'
+          if (Test-Path -LiteralPath $prefix) {
+            Remove-Item -LiteralPath $prefix -Recurse -Force -ErrorAction SilentlyContinue
+          }
+          $dataRoot = Join-Path $env:ProgramData 'Tesserafin'
+          if (Test-Path -LiteralPath $dataRoot) {
+            Remove-Item -LiteralPath $dataRoot -Recurse -Force -ErrorAction SilentlyContinue
+          }
+          Remove-Item -LiteralPath 'HKLM:\SOFTWARE\Tesserafin' -Recurse -Force -ErrorAction SilentlyContinue
+          # One control deliberately leaves the Event Log source registered, and
+          # the probe's precondition refuses a host that already has one -- which
+          # would read like a defect in the proof rather than like leftover state.
+          Remove-Item -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Services\EventLog\Application\Tesserafin' `
+            -Recurse -Force -ErrorAction SilentlyContinue
           'cleanup complete'
           exit 0

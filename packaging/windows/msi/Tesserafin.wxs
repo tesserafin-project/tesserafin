@@ -127,9 +127,14 @@
   differing `UpgradeCode` and a `ServiceControl` that starts the service are both
   produced by editing the built MSI's own tables, for two reasons: a second
   `UpgradeCode` string in this file is RED to `ci/windows/w4/msi-controls.py` and
-  so is `Start="install"` anywhere in it, and installing either one would create
-  the second product the W4-A4 ruling forbids inventing, or roll back to 1603 and
-  hide every other outcome behind one identity problem the way W0 §5.2 measured.
+  so, at W4-A4, was `Start="install"` anywhere in it, and installing either one
+  would create the second product the W4-A4 ruling forbids inventing, or roll
+  back to 1603 and hide every other outcome behind one identity problem the way
+  W0 §5.2 measured. W4-A6 (#234) narrowed the second of those gates rather than
+  removing it: `Start="install"` is still RED in the package the real build
+  emits, and is now permitted in exactly one place, the `eventlog-start-install`
+  branch that is the W4-A6 ruling's own hostile control. The W4-A4 table control
+  is unchanged and still edits a built MSI.
 
   W4-A5 (#234) repairs NB-3 of W4-A4, and only that. W4-A4 measured the upgrade
   with INSTALLFOLDER passed again on the second msiexec command line, and
@@ -181,17 +186,51 @@
                            is untouched, which is what makes the control
                            attributable to the missing remember-property.
 
+  W4-A6 (#234) authors the last §4 row this file was missing: the Windows Event
+  Log SOURCE named `Tesserafin`, so that the service-lifecycle events
+  `ServiceBase` already writes have somewhere to go. It is one component holding
+  one registry key, written with the CORE `RegistryKey` / `RegistryValue`
+  elements and taking no second WiX extension. The long comment on
+  `EventLogSource` below says why the package rather than the service has to
+  create it, why the KEY and not only its values is removed, and why the message
+  file is the one this package ships. Three hostile controls are authored here as
+  three more `Mutation` values:
+
+    `eventlog-no-source`        no source component and no reference to it, so
+                                after the install nothing is registered and the
+                                non-administrator service identity cannot
+                                register it either. This is the machine W3-A0 §3
+                                described.
+
+    `eventlog-source-survives`  one attribute, `Permanent="yes"`. The install is
+                                byte for byte the real one and the uninstall
+                                leaves the source behind.
+
+    `eventlog-start-install`    the package starts the service inside the MSI
+                                transaction. W4-A6's start is a probe AFTER the
+                                install; this is the package doing it instead.
+
+  W4-A6 still claims nothing about APPLICATION or media events: §4 gives the
+  Event Log service-lifecycle events "only", and shaping what the server itself
+  writes is not this slice.
+
   What this authoring deliberately does NOT claim:
 
     * it is NOT a bit-identical MSI. W0 §5.6 measured that and accepted a
       bounded exception; W4-A0 makes no reproducibility claim at all;
     * it is NOT signed, and carries no certificate reference;
-    * it does NOT start the service. W0 §10 is explicit that a fresh
-      installation leaves the service "installed and enabled but not started";
-    * it does NOT implement the rest of the §4 table. The 120 s stop timeout and
-      the Event Log row are neither authored here nor measured, and W4-A2 rules
-      on neither. The recovery row is the only one this slice adds;
-    * it registers no Event Log source as a separate product;
+    * the PACKAGE does NOT start the service. W0 §10 is explicit that a fresh
+      installation leaves the service "installed and enabled but not started",
+      and that is still true after W4-A6: the start and stop that produce a
+      lifecycle event are a probe run after the install has finished, the same
+      shape as W3-A0's;
+    * it does NOT implement the rest of the §4 table. The 120 s stop timeout is
+      neither authored here nor measured, and W4-A2 rules on it not at all. The
+      recovery row and, since W4-A6, the Event Log source are what this file
+      adds;
+    * it registers no Event Log source as a separate product, and defines no
+      event log of its own: the source is registered under the existing
+      `Application` log;
     * it claims nothing about upgrade or repair beyond what `MajorUpgrade`
       emits by default.
 
@@ -224,8 +263,9 @@
                 SharedVersion.cs, the same source the assembler reads
     Mutation    `none` for the real package. Every other value builds a
                 DELIBERATELY BROKEN package for one hostile control - four from
-                W4-A0 over containment, the argument list and the uninstall, and
-                three from W4-A2 over the recovery policy - and exists
+                W4-A0 over containment, the argument list and the uninstall,
+                three from W4-A2 over the recovery policy, and three from W4-A6
+                over the Event Log source - and exists
                 so those controls drive THIS authoring rather than a second
                 copy of it written for the test - the same reason the frozen
                 W2-A2 assembler carries its own PACK-ONLY parameter set.
@@ -702,8 +742,31 @@
 
         <!-- Removing the service is a property of the package, not of a custom
              action that could be skipped. W4-A0 hostile control 4 - "uninstall
-             leaves the service registered" - is this element's absence. -->
-        <?if $(var.Mutation) != "no-service-remove" ?>
+             leaves the service registered" - is this element's absence.
+
+             W4-A6 (#234) turned the `!=` into the three-way form below and
+             changed nothing about the element the real package gets, which is
+             still the `<?else ?>` branch and is still character for character
+             what W4-A0 authored. The middle branch is the ruling's own hostile
+             control: a package that DOES start the service inside the MSI
+             transaction. W0 §5.2 measured that path failing with 1920 and
+             rolling the whole install back to 1603, and §10 does not want a
+             fresh installation started anyway - W4-A6's start is a probe AFTER
+             the install, the same shape as W3-A0's. The control is graded on
+             what the package did to the service, never on the exit code: since
+             W3-A0 the executable answers the SCM from a shell that has nothing
+             to do first, so the 1920 W0 recorded is no longer the only outcome
+             this mutation can produce, and a control that declared it would be
+             asserting a measurement rather than making one. -->
+        <?if $(var.Mutation) = "no-service-remove" ?>
+        <?elseif $(var.Mutation) = "eventlog-start-install" ?>
+          <ServiceControl Id="TesserafinServiceControl"
+                          Name="Tesserafin"
+                          Start="install"
+                          Stop="both"
+                          Remove="uninstall"
+                          Wait="yes" />
+        <?else ?>
           <ServiceControl Id="TesserafinServiceControl"
                           Name="Tesserafin"
                           Stop="both"
@@ -820,6 +883,97 @@
     </ComponentGroup>
     <?endif ?>
 
+    <!-- W4-A6 (#234). The Windows Event Log source W0 §4 asks for, for
+         service-lifecycle events and nothing else.
+
+         An Event Log source IS a registry key. There is no table and no custom
+         action behind `EventCreate` or behind .NET's own
+         `EventLog.CreateEventSource`: both write
+         `HKLM\SYSTEM\CurrentControlSet\Services\EventLog\<log>\<source>` with an
+         `EventMessageFile` and a `TypesSupported`, and the Event Log service
+         reads exactly that. So this is authored with the CORE `RegistryKey` and
+         `RegistryValue` elements. It takes no second WiX extension, and the
+         ruling's "if this needs a WiX extension other than Util 6.0.2, STOP"
+         never comes up: `util:EventSource` exists and would write the same two
+         values through the same registry table.
+
+         WHY THE PACKAGE HAS TO DO IT. `System.ServiceProcess.ServiceBase`
+         defaults `AutoLog` to true and writes one entry when `OnStart` returns
+         and one when `OnStop` does - the service-lifecycle events §4 names. It
+         writes them through an `EventLog` whose `Log` is `Application` and whose
+         `Source` is the ServiceName, which for this package is `Tesserafin`.
+         `EventLog.WriteEntry` CREATES a missing source before writing, and
+         creating one needs write access to the key above, which
+         `NT SERVICE\Tesserafin` does not have. `ServiceBase` swallows the
+         failure, so a machine without this key runs a service that logs its
+         lifecycle nowhere and reports nothing about it. W3-A0 §3 recorded that
+         as W4's to close. The `eventlog-no-source` control below is that machine.
+
+         WHY `ForceDeleteOnUninstall`. The ruling requires the source to be gone
+         after an uninstall, and "gone" is measured the way Windows measures it:
+         `EventLog.SourceExists` asks whether the SUBKEY exists and never looks
+         at its values. Removing the two values would leave an empty
+         `...\Application\Tesserafin` behind, and every reader - .NET, the Event
+         Log service, `Get-WinEvent` - would still call the source registered. So
+         the key itself is authored, and removed.
+
+         WHY THE MESSAGE FILE IS THE PACKAGE'S OWN. `ServiceBase` writes with
+         event id 0 and the message as the single insertion string, which renders
+         only if the source names a message file whose table has an entry for it.
+         .NET's `CreateEventSource` points at the .NET Framework's
+         `EventLogMessages.dll` and falls back to
+         `System.Diagnostics.EventLog.Messages.dll` beside the assembly. This
+         package ships that second file - it is a managed file of the
+         `Microsoft.AspNetCore.App` win-x64 runtime pack and so is in the
+         self-contained publish the accepted W2 layout is - and pointing at it
+         keeps a distribution that needs no system .NET runtime from taking a
+         dependency on one for the sake of a string. The probe grades that the
+         file is actually there: a dangling `EventMessageFile` is a defect in
+         what this authoring claims, whatever the events look like.
+
+         The component is NOT `Permanent` and NOT `NeverOverwrite`, for the
+         reason the six `OperatorTreePermissions` components above are neither:
+         this key is package policy, re-stated by every install and removed by
+         the uninstall. `eventlog-source-survives` below is the one-attribute
+         mutation that makes it outlive the package. -->
+    <?if $(var.Mutation) != "eventlog-no-source" ?>
+    <ComponentGroup Id="EventLogSource" Directory="INSTALLFOLDER">
+      <?if $(var.Mutation) = "eventlog-source-survives" ?>
+      <!-- W4-A6 hostile control: the source outlives the package. One attribute
+           and nothing else: the key is authored identically and installed
+           identically, so after the install every predicate is what the real
+           package produces, and the only thing that changes is that uninstall
+           never removes the component and therefore never removes the key. -->
+      <Component Id="EventLogSourceRegistration" Guid="55ce15a7-640d-4216-b490-0236e5948fce" Permanent="yes">
+        <RegistryKey Root="HKLM"
+                     Key="SYSTEM\CurrentControlSet\Services\EventLog\Application\Tesserafin"
+                     ForceDeleteOnUninstall="yes">
+          <RegistryValue Name="EventMessageFile"
+                         Value="[INSTALLFOLDER]System.Diagnostics.EventLog.Messages.dll"
+                         Type="expandable"
+                         KeyPath="yes" />
+          <RegistryValue Name="TypesSupported" Value="7" Type="integer" />
+        </RegistryKey>
+      </Component>
+      <?else ?>
+      <Component Id="EventLogSourceRegistration" Guid="55ce15a7-640d-4216-b490-0236e5948fce">
+        <RegistryKey Root="HKLM"
+                     Key="SYSTEM\CurrentControlSet\Services\EventLog\Application\Tesserafin"
+                     ForceDeleteOnUninstall="yes">
+          <!-- 7 is ERROR | WARNING | INFORMATION, the three types `ServiceBase`
+               can write: Information for a clean start or stop, Error for a
+               failed one. -->
+          <RegistryValue Name="EventMessageFile"
+                         Value="[INSTALLFOLDER]System.Diagnostics.EventLog.Messages.dll"
+                         Type="expandable"
+                         KeyPath="yes" />
+          <RegistryValue Name="TypesSupported" Value="7" Type="integer" />
+        </RegistryKey>
+      </Component>
+      <?endif ?>
+    </ComponentGroup>
+    <?endif ?>
+
     <!-- W0 §9.1 and §10: the operator-owned directories. They are created by
          the package so that "uninstall does not delete them" is a measurable
          statement rather than a vacuous one, and they are `Permanent` so that
@@ -860,6 +1014,9 @@
       <ComponentGroupRef Id="RetainedState" />
       <?if $(var.Mutation) != "upgrade-no-remember" ?>
       <ComponentGroupRef Id="RememberedInstallLocation" />
+      <?endif ?>
+      <?if $(var.Mutation) != "eventlog-no-source" ?>
+      <ComponentGroupRef Id="EventLogSource" />
       <?endif ?>
     </Feature>
   </Package>

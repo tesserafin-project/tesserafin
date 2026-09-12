@@ -1026,9 +1026,82 @@ function Show-W4AclObservations {
     }
 }
 
+# ---------------------------------------------------------------------------
+# W4-A6 (#234): the Windows Event Log source, and the events written under it.
+# ---------------------------------------------------------------------------
+function Get-W4EventLogSource {
+    <#
+        Read an Event Log source out of the registry, which is what an Event Log
+        source IS. Returns $null when the SUBKEY is absent -- which is exactly
+        the question `[System.Diagnostics.EventLog]::SourceExists` answers, and
+        is why an emptied key is NOT an absent source.
+    #>
+    param(
+        [Parameter(Mandatory = $true)] [string] $LogName,
+        [Parameter(Mandatory = $true)] [string] $SourceName
+    )
+    $key = "HKLM:\SYSTEM\CurrentControlSet\Services\EventLog\$LogName\$SourceName"
+    if (-not (Test-Path -LiteralPath $key)) { return $null }
+    $raw = Get-ItemProperty -LiteralPath $key -ErrorAction SilentlyContinue
+    $read = {
+        param($name)
+        if ($null -ne $raw -and $raw.PSObject.Properties.Name -contains $name) { $raw.$name } else { $null }
+    }
+    $types = & $read 'TypesSupported'
+    return @{
+        key = $key
+        log = $LogName
+        eventMessageFile = [string](& $read 'EventMessageFile')
+        typesSupported = $(if ($null -eq $types) { -1 } else { [int]$types })
+    }
+}
+
+function Test-W4EventLogSourceExists {
+    <#
+        What every READER of the log asks. Kept beside the registry read rather
+        than folded into it because the two can disagree in exactly the way this
+        slice has to rule out: a key whose values were removed and whose subkey
+        was not still answers true here.
+    #>
+    param([Parameter(Mandatory = $true)] [string] $SourceName)
+    try { return [System.Diagnostics.EventLog]::SourceExists($SourceName) }
+    catch { return $false }
+}
+
+function Get-W4LifecycleEvents {
+    <#
+        The Application-log events written under a source since a given instant.
+
+        Bounded at BOTH ends on purpose. `Since` is taken immediately before the
+        `sc start` that is supposed to produce them, so an event left behind by
+        an earlier run of this job cannot be mistaken for this run's, and the
+        provider is matched rather than the message text -- `ServiceBase` writes
+        a localised string and a gate that read it would be measuring the
+        runner's display language.
+    #>
+    param(
+        [Parameter(Mandatory = $true)] [string] $LogName,
+        [Parameter(Mandatory = $true)] [string] $SourceName,
+        [Parameter(Mandatory = $true)] [DateTime] $Since
+    )
+    $filter = @{ LogName = $LogName; ProviderName = $SourceName; StartTime = $Since }
+    $found = @(Get-WinEvent -FilterHashtable $filter -ErrorAction SilentlyContinue |
+        Sort-Object -Property TimeCreated)
+    return @($found | ForEach-Object {
+        [ordered]@{
+            providerName = [string]$_.ProviderName
+            id = [int]$_.Id
+            level = [string]$_.LevelDisplayName
+            timeCreated = $_.TimeCreated.ToUniversalTime().ToString('o')
+            message = [string]$_.Message
+        }
+    })
+}
+
 Export-ModuleMember -Function Show-W4MsiFailureExcerpt, Invoke-W4Msi, Invoke-W4MsiQuery,
     Test-W4MsiInstrumentType,
     Get-W4MsiProperty, Get-W4MsiFileNames, Get-W4MsiStartsServiceOnInstall, Set-W4MsiCell, Get-W4MsiServiceControlEvent,
     Get-W4ProductInstallState, Get-W4ServiceRegistry, Get-W4ServiceState, Remove-W4ServiceIfPresent,
     Get-W4ServiceFailureActions, Get-W4ServiceFailureEvidence, Get-W4AclObservation,
-    Get-W4AclObservations, Show-W4AclObservations
+    Get-W4AclObservations, Show-W4AclObservations,
+    Get-W4EventLogSource, Test-W4EventLogSourceExists, Get-W4LifecycleEvents

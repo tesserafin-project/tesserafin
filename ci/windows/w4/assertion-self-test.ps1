@@ -438,10 +438,164 @@ if ($strayPredicates['exeIsB'] -or (-not $strayPredicates['exeReplaced'])) {
     $failures++
 }
 
+# ---------------------------------------------------------------------------
+# W4-A6 (#234). The third grader: the W0 §4 Event Log source.
+# ---------------------------------------------------------------------------
+$MESSAGE_FILE = 'System.Diagnostics.EventLog.Messages.dll'
+
+function New-SyntheticEventLogObservation {
+    <#
+        What each W4-A6 package genuinely produces.
+
+        `eventlog-no-source` registers nothing, so the source is absent after the
+        install AND there is nowhere for `ServiceBase` to write -- which is why
+        it produces no lifecycle events either. The service still starts and
+        still stops: the missing source does not stop the server, it stops the
+        server being heard, and a control that also reddened the lifecycle would
+        be indistinguishable from a package that would not run.
+
+        `eventlog-source-survives` is the real package up to the uninstall.
+
+        `eventlog-start-install` is a TABLE control: the live half is the real
+        run's, and only the package's own ServiceControl fact is its own.
+    #>
+    param([Parameter(Mandatory = $true)] [string] $Control)
+
+    $registers = ($Control -ne 'eventlog-no-source')
+    $source = $(if ($registers) {
+        @{
+            log = 'Application'
+            eventMessageFile = (Join-W4Path -Root $prefix -Relative $MESSAGE_FILE)
+            typesSupported = 7
+        }
+    } else { $null })
+
+    $events = $(if ($registers) {
+        @(
+            [ordered]@{ providerName = 'Tesserafin'; id = 0; level = 'Information'
+                timeCreated = '2026-09-12T00:00:01Z'; message = 'Service started successfully.' }
+            [ordered]@{ providerName = 'Tesserafin'; id = 0; level = 'Information'
+                timeCreated = '2026-09-12T00:01:01Z'; message = 'Service stopped successfully.' }
+        )
+    } else { @() })
+
+    return @{
+        msi = @{ startsServiceOnInstall = ($Control -eq 'eventlog-start-install') }
+        installExit = 0
+        uninstallExit = 0
+        installPrefix = $prefix
+        messageFileName = $MESSAGE_FILE
+        messageFileInstalled = $true
+        sourceAfterInstall = $source
+        sourceAfterUninstall = $(if ($Control -eq 'eventlog-source-survives') { $source } else { $null })
+        sourceApiAfterUninstall = ($Control -eq 'eventlog-source-survives')
+        serviceStateAfterInstall = 'Stopped'
+        serviceStateAfterStart = 'Running'
+        serviceStateAfterStop = 'Stopped'
+        orphansAfterStop = 0
+        lifecycleEvents = $events
+    }
+}
+
+$eventLogControls = @('none') + @((Get-W4EventLogControlExpectations).Keys)
+$eventLogRedSets = @{}
+
+foreach ($control in $eventLogControls) {
+    $predicates = Get-W4EventLogPredicates -Observation (New-SyntheticEventLogObservation -Control $control)
+    $verdict = Get-W4EventLogVerdict -Predicates $predicates -Control $control
+    $status = if ($verdict.passed) { 'OK  ' } else { 'FAIL' }
+    "$status eventlog/$($control.PadRight(24)) $($verdict.detail)"
+    if (-not $verdict.passed) { $failures++ }
+    $eventLogRedSets[($verdict.red -join '|')] = $true
+}
+
+if ($eventLogRedSets.Count -ne $eventLogControls.Count) {
+    "FAIL distinct event-log red sets: $($eventLogRedSets.Count) across $($eventLogControls.Count) controls"
+    $failures++
+}
+
+$eventLogPredicates = Get-W4EventLogPredicates -Observation (New-SyntheticEventLogObservation -Control 'none')
+if ($eventLogPredicates.Count -lt 14) {
+    "FAIL the event-log grader answers only $($eventLogPredicates.Count) predicates"
+    $failures++
+}
+
+# The rows a careless grader gets wrong in a direction NO control above catches,
+# because no authorised mutation produces the observation.
+#
+# 1. An emptied key. `eventlog-source-survives` leaves the key AND its values,
+#    so a grader that asked only about the values would still call it red. A
+#    package whose uninstall removed the values and left the subkey is the shape
+#    that would slip past, and it is the one every READER of the log still calls
+#    a registered source.
+$emptiedKey = New-SyntheticEventLogObservation -Control 'none'
+$emptiedKey.sourceAfterUninstall = $null
+$emptiedKey.sourceApiAfterUninstall = $true
+if ((Get-W4EventLogPredicates -Observation $emptiedKey)['eventLogSourceGoneToTheApi']) {
+    'FAIL eventLogSourceGoneToTheApi is green while SourceExists still answers true'
+    $failures++
+}
+
+# 2. A dangling EventMessageFile: the value names the package's own file and the
+#    file is not there. The events are still written and still unreadable.
+$dangling = New-SyntheticEventLogObservation -Control 'none'
+$dangling.messageFileInstalled = $false
+$danglingPredicates = Get-W4EventLogPredicates -Observation $dangling
+if ($danglingPredicates['messageFileInstalled'] -or (-not $danglingPredicates['eventMessageFileIsPackaged'])) {
+    'FAIL a dangling EventMessageFile does not grade as claimed-but-absent'
+    $failures++
+}
+
+# 3. A message file that is somebody else's. The .NET Framework's own
+#    EventLogMessages.dll would render the events perfectly and would put a
+#    distribution that needs no system .NET runtime back in the business of
+#    needing one.
+$foreignMessageFile = New-SyntheticEventLogObservation -Control 'none'
+$foreignMessageFile.sourceAfterInstall = @{
+    log = 'Application'
+    eventMessageFile = 'C:\Windows\Microsoft.NET\Framework64\v4.0.30319\EventLogMessages.dll'
+    typesSupported = 7
+}
+if ((Get-W4EventLogPredicates -Observation $foreignMessageFile)['eventMessageFileIsPackaged']) {
+    'FAIL eventMessageFileIsPackaged is green for a message file the package does not ship'
+    $failures++
+}
+
+# 4. Events under somebody else's provider. The SCM writes its own "The
+#    Tesserafin service entered the running state" under `Service Control
+#    Manager` on every start, in the same log and the same window, and a grader
+#    that counted events instead of matching the provider would be green on a
+#    machine where this slice changed nothing at all.
+$foreignProvider = New-SyntheticEventLogObservation -Control 'none'
+$foreignProvider.lifecycleEvents = @(
+    [ordered]@{ providerName = 'Service Control Manager'; id = 7036; level = 'Information'
+        timeCreated = '2026-09-12T00:00:01Z'; message = 'The Tesserafin service entered the running state.' }
+)
+if ((Get-W4EventLogPredicates -Observation $foreignProvider)['lifecycleEventUnderSource']) {
+    'FAIL lifecycleEventUnderSource is green for an event the SCM wrote under its own provider'
+    $failures++
+}
+
+# 5. A source registered under a log that is not Application. It would exist,
+#    it would answer SourceExists, and `ServiceBase` -- whose EventLog is
+#    constructed with Log = 'Application' -- would throw LogSourceMismatch
+#    rather than write to it.
+$wrongLog = New-SyntheticEventLogObservation -Control 'none'
+$wrongLog.sourceAfterInstall = @{
+    log = 'Tesserafin'
+    eventMessageFile = (Join-W4Path -Root $prefix -Relative $MESSAGE_FILE)
+    typesSupported = 7
+}
+if ((Get-W4EventLogPredicates -Observation $wrongLog)['eventLogSourceLogIsApplication']) {
+    'FAIL eventLogSourceLogIsApplication is green for a source registered under another log'
+    $failures++
+}
+
 if ($failures -gt 0) {
     "W4 assertion self-test FAILED with $failures problem(s)"
     exit 1
 }
 "W4 assertion self-test: $($mutations.Count) fresh-install mutations, $($allPredicates.Count) predicates; " +
-    "$($upgradeControls.Count) upgrade controls, $($upgradePredicates.Count) predicates; all as declared"
+    "$($upgradeControls.Count) upgrade controls, $($upgradePredicates.Count) predicates; " +
+    "$($eventLogControls.Count) event-log controls, $($eventLogPredicates.Count) predicates; all as declared"
 exit 0

@@ -1168,9 +1168,237 @@ function Get-W4UpgradeVerdict {
     }
 }
 
+# ---------------------------------------------------------------------------
+# W0 §4, the Event Log row, restated ONCE for the grader (W4-A6).
+#
+#   after an install there is an Event Log SOURCE named `Tesserafin` under the
+#   `Application` log; a start and a stop run AFTER the install write at least
+#   one service-lifecycle event under it; an uninstall removes it.
+#
+# `TypesSupported` is ERROR | WARNING | INFORMATION -- the three types
+# `ServiceBase` can write, Information for a clean start or stop and Error for a
+# failed one. It is stated here as the number the registry holds, because that
+# is what the probe reads back off the live machine.
+# ---------------------------------------------------------------------------
+$script:ContractEventLogName = 'Application'
+$script:ContractEventLogSource = 'Tesserafin'
+$script:ContractTypesSupported = 7
+
+function Get-W4EventLogPredicates {
+    <#
+        Grade one W4-A6 run: one package, installed, started, stopped, read and
+        removed.
+
+        The observation is a hashtable with these keys:
+
+          msi                      [hashtable] read out of the BUILT package's
+                                   own tables, never out of the authoring:
+                                     startsServiceOnInstall [bool] the
+                                     ServiceControl table carries a
+                                     start-on-install event for the service
+          installExit              [int]      msiexec /i
+          uninstallExit            [int]      msiexec /x
+          installPrefix            [string]   INSTALLFOLDER
+          messageFileName          [string]   the file the authoring's
+                                   EventMessageFile is supposed to name
+          messageFileInstalled     [bool]     that file is on disk under the
+                                   prefix, so the EventMessageFile does not dangle
+          sourceAfterInstall       [hashtable] or $null -- the registry key
+                                   HKLM\SYSTEM\CurrentControlSet\Services\
+                                   EventLog\<log>\<source> after the install:
+                                     log              [string]
+                                     eventMessageFile [string]
+                                     typesSupported   [int]
+          sourceAfterUninstall     [hashtable] or $null -- the same key after
+                                   the uninstall
+          sourceApiAfterUninstall  [bool]     what
+                                   [System.Diagnostics.EventLog]::SourceExists
+                                   answers afterwards. Asked separately because
+                                   it is what every READER of the log uses, and
+                                   it answers on the SUBKEY alone -- an emptied
+                                   key still reads as a registered source
+          serviceStateAfterInstall [string]   'Stopped' / 'Running' / 'Absent'
+          serviceStateAfterStart   [string]
+          serviceStateAfterStop    [string]
+          orphansAfterStop         [int]      surviving `tesserafin` processes
+          lifecycleEvents          [array]    Application-log events whose
+                                   provider is the source, inside the window
+                                   that opened immediately before `sc start`
+    #>
+    [OutputType([System.Collections.Specialized.OrderedDictionary])]
+    param([Parameter(Mandatory = $true)] [hashtable] $Observation)
+
+    $o = $Observation
+    $source = $o.sourceAfterInstall
+    $expectedMessageFile = Join-W4Path -Root $o.installPrefix -Relative $o.messageFileName
+
+    $predicates = [ordered]@{}
+
+    # ── the install, and what it registered ─────────────────────────────────
+    $predicates['installSucceeded'] = ($o.installExit -eq 0)
+    $predicates['eventLogSourceRegistered'] = ($null -ne $source)
+    $predicates['eventLogSourceLogIsApplication'] =
+        ($null -ne $source -and (Test-W4HasKey -Bag $source -Key 'log') -and
+            ([string]$source.log -eq $script:ContractEventLogName))
+    # The message file is asked about twice on purpose. The VALUE can name the
+    # package's own file while the FILE is not there -- a trimmed publish, a
+    # renamed runtime-pack assembly -- and the events would then be recorded and
+    # render as a missing description. One predicate is the authoring's claim,
+    # the other is whether the claim is true on the machine.
+    $predicates['eventMessageFileIsPackaged'] =
+        ($null -ne $source -and (Test-W4HasKey -Bag $source -Key 'eventMessageFile') -and
+            (Test-W4SamePath -Left ([string]$source.eventMessageFile) -Right $expectedMessageFile))
+    $predicates['messageFileInstalled'] = [bool]$o.messageFileInstalled
+    $predicates['typesSupportedIsContract'] =
+        ($null -ne $source -and (Test-W4HasKey -Bag $source -Key 'typesSupported') -and
+            ([int]$source.typesSupported -eq $script:ContractTypesSupported))
+
+    # ── W0 §10: the PACKAGE leaves it installed and enabled, not started ─────
+    # Read off the package's own ServiceControl table as well as off the live
+    # SCM, because the two fail differently: a package that asks for the start
+    # and whose start then fails rolls the install back and leaves no service to
+    # observe at all.
+    $predicates['packageDoesNotStartService'] =
+        ($null -ne $o.msi -and (Test-W4HasKey -Bag $o.msi -Key 'startsServiceOnInstall') -and
+            (-not $o.msi.startsServiceOnInstall))
+    $predicates['serviceStoppedAfterInstall'] = ([string]$o.serviceStateAfterInstall -eq 'Stopped')
+
+    # ── the probe's own start and stop, AFTER the transaction ───────────────
+    $predicates['serviceReachedRunning'] = ([string]$o.serviceStateAfterStart -eq 'Running')
+    $predicates['serviceReachedStopped'] = ([string]$o.serviceStateAfterStop -eq 'Stopped')
+    $predicates['noOrphanAfterStop'] = ([int]$o.orphansAfterStop -eq 0)
+
+    # The whole of what W4-A6 is for. The events are matched on the PROVIDER and
+    # on the time window, never on the English of the message: `ServiceBase`
+    # writes a localised string, and a gate that read it would measure the
+    # runner's display language.
+    $events = @($o.lifecycleEvents)
+    $predicates['lifecycleEventUnderSource'] =
+        ($events.Count -ge 1 -and
+            @($events | Where-Object { [string]$_.providerName -ne $script:ContractEventLogSource }).Count -eq 0)
+
+    # ── the uninstall ───────────────────────────────────────────────────────
+    $predicates['uninstallSucceeded'] = ($o.uninstallExit -eq 0)
+    $predicates['eventLogSourceRemoved'] = ($null -eq $o.sourceAfterUninstall)
+    $predicates['eventLogSourceGoneToTheApi'] = (-not $o.sourceApiAfterUninstall)
+
+    return $predicates
+}
+
+function Get-W4EventLogControlExpectations {
+    <#
+        The RED set each W4-A6 hostile control must produce -- exactly, no more
+        and no less, the same rule every other control in this file is held to.
+
+        The ruling names four. Three are authored as `Mutation` values and are
+        below; the fourth, "UpgradeCode bytes moved", is not a run at all -- it
+        is `ci/windows/w4/msi-controls.py`'s frozen-GUID gate, which refuses the
+        authoring before a package is built.
+
+        Two of the three are LIVE: a real package, a real install, a real
+        `sc start` and `sc stop`, a real read of the Application log and a real
+        uninstall. The third is a TABLE control, for the reason W4-A4's own
+        start-on-install control is one, restated because the measurement behind
+        it has changed. W0 §5.2 recorded `Start="install"` failing with 1920 and
+        rolling the install back to 1603 -- but that was measured against the
+        console executable, which never called StartServiceCtrlDispatcher. Since
+        W3-A0 the executable answers the SCM from a shell that has nothing to do
+        first, so the same package can now also install cleanly and leave the
+        service Running. Both outcomes are the defect and neither is the other,
+        so installing it would grade the control on whichever of the two the
+        runner produced. What the defect IS -- the package asking the SCM to
+        start the service inside its own transaction -- is in the package's
+        ServiceControl table either way, and that is what is read.
+    #>
+    [OutputType([System.Collections.Specialized.OrderedDictionary])]
+    param()
+    return [ordered]@{
+        # LIVE. No source component and no reference to it, so nothing is
+        # registered and `NT SERVICE\Tesserafin` cannot register one itself --
+        # `ServiceBase` swallows the failure and the lifecycle events go
+        # nowhere. That last row is the one this whole slice exists for.
+        #
+        # `eventLogSourceRemoved` and `eventLogSourceGoneToTheApi` stay GREEN
+        # and must: there is nothing to remove, and a control that reddened them
+        # would be indistinguishable from one whose uninstall failed.
+        # `messageFileInstalled` stays green too -- the payload is untouched.
+        'eventlog-no-source' = @(
+            'eventLogSourceRegistered'
+            'eventLogSourceLogIsApplication'
+            'eventMessageFileIsPackaged'
+            'typesSupportedIsContract'
+            'lifecycleEventUnderSource'
+        )
+        # LIVE. One attribute, `Permanent="yes"`. Everything up to the uninstall
+        # is byte for byte what the real package does, which is what makes this
+        # control attributable to the uninstall alone. Both rows go red together
+        # because they are two readings of one fact -- the key is still there,
+        # and every reader of the log still calls the source registered.
+        'eventlog-source-survives' = @(
+            'eventLogSourceRemoved'
+            'eventLogSourceGoneToTheApi'
+        )
+        # TABLE. Graded on the real run's live observation with only this
+        # package's own ServiceControl fact substituted.
+        'eventlog-start-install' = @('packageDoesNotStartService')
+    }
+}
+
+function Get-W4EventLogVerdict {
+    <#
+        Grade one W4-A6 run against what it was supposed to prove. Same rule as
+        `Get-W4Verdict` and `Get-W4UpgradeVerdict`: the real run must be green
+        everywhere, and a hostile control must redden EXACTLY its declared set.
+    #>
+    param(
+        [Parameter(Mandatory = $true)] [System.Collections.Specialized.OrderedDictionary] $Predicates,
+        [Parameter(Mandatory = $true)] [string] $Control
+    )
+
+    $red = @($Predicates.Keys | Where-Object { -not $Predicates[$_] })
+    $expectations = Get-W4EventLogControlExpectations
+
+    if ($Control -eq 'none') {
+        $expectedRed = @()
+    } elseif ($expectations.Contains($Control)) {
+        $expectedRed = @($expectations[$Control])
+    } else {
+        return [ordered]@{
+            control = $Control; passed = $false; red = $red; expectedRed = @()
+            detail = "no declared expectation for control '$Control'"
+        }
+    }
+
+    $unexpected = @($red | Where-Object { $expectedRed -notcontains $_ })
+    $missing = @($expectedRed | Where-Object { $red -notcontains $_ })
+    $passed = ($unexpected.Count -eq 0 -and $missing.Count -eq 0)
+
+    $detail = if ($passed -and $Control -eq 'none') {
+        'every predicate green'
+    } elseif ($passed) {
+        "reddened exactly its declared set: $($expectedRed -join ', ')"
+    } else {
+        $parts = @()
+        if ($unexpected.Count -gt 0) { $parts += "unexpectedly red: $($unexpected -join ', ')" }
+        if ($missing.Count -gt 0) { $parts += "expected red but green: $($missing -join ', ')" }
+        $parts -join '; '
+    }
+
+    return [ordered]@{
+        control = $Control
+        passed = $passed
+        red = $red
+        expectedRed = $expectedRed
+        unexpectedlyRed = $unexpected
+        expectedRedButGreen = $missing
+        detail = $detail
+    }
+}
+
 Export-ModuleMember -Function Split-W4CommandLine, Get-W4PathArgument, Test-W4SamePath,
     Join-W4Path, Get-W4FailureAction, Test-W4FailureAction, Get-W4Predicates,
     Get-W4ControlExpectations, Get-W4Verdict, Test-W4HasKey, Get-W4Acl, Get-W4AllowMask,
     Test-W4Grants, Test-W4NoWriteFor, Test-W4EveryStateDirectory,
     Get-W4NormalisedGuid, Test-W4SameDigest, Get-W4UpgradePredicates,
-    Get-W4UpgradeControlExpectations, Get-W4UpgradeVerdict
+    Get-W4UpgradeControlExpectations, Get-W4UpgradeVerdict,
+    Get-W4EventLogPredicates, Get-W4EventLogControlExpectations, Get-W4EventLogVerdict
