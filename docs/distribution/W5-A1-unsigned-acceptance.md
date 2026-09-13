@@ -126,6 +126,8 @@ mutation that no longer applies reports INERT, which is a failure.
 | W10 | verify job loses `if: always()` | `VERIFY-SKIPPABLE` |
 | W11 | artifact retention under 14 days | `RETENTION` |
 | W12 / W13 | path filter omits `Tesserafin.Server.Core/**`; a one-line C# edit is planted in a copy of a real Core file | `PATHS`; the plant queues with the committed filter and not without that line |
+| W14 | `workflow_dispatch:` restored as a trigger | `TRIGGERS` |
+| W15 | one assemble `setup-dotnet` step drops `cache: false` | `CACHE` |
 | P01 | a frozen W2 input, W0–W4 workflow, `SharedVersion.cs` or `Tesserafin.wxs` changed, or a file added under `ci/windows/w2/` | byte pins at `f90fd18862` |
 | P02 | the verifier's pins disagree with `ci/package/pins.env` / `accepted-runtime.json` | pin equality |
 
@@ -145,6 +147,17 @@ mutation that no longer applies reports INERT, which is a failure.
 * **The verify job runs the frozen W1 consumer.** It is how the job acquires the
   accepted FFmpeg runtime archive without trusting the assemble jobs. It pulls
   anonymously, with an empty `DOCKER_CONFIG`, and builds nothing.
+* **R1B — dispatch removed, `cache: false` required.** `workflow_dispatch` is
+  deleted; `pull_request` is the only trigger, and `W00` now requires exactly
+  `["pull_request"]`. Both assemble `setup-dotnet` steps set `cache: false`.
+  `CACHE` is RED on `actions/cache`, on any `cache:` value other than `false`,
+  and on a `setup-dotnet` step without `cache: false`. W03/W04 are re-anchored on
+  the `- 'src/**'` path line, which survives the trigger removal; W14 restores
+  `workflow_dispatch:` and W15 drops `cache: false` from one assemble step, both
+  observed RED on the real workflow. Checkout of `needs.prepare.outputs.head`
+  with `persist-credentials: false` and all permissions are unchanged. The ZIP
+  pin in §1 is not reopened: `c1f6261c…` remains the measurement at
+  `41d3411c98` from run `34766464798`.
 
 ## 6. Not claimed
 

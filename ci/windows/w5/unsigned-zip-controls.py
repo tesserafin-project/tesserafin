@@ -403,8 +403,8 @@ def audit(text, work):
 
     triggers = [re.match(r"^  ([A-Za-z_]+):", l).group(1) for l in top_block(lines, "on")
                 if re.match(r"^  [A-Za-z_]+:", l)]
-    if sorted(triggers) != ["pull_request", "workflow_dispatch"]:
-        findings.append("TRIGGERS: %s, required exactly pull_request and workflow_dispatch" % triggers)
+    if triggers != ["pull_request"]:
+        findings.append("TRIGGERS: %s, required exactly pull_request" % triggers)
 
     perms = [l.strip() for l in top_block(lines, "permissions")]
     if perms != ["contents: read", "actions: read", "pull-requests: none"]:
@@ -417,8 +417,14 @@ def audit(text, work):
         job_text = "\n".join(job)
         if "packages: read" in job_text and name not in ("assemble-a", "assemble-b"):
             findings.append("PERMISSIONS: %s holds packages: read" % name)
-        if "actions/cache" in job_text or re.search(r"^\s+cache:", job_text, re.M):
-            findings.append("CACHE: %s uses a cache" % name)
+        if "actions/cache" in job_text:
+            findings.append("CACHE: %s uses actions/cache" % name)
+        for value in re.findall(r"^\s+cache:(.*)$", job_text, re.M):
+            if value.strip() != "false":
+                findings.append("CACHE: %s sets cache:%s" % (name, value))
+        for step in re.split(r"^      - ", job_text, flags=re.M):
+            if "actions/setup-dotnet" in step and not re.search(r"^          cache: false$", step, re.M):
+                findings.append("CACHE: a setup-dotnet step in %s does not set cache: false" % name)
 
     verify = "\n".join(all_jobs.get("verify", []))
     for word in ("dotnet", "setup-dotnet", "assemble-server-zip", "publish"):
@@ -473,9 +479,9 @@ def workflow_controls(work):
          "    name: Verify the pair from the archive bytes\n",
          "    name: Verify the pair from the archive bytes\n    permissions:\n      contents: write\n", "PERMISSIONS"),
         ("W03", "the workflow is reachable from pull_request_target",
-         "  workflow_dispatch:\n", "  workflow_dispatch:\n  pull_request_target:\n", "TRIGGERS"),
+         "      - 'src/**'\n", "      - 'src/**'\n  pull_request_target:\n", "TRIGGERS"),
         ("W04", "the workflow is reachable from a push (fork or master)",
-         "  workflow_dispatch:\n", "  workflow_dispatch:\n  push:\n", "TRIGGERS"),
+         "      - 'src/**'\n", "      - 'src/**'\n  push:\n", "TRIGGERS"),
         ("W05", "the verify job calls dotnet publish",
          "      - name: Verify both archives from their own bytes\n",
          "      - run: dotnet publish Tesserafin.Server --runtime win-x64\n"
@@ -500,6 +506,11 @@ def workflow_controls(work):
          "          retention-days: 14\n", "          retention-days: 7\n", "RETENTION"),
         ("W12", "the path filter omits Tesserafin.Server.Core (planted one-line C# edit must queue)",
          "      - 'Tesserafin.Server.Core/**'\n", "", "PATHS"),
+        ("W14", "workflow_dispatch is restored",
+         "      - 'src/**'\n", "      - 'src/**'\n  workflow_dispatch:\n", "TRIGGERS"),
+        ("W15", "an assemble setup-dotnet step drops cache: false",
+         "          dotnet-version: ${{ env.SDK_VERSION }}\n          cache: false\n",
+         "          dotnet-version: ${{ env.SDK_VERSION }}\n", "CACHE"),
     ]
     for cid, what, old, new, code in mutations:
         count = text.count(old)

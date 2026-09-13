@@ -61,7 +61,6 @@ on:
       - 'Tesserafin.Server.Implementations/**'
       - 'Tesserafin.XbmcMetadata/**'
       - 'src/**'
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -146,6 +145,7 @@ jobs:
       - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           dotnet-version: ${{ env.SDK_VERSION }}
+          cache: false
 
       - name: Record the allocation and interpreters
         id: tools
@@ -212,6 +212,7 @@ jobs:
       - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           dotnet-version: ${{ env.SDK_VERSION }}
+          cache: false
 
       - name: Record the allocation and interpreters
         id: tools
