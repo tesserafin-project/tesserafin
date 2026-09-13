@@ -20,17 +20,26 @@ document.
 
 | field | value |
 | --- | --- |
-| `zipSha256` | **TO BE MEASURED** |
-| `serverCommit` | TO BE MEASURED |
+| `zipSha256` | **`c1f6261cb770bd3dcbf255f4dd15b287a7289adad5a619d31725c158cd20e2d8`** (185 905 625 bytes) |
+| `serverCommit` / `assembledAtHead` | `41d3411c9838feec6650dd10ec89a1f198aafdeb` |
 | `webPayloadSha256` | `4148c4bc6e0c7c2d6b35ed9992e874a06dcc11d2b6d9e0aad06719e36567be4f` |
 | `ffmpegRuntimeSha256` | `f28cc9186aad757491a6f44e7950d39bc39354dfe9505e278af91d7619811c9e` |
-| `sourceDateEpoch` | TO BE MEASURED |
-| `evidenceRunId` | TO BE MEASURED |
-| allocation A / B SHA-256 | TO BE MEASURED |
+| `sourceDateEpoch` | `1789314188` |
+| `evidenceRunId` | [`34766464798`](https://github.com/tesserafin-project/tesserafin/actions/runs/34766464798), `pull_request`, conclusion `success` |
+| allocation A (`GitHub Actions 1000010527`) | `c1f6261cb770bd3dcbf255f4dd15b287a7289adad5a619d31725c158cd20e2d8` |
+| allocation B (`GitHub Actions 1000010528`) | `c1f6261cb770bd3dcbf255f4dd15b287a7289adad5a619d31725c158cd20e2d8` |
 
-A digest written before the hosted pair is terminal is a guess. This table and
-`ci/windows/w5/accepted-unsigned-zip.json` are filled in by one later commit,
-and only after a PASS of `W5 unsigned win-x64 ZIP acceptance` at a named head.
+These are measurements, taken after the hosted pair was terminal. The `verify`
+job (`GitHub Actions 1000010532`) recomputed both SHA-256 values from the two
+downloaded artifacts; the assemble jobs uploaded no hash. Both allocations ran
+.NET SDK `10.0.401`. `ci/windows/w5/accepted-unsigned-zip.json` records the same
+values.
+
+The digest is the ZIP **at `41d3411c98`**. The archive records its commit and
+that commit's committer time (`licenses/provenance.json`, first-party
+assemblies), so any later commit — this pin commit included — assembles a
+different digest. That is expected and is not a reproducibility regression; the
+claim is two allocations agreeing at one named head.
 
 ## 2. What it proves
 
@@ -70,7 +79,9 @@ Three facts, and only these.
    and fails first if any of them did not succeed, so a missing pair is RED and
    never skipped.
 
-3. **Pin only after a terminal PASS.** Nothing in this commit names a ZIP digest.
+3. **Pin only after a terminal PASS.** The harness commit `41d3411c98` named no
+   ZIP digest. The digest in §1 and the pin file were added by a separate commit
+   after run `34766464798` was terminal and green.
 
 It does not start `tesserafin.exe` (W2-A3 evidence), register a service, build
 or hash an MSI (W4 made no bit-identical MSI claim), sign, tag, release or push

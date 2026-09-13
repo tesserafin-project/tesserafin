@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "archiveName": "tesserafin-server_1.0.0_win-x64.zip",
+  "zipSha256": "c1f6261cb770bd3dcbf255f4dd15b287a7289adad5a619d31725c158cd20e2d8",
+  "zipSize": 185905625,
+  "serverCommit": "41d3411c9838feec6650dd10ec89a1f198aafdeb",
+  "webPayloadSha256": "4148c4bc6e0c7c2d6b35ed9992e874a06dcc11d2b6d9e0aad06719e36567be4f",
+  "ffmpegRuntimeSha256": "f28cc9186aad757491a6f44e7950d39bc39354dfe9505e278af91d7619811c9e",
+  "sourceDateEpoch": 1789314188,
+  "evidenceRunId": 34766464798,
+  "assembledAtHead": "41d3411c9838feec6650dd10ec89a1f198aafdeb",
+  "signed": false
+}
