@@ -1,0 +1,349 @@
+# W5-A1 (#276): unsigned win-x64 portable ZIP acceptance.
+#
+# Measures tesserafin-server_1.0.0_win-x64.zip as a function of this commit and
+# the frozen W1 FFmpeg / W2 Web pins. It proves three facts and only these:
+#
+#   1. two independent windows-latest allocations assemble the ZIP from the same
+#      commit with the frozen W2 assembler and the same SOURCE_DATE_EPOCH;
+#   2. a verify job that builds nothing downloads both archives, hashes them
+#      itself and accepts only if the two digests agree AND the archive carries
+#      the pinned Web tree, the pinned FFmpeg runtime (compared against the
+#      accepted runtime archive it acquires for itself), a provenance manifest
+#      naming this commit and both pins, and a self-contained PE x64 server;
+#   3. nothing here writes a digest into the repository. The pin is a later
+#      commit, made only after a terminal PASS of this workflow.
+#
+# It does not start tesserafin.exe (W2-A3), register a service, build or hash an
+# MSI, sign anything, tag, release or publish. It does not recover the W2
+# closeout ZIP digest, which stays UNKNOWN.
+#
+# `ci/windows/w5/unsigned-zip-controls.py` audits this file: triggers,
+# permissions, the path filter against the server's ProjectReference closure,
+# the verify job's inability to publish, assemble or read an assemble job's
+# hash, and the frozen W2 inputs' bytes.
+
+name: W5 unsigned win-x64 ZIP acceptance
+
+on:
+  pull_request:
+    paths:
+      - 'ci/windows/w5/**'
+      - 'ci/windows/w2/**'
+      - 'ci/windows/runtime-retention/consume.ps1'
+      - 'ci/windows/runtime-retention/accepted-runtime.json'
+      - 'ci/windows/build-inputs/install-oras.sh'
+      - 'ci/windows/build-inputs/tools.lock.json'
+      - 'ci/package/pins.env'
+      - '.github/workflows/w5-unsigned-zip.yml'
+      - 'docs/distribution/W5-A1-unsigned-acceptance.md'
+      # Everything compiled into the server, and what configures that build.
+      - 'SharedVersion.cs'
+      - 'LICENSE'
+      - 'global.json'
+      - 'nuget.config'
+      - 'Directory.Build.props'
+      - 'Directory.Packages.props'
+      - 'stylecop.json'
+      - 'BannedSymbols.txt'
+      - '.editorconfig'
+      - 'Tesserafin.Api/**'
+      - 'Tesserafin.Common/**'
+      - 'Tesserafin.Controller/**'
+      - 'Tesserafin.Data/**'
+      - 'Tesserafin.LocalMetadata/**'
+      - 'Tesserafin.MediaEncoding/**'
+      - 'Tesserafin.Model/**'
+      - 'Tesserafin.Naming/**'
+      - 'Tesserafin.Photos/**'
+      - 'Tesserafin.Providers/**'
+      - 'Tesserafin.Server/**'
+      - 'Tesserafin.Server.Core/**'
+      - 'Tesserafin.Server.Implementations/**'
+      - 'Tesserafin.XbmcMetadata/**'
+      - 'src/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: none
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  SDK_VERSION: "10.0.x"
+  HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
+jobs:
+  controls:
+    name: W5-A1 hostile controls
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ env.HEAD_SHA }}
+          persist-credentials: false
+
+      - name: Run the W5-A1 hostile controls
+        run: python3 ci/windows/w5/unsigned-zip-controls.py
+
+  # SOURCE_DATE_EPOCH is derived ONCE, here, and handed identically to both
+  # assemble jobs -- the W2-A2 rule. The verify job re-derives it from git and
+  # requires the provenance inside the archive to name it.
+  prepare:
+    name: Derive the commit and SOURCE_DATE_EPOCH
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      head: ${{ steps.epoch.outputs.head }}
+      epoch: ${{ steps.epoch.outputs.epoch }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ env.HEAD_SHA }}
+          persist-credentials: false
+
+      - name: Derive SOURCE_DATE_EPOCH from the commit
+        id: epoch
+        run: |
+          set -euo pipefail
+          [[ "${HEAD_SHA}" =~ ^[0-9a-f]{40}$ ]] || { echo "not a commit: ${HEAD_SHA}"; exit 1; }
+          checkout="$(git rev-parse HEAD)"
+          [ "${checkout}" = "${HEAD_SHA}" ] || { echo "checked out ${checkout}, not ${HEAD_SHA}"; exit 1; }
+          epoch="$(git log -1 --format=%ct "${HEAD_SHA}")"
+          [[ "${epoch}" =~ ^[1-9][0-9]*$ ]] || { echo "no committer time for ${HEAD_SHA}"; exit 1; }
+          echo "head=${HEAD_SHA}" >> "$GITHUB_OUTPUT"
+          echo "epoch=${epoch}" >> "$GITHUB_OUTPUT"
+          echo "commit            : ${HEAD_SHA}"
+          echo "SOURCE_DATE_EPOCH : ${epoch}"
+
+  # ── Two allocations. Each needs only `prepare`, never the other, and shares no
+  #    cache, work tree or artifact with it. Each uploads its ZIP and nothing
+  #    else: no hash file, no job output.
+  assemble-a:
+    name: Assemble the win-x64 ZIP on allocation A
+    needs: [prepare]
+    runs-on: windows-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      # The frozen W2-A0 Web consumer has no anonymous fallback; its pull is the
+      # only reason this job holds a token scope beyond contents.
+      packages: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ needs.prepare.outputs.head }}
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: ${{ env.SDK_VERSION }}
+
+      - name: Record the allocation and interpreters
+        id: tools
+        shell: pwsh
+        run: |
+          "runner name : $env:RUNNER_NAME"
+          $python = (Get-Command python -CommandType Application | Select-Object -First 1).Source
+          if (-not $python) { throw 'no python on this runner' }
+          if ($PSVersionTable.PSVersion.Major -lt 7) { throw "PowerShell 7 required, got $($PSVersionTable.PSVersion)" }
+          "python=$python" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          & dotnet --version
+
+      - name: Make zstd available
+        shell: pwsh
+        run: |
+          if (Get-Command zstd -CommandType Application -ErrorAction SilentlyContinue) { exit 0 }
+          $fallback = Join-Path $env:ProgramFiles 'Git\usr\bin\zstd.exe'
+          if (-not (Test-Path -LiteralPath $fallback)) { throw 'no zstd on this runner' }
+          (Split-Path -Parent $fallback) | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
+      - name: Install the pinned ORAS
+        shell: bash
+        run: ./ci/windows/build-inputs/install-oras.sh windows-amd64 "${RUNNER_TEMP}/bin"
+
+      - name: Assemble the ZIP with the frozen W2 assembler
+        shell: pwsh
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if ((& git rev-parse HEAD).Trim() -cne '${{ needs.prepare.outputs.head }}') { throw 'wrong checkout' }
+          $root = Join-Path $env:RUNNER_TEMP 'w5a1-a'
+          if (Test-Path -LiteralPath $root) { throw "$root already exists" }
+          ./ci/windows/w2/assemble-server-zip.ps1 `
+            -RepoRoot $PWD `
+            -WorkDir (Join-Path $root 'work') `
+            -OutDir (Join-Path $root 'out') `
+            -SourceDateEpoch ${{ needs.prepare.outputs.epoch }} `
+            -OrasPath (Join-Path $env:RUNNER_TEMP 'bin\oras.exe') `
+            -PythonPath '${{ steps.tools.outputs.python }}'
+          if ($LASTEXITCODE -ne 0) { throw 'this allocation produced no archive' }
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: w5a1-zip-a
+          path: ${{ runner.temp }}\w5a1-a\out\tesserafin-server_1.0.0_win-x64.zip
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  assemble-b:
+    name: Assemble the win-x64 ZIP on allocation B
+    needs: [prepare]
+    runs-on: windows-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ needs.prepare.outputs.head }}
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: ${{ env.SDK_VERSION }}
+
+      - name: Record the allocation and interpreters
+        id: tools
+        shell: pwsh
+        run: |
+          "runner name : $env:RUNNER_NAME"
+          $python = (Get-Command python -CommandType Application | Select-Object -First 1).Source
+          if (-not $python) { throw 'no python on this runner' }
+          if ($PSVersionTable.PSVersion.Major -lt 7) { throw "PowerShell 7 required, got $($PSVersionTable.PSVersion)" }
+          "python=$python" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          & dotnet --version
+
+      - name: Make zstd available
+        shell: pwsh
+        run: |
+          if (Get-Command zstd -CommandType Application -ErrorAction SilentlyContinue) { exit 0 }
+          $fallback = Join-Path $env:ProgramFiles 'Git\usr\bin\zstd.exe'
+          if (-not (Test-Path -LiteralPath $fallback)) { throw 'no zstd on this runner' }
+          (Split-Path -Parent $fallback) | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
+      - name: Install the pinned ORAS
+        shell: bash
+        run: ./ci/windows/build-inputs/install-oras.sh windows-amd64 "${RUNNER_TEMP}/bin"
+
+      - name: Assemble the ZIP with the frozen W2 assembler
+        shell: pwsh
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if ((& git rev-parse HEAD).Trim() -cne '${{ needs.prepare.outputs.head }}') { throw 'wrong checkout' }
+          $root = Join-Path $env:RUNNER_TEMP 'w5a1-b'
+          if (Test-Path -LiteralPath $root) { throw "$root already exists" }
+          ./ci/windows/w2/assemble-server-zip.ps1 `
+            -RepoRoot $PWD `
+            -WorkDir (Join-Path $root 'work') `
+            -OutDir (Join-Path $root 'out') `
+            -SourceDateEpoch ${{ needs.prepare.outputs.epoch }} `
+            -OrasPath (Join-Path $env:RUNNER_TEMP 'bin\oras.exe') `
+            -PythonPath '${{ steps.tools.outputs.python }}'
+          if ($LASTEXITCODE -ne 0) { throw 'this allocation produced no archive' }
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: w5a1-zip-b
+          path: ${{ runner.temp }}\w5a1-b\out\tesserafin-server_1.0.0_win-x64.zip
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  # ── The verdict. Builds nothing: no SDK, no publish, no assembler. It trusts no
+  #    assemble-job statement -- it reads no job output and no hash file, only
+  #    the two archives' bytes and a runtime archive it acquires itself through
+  #    the frozen W1 consumer. `always()` so a failed or cancelled assemble is a
+  #    RED verdict, never a skipped one.
+  verify:
+    name: Verify the pair from the archive bytes
+    needs: [controls, prepare, assemble-a, assemble-b]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Every upstream job must have succeeded
+        run: |
+          echo "controls   : ${{ needs.controls.result }}"
+          echo "prepare    : ${{ needs.prepare.result }}"
+          echo "assemble-a : ${{ needs.assemble-a.result }}"
+          echo "assemble-b : ${{ needs.assemble-b.result }}"
+          for r in '${{ needs.controls.result }}' '${{ needs.prepare.result }}' \
+                   '${{ needs.assemble-a.result }}' '${{ needs.assemble-b.result }}'; do
+            [ "$r" = success ] || { echo 'W5-A1 RED: an upstream job did not succeed; there is no pair to verify.'; exit 1; }
+          done
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ env.HEAD_SHA }}
+          persist-credentials: false
+
+      - name: Re-derive the commit and SOURCE_DATE_EPOCH
+        id: epoch
+        run: |
+          set -euo pipefail
+          head="$(git rev-parse HEAD)"
+          epoch="$(git log -1 --format=%ct "${head}")"
+          [ "${head}" = "${HEAD_SHA}" ] || { echo "checked out ${head}, not ${HEAD_SHA}"; exit 1; }
+          [ "${epoch}" = '${{ needs.prepare.outputs.epoch }}' ] || { echo "epoch ${epoch} != prepare's"; exit 1; }
+          echo "head=${head}" >> "$GITHUB_OUTPUT"
+          echo "epoch=${epoch}" >> "$GITHUB_OUTPUT"
+
+      - name: Acquire the accepted FFmpeg runtime archive through the frozen W1 consumer
+        id: runtime
+        run: |
+          set -euo pipefail
+          ./ci/windows/build-inputs/install-oras.sh linux-amd64 "${RUNNER_TEMP}/bin"
+          mkdir -p "${RUNNER_TEMP}/docker-empty"
+          DOCKER_CONFIG="${RUNNER_TEMP}/docker-empty" pwsh -NoProfile -File ci/windows/runtime-retention/consume.ps1 \
+            -AcceptedManifest ci/windows/runtime-retention/accepted-runtime.json \
+            -WorkDir "${RUNNER_TEMP}/runtime-work" -OutDir "${RUNNER_TEMP}/runtime-out" \
+            -OrasPath "${RUNNER_TEMP}/bin/oras"
+          leaf="$(python3 -c 'import json,os;print(os.path.basename(json.load(open("ci/windows/runtime-retention/accepted-runtime.json"))["runtimePath"]))')"
+          echo "archive=${RUNNER_TEMP}/runtime-out/${leaf}" >> "$GITHUB_OUTPUT"
+          rm -rf "${RUNNER_TEMP}/runtime-work"
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: w5a1-zip-a
+          path: ${{ runner.temp }}/zip-a
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: w5a1-zip-b
+          path: ${{ runner.temp }}/zip-b
+
+      - name: Verify both archives from their own bytes
+        run: |
+          set -o pipefail
+          status=0
+          python3 ci/windows/w5/verify-unsigned-zip.py \
+            --zip-a "${RUNNER_TEMP}/zip-a/tesserafin-server_1.0.0_win-x64.zip" \
+            --zip-b "${RUNNER_TEMP}/zip-b/tesserafin-server_1.0.0_win-x64.zip" \
+            --runtime-archive '${{ steps.runtime.outputs.archive }}' \
+            --head '${{ steps.epoch.outputs.head }}' \
+            --epoch '${{ steps.epoch.outputs.epoch }}' \
+            2>&1 | tee "${RUNNER_TEMP}/verdict.txt" || status=$?
+          {
+            echo "### W5-A1 unsigned win-x64 ZIP"
+            echo ""
+            echo "commit \`${{ steps.epoch.outputs.head }}\`, SOURCE_DATE_EPOCH \`${{ steps.epoch.outputs.epoch }}\`, verifier exit ${status}"
+            echo ""
+            echo '```'
+            head -c 60000 "${RUNNER_TEMP}/verdict.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "${status}"
