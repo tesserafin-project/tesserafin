@@ -53,8 +53,11 @@ clients are roadmap items, not shipped software.
 
 ## Install and run
 
-The supported way to install Tesserafin is the prebuilt container image. Nothing
-needs to be built from source.
+The prebuilt container image is the first release's install path. Nothing
+needs to be built from source. Tesserafin 1.1, not yet released, adds native
+Linux packages ([`docs/distribution/L0-linux-packages.md`](docs/distribution/L0-linux-packages.md))
+and a native `win-x64` ZIP and MSI
+([`docs/distribution/install-windows.md`](docs/distribution/install-windows.md)).
 
 **Start here: [`docs/container/A3-guided-install.md`](docs/container/A3-guided-install.md)**
 — the guided NAS / Docker operator guide, five steps from nothing to an onboarded

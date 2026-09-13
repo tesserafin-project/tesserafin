@@ -211,3 +211,33 @@ The `12.x` A6 evidence satisfies neither promise, because both are scoped to the
 
 Nothing else derives a version. A new consumer asks one of these; it does not
 re-implement the derivation.
+
+---
+
+## 7. Publication rules for 1.1
+
+Tracker [#276](https://github.com/tesserafin-project/tesserafin/issues/276).
+Contract: [W5-A0](./distribution/W5-A0-acceptance-contract.md).
+
+1.1 adds native artifacts beside the container: Linux `.deb`, `.rpm` and
+`.tar.gz`, a `win-x64` portable ZIP and a `win-x64` MSI. §1–§6 still govern the
+container. For 1.1, additionally:
+
+* **The Git tag and the GitHub Release are W5-A4, and owner-only.** No agent
+  slice, workflow or pull request creates either. This document names no tag
+  and no date; neither exists until W5-A4 creates it.
+* **The unsigned `win-x64` ZIP digest is the W5-A1 pin**,
+  [`ci/windows/w5/accepted-unsigned-zip.json`](../ci/windows/w5/accepted-unsigned-zip.json):
+  `zipSha256` `c1f6261cb770bd3dcbf255f4dd15b287a7289adad5a619d31725c158cd20e2d8`,
+  `assembledAtHead` `41d3411c9838feec6650dd10ec89a1f198aafdeb`, evidence run
+  `34766464798`. That pin names the ZIP built from that commit. It is not a
+  claim that a rebuild from any other commit produces the same bytes: the
+  archive records its own commit, so it does not.
+* **The MSI has no bit-identical claim.** No slice built it twice and compared
+  bytes, and no MSI digest is pinned.
+* **Signing is a later transformation**
+  ([W0 §8, §11](./distribution/W0-windows-server.md)). A signature is applied to
+  the accepted unsigned bytes, never before acceptance, and a signed artifact
+  must name the unsigned digest it was made from. The signing vendor is
+  **UNDECIDED** ([W5-A0 §D](./distribution/W5-A0-acceptance-contract.md)).
+  Unsigned artifacts remain publishable and usable.
