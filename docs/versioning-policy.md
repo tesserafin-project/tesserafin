@@ -224,8 +224,10 @@ Contract: [W5-A0](./distribution/W5-A0-acceptance-contract.md).
 container. For 1.1, additionally:
 
 * **The Git tag and the GitHub Release are W5-A4, and owner-only.** No agent
-  slice, workflow or pull request creates either. This document names no tag
-  and no date; neither exists until W5-A4 creates it.
+  slice, workflow or pull request creates either. W5-A4 has created both: Git
+  tag `v1.1.0` at `bb2234aebbf0ff2c1cbe291df48f2ffa62beea46`, and the
+  [GitHub Release](https://github.com/tesserafin-project/tesserafin/releases/tag/v1.1.0)
+  published 13 September 2026.
 * **The unsigned `win-x64` ZIP digest is the W5-A1 pin**,
   [`ci/windows/w5/accepted-unsigned-zip.json`](../ci/windows/w5/accepted-unsigned-zip.json):
   `zipSha256` `c1f6261cb770bd3dcbf255f4dd15b287a7289adad5a619d31725c158cd20e2d8`,
