@@ -9,9 +9,71 @@ follows [`docs/versioning-policy.md`](./docs/versioning-policy.md), which is aut
 
 ## [Unreleased]
 
-**Tesserafin has not published a release yet.** Nothing below has shipped to the public
-Stable channel, because that channel does not exist yet. This section describes what the
-first public release, `1.0.0`, will contain.
+## [1.1.0] - 2026-09-13
+
+1.1.0 adds native distribution surfaces to the contents of [1.0.0](#100---2026-08-05), below.
+Git tag `v1.1.0`; [GitHub Release](https://github.com/tesserafin-project/tesserafin/releases/tag/v1.1.0).
+The acceptance contract is
+[`docs/distribution/W5-A0-acceptance-contract.md`](./docs/distribution/W5-A0-acceptance-contract.md);
+tracker [#276](https://github.com/tesserafin-project/tesserafin/issues/276).
+
+**Unsigned.** Nothing in 1.1.0 is Authenticode-signed. **The MSI is not attached** to the GitHub
+Release. The one attached asset is the unsigned `win-x64` ZIP pinned below. `SharedVersion` is
+still `1.0.0`, which is why that ZIP is named `tesserafin-server_1.0.0_win-x64.zip`.
+
+### Added
+
+- **Linux container**, unchanged: the 1.0 path, still pinned by immutable digest.
+- **Native Linux packages**: `.deb`, `.rpm` and a portable `.tar.gz`, for `linux-x64` and
+  `linux-arm64`, accepted on architecture-native runners
+  ([#225](https://github.com/tesserafin-project/tesserafin/issues/225)).
+  See [`docs/distribution/L0-linux-packages.md`](./docs/distribution/L0-linux-packages.md).
+- **Native `win-x64` portable ZIP** (W2, W5-A1), unsigned, attached to the GitHub Release as
+  `tesserafin-server_1.0.0_win-x64.zip`: a self-contained, relocatable server that ships
+  no state. The unsigned ZIP accepted by W5-A1 is pinned in
+  [`ci/windows/w5/accepted-unsigned-zip.json`](./ci/windows/w5/accepted-unsigned-zip.json):
+  SHA-256 `c1f6261cb770bd3dcbf255f4dd15b287a7289adad5a619d31725c158cd20e2d8`, assembled at
+  `41d3411c9838feec6650dd10ec89a1f198aafdeb`, identical on two independent allocations in run
+  [34766464798](https://github.com/tesserafin-project/tesserafin/actions/runs/34766464798).
+  That digest identifies the ZIP built from that commit; a ZIP built from any other commit has a
+  different one. A rebuild from the `v1.1.0` tag commit is not this ZIP.
+- **Native `win-x64` MSI and Windows Service** (W3, W4), documented and measured but **not
+  attached to the 1.1.0 GitHub Release**: installs the server, registers the
+  service `Tesserafin` under the virtual account `NT SERVICE\Tesserafin` with explicit
+  `%ProgramData%` state directories and least-privilege ACLs, and leaves it stopped. Install,
+  `MajorUpgrade` (state kept, `INSTALLFOLDER` remembered) and uninstall (state kept) are
+  measured. The `UpgradeCode` is frozen at `0f0c9f4e-1c5a-4b8e-9a3d-6d1f2b7c8e05`.
+- **Bundled Tesserafin Web**, pinned by canonical tree digest
+  `4148c4bc6e0c7c2d6b35ed9992e874a06dcc11d2b6d9e0aad06719e36567be4f`.
+- **Tesserafin FFmpeg runtime**, pinned by archive digest
+  `f28cc9186aad757491a6f44e7950d39bc39354dfe9505e278af91d7619811c9e`.
+- **Windows install documentation** for the ZIP and the MSI:
+  [`docs/distribution/install-windows.md`](./docs/distribution/install-windows.md).
+
+The interface on every platform remains Tesserafin Web in a browser.
+
+### Not in 1.1
+
+Stated rather than omitted:
+
+- **No Authenticode signature yet.** The ZIP, the MSI and the executables are unsigned. Signing
+  is a later transformation applied to the accepted unsigned bytes; the vendor is undecided.
+  Unsigned artifacts remain usable.
+- **No bit-identical MSI.** Only the unsigned ZIP carries a reproducibility pin.
+- **No `win-arm64`.**
+- **No native client.**
+- **No advertised MSI repair.** Repair is not exercised by any slice.
+- **No Secure Remote Access or managed HTTPS.**
+  [#241](https://github.com/tesserafin-project/tesserafin/issues/241) is post-1.1.
+- **No auto-updater.**
+- **No Jellyfin client or plugin compatibility.**
+- **No D3D11VA, DXVA2, QSV, NVENC or AMF runtime claim on Windows.** The runners that measured the
+  Windows forms have no GPU.
+
+## [1.0.0] - 2026-08-05
+
+The first public release, **1.0.0 — Foundation**. Git tag `1.0.0`;
+[GitHub Release](https://github.com/tesserafin-project/tesserafin/releases/tag/1.0.0).
 
 Tesserafin is a fork of [Jellyfin](https://github.com/jellyfin/jellyfin). It inherited a
 `12.x` server line and a `13.x` web line from upstream history; those numbers describe a
@@ -126,64 +188,10 @@ Stated rather than omitted:
   [#188](https://github.com/tesserafin-project/tesserafin/issues/188); one finding is handled
   under coordinated disclosure and is deliberately not described publicly.
 - **The Linux container is the first release's deployment surface.** Native Linux packages and
-  native `win-x64` forms are added by [1.1](#11--not-yet-released), below, which states their
+  native `win-x64` forms are added by [1.1.0](#110---2026-09-13), above, which states their
   limits. The full server test suite is not green on native Windows; see
   [`docs/distribution/W0-windows-server.md`](./docs/distribution/W0-windows-server.md) §2.7.
 
-## 1.1 — not yet released
-
-1.1 adds native distribution surfaces to the contents described under [Unreleased] above.
-Nothing in this section has been tagged or published. The tag and the GitHub Release are
-W5-A4 and owner-only; see [`docs/versioning-policy.md`](./docs/versioning-policy.md) §7.
-The acceptance contract is
-[`docs/distribution/W5-A0-acceptance-contract.md`](./docs/distribution/W5-A0-acceptance-contract.md);
-tracker [#276](https://github.com/tesserafin-project/tesserafin/issues/276).
-
-### Added
-
-- **Linux container**, unchanged: the 1.0 path, still pinned by immutable digest.
-- **Native Linux packages**: `.deb`, `.rpm` and a portable `.tar.gz`, for `linux-x64` and
-  `linux-arm64`, accepted on architecture-native runners
-  ([#225](https://github.com/tesserafin-project/tesserafin/issues/225)).
-  See [`docs/distribution/L0-linux-packages.md`](./docs/distribution/L0-linux-packages.md).
-- **Native `win-x64` portable ZIP** (W2, W5-A1): a self-contained, relocatable server that ships
-  no state. The unsigned ZIP accepted by W5-A1 is pinned in
-  [`ci/windows/w5/accepted-unsigned-zip.json`](./ci/windows/w5/accepted-unsigned-zip.json):
-  SHA-256 `c1f6261cb770bd3dcbf255f4dd15b287a7289adad5a619d31725c158cd20e2d8`, assembled at
-  `41d3411c9838feec6650dd10ec89a1f198aafdeb`, identical on two independent allocations in run
-  [34766464798](https://github.com/tesserafin-project/tesserafin/actions/runs/34766464798).
-  That digest identifies the ZIP built from that commit; a ZIP built from any other commit has a
-  different one.
-- **Native `win-x64` MSI and Windows Service** (W3, W4): installs the server, registers the
-  service `Tesserafin` under the virtual account `NT SERVICE\Tesserafin` with explicit
-  `%ProgramData%` state directories and least-privilege ACLs, and leaves it stopped. Install,
-  `MajorUpgrade` (state kept, `INSTALLFOLDER` remembered) and uninstall (state kept) are
-  measured. The `UpgradeCode` is frozen at `0f0c9f4e-1c5a-4b8e-9a3d-6d1f2b7c8e05`.
-- **Bundled Tesserafin Web**, pinned by canonical tree digest
-  `4148c4bc6e0c7c2d6b35ed9992e874a06dcc11d2b6d9e0aad06719e36567be4f`.
-- **Tesserafin FFmpeg runtime**, pinned by archive digest
-  `f28cc9186aad757491a6f44e7950d39bc39354dfe9505e278af91d7619811c9e`.
-- **Windows install documentation** for the ZIP and the MSI:
-  [`docs/distribution/install-windows.md`](./docs/distribution/install-windows.md).
-
-The interface on every platform remains Tesserafin Web in a browser.
-
-### Not in 1.1
-
-Stated rather than omitted:
-
-- **No Authenticode signature yet.** The ZIP, the MSI and the executables are unsigned. Signing
-  is a later transformation applied to the accepted unsigned bytes; the vendor is undecided.
-  Unsigned artifacts remain usable.
-- **No bit-identical MSI.** Only the unsigned ZIP carries a reproducibility pin.
-- **No `win-arm64`.**
-- **No native client.**
-- **No advertised MSI repair.** Repair is not exercised by any slice.
-- **No Secure Remote Access or managed HTTPS.**
-  [#241](https://github.com/tesserafin-project/tesserafin/issues/241) is post-1.1.
-- **No auto-updater.**
-- **No Jellyfin client or plugin compatibility.**
-- **No D3D11VA, DXVA2, QSV, NVENC or AMF runtime claim on Windows.** The runners that measured the
-  Windows forms have no GPU.
-
-[Unreleased]: https://github.com/tesserafin-project/tesserafin/commits/master
+[Unreleased]: https://github.com/tesserafin-project/tesserafin/compare/v1.1.0...master
+[1.1.0]: https://github.com/tesserafin-project/tesserafin/releases/tag/v1.1.0
+[1.0.0]: https://github.com/tesserafin-project/tesserafin/releases/tag/1.0.0

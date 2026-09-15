@@ -15,16 +15,25 @@ fork attribution.
 
 ## Project status
 
-**Tesserafin has not shipped a public release yet.** Read this section before
-deciding whether to install anything.
+Two public releases exist. Read this section before deciding what to install.
 
-- No public Stable release exists. There is no GitHub Release in either
-  repository.
-- The container images that exist today are **private development and
-  release-candidate artefacts**, published to GHCR for reproducibility and gate
-  evidence. They are not a supported product.
+- **[`1.0.0` — Foundation](https://github.com/tesserafin-project/tesserafin/releases/tag/1.0.0)**,
+  released 2026-08-05 (tag `1.0.0`). The Linux container
+  `ghcr.io/tesserafin-project/server`, installed by digest. It is still the 1.0
+  install path.
+- **[`1.1.0`](https://github.com/tesserafin-project/tesserafin/releases/tag/v1.1.0)**,
+  released 2026-09-13 (tag `v1.1.0`). It keeps the container unchanged and adds
+  native Linux packages and a native `win-x64` portable ZIP. Nothing in it is
+  Authenticode-signed. The MSI is documented but **not attached** to the
+  GitHub Release. The attached ZIP is `tesserafin-server_1.0.0_win-x64.zip`,
+  because `SharedVersion` is still `1.0.0`; its SHA-256
+  `c1f6261cb770bd3dcbf255f4dd15b287a7289adad5a619d31725c158cd20e2d8` identifies
+  the ZIP assembled at `41d3411c9838feec6650dd10ec89a1f198aafdeb` (run
+  `34766464798`). A rebuild from the `v1.1.0` tag is a different ZIP.
 - `1.0.0` is the first public version epoch. The server and the web client share
   that number.
+- The build package `ghcr.io/tesserafin-project/tesserafin-server` and the
+  web-assets package are **private build provenance**, not a supported product.
 - The inherited `12.x` server images and `13.x` web-assets images describe
   upstream lineage, not a Tesserafin release history. They are retained as
   development evidence and are **unsupported**.
@@ -34,9 +43,8 @@ deciding whether to install anything.
 
 The authoritative rules for which numbers exist, where they are published and how
 a release may be resolved are in
-[`docs/versioning-policy.md`](docs/versioning-policy.md). What the first public
-release will contain, and what it will not, is in
-[CHANGELOG.md](CHANGELOG.md).
+[`docs/versioning-policy.md`](docs/versioning-policy.md). What each release
+contains, and what it does not, is in [CHANGELOG.md](CHANGELOG.md).
 
 ## What Tesserafin is
 
@@ -53,11 +61,12 @@ clients are roadmap items, not shipped software.
 
 ## Install and run
 
-The prebuilt container image is the first release's install path. Nothing
-needs to be built from source. Tesserafin 1.1, not yet released, adds native
-Linux packages ([`docs/distribution/L0-linux-packages.md`](docs/distribution/L0-linux-packages.md))
-and a native `win-x64` ZIP and MSI
-([`docs/distribution/install-windows.md`](docs/distribution/install-windows.md)).
+The prebuilt container image is the 1.0 install path. Nothing needs to be built
+from source. Tesserafin 1.1.0 adds native Linux packages
+([`docs/distribution/L0-linux-packages.md`](docs/distribution/L0-linux-packages.md))
+and an unsigned native `win-x64` portable ZIP
+([`docs/distribution/install-windows.md`](docs/distribution/install-windows.md),
+which also documents the MSI; the MSI is not attached to the 1.1.0 release).
 
 **Start here: [`docs/container/A3-guided-install.md`](docs/container/A3-guided-install.md)**
 — the guided NAS / Docker operator guide, five steps from nothing to an onboarded

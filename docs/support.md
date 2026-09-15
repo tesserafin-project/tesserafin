@@ -3,7 +3,7 @@
 Where to bring a problem, what to include, and what this project does and does not promise in
 return.
 
-**Tesserafin has not published a release yet.** Everything below describes the channels that
+Tesserafin has published `1.0.0` and `1.1.0`. Everything below describes the channels that
 exist today; none of it is a support contract, and none of it is a commitment on anyone's time.
 
 ## The channels
@@ -34,9 +34,10 @@ here.
 
 Most reports that stall do so because one of these is missing:
 
-* **The exact image you are running.** A digest or an immutable version tag, not "latest" —
-  `docker compose ps --format '{{.Image}}'`. See
-  [the admin guide](./admin-guide.md#1-know-exactly-what-you-are-running).
+* **The exact build you are running.** For the container, a digest or an immutable version
+  tag, not "latest" — `docker compose ps --format '{{.Image}}'`; see
+  [the admin guide](./admin-guide.md#1-know-exactly-what-you-are-running). For a native
+  install, the package name and version, or the SHA-256 of the `win-x64` ZIP you unpacked.
 * **What `/health` says** — `curl -fsS http://127.0.0.1:8096/health`. The three fields
   distinguish "still starting" from "the database is not answering" from "startup failed".
 * **The relevant logs**, not the whole file. For playback and transcoding problems the decisive
@@ -61,14 +62,16 @@ you to share more than you want to.
 * **Everything else is best-effort.** Tesserafin is maintained by volunteers and makes no
   contractual commitment of anyone's time. There is no SLA, no triage rota and no
   guaranteed response.
-* **There is no supported release to fall back to.** Until a public Stable release exists, every
-  artefact is a development build — see [`docs/versioning-policy.md`](./versioning-policy.md)
-  and [`CHANGELOG.md`](../CHANGELOG.md).
+* **Report against a published release.** `1.0.0` and `1.1.0` are the published releases;
+  anything else, including the private build packages, is a development build — see
+  [`docs/versioning-policy.md`](./versioning-policy.md) and [`CHANGELOG.md`](../CHANGELOG.md).
 
 ## Before reporting, check whether it is a known limit
 
 Several behaviours are documented as limits rather than defects, and reporting them again does
-not move them. The current list is in the *Known limitations at the first release* section of
-[`CHANGELOG.md`](../CHANGELOG.md) and §7 of [the admin guide](./admin-guide.md) — unvalidated
-acceleration backends, no live mid-session transcode retry, the unproven forward-migration
-boundary, no Jellyfin client compatibility, and Linux-container-only support.
+not move them. The current list is in the *Known limitations* section of `1.0.0` and the
+*Not in 1.1* section of `1.1.0` in [`CHANGELOG.md`](../CHANGELOG.md), and §7 of
+[the admin guide](./admin-guide.md) — unvalidated acceleration backends, no live mid-session
+transcode retry, the unproven forward-migration boundary, no Jellyfin client compatibility, no
+Authenticode signature on the Windows artifacts, and no `win-arm64`. The Linux container is the
+1.0 path; 1.1 adds native Linux packages and an unsigned `win-x64` portable ZIP.

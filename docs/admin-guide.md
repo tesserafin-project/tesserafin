@@ -3,17 +3,23 @@
 The single entry point for running a Tesserafin server after it is installed: knowing what
 you are running, watching it, backing it up, upgrading it, and getting transcoding to behave.
 
-**Installing** is a different document — follow
+**Installing** is a different document — for the container, follow
 [`docs/container/A3-guided-install.md`](./container/A3-guided-install.md), which the
-[README](../README.md) links as the primary install path.
+[README](../README.md) links as the 1.0 install path. The native forms added by 1.1 are
+[`docs/distribution/L0-linux-packages.md`](./distribution/L0-linux-packages.md) and
+[`docs/distribution/install-windows.md`](./distribution/install-windows.md).
 
 This guide **routes**; it does not restate. Each operational area has one authoritative
 document, and that document is where the exact procedure, its guarantees and its limits live.
 The commands quoted here are the short ones you need at the keyboard; when a quoted command
 and its authoritative document ever disagree, the document wins.
 
-**Supported surface: the Linux container.** No Windows path semantics are claimed, because no
-test in this repository runs on Windows.
+**Surfaces.** Docker, the Linux container, is the 1.0 path, and every command quoted in this
+guide is written for it. 1.1 adds native Linux packages (`.deb`, `.rpm`, `.tar.gz` for
+`linux-x64` and `linux-arm64`) and an unsigned `win-x64` portable ZIP; the MSI is documented but
+not attached to the 1.1.0 release. For a native install the routes below still name the right
+topic, but paths, service commands and log locations are the ones in L0 and
+`install-windows.md`, not the `docker` commands quoted here.
 
 | I need to… | Go to |
 | --- | --- |
