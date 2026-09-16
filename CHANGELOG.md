@@ -187,9 +187,12 @@ Stated rather than omitted:
   are classified in [#185](https://github.com/tesserafin-project/tesserafin/issues/185) and
   [#188](https://github.com/tesserafin-project/tesserafin/issues/188); one finding is handled
   under coordinated disclosure and is deliberately not described publicly.
-- **The Linux container is the first release's deployment surface.** Native Linux packages and
-  native `win-x64` forms are added by [1.1.0](#110---2026-09-13), above, which states their
-  limits. The full server test suite is not green on native Windows; see
+- **The Linux container is the first release's deployment surface, and it is still the only
+  published Linux path.** [1.1.0](#110---2026-09-13), above, adds native Linux `.deb`, `.rpm`
+  and `.tar.gz` forms, but they are *accepted* on architecture-native runners — they are **not
+  attached** to the GitHub Release, so there is no Linux-native artifact to download from it.
+  The one attached asset is the unsigned native `win-x64` ZIP; the MSI is not attached either.
+  The full server test suite is not green on native Windows; see
   [`docs/distribution/W0-windows-server.md`](./docs/distribution/W0-windows-server.md) §2.7.
 
 [Unreleased]: https://github.com/tesserafin-project/tesserafin/compare/v1.1.0...master
