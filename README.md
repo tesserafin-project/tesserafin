@@ -72,11 +72,19 @@ The native Linux files are on the
 [1.1.0 release page](https://github.com/tesserafin-project/tesserafin/releases/tag/v1.1.0)
 (attached 2026-09-17). They are unsigned, and there is no APT or DNF repository: download the
 file for your distribution and architecture and install it with your package manager. For
-`linux-x64`, check it first:
+`linux-x64`, download `SHA256SUMS-linux-x64.txt` into the same directory and check the file
+first:
 
 ```bash
 sha256sum -c --ignore-missing SHA256SUMS-linux-x64.txt
 ```
+
+The output must name the file you are about to install, followed by `OK` — for example
+`tesserafin-server_1.0.0-1_amd64.deb: OK`. `--ignore-missing` skips every listed file that is not
+in the directory (the list also names two `1.0.0-2` packages that are not attached), so a file
+the output does not name was not checked. This establishes that the download is intact. It does
+not establish where the file came from: the checksum list is served from the same release page
+and neither it nor the packages are signed.
 
 No checksum file is published for the `arm64` / `aarch64` files. What a package installs, the
 service it registers and what is not claimed are in L0.
