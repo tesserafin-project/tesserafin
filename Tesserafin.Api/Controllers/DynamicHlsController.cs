@@ -322,6 +322,9 @@ public class DynamicHlsController : BaseTesserafinApiController
 
         if (!System.IO.File.Exists(playlistPath))
         {
+            // tesserafin#119: the live command is built with the options in force, too.
+            _encodingOptions = _transcodeManager.GetEffectiveEncodingOptions(streamingRequest.MediaSourceId) ?? _encodingOptions;
+
             using (await _transcodeManager.LockAsync(playlistPath, cancellationToken).ConfigureAwait(false))
             {
                 if (!System.IO.File.Exists(playlistPath))

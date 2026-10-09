@@ -28,7 +28,11 @@ namespace Tesserafin.Server.Configuration
             var corsHosts = _serverConfigurationManager.Configuration.CorsHosts;
             var builder = new CorsPolicyBuilder()
                 .AllowAnyMethod()
-                .AllowAnyHeader();
+                .AllowAnyHeader()
+
+                // tesserafin#119: a web client on another origin must be able to read what the
+                // server says about a failed transcode, or it can never tell a recoverable one.
+                .WithExposedHeaders("X-Tesserafin-Playback-Recovery");
 
             // No hosts configured or only default configured.
             if (corsHosts.Length == 0

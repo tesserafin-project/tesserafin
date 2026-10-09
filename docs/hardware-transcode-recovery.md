@@ -79,8 +79,13 @@ This is an addition on the HLS segment routes, which are fetched by the media pl
 through the generated SDK; the OpenAPI document and the SDK are unchanged. A client that does
 not know the header sees a failed segment, as before.
 
-The failed job stays registered until the client releases it (`DELETE /Videos/ActiveEncodings`,
-which a reload already sends), so a late segment request cannot start a new process.
+The failed job answers this way for 30 seconds, or until the client releases it
+(`DELETE /Videos/ActiveEncodings`, which a reload already sends). After that a segment request
+on the same play session is served a fresh transcode, built with the options then in force –
+which is how a client that does not know the header still recovers, by asking again.
+
+The header is listed in the CORS policy's exposed headers, so a web client served from another
+origin can read it.
 
 ## How it was proven
 
@@ -118,9 +123,22 @@ segment), recovery within 15 s, same tracks, exactly one software start.
 | viewer leaves during recovery | no process started afterwards, none left running |
 | two sessions on hardware, one fault | both recovered, one software start each |
 
+## Second-pass review
+
+A separate automated read of both diffs (another Claude agent, no shared context – **not an
+independent human review**) found one blocking defect and eight smaller ones; all nine were
+repaired before the final runs. On the server: the stop flag is set before anything that can
+make ffmpeg exit; a verdict needs stderr to have been read to its end, otherwise it is a
+refusal; the attempt's backend is taken from the command that ran, not from options that may
+have changed since; the progressive and live-HLS command builders use the effective options
+too; the failure answer expires; the header is exposed to other origins. Not repaired, by
+choice: image extraction (`MediaEncoder`) still uses the stored options, and `Device creation
+failed` also describes an OpenCL/Vulkan filter device, which withholds the whole backend.
+
 ## Not covered
 
-- Any backend other than VAAPI on AMD.
+- Any backend other than VAAPI on AMD. V4L2 M2M commands open no device on the command line and
+  are treated as software: they are never fallen back from.
 - Progressive (non-HLS) transcodes: a withheld backend is honoured for new ones, but a
   failure of one is neither classified nor announced to the client.
 - A hardware failure that leaves no recognisable line.

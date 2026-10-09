@@ -18,6 +18,8 @@ namespace Tesserafin.Controller.MediaEncoding;
 /// </remarks>
 public sealed class TranscodeAttempt : IDisposable
 {
+    private volatile bool _stopRequested;
+
     /// <summary>
     /// Gets or sets the ffmpeg process for this attempt.
     /// </summary>
@@ -49,7 +51,7 @@ public sealed class TranscodeAttempt : IDisposable
     /// Gets a value indicating whether the server asked this process to stop. A process that ends
     /// after that did not fail, whatever its exit code says.
     /// </summary>
-    public bool StopRequested { get; private set; }
+    public bool StopRequested => _stopRequested;
 
     /// <summary>
     /// Gets or sets the hardware backend this attempt's command was built for.
@@ -77,6 +79,12 @@ public sealed class TranscodeAttempt : IDisposable
     public Task? DiagnosticsCompleted { get; set; }
 
     /// <summary>
+    /// Records that the server is stopping this attempt. Called before anything that could make
+    /// the process exit, so that exit is never judged as a failure.
+    /// </summary>
+    public void MarkStopRequested() => _stopRequested = true;
+
+    /// <summary>
     /// Requests a graceful stop, falling back to <see cref="Process.Kill()"/> if the process
     /// hasn't exited within 5 seconds. For an ordinary job the graceful stop is writing "q" to the
     /// process's stdin (ffmpeg's own stop-and-finalize-output handling); for a job whose stdin is
@@ -88,7 +96,7 @@ public sealed class TranscodeAttempt : IDisposable
     {
         // Set before anything else, and whether or not the process is still there: the exit
         // handler reads it to tell a stop from a failure, and the two can race.
-        StopRequested = true;
+        _stopRequested = true;
 
         var process = Process;
         if (process is null || HasExited)

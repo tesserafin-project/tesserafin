@@ -7,7 +7,7 @@ namespace Tesserafin.Controller.Tests.MediaEncoding;
 /// <summary>
 /// Locks <see cref="TranscodeFallbackPlanner"/>'s decision rules (tesserafin#119). The planner is
 /// pure; what applies its decision is covered by <c>TranscodeManagerHardwareFallbackTests</c> and,
-/// end to end, by the playback rig described in <c>docs/playback/hardware-transcode-recovery.md</c>.
+/// end to end, by the playback rig described in <c>docs/hardware-transcode-recovery.md</c>.
 /// </summary>
 public class TranscodeFallbackPlannerTests
 {

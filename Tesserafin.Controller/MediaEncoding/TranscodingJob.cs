@@ -324,6 +324,10 @@ public sealed class TranscodingJob : IDisposable
     /// </summary>
     public void Stop()
     {
+        // First, and outside the lock: stopping the throttler or closing a live pipe below can
+        // already make ffmpeg exit, and that exit must be seen as the stop it is.
+        CurrentAttempt?.MarkStopRequested();
+
         lock (_processLock)
         {
 #pragma warning disable CA1849 // Can't await in lock block

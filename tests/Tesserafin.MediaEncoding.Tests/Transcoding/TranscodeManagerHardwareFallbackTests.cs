@@ -83,6 +83,8 @@ public sealed class TranscodeManagerHardwareFallbackTests
         configured.VaapiDevice = "/dev/dri/renderD129";
         configured.EncodingThreadCount = 3;
         configured.H264Crf = 27;
+        configured.HardwareDecodingCodecs = ["h264", "hevc", "av1"];
+        configured.AllowOnDemandMetadataBasedKeyframeExtractionForExtensions = ["mkv", "ts"];
 
         manager.WithholdHardware(_backendWide, HardwareAccelerationType.vaapi, null);
         var effective = manager.GetEffectiveEncodingOptions(null);
@@ -90,6 +92,10 @@ public sealed class TranscodeManagerHardwareFallbackTests
         Assert.Equal("/dev/dri/renderD129", effective.VaapiDevice);
         Assert.Equal(3, effective.EncodingThreadCount);
         Assert.Equal(27, effective.H264Crf);
+
+        // Arrays with constructor defaults are the ones a careless copy appends to instead of replacing.
+        Assert.Equal(["h264", "hevc", "av1"], effective.HardwareDecodingCodecs);
+        Assert.Equal(["mkv", "ts"], effective.AllowOnDemandMetadataBasedKeyframeExtractionForExtensions);
     }
 
     [Fact]

@@ -62,6 +62,8 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
     // tesserafin#119. What a hardware failure in THIS server process has shown cannot work.
     // In memory only: the stored configuration is never touched, and the next start's own
     // hardware verification decides afresh.
+    private static readonly TimeSpan FailureAnswerLifetime = TimeSpan.FromSeconds(30);
+
     private readonly object _fallbackLock = new();
     private readonly HashSet<HardwareAccelerationType> _unavailableBackends = new();
     private readonly HashSet<string> _softwareOnlyMediaSources = new(StringComparer.OrdinalIgnoreCase);
@@ -354,6 +356,7 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
     private async Task KillTranscodingJob(TranscodingJob job, bool closeLiveStream, Func<string, bool> delete)
     {
         job.DisposeKillTimer();
+        job.CurrentAttempt?.MarkStopRequested();
 
         _logger.LogDebug(
             "KillTranscodingJob - RequestId={RequestId} JobId {JobId} PlaySessionId {PlaySessionId}. Killing transcoding",
@@ -488,7 +491,10 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
         {
             var audioCodec = state.ActualOutputAudioCodec;
             var videoCodec = state.ActualOutputVideoCodec;
-            var hardwareAccelerationType = GetEffectiveEncodingOptions(state.Request.MediaSourceId).HardwareAccelerationType;
+            // What this job's own command was built for, when known: a session that is still
+            // healthy on hardware keeps saying so after the backend was withheld from new ones.
+            var hardwareAccelerationType = job?.CurrentAttempt?.Backend
+                ?? GetEffectiveEncodingOptions(state.Request.MediaSourceId).HardwareAccelerationType;
 
             _sessionManager.ReportTranscodingInfo(deviceId, new TranscodingInfo
             {
@@ -532,8 +538,17 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
     {
         lock (_activeTranscodingJobs)
         {
+            // For a short while only. A client that knows the answer reloads within a second or
+            // two and releases the job; one that does not must not be refused forever on a play
+            // session it keeps asking for - after this it is served a fresh transcode, built
+            // with the options in force by then.
+            var notBefore = DateTime.UtcNow - FailureAnswerLifetime;
+
             return _activeTranscodingJobs
-                .FirstOrDefault(j => j.Type == type && j.Failure is not null && string.Equals(j.Path, path, StringComparison.OrdinalIgnoreCase))
+                .FirstOrDefault(j => j.Type == type
+                    && j.Failure is not null
+                    && j.Failure.OccurredAt >= notBefore
+                    && string.Equals(j.Path, path, StringComparison.OrdinalIgnoreCase))
                 ?.Failure;
         }
     }
@@ -942,14 +957,17 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
     /// </summary>
     private void DescribeAttempt(TranscodeAttempt attempt, StreamState state, string commandLineArguments)
     {
-        var options = GetEffectiveEncodingOptions(state.Request.MediaSourceId);
-        attempt.Backend = options.HardwareAccelerationType;
-
         // Read off the command that will run, not off the configuration: a backend can be
-        // configured and still not be used (stream copy, audio only, an input it cannot take).
-        attempt.UsesHardwarePipeline = attempt.Backend != HardwareAccelerationType.none
+        // configured and still not be used (stream copy, audio only, an input it cannot take),
+        // and the options in force now may no longer be the ones this command was built with -
+        // another session's failure can have withheld the backend in between. The flags are the
+        // ones EncodingHelper emits for every backend that opens a device; a backend whose
+        // command carries neither (V4L2 M2M) is treated as software and is never fallen back from.
+        var configuredBackend = _serverConfigurationManager.GetEncodingOptions().HardwareAccelerationType;
+        attempt.UsesHardwarePipeline = configuredBackend != HardwareAccelerationType.none
             && (commandLineArguments.Contains("-init_hw_device ", StringComparison.Ordinal)
                 || commandLineArguments.Contains("-hwaccel ", StringComparison.Ordinal));
+        attempt.Backend = attempt.UsesHardwarePipeline ? configuredBackend : HardwareAccelerationType.none;
 
         if (!attempt.UsesHardwarePipeline || state.VideoRequest is null)
         {
@@ -987,17 +1005,26 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
             return null;
         }
 
-        try
+        // The stderr reader is attached just after the process starts, and the pipe closes when
+        // the process exits, so both waits are normally immediate. They are bounded all the
+        // same, and a verdict on evidence that is not known to be complete is a refusal: a
+        // device line that was read says nothing about an input line that was not read yet.
+        var evidenceComplete = SpinWait.SpinUntil(() => attempt.DiagnosticsCompleted is not null, TimeSpan.FromSeconds(2));
+        if (evidenceComplete)
         {
-            // The pipe closes when the process exits, so this is normally immediate. Bounded all
-            // the same: a verdict on incomplete evidence can only be a refusal.
-            attempt.DiagnosticsCompleted?.Wait(TimeSpan.FromSeconds(2));
-        }
-        catch (AggregateException)
-        {
+            try
+            {
+                evidenceComplete = attempt.DiagnosticsCompleted!.Wait(TimeSpan.FromSeconds(2));
+            }
+            catch (AggregateException)
+            {
+                evidenceComplete = false;
+            }
         }
 
-        var categories = attempt.Diagnostics?.GetDetectedErrorCategories() ?? [];
+        IReadOnlyCollection<FfmpegErrorCategory> categories = evidenceComplete
+            ? attempt.Diagnostics?.GetDetectedErrorCategories() ?? []
+            : [];
         var decision = TranscodeFallbackPlanner.Evaluate(new TranscodeFallbackRequest(
             categories,
             attempt.Backend,
