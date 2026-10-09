@@ -2,10 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Moq;
 using Tesserafin.Common.Configuration;
 using Tesserafin.Model.Configuration;
 using Tesserafin.Server.Core;
+using Tesserafin.Server.Core.AppBase;
 using Xunit;
 
 namespace Tesserafin.Server.Implementations.Tests.AppBase;
@@ -196,6 +199,77 @@ public sealed class BaseApplicationPathsMarkerTests : IDisposable
 
         Assert.True(File.Exists(Path.Combine(directory, ".tesserafin-transcode")));
         Assert.Empty(LegacyMarkersUnder(directory));
+    }
+
+    // tesserafin#286. Two playbacks starting together both find the transcode marker missing and both
+    // create it. The second creator used to fail on the first one's exclusive handle, and that request
+    // answered 500. Holding the first handle open makes the overlap certain instead of likely.
+    [Fact]
+    public void OpenOrCreateMarker_WhileAnotherCreatorStillHoldsIt_OpensTheSameFile()
+    {
+        var marker = Path.Combine(Directory.CreateDirectory(Path.Combine(_root, "transcodes")).FullName, ".tesserafin-transcode");
+
+        using var first = BaseApplicationPaths.OpenOrCreateMarker(marker);
+        using var second = BaseApplicationPaths.OpenOrCreateMarker(marker);
+
+        Assert.False(second.IsInvalid);
+        Assert.Equal(new[] { marker }, MarkersUnder(_root).ToArray());
+    }
+
+    // The same thing through the path every playback start takes, on real threads. Bounded: 20 fresh
+    // directories, 8 callers released together on each. It exercises the check-then-create window, which
+    // it cannot force - the test above is the deterministic one.
+    [Fact]
+    public async Task GetTranscodePath_FreshDirectory_ConcurrentCallersAllSucceed()
+    {
+        const int Callers = 8;
+
+        for (var round = 0; round < 20; round++)
+        {
+            var transcodePath = Path.Combine(_root, "transcodes-" + round);
+            var manager = BuildConfigurationManager(transcodePath);
+            using var barrier = new Barrier(Callers);
+
+            var results = Enumerable.Range(0, Callers)
+                .Select(_ => Task.Factory.StartNew(
+                    () =>
+                    {
+                        barrier.SignalAndWait();
+                        return manager.GetTranscodePath();
+                    },
+                    CancellationToken.None,
+                    TaskCreationOptions.LongRunning,
+                    TaskScheduler.Default))
+                .ToArray();
+
+            Assert.All(await Task.WhenAll(results), path => Assert.Equal(transcodePath, path));
+            Assert.Equal(
+                new[] { ".tesserafin-transcode" },
+                MarkersUnder(transcodePath).Select(Path.GetFileName).ToArray());
+        }
+    }
+
+    // What the shared open must NOT swallow: a marker that cannot be created is still an error.
+    [Fact]
+    public void GetTranscodePath_DirectoryCannotBeWritten_Throws()
+    {
+        if (OperatingSystem.IsWindows() || Environment.UserName == "root")
+        {
+            return;
+        }
+
+        var transcodePath = Directory.CreateDirectory(Path.Combine(_root, "transcodes")).FullName;
+        File.SetUnixFileMode(transcodePath, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+
+        try
+        {
+            Assert.Throws<UnauthorizedAccessException>(() => BuildConfigurationManager(transcodePath).GetTranscodePath());
+            Assert.Empty(MarkersUnder(transcodePath));
+        }
+        finally
+        {
+            File.SetUnixFileMode(transcodePath, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
     }
 
     private static void SeedMarker(string directory, string fileName)

@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using Microsoft.Win32.SafeHandles;
 using Tesserafin.Common.Configuration;
-using Tesserafin.Extensions;
 
 namespace Tesserafin.Server.Core.AppBase
 {
@@ -140,6 +140,21 @@ namespace Tesserafin.Server.Core.AppBase
             }
         }
 
+        /// <summary>
+        /// Opens a marker file, creating it when it is not there yet.
+        /// </summary>
+        /// <remarks>
+        /// A marker is an empty file whose only content is its name, so the same marker is created by
+        /// every request that finds it missing, and several can arrive together (the transcode directory
+        /// is checked on each playback start). The open is therefore shared and never truncates: whoever
+        /// comes second opens the file the first one made. Everything else - a directory that cannot be
+        /// written, a full or read-only volume, a directory in the marker's place - still throws.
+        /// </remarks>
+        /// <param name="markerPath">The full path of the marker file.</param>
+        /// <returns>The open handle.</returns>
+        internal static SafeFileHandle OpenOrCreateMarker(string markerPath)
+            => File.OpenHandle(markerPath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.ReadWrite);
+
         private static IEnumerable<string> GetMarkers(string path, bool recursive = false)
         {
             var options = new EnumerationOptions
@@ -235,7 +250,7 @@ namespace Tesserafin.Server.Core.AppBase
             var markerPath = rootMarker ?? Path.Combine(path, markerName);
             if (!File.Exists(markerPath))
             {
-                FileHelper.CreateEmpty(markerPath);
+                OpenOrCreateMarker(markerPath).Dispose();
             }
 
             if (legacyMarkers is null || !File.Exists(markerPath))
