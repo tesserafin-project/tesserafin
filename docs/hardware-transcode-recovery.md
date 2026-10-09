@@ -137,6 +137,121 @@ too; the failure answer expires; the header is exposed to other origins. Not rep
 choice: image extraction (`MediaEncoder`) still uses the stored options, and `Device creation
 failed` also describes an OpenCL/Vulkan filter device, which withholds the whole backend.
 
+## POLISH-2-R1: concurrent starts, and a recovery that belongs to one playback
+
+Two things found while proving the above, and what was done about them. Same rig, same FFmpeg
+7.1.4 (SHA-256 `ef565fc0…79a1`), same backend; nothing here is claimed for another one.
+
+### Several playbacks starting together (tesserafin#286)
+
+The first use of the transcode manager after a server start empties the transcode directory,
+`.tesserafin-transcode` marker included. Every playback start checks the directory and recreates
+the marker when it is missing; it did so with a truncating, exclusive open, so of several
+starts arriving together all but one failed on the first one's handle and their
+`master.m3u8` answered **500**.
+
+**It predates #119.** Measured, not inferred, on three builds, always on a server that had not
+transcoded since it started and always reading the *first* answer (a playback that starts after
+a 500 because the client asked again is counted as a failure):
+
+| Build | 6 playbacks by HTTP, released together | 4 browser contexts pressing Play together |
+| --- | --- | --- |
+| `b2cb895c0d`, the parent of #119 | 5 of 6 answered 500, in each of 3 rounds | 3 of 4 answered 500, in each of 3 rounds |
+| `70a8974c48`, with #119 | 5 of 6, in each of 3 rounds | 3 of 4, in each of 3 rounds |
+| the fix | 0, in 7 rounds | 0, in 4 rounds |
+
+On a directory that already holds its marker, no build failed. Two or four requests for the
+*same* item, from different devices, each got their own play session and their own output files.
+The rounds are few on purpose: before the fix the failure was not a matter of luck, it happened
+every time.
+
+The marker is an empty file whose name is its whole content, so it is now opened shared and
+without truncation: whoever comes second opens the file the first one made. Nothing is caught,
+nothing is retried, no lock is taken. A directory that cannot be written, a full volume or a
+directory sitting in the marker's place still throws, the check that refuses a directory
+carrying another root's marker is unchanged, and so is the order in which a pre-rename marker is
+replaced.
+
+### One recovery, for one playback (web client)
+
+The player object outlives the film it plays, and a recovery reload is several requests long.
+The reload was guarded by flags on that object, which the next play request reset - so an
+answer that arrived late was taken for a live one. Reproduced with the reload's answer held
+back, on the unmodified client:
+
+- after the 30 s recovery timeout had shown its error, the late answer started the film anyway;
+- after film A was stopped and film B started, A's late answer replaced B's stream;
+- a failure notified more than once started one reload per notification;
+- a second `software` offer, after the one recovery had been used, reloaded again;
+- B started without stopping A reported A as stopped at position zero.
+
+The same happened to the ordinary retry ladder and to any other stream change (a track or
+quality switch, a seek that reloads): their answers were no better guarded.
+
+Now each playback is an object, made by the play request and gone when that playback is
+reported stopped or is replaced, and the recovery in flight is another. Every asynchronous step
+of a stream change carries the ones it started under; a step that finds different ones on the
+player releases the transcode it was for and changes nothing else. Stop, timeout, replacement
+and terminal failure all end a recovery through the same function. A stop asked for while a
+stream change is in flight is honoured, and reported at the position the viewer was at.
+
+**The signal is read strictly.** An instruction is `410` together with `software` or `none`,
+exactly as the server writes them. A 410 with no header, with one the client cannot read, or
+with any other value is an ordinary HTTP error: the client does not claim the server diagnosed
+a failed transcode, and the ordinary retry ladder handles it. `software` is honoured once per
+playback; any further recognised instruction ends that playback with the error dialog. `none`
+starts no software recovery.
+
+Proven by tests that drive the real playback manager with held answers and a controlled clock
+(21 of the 35 fail on the unmodified client), and on the rig with the final pair, the recovery's
+own request held in the browser:
+
+| Check | Result |
+| --- | --- |
+| hardware failure mid-film, as above | recovered in 1.0 s, position +0.44 s, same audio and subtitles, one `libx264` start, resume saved at 156.2 s (failure at 143.7 s) |
+| answer held past the 30 s timeout, then released | the error dialog, once; nothing started afterwards, no process left; resume saved at 135.1 s (failure at 130.7 s) |
+| viewer leaves while the answer is held, then released | no player, no dialog, no process started, also after the old timer's time has passed; resume kept |
+| viewer leaves, starts another film, then A's answer is released | B plays on for 42 s without a stall, a dialog or a change of source; no request for A's stream; A's resume kept |
+| software attempt failing too | `410 software`, one reload, `410 none`, the dialog; Retry works |
+| unreadable input on healthy hardware | `410 none` three times (see below), no software start, the dialog |
+
+**`SIGKILL` of the hardware ffmpeg, watched to the end.** The dead job had written 176 segments
+and the player was at segment 23. The viewer was moved to within 30 s of the last one and left
+to play. When the player asked for segment 177, which the dead job never wrote, the server
+started a new `h264_vaapi` transcode at that point and answered 200. Nothing was visible: no
+stall, no notice, no dialog. The kill was "not recognised", no software fallback was granted,
+the backend was not withheld and the next playback started on hardware. Not exercised: reaching
+the hole within 30 s of the kill, while the dead job still answers 410.
+
+**An automated second read** of both diffs (another Claude agent, no shared context - not a
+human review) found nothing blocking on the server and one blocking defect on the client: a
+stream that finished loading after its playback had been replaced stopped the player under the
+next film. It and five smaller findings were repaired; a second read of the repairs found two
+more, also repaired. The last repairs were not read a third time.
+
+### What R1 leaves as it found it
+
+- **`none` still goes down the ordinary retry ladder.** On unreadable input the client reloads
+  twice more before the dialog, each a hardware attempt that fails at once. It is bounded and it
+  is what the client did before; it is not a software recovery.
+- **The ladder reloads once per error it is told about.** Only the software recovery ignores a
+  repeated notification.
+- **A hardware failure can reach the player as something other than a 410.** Seen once, not
+  reproduced in two attempts: the device was lost while the player was waiting for a segment the
+  job had not written yet, the server started a software transcode on the *same* play session a
+  few milliseconds after the failed one ended, and the browser choked on software segments
+  following a hardware initialisation segment. The ladder then reloaded and the film played, in
+  software, without the notice and with three software starts instead of one. The cause is
+  believed to be two checks in the segment route that are not atomic with the deletion of the
+  failed job's files; that is an inference from one log.
+- **One unrelated 500 was seen under concurrent starts**, in 1 of 18 browser rounds on the fixed
+  server and none of the HTTP ones: `SQLite Error 5: unable to delete/modify collation sequence
+  due to active statements`, on a segment request and a progress report 2.5 s after four films
+  were started together. The client reloaded that one stream. Whether it predates #119 is not
+  known - the older builds failed earlier, on the marker.
+- A live stream opened for a stream change whose answer arrives too late is released like any
+  other transcode, by play session; this was not exercised with a tuner.
+
 ## Not covered
 
 - Any backend other than VAAPI on AMD. V4L2 M2M commands open no device on the command line and
