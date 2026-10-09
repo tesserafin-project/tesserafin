@@ -33,7 +33,7 @@ using Tesserafin.Model.Session;
 namespace Tesserafin.MediaEncoding.Transcoding;
 
 /// <inheritdoc cref="ITranscodeManager"/>
-public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegistry, IDisposable
+public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegistry, IHardwareTranscodeFallback, IDisposable
 {
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<TranscodeManager> _logger;

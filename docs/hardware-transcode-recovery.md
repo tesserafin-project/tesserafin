@@ -49,7 +49,9 @@ line), leaves no evidence and is refused.
 - **Nothing is restarted by the server.** The decision changes what the *next* command is
   built with. That is what bounds the incident to one software attempt: the client reloads the
   stream once, and there is no second mechanism to multiply it with.
-- `ITranscodeManager.GetEffectiveEncodingOptions(mediaSourceId)` returns a *copy* of the
+- `IHardwareTranscodeFallback.GetEffectiveEncodingOptions(mediaSourceId)` (implemented by the
+  transcode manager, kept off `ITranscodeManager` so that published interface does not change)
+  returns a *copy* of the
   configured options with hardware acceleration off when the backend, or that media source,
   has been withheld. `EncodingHelper` builds the whole command from those options, so the
   decoder, the filters and the upload/download steps are the software ones too – no encoder
