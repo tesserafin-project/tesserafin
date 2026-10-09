@@ -3,6 +3,7 @@
 #pragma warning disable CS1591
 
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -14,6 +15,8 @@ namespace Tesserafin.Controller.MediaEncoding
     public class JobLogger
     {
         private readonly ILogger _logger;
+        private readonly object _evidenceLock = new();
+        private readonly List<FfmpegErrorCategory> _categories = new();
 
         public JobLogger(ILogger logger)
         {
@@ -21,11 +24,27 @@ namespace Tesserafin.Controller.MediaEncoding
         }
 
         /// <summary>
-        /// Gets the most specific <see cref="FfmpegErrorCategory"/> found in stderr so far, or
-        /// <see cref="FfmpegErrorCategory.Unknown"/> if nothing has matched yet. Diagnostic only -
-        /// nothing currently acts on this.
+        /// Gets the most recent <see cref="FfmpegErrorCategory"/> found in stderr so far, or
+        /// <see cref="FfmpegErrorCategory.Unknown"/> if nothing has matched yet.
         /// </summary>
         public FfmpegErrorCategory DetectedErrorCategory { get; private set; }
+
+        /// <summary>
+        /// Gets the codec an "unknown encoder/decoder" line named, when one did.
+        /// </summary>
+        public string UnsupportedCodecName { get; private set; }
+
+        /// <summary>
+        /// Gets every distinct category found in stderr so far, in the order first seen.
+        /// </summary>
+        /// <returns>A snapshot.</returns>
+        public IReadOnlyCollection<FfmpegErrorCategory> GetDetectedErrorCategories()
+        {
+            lock (_evidenceLock)
+            {
+                return _categories.ToArray();
+            }
+        }
 
         public async Task StartStreamingLog(EncodingJobInfo state, StreamReader reader, Stream target)
         {
@@ -37,8 +56,10 @@ namespace Tesserafin.Controller.MediaEncoding
                     string line = await reader.ReadLineAsync().ConfigureAwait(false);
                     while (line is not null && reader.BaseStream.CanRead)
                     {
-                        ParseLogLine(line, state);
+                        // Evidence first: nothing the progress parser does with a line may cost the
+                        // record of what that line showed.
                         ClassifyLine(line);
+                        ParseLogLine(line, state);
 
                         var bytes = Encoding.UTF8.GetBytes(Environment.NewLine + line);
 
@@ -171,9 +192,24 @@ namespace Tesserafin.Controller.MediaEncoding
         private void ClassifyLine(string line)
         {
             var category = FfmpegErrorClassifier.Classify(line);
-            if (category == FfmpegErrorCategory.Unknown || category == DetectedErrorCategory)
+            if (category == FfmpegErrorCategory.Unknown)
             {
                 return;
+            }
+
+            lock (_evidenceLock)
+            {
+                if (_categories.Contains(category))
+                {
+                    return;
+                }
+
+                _categories.Add(category);
+            }
+
+            if (category == FfmpegErrorCategory.UnsupportedCodec)
+            {
+                UnsupportedCodecName ??= FfmpegErrorClassifier.GetUnsupportedCodecName(line);
             }
 
             DetectedErrorCategory = category;

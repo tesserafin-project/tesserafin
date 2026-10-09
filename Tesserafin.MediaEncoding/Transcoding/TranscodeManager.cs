@@ -23,6 +23,7 @@ using Tesserafin.Controller.Streaming;
 using Tesserafin.Data;
 using Tesserafin.Database.Implementations.Enums;
 using Tesserafin.Extensions;
+using Tesserafin.Model.Configuration;
 using Tesserafin.Model.Dlna;
 using Tesserafin.Model.Entities;
 using Tesserafin.Model.IO;
@@ -58,7 +59,16 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
 
     // #153-LTV-R1. Monotonic across the process, so two jobs that reuse one playlist identifier
     // are still distinguishable and a stale binding cannot be mistaken for a live one.
+    // tesserafin#119. What a hardware failure in THIS server process has shown cannot work.
+    // In memory only: the stored configuration is never touched, and the next start's own
+    // hardware verification decides afresh.
+    private readonly object _fallbackLock = new();
+    private readonly HashSet<HardwareAccelerationType> _unavailableBackends = new();
+    private readonly HashSet<string> _softwareOnlyMediaSources = new(StringComparer.OrdinalIgnoreCase);
+
     private long _jobGeneration;
+    private EncodingOptions? _softwareOptionsSource;
+    private EncodingOptions? _softwareOptions;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TranscodeManager"/> class.
@@ -478,7 +488,7 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
         {
             var audioCodec = state.ActualOutputAudioCodec;
             var videoCodec = state.ActualOutputVideoCodec;
-            var hardwareAccelerationType = _serverConfigurationManager.GetEncodingOptions().HardwareAccelerationType;
+            var hardwareAccelerationType = GetEffectiveEncodingOptions(state.Request.MediaSourceId).HardwareAccelerationType;
 
             _sessionManager.ReportTranscodingInfo(deviceId, new TranscodingInfo
             {
@@ -496,6 +506,35 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
                 HardwareAccelerationType = hardwareAccelerationType,
                 TranscodeReasons = state.TranscodeReasons
             });
+        }
+    }
+
+    /// <inheritdoc />
+    public EncodingOptions GetEffectiveEncodingOptions(string? mediaSourceId)
+    {
+        var configured = _serverConfigurationManager.GetEncodingOptions();
+        if (configured.HardwareAccelerationType == HardwareAccelerationType.none)
+        {
+            return configured;
+        }
+
+        lock (_fallbackLock)
+        {
+            var withheld = _unavailableBackends.Contains(configured.HardwareAccelerationType)
+                || (!string.IsNullOrEmpty(mediaSourceId) && _softwareOnlyMediaSources.Contains(mediaSourceId));
+
+            return withheld ? GetSoftwareOptions(configured) : configured;
+        }
+    }
+
+    /// <inheritdoc />
+    public TranscodeFailure? GetTranscodeFailure(string path, TranscodingJobType type)
+    {
+        lock (_activeTranscodingJobs)
+        {
+            return _activeTranscodingJobs
+                .FirstOrDefault(j => j.Type == type && j.Failure is not null && string.Equals(j.Path, path, StringComparison.OrdinalIgnoreCase))
+                ?.Failure;
         }
     }
 
@@ -577,6 +616,8 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
             userId,
             state,
             cancellationTokenSource);
+
+        DescribeAttempt(transcodingJob.CurrentAttempt!, state, commandLineArguments);
 
         _logger.LogInformation("{Filename} {Arguments}", process.StartInfo.FileName, process.StartInfo.Arguments);
 
@@ -672,8 +713,11 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
                 plan.IsHardwareEncoder);
         }
 
-        // Important - don't await the log task or we won't be able to kill FFmpeg when the user stops playback
-        _ = new JobLogger(_logger).StartStreamingLog(state, process.StandardError, logStream);
+        // Important - don't await the log task or we won't be able to kill FFmpeg when the user stops playback.
+        // It is kept, though: what it recognised in stderr is the evidence a failure is judged on.
+        var jobLogger = new JobLogger(_logger);
+        transcodingJob.CurrentAttempt!.Diagnostics = jobLogger;
+        transcodingJob.CurrentAttempt.DiagnosticsCompleted = jobLogger.StartStreamingLog(state, process.StandardError, logStream);
 
         // Wait for the file to exist before proceeding
         var ffmpegTargetFile = state.WaitForPath ?? outputPath;
@@ -843,8 +887,16 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
 
     private void OnFfMpegProcessExited(Process process, TranscodingJob job, StreamState state)
     {
-        job.HasExited = true;
         job.ExitCode = process.ExitCode;
+
+        // Judged BEFORE HasExited is published: a segment request waiting on this job wakes up on
+        // HasExited and must find the reason already there.
+        if (process.ExitCode != 0)
+        {
+            job.Failure = EvaluateFailure(job, state, process.ExitCode);
+        }
+
+        job.HasExited = true;
 
         ReportTranscodingProgress(job, state, null, null, null, null, null);
 
@@ -863,6 +915,165 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
         TranscodingJobEnded?.Invoke(this, job);
 
         job.Dispose();
+    }
+
+    /// <summary>
+    /// A copy of the configured options with hardware acceleration off. A copy, because the
+    /// configured object is the one the dashboard reads and saves.
+    /// </summary>
+    private EncodingOptions GetSoftwareOptions(EncodingOptions configured)
+    {
+        lock (_fallbackLock)
+        {
+            if (!ReferenceEquals(_softwareOptionsSource, configured) || _softwareOptions is null)
+            {
+                var copy = JsonSerializer.Deserialize<EncodingOptions>(JsonSerializer.Serialize(configured))!;
+                copy.HardwareAccelerationType = HardwareAccelerationType.none;
+                _softwareOptionsSource = configured;
+                _softwareOptions = copy;
+            }
+
+            return _softwareOptions;
+        }
+    }
+
+    /// <summary>
+    /// Records, while the stream state is still alive, what this attempt is about to run.
+    /// </summary>
+    private void DescribeAttempt(TranscodeAttempt attempt, StreamState state, string commandLineArguments)
+    {
+        var options = GetEffectiveEncodingOptions(state.Request.MediaSourceId);
+        attempt.Backend = options.HardwareAccelerationType;
+
+        // Read off the command that will run, not off the configuration: a backend can be
+        // configured and still not be used (stream copy, audio only, an input it cannot take).
+        attempt.UsesHardwarePipeline = attempt.Backend != HardwareAccelerationType.none
+            && (commandLineArguments.Contains("-init_hw_device ", StringComparison.Ordinal)
+                || commandLineArguments.Contains("-hwaccel ", StringComparison.Ordinal));
+
+        if (!attempt.UsesHardwarePipeline || state.VideoRequest is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var softwareEncoder = _encodingHelper.GetVideoEncoder(state, GetSoftwareOptions(_serverConfigurationManager.GetEncodingOptions()));
+            attempt.SoftwareAlternativeAvailable = !string.IsNullOrEmpty(softwareEncoder)
+                && !EncodingHelper.IsCopyCodec(softwareEncoder)
+                && _mediaEncoder.SupportsEncoder(softwareEncoder);
+        }
+        catch (Exception ex)
+        {
+            // Not knowing is not having: no alternative is assumed.
+            _logger.LogDebug(ex, "Could not determine the software encoder for a hardware attempt");
+        }
+    }
+
+    /// <summary>
+    /// Judges an ffmpeg process that ended with a non-zero exit code, and applies the result.
+    /// </summary>
+    /// <remarks>
+    /// Nothing is restarted from here. A granted fallback changes what the NEXT command is built
+    /// with; the client reloads the stream, which is also what gives the software attempt its own
+    /// output files and its own initialisation segment.
+    /// </remarks>
+    /// <returns>The failure, or <see langword="null"/> when the server stopped the process itself.</returns>
+    private TranscodeFailure? EvaluateFailure(TranscodingJob job, StreamState state, int exitCode)
+    {
+        var attempt = job.CurrentAttempt;
+        if (attempt is null || attempt.StopRequested)
+        {
+            return null;
+        }
+
+        try
+        {
+            // The pipe closes when the process exits, so this is normally immediate. Bounded all
+            // the same: a verdict on incomplete evidence can only be a refusal.
+            attempt.DiagnosticsCompleted?.Wait(TimeSpan.FromSeconds(2));
+        }
+        catch (AggregateException)
+        {
+        }
+
+        var categories = attempt.Diagnostics?.GetDetectedErrorCategories() ?? [];
+        var decision = TranscodeFallbackPlanner.Evaluate(new TranscodeFallbackRequest(
+            categories,
+            attempt.Backend,
+            attempt.UsesHardwarePipeline,
+            attempt.SoftwareAlternativeAvailable,
+            attempt.StopRequested,
+            attempt.Diagnostics?.UnsupportedCodecName));
+
+        if (!decision.ShouldFallback)
+        {
+            _logger.LogInformation(
+                "Transcode failure not eligible for software fallback: Backend={Backend} Categories={Categories} Reason={Reason}",
+                attempt.Backend,
+                categories,
+                decision.Reason);
+
+            return new TranscodeFailure(exitCode, categories, decision, DateTime.UtcNow);
+        }
+
+        WithholdHardware(decision, attempt.Backend, state.Request.MediaSourceId);
+
+        _logger.LogWarning(
+            "Hardware transcode failed; software will be used: Backend={Backend} Scope={Scope} Categories={Categories} Reason={Reason}. The configured backend is unchanged and is verified again at the next start.",
+            attempt.Backend,
+            decision.Scope,
+            categories,
+            decision.Reason);
+
+        // Nothing the failed attempt wrote may be served to the software attempt's viewer: its
+        // last segment may be truncated, and its initialisation segment belongs to another encoder.
+        if (job.Type == TranscodingJobType.Hls && !string.IsNullOrEmpty(job.Path))
+        {
+            try
+            {
+                DeleteHlsPartialStreamFiles(job.Path);
+            }
+            catch (Exception ex) when (ex is IOException or AggregateException)
+            {
+                _logger.LogWarning(ex, "Could not remove the failed attempt's output");
+            }
+        }
+
+        return new TranscodeFailure(exitCode, categories, decision, DateTime.UtcNow);
+    }
+
+    /// <summary>
+    /// Applies a granted fallback: withholds the backend from every new command, or hardware from
+    /// one media source, for the rest of this process. Nothing is stored and nothing running is touched.
+    /// </summary>
+    /// <param name="decision">The planner's decision.</param>
+    /// <param name="backend">The backend the failed attempt used.</param>
+    /// <param name="mediaSourceId">The media source the failed attempt was for.</param>
+    internal void WithholdHardware(TranscodeFallbackDecision decision, HardwareAccelerationType backend, string? mediaSourceId)
+    {
+        if (!decision.ShouldFallback)
+        {
+            return;
+        }
+
+        lock (_fallbackLock)
+        {
+            if (decision.Scope == TranscodeFallbackScope.Backend)
+            {
+                _unavailableBackends.Add(backend);
+            }
+            else if (decision.Scope == TranscodeFallbackScope.MediaSource && !string.IsNullOrEmpty(mediaSourceId))
+            {
+                // Bounded: forgetting a source costs one more failed hardware start, never a wrong answer.
+                if (_softwareOnlyMediaSources.Count >= 4096)
+                {
+                    _softwareOnlyMediaSources.Clear();
+                }
+
+                _softwareOnlyMediaSources.Add(mediaSourceId);
+            }
+        }
     }
 
     private async Task AcquireResources(StreamState state, CancellationTokenSource cancellationTokenSource)

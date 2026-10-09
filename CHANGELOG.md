@@ -9,6 +9,17 @@ follows [`docs/versioning-policy.md`](./docs/versioning-policy.md), which is aut
 
 ## [Unreleased]
 
+### Fixed
+
+- **A hardware transcode that fails no longer ends the playback or the server's ability to
+  transcode** ([#119](https://github.com/tesserafin-project/tesserafin/issues/119)). When
+  ffmpeg's own output positively identifies a hardware failure, the playback continues in
+  software and the backend is withheld from new transcodes until the server restarts; the stored
+  configuration is not changed. Failures that are not hardware ones (unreadable input, an
+  unrecognised crash, a software transcode) are not retried and are reported to the client as
+  such. Observed and proven on VAAPI with an AMD GPU only. See
+  [`docs/hardware-transcode-recovery.md`](./docs/hardware-transcode-recovery.md).
+
 ### Changed
 
 - **Documentation: the native Linux packages are now downloadable from the 1.1.0 GitHub

@@ -167,7 +167,11 @@ public static class StreamingHelpers
             }
         }
 
-        var encodingOptions = serverConfigurationManager.GetEncodingOptions();
+        // tesserafin#119: the options a command for THIS source must be built with - hardware is
+        // withheld when a failure in this server process showed it cannot work. The fallback to the
+        // stored options only serves a manager that answers nothing (a test double).
+        var encodingOptions = transcodeManager.GetEffectiveEncodingOptions(streamingRequest.MediaSourceId)
+            ?? serverConfigurationManager.GetEncodingOptions();
 
         encodingHelper.AttachMediaSourceInfo(state, encodingOptions, mediaSource, url);
 

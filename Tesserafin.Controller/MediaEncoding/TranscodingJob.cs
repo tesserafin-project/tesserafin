@@ -116,6 +116,13 @@ public sealed class TranscodingJob : IDisposable
     public TranscodeAttempt? CurrentAttempt { get; set; }
 
     /// <summary>
+    /// Gets or sets what is known about this job's failure, when it ended on its own with one.
+    /// Set before <see cref="HasExited"/> becomes <see langword="true"/>, so a reader that sees
+    /// the exit also sees the reason.
+    /// </summary>
+    public TranscodeFailure? Failure { get; set; }
+
+    /// <summary>
     /// Gets or sets the process of the current attempt.
     /// </summary>
     public Process? Process

@@ -46,6 +46,12 @@ namespace Tesserafin.Api.Controllers;
 [ApiExplorerSettings(IgnoreApi = true)]
 public class DynamicHlsController : BaseTesserafinApiController
 {
+    /// <summary>
+    /// Response header naming what a client can do about a failed transcode: <c>software</c> when
+    /// reloading the stream will be served by a software transcode, <c>none</c> otherwise.
+    /// </summary>
+    internal const string PlaybackRecoveryHeader = "X-Tesserafin-Playback-Recovery";
+
     private const EncoderPreset DefaultVodEncoderPreset = EncoderPreset.veryfast;
     private const EncoderPreset DefaultEventEncoderPreset = EncoderPreset.superfast;
     private const TranscodingJobType TranscodingJobType = Tesserafin.Controller.MediaEncoding.TranscodingJobType.Hls;
@@ -67,7 +73,7 @@ public class DynamicHlsController : BaseTesserafinApiController
     private readonly DynamicHlsHelper _dynamicHlsHelper;
     private readonly IPlaybackSessionManager _playbackSessionManager;
     private readonly IHlsJobOwnershipAuthorizer _jobOwnership;
-    private readonly EncodingOptions _encodingOptions;
+    private EncodingOptions _encodingOptions;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DynamicHlsController"/> class.
@@ -1510,6 +1516,10 @@ public class DynamicHlsController : BaseTesserafinApiController
 
         var playlistPath = Path.ChangeExtension(state.OutputFilePath, ".m3u8");
 
+        // tesserafin#119. Any command built below uses the options that hold for this source
+        // now, which is not always the stored configuration: see GetEffectiveEncodingOptions.
+        _encodingOptions = _transcodeManager.GetEffectiveEncodingOptions(streamingRequest.MediaSourceId) ?? _encodingOptions;
+
         // #153-LTV-R3. This path is MD5(mediaPath-userAgent-deviceId-playSessionId): the device,
         // the play session and the User-Agent all come from the caller, so a second authenticated
         // user replaying this url arrives at the same file. The decision is taken here, once,
@@ -1534,6 +1544,18 @@ public class DynamicHlsController : BaseTesserafinApiController
         var segmentExtension = EncodingHelper.GetSegmentFileExtension(state.Request.SegmentContainer);
 
         TranscodingJob? job;
+
+        // tesserafin#119. The job that was writing here ended with a failure, and this segment is
+        // not something it finished. Starting another process from a segment request is what kept
+        // a dead device being retried forever, so the caller is told instead: it reloads the
+        // stream, once, and the failed job is removed when it does.
+        if (mayServeWhatIsAlreadyThere
+            && !System.IO.File.Exists(segmentPath)
+            && _transcodeManager.GetTranscodeFailure(playlistPath, TranscodingJobType) is { } knownFailure)
+        {
+            state.Dispose();
+            return TranscodeFailed(knownFailure);
+        }
 
         if (mayServeWhatIsAlreadyThere && System.IO.File.Exists(segmentPath))
         {
@@ -1600,6 +1622,13 @@ public class DynamicHlsController : BaseTesserafinApiController
                         Request.HttpContext.User.GetUserId(),
                         TranscodingJobType,
                         cancellationTokenSource).ConfigureAwait(false);
+                }
+                catch (Tesserafin.Common.FfmpegException) when (_transcodeManager.GetTranscodeFailure(playlistPath, TranscodingJobType) is not null)
+                {
+                    // ffmpeg ended before its first output, and why is known. Answered like any
+                    // other failed job rather than as an unexplained 500.
+                    state.Dispose();
+                    return TranscodeFailed(_transcodeManager.GetTranscodeFailure(playlistPath, TranscodingJobType)!);
                 }
                 catch
                 {
@@ -2043,6 +2072,13 @@ public class DynamicHlsController : BaseTesserafinApiController
             if (!System.IO.File.Exists(segmentPath))
             {
                 _logger.LogWarning("cannot serve {0} as transcoding quit before we got there", segmentPath);
+
+                if (transcodingJob.Failure is { } failure)
+                {
+                    state.Dispose();
+                    _transcodeManager.OnTranscodeEndRequest(transcodingJob);
+                    return TranscodeFailed(failure);
+                }
             }
             else
             {
@@ -2057,6 +2093,24 @@ public class DynamicHlsController : BaseTesserafinApiController
         }
 
         return GetSegmentResult(state, segmentPath, transcodingJob);
+    }
+
+    /// <summary>
+    /// Answers a request for output a failed transcode never produced.
+    /// </summary>
+    /// <remarks>
+    /// 410, not 5xx: the resource is gone and will not come back at this address, and a 4xx is
+    /// what stops an HLS client from retrying the same segment. The header tells the caller
+    /// whether reloading the stream can help - it can when the server has since switched this
+    /// playback to software. Nothing about the process, its command or any path is disclosed.
+    /// </remarks>
+    private ObjectResult TranscodeFailed(TranscodeFailure failure)
+    {
+        var recovery = failure.Decision.ShouldFallback ? "software" : "none";
+        Response.Headers[PlaybackRecoveryHeader] = recovery;
+        Response.Headers.CacheControl = "no-store";
+
+        return StatusCode(StatusCodes.Status410Gone, new { title = "The transcode for this stream ended with a failure.", recovery });
     }
 
     private ActionResult GetSegmentResult(StreamState state, string segmentPath, TranscodingJob? transcodingJob)

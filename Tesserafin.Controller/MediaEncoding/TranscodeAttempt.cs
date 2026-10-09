@@ -1,6 +1,8 @@
 using System;
 using System.Diagnostics;
+using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Tesserafin.Model.Entities;
 
 namespace Tesserafin.Controller.MediaEncoding;
 
@@ -44,6 +46,37 @@ public sealed class TranscodeAttempt : IDisposable
     public bool StandardInputIsMediaPipe { get; set; }
 
     /// <summary>
+    /// Gets a value indicating whether the server asked this process to stop. A process that ends
+    /// after that did not fail, whatever its exit code says.
+    /// </summary>
+    public bool StopRequested { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the hardware backend this attempt's command was built for.
+    /// </summary>
+    public HardwareAccelerationType Backend { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the command that ran used a hardware device.
+    /// </summary>
+    public bool UsesHardwarePipeline { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether this ffmpeg has the software encoder for the same output.
+    /// </summary>
+    public bool SoftwareAlternativeAvailable { get; set; }
+
+    /// <summary>
+    /// Gets or sets the reader of this attempt's stderr, which holds what it recognised.
+    /// </summary>
+    public JobLogger? Diagnostics { get; set; }
+
+    /// <summary>
+    /// Gets or sets the task that completes when stderr has been read to its end.
+    /// </summary>
+    public Task? DiagnosticsCompleted { get; set; }
+
+    /// <summary>
     /// Requests a graceful stop, falling back to <see cref="Process.Kill()"/> if the process
     /// hasn't exited within 5 seconds. For an ordinary job the graceful stop is writing "q" to the
     /// process's stdin (ffmpeg's own stop-and-finalize-output handling); for a job whose stdin is
@@ -53,6 +86,10 @@ public sealed class TranscodeAttempt : IDisposable
     /// <param name="path">Output path, for logging only.</param>
     public void Stop(ILogger logger, string? path)
     {
+        // Set before anything else, and whether or not the process is still there: the exit
+        // handler reads it to tell a stop from a failure, and the two can race.
+        StopRequested = true;
+
         var process = Process;
         if (process is null || HasExited)
         {
