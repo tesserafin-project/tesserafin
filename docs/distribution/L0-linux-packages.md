@@ -622,6 +622,18 @@ public release, no publication of any artifact, no automatic updates. The
 workflow has no `release:` trigger and no push step; artifacts exist only as
 workflow artifacts.
 
+That paragraph describes this work, and is still true of it. Separately, on
+2026-09-17 the `.deb`, `.rpm` and `.tar.gz` files for
+both architectures were attached to the
+[1.1.0 GitHub Release](https://github.com/tesserafin-project/tesserafin/releases/tag/v1.1.0),
+with `SHA256SUMS-linux-x64.txt`. They are unsigned, there is still no APT or DNF
+repository, and no checksum file is attached for `linux-arm64`. The acceptance
+described in this document was made on the workflow's own outputs, and the
+repository pins no digest for the server packages, so nothing here shows that
+the attached packages are those bytes. The two attached FFmpeg archives are the
+exception: their SHA-256 values are the ones in
+`ci/package/f0-accepted-digests.txt`.
+
 The packaging checks are **not** branch-protection required checks. Branch
 protection lists a fixed set of contexts, and this work does not modify it.
 

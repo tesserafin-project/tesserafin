@@ -9,6 +9,26 @@ follows [`docs/versioning-policy.md`](./docs/versioning-policy.md), which is aut
 
 ## [Unreleased]
 
+### Changed
+
+- **Documentation: the native Linux packages are now downloadable from the 1.1.0 GitHub
+  Release.** They were attached on 2026-09-17, four days after the release and one day after
+  this changelog last said they were not. Attached today: `.deb` (`amd64`, `arm64`), `.rpm`
+  (`x86_64`, `aarch64`), `.tar.gz` (`linux-x64`, `linux-arm64`), the `linux-x64` Tesserafin
+  FFmpeg runtime archive with its corresponding-source archive, and `SHA256SUMS-linux-x64.txt`.
+  What that does and does not establish:
+  - a file being downloadable is not a new acceptance. The acceptance is still the one in
+    [`docs/distribution/L0-linux-packages.md`](./docs/distribution/L0-linux-packages.md), made
+    on architecture-native runners. The repository pins no digest for the server packages, so
+    nothing in it shows the attached packages are the accepted bytes. The two FFmpeg archives
+    are the exception: their SHA-256 values match `ci/package/f0-accepted-digests.txt`;
+  - `SHA256SUMS-linux-x64.txt` covers `linux-x64` only. No checksum file is attached for the
+    `arm64` / `aarch64` files, and no `linux-arm64` FFmpeg runtime archive is attached;
+  - that checksum file also lists `tesserafin-server_1.0.0-2_amd64.deb` and
+    `tesserafin-server-1.0.0-2.x86_64.rpm`, which are not attached. Use
+    `sha256sum -c --ignore-missing`;
+  - the MSI is still not attached, and nothing is signed.
+
 ## [1.1.0] - 2026-09-13
 
 1.1.0 adds native distribution surfaces to the contents of [1.0.0](#100---2026-08-05), below.
@@ -18,7 +38,8 @@ The acceptance contract is
 tracker [#276](https://github.com/tesserafin-project/tesserafin/issues/276).
 
 **Unsigned.** Nothing in 1.1.0 is Authenticode-signed. **The MSI is not attached** to the GitHub
-Release. The one attached asset is the unsigned `win-x64` ZIP pinned below. `SharedVersion` is
+Release. On the release date the one attached asset was the unsigned `win-x64` ZIP pinned below;
+the native Linux packages were attached on 2026-09-17 (see [Unreleased](#unreleased)). `SharedVersion` is
 still `1.0.0`, which is why that ZIP is named `tesserafin-server_1.0.0_win-x64.zip`.
 
 ### Added
@@ -187,11 +208,12 @@ Stated rather than omitted:
   are classified in [#185](https://github.com/tesserafin-project/tesserafin/issues/185) and
   [#188](https://github.com/tesserafin-project/tesserafin/issues/188); one finding is handled
   under coordinated disclosure and is deliberately not described publicly.
-- **The Linux container is the first release's deployment surface, and it is still the only
-  published Linux path.** [1.1.0](#110---2026-09-13), above, adds native Linux `.deb`, `.rpm`
-  and `.tar.gz` forms, but they are *accepted* on architecture-native runners — they are **not
-  attached** to the GitHub Release, so there is no Linux-native artifact to download from it.
-  The one attached asset is the unsigned native `win-x64` ZIP; the MSI is not attached either.
+- **The Linux container is the first release's deployment surface.**
+  [1.1.0](#110---2026-09-13), above, adds native Linux `.deb`, `.rpm` and `.tar.gz` forms,
+  *accepted* on architecture-native runners. Until 2026-09-16 they were **not attached** to the
+  1.1.0 GitHub Release and the container was the only published Linux path; they were attached
+  on 2026-09-17 (see [Unreleased](#unreleased) for what is and is not there). The MSI is still
+  not attached.
   The full server test suite is not green on native Windows; see
   [`docs/distribution/W0-windows-server.md`](./docs/distribution/W0-windows-server.md) §2.7.
 

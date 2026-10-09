@@ -68,6 +68,19 @@ and an unsigned native `win-x64` portable ZIP
 ([`docs/distribution/install-windows.md`](docs/distribution/install-windows.md),
 which also documents the MSI; the MSI is not attached to the 1.1.0 release).
 
+The native Linux files are on the
+[1.1.0 release page](https://github.com/tesserafin-project/tesserafin/releases/tag/v1.1.0)
+(attached 2026-09-17). They are unsigned, and there is no APT or DNF repository: download the
+file for your distribution and architecture and install it with your package manager. For
+`linux-x64`, check it first:
+
+```bash
+sha256sum -c --ignore-missing SHA256SUMS-linux-x64.txt
+```
+
+No checksum file is published for the `arm64` / `aarch64` files. What a package installs, the
+service it registers and what is not claimed are in L0.
+
 **Start here: [`docs/container/A3-guided-install.md`](docs/container/A3-guided-install.md)**
 — the guided NAS / Docker operator guide, five steps from nothing to an onboarded
 server.
