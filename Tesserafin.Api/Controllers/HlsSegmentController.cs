@@ -94,7 +94,7 @@ public class HlsSegmentController : BaseTesserafinApiController
             return BadRequest("Invalid segment.");
         }
 
-        if (_transcodeManager.GetTranscodeFailure(binding.CanonicalPlaylistPath, TranscodingJobType.Hls) is { Decision.ShouldFallback: true } failure)
+        if (_transcodeManager.GetTranscodingJob(binding.CanonicalPlaylistPath, TranscodingJobType.Hls)?.Failure is { Decision.ShouldFallback: true } failure)
         {
             return DynamicHlsController.TranscodeFailed(Response, failure);
         }
@@ -311,7 +311,9 @@ public class HlsSegmentController : BaseTesserafinApiController
         // tesserafin#289. These routes serve what a job wrote as it stands. A job that failed and
         // that software takes over from wrote nothing that may be served: its files are being
         // removed, and until they are gone they are another encoder's.
-        if (_transcodeManager.GetTranscodeFailure(playlistPath, TranscodingJobType.Hls) is { Decision.ShouldFallback: true } failure)
+        // For as long as that job is registered, not for the thirty seconds the segment route keeps
+        // its answer: these routes start nothing, so there is nothing to make room for.
+        if (_transcodeManager.GetTranscodingJob(playlistPath, TranscodingJobType.Hls)?.Failure is { Decision.ShouldFallback: true } failure)
         {
             return DynamicHlsController.TranscodeFailed(Response, failure);
         }

@@ -340,7 +340,15 @@ public class DynamicHlsController : BaseTesserafinApiController
                 if (!System.IO.File.Exists(playlistPath))
                 {
                     // Asked again under the lock: the failure can have been published, and the
-                    // playlist removed, since the look above.
+                    // playlist removed, since the look above. So is who owns this output - the job
+                    // may not have been registered yet when that was decided.
+                    ownership = _jobOwnership.AuthorizeByOutputPath(HttpContext, playlistPath);
+                    if (ownership.Outcome == HlsJobOwnershipOutcome.Refused)
+                    {
+                        state.Dispose();
+                        return Unauthorized();
+                    }
+
                     if (ownership.IsAuthorized
                         && _transcodeManager.GetTranscodeFailure(playlistPath, TranscodingJobType) is { Decision.ShouldFallback: true } failedMeanwhile)
                     {

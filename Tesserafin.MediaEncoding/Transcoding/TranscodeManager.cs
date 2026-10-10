@@ -412,6 +412,14 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
 
         await Task.Delay(delayMs).ConfigureAwait(false);
 
+        // Asked before the lock as well: a successor can hold the lock for as long as its own
+        // start takes, and a stop that awaits this removal must not wait on it for nothing.
+        if (GetTranscodingJob(path, jobType) is not null)
+        {
+            _logger.LogDebug("Not deleting {Path}: another transcode has started on it", path);
+            return;
+        }
+
         try
         {
             // The job was unregistered before the delay, and a request on the same play session

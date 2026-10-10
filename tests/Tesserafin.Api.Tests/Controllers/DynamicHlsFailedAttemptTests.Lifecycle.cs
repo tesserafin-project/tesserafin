@@ -59,7 +59,7 @@ public sealed partial class DynamicHlsFailedAttemptTests
         Assert.NotNull(attempt.Job.Failure);
 
         // And the request that was waiting on that process is let go, with the reason.
-        AssertFailed(await live.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken), "software");
+        AssertFailed(await live.WaitAsync(Patience, TestContext.Current.CancellationToken), "software");
 
         await attempt.Ended.WaitAsync(Patience, TestContext.Current.CancellationToken);
         Assert.Empty(attempt.FilesOnDisk());
@@ -114,6 +114,49 @@ public sealed partial class DynamicHlsFailedAttemptTests
 
         AssertFailed(await Settled(second), "software");
         Assert.Single(_starts);
+    }
+
+    [Fact]
+    public async Task LiveRequestDecidedBeforeTheJobExisted_IsStillToldSo_WhenThatJobFails()
+    {
+        Configure(hardware: true);
+
+        // This request arrives first, finds no job and no playlist, and stops before the lock.
+        var beforeLock = new Gate("the lock");
+        _lockGate = beforeLock;
+        var early = LiveRequest(minSegments: 1);
+        await beforeLock.Reached;
+
+        // Another one for the same playlist overtakes it, starts the transcode, and that fails.
+        var next = NextStart();
+        var starter = LiveRequest(minSegments: 1);
+        var attempt = await next.WaitAsync(Patience, TestContext.Current.CancellationToken);
+        await FailAndWait(attempt, 251, "Device creation failed: -5.");
+        AssertFailed(await Settled(starter), "software");
+        beforeLock.Open();
+
+        AssertFailed(await Settled(early), "software");
+        Assert.Single(_starts);
+    }
+
+    [Fact]
+    public async Task LegacyRoutes_KeepRefusingAFailedAttemptsFiles_PastTheThirtySeconds()
+    {
+        var attempt = await StartPlayback(hardware: true, segments: 6);
+        var beforeRemoval = _fileSystem.PauseBeforeRemoval(attempt.Prefix);
+        Fail(attempt, 134, DeviceLost);
+        await beforeRemoval.Reached;
+
+        // The files are still there, and the answer the segment route keeps has run out.
+        _clock.Advance(FailureAnswerLifetime + TimeSpan.FromTicks(1));
+        var video = await LegacySegmentRequest(attempt, 1);
+        var audio = await LegacyAudioRequest(attempt, 1);
+
+        beforeRemoval.Open();
+        await attempt.Ended.WaitAsync(Patience, TestContext.Current.CancellationToken);
+
+        AssertFailed(video, "software");
+        AssertFailed(audio, "software");
     }
 
     [Fact]
@@ -219,22 +262,26 @@ public sealed partial class DynamicHlsFailedAttemptTests
         // its files a second and a half later.
         var release = _manager!.KillTranscodingJobs(OwnerDevice, SessionA, _ => true);
 
-        // A request still on its way for that play session: a fresh attempt, by design.
+        // A request still on its way for that play session, for a segment the released attempt
+        // never wrote: a fresh attempt, by design.
         var next = NextStart();
-        var request = Request(2, actor: "successor");
+        var request = Request(8, actor: "successor");
         var successor = await next.WaitAsync(Patience, TestContext.Current.CancellationToken);
+
+        // The late removal has not run yet: this run is the one the guard exists for.
+        Assert.True(File.Exists(attempt.Segment(5)), "the removal ran before the successor started; this run shows nothing");
         successor.Write(Init, "successor init");
-        successor.Write(2, "successor 2");
-        successor.Write(3, "successor 3");
+        successor.Write(8, "successor 8");
+        successor.Write(9, "successor 9");
         var response = await request.WaitAsync(Patience, TestContext.Current.CancellationToken);
 
         await release.WaitAsync(Patience, TestContext.Current.CancellationToken);
 
         Assert.Equal(StatusCodes.Status200OK, response.Status);
-        Assert.Equal("successor 2", response.Text);
+        Assert.Equal("successor 8", response.Text);
         Assert.Equal(attempt.Job.Path, successor.Job.Path);
         Assert.True(File.Exists(successor.Segment(Init)), "the released attempt's late removal took its successor's initialisation segment");
-        Assert.True(File.Exists(successor.Segment(2)), "the released attempt's late removal took its successor's segment");
+        Assert.True(File.Exists(successor.Segment(8)), "the released attempt's late removal took its successor's segment");
     }
 
     [Fact]
@@ -271,7 +318,8 @@ public sealed partial class DynamicHlsFailedAttemptTests
         Fail(attempt, 134, DeviceLost);
         await judged.Reached;
 
-        // The viewer stops, the client releases, and a seek is still on its way - all at once.
+        // The viewer stops, the client releases, and a seek is still on its way. The first of the
+        // two takes the job; the second finds none, which is what a second one does.
         var stop = _manager!.KillTranscodingJobs(OwnerDevice, SessionA, _ => true);
         var release = _manager.KillTranscodingJobs(OwnerDevice, SessionA, _ => true);
         var next = NextStart();
@@ -282,6 +330,7 @@ public sealed partial class DynamicHlsFailedAttemptTests
         }
 
         var successor = await next.WaitAsync(Patience, TestContext.Current.CancellationToken);
+        Assert.True(File.Exists(attempt.Segment(5)), "the removal ran before the successor started; this run shows nothing");
         successor.Write(Init, "successor init");
         successor.Write(40, "successor 40");
         successor.Write(41, "successor 41");
@@ -405,5 +454,18 @@ public sealed partial class DynamicHlsFailedAttemptTests
         controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
 
         return Task.Run(() => Executed(controller.GetHlsVideoSegmentLegacy(_item.ToString("N"), playlistId, segmentId, "mp4"), httpContext, body));
+    }
+
+    /// <summary>
+    /// <c>Audio/{itemId}/hls/{segmentId}/stream.aac</c>, the audio sibling, which selects its job by the segment's name.
+    /// </summary>
+    private Task<Response> LegacyAudioRequest(Start attempt, int segment)
+    {
+        var segmentId = Path.GetFileNameWithoutExtension(attempt.Segment(segment));
+        var httpContext = Context(FormattableString.Invariant($"/Audio/{_item:N}/hls/{segmentId}/stream.mp4"), null, OwnerDevice, out var body);
+        var controller = _newLegacyController!();
+        controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
+
+        return Task.Run(() => Executed(controller.GetHlsAudioSegmentLegacy(_item.ToString("N"), segmentId), httpContext, body));
     }
 }
