@@ -892,6 +892,11 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
                 Generation = Interlocked.Increment(ref _jobGeneration)
             };
 
+            // An attempt that ended on this output and was never released is still registered.
+            // It leaves when its successor arrives: every lookup by output returns the first
+            // job on it, and two would answer for each other. By output, never by device or play
+            // session - those select other people's jobs when a client names neither.
+            _activeTranscodingJobs.RemoveAll(j => j.Type == type && j.HasExited && string.Equals(j.Path, path, StringComparison.OrdinalIgnoreCase));
             _activeTranscodingJobs.Add(job);
 
             ReportTranscodingProgress(job, state, null, null, null, null, null);

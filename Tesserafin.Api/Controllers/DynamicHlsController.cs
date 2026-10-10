@@ -359,15 +359,6 @@ public class DynamicHlsController : BaseTesserafinApiController
                     // If the playlist doesn't already exist, startup ffmpeg
                     try
                     {
-                        // An attempt that ended here and was never released is still registered.
-                        // It leaves before another starts: two jobs on one output answer for
-                        // each other.
-                        if (_transcodeManager.GetTranscodingJob(playlistPath, TranscodingJobType) is not null)
-                        {
-                            await _transcodeManager.KillTranscodingJobs(streamingRequest.DeviceId!, streamingRequest.PlaySessionId, p => false)
-                                .ConfigureAwait(false);
-                        }
-
                         job = await _transcodeManager.StartFfMpeg(
                                 state,
                                 playlistPath,

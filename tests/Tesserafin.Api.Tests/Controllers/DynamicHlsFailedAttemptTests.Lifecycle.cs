@@ -214,6 +214,38 @@ public sealed partial class DynamicHlsFailedAttemptTests
     }
 
     [Fact]
+    public async Task LiveRestartByAClientThatNamesNothing_StopsNobodyElsesTranscode()
+    {
+        // Somebody else's healthy transcode, started without a device id or a play session id.
+        Configure(hardware: true);
+        _liveWithoutIds = true;
+        var next = NextStart();
+        var theirs = LiveRequest(minSegments: 1, user: _stranger, device: "another-device", userAgent: "another client");
+        var bystander = await next.WaitAsync(Patience, TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(bystander.Job.Path!, "#EXTM3U\n#EXTINF:3.0,\nz0.ts\n", TestContext.Current.CancellationToken);
+        Assert.Equal(StatusCodes.Status200OK, (await theirs.WaitAsync(Patience, TestContext.Current.CancellationToken)).Status);
+
+        // The owner's, as nameless, fails; the answer runs out; the owner asks again.
+        next = NextStart();
+        var first = LiveRequest(minSegments: 1);
+        var attempt = await next.WaitAsync(Patience, TestContext.Current.CancellationToken);
+        Assert.NotEqual(bystander.Job.Path, attempt.Job.Path);
+        await File.WriteAllTextAsync(attempt.Job.Path!, "#EXTM3U\n#EXTINF:3.0,\nx0.ts\n", TestContext.Current.CancellationToken);
+        Assert.Equal(StatusCodes.Status200OK, (await first.WaitAsync(Patience, TestContext.Current.CancellationToken)).Status);
+        await FailAndWait(attempt, 134, DeviceLost);
+        _clock.Advance(FailureAnswerLifetime + TimeSpan.FromTicks(1));
+        next = NextStart();
+        var again = LiveRequest(minSegments: 1);
+        var successor = await next.WaitAsync(Patience, TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(successor.Job.Path!, "#EXTM3U\n#EXTINF:3.0,\ny0.ts\n", TestContext.Current.CancellationToken);
+        Assert.Equal(StatusCodes.Status200OK, (await again.WaitAsync(Patience, TestContext.Current.CancellationToken)).Status);
+
+        Assert.False(bystander.Job.HasExited, "a live restart stopped another user's transcode");
+        Assert.Same(bystander.Job, _manager!.GetTranscodingJob(bystander.Job.Path!, TranscodingJobType.Hls));
+        Assert.Same(successor.Job, _manager.GetTranscodingJob(successor.Job.Path!, TranscodingJobType.Hls));
+    }
+
+    [Fact]
     public async Task InitialisationSegmentRequestThatStartedAnAttemptWhichFailsWithoutFallback_GetsTheFile()
     {
         Configure(hardware: false);
@@ -406,9 +438,15 @@ public sealed partial class DynamicHlsFailedAttemptTests
     /// <summary>
     /// <c>Videos/{itemId}/live.m3u8</c> through the real action.
     /// </summary>
-    private Task<Response> LiveRequest(int minSegments, Guid? user = null, string device = OwnerDevice)
+    private Task<Response> LiveRequest(int minSegments, Guid? user = null, string device = OwnerDevice, string? userAgent = null)
     {
         var httpContext = Context(FormattableString.Invariant($"/Videos/{_item:N}/live.m3u8"), user, device, out var body);
+        if (userAgent is not null)
+        {
+            // Part of what names an output; without it two nameless clients on one film share one.
+            httpContext.Request.Headers.UserAgent = userAgent;
+        }
+
         var named = !_liveWithoutIds;
         var controller = _newController!();
         controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
