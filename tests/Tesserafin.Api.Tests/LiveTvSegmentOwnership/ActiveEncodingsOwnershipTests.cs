@@ -205,6 +205,7 @@ public sealed class ActiveEncodingsOwnershipTests : IDisposable
     /// anything — a fixture defect that reads exactly like a boundary. It is the F3 vacuity in a
     /// different costume, so it is pinned here explicitly.
     /// </remarks>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     [Fact]
     public async Task TheOwnerIsKilledAndAStrangerIsNot_FromTheSameFixture()
     {
@@ -225,6 +226,7 @@ public sealed class ActiveEncodingsOwnershipTests : IDisposable
     /// with the request's OWN <see cref="HttpContext"/> and with the JOB's owner — not with the
     /// caller-supplied query parameters, which is what the route used to act on.
     /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     [Fact]
     public async Task TheRouteAsksTheAuthorizerAboutTheJobsOwner_NotAboutTheQuery()
     {
