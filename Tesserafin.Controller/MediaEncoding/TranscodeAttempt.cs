@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Tesserafin.Model.Entities;
@@ -114,7 +115,16 @@ public sealed class TranscodeAttempt : IDisposable
             {
                 logger.LogInformation("Stopping ffmpeg process with q command for {Path}", path);
 
-                process.StandardInput.WriteLine("q");
+                try
+                {
+                    process.StandardInput.WriteLine("q");
+                }
+                catch (IOException)
+                {
+                    // Nobody is reading: the process has exited and its exit is still being
+                    // handled, so HasExited does not say so yet (tesserafin#289) - or it is alive
+                    // and deaf, and the wait below ends in a kill.
+                }
             }
 
             // Need to wait because killing is asynchronous.

@@ -1553,29 +1553,27 @@ public class DynamicHlsController : BaseTesserafinApiController
         // a dead device being retried forever, so the caller is told instead: it reloads the
         // stream, once, and the failed job is removed when it does.
         if (mayServeWhatIsAlreadyThere
-            && !_fileSystem.FileExists(segmentPath)
-            && _transcodeManager.GetTranscodeFailure(playlistPath, TranscodingJobType) is { } knownFailure)
+            && await AnswerFromWhatIsThere(state, playlistPath, segmentPath, segmentExtension, segmentId, cancellationToken).ConfigureAwait(false) is { } answer)
         {
-            state.Dispose();
-            return TranscodeFailed(knownFailure);
-        }
-
-        if (mayServeWhatIsAlreadyThere && _fileSystem.FileExists(segmentPath))
-        {
-            job = _transcodeManager.OnTranscodeBeginRequest(playlistPath, TranscodingJobType);
-            _logger.LogDebug("returning {0} [it exists, try 1]", segmentPath);
-            return await GetSegmentResult(state, playlistPath, segmentPath, segmentExtension, segmentId, job, cancellationToken).ConfigureAwait(false);
+            return answer;
         }
 
         using (await _transcodeManager.LockAsync(playlistPath, cancellationToken).ConfigureAwait(false))
         {
             var startTranscoding = false;
-            if (mayServeWhatIsAlreadyThere && _fileSystem.FileExists(segmentPath))
+
+            // tesserafin#289. Asked again now that nothing can start, or finish being removed, on
+            // this output: the look above and this lock are not one step, and a failure published
+            // in between must not be answered by a new process.
+            if (mayServeWhatIsAlreadyThere
+                && await AnswerFromWhatIsThere(state, playlistPath, segmentPath, segmentExtension, segmentId, cancellationToken).ConfigureAwait(false) is { } answerUnderLock)
             {
-                job = _transcodeManager.OnTranscodeBeginRequest(playlistPath, TranscodingJobType);
-                _logger.LogDebug("returning {0} [it exists, try 2]", segmentPath);
-                return await GetSegmentResult(state, playlistPath, segmentPath, segmentExtension, segmentId, job, cancellationToken).ConfigureAwait(false);
+                return answerUnderLock;
             }
+
+            // Only an attempt whose failure answer has expired gets this far. Its last file is the
+            // one it was writing when it ended, and is not left for its successor to serve.
+            var replacesFailedAttempt = _transcodeManager.GetTranscodingJob(playlistPath, TranscodingJobType)?.Failure is not null;
 
             var currentTranscodingIndex = GetCurrentTranscodingIndex(playlistPath, segmentExtension);
             var segmentGapRequiringTranscodingChange = 24 / state.SegmentLength;
@@ -1605,12 +1603,22 @@ public class DynamicHlsController : BaseTesserafinApiController
             if (startTranscoding)
             {
                 // If the playlist doesn't already exist, startup ffmpeg
+                // tesserafin#289. Listing the output took time, and the attempt that looked healthy
+                // above can have failed meanwhile. Asked once more before it is stopped as if it
+                // were: past this point a failure that is published late finds a successor.
+                if (mayServeWhatIsAlreadyThere
+                    && _transcodeManager.GetTranscodeFailure(playlistPath, TranscodingJobType) is { } lateFailure)
+                {
+                    state.Dispose();
+                    return TranscodeFailed(lateFailure);
+                }
+
                 try
                 {
                     await _transcodeManager.KillTranscodingJobs(streamingRequest.DeviceId, streamingRequest.PlaySessionId, p => false)
                         .ConfigureAwait(false);
 
-                    if (currentTranscodingIndex.HasValue)
+                    if (currentTranscodingIndex.HasValue || replacesFailedAttempt)
                     {
                         await DeleteLastFile(playlistPath, segmentExtension, 0).ConfigureAwait(false);
                     }
@@ -1655,6 +1663,56 @@ public class DynamicHlsController : BaseTesserafinApiController
         job ??= _transcodeManager.OnTranscodeBeginRequest(playlistPath, TranscodingJobType);
         return await GetSegmentResult(state, playlistPath, segmentPath, segmentExtension, segmentId, job, cancellationToken).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Serves the segment if it is on disk and may be served, or says the attempt that was to
+    /// write it failed. Neither is the case when a transcode has to be started, or waited for.
+    /// </summary>
+    /// <remarks>
+    /// tesserafin#289. THE ORDER IS THE POINT: the file is looked at first and the attempt's state
+    /// read after. The manager publishes a failure before it removes anything, so a file found
+    /// missing because of that removal always comes with its reason. An attempt that failed is
+    /// not one that finished: when software takes over nothing it wrote is served, and otherwise
+    /// only a segment it had moved on from - the one it was writing may be truncated.
+    /// </remarks>
+    private async Task<ActionResult?> AnswerFromWhatIsThere(
+        StreamState state,
+        string playlistPath,
+        string segmentPath,
+        string segmentExtension,
+        int segmentId,
+        CancellationToken cancellationToken)
+    {
+        var servable = _fileSystem.FileExists(segmentPath);
+        var failed = _transcodeManager.GetTranscodingJob(playlistPath, TranscodingJobType)?.Failure;
+        if (servable && failed is not null)
+        {
+            servable = !failed.Decision.ShouldFallback && IsFinished(state, playlistPath, segmentId);
+        }
+
+        if (servable)
+        {
+            var job = _transcodeManager.OnTranscodeBeginRequest(playlistPath, TranscodingJobType);
+            _logger.LogDebug("returning {0} [it exists]", segmentPath);
+            return await GetSegmentResult(state, playlistPath, segmentPath, segmentExtension, segmentId, job, cancellationToken).ConfigureAwait(false);
+        }
+
+        // For as long as the manager keeps the answer. After that the caller starts afresh.
+        if (_transcodeManager.GetTranscodeFailure(playlistPath, TranscodingJobType) is { } knownFailure)
+        {
+            state.Dispose();
+            return TranscodeFailed(knownFailure);
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Whether an attempt that failed had finished this file: it had if it went on to the next
+    /// one. The initialisation segment is written before any segment and is never the last file.
+    /// </summary>
+    private bool IsFinished(StreamState state, string playlistPath, int segmentId)
+        => segmentId == -1 || _fileSystem.FileExists(GetSegmentPath(state, playlistPath, segmentId + 1));
 
     private static double[] GetSegmentLengths(StreamState state)
         => GetSegmentLengthsInternal(state.RunTimeTicks ?? 0, state.SegmentLength);
@@ -2025,11 +2083,22 @@ public class DynamicHlsController : BaseTesserafinApiController
         TranscodingJob? transcodingJob,
         CancellationToken cancellationToken)
     {
+        var nextSegmentPath = GetSegmentPath(state, playlistPath, segmentIndex + 1);
         var segmentExists = _fileSystem.FileExists(segmentPath);
         if (segmentExists)
         {
             if (transcodingJob is not null && transcodingJob.HasExited)
             {
+                // tesserafin#289. Over is not finished: see AnswerFromWhatIsThere. The job can have
+                // failed since that was asked.
+                if (transcodingJob.Failure is { } failed
+                    && (failed.Decision.ShouldFallback || !IsFinished(state, playlistPath, segmentIndex)))
+                {
+                    state.Dispose();
+                    _transcodeManager.OnTranscodeEndRequest(transcodingJob);
+                    return TranscodeFailed(failed);
+                }
+
                 // Transcoding job is over, so assume all existing files are ready
                 _logger.LogDebug("serving up {0} as transcode is over", segmentPath);
                 return GetSegmentResult(state, segmentPath, transcodingJob);
@@ -2045,7 +2114,6 @@ public class DynamicHlsController : BaseTesserafinApiController
             }
         }
 
-        var nextSegmentPath = GetSegmentPath(state, playlistPath, segmentIndex + 1);
         if (transcodingJob is not null)
         {
             while (!cancellationToken.IsCancellationRequested && !transcodingJob.HasExited)
@@ -2072,16 +2140,20 @@ public class DynamicHlsController : BaseTesserafinApiController
                 await Task.Delay(100, cancellationToken).ConfigureAwait(false);
             }
 
+            // tesserafin#289. A file that was being waited on when the job failed is the one the
+            // job was writing, unless the job had already moved on from it.
+            if (transcodingJob.Failure is { } failure
+                && (failure.Decision.ShouldFallback || !_fileSystem.FileExists(segmentPath) || !IsFinished(state, playlistPath, segmentIndex)))
+            {
+                _logger.LogWarning("cannot serve {0} as transcoding failed before we got there", segmentPath);
+                state.Dispose();
+                _transcodeManager.OnTranscodeEndRequest(transcodingJob);
+                return TranscodeFailed(failure);
+            }
+
             if (!_fileSystem.FileExists(segmentPath))
             {
                 _logger.LogWarning("cannot serve {0} as transcoding quit before we got there", segmentPath);
-
-                if (transcodingJob.Failure is { } failure)
-                {
-                    state.Dispose();
-                    _transcodeManager.OnTranscodeEndRequest(transcodingJob);
-                    return TranscodeFailed(failure);
-                }
             }
             else
             {

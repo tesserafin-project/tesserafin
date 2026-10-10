@@ -57,6 +57,10 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
 
     private readonly Version _maxFFmpegCkeyPauseSupported = new Version(6, 1);
 
+    // tesserafin#289. HLS outputs still holding what a failed attempt wrote before software took
+    // over, by the attempt that wrote it. See RemoveFailedOutput.
+    private readonly Dictionary<string, TranscodingJob> _failedOutputs = new(StringComparer.OrdinalIgnoreCase);
+
     // #153-LTV-R1. Monotonic across the process, so two jobs that reuse one playlist identifier
     // are still distinguishable and a stale binding cannot be mistaken for a live one.
     // tesserafin#119. What a hardware failure in THIS server process has shown cannot work.
@@ -572,6 +576,11 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
         var directory = Path.GetDirectoryName(outputPath) ?? throw new ArgumentException($"Provided path ({outputPath}) is not valid.", nameof(outputPath));
         Directory.CreateDirectory(directory);
 
+        // tesserafin#289. Every caller holds LockAsync(outputPath). A failed attempt whose output
+        // has not been removed yet - it was released before its own exit got that far - does not
+        // leave it to the process started here.
+        RemoveFailedOutput(outputPath, null);
+
         await AcquireResources(state, cancellationTokenSource).ConfigureAwait(false);
 
         if (state.VideoRequest is not null && !EncodingHelper.IsCopyCodec(state.OutputVideoCodec))
@@ -911,10 +920,22 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
         job.ExitCode = process.ExitCode;
 
         // Judged BEFORE HasExited is published: a segment request waiting on this job wakes up on
-        // HasExited and must find the reason already there.
+        // HasExited and must find the reason already there. Nothing is removed yet - see
+        // RemoveFailedOutput for why that comes after both.
+        var removeOutput = false;
         if (process.ExitCode != 0)
         {
-            job.Failure = EvaluateFailure(job, state, process.ExitCode);
+            var failure = EvaluateFailure(job, state, process.ExitCode);
+            removeOutput = failure is { Decision.ShouldFallback: true } && job.Type == TranscodingJobType.Hls && !string.IsNullOrEmpty(job.Path);
+            if (removeOutput)
+            {
+                lock (_failedOutputs)
+                {
+                    _failedOutputs[job.Path!] = job;
+                }
+            }
+
+            job.Failure = failure;
         }
 
         job.HasExited = true;
@@ -936,6 +957,16 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
         TranscodingJobEnded?.Invoke(this, job);
 
         job.Dispose();
+
+        // Last, because it can wait: a request may be holding this output's lock for as long as
+        // its client stays, and everything above must not wait with it.
+        if (removeOutput)
+        {
+            using (_transcodingLocks.Lock(job.Path!))
+            {
+                RemoveFailedOutput(job.Path!, job);
+            }
+        }
     }
 
     /// <summary>
@@ -1059,21 +1090,59 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
             categories,
             decision.Reason);
 
-        // Nothing the failed attempt wrote may be served to the software attempt's viewer: its
-        // last segment may be truncated, and its initialisation segment belongs to another encoder.
-        if (job.Type == TranscodingJobType.Hls && !string.IsNullOrEmpty(job.Path))
+        return new TranscodeFailure(exitCode, categories, decision, TimeProvider.GetUtcNow().UtcDateTime);
+    }
+
+    /// <summary>
+    /// Removes what an attempt wrote before a failure that software will take over from: its last
+    /// segment may be truncated, and its initialisation segment belongs to another encoder.
+    /// </summary>
+    /// <remarks>
+    /// tesserafin#289. ALWAYS UNDER THE OUTPUT'S OWN LOCK, the one a request holds while it starts
+    /// a transcode there, and only once the failure is published. So a request that finds a file
+    /// gone because of this removal also finds the reason, in that order; and a start on this
+    /// output is entirely before the removal or entirely after it.
+    ///
+    /// It is done once, by whoever holds the lock first: the failed attempt's own exit, or the
+    /// start of a successor when the client let go of the play session before that exit got this
+    /// far. Whichever comes second finds nothing to do - and an exit that comes second, or that
+    /// finds another attempt registered on the output, leaves it alone: it is no longer its own.
+    ///
+    /// That last case is a seek that restarted the attempt between its verdict and its
+    /// publication. What the failed attempt wrote then stays beside its successor's output, its
+    /// last file excepted (the restart deletes that one). Accepted: the window is the few
+    /// milliseconds of the verdict, and removing here would take the successor's files too.
+    /// </remarks>
+    /// <param name="path">The output.</param>
+    /// <param name="failedJob">The failed attempt, or <see langword="null"/> for a start on the output.</param>
+    private void RemoveFailedOutput(string path, TranscodingJob? failedJob)
+    {
+        lock (_failedOutputs)
         {
-            try
+            if (!_failedOutputs.TryGetValue(path, out var pending)
+                || (failedJob is not null && !ReferenceEquals(pending, failedJob)))
             {
-                DeleteHlsPartialStreamFiles(job.Path);
+                return;
             }
-            catch (Exception ex) when (ex is IOException or AggregateException)
-            {
-                _logger.LogWarning(ex, "Could not remove the failed attempt's output");
-            }
+
+            _failedOutputs.Remove(path);
         }
 
-        return new TranscodeFailure(exitCode, categories, decision, TimeProvider.GetUtcNow().UtcDateTime);
+        if (failedJob is not null
+            && GetTranscodingJob(path, failedJob.Type) is { } current
+            && !ReferenceEquals(current, failedJob))
+        {
+            return;
+        }
+
+        try
+        {
+            DeleteHlsPartialStreamFiles(path);
+        }
+        catch (Exception ex) when (ex is IOException or AggregateException)
+        {
+            _logger.LogWarning(ex, "Could not remove the failed attempt's output");
+        }
     }
 
     /// <summary>
