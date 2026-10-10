@@ -208,6 +208,7 @@ public sealed partial class DynamicHlsFailedAttemptTests
         // can the playlist's, or its temporary file's.
         await File.WriteAllTextAsync(attempt.Prefix + ".m3u8", "the playlist", TestContext.Current.CancellationToken);
         await File.WriteAllTextAsync(attempt.Prefix + ".m3u8.tmp", "the playlist, being written", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(attempt.Prefix + "1x.mp4", "not a segment either", TestContext.Current.CancellationToken);
         foreach (var (segmentId, container, tail) in new[] { (playlistId + ".mp4", ".", ".mp4.."), (playlistId + ".m3u8", ".", ".m3u8.."), (playlistId + ".m3u8", "tmp", ".m3u8.tmp"), (playlistId + "1x", "mp4", "1x.mp4") })
         {
             var spelled = Context(FormattableString.Invariant($"/Videos/{_item:N}/hls/{playlistId}/{playlistId}{tail}"), null, OwnerDevice, out var spelledBody);
@@ -216,6 +217,13 @@ public sealed partial class DynamicHlsFailedAttemptTests
             var answer = await Executed(controller.GetHlsVideoSegmentLegacy(_item.ToString("N"), playlistId, segmentId, container), spelled, spelledBody);
             Assert.True(answer.Status == StatusCodes.Status404NotFound, FormattableString.Invariant($"{tail}: {answer.Status} \"{answer.Text}\""));
         }
+
+        // The audio route's extension is the url's too, and an url ending in a slash has none.
+        var slashed = Context(FormattableString.Invariant($"/Audio/{_item:N}/hls/{playlistId}.mp4/stream.mp3/"), null, OwnerDevice, out var slashedBody);
+        controller = _newLegacyController!();
+        controller.ControllerContext = new ControllerContext { HttpContext = slashed };
+        var fromSlashed = await Executed(controller.GetHlsAudioSegmentLegacy(_item.ToString("N"), playlistId + ".mp4"), slashed, slashedBody);
+        Assert.True(fromSlashed.Status == StatusCodes.Status404NotFound, FormattableString.Invariant($"trailing slash: {fromSlashed.Status} \"{fromSlashed.Text}\""));
 
         // And it is not that these routes serve nothing: a segment of the job's is still the owner's.
         Assert.Equal("segment 1", (await LegacySegmentRequest(attempt, 1)).Text);

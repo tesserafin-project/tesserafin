@@ -733,8 +733,14 @@
           "file": "Tesserafin.Api/Controllers/HlsSegmentController.cs",
           "find": "        if (!segmentId.StartsWith(binding.PlaylistId, StringComparison.Ordinal))\n        {\n            return NotFound(\"Hls segment not found.\");\n        }",
           "replace": "        if (!segmentId.StartsWith(binding.PlaylistId, StringComparison.Ordinal))\n        {\n            _ = binding.PlaylistId;\n        }"
+        },
+        {
+          "file": "Tesserafin.Api/Controllers/HlsSegmentController.cs",
+          "find": "        if (!NamesASegmentOf(binding, file))\n        {\n            return NotFound(\"Hls segment not found.\");\n        }\n\n        return GetFileResult(file, binding.CanonicalPlaylistPath);",
+          "replace": "        return GetFileResult(file, binding.CanonicalPlaylistPath);"
         }
-      ]
+      ],
+      "note": "POLISH-2-R4: the prefix is now asked twice - of the segment id, and of the file about to be opened (NamesASegmentOf) - so restoring segment-id-only resolution means removing both."
     },
     {
       "id": "r1-serve-a-file-after-the-binding-expired",
@@ -1786,6 +1792,31 @@
         }
       ],
       "note": "The play session id is in the body of the report. Both stop reports selected by it with no comparison at all."
+    },
+    {
+      "id": "p2r4-any-name-with-the-prefix-is-a-segment",
+      "stage": "P2R4",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "the legacy routes open nothing but the job's playlist identifier followed by an index",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.Controllers.DynamicHlsFailedAttemptTests",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.Controllers.DynamicHlsFailedAttemptTests.LegacyRoutes_DoNotServeTheProgressiveFileThatSharesTheOutputsName"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Controllers/HlsSegmentController.cs",
+          "find": "        return index is \"-1\" || (index.Length > 0 && !index.ContainsAnyExceptInRange('0', '9'));",
+          "replace": "        return index.Length >= 0;",
+          "count": 1
+        }
+      ],
+      "note": "The identifier alone, with an extension the url supplies separately, is the file a progressive transcode of the same request writes; the playlist and its temporary file carry the prefix too."
     }
   ]
 }
