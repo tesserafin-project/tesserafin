@@ -65,7 +65,7 @@ line), leaves no evidence and is refused.
 
 ## What the client is told
 
-A request for a segment the failed job never produced is answered
+A segment request on a play session whose transcode failed is answered
 
 ```
 HTTP/1.1 410 Gone
@@ -76,6 +76,12 @@ Cache-Control: no-store
 `software`: reloading the stream will be served by a software transcode. `none`: it will not
 help. The body names no path, command or credential. 410 rather than 5xx because an HLS
 client retries a 5xx on the same URL.
+
+Which requests: after a failure that software takes over from, every one - nothing the failed
+attempt wrote is served. After a failure with no fallback, the segments the attempt had finished
+are still served, and the answer above is given for the one it was writing when it ended and for
+everything after it. "Finished" means the attempt had gone on to the next file; that the process
+has exited does not make its last file complete (see POLISH-2-R2 below).
 
 This is an addition on the HLS segment routes, which are fetched by the media player and not
 through the generated SDK; the OpenAPI document and the SDK are unchanged. A client that does
@@ -243,7 +249,7 @@ more, also repaired. The last repairs were not read a third time.
   following a hardware initialisation segment. The ladder then reloaded and the film played, in
   software, without the notice and with three software starts instead of one. The cause is
   believed to be two checks in the segment route that are not atomic with the deletion of the
-  failed job's files; that is an inference from one log.
+  failed job's files; that is an inference from one log. **Resolved in POLISH-2-R2, below.**
 - **One unrelated 500 was seen under concurrent starts**, in 1 of 18 browser rounds on the fixed
   server and none of the HTTP ones: `SQLite Error 5: unable to delete/modify collation sequence
   due to active statements`, on a segment request and a progress report 2.5 s after four films
@@ -251,6 +257,86 @@ more, also repaired. The last repairs were not read a third time.
   known - the older builds failed earlier, on the marker.
 - A live stream opened for a stream change whose answer arrives too late is released like any
   other transcode, by play session; this was not exercised with a tuner.
+
+## POLISH-2-R2: a failing attempt and the requests that meet it (tesserafin#289)
+
+R1 left one observation unexplained: a hardware failure that reached the player as software
+segments on the *same* play session instead of a 410. It was a race, and it was wider than the one
+log suggested.
+
+A segment request decides between serving a file, saying the attempt failed, and starting a
+transcode. It decided on two looks at the disk and one at the job, while the failing job removed
+its files first and published why afterwards. Held open on purpose in tests - the real controller
+action, the real transcode manager, a real child process, every interleaving stopped at a gate
+rather than by a delay - the unfixed code did three things, in 12 of 20 cases:
+
+| Interleaving | Before |
+| --- | --- |
+| the request had seen its segment, or found a healthy attempt, or taken the lock, or decided on a seek - and then the attempt failed and removed its output | a second transcode on the same output and play session, in **hardware** again: the options had been read before the failure withheld it |
+| the request arrived while the output was being removed | **HTTP 500**, `IOException: Broken pipe`: the process was gone and nothing said so yet |
+| the last segment of a failed attempt, the one it was writing | served 200 - live, to a request that was waiting for it, and after the answer had expired |
+
+What holds now:
+
+- **Published before removed.** The failure, then "has exited", then the removal - under the
+  output's own lock, the one a request holds while it starts a transcode there. A file found
+  missing because of the removal always comes with its reason; a start on that output is entirely
+  before the removal or entirely after it.
+- **Removed once, by whoever holds that lock first**: the failed attempt's own exit, or the start
+  of a successor when the client released the play session first. A successor never starts on
+  what the failed attempt left, and a late exit leaves the successor's files alone.
+- **Asked in that order, and asked again**: file first, attempt second; before the lock, under it,
+  and once more before an attempt is stopped to make room for another. No lock is taken by a
+  request that only reads, nothing is retried, nothing waits.
+- **Failed is not finished** - the rule stated under "What the client is told".
+- The 30 seconds are unchanged. Past them the same play session starts afresh, as before, after
+  deleting the failed attempt's last file instead of leaving it to be served.
+
+**On the rig**, same FFmpeg 7.1.4 (SHA-256 `ef565fc0…79a1`), same backend, final pair (this change
+with web `af1d4ef1ef`). Unpaced, the hardware encoder finishes a 20-minute film in about 15 s and
+the player is never near the edge of what is written, so the encoder was paced at the same
+boundary the fault is injected at (a sleep before each command submission, in that ffmpeg process
+only) until the server was *holding* the player's segment request. The fault came then.
+
+| Run | Result |
+| --- | --- |
+| at the edge after three +30 s seeks, 4 runs: the server holding the request for segment 31, the last and unfinished one on disk, 2.2 s buffered ahead | that request answered `410 software`; one `PlaybackInfo`, one play session in software on a new output with its own initialisation segment, no hardware start, no `bufferAppendError`, no fatal player error; the notice shown; advancing again after 1.5 s at +0.21 to +0.28 s; resume saved at 114.6 to 115.5 s (failure at 95.9 s) |
+| the same with French audio and French subtitles selected first, two seeks | the same; `-map 0:0 -map 0:2` before and after, the French cue before and after; 1.5 s, +0.29 s |
+| encoder far ahead of the player (fault at 257.9 s, segment 88 the first missing) | `410 software`, one software play session, 1.5 s, +0.63 s, same tracks, resume saved at 271.8 s |
+| two sessions, both at the edge, one fault | each held request answered `410 software`; one software start each on its own new output; both advancing 4.4 s after the fault |
+| viewer leaves on the first failed response | no player, no dialog, no process started after the fault, none left running; resume saved at 62.9 s (viewer was at 61.0 s) |
+| the software attempt fails too (input made unreadable with the fault) | `410 software`, one software start, `410 none` on its initialisation segment, the dialog; Retry plays once the input is back |
+| unreadable input on healthy hardware | `410 none` three times (the ordinary ladder), no software start, the dialog; Retry plays |
+| `SIGKILL` of the hardware ffmpeg, its last segment (8) on disk and unfinished | 11 s later the player asks for segment 8: `410 none`, where it used to be served; the ladder reloads once, a new hardware play session, no dialog |
+
+Tolerances as in POLISH-2: position within 3 s, recovery within 15 s, same tracks, one software
+start. The two command lines a software play session shows (segment 0, then `-ss`) are one play
+session on one output, as in every earlier run.
+
+**What the browser did not show.** The same edge runs on the unfixed server also recovered cleanly,
+8 times of 8: the window is a few milliseconds and the browser does not find it on demand. The
+defect is reproduced by the tests, where it is not a matter of luck; the browser shows what the
+viewer gets with the fix, not the defect without it. The one occurrence in the field is R1's.
+
+**An automated read** of the candidate (another Claude agent, no shared context - not a human
+review) found nothing blocking and seven things to improve; six were taken, among them that the
+removal is now the exit handler's last step, so that a request holding the lock cannot keep a
+failed job from being reported ended. The repairs were not read again.
+
+### What R2 leaves
+
+- A seek that stops an attempt in the few milliseconds between its verdict and its publication
+  starts another on the same play session, possibly in hardware once more, beside what the failed
+  one wrote. It is told at its next failure.
+- A segment chosen for serving before the failure was published, and removed before it is opened,
+  answers 404; the next request gets the 410.
+- The delete a client's release schedules 1.5 s later is not serialized with starts, as before.
+- After the 30 seconds, a client that never reloaded gets a fresh transcode on the same play
+  session while still holding the old initialisation segment, as before.
+- A process killed without a recognisable line (`SIGKILL`) is still refused a fallback. Its last
+  segment is no longer served: the player gets `410 none` there and the ordinary ladder reloads the
+  stream. Before, a new transcode took over silently on the same play session.
+- The SQLite failure of R1 (tesserafin#288) is a separate defect; see the issue.
 
 ## Not covered
 
