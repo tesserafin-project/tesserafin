@@ -600,11 +600,11 @@ public sealed partial class DynamicHlsFailedAttemptTests : IDisposable
     /// Starts a playback and puts <paramref name="segments"/> segments and the initialisation
     /// segment on disk; the highest one is the one "being written".
     /// </summary>
-    private async Task<Start> StartPlayback(bool hardware, int segments, string? last = null, string playSession = SessionA)
+    private async Task<Start> StartPlayback(bool hardware, int segments, string? last = null, string? playSession = SessionA, Guid? user = null, string device = OwnerDevice, string? namedDevice = OwnerDevice, string? userAgent = null)
     {
         Configure(hardware);
         var next = NextStart();
-        var first = Request(0, playSession: playSession);
+        var first = Request(0, playSession: playSession, user: user, device: device, namedDevice: namedDevice, userAgent: userAgent);
         var attempt = await next.WaitAsync(Patience, TestContext.Current.CancellationToken);
         Assert.Equal(hardware, attempt.Command.Contains("-init_hw_device", StringComparison.Ordinal));
 
@@ -825,7 +825,11 @@ public sealed partial class DynamicHlsFailedAttemptTests : IDisposable
     /// <summary>
     /// One segment request through the real action, executed to the bytes the framework writes.
     /// </summary>
-    private Task<Response> Request(int segment, string? actor = null, string playSession = SessionA, Guid? user = null, string device = OwnerDevice)
+    /// <remarks>
+    /// <paramref name="device"/> is the token's; <paramref name="namedDevice"/> and
+    /// <paramref name="playSession"/> are what the client puts in the query, and may be nothing.
+    /// </remarks>
+    private Task<Response> Request(int segment, string? actor = null, string? playSession = SessionA, Guid? user = null, string device = OwnerDevice, string? namedDevice = OwnerDevice, string? userAgent = null)
     {
         var identity = new ClaimsIdentity("CustomAuthentication");
         identity.AddClaim(new Claim(InternalClaimTypes.UserId, (user ?? _owner).ToString("N")));
@@ -839,6 +843,12 @@ public sealed partial class DynamicHlsFailedAttemptTests : IDisposable
             User = new ClaimsPrincipal(identity),
             RequestServices = _services
         };
+        if (userAgent is not null)
+        {
+            // Part of what names an output; without it two nameless clients on one film share one.
+            httpContext.Request.Headers.UserAgent = userAgent;
+        }
+
         var controller = _newController!();
         controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
 
@@ -861,7 +871,7 @@ public sealed partial class DynamicHlsFailedAttemptTests : IDisposable
                 segmentLength: 3,
                 minSegments: 1,
                 mediaSourceId: MediaSourceId,
-                deviceId: OwnerDevice,
+                deviceId: namedDevice,
                 audioCodec: "aac",
                 enableAutoStreamCopy: false,
                 allowVideoStreamCopy: false,
@@ -968,7 +978,7 @@ public sealed partial class DynamicHlsFailedAttemptTests : IDisposable
     /// <summary>
     /// The real manager as the controller sees it, with a gate where a request takes the output's lock.
     /// </summary>
-    private sealed class GatedTranscodeManager : ITranscodeManager, IHardwareTranscodeFallback
+    private sealed class GatedTranscodeManager : ITranscodeManager, IHardwareTranscodeFallback, ITranscodeOutputStop
     {
         private readonly TranscodeManager _inner;
         private readonly Action _beforeLock;
@@ -1018,6 +1028,8 @@ public sealed partial class DynamicHlsFailedAttemptTests : IDisposable
         public EncodingOptions GetEffectiveEncodingOptions(string? mediaSourceId) => _inner.GetEffectiveEncodingOptions(mediaSourceId);
 
         public TranscodeFailure? GetTranscodeFailure(string path, TranscodingJobType type) => _inner.GetTranscodeFailure(path, type);
+
+        public Task StopTranscodingJob(string path, TranscodingJobType type, long generation, Func<string, bool> deleteFiles) => _inner.StopTranscodingJob(path, type, generation, deleteFiles);
     }
 
     /// <summary>

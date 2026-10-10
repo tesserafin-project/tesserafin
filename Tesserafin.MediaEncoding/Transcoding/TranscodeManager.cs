@@ -33,7 +33,7 @@ using Tesserafin.Model.Session;
 namespace Tesserafin.MediaEncoding.Transcoding;
 
 /// <inheritdoc cref="ITranscodeManager"/>
-public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegistry, IHardwareTranscodeFallback, IDisposable
+public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegistry, IHardwareTranscodeFallback, ITranscodeOutputStop, IDisposable
 {
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<TranscodeManager> _logger;
@@ -361,6 +361,21 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
                 yield return KillTranscodingJob(job, false, deleteFiles);
             }
         }
+    }
+
+    /// <inheritdoc />
+    public Task StopTranscodingJob(string path, TranscodingJobType type, long generation, Func<string, bool> deleteFiles)
+    {
+        TranscodingJob? job;
+
+        lock (_activeTranscodingJobs)
+        {
+            job = _activeTranscodingJobs.FirstOrDefault(j => j.Type == type
+                && j.Generation == generation
+                && string.Equals(j.Path, path, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return job is null ? Task.CompletedTask : KillTranscodingJob(job, false, deleteFiles);
     }
 
     private async Task KillTranscodingJob(TranscodingJob job, bool closeLiveStream, Func<string, bool> delete)

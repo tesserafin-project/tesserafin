@@ -1619,6 +1619,18 @@ public class DynamicHlsController : BaseTesserafinApiController
         {
             var startTranscoding = false;
 
+            // Who owns this output is decided again now that nothing can start on it: the attempt
+            // the decision above was taken on can have been replaced while this request waited,
+            // and by one that is not this caller's. What is stopped below is what is found here.
+            ownership = _jobOwnership.AuthorizeByOutputPath(HttpContext, playlistPath);
+            if (ownership.Outcome == HlsJobOwnershipOutcome.Refused)
+            {
+                state.Dispose();
+                return Unauthorized();
+            }
+
+            mayServeWhatIsAlreadyThere = ownership.IsAuthorized;
+
             // tesserafin#289. Asked again now that nothing can start, or finish being removed, on
             // this output: the look above and this lock are not one step, and a failure published
             // in between must not be answered by a new process.
@@ -1672,8 +1684,15 @@ public class DynamicHlsController : BaseTesserafinApiController
 
                 try
                 {
-                    await _transcodeManager.KillTranscodingJobs(streamingRequest.DeviceId, streamingRequest.PlaySessionId, p => false)
-                        .ConfigureAwait(false);
+                    // The attempt on this output, which this caller was just found to own - and
+                    // no other. The device and play session ids are the caller's to send: one that
+                    // sends neither would select every transcode started the same way, and one
+                    // that sends somebody else's would select theirs.
+                    if (ownership.Binding is { } owned)
+                    {
+                        await _transcodeManager.StopTranscodingJob(playlistPath, TranscodingJobType, owned.Generation, p => false)
+                            .ConfigureAwait(false);
+                    }
 
                     if (currentTranscodingIndex.HasValue || replacesFailedAttempt)
                     {
