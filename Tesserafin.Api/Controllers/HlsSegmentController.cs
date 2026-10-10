@@ -85,6 +85,13 @@ public class HlsSegmentController : BaseTesserafinApiController
             return Unauthorized();
         }
 
+        // Before any file is named, so that the lines below stay exactly what the
+        // hostile-control manifest anchors on (r3-resolve-from-segment-id-alone).
+        if (_transcodeManager.GetTranscodingJob(binding.CanonicalPlaylistPath, TranscodingJobType.Hls)?.Failure is { Decision.ShouldFallback: true } failure)
+        {
+            return DynamicHlsController.TranscodeFailed(Response, failure);
+        }
+
         var file = Path.GetFullPath(Path.Combine(
             binding.CanonicalRoot,
             string.Concat(segmentId, Path.GetExtension(Request.Path.Value.AsSpan()))));
@@ -92,11 +99,6 @@ public class HlsSegmentController : BaseTesserafinApiController
         if (!string.Equals(Path.GetDirectoryName(file), binding.CanonicalRoot, StringComparison.Ordinal))
         {
             return BadRequest("Invalid segment.");
-        }
-
-        if (_transcodeManager.GetTranscodingJob(binding.CanonicalPlaylistPath, TranscodingJobType.Hls)?.Failure is { Decision.ShouldFallback: true } failure)
-        {
-            return DynamicHlsController.TranscodeFailed(Response, failure);
         }
 
         return FileStreamResponseHelpers.GetStaticFileResult(file, MimeTypes.GetMimeType(file));
