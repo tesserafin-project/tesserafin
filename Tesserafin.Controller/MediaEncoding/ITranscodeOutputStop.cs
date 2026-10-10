@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 namespace Tesserafin.Controller.MediaEncoding;
 
 /// <summary>
-/// Stops one transcoding job, named by what the server knows of it and by nothing a client sends.
+/// Stops one transcoding job, named by its output and by the generation the server gave it.
 /// </summary>
 /// <remarks>
 /// A separate interface, not a new member on <see cref="ITranscodeManager"/>: adding members to a
@@ -14,7 +14,8 @@ namespace Tesserafin.Controller.MediaEncoding;
 /// <see cref="ITranscodeManager.KillTranscodingJobs"/> selects by play session id, or by device
 /// id when there is none. Both are query parameters on the routes that restart a transcode: a
 /// request that sends neither selects every job started the same way, and one that sends
-/// somebody else's selects theirs.
+/// somebody else's selects theirs. An output path is derived from what a client sends too, which
+/// is why the generation is asked for: it is the one of the job the caller was found to own.
 /// </remarks>
 public interface ITranscodeOutputStop
 {
