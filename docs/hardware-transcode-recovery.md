@@ -330,13 +330,34 @@ failed job from being reported ended. The repairs were not read again.
   one wrote. It is told at its next failure.
 - A segment chosen for serving before the failure was published, and removed before it is opened,
   answers 404; the next request gets the 410.
-- The delete a client's release schedules 1.5 s later is not serialized with starts, as before.
+- ~~The delete a client's release schedules 1.5 s later is not serialized with starts.~~ Serialized in POLISH-2-R3, below.
 - After the 30 seconds, a client that never reloaded gets a fresh transcode on the same play
   session while still holding the old initialisation segment, as before.
 - A process killed without a recognisable line (`SIGKILL`) is still refused a fallback. Its last
   segment is no longer served: the player gets `410 none` there and the ordinary ladder reloads the
   stream. Before, a new transcode took over silently on the same play session.
 - The SQLite failure of R1 (tesserafin#288) is a separate defect; see the issue.
+
+## POLISH-2-R3: the neighbours of that fix
+
+R2 changed the output's lock and who removes an output when, and proved it on one route. R3 went
+to the others with the same tests. Nothing here is tesserafin#289, and no tuner was involved: the
+live route was driven with a file, as the tests drive every route.
+
+| Found | Now |
+| --- | --- |
+| a live playlist request waiting for its first segments held the output's lock for ever when the transcode ended by itself - and since R2, a client's stop could no longer end the wait | the wait ends when the process does; a failure is answered 410 with the recovery header |
+| a live playlist whose attempt software takes over from was served while still on disk, then a second process was started in its place on the same play session | 410, before the lock and under it; nothing is started while the answer lasts |
+| a live start that failed before its first output answered an unexplained 500 | 410, as on the segment route |
+| past the 30 seconds a live restart left the failed job registered beside its successor | the failed one leaves first |
+| the legacy segment routes (`Videos/{id}/hls/{playlist}/…`, `Audio/{id}/hls/…`), which a live playlist points at, served a failed attempt's files until the removal reached them | 410 when software takes over |
+| the removal a release schedules 1.5 s later ran outside the lock and deleted the files of an attempt started meanwhile on the same play session | under the lock, and not at all when another attempt holds the output |
+| the request for the initialisation segment that started an attempt was refused where the same request, repeated, was served | served |
+
+Still as found: the legacy routes do not apply the "last file" rule after a failure with no
+fallback; `Videos/{id}/hls/{playlist}/stream.m3u8` answers 400 to every request (its guard refuses
+exactly the extension it serves) and was left alone; the 410 on the live routes has not been
+exercised with a tuner or with a client playing live.
 
 ## Not covered
 

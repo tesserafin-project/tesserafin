@@ -320,6 +320,16 @@ public class DynamicHlsController : BaseTesserafinApiController
             return Unauthorized();
         }
 
+        // tesserafin#289, on this route. The attempt that wrote this playlist failed and software
+        // takes over from it: neither its playlist, while it is still there, nor a second process
+        // started in its place on the same play session. The caller is told, as on the segment route.
+        if (ownership.IsAuthorized
+            && _transcodeManager.GetTranscodeFailure(playlistPath, TranscodingJobType) is { Decision.ShouldFallback: true } failedAttempt)
+        {
+            state.Dispose();
+            return TranscodeFailed(failedAttempt);
+        }
+
         if (!System.IO.File.Exists(playlistPath))
         {
             // tesserafin#119: the live command is built with the options in force, too.
@@ -329,9 +339,27 @@ public class DynamicHlsController : BaseTesserafinApiController
             {
                 if (!System.IO.File.Exists(playlistPath))
                 {
+                    // Asked again under the lock: the failure can have been published, and the
+                    // playlist removed, since the look above.
+                    if (ownership.IsAuthorized
+                        && _transcodeManager.GetTranscodeFailure(playlistPath, TranscodingJobType) is { Decision.ShouldFallback: true } failedMeanwhile)
+                    {
+                        state.Dispose();
+                        return TranscodeFailed(failedMeanwhile);
+                    }
+
                     // If the playlist doesn't already exist, startup ffmpeg
                     try
                     {
+                        // An attempt that ended here and was never released is still registered.
+                        // It leaves before another starts: two jobs on one output answer for
+                        // each other.
+                        if (_transcodeManager.GetTranscodingJob(playlistPath, TranscodingJobType) is not null)
+                        {
+                            await _transcodeManager.KillTranscodingJobs(streamingRequest.DeviceId ?? string.Empty, streamingRequest.PlaySessionId, p => false)
+                                .ConfigureAwait(false);
+                        }
+
                         job = await _transcodeManager.StartFfMpeg(
                                 state,
                                 playlistPath,
@@ -342,6 +370,13 @@ public class DynamicHlsController : BaseTesserafinApiController
                             .ConfigureAwait(false);
                         job.IsLiveOutput = true;
                     }
+                    catch (Tesserafin.Common.FfmpegException) when (_transcodeManager.GetTranscodeFailure(playlistPath, TranscodingJobType) is not null)
+                    {
+                        // ffmpeg ended before its first output, and why is known: answered as on
+                        // the segment route rather than as an unexplained 500.
+                        state.Dispose();
+                        return TranscodeFailed(_transcodeManager.GetTranscodeFailure(playlistPath, TranscodingJobType)!);
+                    }
                     catch
                     {
                         state.Dispose();
@@ -351,7 +386,17 @@ public class DynamicHlsController : BaseTesserafinApiController
                     minSegments = state.MinSegments;
                     if (minSegments > 0)
                     {
-                        await HlsHelpers.WaitForMinimumSegmentCount(playlistPath, minSegments, _logger, cancellationToken).ConfigureAwait(false);
+                        // This wait holds the output's lock. A transcode that ends by itself cancels
+                        // nothing, so the wait asks: without that it never ended, and neither did
+                        // anything else that needs this lock.
+                        var started = job;
+                        await HlsHelpers.WaitForMinimumSegmentCount(playlistPath, minSegments, _logger, () => started.HasExited, cancellationToken).ConfigureAwait(false);
+                    }
+
+                    if (job.Failure is { } failure)
+                    {
+                        state.Dispose();
+                        return TranscodeFailed(failure);
                     }
                 }
             }
@@ -2084,6 +2129,10 @@ public class DynamicHlsController : BaseTesserafinApiController
         CancellationToken cancellationToken)
     {
         var nextSegmentPath = GetSegmentPath(state, playlistPath, segmentIndex + 1);
+
+        // The request for the initialisation segment that started the transcode arrives here as
+        // index 0 with the initialisation segment's path. It is that file's rule that applies.
+        var isInitialisation = string.Equals(segmentPath, GetSegmentPath(state, playlistPath, -1), StringComparison.Ordinal);
         var segmentExists = _fileSystem.FileExists(segmentPath);
         if (segmentExists)
         {
@@ -2092,7 +2141,7 @@ public class DynamicHlsController : BaseTesserafinApiController
                 // tesserafin#289. Over is not finished: see AnswerFromWhatIsThere. The job can have
                 // failed since that was asked.
                 if (transcodingJob.Failure is { } failed
-                    && (failed.Decision.ShouldFallback || !IsFinished(state, playlistPath, segmentIndex)))
+                    && (failed.Decision.ShouldFallback || !(isInitialisation || IsFinished(state, playlistPath, segmentIndex))))
                 {
                     state.Dispose();
                     _transcodeManager.OnTranscodeEndRequest(transcodingJob);
@@ -2143,7 +2192,7 @@ public class DynamicHlsController : BaseTesserafinApiController
             // tesserafin#289. A file that was being waited on when the job failed is the one the
             // job was writing, unless the job had already moved on from it.
             if (transcodingJob.Failure is { } failure
-                && (failure.Decision.ShouldFallback || !_fileSystem.FileExists(segmentPath) || !IsFinished(state, playlistPath, segmentIndex)))
+                && (failure.Decision.ShouldFallback || !_fileSystem.FileExists(segmentPath) || !(isInitialisation || IsFinished(state, playlistPath, segmentIndex))))
             {
                 _logger.LogWarning("cannot serve {0} as transcoding failed before we got there", segmentPath);
                 state.Dispose();
@@ -2180,12 +2229,15 @@ public class DynamicHlsController : BaseTesserafinApiController
     /// playback to software. Nothing about the process, its command or any path is disclosed.
     /// </remarks>
     private ObjectResult TranscodeFailed(TranscodeFailure failure)
+        => TranscodeFailed(Response, failure);
+
+    internal static ObjectResult TranscodeFailed(HttpResponse response, TranscodeFailure failure)
     {
         var recovery = failure.Decision.ShouldFallback ? "software" : "none";
-        Response.Headers[PlaybackRecoveryHeader] = recovery;
-        Response.Headers.CacheControl = "no-store";
+        response.Headers[PlaybackRecoveryHeader] = recovery;
+        response.Headers.CacheControl = "no-store";
 
-        return StatusCode(StatusCodes.Status410Gone, new { title = "The transcode for this stream ended with a failure.", recovery });
+        return new ObjectResult(new { title = "The transcode for this stream ended with a failure.", recovery }) { StatusCode = StatusCodes.Status410Gone };
     }
 
     private ActionResult GetSegmentResult(StreamState state, string segmentPath, TranscodingJob? transcodingJob)

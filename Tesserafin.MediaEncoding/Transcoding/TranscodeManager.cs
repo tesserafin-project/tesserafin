@@ -414,13 +414,25 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
 
         try
         {
-            if (jobType == TranscodingJobType.Progressive)
+            // The job was unregistered before the delay, and a request on the same play session
+            // can have started another on this output since. Under the lock a start takes, so
+            // that it is entirely before or after; and not at all if the output has a new owner.
+            using (await _transcodingLocks.LockAsync(path).ConfigureAwait(false))
             {
-                DeleteProgressivePartialStreamFiles(path);
-            }
-            else
-            {
-                DeleteHlsPartialStreamFiles(path);
+                if (GetTranscodingJob(path, jobType) is not null)
+                {
+                    _logger.LogDebug("Not deleting {Path}: another transcode has started on it", path);
+                    return;
+                }
+
+                if (jobType == TranscodingJobType.Progressive)
+                {
+                    DeleteProgressivePartialStreamFiles(path);
+                }
+                else
+                {
+                    DeleteHlsPartialStreamFiles(path);
+                }
             }
         }
         catch (IOException ex)
@@ -958,8 +970,8 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
 
         job.Dispose();
 
-        // Last, because it can wait: a request may be holding this output's lock for as long as
-        // its client stays, and everything above must not wait with it.
+        // Last, because it can wait: a request may be holding this output's lock, and nothing
+        // above may wait with it - the job's end is reported and the job disposed first.
         if (removeOutput)
         {
             using (_transcodingLocks.Lock(job.Path!))

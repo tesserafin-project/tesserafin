@@ -24,11 +24,23 @@ public static class HlsHelpers
     /// <param name="logger">Instance of the <see cref="ILogger"/> interface.</param>
     /// <param name="cancellationToken">The <see cref="CancellationToken"/>.</param>
     /// <returns>A <see cref="Task"/> indicating the waiting process.</returns>
-    public static async Task WaitForMinimumSegmentCount(string playlist, int? segmentCount, ILogger logger, CancellationToken cancellationToken)
+    public static Task WaitForMinimumSegmentCount(string playlist, int? segmentCount, ILogger logger, CancellationToken cancellationToken)
+        => WaitForMinimumSegmentCount(playlist, segmentCount, logger, static () => false, cancellationToken);
+
+    /// <summary>
+    /// Waits for the minimum number of segments to be available, for as long as they can still come.
+    /// </summary>
+    /// <param name="playlist">The playlist string.</param>
+    /// <param name="segmentCount">The segment count.</param>
+    /// <param name="logger">Instance of the <see cref="ILogger"/> interface.</param>
+    /// <param name="writerHasEnded">Whether the process writing the playlist has ended. A process that ends by itself cancels nothing.</param>
+    /// <param name="cancellationToken">The <see cref="CancellationToken"/>.</param>
+    /// <returns>A <see cref="Task"/> indicating the waiting process.</returns>
+    public static async Task WaitForMinimumSegmentCount(string playlist, int? segmentCount, ILogger logger, Func<bool> writerHasEnded, CancellationToken cancellationToken)
     {
         logger.LogDebug("Waiting for {0} segments in {1}", segmentCount, playlist);
 
-        while (!cancellationToken.IsCancellationRequested)
+        while (!cancellationToken.IsCancellationRequested && !writerHasEnded())
         {
             try
             {
