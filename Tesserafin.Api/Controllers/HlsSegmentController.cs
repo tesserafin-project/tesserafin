@@ -190,8 +190,9 @@ public class HlsSegmentController : BaseTesserafinApiController
         //
         // A job this caller does not own answers exactly as one that never existed: 204, having
         // done nothing. Distinguishing the two would turn this route into a probe for which play
-        // sessions are live. The 204 is sent once the processes have stopped, and a stop that
-        // failed is an error rather than a 204; the files are removed afterwards.
+        // sessions are live. The 204 is sent once the processes have been stopped and waited for
+        // (a kill is given five seconds), and a stop that threw is an error rather than a 204;
+        // the files are removed afterwards.
         if (string.IsNullOrWhiteSpace(playSessionId))
         {
             return NoContent();

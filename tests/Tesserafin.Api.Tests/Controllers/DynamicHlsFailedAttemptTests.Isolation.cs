@@ -278,7 +278,30 @@ public sealed partial class DynamicHlsFailedAttemptTests
             }
         };
 
-        await Assert.ThrowsAnyAsync<Exception>(() => StopEncodings(SessionA));
+        // The manager's own error, carrying what went wrong - not any exception at all.
+        var error = await Assert.ThrowsAsync<AggregateException>(() => StopEncodings(SessionA));
+        Assert.Contains(error.Flatten().InnerExceptions, e => e.Message == "the stop could not be completed");
+    }
+
+    [Fact]
+    public async Task EmptyingAReleasedOutput_LeavesAProgressiveTranscodesFileOfTheSameNameAlone()
+    {
+        // The same request as a progressive transcode writes "{name}.{ext}" in the same folder,
+        // under a job that is not an HLS job and may well be running.
+        var theirs = await StartPlayback(hardware: false, segments: 6);
+        await _manager!.KillTranscodingJobs(OwnerDevice, SessionA, _ => false);
+        var progressive = theirs.Prefix + ".mp4";
+        await File.WriteAllTextAsync(progressive, "a progressive transcode", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(theirs.Prefix + ".m3u8", "#EXTM3U", TestContext.Current.CancellationToken);
+
+        var next = NextStart();
+        var replay = Request(2, actor: "replay", user: _stranger, device: OtherDevice);
+        var mine = await next.WaitAsync(Patience, TestContext.Current.CancellationToken);
+
+        Assert.Equal([progressive], mine.FilesWhenStarted);
+        mine.Write(2, "mine 2");
+        mine.Write(3, "mine 3");
+        Assert.Equal("mine 2", (await replay.WaitAsync(Patience, TestContext.Current.CancellationToken)).Text);
     }
 
     [Fact]

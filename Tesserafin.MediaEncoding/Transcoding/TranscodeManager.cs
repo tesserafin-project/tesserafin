@@ -381,6 +381,12 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
     /// <inheritdoc />
     public Task StopTranscodingJobs(string playSessionId, Func<TranscodingJob, bool> isCallers)
     {
+        // No play session id names no job - not every job that was started without one.
+        if (string.IsNullOrWhiteSpace(playSessionId))
+        {
+            return Task.CompletedTask;
+        }
+
         List<TranscodingJob> jobs;
 
         lock (_activeTranscodingJobs)
@@ -448,9 +454,10 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
             }
         }
 
-        // The job stays registered until its process has stopped. It used to leave first, and for
-        // as long as the stop took the output had no owner while something was still writing to
-        // it: a request for it was compared with nobody, and started a transcode beside the dying one.
+        // The job stays registered until its process has been waited for. It used to leave first,
+        // and for as long as the stop took the output had no owner while something was still
+        // writing to it: a request for it was compared with nobody, and started a transcode beside
+        // the dying one. A process that outlives the kill is not waited for any longer than that.
         job.Stop();
 
         lock (_activeTranscodingJobs)

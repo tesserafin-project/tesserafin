@@ -2314,7 +2314,7 @@ public class DynamicHlsController : BaseTesserafinApiController
     /// Removes what is on an output that no job is registered on, before anything is started there.
     /// </summary>
     /// <remarks>
-    /// POLISH-2-R4. ONLY UNDER THE OUTPUT'S LOCK, AND ONLY ONCE NO JOB WAS FOUND ON IT THERE.
+    /// POLISH-2-R4. ONLY UNDER THE OUTPUT'S LOCK, AND ONLY ONCE NO HLS JOB WAS FOUND ON IT THERE.
     /// An output's path is derived from what the client sends - the User-Agent, the device id,
     /// the play session id - so a second user replaying the first user's url arrives at the first
     /// user's files. While a job is registered the caller is compared with its owner. Once it is
@@ -2329,8 +2329,14 @@ public class DynamicHlsController : BaseTesserafinApiController
     /// The server does not have to remember who a released output was for, and no client-named
     /// id is taken as proof of it.
     ///
-    /// A job is registered until its process has stopped (TranscodeManager.StopJob), so nothing
-    /// is still writing to an output that gets this far.
+    /// A job that is stopped stays registered until its process has been waited for
+    /// (TranscodeManager.StopJob), so an output does not normally get this far with something
+    /// still writing to it. That is best effort and not a structural guarantee: a process that
+    /// outlives its kill, or one whose start failed, is unregistered all the same.
+    ///
+    /// A PROGRESSIVE TRANSCODE'S FILE IS NOT THIS OUTPUT'S. It carries the same name with another
+    /// extension, in the same folder, and its job is not an HLS job: finding no HLS job here says
+    /// nothing about it, and it may be running. It is left alone.
     /// </remarks>
     private void RemoveUnownedOutput(string playlistPath)
     {
@@ -2340,12 +2346,16 @@ public class DynamicHlsController : BaseTesserafinApiController
             return;
         }
 
-        // Every file of an output begins with its playlist's name: ffmpeg is given
-        // "{name}%d.{ext}", "{name}-1.{ext}" and "{name}.m3u8".
+        // ffmpeg is given "{name}%d.{ext}", "{name}-1.{ext}" and "{name}.m3u8". "{name}.{ext}"
+        // alone is what a progressive transcode of the same request writes.
         var name = Path.GetFileNameWithoutExtension(playlistPath);
         foreach (var file in _fileSystem.GetFilePaths(directory))
         {
-            if (Path.GetFileName(file).StartsWith(name, StringComparison.OrdinalIgnoreCase))
+            var fileName = Path.GetFileName(file);
+            var isProgressiveSibling = string.Equals(Path.GetFileNameWithoutExtension(fileName), name, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(Path.GetExtension(fileName), ".m3u8", StringComparison.OrdinalIgnoreCase);
+
+            if (fileName.StartsWith(name, StringComparison.OrdinalIgnoreCase) && !isProgressiveSibling)
             {
                 _logger.LogDebug("Removing {Path}: left on an output no job is registered on", file);
                 _fileSystem.DeleteFile(file);
