@@ -27,6 +27,8 @@ namespace Tesserafin.Api.Tests.Controllers;
 /// </remarks>
 public sealed partial class DynamicHlsFailedAttemptTests
 {
+    private bool _liveWithoutIds;
+
     // ---------------------------------------------------------------- the live playlist holds the lock while it waits
 
     [Fact]
@@ -160,9 +162,37 @@ public sealed partial class DynamicHlsFailedAttemptTests
     }
 
     [Fact]
-    public async Task LivePlaylistAfterTheFailureAnswerExpired_StartsOneAttempt_AndTheFailedOneIsGone()
+    public async Task LiveRequestOfAnotherUserDecidedBeforeTheJobExisted_DoesNotGetItsPlaylist()
     {
         Configure(hardware: true);
+
+        // Another user, replaying the owner's url, arrives when there is neither a job nor a
+        // playlist - nothing to refuse yet - and stops before the lock.
+        var beforeLock = new Gate("the lock");
+        _lockGate = beforeLock;
+        var stranger = LiveRequest(minSegments: 1, user: _stranger, device: "another-device");
+        await beforeLock.Reached;
+
+        var next = NextStart();
+        var owner = LiveRequest(minSegments: 1);
+        var attempt = await next.WaitAsync(Patience, TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(attempt.Job.Path!, "#EXTM3U\n#EXTINF:3.0,\nx0.ts\n", TestContext.Current.CancellationToken);
+        Assert.Equal(StatusCodes.Status200OK, (await owner.WaitAsync(Patience, TestContext.Current.CancellationToken)).Status);
+        beforeLock.Open();
+
+        var response = await Settled(stranger);
+        Assert.Equal(StatusCodes.Status401Unauthorized, response.Status);
+        Assert.DoesNotContain("x0.ts", response.Text, StringComparison.Ordinal);
+        Assert.Single(_starts);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task LivePlaylistAfterTheFailureAnswerExpired_StartsOneAttempt_AndTheFailedOneIsGone(bool clientNamesItself)
+    {
+        Configure(hardware: true);
+        _liveWithoutIds = !clientNamesItself;
         var next = NextStart();
         var first = LiveRequest(minSegments: 1);
         var attempt = await next.WaitAsync(Patience, TestContext.Current.CancellationToken);
@@ -376,9 +406,10 @@ public sealed partial class DynamicHlsFailedAttemptTests
     /// <summary>
     /// <c>Videos/{itemId}/live.m3u8</c> through the real action.
     /// </summary>
-    private Task<Response> LiveRequest(int minSegments)
+    private Task<Response> LiveRequest(int minSegments, Guid? user = null, string device = OwnerDevice)
     {
-        var httpContext = Context(FormattableString.Invariant($"/Videos/{_item:N}/live.m3u8"), null, OwnerDevice, out var body);
+        var httpContext = Context(FormattableString.Invariant($"/Videos/{_item:N}/live.m3u8"), user, device, out var body);
+        var named = !_liveWithoutIds;
         var controller = _newController!();
         controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
 
@@ -391,12 +422,12 @@ public sealed partial class DynamicHlsFailedAttemptTests
                 @params: null,
                 tag: null,
                 deviceProfileId: null,
-                playSessionId: SessionA,
+                playSessionId: named ? SessionA : null,
                 segmentContainer: "ts",
                 segmentLength: 3,
                 minSegments: minSegments,
                 mediaSourceId: MediaSourceId,
-                deviceId: OwnerDevice,
+                deviceId: named ? OwnerDevice : null,
                 audioCodec: "aac",
                 enableAutoStreamCopy: false,
                 allowVideoStreamCopy: false,

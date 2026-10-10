@@ -364,7 +364,7 @@ public class DynamicHlsController : BaseTesserafinApiController
                         // each other.
                         if (_transcodeManager.GetTranscodingJob(playlistPath, TranscodingJobType) is not null)
                         {
-                            await _transcodeManager.KillTranscodingJobs(streamingRequest.DeviceId ?? string.Empty, streamingRequest.PlaySessionId, p => false)
+                            await _transcodeManager.KillTranscodingJobs(streamingRequest.DeviceId!, streamingRequest.PlaySessionId, p => false)
                                 .ConfigureAwait(false);
                         }
 
@@ -410,7 +410,20 @@ public class DynamicHlsController : BaseTesserafinApiController
             }
         }
 
-        job ??= _transcodeManager.OnTranscodeBeginRequest(playlistPath, TranscodingJobType);
+        if (job is null)
+        {
+            // This request started nothing, so the playlist it is about to read is somebody's
+            // job's - possibly one registered since ownership was decided above, when there was
+            // neither a job nor a file. Decided again, on what is there now.
+            var owner = _jobOwnership.AuthorizeByOutputPath(HttpContext, playlistPath);
+            if (owner.Outcome == HlsJobOwnershipOutcome.Refused || !owner.IsAuthorized)
+            {
+                state.Dispose();
+                return Unauthorized();
+            }
+
+            job = _transcodeManager.OnTranscodeBeginRequest(playlistPath, TranscodingJobType);
+        }
 
         if (job is not null)
         {
