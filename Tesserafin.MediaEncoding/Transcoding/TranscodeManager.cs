@@ -404,8 +404,8 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
             {
                 StopJob(job);
 
-                // Not waited for: the process is what the caller asked to have stopped. Nothing
-                // can be read from these files meanwhile - see DynamicHlsController.RemoveUnownedOutput.
+                // Not waited for: the process is what the caller asked to have stopped. An HLS
+                // output's files are not served meanwhile - see DynamicHlsController.RemoveUnownedOutput.
                 _ = DeletePartialStreamFiles(job.Path!, job.Type, 0, 1500);
             }
             catch (Exception ex)

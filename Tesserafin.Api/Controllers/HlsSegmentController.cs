@@ -85,6 +85,15 @@ public class HlsSegmentController : BaseTesserafinApiController
             return Unauthorized();
         }
 
+        // POLISH-2-R4. A segment's name is the job's playlist identifier AND an index. The
+        // identifier alone, with the extension the url ends in, is not a segment: it is the file
+        // a progressive transcode of the same request writes, in the same folder, for whoever
+        // made that request.
+        if (string.Equals(segmentId, binding.PlaylistId, StringComparison.Ordinal))
+        {
+            return NotFound("Hls segment not found.");
+        }
+
         // Before any file is named, so that the lines below stay exactly what the
         // hostile-control manifest anchors on (r3-resolve-from-segment-id-alone).
         if (_transcodeManager.GetTranscodingJob(binding.CanonicalPlaylistPath, TranscodingJobType.Hls)?.Failure is { Decision.ShouldFallback: true } failure)
@@ -276,6 +285,13 @@ public class HlsSegmentController : BaseTesserafinApiController
         // This is what stops a capability for job A reaching job B's bytes: segmentId alone never
         // names a file any more.
         if (!segmentId.StartsWith(binding.PlaylistId, StringComparison.Ordinal))
+        {
+            return NotFound("Hls segment not found.");
+        }
+
+        // POLISH-2-R4. And something after it: the identifier alone names the file a progressive
+        // transcode of the same request writes, which is not this job's and need not be this caller's.
+        if (segmentId.Length == binding.PlaylistId.Length)
         {
             return NotFound("Hls segment not found.");
         }
