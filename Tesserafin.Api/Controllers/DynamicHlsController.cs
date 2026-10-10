@@ -1553,14 +1553,14 @@ public class DynamicHlsController : BaseTesserafinApiController
         // a dead device being retried forever, so the caller is told instead: it reloads the
         // stream, once, and the failed job is removed when it does.
         if (mayServeWhatIsAlreadyThere
-            && !System.IO.File.Exists(segmentPath)
+            && !_fileSystem.FileExists(segmentPath)
             && _transcodeManager.GetTranscodeFailure(playlistPath, TranscodingJobType) is { } knownFailure)
         {
             state.Dispose();
             return TranscodeFailed(knownFailure);
         }
 
-        if (mayServeWhatIsAlreadyThere && System.IO.File.Exists(segmentPath))
+        if (mayServeWhatIsAlreadyThere && _fileSystem.FileExists(segmentPath))
         {
             job = _transcodeManager.OnTranscodeBeginRequest(playlistPath, TranscodingJobType);
             _logger.LogDebug("returning {0} [it exists, try 1]", segmentPath);
@@ -1570,7 +1570,7 @@ public class DynamicHlsController : BaseTesserafinApiController
         using (await _transcodeManager.LockAsync(playlistPath, cancellationToken).ConfigureAwait(false))
         {
             var startTranscoding = false;
-            if (mayServeWhatIsAlreadyThere && System.IO.File.Exists(segmentPath))
+            if (mayServeWhatIsAlreadyThere && _fileSystem.FileExists(segmentPath))
             {
                 job = _transcodeManager.OnTranscodeBeginRequest(playlistPath, TranscodingJobType);
                 _logger.LogDebug("returning {0} [it exists, try 2]", segmentPath);
@@ -2025,7 +2025,7 @@ public class DynamicHlsController : BaseTesserafinApiController
         TranscodingJob? transcodingJob,
         CancellationToken cancellationToken)
     {
-        var segmentExists = System.IO.File.Exists(segmentPath);
+        var segmentExists = _fileSystem.FileExists(segmentPath);
         if (segmentExists)
         {
             if (transcodingJob is not null && transcodingJob.HasExited)
@@ -2054,7 +2054,7 @@ public class DynamicHlsController : BaseTesserafinApiController
                 // either the transcoding job should be done or next segment should also exist
                 if (segmentExists)
                 {
-                    if (transcodingJob.HasExited || System.IO.File.Exists(nextSegmentPath))
+                    if (transcodingJob.HasExited || _fileSystem.FileExists(nextSegmentPath))
                     {
                         _logger.LogDebug("Serving up {SegmentPath} as it deemed ready", segmentPath);
                         return GetSegmentResult(state, segmentPath, transcodingJob);
@@ -2062,7 +2062,7 @@ public class DynamicHlsController : BaseTesserafinApiController
                 }
                 else
                 {
-                    segmentExists = System.IO.File.Exists(segmentPath);
+                    segmentExists = _fileSystem.FileExists(segmentPath);
                     if (segmentExists)
                     {
                         continue; // avoid unnecessary waiting if segment just became available
@@ -2072,7 +2072,7 @@ public class DynamicHlsController : BaseTesserafinApiController
                 await Task.Delay(100, cancellationToken).ConfigureAwait(false);
             }
 
-            if (!System.IO.File.Exists(segmentPath))
+            if (!_fileSystem.FileExists(segmentPath))
             {
                 _logger.LogWarning("cannot serve {0} as transcoding quit before we got there", segmentPath);
 

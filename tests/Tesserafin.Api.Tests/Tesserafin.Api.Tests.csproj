@@ -25,6 +25,7 @@
   <ItemGroup>
     <ProjectReference Include="../../Tesserafin.Api/Tesserafin.Api.csproj" />
     <ProjectReference Include="../../Tesserafin.Server.Implementations/Tesserafin.Server.Implementations.csproj" />
+    <ProjectReference Include="../../Tesserafin.Server.Core/Tesserafin.Server.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>

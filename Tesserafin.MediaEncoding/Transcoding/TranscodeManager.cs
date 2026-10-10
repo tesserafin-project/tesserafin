@@ -130,6 +130,12 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
     /// <inheritdoc />
     public event EventHandler<TranscodingJob>? TranscodingJobStarted;
 
+    /// <summary>
+    /// Gets or sets the clock a failure is dated and aged with. The system clock, except in a test
+    /// that has to stand on either side of <see cref="FailureAnswerLifetime"/>.
+    /// </summary>
+    internal TimeProvider TimeProvider { get; set; } = TimeProvider.System;
+
     /// <inheritdoc />
     public TranscodingJob? GetTranscodingJob(string playSessionId)
     {
@@ -542,7 +548,7 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
             // two and releases the job; one that does not must not be refused forever on a play
             // session it keeps asking for - after this it is served a fresh transcode, built
             // with the options in force by then.
-            var notBefore = DateTime.UtcNow - FailureAnswerLifetime;
+            var notBefore = TimeProvider.GetUtcNow().UtcDateTime - FailureAnswerLifetime;
 
             return _activeTranscodingJobs
                 .FirstOrDefault(j => j.Type == type
@@ -1041,7 +1047,7 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
                 categories,
                 decision.Reason);
 
-            return new TranscodeFailure(exitCode, categories, decision, DateTime.UtcNow);
+            return new TranscodeFailure(exitCode, categories, decision, TimeProvider.GetUtcNow().UtcDateTime);
         }
 
         WithholdHardware(decision, attempt.Backend, state.Request.MediaSourceId);
@@ -1067,7 +1073,7 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
             }
         }
 
-        return new TranscodeFailure(exitCode, categories, decision, DateTime.UtcNow);
+        return new TranscodeFailure(exitCode, categories, decision, TimeProvider.GetUtcNow().UtcDateTime);
     }
 
     /// <summary>
