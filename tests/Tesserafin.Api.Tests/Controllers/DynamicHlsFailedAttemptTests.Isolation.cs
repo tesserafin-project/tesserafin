@@ -203,9 +203,24 @@ public sealed partial class DynamicHlsFailedAttemptTests
         Assert.Equal(StatusCodes.Status404NotFound, fromAudio.Status);
         Assert.DoesNotContain("progressive", fromVideo.Text + fromAudio.Text, StringComparison.Ordinal);
 
+        // The name that is opened is the segment id AND an extension the url supplies separately.
+        // An url ending in a dot supplies none, and the whole file name can then be the id; so
+        // can the playlist's, or its temporary file's.
+        await File.WriteAllTextAsync(attempt.Prefix + ".m3u8", "the playlist", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(attempt.Prefix + ".m3u8.tmp", "the playlist, being written", TestContext.Current.CancellationToken);
+        foreach (var (segmentId, container, tail) in new[] { (playlistId + ".mp4", ".", ".mp4.."), (playlistId + ".m3u8", ".", ".m3u8.."), (playlistId + ".m3u8", "tmp", ".m3u8.tmp"), (playlistId + "1x", "mp4", "1x.mp4") })
+        {
+            var spelled = Context(FormattableString.Invariant($"/Videos/{_item:N}/hls/{playlistId}/{playlistId}{tail}"), null, OwnerDevice, out var spelledBody);
+            controller = _newLegacyController!();
+            controller.ControllerContext = new ControllerContext { HttpContext = spelled };
+            var answer = await Executed(controller.GetHlsVideoSegmentLegacy(_item.ToString("N"), playlistId, segmentId, container), spelled, spelledBody);
+            Assert.True(answer.Status == StatusCodes.Status404NotFound, FormattableString.Invariant($"{tail}: {answer.Status} \"{answer.Text}\""));
+        }
+
         // And it is not that these routes serve nothing: a segment of the job's is still the owner's.
         Assert.Equal("segment 1", (await LegacySegmentRequest(attempt, 1)).Text);
         Assert.Equal("segment 1", (await LegacyAudioRequest(attempt, 1)).Text);
+        Assert.Equal("init", (await LegacySegmentRequest(attempt, Init)).Text);
     }
 
     // ---------------------------------------------------------------- whose transcodes a stop reaches

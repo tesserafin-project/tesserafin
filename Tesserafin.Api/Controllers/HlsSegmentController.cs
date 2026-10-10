@@ -85,15 +85,6 @@ public class HlsSegmentController : BaseTesserafinApiController
             return Unauthorized();
         }
 
-        // POLISH-2-R4. A segment's name is the job's playlist identifier AND an index. The
-        // identifier alone, with the extension the url ends in, is not a segment: it is the file
-        // a progressive transcode of the same request writes, in the same folder, for whoever
-        // made that request.
-        if (string.Equals(segmentId, binding.PlaylistId, StringComparison.Ordinal))
-        {
-            return NotFound("Hls segment not found.");
-        }
-
         // Before any file is named, so that the lines below stay exactly what the
         // hostile-control manifest anchors on (r3-resolve-from-segment-id-alone).
         if (_transcodeManager.GetTranscodingJob(binding.CanonicalPlaylistPath, TranscodingJobType.Hls)?.Failure is { Decision.ShouldFallback: true } failure)
@@ -108,6 +99,11 @@ public class HlsSegmentController : BaseTesserafinApiController
         if (!string.Equals(Path.GetDirectoryName(file), binding.CanonicalRoot, StringComparison.Ordinal))
         {
             return BadRequest("Invalid segment.");
+        }
+
+        if (!NamesASegmentOf(binding, file))
+        {
+            return NotFound("Hls segment not found.");
         }
 
         return FileStreamResponseHelpers.GetStaticFileResult(file, MimeTypes.GetMimeType(file));
@@ -289,13 +285,6 @@ public class HlsSegmentController : BaseTesserafinApiController
             return NotFound("Hls segment not found.");
         }
 
-        // POLISH-2-R4. And something after it: the identifier alone names the file a progressive
-        // transcode of the same request writes, which is not this job's and need not be this caller's.
-        if (segmentId.Length == binding.PlaylistId.Length)
-        {
-            return NotFound("Hls segment not found.");
-        }
-
         var file = Path.GetFullPath(Path.Combine(
             binding.CanonicalRoot,
             string.Concat(segmentId, Path.GetExtension(Request.Path.Value.AsSpan()))));
@@ -305,7 +294,37 @@ public class HlsSegmentController : BaseTesserafinApiController
             return BadRequest("Invalid segment.");
         }
 
+        if (!NamesASegmentOf(binding, file))
+        {
+            return NotFound("Hls segment not found.");
+        }
+
         return GetFileResult(file, binding.CanonicalPlaylistPath);
+    }
+
+    /// <summary>
+    /// Whether a file, as it is about to be opened, is one of the job's segments:
+    /// "{playlistId}{index}.{ext}", the index a number or the -1 of an initialisation segment.
+    /// </summary>
+    /// <remarks>
+    /// POLISH-2-R4. ASKED OF THE FILE, NOT OF WHAT THE URL WAS SPLIT INTO. The job's owner used to
+    /// be served any file whose name began with the job's playlist identifier, and the identifier
+    /// alone with an extension is the file a progressive transcode of the same request writes, in
+    /// the same folder, for whoever made that request. Comparing the segment id does not close
+    /// that: the name is the segment id AND an extension the caller chooses separately, and can
+    /// leave empty - "{playlistId}.mp4" as the id, nothing after it. The playlist and its
+    /// temporary file are no segments either.
+    /// </remarks>
+    private static bool NamesASegmentOf(HlsSegmentBinding binding, string file)
+    {
+        var name = Path.GetFileNameWithoutExtension(file.AsSpan());
+        if (Path.GetExtension(file.AsSpan()).Length < 2 || !name.StartsWith(binding.PlaylistId, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var index = name[binding.PlaylistId.Length..];
+        return index is "-1" || (index.Length > 0 && !index.ContainsAnyExceptInRange('0', '9'));
     }
 
     /// <summary>

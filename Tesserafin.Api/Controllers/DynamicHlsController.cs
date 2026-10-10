@@ -2336,8 +2336,8 @@ public class DynamicHlsController : BaseTesserafinApiController
     ///
     /// A PROGRESSIVE TRANSCODE'S FILE IS NOT THIS OUTPUT'S. It carries the same name with another
     /// extension, in the same folder, and its job is not an HLS job: finding no HLS job here says
-    /// nothing about it, and it may be running. It is left alone here, and no HLS route serves
-    /// it: a segment's name is the playlist's name and an index (HlsSegmentController).
+    /// nothing about it, and it may be running. It is left alone here, and the legacy routes
+    /// open nothing but "{name}{index}.{ext}" (HlsSegmentController.NamesASegmentOf).
     /// </remarks>
     private void RemoveUnownedOutput(string playlistPath)
     {
