@@ -64,7 +64,7 @@ namespace Tesserafin.Api.Tests.Controllers;
 /// stops until the test opens it. The waits that remain are bounded waits for an event that must
 /// happen (<see cref="Patience"/>), and a test that outlives one fails.
 /// </remarks>
-public sealed class DynamicHlsFailedAttemptTests : IDisposable
+public sealed partial class DynamicHlsFailedAttemptTests : IDisposable
 {
     private const string DeviceLost = "amdgpu: The CS has cancelled because the context is lost. This context is innocent.";
     private const string OwnerDevice = "owner-device";
@@ -94,6 +94,7 @@ public sealed class DynamicHlsFailedAttemptTests : IDisposable
     private Gate? _lockGate;
     private Gate? _verdictGate;
     private Func<DynamicHlsController>? _newController;
+    private Func<HlsSegmentController>? _newLegacyController;
 
     public DynamicHlsFailedAttemptTests()
     {
@@ -803,6 +804,8 @@ public sealed class DynamicHlsFailedAttemptTests : IDisposable
             Mock.Of<ITrickplayManager>());
         var authorizer = new HlsJobOwnershipAuthorizer(manager, _sessionManager.Object);
 
+        _newLegacyController = () => new HlsSegmentController(gated, authorizer);
+
         _newController = () => new DynamicHlsController(
             libraryManager.Object,
             Mock.Of<IUserManager>(),
@@ -1109,7 +1112,7 @@ public sealed class DynamicHlsFailedAttemptTests : IDisposable
         /// <summary>Gets or sets the file a removal takes first. Directory order is the file system's to choose.</summary>
         public string? RemoveFirst { get; set; }
 
-        public Gate PauseAfterLook(string actor, string path, int occurrence = 1)
+        public Gate PauseAfterLook(string? actor, string path, int occurrence = 1)
         {
             var seen = 0;
             return Add("the look at " + Path.GetFileName(path), (op, who, p) => op == "looked" && who == actor && p == path && Interlocked.Increment(ref seen) == occurrence);
