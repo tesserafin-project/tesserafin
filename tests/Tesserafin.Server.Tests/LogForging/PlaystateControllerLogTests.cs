@@ -187,11 +187,9 @@ namespace Tesserafin.Server.Tests.LogForging
 
                 var transcodeManager = new Mock<ITranscodeManager>();
                 transcodeManager
-                    .Setup(x => x.KillTranscodingJobs(
-                        It.IsAny<string>(),
-                        It.IsAny<string>(),
-                        It.IsAny<Func<string, bool>>()))
-                    .Callback<string, string, Func<string, bool>>((_, playSessionId, _) => KilledPlaySessionId = playSessionId)
+                    .As<ITranscodeOwnedStop>()
+                    .Setup(x => x.StopTranscodingJobs(It.IsAny<string>(), It.IsAny<Func<TranscodingJob, bool>>()))
+                    .Callback<string, Func<TranscodingJob, bool>>((playSessionId, _) => KilledPlaySessionId = playSessionId)
                     .Returns(Task.CompletedTask);
 
                 _controller = new PlaystateController(
@@ -200,7 +198,8 @@ namespace Tesserafin.Server.Tests.LogForging
                     Mock.Of<IItemAccessService>(),
                     sessionManager.Object,
                     probe.Factory,
-                    transcodeManager.Object)
+                    transcodeManager.Object,
+                    Mock.Of<Tesserafin.Api.Auth.HlsJobOwnership.IHlsJobOwnershipAuthorizer>())
                 {
                     ControllerContext = new ControllerContext
                     {

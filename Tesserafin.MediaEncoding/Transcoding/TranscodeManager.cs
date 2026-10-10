@@ -33,7 +33,7 @@ using Tesserafin.Model.Session;
 namespace Tesserafin.MediaEncoding.Transcoding;
 
 /// <inheritdoc cref="ITranscodeManager"/>
-public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegistry, IHardwareTranscodeFallback, ITranscodeOutputStop, IDisposable
+public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegistry, IHardwareTranscodeFallback, ITranscodeOutputStop, ITranscodeOwnedStop, IDisposable
 {
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<TranscodeManager> _logger;
@@ -378,7 +378,56 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
         return job is null ? Task.CompletedTask : KillTranscodingJob(job, false, deleteFiles);
     }
 
+    /// <inheritdoc />
+    public Task StopTranscodingJobs(string playSessionId, Func<TranscodingJob, bool> isCallers)
+    {
+        List<TranscodingJob> jobs;
+
+        lock (_activeTranscodingJobs)
+        {
+            jobs = _activeTranscodingJobs.Where(j => string.Equals(playSessionId, j.PlaySessionId, StringComparison.OrdinalIgnoreCase)).ToList();
+        }
+
+        // Asked outside the registry's lock - the answer comes from the session manager - and of
+        // each job. What is stopped below is the job that was asked about, itself: nothing is
+        // selected again by what the caller named.
+        List<Exception>? errors = null;
+        foreach (var job in jobs.Where(isCallers))
+        {
+            try
+            {
+                StopJob(job);
+
+                // Not waited for: the process is what the caller asked to have stopped. Nothing
+                // can be read from these files meanwhile - see DynamicHlsController.RemoveUnownedOutput.
+                _ = DeletePartialStreamFiles(job.Path!, job.Type, 0, 1500);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error stopping transcoding job {JobId}", job.Id);
+                (errors ??= new List<Exception>()).Add(ex);
+            }
+        }
+
+        return errors is null ? Task.CompletedTask : Task.FromException(new AggregateException("Error stopping transcoding jobs", errors));
+    }
+
     private async Task KillTranscodingJob(TranscodingJob job, bool closeLiveStream, Func<string, bool> delete)
+    {
+        StopJob(job);
+
+        if (delete(job.Path!))
+        {
+            await DeletePartialStreamFiles(job.Path!, job.Type, 0, 1500).ConfigureAwait(false);
+        }
+
+        if (closeLiveStream && !string.IsNullOrWhiteSpace(job.LiveStreamId))
+        {
+            await _sessionManager.CloseLiveStreamIfNeededAsync(job.LiveStreamId, job.PlaySessionId).ConfigureAwait(false);
+        }
+    }
+
+    private void StopJob(TranscodingJob job)
     {
         job.DisposeKillTimer();
         job.CurrentAttempt?.MarkStopRequested();
@@ -391,8 +440,6 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
 
         lock (_activeTranscodingJobs)
         {
-            _activeTranscodingJobs.Remove(job);
-
             if (job.CancellationTokenSource?.IsCancellationRequested == false)
             {
 #pragma warning disable CA1849 // Can't await in lock block
@@ -401,19 +448,17 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
             }
         }
 
+        // The job stays registered until its process has stopped. It used to leave first, and for
+        // as long as the stop took the output had no owner while something was still writing to
+        // it: a request for it was compared with nobody, and started a transcode beside the dying one.
         job.Stop();
 
+        lock (_activeTranscodingJobs)
+        {
+            _activeTranscodingJobs.Remove(job);
+        }
+
         TranscodingJobEnded?.Invoke(this, job);
-
-        if (delete(job.Path!))
-        {
-            await DeletePartialStreamFiles(job.Path!, job.Type, 0, 1500).ConfigureAwait(false);
-        }
-
-        if (closeLiveStream && !string.IsNullOrWhiteSpace(job.LiveStreamId))
-        {
-            await _sessionManager.CloseLiveStreamIfNeededAsync(job.LiveStreamId, job.PlaySessionId).ConfigureAwait(false);
-        }
     }
 
     private async Task DeletePartialStreamFiles(string path, TranscodingJobType jobType, int retryCount, int delayMs)

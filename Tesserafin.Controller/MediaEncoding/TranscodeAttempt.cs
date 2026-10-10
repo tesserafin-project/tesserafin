@@ -132,6 +132,9 @@ public sealed class TranscodeAttempt : IDisposable
             {
                 logger.LogInformation("Killing FFmpeg process for {Path}", path);
                 process.Kill();
+
+                // Killing is asynchronous too, and a caller of this is told the process has stopped.
+                process.WaitForExit(5000);
             }
         }
         catch (InvalidOperationException)

@@ -359,6 +359,13 @@ public class DynamicHlsController : BaseTesserafinApiController
                     // If the playlist doesn't already exist, startup ffmpeg
                     try
                     {
+                        if (!ownership.IsAuthorized)
+                        {
+                            // The playlist is gone and its segments need not be: a removal takes
+                            // the files in the directory's order, and can stop half-way.
+                            RemoveUnownedOutput(playlistPath);
+                        }
+
                         job = await _transcodeManager.StartFfMpeg(
                                 state,
                                 playlistPath,
@@ -1631,6 +1638,19 @@ public class DynamicHlsController : BaseTesserafinApiController
 
             mayServeWhatIsAlreadyThere = ownership.IsAuthorized;
 
+            if (!mayServeWhatIsAlreadyThere)
+            {
+                try
+                {
+                    RemoveUnownedOutput(playlistPath);
+                }
+                catch
+                {
+                    state.Dispose();
+                    throw;
+                }
+            }
+
             // tesserafin#289. Asked again now that nothing can start, or finish being removed, on
             // this output: the look above and this lock are not one step, and a failure published
             // in between must not be answered by a new process.
@@ -2288,6 +2308,49 @@ public class DynamicHlsController : BaseTesserafinApiController
         });
 
         return FileStreamResponseHelpers.GetStaticFileResult(segmentPath, MimeTypes.GetMimeType(segmentPath));
+    }
+
+    /// <summary>
+    /// Removes what is on an output that no job is registered on, before anything is started there.
+    /// </summary>
+    /// <remarks>
+    /// POLISH-2-R4. ONLY UNDER THE OUTPUT'S LOCK, AND ONLY ONCE NO JOB WAS FOUND ON IT THERE.
+    /// An output's path is derived from what the client sends - the User-Agent, the device id,
+    /// the play session id - so a second user replaying the first user's url arrives at the first
+    /// user's files. While a job is registered the caller is compared with its owner. Once it is
+    /// released there is nobody to compare with, and its files are still there: for the second
+    /// and a half the removal waits, for good when the removal fails, and until the next start
+    /// when the release asked for none. A transcode started on such an output found the file it
+    /// was to wait for already present, and the caller was served it - bytes produced for
+    /// somebody else, by a request the server had just authorized to start its own.
+    ///
+    /// So an output with no job is nobody's, its former owner included, and nothing on it is
+    /// reused: it is emptied before the start, and the start does not happen if it cannot be.
+    /// The server does not have to remember who a released output was for, and no client-named
+    /// id is taken as proof of it.
+    ///
+    /// A job is registered until its process has stopped (TranscodeManager.StopJob), so nothing
+    /// is still writing to an output that gets this far.
+    /// </remarks>
+    private void RemoveUnownedOutput(string playlistPath)
+    {
+        var directory = Path.GetDirectoryName(playlistPath) ?? throw new ArgumentException("Path can't be a root directory.", nameof(playlistPath));
+        if (!Directory.Exists(directory))
+        {
+            return;
+        }
+
+        // Every file of an output begins with its playlist's name: ffmpeg is given
+        // "{name}%d.{ext}", "{name}-1.{ext}" and "{name}.m3u8".
+        var name = Path.GetFileNameWithoutExtension(playlistPath);
+        foreach (var file in _fileSystem.GetFilePaths(directory))
+        {
+            if (Path.GetFileName(file).StartsWith(name, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogDebug("Removing {Path}: left on an output no job is registered on", file);
+                _fileSystem.DeleteFile(file);
+            }
+        }
     }
 
     private int? GetCurrentTranscodingIndex(string playlist, string segmentExtension)

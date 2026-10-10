@@ -100,16 +100,17 @@ public sealed partial class DynamicHlsFailedAttemptTests
         await beforeLock.Reached;
 
         // Meanwhile the attempt is released, and another user replaying the same url starts one
-        // there: with no job on the output, that is allowed.
+        // there: with no job on the output, that is allowed - on an output emptied first.
         await _manager!.KillTranscodingJobs(OwnerDevice, SessionA, _ => false);
         var next = NextStart();
         var replay = Request(0, user: _stranger, device: OtherDevice);
         var theirs = await next.WaitAsync(Patience, TestContext.Current.CancellationToken);
         Assert.Equal(attempt.Job.Path, theirs.Job.Path);
 
-        // Only waited for, so that the output's lock is free again. What that request is
-        // answered with is not this test's subject, and is not stated here as right.
-        await replay.WaitAsync(Patience, TestContext.Current.CancellationToken);
+        // Answered with what its own transcode writes (POLISH-2-R4), which also frees the output's lock.
+        theirs.Write(0, "theirs 0");
+        theirs.Write(1, "theirs 1");
+        Assert.Equal("theirs 0", (await replay.WaitAsync(Patience, TestContext.Current.CancellationToken)).Text);
 
         beforeLock.Open();
         var response = await Settled(seek);

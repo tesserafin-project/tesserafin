@@ -93,8 +93,11 @@ public sealed partial class DynamicHlsFailedAttemptTests : IDisposable
     private TranscodeManager? _manager;
     private Gate? _lockGate;
     private Gate? _verdictGate;
+    private Gate? _stopGate;
+    private Gate? _stopDecisionGate;
     private Func<DynamicHlsController>? _newController;
     private Func<HlsSegmentController>? _newLegacyController;
+    private ITranscodeManager? _gated;
 
     public DynamicHlsFailedAttemptTests()
     {
@@ -557,6 +560,8 @@ public sealed partial class DynamicHlsFailedAttemptTests : IDisposable
         _reportGate?.Open();
         _lockGate?.Open();
         _verdictGate?.Open();
+        _stopGate?.Open();
+        _stopDecisionGate?.Open();
 
         foreach (var start in _starts)
         {
@@ -765,6 +770,11 @@ public sealed partial class DynamicHlsFailedAttemptTests : IDisposable
                 {
                     Interlocked.Exchange(ref _verdictGate, null)?.Hit();
                 }
+                else if (message.StartsWith("Stopping ffmpeg process", StringComparison.Ordinal))
+                {
+                    // Said by a job that is being stopped, just before its process is told to end.
+                    Interlocked.Exchange(ref _stopGate, null)?.Hit();
+                }
             }),
             _fileSystem,
             appPaths,
@@ -788,7 +798,11 @@ public sealed partial class DynamicHlsFailedAttemptTests : IDisposable
             }
         };
         _manager = manager;
-        var gated = new GatedTranscodeManager(manager, () => Interlocked.Exchange(ref _lockGate, null)?.Hit());
+        var gated = new GatedTranscodeManager(
+            manager,
+            () => Interlocked.Exchange(ref _lockGate, null)?.Hit(),
+            () => Interlocked.Exchange(ref _stopDecisionGate, null)?.Hit());
+        _gated = gated;
 
         var helper = new DynamicHlsHelper(
             libraryManager.Object,
@@ -976,17 +990,20 @@ public sealed partial class DynamicHlsFailedAttemptTests : IDisposable
     }
 
     /// <summary>
-    /// The real manager as the controller sees it, with a gate where a request takes the output's lock.
+    /// The real manager as the controller sees it, with a gate where a request takes the output's
+    /// lock, and one between a job being found to be the caller's and that job being stopped.
     /// </summary>
-    private sealed class GatedTranscodeManager : ITranscodeManager, IHardwareTranscodeFallback, ITranscodeOutputStop
+    private sealed class GatedTranscodeManager : ITranscodeManager, IHardwareTranscodeFallback, ITranscodeOutputStop, ITranscodeOwnedStop
     {
         private readonly TranscodeManager _inner;
         private readonly Action _beforeLock;
+        private readonly Action _afterStopDecision;
 
-        public GatedTranscodeManager(TranscodeManager inner, Action beforeLock)
+        public GatedTranscodeManager(TranscodeManager inner, Action beforeLock, Action afterStopDecision)
         {
             _inner = inner;
             _beforeLock = beforeLock;
+            _afterStopDecision = afterStopDecision;
         }
 
         public event EventHandler<TranscodingJob>? TranscodingJobEnded
@@ -1030,11 +1047,23 @@ public sealed partial class DynamicHlsFailedAttemptTests : IDisposable
         public TranscodeFailure? GetTranscodeFailure(string path, TranscodingJobType type) => _inner.GetTranscodeFailure(path, type);
 
         public Task StopTranscodingJob(string path, TranscodingJobType type, long generation, Func<string, bool> deleteFiles) => _inner.StopTranscodingJob(path, type, generation, deleteFiles);
+
+        public Task StopTranscodingJobs(string playSessionId, Func<TranscodingJob, bool> isCallers)
+            => _inner.StopTranscodingJobs(playSessionId, job =>
+            {
+                var yes = isCallers(job);
+                if (yes)
+                {
+                    _afterStopDecision();
+                }
+
+                return yes;
+            });
     }
 
     /// <summary>
-    /// Hands the manager's warnings to the test, which is how it stands between a failed attempt
-    /// being judged and that judgement being published.
+    /// Hands what the manager says to the test, which is how it stands between a failed attempt
+    /// being judged and that judgement being published, and beside a job whose process is about to be stopped.
     /// </summary>
     private sealed class GatedLoggerFactory : ILoggerFactory, ILogger
     {
@@ -1060,7 +1089,7 @@ public sealed partial class DynamicHlsFailedAttemptTests : IDisposable
 
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
         {
-            if (logLevel == LogLevel.Warning)
+            if (logLevel is LogLevel.Warning or LogLevel.Information)
             {
                 _onWarning(formatter(state, exception));
             }
@@ -1124,6 +1153,9 @@ public sealed partial class DynamicHlsFailedAttemptTests : IDisposable
         /// <summary>Gets or sets the file a removal takes first. Directory order is the file system's to choose.</summary>
         public string? RemoveFirst { get; set; }
 
+        /// <summary>Gets or sets a file that cannot be removed.</summary>
+        public string? CannotRemove { get; set; }
+
         public Gate PauseAfterLook(string? actor, string path, int occurrence = 1)
         {
             var seen = 0;
@@ -1138,6 +1170,9 @@ public sealed partial class DynamicHlsFailedAttemptTests : IDisposable
 
         public Gate PauseBeforeRemoval(string prefix)
             => Add("the first removal", (op, who, p) => op == "removing" && who is null && p.StartsWith(prefix, StringComparison.Ordinal));
+
+        public Gate PauseBeforeRemovalBy(string actor, string prefix)
+            => Add("the first removal by " + actor, (op, who, p) => op == "removing" && who == actor && p.StartsWith(prefix, StringComparison.Ordinal));
 
         public void OpenEverything()
         {
@@ -1157,6 +1192,11 @@ public sealed partial class DynamicHlsFailedAttemptTests : IDisposable
         public override void DeleteFile(string path)
         {
             Pass("removing", path);
+            if (path == CannotRemove)
+            {
+                throw new IOException("The file is in use: " + path);
+            }
+
             base.DeleteFile(path);
             Pass("removed", path);
         }
