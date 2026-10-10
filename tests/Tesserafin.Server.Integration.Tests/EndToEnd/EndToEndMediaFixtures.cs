@@ -43,16 +43,17 @@ public static class EndToEndMediaFixtures
     /// </summary>
     /// <param name="directory">The directory to write the fixture into.</param>
     /// <param name="fileName">The file name (including extension) to write.</param>
+    /// <param name="durationSeconds">The duration to encode: more than one HLS segment's worth when a test needs several.</param>
     /// <returns>The full path to the synthesized file.</returns>
-    public static async Task<string> CreateH264AacMp4Async(string directory, string fileName = "fixture.mp4")
+    public static async Task<string> CreateH264AacMp4Async(string directory, string fileName = "fixture.mp4", int durationSeconds = DurationSeconds)
     {
         var path = Path.Combine(directory, fileName);
         string[] arguments =
         [
             "-hide_banner",
             "-y",
-            "-f", "lavfi", "-i", $"testsrc=size={Width}x{Height}:rate=15:duration={DurationSeconds}",
-            "-f", "lavfi", "-i", $"sine=frequency=1000:duration={DurationSeconds}",
+            "-f", "lavfi", "-i", $"testsrc=size={Width}x{Height}:rate=15:duration={durationSeconds}",
+            "-f", "lavfi", "-i", $"sine=frequency=1000:duration={durationSeconds}",
             "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
             "-c:a", "aac",
             "-movflags", "+faststart",
