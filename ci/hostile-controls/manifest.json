@@ -1199,11 +1199,11 @@
       "mutations": [
         {
           "file": "Tesserafin.Api/Controllers/HlsSegmentController.cs",
-          "find": "        if (job is null || !_jobOwnership.OwnsJob(HttpContext, job.UserId, job.OwnerDeviceId))",
-          "replace": "        if (job is null)"
+          "find": "            .StopTranscodingJobs(playSessionId, job => _jobOwnership.OwnsJob(HttpContext, job.UserId, job.OwnerDeviceId))",
+          "replace": "            .StopTranscodingJobs(playSessionId, job => true)"
         }
       ],
-      "note": "R4 finding F1, half two. Neutering the implementation and blinding the call site are different failures and both were invisible; both are pinned separately."
+      "note": "R4 finding F1, half two. Neutering the implementation and blinding the call site are different failures and both were invisible; both are pinned separately. POLISH-2-R4: the action no longer looks one job up and decides for all of them - it hands the manager the question to put to each job - so blinding the call site is now answering it yes for every job."
     },
     {
       "id": "r5-select-any-job-for-a-segment-name",
@@ -1630,6 +1630,162 @@
           "count": 1
         }
       ]
+    },
+    {
+      "id": "p2r4-start-on-what-a-released-job-left",
+      "stage": "P2R4",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "an output no job is registered on is emptied before a transcode is started on it",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.Controllers.DynamicHlsFailedAttemptTests",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.Controllers.DynamicHlsFailedAttemptTests.ReleasedOutputReplayedByAnotherUser_IsNotAnsweredWithWhatTheFirstUserLeft",
+          "Tesserafin.Api.Tests.Controllers.DynamicHlsFailedAttemptTests.ReleasedOutputAskedForAgainByItsOwner_IsTranscodedAfresh_NotServedFromWhatWasLeft",
+          "Tesserafin.Api.Tests.Controllers.DynamicHlsFailedAttemptTests.ReleasedOutputThatCannotBeEmptied_IsNeitherStartedOnNorServed",
+          "Tesserafin.Api.Tests.Controllers.DynamicHlsFailedAttemptTests.ReleaseThenAStartOnTheSameOutput_TheLateRemovalLeavesTheSuccessorAlone",
+          "Tesserafin.Api.Tests.Controllers.DynamicHlsFailedAttemptTests.StopReleaseAndSeekMeetingADyingAttempt_NothingThrows_NothingBlocks_TheSuccessorKeepsItsOutput"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Controllers/DynamicHlsController.cs",
+          "find": "                try\n                {\n                    RemoveUnownedOutput(playlistPath);",
+          "replace": "                try\n                {\n                    _ = playlistPath;",
+          "count": 1
+        }
+      ],
+      "note": "The defect of the automated read of #291: a second user replaying a released url was answered with the first user's leftover segment, because the transcode it was allowed to start found the file it waits for already there."
+    },
+    {
+      "id": "p2r4-live-start-beside-leftover-segments",
+      "stage": "P2R4",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "the live route empties an output it starts on when no job was found there",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.Controllers.DynamicHlsFailedAttemptTests",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.Controllers.DynamicHlsFailedAttemptTests.LivePlaylistGoneButItsSegmentsLeft_AnotherUsersStartDoesNotInheritThem"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Controllers/DynamicHlsController.cs",
+          "find": "                            // the files in the directory's order, and can stop half-way.\n                            RemoveUnownedOutput(playlistPath);",
+          "replace": "                            // the files in the directory's order, and can stop half-way.\n                            _ = playlistPath;",
+          "count": 1
+        }
+      ],
+      "note": "The same mechanism on the live route: the legacy segment route serves a job's owner any file carrying the job's prefix, so a start beside leftover segments hands them to the new owner."
+    },
+    {
+      "id": "p2r4-unregister-before-the-process-stops",
+      "stage": "P2R4",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "a job stays registered until its process has stopped",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.Controllers.DynamicHlsFailedAttemptTests",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.Controllers.DynamicHlsFailedAttemptTests.WhileAReleasedAttemptIsStillBeingStopped_AnotherUserIsRefused_AndStartsNothing"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.MediaEncoding/Transcoding/TranscodeManager.cs",
+          "find": "        job.Stop();\n\n        lock (_activeTranscodingJobs)\n        {\n            _activeTranscodingJobs.Remove(job);\n        }\n",
+          "replace": "        lock (_activeTranscodingJobs)\n        {\n            _activeTranscodingJobs.Remove(job);\n        }\n\n        job.Stop();\n",
+          "count": 1
+        }
+      ],
+      "note": "The order upstream had. For as long as the stop took, the output had no owner and a process still writing to it."
+    },
+    {
+      "id": "p2r4-first-job-answers-for-the-play-session",
+      "stage": "P2R4",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "ownership is asked of each job a stop reaches, not of the first one on behalf of the others",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.Controllers.DynamicHlsFailedAttemptTests",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.Controllers.DynamicHlsFailedAttemptTests.StopOnAPlaySessionTwoUsersNamed_StopsTheCallersJobAndOnlyThat_WhicheverIsRegisteredFirst"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.MediaEncoding/Transcoding/TranscodeManager.cs",
+          "find": "        foreach (var job in jobs.Where(isCallers))",
+          "replace": "        foreach (var job in jobs.Count > 0 && isCallers(jobs[0]) ? jobs : new List<TranscodingJob>())",
+          "count": 1
+        }
+      ],
+      "note": "What DELETE Videos/ActiveEncodings did: the caller's own job first and everybody's was stopped, somebody else's first and the caller could not stop its own."
+    },
+    {
+      "id": "p2r4-stop-selects-again-by-play-session",
+      "stage": "P2R4",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "the jobs that are stopped are the ones that were asked about",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.Controllers.DynamicHlsFailedAttemptTests",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.Controllers.DynamicHlsFailedAttemptTests.JobReplacedBetweenTheDecisionAndTheStop_TheOneThatReplacedItIsNotStopped",
+          "Tesserafin.Api.Tests.Controllers.DynamicHlsFailedAttemptTests.StopOnAPlaySessionTwoUsersNamed_StopsTheCallersJobAndOnlyThat_WhicheverIsRegisteredFirst",
+          "Tesserafin.Api.Tests.Controllers.DynamicHlsFailedAttemptTests.StopThatFails_IsAnError_NotA204"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.MediaEncoding/Transcoding/TranscodeManager.cs",
+          "find": "                StopJob(job);\n\n                // Not waited for",
+          "replace": "                KillTranscodingJobs(string.Empty, job.PlaySessionId, _ => false);\n\n                // Not waited for",
+          "count": 1
+        }
+      ],
+      "note": "Decided on one job and applied to whatever the play session id names by then: the job that replaced it is somebody else's."
+    },
+    {
+      "id": "p2r4-stop-report-asks-nobody",
+      "stage": "P2R4",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "a playback stop report stops the reporter's own transcodes only",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.Controllers.DynamicHlsFailedAttemptTests",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.Controllers.DynamicHlsFailedAttemptTests.PlaybackStopReport_StopsTheReportersOwnTranscode_NotTheOneItsPlaySessionIdNames"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Controllers/PlaystateController.cs",
+          "find": "        => _transcodeManager.StopTranscodingJobs(playSessionId, job => _jobOwnership.OwnsJob(HttpContext, job.UserId, job.OwnerDeviceId));",
+          "replace": "        => _transcodeManager.StopTranscodingJobs(playSessionId, job => true);",
+          "count": 1
+        }
+      ],
+      "note": "The play session id is in the body of the report. Both stop reports selected by it with no comparison at all."
     }
   ]
 }
