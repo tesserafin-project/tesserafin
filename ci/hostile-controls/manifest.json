@@ -755,7 +755,7 @@
         },
         {
           "file": "Tesserafin.Api/Controllers/HlsSegmentController.cs",
-          "find": "        var file = Path.GetFullPath(Path.Combine(\n            binding.CanonicalRoot,\n            string.Concat(segmentId, Path.GetExtension(Request.Path.Value.AsSpan()))));\n\n        if (!string.Equals(Path.GetDirectoryName(file), binding.CanonicalRoot, StringComparison.Ordinal))\n        {\n            return BadRequest(\"Invalid segment.\");\n        }\n\n        return GetFileResult(file, binding.CanonicalPlaylistPath);",
+          "find": "        var file = Path.GetFullPath(Path.Combine(\n            binding.CanonicalRoot,\n            string.Concat(segmentId, Path.GetExtension(Request.Path.Value.AsSpan()))));\n\n        if (!string.Equals(Path.GetDirectoryName(file), binding.CanonicalRoot, StringComparison.Ordinal))\n        {\n            return BadRequest(\"Invalid segment.\");\n        }\n\n        if (!NamesASegmentOf(binding, file))\n        {\n            return NotFound(\"Hls segment not found.\");\n        }\n\n        return GetFileResult(file, binding.CanonicalPlaylistPath);",
           "replace": "        var file = Path.GetFullPath(Path.Combine(\n            _serverConfigurationManager.GetTranscodePath(),\n            string.Concat(segmentId, Path.GetExtension(Request.Path.Value.AsSpan()))));\n\n        return GetFileResult(file, binding.CanonicalPlaylistPath);"
         }
       ],
@@ -1030,7 +1030,7 @@
         },
         {
           "file": "Tesserafin.Api/Controllers/HlsSegmentController.cs",
-          "find": "        var file = Path.GetFullPath(Path.Combine(\n            binding.CanonicalRoot,\n            string.Concat(segmentId, Path.GetExtension(Request.Path.Value.AsSpan()))));\n\n        if (!string.Equals(Path.GetDirectoryName(file), binding.CanonicalRoot, StringComparison.Ordinal))\n        {\n            return BadRequest(\"Invalid segment.\");\n        }\n\n        return FileStreamResponseHelpers.GetStaticFileResult(file, MimeTypes.GetMimeType(file));",
+          "find": "        var file = Path.GetFullPath(Path.Combine(\n            binding.CanonicalRoot,\n            string.Concat(segmentId, Path.GetExtension(Request.Path.Value.AsSpan()))));\n\n        if (!string.Equals(Path.GetDirectoryName(file), binding.CanonicalRoot, StringComparison.Ordinal))\n        {\n            return BadRequest(\"Invalid segment.\");\n        }\n\n        if (!NamesASegmentOf(binding, file))\n        {\n            return NotFound(\"Hls segment not found.\");\n        }\n\n        return FileStreamResponseHelpers.GetStaticFileResult(file, MimeTypes.GetMimeType(file));",
           "replace": "        var file = Path.GetFullPath(Path.Combine(\n            _serverConfigurationManager.GetTranscodePath(),\n            string.Concat(segmentId, Path.GetExtension(Request.Path.Value.AsSpan()))));\n\n        return FileStreamResponseHelpers.GetStaticFileResult(file, MimeTypes.GetMimeType(file));"
         }
       ],
