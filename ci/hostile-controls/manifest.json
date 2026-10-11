@@ -1653,7 +1653,8 @@
           "Tesserafin.Api.Tests.Controllers.DynamicHlsFailedAttemptTests.ReleasedOutputAskedForAgainByItsOwner_IsTranscodedAfresh_NotServedFromWhatWasLeft",
           "Tesserafin.Api.Tests.Controllers.DynamicHlsFailedAttemptTests.ReleasedOutputThatCannotBeEmptied_IsNeitherStartedOnNorServed",
           "Tesserafin.Api.Tests.Controllers.DynamicHlsFailedAttemptTests.ReleaseThenAStartOnTheSameOutput_TheLateRemovalLeavesTheSuccessorAlone",
-          "Tesserafin.Api.Tests.Controllers.DynamicHlsFailedAttemptTests.StopReleaseAndSeekMeetingADyingAttempt_NothingThrows_NothingBlocks_TheSuccessorKeepsItsOutput"
+          "Tesserafin.Api.Tests.Controllers.DynamicHlsFailedAttemptTests.StopReleaseAndSeekMeetingADyingAttempt_NothingThrows_NothingBlocks_TheSuccessorKeepsItsOutput",
+          "Tesserafin.Api.Tests.Controllers.DynamicHlsFailedAttemptTests.EmptyingAReleasedOutput_LeavesAProgressiveTranscodesFileOfTheSameNameAlone"
         ]
       },
       "mutations": [
