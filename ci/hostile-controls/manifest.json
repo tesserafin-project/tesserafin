@@ -1704,18 +1704,69 @@
         "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
         "filter": "FullyQualifiedName~Tesserafin.Api.Tests.Controllers.DynamicHlsFailedAttemptTests",
         "expectedTests": [
-          "Tesserafin.Api.Tests.Controllers.DynamicHlsFailedAttemptTests.WhileAReleasedAttemptIsStillBeingStopped_AnotherUserIsRefused_AndStartsNothing"
+          "Tesserafin.Api.Tests.Controllers.DynamicHlsFailedAttemptTests.WhileAReleasedAttemptIsStillBeingStopped_AnotherUserIsRefused_AndStartsNothing",
+          "Tesserafin.Api.Tests.Controllers.DynamicHlsFailedAttemptTests.StopThatDoesNotEndTheProcess_IsAnError_AndTheOutputKeepsItsOwner"
         ]
       },
       "mutations": [
         {
           "file": "Tesserafin.MediaEncoding/Transcoding/TranscodeManager.cs",
-          "find": "        job.Stop();\n\n        lock (_activeTranscodingJobs)\n        {\n            _activeTranscodingJobs.Remove(job);\n        }\n",
-          "replace": "        lock (_activeTranscodingJobs)\n        {\n            _activeTranscodingJobs.Remove(job);\n        }\n\n        job.Stop();\n",
+          "find": "        // the dying one.\n        job.Stop();\n",
+          "replace": "        // the dying one.\n        lock (_activeTranscodingJobs)\n        {\n            _activeTranscodingJobs.Remove(job);\n        }\n\n        job.Stop();\n",
           "count": 1
         }
       ],
       "note": "The order upstream had. For as long as the stop took, the output had no owner and a process still writing to it."
+    },
+    {
+      "id": "p2r4-unregister-a-process-that-did-not-end",
+      "stage": "P2R4",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "a job whose process did not end when stopped stays registered, and the stop is an error",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.Controllers.DynamicHlsFailedAttemptTests",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.Controllers.DynamicHlsFailedAttemptTests.StopThatDoesNotEndTheProcess_IsAnError_AndTheOutputKeepsItsOwner"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.MediaEncoding/Transcoding/TranscodeManager.cs",
+          "find": "        if (!HasEnded(job))\n",
+          "replace": "        if (false)\n",
+          "count": 1
+        }
+      ],
+      "note": "The wait for a stopped process is bounded. When it ran out the job left the registry all the same, DELETE answered 204, and the output had no owner and a process still writing to it."
+    },
+    {
+      "id": "p2r4-failed-start-leaves-its-process",
+      "stage": "P2R4",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "a start that fails with its process running does not unregister the job before that process has ended",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.Controllers.DynamicHlsFailedAttemptTests",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.Controllers.DynamicHlsFailedAttemptTests.StartThatFailsWithItsProcessRunning_DoesNotLeaveThatProcessOnAnOutputWithNoJob"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.MediaEncoding/Transcoding/TranscodeManager.cs",
+          "find": "                StopJob(job);\n            }\n            catch (Exception ex)\n            {\n                // The start's own failure",
+          "replace": "                lock (_activeTranscodingJobs)\n                {\n                    _activeTranscodingJobs.Remove(job);\n                }\n            }\n            catch (Exception ex)\n            {\n                // The start's own failure",
+          "count": 1
+        }
+      ],
+      "note": "What upstream did: a live stream that failed before ffmpeg's first output unregistered the job and left its process running."
     },
     {
       "id": "p2r4-first-job-answers-for-the-play-session",

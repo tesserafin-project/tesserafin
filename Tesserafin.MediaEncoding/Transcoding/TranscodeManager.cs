@@ -335,7 +335,16 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
             job.Id,
             job.PlaySessionId);
 
-        await KillTranscodingJob(job, true, path => true).ConfigureAwait(false);
+        try
+        {
+            await KillTranscodingJob(job, true, path => true).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            // Nobody awaits a timer callback: thrown from here, it would take the server down.
+            // A job whose process did not end stays registered, and so does its owner.
+            _logger.LogError(ex, "Error killing transcoding job {JobId} after its kill timer", job.Id);
+        }
     }
 
     /// <inheritdoc />
@@ -457,8 +466,16 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
         // The job stays registered until its process has been waited for. It used to leave first,
         // and for as long as the stop took the output had no owner while something was still
         // writing to it: a request for it was compared with nobody, and started a transcode beside
-        // the dying one. A process that outlives the kill is not waited for any longer than that.
+        // the dying one.
         job.Stop();
+
+        // The wait is bounded, so it can end with the process still there. Then the stop has not
+        // happened: the job keeps its place and its owner, nothing is removed, and the caller is
+        // told. Leaving the registry is not what proves a process has ended.
+        if (!HasEnded(job))
+        {
+            throw new TimeoutException(string.Format(CultureInfo.InvariantCulture, "The FFmpeg process of transcoding job {0} did not end when stopped; its output is still its owner's.", job.Id));
+        }
 
         lock (_activeTranscodingJobs)
         {
@@ -466,6 +483,24 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
         }
 
         TranscodingJobEnded?.Invoke(this, job);
+    }
+
+    private static bool HasEnded(TranscodingJob job)
+    {
+        if (job.HasExited)
+        {
+            return true;
+        }
+
+        try
+        {
+            return job.Process?.HasExited ?? true;
+        }
+        catch (InvalidOperationException)
+        {
+            // Never started, or disposed of by the handling of its own exit: nothing is running.
+            return true;
+        }
     }
 
     private async Task DeletePartialStreamFiles(string path, TranscodingJobType jobType, int retryCount, int delayMs)
@@ -989,16 +1024,22 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
         lock (_activeTranscodingJobs)
         {
             job = _activeTranscodingJobs.FirstOrDefault(j => j.Type == type && string.Equals(j.Path, path, StringComparison.OrdinalIgnoreCase));
-
-            if (job is not null)
-            {
-                _activeTranscodingJobs.Remove(job);
-            }
         }
 
         if (job is not null)
         {
-            TranscodingJobEnded?.Invoke(this, job);
+            try
+            {
+                // A start can fail with its process already running - the live stream feeding it
+                // died first. Stopped like any other job, so that it leaves the registry once
+                // that process has ended and not before.
+                StopJob(job);
+            }
+            catch (Exception ex)
+            {
+                // The start's own failure is what its caller is about to be told.
+                _logger.LogError(ex, "Error stopping transcoding job {JobId} after its start failed", job.Id);
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(state.Request.DeviceId))

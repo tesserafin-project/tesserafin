@@ -699,6 +699,8 @@ public sealed partial class DynamicHlsFailedAttemptTests : IDisposable
             + "    \"end \"*) rest=${line#end }; code=${rest%% *}; text=${rest#\"$code\"}; [ -n \"$text\" ] && printf '%s\\n' \"${text# }\" >&2; exit \"$code\" ;;\n"
             + "  esac\n"
             + "done\n"
+            + "# Its input closed: it ends - unless the test put this marker down, for a process that does not.\n"
+            + "[ -e \"$0.lingers\" ] && exec sleep 600\n"
             + "exit 0\n");
         if (!OperatingSystem.IsWindows())
         {

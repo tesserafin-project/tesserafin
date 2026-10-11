@@ -2330,9 +2330,8 @@ public class DynamicHlsController : BaseTesserafinApiController
     /// id is taken as proof of it.
     ///
     /// A job that is stopped stays registered until its process has been waited for
-    /// (TranscodeManager.StopJob), so an output does not normally get this far with something
-    /// still writing to it. That is best effort and not a structural guarantee: a process that
-    /// outlives its kill, or one whose start failed, is unregistered all the same.
+    /// (TranscodeManager.StopJob), and a process that outlives its kill, or one whose start
+    /// failed, keeps its job: an output does not get this far with that process still writing.
     ///
     /// A PROGRESSIVE TRANSCODE'S FILE IS NOT THIS OUTPUT'S. It carries the same name with another
     /// extension, in the same folder, and its job is not an HLS job: finding no HLS job here says

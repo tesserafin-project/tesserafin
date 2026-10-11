@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -7,9 +8,13 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Tesserafin.Api.Auth.HlsJobOwnership;
 using Tesserafin.Api.Controllers;
+using Tesserafin.Common;
 using Tesserafin.Controller.Library;
 using Tesserafin.Controller.MediaEncoding;
 using Tesserafin.Controller.Session;
+using Tesserafin.Controller.Streaming;
+using Tesserafin.Model.Dto;
+using Tesserafin.Model.MediaInfo;
 using Tesserafin.Model.Session;
 using Xunit;
 
@@ -124,6 +129,61 @@ public sealed partial class DynamicHlsFailedAttemptTests
         stopping.Open();
         await release.WaitAsync(Patience, TestContext.Current.CancellationToken);
         Assert.Null(_manager!.GetTranscodingJob(theirs.Job.Path!, TranscodingJobType.Hls));
+    }
+
+    [Fact]
+    public async Task StopThatDoesNotEndTheProcess_IsAnError_AndTheOutputKeepsItsOwner()
+    {
+        // THE PROBE: the job is handed a second handle on its own process, one with no standard
+        // input to be asked through. The stop runs to its end and the process - the one that
+        // writes this output - is still there. It stands for a process that outlives its kill;
+        // what is under test is what the manager concludes from a stop that ended nothing.
+        var theirs = await StartPlayback(hardware: false, segments: 6);
+        theirs.Job.Process = System.Diagnostics.Process.GetProcessById(theirs.Process.Id);
+
+        var error = await Assert.ThrowsAsync<AggregateException>(() => StopEncodings(SessionA));
+
+        Assert.Contains(error.Flatten().InnerExceptions, e => e is TimeoutException);
+        Assert.False(Stopped(theirs));
+        Assert.Same(theirs.Job, _manager!.GetTranscodingJob(theirs.Job.Path!, TranscodingJobType.Hls));
+        Assert.Equal(7, theirs.FilesOnDisk().Count);
+
+        // Still written to, so still somebody's: the second user is compared with its owner.
+        var response = await Settled(Request(2, actor: "replay", user: _stranger, device: OtherDevice));
+        Assert.Equal(StatusCodes.Status401Unauthorized, response.Status);
+        Assert.DoesNotContain("segment", response.Text, StringComparison.Ordinal);
+        Assert.Single(_starts);
+
+        // Once the process has ended, the same stop releases the output.
+        await EndAndWait(theirs, "q");
+        await StopEncodings(SessionA).WaitAsync(Patience, TestContext.Current.CancellationToken);
+        Assert.Null(_manager.GetTranscodingJob(theirs.Job.Path!, TranscodingJobType.Hls));
+    }
+
+    [Fact]
+    public async Task StartThatFailsWithItsProcessRunning_DoesNotLeaveThatProcessOnAnOutputWithNoJob()
+    {
+        // A live stream that fails before ffmpeg's first output fails the start - after the
+        // process was started. This stand-in outlives the closing of its input, as an ffmpeg
+        // that is finishing what it has does.
+        Configure(hardware: false);
+        await File.WriteAllTextAsync(Path.Combine(_root, "ffmpeg.lingers"), string.Empty, TestContext.Current.CancellationToken);
+        var output = Path.Combine(_transcodePath, "feed.m3u8");
+        using var state = new StreamState(Mock.Of<IMediaSourceManager>(), TranscodingJobType.Hls, _manager!)
+        {
+            Request = new StreamingRequestDto { Id = _item, PlaySessionId = SessionA, DeviceId = OwnerDevice, MediaSourceId = MediaSourceId },
+            MediaSource = new MediaSourceInfo { Id = MediaSourceId, Path = "pipe:0", Protocol = MediaProtocol.File },
+            DirectStreamProvider = Mock.Of<IDirectStreamProvider>(p => p.GetStream() == new LostTuner()),
+            OwnerDeviceId = OwnerDevice
+        };
+        using var cancellation = new CancellationTokenSource();
+
+        await Assert.ThrowsAsync<FfmpegException>(() => _manager!.StartFfMpeg(state, output, "-i pipe:0", _owner, TranscodingJobType.Hls, cancellation));
+
+        var start = Assert.Single(_starts);
+        Assert.True(
+            Stopped(start) || _manager!.GetTranscodingJob(output, TranscodingJobType.Hls) is not null,
+            "the start failed, its job left the registry, and its process is still running on the output");
     }
 
     [Fact]
@@ -374,18 +434,26 @@ public sealed partial class DynamicHlsFailedAttemptTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task PlaybackStopReport_StopsTheReportersOwnTranscode_NotTheOneItsPlaySessionIdNames(bool reportedByItsOwner)
+    [InlineData("owner", false)]
+    [InlineData("owner", true)]
+    [InlineData("stranger", false)]
+    [InlineData("stranger", true)]
+    [InlineData("owner's other device", false)]
+    [InlineData("owner's other device", true)]
+    public async Task PlaybackStopReport_StopsTheReportersOwnTranscode_NotTheOneItsPlaySessionIdNames(string reporter, bool legacyRoute)
     {
+        // Both routes a stop is reported on: POST Sessions/Playing/Stopped, and the obsolete
+        // DELETE PlayingItems/{itemId} that older clients still send.
+        var reportedByItsOwner = reporter == "owner";
+        var path = legacyRoute ? FormattableString.Invariant($"/PlayingItems/{_item:N}") : "/Sessions/Playing/Stopped";
         var theirs = await StartPlayback(hardware: false, segments: 6);
         _sessionManager
             .Setup(s => s.LogSessionActivity(It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<Tesserafin.Database.Implementations.Entities.User?>()))
             .ReturnsAsync(() => new SessionInfo(_sessionManager.Object, NullLogger.Instance) { Id = "a-session" });
 
-        var httpContext = reportedByItsOwner
-            ? Context("/Sessions/Playing/Stopped", null, OwnerDevice, out _)
-            : Context("/Sessions/Playing/Stopped", _stranger, OtherDevice, out _);
+        var httpContext = reporter == "stranger"
+            ? Context(path, _stranger, OtherDevice, out _)
+            : Context(path, null, reportedByItsOwner ? OwnerDevice : OtherDevice, out _);
         var controller = new PlaystateController(
             Mock.Of<IUserManager>(),
             Mock.Of<IUserDataManager>(),
@@ -398,7 +466,13 @@ public sealed partial class DynamicHlsFailedAttemptTests
             ControllerContext = new ControllerContext { HttpContext = httpContext }
         };
 
-        var result = await Task.Run(() => controller.ReportPlaybackStopped(new PlaybackStopInfo { PlaySessionId = SessionA }), TestContext.Current.CancellationToken);
+#pragma warning disable CS0618 // The obsolete route is one of the two under test.
+        var result = await Task.Run(
+            () => legacyRoute
+                ? controller.OnPlaybackStopped(_item, null, null, null, null, SessionA)
+                : controller.ReportPlaybackStopped(new PlaybackStopInfo { PlaySessionId = SessionA }),
+            TestContext.Current.CancellationToken);
+#pragma warning restore CS0618
 
         Assert.IsType<NoContentResult>(result);
         Assert.Equal(reportedByItsOwner, Stopped(theirs));
@@ -446,5 +520,16 @@ public sealed partial class DynamicHlsFailedAttemptTests
             Assert.True(DateTime.UtcNow < deadline, "It never happened.");
             await Task.Delay(50, TestContext.Current.CancellationToken);
         }
+    }
+
+    private sealed class LostTuner : MemoryStream
+    {
+        public override int Read(byte[] buffer, int offset, int count) => throw new IOException("the tuner is gone");
+
+        public override int Read(Span<byte> buffer) => throw new IOException("the tuner is gone");
+
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) => throw new IOException("the tuner is gone");
+
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) => throw new IOException("the tuner is gone");
     }
 }
