@@ -53,6 +53,7 @@ public static class LibraryItemSeeder
     /// <param name="name">The item's display name.</param>
     /// <param name="runTimeTicks">The duration of <paramref name="mediaPath"/>.</param>
     /// <param name="tags">The item's tags, for a test that restricts a user by tag.</param>
+    /// <param name="parentId">The folder the item is in, for a test that restricts a user by library.</param>
     /// <returns>The new item's id.</returns>
     public static Guid SeedVideo(
         ILibraryManager libraryManager,
@@ -62,7 +63,8 @@ public static class LibraryItemSeeder
         IReadOnlyList<MediaStream> streams,
         string name = "PR119 End-to-End Fixture",
         long runTimeTicks = EndToEndMediaFixtures.DurationTicks,
-        string[]? tags = null)
+        string[]? tags = null,
+        Guid parentId = default)
     {
         ArgumentNullException.ThrowIfNull(libraryManager);
         ArgumentNullException.ThrowIfNull(mediaStreamRepository);
@@ -81,7 +83,12 @@ public static class LibraryItemSeeder
             DateCreated = DateTime.UtcNow,
             DateModified = DateTime.UtcNow,
             Tags = tags ?? [],
+            ParentId = parentId,
         };
+
+        // What a scan's refresh would have set: without it every seeded item shares one (empty) key,
+        // and a query that groups versions by that key answers with one of them for all.
+        movie.PresentationUniqueKey = movie.CreatePresentationUniqueKey();
 
         // No parent: this is the historical CreateItems path, not IItemStore - real IItemRepository/
         // IItemPersistenceService underneath (LibraryManagerItemStoreTests cross-checks the same call
