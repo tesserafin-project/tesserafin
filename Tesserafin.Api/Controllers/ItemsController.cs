@@ -292,6 +292,21 @@ public class ItemsController : BaseTesserafinApiController
         var dtoOptions = new DtoOptions { Fields = fields }
             .AddAdditionalDtoOptions(enableImages, enableUserData, imageTypeLimit, enableImageTypes);
 
+        // A parent the user may not see is a parent that does not exist, and is answered as one.
+        if (user is not null && parentId.HasValue && _libraryManager.GetItemById<BaseItem>(parentId.Value, user) is null)
+        {
+            _logger.LogWarning("{UserName} is not permitted to access {ItemId}", user.Username, parentId.Value);
+            throw new ArgumentException($"Invalid parent id: {parentId.Value}");
+        }
+
+        // A query that names ids is not scoped to its user's libraries: each id is asked what
+        // Items/{id} asks, and a selection with nothing left in it names nothing.
+        // ponytail: one lookup per id, on top of the query; batch it if selections grow past hundreds.
+        if (user is not null && ids.Length != 0)
+        {
+            ids = [.. ids.Where(id => _libraryManager.GetItemById<BaseItem>(id, user) is not null).DefaultIfEmpty(Guid.NewGuid())];
+        }
+
         var item = _libraryManager.GetParentItem(parentId, userId);
         QueryResult<BaseItem> result;
 
@@ -348,16 +363,6 @@ public class ItemsController : BaseTesserafinApiController
         if (folder is ICollectionFolder && includeItemTypes.Length > 0)
         {
             recursive ??= true;
-        }
-
-        if (item is not UserRootFolder
-            // api keys can always access all folders
-            && !isApiKey
-            // check the item is visible for the user
-            && !item.IsVisible(user))
-        {
-            _logger.LogWarning("{UserName} is not permitted to access Library {ItemName}", user!.Username, item.Name);
-            return Unauthorized($"{user.Username} is not permitted to access Library {item.Name}.");
         }
 
         // Build the query up front so the dispatch below can decide the path from it.

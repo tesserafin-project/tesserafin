@@ -744,11 +744,28 @@ namespace Tesserafin.Server.Core.Session
                 return item;
             }
 
-            item = _itemLookupService.GetItemById(itemId);
+            item = GetItemForSession(session, itemId);
 
             session.FullNowPlayingItem = item;
 
             return item;
+        }
+
+        /// <summary>
+        /// The item a session names, as its user may see it. What a session says it plays or looks
+        /// at is described back to it and to whoever lists sessions: an item its user may not see
+        /// is, for that session, an item that does not exist. A session with no user is not restricted.
+        /// </summary>
+        private BaseItem GetItemForSession(SessionInfo session, Guid itemId)
+        {
+            var item = _itemLookupService.GetItemById(itemId);
+            if (item is null || session.UserId.IsEmpty())
+            {
+                return item;
+            }
+
+            var user = _userManager.GetUserById(session.UserId);
+            return user is not null && (item is UserRootFolder || item.IsVisibleStandalone(user)) ? item : null;
         }
 
         /// <summary>
@@ -1947,8 +1964,8 @@ namespace Tesserafin.Server.Core.Session
         {
             ArgumentException.ThrowIfNullOrEmpty(itemId);
 
-            var item = _itemLookupService.GetItemById(new Guid(itemId));
             var session = GetSession(sessionId);
+            var item = GetItemForSession(session, new Guid(itemId));
 
             session.NowViewingItem = GetItemInfo(item, null);
         }

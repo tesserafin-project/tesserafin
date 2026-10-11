@@ -170,11 +170,13 @@ public class PlaylistsController : BaseTesserafinApiController
             return NotFound("Playlist not found");
         }
 
+        var user = _userManager.GetUserById(userId);
+
         return new PlaylistDto()
         {
             Shares = playlist.Shares,
             OpenAccess = playlist.OpenAccess,
-            ItemIds = playlist.GetManageableItems().Select(t => t.Item2.Id).ToList()
+            ItemIds = playlist.GetManageableItems().Where(t => user is null || t.Item2.IsVisibleStandalone(user)).Select(t => t.Item2.Id).ToList()
         };
     }
 
@@ -534,7 +536,7 @@ public class PlaylistsController : BaseTesserafinApiController
         }
 
         var user = _userManager.GetUserById(callingUserId);
-        var items = playlist.GetManageableItems().Where(i => i.Item2.IsVisible(user)).ToArray();
+        var items = playlist.GetManageableItems().Where(i => i.Item2.IsVisibleStandalone(user)).ToArray();
         var count = items.Length;
         if (startIndex.HasValue)
         {

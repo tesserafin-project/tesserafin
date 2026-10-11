@@ -94,6 +94,13 @@ namespace Tesserafin.Server.Core.Library
                 {
                     query.ItemIds = [Guid.NewGuid()];
                 }
+
+                // These ids stand in for the scoping a parent gives, and a query that names ids is
+                // not scoped to its user's libraries afterwards: do it here.
+                if (query.User is not null)
+                {
+                    SetTopParentIdsToUserViews(query, query.User, true);
+                }
             }
             else
             {
@@ -127,20 +134,25 @@ namespace Tesserafin.Server.Core.Library
                 query.ItemIds.Length == 0 &&
                 query.OwnerIds.Length == 0)
             {
-                var userViews = _userViewCatalog.GetUserViews(new UserViewQuery
-                {
-                    User = user,
-                    IncludeHidden = true,
-                    IncludeExternalContent = allowExternalContent
-                });
+                SetTopParentIdsToUserViews(query, user, allowExternalContent);
+            }
+        }
 
-                query.TopParentIds = userViews.SelectMany(i => GetTopParentIdsForQuery(i, user)).ToArray();
+        private void SetTopParentIdsToUserViews(InternalItemsQuery query, User user, bool allowExternalContent)
+        {
+            var userViews = _userViewCatalog.GetUserViews(new UserViewQuery
+            {
+                User = user,
+                IncludeHidden = true,
+                IncludeExternalContent = allowExternalContent
+            });
 
-                // Prevent searching in all libraries due to empty filter
-                if (query.TopParentIds.Length == 0)
-                {
-                    query.TopParentIds = [Guid.NewGuid()];
-                }
+            query.TopParentIds = userViews.SelectMany(i => GetTopParentIdsForQuery(i, user)).ToArray();
+
+            // Prevent searching in all libraries due to empty filter
+            if (query.TopParentIds.Length == 0)
+            {
+                query.TopParentIds = [Guid.NewGuid()];
             }
         }
 

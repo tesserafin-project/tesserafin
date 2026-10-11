@@ -175,7 +175,7 @@ namespace Tesserafin.Controller.Playlists
         {
             if (user is not null)
             {
-                inputItems = inputItems.Where(i => i.IsVisible(user));
+                inputItems = inputItems.Where(i => i.IsVisibleStandalone(user));
             }
 
             var list = new List<BaseItem>();
