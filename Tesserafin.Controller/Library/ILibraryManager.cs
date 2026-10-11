@@ -215,7 +215,7 @@ namespace Tesserafin.Controller.Library
         /// Gets the item by id, as T, and validates user access.
         /// </summary>
         /// <param name="id">The item id.</param>
-        /// <param name="userId">The user id to validate against.</param>
+        /// <param name="userId">The user id to validate against. Empty validates nothing; an id that names no user sees nothing.</param>
         /// <typeparam name="T">The type of item.</typeparam>
         /// <returns>The item if found.</returns>
         public T? GetItemById<T>(Guid id, Guid userId)

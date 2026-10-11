@@ -179,7 +179,7 @@ namespace Tesserafin.Server.Tests.LogForging
 
                 _controller = new PlaybackSessionsController(
                     _manager.Object,
-                    Mock.Of<IItemLookupService>(),
+                    Mock.Of<IItemAccessService>(),
                     Mock.Of<IUserManager>(),
                     Mock.Of<IMediaSourceManager>(),
                     Mock.Of<IV2PlanStore>(),

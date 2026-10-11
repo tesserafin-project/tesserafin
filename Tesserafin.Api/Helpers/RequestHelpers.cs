@@ -59,6 +59,41 @@ public static class RequestHelpers
     }
 
     /// <summary>
+    /// Whether a user may be served a media source of an item it may see.
+    /// </summary>
+    /// <remarks>
+    /// A media source can be another item - an alternate version, with tags, a rating and a
+    /// library of its own - and is then that item's file. A source that is no item at all (a live
+    /// stream, a channel's) is the item's own.
+    /// </remarks>
+    /// <param name="libraryManager">The library manager.</param>
+    /// <param name="userId">The user, or empty for a principal that names none (an API key).</param>
+    /// <param name="itemId">The item the source was asked of, already resolved for this user.</param>
+    /// <param name="mediaSourceId">The media source id.</param>
+    /// <returns>False when the source is an item this user may not see.</returns>
+    internal static bool CanSeeMediaSource(ILibraryManager libraryManager, Guid userId, Guid itemId, string? mediaSourceId)
+        => userId.IsEmpty()
+            || !Guid.TryParse(mediaSourceId, out var sourceItemId)
+            || sourceItemId.Equals(itemId)
+            || libraryManager.GetItemById<BaseItem>(sourceItemId) is null
+            || libraryManager.GetItemById<BaseItem>(sourceItemId, userId) is not null;
+
+    /// <summary>
+    /// The media source id to ask a lower layer for: the one named, or - when it is an item
+    /// withheld from the user - one that names nothing, so that a withheld version and a version
+    /// that does not exist get one and the same answer.
+    /// </summary>
+    /// <param name="libraryManager">The library manager.</param>
+    /// <param name="userId">The user, or empty for a principal that names none (an API key).</param>
+    /// <param name="itemId">The item the source was asked of, already resolved for this user.</param>
+    /// <param name="mediaSourceId">The media source id.</param>
+    /// <returns>The media source id to use.</returns>
+    internal static string? VisibleMediaSourceId(ILibraryManager libraryManager, Guid userId, Guid itemId, string? mediaSourceId)
+        => CanSeeMediaSource(libraryManager, userId, itemId, mediaSourceId)
+            ? mediaSourceId
+            : Guid.NewGuid().ToString("N", System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>
     /// Checks if the user can access a user.
     /// </summary>
     /// <param name="claimsPrincipal">The <see cref="ClaimsPrincipal"/> for the current request.</param>

@@ -40,7 +40,7 @@ public class PlaybackSessionsControllerTests
     private const string DemotionSourceId = "source-1";
 
     private readonly Mock<IPlaybackSessionManager> _playbackSessionManager = new();
-    private readonly Mock<IItemLookupService> _itemLookupService = new();
+    private readonly Mock<IItemAccessService> _itemLookupService = new();
     private readonly Mock<IUserManager> _userManager = new();
     private readonly Mock<IMediaSourceManager> _mediaSourceManager = new();
     private readonly Mock<IV2PlanStore> _v2PlanStore = new();
@@ -122,7 +122,7 @@ public class PlaybackSessionsControllerTests
     private void SetUpItemAndUser(Video item)
     {
         _userManager.Setup(m => m.GetUserById(_userId)).Returns(new User("test", "auth", "reset"));
-        _itemLookupService.Setup(m => m.GetItemById<BaseItem>(_itemId)).Returns(item);
+        _itemLookupService.Setup(m => m.GetVisibleItemById<BaseItem>(_itemId, It.IsAny<User>())).Returns(item);
         _mediaSourceManager
             .Setup(m => m.GetPlaybackMediaSources(item, It.IsAny<User>(), true, true, It.IsAny<CancellationToken>()))
             .ReturnsAsync([new MediaSourceInfo { Id = _itemId.ToString("N") }]);
@@ -282,7 +282,7 @@ public class PlaybackSessionsControllerTests
     public async Task CreatePlaybackSession_ItemNotFound_Throws()
     {
         _userManager.Setup(m => m.GetUserById(_userId)).Returns(new User("test", "auth", "reset"));
-        _itemLookupService.Setup(m => m.GetItemById<BaseItem>(_itemId)).Returns((BaseItem?)null);
+        _itemLookupService.Setup(m => m.GetVisibleItemById<BaseItem>(_itemId, It.IsAny<User>())).Returns((BaseItem?)null);
 
         await Assert.ThrowsAsync<Tesserafin.Common.Extensions.ResourceNotFoundException>(
             () => CreateController().CreatePlaybackSession(CreateRequest()));

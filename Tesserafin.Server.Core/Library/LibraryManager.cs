@@ -1636,8 +1636,14 @@ namespace Tesserafin.Server.Core.Library
         public T? GetItemById<T>(Guid id, Guid userId)
             where T : BaseItem
         {
-            var user = userId.IsEmpty() ? null : _userManager.GetUserById(userId);
-            return GetItemById<T>(id, user);
+            if (userId.IsEmpty())
+            {
+                return GetItemById<T>(id);
+            }
+
+            // An id that names no user is not "no user": nothing is visible to it.
+            var user = _userManager.GetUserById(userId);
+            return user is null ? null : GetItemById<T>(id, user);
         }
 
         /// <inheritdoc />

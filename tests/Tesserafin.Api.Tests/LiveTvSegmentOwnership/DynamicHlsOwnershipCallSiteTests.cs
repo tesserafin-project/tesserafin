@@ -23,6 +23,7 @@ using Tesserafin.Controller.IO;
 using Tesserafin.Controller.Library;
 using Tesserafin.Controller.MediaEncoding;
 using Tesserafin.Controller.Trickplay;
+using Tesserafin.Database.Implementations.Entities;
 using Tesserafin.MediaEncoding.Hls.Playlist;
 using Tesserafin.Model.Configuration;
 using Tesserafin.Model.Dto;
@@ -313,6 +314,8 @@ public sealed class DynamicHlsOwnershipCallSiteTests : IDisposable
         var item = new Audio { Id = _itemA, Path = Path.Combine(_transcodePath, "source.mp3") };
         var libraryManager = new Mock<ILibraryManager>();
         libraryManager.Setup(l => l.GetItemById<BaseItem>(It.IsAny<Guid>())).Returns(item);
+        libraryManager.Setup(l => l.GetItemById<BaseItem>(It.IsAny<Guid>(), It.IsAny<User>())).Returns(item);
+        libraryManager.Setup(l => l.GetItemById<BaseItem>(It.IsAny<Guid>(), It.IsAny<Guid>())).Returns(item);
 
         var mediaSource = new MediaSourceInfo
         {
@@ -369,7 +372,7 @@ public sealed class DynamicHlsOwnershipCallSiteTests : IDisposable
 
         var helper = new DynamicHlsHelper(
             libraryManager.Object,
-            Mock.Of<IUserManager>(),
+            TestHelpers.AnyUser(),
             mediaSourceManager.Object,
             configurationManager.Object,
             mediaEncoder.Object,
@@ -382,7 +385,7 @@ public sealed class DynamicHlsOwnershipCallSiteTests : IDisposable
 
         var controller = new DynamicHlsController(
             libraryManager.Object,
-            Mock.Of<IUserManager>(),
+            TestHelpers.AnyUser(),
             mediaSourceManager.Object,
             configurationManager.Object,
             mediaEncoder.Object,

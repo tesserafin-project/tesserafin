@@ -11,6 +11,7 @@ using Tesserafin.Api.Auth.PlaybackCapabilityPolicy;
 using Tesserafin.Api.Extensions;
 using Tesserafin.Common.Configuration;
 using Tesserafin.Common.Extensions;
+using Tesserafin.Controller.Authentication;
 using Tesserafin.Controller.Configuration;
 using Tesserafin.Controller.Entities;
 using Tesserafin.Controller.Library;
@@ -59,6 +60,14 @@ public static class StreamingHelpers
         var httpRequest = httpContext.Request;
         if (!string.IsNullOrWhiteSpace(streamingRequest.Params))
         {
+            // The blob rewrites the media source, the play session and the live stream - after a
+            // capability was validated against the ones the query names. Refused as a capability
+            // presented for something else is.
+            if (ValidatedPlaybackCapability.From(httpContext) is not null)
+            {
+                throw new AuthenticationException();
+            }
+
             ParseParams(streamingRequest);
         }
 
@@ -88,10 +97,13 @@ public static class StreamingHelpers
             OwnerCapabilitySessionId = ValidatedPlaybackCapability.From(httpContext)?.Validation.SessionId
         };
 
+        // A principal that names a user - a session token, or a playback capability, which
+        // carries the user it was minted for - is that user and no more. An API key names none:
+        // it is unrestricted here as it is everywhere (DefaultAuthorizationHandler).
         var userId = httpContext.User.GetUserId();
         if (!userId.IsEmpty())
         {
-            state.User = userManager.GetUserById(userId);
+            state.User = userManager.GetUserById(userId) ?? throw new ResourceNotFoundException();
         }
 
         if (state.IsVideoRequest && !string.IsNullOrWhiteSpace(state.Request.VideoCodec))
@@ -114,7 +126,11 @@ public static class StreamingHelpers
                                           ?? state.SupportedSubtitleCodecs.FirstOrDefault();
         }
 
-        var item = libraryManager.GetItemById<BaseItem>(streamingRequest.Id)
+        // The item as this user may see it, asked on every request and before anything is opened,
+        // attached to or started: a file already on the output and a transcode already running
+        // are reached through here too. An item withheld from the user and an item that does not
+        // exist are the same answer.
+        var item = libraryManager.GetItemById<BaseItem>(streamingRequest.Id, state.User)
             ?? throw new ResourceNotFoundException();
 
         state.IsInputVideo = item.MediaType == MediaType.Video;
@@ -126,14 +142,24 @@ public static class StreamingHelpers
                 ? transcodeManager.GetTranscodingJob(streamingRequest.PlaySessionId)
                 : null;
 
-            if (currentJob is not null)
+            // The play session id is the client's to send, and a job under it may be anybody's
+            // transcode of anything: its media source is taken only from the caller's own job,
+            // for the item just resolved, and while the caller may still see that source.
+            if (currentJob is not null
+                && currentJob.ItemId.Equals(item.Id)
+                && currentJob.UserId.Equals(userId)
+                && RequestHelpers.CanSeeMediaSource(libraryManager, userId, item.Id, currentJob.MediaSource?.Id))
             {
                 mediaSource = currentJob.MediaSource;
             }
 
             if (mediaSource is null)
             {
-                var mediaSources = await mediaSourceManager.GetPlaybackMediaSources(libraryManager.GetItemById<BaseItem>(streamingRequest.Id), null, false, false, cancellationToken).ConfigureAwait(false);
+                IReadOnlyList<MediaSourceInfo> mediaSources = await mediaSourceManager.GetPlaybackMediaSources(item, null, false, false, cancellationToken).ConfigureAwait(false);
+
+                // Another version of the item is another item: withheld from the user, it is not
+                // among this item's sources, and naming it is naming a source that does not exist.
+                mediaSources = mediaSources.Where(source => RequestHelpers.CanSeeMediaSource(libraryManager, userId, item.Id, source.Id)).ToList();
 
                 mediaSource = string.IsNullOrEmpty(streamingRequest.MediaSourceId)
                     ? mediaSources[0]

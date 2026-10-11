@@ -34,6 +34,7 @@ using Tesserafin.Controller.MediaEncoding;
 using Tesserafin.Controller.Net.PlaybackCredentials;
 using Tesserafin.Controller.Session;
 using Tesserafin.Controller.Trickplay;
+using Tesserafin.Database.Implementations.Entities;
 using Tesserafin.MediaEncoding.Hls.Playlist;
 using Tesserafin.Model.Configuration;
 using Tesserafin.Model.Dto;
@@ -284,7 +285,7 @@ public sealed class DynamicHlsStartTimeTicksBoundaryTests : IDisposable
         Assert.Equal(0, bytes);
         Assert.Empty(authorizer.Questions);
         Assert.False(fixture.BeyondTheGate.Reached);
-        fixture.LibraryManager.Verify(l => l.GetItemById<BaseItem>(It.IsAny<Guid>()), Times.Never);
+        fixture.LibraryManager.Verify(l => l.GetItemById<BaseItem>(It.IsAny<Guid>(), It.IsAny<User>()), Times.Never);
         fixture.TranscodeManager.Verify(
             t => t.OnTranscodeBeginRequest(It.IsAny<string>(), It.IsAny<TranscodingJobType>()),
             Times.Never);
@@ -310,7 +311,7 @@ public sealed class DynamicHlsStartTimeTicksBoundaryTests : IDisposable
 
         Assert.Single(authorizer.Questions);
         Assert.True(fixture.BeyondTheGate.Reached);
-        fixture.LibraryManager.Verify(l => l.GetItemById<BaseItem>(It.IsAny<Guid>()), Times.AtLeastOnce);
+        fixture.LibraryManager.Verify(l => l.GetItemById<BaseItem>(It.IsAny<Guid>(), It.IsAny<User>()), Times.AtLeastOnce);
         fixture.TranscodeManager.Verify(
             t => t.LockAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
             Times.Once);
@@ -636,6 +637,8 @@ public sealed class DynamicHlsStartTimeTicksBoundaryTests : IDisposable
         var item = new Audio { Id = _itemA, Path = Path.Combine(_transcodePath, "source.mp3") };
         var libraryManager = new Mock<ILibraryManager>();
         libraryManager.Setup(l => l.GetItemById<BaseItem>(It.IsAny<Guid>())).Returns(item);
+        libraryManager.Setup(l => l.GetItemById<BaseItem>(It.IsAny<Guid>(), It.IsAny<User>())).Returns(item);
+        libraryManager.Setup(l => l.GetItemById<BaseItem>(It.IsAny<Guid>(), It.IsAny<Guid>())).Returns(item);
 
         var mediaSource = new MediaSourceInfo
         {
@@ -704,7 +707,7 @@ public sealed class DynamicHlsStartTimeTicksBoundaryTests : IDisposable
 
         var helper = new DynamicHlsHelper(
             libraryManager.Object,
-            Mock.Of<IUserManager>(),
+            TestHelpers.AnyUser(),
             mediaSourceManager.Object,
             configurationManager.Object,
             mediaEncoder.Object,
@@ -717,7 +720,7 @@ public sealed class DynamicHlsStartTimeTicksBoundaryTests : IDisposable
 
         var controller = new DynamicHlsController(
             libraryManager.Object,
-            Mock.Of<IUserManager>(),
+            TestHelpers.AnyUser(),
             mediaSourceManager.Object,
             configurationManager.Object,
             mediaEncoder.Object,

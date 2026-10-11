@@ -20,6 +20,7 @@ using Tesserafin.Api.Helpers;
 using Tesserafin.Api.Models.SubtitleDtos;
 using Tesserafin.Common.Api;
 using Tesserafin.Common.Configuration;
+using Tesserafin.Common.Extensions;
 using Tesserafin.Controller.Configuration;
 using Tesserafin.Controller.Entities;
 using Tesserafin.Controller.Library;
@@ -237,9 +238,12 @@ public class SubtitleController : BaseTesserafinApiController
             format = "json";
         }
 
+        mediaSourceId = RequestHelpers.VisibleMediaSourceId(_libraryManager, User.GetUserId(), itemId.Value, mediaSourceId);
+
         if (string.IsNullOrEmpty(format))
         {
-            var item = _libraryManager.GetItemById<Video>(itemId.Value);
+            var item = _libraryManager.GetItemById<Video>(itemId.Value, User.GetUserId())
+                ?? throw new ResourceNotFoundException();
 
             var idString = itemId.Value.ToString("N", CultureInfo.InvariantCulture);
             var mediaSource = _mediaSourceManager.GetStaticMediaSources(item, false)
@@ -360,6 +364,8 @@ public class SubtitleController : BaseTesserafinApiController
         {
             return NotFound();
         }
+
+        mediaSourceId = RequestHelpers.VisibleMediaSourceId(_libraryManager, User.GetUserId(), itemId, mediaSourceId)!;
 
         var mediaSource = await _mediaSourceManager.GetMediaSource(item, mediaSourceId, null, false, CancellationToken.None).ConfigureAwait(false);
 
@@ -484,7 +490,8 @@ public class SubtitleController : BaseTesserafinApiController
         long? endPositionTicks,
         bool copyTimestamps)
     {
-        var item = _libraryManager.GetItemById<BaseItem>(id);
+        var item = _libraryManager.GetItemById<BaseItem>(id, User.GetUserId())
+            ?? throw new ResourceNotFoundException();
 
         return _subtitleEncoder.GetSubtitles(
             item,

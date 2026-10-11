@@ -32,6 +32,7 @@ using Tesserafin.Controller.MediaEncoding;
 using Tesserafin.Controller.Session;
 using Tesserafin.Controller.Streaming;
 using Tesserafin.Controller.Trickplay;
+using Tesserafin.Database.Implementations.Entities;
 using Tesserafin.MediaEncoding.Hls.Playlist;
 using Tesserafin.MediaEncoding.Playback;
 using Tesserafin.MediaEncoding.Transcoding;
@@ -726,6 +727,8 @@ public sealed partial class DynamicHlsFailedAttemptTests : IDisposable
         var item = new Movie { Id = _item, Path = Path.Combine(_root, "film.mkv") };
         var libraryManager = new Mock<ILibraryManager>();
         libraryManager.Setup(l => l.GetItemById<BaseItem>(It.IsAny<Guid>())).Returns(item);
+        libraryManager.Setup(l => l.GetItemById<BaseItem>(It.IsAny<Guid>(), It.IsAny<User>())).Returns(item);
+        libraryManager.Setup(l => l.GetItemById<BaseItem>(It.IsAny<Guid>(), It.IsAny<Guid>())).Returns(item);
 
         // Under five minutes: neither the throttler nor the segment cleaner is started, so nothing
         // but the test and the code under test touches the output.
@@ -788,7 +791,7 @@ public sealed partial class DynamicHlsFailedAttemptTests : IDisposable
             _fileSystem,
             appPaths,
             configurationManager.Object,
-            Mock.Of<IUserManager>(),
+            TestHelpers.AnyUser(),
             _sessionManager.Object,
             encodingHelper,
             mediaEncoder.Object,
@@ -815,7 +818,7 @@ public sealed partial class DynamicHlsFailedAttemptTests : IDisposable
 
         var helper = new DynamicHlsHelper(
             libraryManager.Object,
-            Mock.Of<IUserManager>(),
+            TestHelpers.AnyUser(),
             mediaSourceManager.Object,
             configurationManager.Object,
             mediaEncoder.Object,
@@ -831,7 +834,7 @@ public sealed partial class DynamicHlsFailedAttemptTests : IDisposable
 
         _newController = () => new DynamicHlsController(
             libraryManager.Object,
-            Mock.Of<IUserManager>(),
+            TestHelpers.AnyUser(),
             mediaSourceManager.Object,
             configurationManager.Object,
             mediaEncoder.Object,

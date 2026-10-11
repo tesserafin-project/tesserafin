@@ -72,7 +72,7 @@ public class VideoAttachmentsController : BaseTesserafinApiController
 
             var (attachment, stream) = await _attachmentExtractor.GetAttachment(
                     item,
-                    mediaSourceId,
+                    RequestHelpers.VisibleMediaSourceId(_libraryManager, User.GetUserId(), videoId, mediaSourceId)!,
                     index,
                     CancellationToken.None)
                 .ConfigureAwait(false);
@@ -83,9 +83,11 @@ public class VideoAttachmentsController : BaseTesserafinApiController
 
             return new FileStreamResult(stream, contentType);
         }
-        catch (ResourceNotFoundException e)
+        catch (ResourceNotFoundException)
         {
-            return NotFound(e.Message);
+            // No message: it names the media source asked for, and a version withheld from the
+            // user is asked for under another name.
+            return NotFound();
         }
     }
 }

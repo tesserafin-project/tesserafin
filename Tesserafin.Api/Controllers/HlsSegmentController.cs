@@ -64,6 +64,7 @@ public class HlsSegmentController : BaseTesserafinApiController
     [ProducesAudioFile]
     [SuppressMessage("Microsoft.Performance", "CA1801:ReviewUnusedParameters", MessageId = "itemId", Justification = "Required for ServiceStack")]
     [RequiresPlaybackCapability(PlaybackCapabilityScope.Media, "itemId", null)]
+    [RequiresVisibleItem("itemId")]
     public ActionResult GetHlsAudioSegmentLegacy([FromRoute, Required] string itemId, [FromRoute, Required] string segmentId)
     {
         // #153-LTV-R3, finding R2-2. This route used to resolve
@@ -122,6 +123,7 @@ public class HlsSegmentController : BaseTesserafinApiController
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesPlaylistFile]
     [SuppressMessage("Microsoft.Performance", "CA1801:ReviewUnusedParameters", MessageId = "itemId", Justification = "Required for ServiceStack")]
+    [RequiresVisibleItem("itemId")]
     public ActionResult GetHlsPlaylistLegacy([FromRoute, Required] string itemId, [FromRoute, Required] string playlistId)
     {
         // #153-LTV-R3. This route is UNREACHABLE and stays that way. Upstream jellyfin b176beb88e
@@ -241,6 +243,7 @@ public class HlsSegmentController : BaseTesserafinApiController
     // play session into every fragment uri, so the client can satisfy the demand without the
     // capability's binding ever being read off the wire.
     [RequiresPlaybackCapability(PlaybackCapabilityScope.Media, "itemId", "mediaSourceId", "playSessionId")]
+    [RequiresVisibleItem("itemId")]
     public ActionResult GetHlsVideoSegmentLegacy(
         [FromRoute, Required] string itemId,
         [FromRoute, Required] string playlistId,

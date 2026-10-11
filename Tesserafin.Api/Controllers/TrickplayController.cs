@@ -59,6 +59,11 @@ public class TrickplayController : BaseTesserafinApiController
         [FromRoute, Required] int width,
         [FromQuery] Guid? mediaSourceId)
     {
+        if (_libraryManager.GetItemById<BaseItem>(mediaSourceId ?? itemId, User.GetUserId()) is null)
+        {
+            return NotFound();
+        }
+
         string? playlist = await _trickplayManager.GetHlsPlaylist(mediaSourceId ?? itemId, width, User.GetToken()).ConfigureAwait(false);
 
         if (string.IsNullOrEmpty(playlist))

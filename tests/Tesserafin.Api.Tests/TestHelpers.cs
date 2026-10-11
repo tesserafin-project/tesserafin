@@ -19,6 +19,18 @@ namespace Tesserafin.Api.Tests
 {
     public static class TestHelpers
     {
+        /// <summary>
+        /// A user manager in which every id is one ordinary user, with the default permissions.
+        /// </summary>
+        /// <returns>The user manager.</returns>
+        public static IUserManager AnyUser()
+        {
+            var user = new User("caller", typeof(DefaultAuthenticationProvider).FullName!, typeof(DefaultPasswordResetProvider).FullName!);
+            user.AddDefaultPermissions();
+            user.AddDefaultPreferences();
+            return Mock.Of<IUserManager>(m => m.GetUserById(It.IsAny<Guid>()) == user);
+        }
+
         public static ClaimsPrincipal SetupUser(
             Mock<IUserManager> userManagerMock,
             Mock<IHttpContextAccessor> httpContextAccessorMock,

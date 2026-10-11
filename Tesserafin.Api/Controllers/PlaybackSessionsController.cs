@@ -43,7 +43,7 @@ namespace Tesserafin.Api.Controllers;
 public class PlaybackSessionsController : BaseTesserafinApiController
 {
     private readonly IPlaybackSessionManager _playbackSessionManager;
-    private readonly IItemLookupService _itemLookupService;
+    private readonly IItemAccessService _itemAccessService;
     private readonly IUserManager _userManager;
     private readonly IMediaSourceManager _mediaSourceManager;
     private readonly IV2PlanStore _v2PlanStore;
@@ -57,7 +57,7 @@ public class PlaybackSessionsController : BaseTesserafinApiController
     /// Initializes a new instance of the <see cref="PlaybackSessionsController"/> class.
     /// </summary>
     /// <param name="playbackSessionManager">Instance of the <see cref="IPlaybackSessionManager"/> interface.</param>
-    /// <param name="itemLookupService">Instance of the <see cref="IItemLookupService"/> interface.</param>
+    /// <param name="itemAccessService">Instance of the <see cref="IItemAccessService"/> interface: the item as the user may see it.</param>
     /// <param name="userManager">Instance of the <see cref="IUserManager"/> interface.</param>
     /// <param name="mediaSourceManager">Instance of the <see cref="IMediaSourceManager"/> interface.</param>
     /// <param name="v2PlanStore">Instance of the <see cref="IV2PlanStore"/> interface (PR115a) — looked up to see whether v2 is authoritative for a session's response.</param>
@@ -90,7 +90,7 @@ public class PlaybackSessionsController : BaseTesserafinApiController
     /// </param>
     public PlaybackSessionsController(
         IPlaybackSessionManager playbackSessionManager,
-        IItemLookupService itemLookupService,
+        IItemAccessService itemAccessService,
         IUserManager userManager,
         IMediaSourceManager mediaSourceManager,
         IV2PlanStore v2PlanStore,
@@ -103,7 +103,7 @@ public class PlaybackSessionsController : BaseTesserafinApiController
         _logger = logger ?? NullLogger<PlaybackSessionsController>.Instance;
         _shadowDiagnosticsStore = shadowDiagnosticsStore ?? NoOpShadowDiagnosticsStore.Instance;
         _playbackSessionManager = playbackSessionManager;
-        _itemLookupService = itemLookupService;
+        _itemAccessService = itemAccessService;
         _userManager = userManager;
         _mediaSourceManager = mediaSourceManager;
         _v2PlanStore = v2PlanStore;
@@ -517,7 +517,7 @@ public class PlaybackSessionsController : BaseTesserafinApiController
     {
         var userId = RequestHelpers.GetUserId(User, request.UserId);
         var user = _userManager.GetUserById(userId) ?? throw new ResourceNotFoundException();
-        var item = _itemLookupService.GetItemById<BaseItem>(request.ItemId) ?? throw new ResourceNotFoundException();
+        var item = _itemAccessService.GetVisibleItemById<BaseItem>(request.ItemId, user) ?? throw new ResourceNotFoundException();
 
         var mediaSources = await _mediaSourceManager.GetPlaybackMediaSources(item, user, true, true, cancellationToken)
             .ConfigureAwait(false);
