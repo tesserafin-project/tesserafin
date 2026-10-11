@@ -52,6 +52,7 @@ public static class LibraryItemSeeder
     /// <param name="streams">The real, known media streams describing <paramref name="mediaPath"/>.</param>
     /// <param name="name">The item's display name.</param>
     /// <param name="runTimeTicks">The duration of <paramref name="mediaPath"/>.</param>
+    /// <param name="tags">The item's tags, for a test that restricts a user by tag.</param>
     /// <returns>The new item's id.</returns>
     public static Guid SeedVideo(
         ILibraryManager libraryManager,
@@ -60,7 +61,8 @@ public static class LibraryItemSeeder
         string container,
         IReadOnlyList<MediaStream> streams,
         string name = "PR119 End-to-End Fixture",
-        long runTimeTicks = EndToEndMediaFixtures.DurationTicks)
+        long runTimeTicks = EndToEndMediaFixtures.DurationTicks,
+        string[]? tags = null)
     {
         ArgumentNullException.ThrowIfNull(libraryManager);
         ArgumentNullException.ThrowIfNull(mediaStreamRepository);
@@ -78,6 +80,7 @@ public static class LibraryItemSeeder
             IsInMixedFolder = true,
             DateCreated = DateTime.UtcNow,
             DateModified = DateTime.UtcNow,
+            Tags = tags ?? [],
         };
 
         // No parent: this is the historical CreateItems path, not IItemStore - real IItemRepository/
