@@ -476,6 +476,56 @@ public sealed class MediaByteAuthorizationEndToEndTests : IClassFixture<HlsIsola
     }
 
     /// <summary>
+    /// SECURITY-MEDIA-R3. The legacy audio segment route alone, and the withdrawal alone: one
+    /// user, one url, one transcode that stays registered and one file that stays on disk. Served
+    /// before the right is withdrawn, refused after as for an item that does not exist, and served
+    /// again once the right is given back - so that the right is the only thing the refusal can
+    /// be an answer to.
+    /// </summary>
+    /// <param name="extension">The extension the route is asked with.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
+    [Theory(Timeout = 120_000)]
+    [InlineData("aac")]
+    [InlineData("mp3")]
+    public async Task LegacyAudioSegment_IsRefusedWhileTheRightIsWithdrawn_AndOnlyThen(string extension)
+    {
+        var playSession = "smr3-audio-" + Guid.NewGuid().ToString("N");
+        var live = FormattableString.Invariant($"Videos/{_item}/live.m3u8?container=ts&{Transcode}&mediaSourceId={_item:N}&deviceId={playSession}&playSessionId={playSession}");
+        Assert.Equal(HttpStatusCode.OK, (await SendAsync(_second, "GET", live, string.Empty)).Status);
+        var job = Assert.Single(_started, j => j.PlaySessionId == playSession);
+
+        // The route selects a job by the segment's name and serves the file of that name.
+        var segment = Path.GetFileNameWithoutExtension(job.Path!) + "0";
+        var file = Path.Combine(Path.GetDirectoryName(job.Path!)!, segment + "." + extension);
+        await File.WriteAllBytesAsync(file, _mark, TestContext.Current.CancellationToken);
+        var url = FormattableString.Invariant($"Audio/{_item}/hls/{segment}/stream.{extension}");
+        var unknownUrl = FormattableString.Invariant($"Audio/{Guid.NewGuid()}/hls/{segment}/stream.{extension}");
+
+        var before = await SendAsync(_second, "GET", url, string.Empty);
+        Assert.Equal(HttpStatusCode.OK, before.Status);
+        Assert.True(Carries(before.Body, _mark));
+
+        await WithholdAsync(_secondId);
+
+        var withdrawn = await SendAsync(_second, "GET", url, string.Empty);
+        var unknown = await SendAsync(_second, "GET", unknownUrl, string.Empty);
+        Assert.Equal(HttpStatusCode.NotFound, withdrawn.Status);
+        Assert.False(Carries(withdrawn.Body, _mark));
+        Assert.Equal(unknown.Status, withdrawn.Status);
+        Assert.Equal(unknown.Body, withdrawn.Body);
+
+        // Nothing else changed: the transcode is the same registered job, its file is still there.
+        Assert.Same(job, _transcodeManager.GetTranscodingJob(playSession));
+        Assert.True(File.Exists(file));
+
+        await WithholdAsync(_secondId, withheld: false);
+
+        var restored = await SendAsync(_second, "GET", url, string.Empty);
+        Assert.Equal(HttpStatusCode.OK, restored.Status);
+        Assert.True(Carries(restored.Body, _mark));
+    }
+
+    /// <summary>
     /// The withheld item is another version of a visible one: its attachment and its trickplay
     /// playlist, asked of the visible item, are answered as for a version that does not exist -
     /// and the attachment's refusal carries no message naming the version asked for.
@@ -659,12 +709,13 @@ public sealed class MediaByteAuthorizationEndToEndTests : IClassFixture<HlsIsola
     }
 
     /// <summary>
-    /// Blocks the withheld tag for a user: its policy as it is, with that one field changed.
+    /// Blocks the withheld tag for a user, or stops blocking it: its policy as it is, with that
+    /// one field changed.
     /// </summary>
-    private async Task WithholdAsync(Guid userId)
+    private async Task WithholdAsync(Guid userId, bool withheld = true)
     {
         var user = (await _admin.GetFromJsonAsync<UserDto>(FormattableString.Invariant($"Users/{userId}"), JsonDefaults.Options, TestContext.Current.CancellationToken))!;
-        user.Policy!.BlockedTags = [WithheldTag];
+        user.Policy!.BlockedTags = withheld ? [WithheldTag] : [];
         using var applied = await _admin.PostAsJsonAsync(FormattableString.Invariant($"Users/{userId}/Policy"), user.Policy, JsonDefaults.Options, TestContext.Current.CancellationToken);
         applied.EnsureSuccessStatusCode();
     }
