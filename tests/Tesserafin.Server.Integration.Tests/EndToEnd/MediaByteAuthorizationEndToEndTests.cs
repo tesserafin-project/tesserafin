@@ -14,10 +14,13 @@ using Microsoft.Extensions.DependencyInjection;
 using Tesserafin.Api.Models.PlaybackSessionDtos;
 using Tesserafin.Common.Configuration;
 using Tesserafin.Controller.Configuration;
+using Tesserafin.Controller.IO;
 using Tesserafin.Controller.Library;
 using Tesserafin.Controller.MediaEncoding;
 using Tesserafin.Controller.Net.PlaybackCredentials;
 using Tesserafin.Controller.Persistence;
+using Tesserafin.Controller.Trickplay;
+using Tesserafin.Database.Implementations.Entities;
 using Tesserafin.Extensions.Json;
 using Tesserafin.Model.Dto;
 using Tesserafin.Model.Entities;
@@ -46,6 +49,7 @@ public sealed class MediaByteAuthorizationEndToEndTests : IClassFixture<HlsIsola
     private const string SubtitleText = "PR119 end-to-end external subtitle fixture";
     private const string Transcode = "static=false&videoCodec=h264&audioCodec=aac&videoBitRate=1500000&audioBitRate=128000";
     private const int Seconds = 20;
+    private const int AttachmentIndex = 3;
 
     private static readonly byte[] _mark = Encoding.ASCII.GetBytes("\n-- SECURITY-MEDIA-R1: on disk before the withheld user asked --\n");
 
@@ -381,6 +385,99 @@ public sealed class MediaByteAuthorizationEndToEndTests : IClassFixture<HlsIsola
     }
 
     /// <summary>
+    /// The three routes the fix changed that a bare film does not reach: an attachment, the
+    /// trickplay playlist and the legacy audio segment. Each is served to a user who may see the
+    /// item, refused to one who may not as an item that does not exist, and refused to the first
+    /// once its right is withdrawn.
+    /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
+    [Fact(Timeout = 120_000)]
+    public async Task AttachmentTrickplayPlaylistAndLegacyAudioSegment_AreServedToWhoMaySeeTheItem_AndToNobodyElse()
+    {
+        await SeedAttachmentAndTrickplayAsync();
+
+        // A transcode of the allowed user's, and a file under one of its segments' names with the
+        // extension the audio route asks for: that route selects a job by the segment's name.
+        var playSession = "smr1-audio-" + Guid.NewGuid().ToString("N");
+        var live = FormattableString.Invariant($"Videos/{_item}/live.m3u8?container=ts&{Transcode}&mediaSourceId={_item:N}&deviceId={playSession}&playSessionId={playSession}");
+        Assert.Equal(HttpStatusCode.OK, (await SendAsync(_second, "GET", live, string.Empty)).Status);
+        var job = Assert.Single(_started, j => j.PlaySessionId == playSession);
+        var segment = Path.GetFileNameWithoutExtension(job.Path!) + "0";
+        await File.WriteAllBytesAsync(Path.Combine(Path.GetDirectoryName(job.Path!)!, segment + ".aac"), _mark, TestContext.Current.CancellationToken);
+
+        (string Template, byte[] Content)[] routes =
+        [
+            ("Videos/{0}/{0:N}/Attachments/" + AttachmentIndex, _mark),
+            ("Videos/{0}/Trickplay/" + EndToEndMediaFixtures.Width + "/tiles.m3u8", Encoding.ASCII.GetBytes("#EXT-X-TILES")),
+            ("Audio/{0}/hls/" + segment + "/stream.aac", _mark),
+        ];
+        string Url(string template, Guid item) => string.Format(CultureInfo.InvariantCulture, template, item);
+
+        foreach (var (template, content) in routes)
+        {
+            var served = await SendAsync(_second, "GET", Url(template, _item), string.Empty);
+            Assert.True(served.Status == HttpStatusCode.OK && Carries(served.Body, content), FormattableString.Invariant($"{template}: the allowed user was answered {(int)served.Status}"));
+
+            var refused = await SendAsync(_withheld, "GET", Url(template, _item), string.Empty);
+            var unknown = await SendAsync(_withheld, "GET", Url(template, Guid.NewGuid()), string.Empty);
+            Assert.Equal(HttpStatusCode.NotFound, refused.Status);
+            Assert.Equal(unknown.Status, refused.Status);
+            Assert.Equal(unknown.Body.Length, refused.Body.Length);
+            Assert.False(Carries(refused.Body, content));
+        }
+
+        await WithholdAsync(_secondId);
+
+        foreach (var (template, content) in routes)
+        {
+            var withdrawn = await SendAsync(_second, "GET", Url(template, _item), string.Empty);
+            Assert.True(withdrawn.Status == HttpStatusCode.NotFound, FormattableString.Invariant($"{template}: answered {(int)withdrawn.Status} after the right was withdrawn"));
+            Assert.False(Carries(withdrawn.Body, content));
+        }
+
+        Assert.NotNull(_transcodeManager.GetTranscodingJob(playSession));
+    }
+
+    /// <summary>
+    /// The withheld item is another version of a visible one: its attachment and its trickplay
+    /// playlist, asked of the visible item, are answered as for a version that does not exist -
+    /// and the attachment's refusal carries no message naming the version asked for.
+    /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
+    [Fact(Timeout = 120_000)]
+    public async Task AttachmentAndTrickplayOfAWithheldVersion_AreAnsweredAsAVersionThatDoesNotExist()
+    {
+        await SeedAttachmentAndTrickplayAsync();
+        using (var merged = await _admin.PostAsync(FormattableString.Invariant($"Videos/MergeVersions?ids={_own},{_item}"), null, TestContext.Current.CancellationToken))
+        {
+            Assert.Equal(HttpStatusCode.NoContent, merged.StatusCode);
+        }
+
+        string[] templates =
+        [
+            "Videos/{0}/{1:N}/Attachments/" + AttachmentIndex,
+            "Videos/{0}/Trickplay/" + EndToEndMediaFixtures.Width + "/tiles.m3u8?mediaSourceId={1}",
+        ];
+        foreach (var template in templates)
+        {
+            string Url(Guid source) => string.Format(CultureInfo.InvariantCulture, template, _own, source);
+
+            var served = await SendAsync(_allowed, "GET", Url(_item), string.Empty);
+            Assert.True(served.Status == HttpStatusCode.OK, FormattableString.Invariant($"{template}: the allowed user was answered {(int)served.Status}"));
+
+            var asked = Guid.NewGuid();
+            var refused = await SendAsync(_withheld, "GET", Url(_item), string.Empty);
+            var unknown = await SendAsync(_withheld, "GET", Url(asked), string.Empty);
+
+            Assert.Equal(HttpStatusCode.NotFound, refused.Status);
+            Assert.Equal(unknown.Status, refused.Status);
+            Assert.Equal(unknown.Body.Length, refused.Body.Length);
+            Assert.False(Carries(refused.Body, _mark));
+            Assert.False(Carries(unknown.Body, Encoding.ASCII.GetBytes(asked.ToString("N", CultureInfo.InvariantCulture))), template + ": the refusal names the media source asked for");
+        }
+    }
+
+    /// <summary>
     /// Two users who may both see the item are each served it, and each transcode is its user's own.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
@@ -496,6 +593,33 @@ public sealed class MediaByteAuthorizationEndToEndTests : IClassFixture<HlsIsola
     }
 
     private void OnStarted(object? sender, TranscodingJob job) => _started.Enqueue(job);
+
+    /// <summary>
+    /// Gives the withheld item an attachment, already extracted, and a trickplay resolution.
+    /// </summary>
+    private async Task SeedAttachmentAndTrickplayAsync()
+    {
+        const string FileName = "smr1.ttf";
+        _factory.Services.GetRequiredService<IMediaAttachmentRepository>().SaveMediaAttachments(
+            _item,
+            [new MediaAttachment { Index = AttachmentIndex, Codec = "ttf", FileName = FileName, MimeType = "font/ttf" }],
+            TestContext.Current.CancellationToken);
+        var extracted = _factory.Services.GetRequiredService<IPathManager>().GetAttachmentPath(_item.ToString("N", CultureInfo.InvariantCulture), FileName)!;
+        Directory.CreateDirectory(Path.GetDirectoryName(extracted)!);
+        await File.WriteAllBytesAsync(extracted, _mark, TestContext.Current.CancellationToken);
+
+        await _factory.Services.GetRequiredService<ITrickplayManager>().SaveTrickplayInfo(new TrickplayInfo
+        {
+            ItemId = _item,
+            Width = EndToEndMediaFixtures.Width,
+            Height = EndToEndMediaFixtures.Height,
+            TileWidth = 1,
+            TileHeight = 1,
+            ThumbnailCount = 1,
+            Interval = 1000,
+            Bandwidth = 1,
+        });
+    }
 
     /// <summary>
     /// Blocks the withheld tag for a user: its policy as it is, with that one field changed.

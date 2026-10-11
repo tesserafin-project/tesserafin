@@ -61,6 +61,9 @@ public class LibraryManagerItemLookupTests
 
         _persistenceServiceMock = fixture.Freeze<Mock<IItemPersistenceService>>();
 
+        // No user is known to this manager: any user id names nobody.
+        fixture.Freeze<Mock<IUserManager>>().Setup(u => u.GetUserById(It.IsAny<Guid>())).Returns((Tesserafin.Database.Implementations.Entities.User?)null);
+
         _externalDataManagerMock = fixture.Freeze<Mock<IExternalDataManager>>();
         fixture.Register(() => new Lazy<IExternalDataManager>(() => _externalDataManagerMock.Object));
 
@@ -236,6 +239,19 @@ public class LibraryManagerItemLookupTests
     // ---------------------------------------------------------------
     // 9. RegisterItem replaces the cached instance
     // ---------------------------------------------------------------
+
+    [Fact]
+    public void GetItemByIdGeneric_UserId_EmptyValidatesNothing_AndAnIdThatNamesNoUserSeesNothing()
+    {
+        var folder = new Folder { Id = Guid.NewGuid(), Name = "Folder" };
+        _libraryManager.RegisterItem(folder);
+
+        // An API key and a system caller carry no user id.
+        Assert.Same(folder, _libraryManager.GetItemById<Folder>(folder.Id, Guid.Empty));
+
+        // SECURITY-MEDIA-R1: a deleted user's id used to fall through to "no user", and see everything.
+        Assert.Null(_libraryManager.GetItemById<Folder>(folder.Id, Guid.NewGuid()));
+    }
 
     [Fact]
     public void RegisterItem_NewInstanceSameId_ReplacesCachedInstance()
