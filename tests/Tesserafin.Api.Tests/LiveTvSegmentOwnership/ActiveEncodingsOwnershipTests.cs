@@ -150,7 +150,7 @@ public sealed class ActiveEncodingsOwnershipTests : IDisposable
         var httpContext = Context(caller);
         var controller = Controller(httpContext, kills, jobIsGone: false, out var asked);
 
-        var result = controller.StopEncodingProcess(RequestedDeviceId, JobPlaySession);
+        var result = await controller.StopEncodingProcess(RequestedDeviceId, JobPlaySession);
 
         // The real authorizer decided, and it was asked exactly once. Without this, every refusal
         // row would also be satisfied by an action that never consulted anything - which is the
@@ -187,7 +187,7 @@ public sealed class ActiveEncodingsOwnershipTests : IDisposable
         var httpContext = Context(Caller.DurableOwner);
         var controller = Controller(httpContext, kills, jobIsGone: true);
 
-        var result = controller.StopEncodingProcess(RequestedDeviceId, JobPlaySession);
+        var result = await controller.StopEncodingProcess(RequestedDeviceId, JobPlaySession);
 
         Assert.IsType<NoContentResult>(result);
         await Execute(result, httpContext).ConfigureAwait(true);
@@ -205,15 +205,16 @@ public sealed class ActiveEncodingsOwnershipTests : IDisposable
     /// anything — a fixture defect that reads exactly like a boundary. It is the F3 vacuity in a
     /// different costume, so it is pinned here explicitly.
     /// </remarks>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     [Fact]
-    public void TheOwnerIsKilledAndAStrangerIsNot_FromTheSameFixture()
+    public async Task TheOwnerIsKilledAndAStrangerIsNot_FromTheSameFixture()
     {
         var ownerKills = new List<(string DeviceId, string? PlaySessionId)>();
         var strangerKills = new List<(string DeviceId, string? PlaySessionId)>();
 
-        Controller(Context(Caller.DurableOwner), ownerKills, jobIsGone: false)
+        await Controller(Context(Caller.DurableOwner), ownerKills, jobIsGone: false)
             .StopEncodingProcess(RequestedDeviceId, JobPlaySession);
-        Controller(Context(Caller.AnotherUser), strangerKills, jobIsGone: false)
+        await Controller(Context(Caller.AnotherUser), strangerKills, jobIsGone: false)
             .StopEncodingProcess(RequestedDeviceId, JobPlaySession);
 
         Assert.Single(ownerKills);
@@ -225,8 +226,9 @@ public sealed class ActiveEncodingsOwnershipTests : IDisposable
     /// with the request's OWN <see cref="HttpContext"/> and with the JOB's owner — not with the
     /// caller-supplied query parameters, which is what the route used to act on.
     /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     [Fact]
-    public void TheRouteAsksTheAuthorizerAboutTheJobsOwner_NotAboutTheQuery()
+    public async Task TheRouteAsksTheAuthorizerAboutTheJobsOwner_NotAboutTheQuery()
     {
         var httpContext = Context(Caller.DurableOwner);
         var authorizer = new RecordingAuthorizer(answer: true);
@@ -235,7 +237,7 @@ public sealed class ActiveEncodingsOwnershipTests : IDisposable
             ControllerContext = new ControllerContext { HttpContext = httpContext }
         };
 
-        controller.StopEncodingProcess(RequestedDeviceId, JobPlaySession);
+        await controller.StopEncodingProcess(RequestedDeviceId, JobPlaySession);
 
         var asked = Assert.Single(authorizer.Questions);
         Assert.Same(httpContext, asked.Context);
@@ -287,16 +289,20 @@ public sealed class ActiveEncodingsOwnershipTests : IDisposable
             Generation = 1
         };
 
+        // POLISH-2-R4. The route no longer looks one job up and then names a play session to
+        // kill: it hands the manager the question to put to EACH job. This stand-in puts it to the
+        // one job there is, and records a kill only when the answer was yes.
         var transcodeManager = new Mock<ITranscodeManager>(MockBehavior.Loose);
         transcodeManager
-            .Setup(t => t.GetTranscodingJob(It.IsAny<string>()))
-            .Returns((string playSessionId) =>
-                jobIsGone || !string.Equals(playSessionId, JobPlaySession, StringComparison.Ordinal)
-                    ? null
-                    : job);
-        transcodeManager
-            .Setup(t => t.KillTranscodingJobs(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Func<string, bool>>()))
-            .Callback((string deviceId, string? playSessionId, Func<string, bool> _) => kills.Add((deviceId, playSessionId)))
+            .As<ITranscodeOwnedStop>()
+            .Setup(t => t.StopTranscodingJobs(It.IsAny<string>(), It.IsAny<Func<TranscodingJob, bool>>()))
+            .Callback((string playSessionId, Func<TranscodingJob, bool> isCallers) =>
+            {
+                if (!jobIsGone && string.Equals(playSessionId, JobPlaySession, StringComparison.Ordinal) && isCallers(job))
+                {
+                    kills.Add((job.DeviceId!, playSessionId));
+                }
+            })
             .Returns(Task.CompletedTask);
         return transcodeManager;
     }

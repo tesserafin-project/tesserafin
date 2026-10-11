@@ -51,6 +51,7 @@ public static class LibraryItemSeeder
     /// <param name="container">The container of <paramref name="mediaPath"/> (for example <c>"mp4"</c>).</param>
     /// <param name="streams">The real, known media streams describing <paramref name="mediaPath"/>.</param>
     /// <param name="name">The item's display name.</param>
+    /// <param name="runTimeTicks">The duration of <paramref name="mediaPath"/>.</param>
     /// <returns>The new item's id.</returns>
     public static Guid SeedVideo(
         ILibraryManager libraryManager,
@@ -58,7 +59,8 @@ public static class LibraryItemSeeder
         string mediaPath,
         string container,
         IReadOnlyList<MediaStream> streams,
-        string name = "PR119 End-to-End Fixture")
+        string name = "PR119 End-to-End Fixture",
+        long runTimeTicks = EndToEndMediaFixtures.DurationTicks)
     {
         ArgumentNullException.ThrowIfNull(libraryManager);
         ArgumentNullException.ThrowIfNull(mediaStreamRepository);
@@ -71,7 +73,7 @@ public static class LibraryItemSeeder
             Path = mediaPath,
             Container = container,
             Size = new FileInfo(mediaPath).Length,
-            RunTimeTicks = EndToEndMediaFixtures.DurationTicks,
+            RunTimeTicks = runTimeTicks,
             VideoType = VideoType.VideoFile,
             IsInMixedFolder = true,
             DateCreated = DateTime.UtcNow,

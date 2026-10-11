@@ -101,6 +101,11 @@ public class HlsSegmentController : BaseTesserafinApiController
             return BadRequest("Invalid segment.");
         }
 
+        if (!NamesASegmentOf(binding, file))
+        {
+            return NotFound("Hls segment not found.");
+        }
+
         return FileStreamResponseHelpers.GetStaticFileResult(file, MimeTypes.GetMimeType(file));
     }
 
@@ -165,32 +170,42 @@ public class HlsSegmentController : BaseTesserafinApiController
     /// <summary>
     /// Stops an active encoding.
     /// </summary>
-    /// <param name="deviceId">The device id of the client requesting. Used to stop encoding processes when needed.</param>
+    /// <param name="deviceId">The device id of the client requesting. It selects nothing: the caller's device is the one its credential was issued to.</param>
     /// <param name="playSessionId">The play session id.</param>
-    /// <response code="204">Encoding stopped successfully.</response>
+    /// <response code="204">The caller's encodings on this play session have stopped.</response>
     /// <returns>A <see cref="NoContentResult"/> indicating success.</returns>
     [HttpDelete("Videos/ActiveEncodings")]
     [Authorize]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
-    public ActionResult StopEncodingProcess(
+    [SuppressMessage("Microsoft.Performance", "CA1801:ReviewUnusedParameters", MessageId = "deviceId", Justification = "Part of the route's contract; it is deliberately not a selector")]
+    public async Task<ActionResult> StopEncodingProcess(
         [FromQuery, Required] string deviceId,
         [FromQuery, Required] string playSessionId)
     {
         // #153-LTV-R3. Both parameters are caller-named, and this used to act on whatever job they
         // selected. That is not a disclosure — nothing is read and nothing is served — but it let
-        // any authenticated caller end anyone else's transcode. The job is resolved from server
-        // state first and the same owner comparison the byte routes use decides.
+        // any authenticated caller end anyone else's transcode.
+        //
+        // POLISH-2-R4. A play session id selects SEVERAL jobs, and they need not be one user's:
+        // it is the client's to send, so a second user can start a transcode under the first
+        // user's. Ownership used to be asked of the first job found and the answer applied to all
+        // of them - the caller's own job first, and everybody's stopped; somebody else's first,
+        // and the caller could not stop its own. It is asked of each job now, and the jobs that
+        // are stopped are the ones that were asked about, whatever order the registry holds them in.
         //
         // A job this caller does not own answers exactly as one that never existed: 204, having
         // done nothing. Distinguishing the two would turn this route into a probe for which play
-        // sessions are live.
-        var job = _transcodeManager.GetTranscodingJob(playSessionId);
-        if (job is null || !_jobOwnership.OwnsJob(HttpContext, job.UserId, job.OwnerDeviceId))
+        // sessions are live. The 204 is sent once the processes have been stopped and waited for
+        // (a kill is given five seconds), and a stop that threw is an error rather than a 204;
+        // the files are removed afterwards.
+        if (string.IsNullOrWhiteSpace(playSessionId))
         {
             return NoContent();
         }
 
-        _transcodeManager.KillTranscodingJobs(deviceId, playSessionId, _ => true);
+        await _transcodeManager
+            .StopTranscodingJobs(playSessionId, job => _jobOwnership.OwnsJob(HttpContext, job.UserId, job.OwnerDeviceId))
+            .ConfigureAwait(false);
         return NoContent();
     }
 
@@ -279,7 +294,37 @@ public class HlsSegmentController : BaseTesserafinApiController
             return BadRequest("Invalid segment.");
         }
 
+        if (!NamesASegmentOf(binding, file))
+        {
+            return NotFound("Hls segment not found.");
+        }
+
         return GetFileResult(file, binding.CanonicalPlaylistPath);
+    }
+
+    /// <summary>
+    /// Whether a file, as it is about to be opened, is one of the job's segments:
+    /// "{playlistId}{index}.{ext}", the index a number or the -1 of an initialisation segment.
+    /// </summary>
+    /// <remarks>
+    /// POLISH-2-R4. ASKED OF THE FILE, NOT OF WHAT THE URL WAS SPLIT INTO. The job's owner used to
+    /// be served any file whose name began with the job's playlist identifier, and the identifier
+    /// alone with an extension is the file a progressive transcode of the same request writes, in
+    /// the same folder, for whoever made that request. Comparing the segment id does not close
+    /// that: the name is the segment id AND an extension the caller chooses separately, and can
+    /// leave empty - "{playlistId}.mp4" as the id, nothing after it. The playlist and its
+    /// temporary file are no segments either.
+    /// </remarks>
+    private static bool NamesASegmentOf(HlsSegmentBinding binding, string file)
+    {
+        var name = Path.GetFileNameWithoutExtension(file.AsSpan());
+        if (Path.GetExtension(file.AsSpan()).Length < 2 || !name.StartsWith(binding.PlaylistId, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var index = name[binding.PlaylistId.Length..];
+        return index is "-1" || (index.Length > 0 && !index.ContainsAnyExceptInRange('0', '9'));
     }
 
     /// <summary>

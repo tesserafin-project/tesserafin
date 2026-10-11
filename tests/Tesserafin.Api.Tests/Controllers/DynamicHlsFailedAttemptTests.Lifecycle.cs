@@ -330,8 +330,10 @@ public sealed partial class DynamicHlsFailedAttemptTests
         var request = Request(8, actor: "successor");
         var successor = await next.WaitAsync(Patience, TestContext.Current.CancellationToken);
 
-        // The late removal has not run yet: this run is the one the guard exists for.
-        Assert.True(File.Exists(attempt.Segment(5)), "the removal ran before the successor started; this run shows nothing");
+        // The late removal has not run yet: this run is the one the guard exists for. What the
+        // released attempt left is gone all the same - the start emptied the output (POLISH-2-R4).
+        Assert.False(release.IsCompleted, "the removal ran before the successor started; this run shows nothing");
+        Assert.Empty(successor.FilesWhenStarted);
         successor.Write(Init, "successor init");
         successor.Write(8, "successor 8");
         successor.Write(9, "successor 9");
@@ -392,7 +394,8 @@ public sealed partial class DynamicHlsFailedAttemptTests
         }
 
         var successor = await next.WaitAsync(Patience, TestContext.Current.CancellationToken);
-        Assert.True(File.Exists(attempt.Segment(5)), "the removal ran before the successor started; this run shows nothing");
+        Assert.False(stop.IsCompleted, "the removal ran before the successor started; this run shows nothing");
+        Assert.Empty(successor.FilesWhenStarted);
         successor.Write(Init, "successor init");
         successor.Write(40, "successor 40");
         successor.Write(41, "successor 41");

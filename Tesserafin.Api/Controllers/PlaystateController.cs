@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using Tesserafin.Api.Auth.HlsJobOwnership;
 using Tesserafin.Api.Extensions;
 using Tesserafin.Api.Helpers;
 using Tesserafin.Api.ModelBinders;
@@ -34,6 +35,7 @@ public class PlaystateController : BaseTesserafinApiController
     private readonly ISessionManager _sessionManager;
     private readonly ILogger<PlaystateController> _logger;
     private readonly ITranscodeManager _transcodeManager;
+    private readonly IHlsJobOwnershipAuthorizer _jobOwnership;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PlaystateController"/> class.
@@ -44,14 +46,17 @@ public class PlaystateController : BaseTesserafinApiController
     /// <param name="sessionManager">Instance of the <see cref="ISessionManager"/> interface.</param>
     /// <param name="loggerFactory">Instance of the <see cref="ILoggerFactory"/> interface.</param>
     /// <param name="transcodeManager">Instance of the <see cref="ITranscodeManager"/> interface.</param>
+    /// <param name="jobOwnership">Instance of the <see cref="IHlsJobOwnershipAuthorizer"/> interface.</param>
     public PlaystateController(
         IUserManager userManager,
         IUserDataManager userDataRepository,
         IItemAccessService itemAccessService,
         ISessionManager sessionManager,
         ILoggerFactory loggerFactory,
-        ITranscodeManager transcodeManager)
+        ITranscodeManager transcodeManager,
+        IHlsJobOwnershipAuthorizer jobOwnership)
     {
+        _jobOwnership = jobOwnership;
         _userManager = userManager;
         _userDataRepository = userDataRepository;
         _itemAccessService = itemAccessService;
@@ -252,7 +257,7 @@ public class PlaystateController : BaseTesserafinApiController
         _logger.LogDebug("ReportPlaybackStopped PlaySessionId: {0}", (playbackStopInfo.PlaySessionId ?? string.Empty).ToSingleLogLine());
         if (!string.IsNullOrWhiteSpace(playbackStopInfo.PlaySessionId))
         {
-            await _transcodeManager.KillTranscodingJobs(User.GetDeviceId()!, playbackStopInfo.PlaySessionId, s => true).ConfigureAwait(false);
+            await StopCallersTranscodes(playbackStopInfo.PlaySessionId).ConfigureAwait(false);
         }
 
         playbackStopInfo.SessionId = await RequestHelpers.GetSessionId(_sessionManager, _userManager, HttpContext).ConfigureAwait(false);
@@ -468,7 +473,7 @@ public class PlaystateController : BaseTesserafinApiController
         _logger.LogDebug("ReportPlaybackStopped PlaySessionId: {0}", (playbackStopInfo.PlaySessionId ?? string.Empty).ToSingleLogLine());
         if (!string.IsNullOrWhiteSpace(playbackStopInfo.PlaySessionId))
         {
-            await _transcodeManager.KillTranscodingJobs(User.GetDeviceId()!, playbackStopInfo.PlaySessionId, s => true).ConfigureAwait(false);
+            await StopCallersTranscodes(playbackStopInfo.PlaySessionId).ConfigureAwait(false);
         }
 
         playbackStopInfo.SessionId = await RequestHelpers.GetSessionId(_sessionManager, _userManager, HttpContext).ConfigureAwait(false);
@@ -524,6 +529,17 @@ public class PlaystateController : BaseTesserafinApiController
 
         return _userDataRepository.GetUserDataDto(item, user);
     }
+
+    /// <summary>
+    /// Stops the transcodes of a play session that are this caller's.
+    /// </summary>
+    /// <remarks>
+    /// POLISH-2-R4. The play session id is in the body of the report, and so is whoever's the
+    /// caller chooses to send: selecting by it alone stopped another user's transcode. The same
+    /// comparison as <c>DELETE Videos/ActiveEncodings</c>, job by job.
+    /// </remarks>
+    private Task StopCallersTranscodes(string playSessionId)
+        => _transcodeManager.StopTranscodingJobs(playSessionId, job => _jobOwnership.OwnsJob(HttpContext, job.UserId, job.OwnerDeviceId));
 
     private PlayMethod ValidatePlayMethod(PlayMethod method, string? playSessionId)
     {
