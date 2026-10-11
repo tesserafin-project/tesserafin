@@ -75,12 +75,12 @@ public class PlaybackCredentialsController : BaseTesserafinApiController
     /// <response code="404">The item, the media source or the play session is not this caller's to name.</response>
     /// <returns>The minted capability.</returns>
     /// <remarks>
-    /// WHY THE CHECKS ARE HERE AND NOWHERE ELSE. <c>StreamingHelpers.GetStreamingState</c> reads the
-    /// user id off the principal and then never asks whether that user may see the item: no library
-    /// restriction, no blocked tag, no media-source ownership check runs anywhere on the delivery
-    /// path. Whatever a capability is permitted to name here is therefore what it can fetch for its
-    /// whole lifetime, so this is the only place those restrictions can hold at all. Remote access
-    /// and the parental schedule are the exception and are deliberately NOT re-checked here:
+    /// WHY THE CHECKS ARE HERE AS WELL AS ON DELIVERY. A capability is minted only for an item and
+    /// a media source its user may see, so that none exists for anything else. That is not what
+    /// keeps a user from an item: the routes that serve an item resolve it, and a media source
+    /// that is itself an item, for the capability's user on every request, so a right withdrawn
+    /// after minting is withdrawn from the capability too. Live TV streams are not covered by
+    /// that. Remote access and the parental schedule are deliberately NOT checked here:
     /// <c>MediaDeliveryRequirement</c> subclasses <c>DefaultAuthorizationRequirement</c>, so
     /// <c>DefaultAuthorizationHandler</c> re-evaluates both on every delivery request, for a
     /// capability principal exactly as for a durable token. Checking them twice is how two code

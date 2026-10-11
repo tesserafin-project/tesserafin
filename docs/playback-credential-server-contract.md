@@ -206,11 +206,10 @@ this up" is a decision rather than a discovery.
 
 ## What minting proves (R1)
 
-`StreamingHelpers.GetStreamingState` reads the user id off the principal and then never asks
-whether that user may see the item. No library restriction, no blocked tag and no media-source
-ownership check runs anywhere on the delivery path. **Whatever a capability is permitted to name at
-minting is what it can fetch for its whole lifetime**, so minting is the only place those
-restrictions can hold at all.
+A capability is minted only for an item and a media source its user may see. Minting is not what
+keeps a user from an item: the routes that serve an item resolve it, and a media source that is
+itself an item, for the capability's user on every request, so **a right withdrawn after minting is
+withdrawn from the capability too**. Live TV streams are not covered by that.
 
 | checked | how |
 |---|---|

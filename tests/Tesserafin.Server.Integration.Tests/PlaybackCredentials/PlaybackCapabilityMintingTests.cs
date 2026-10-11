@@ -13,12 +13,10 @@ namespace Tesserafin.Server.Integration.Tests.PlaybackCredentials;
 /// What the minting endpoint must refuse (#153-A0-R1 item 3).
 /// </summary>
 /// <remarks>
-/// WHY MINTING IS THE ONLY PLACE THESE CAN BE CHECKED. <c>StreamingHelpers.GetStreamingState</c>
-/// reads the user id off the principal and then never asks whether that user may see the item: no
-/// library restriction, no blocked tag, no media-source ownership check runs anywhere on the
-/// delivery path. Whatever a capability is allowed to name at minting is therefore what it can
-/// fetch, forever, for its whole lifetime. Remote access and the parental schedule are the
-/// exception — <c>MediaDeliveryRequirement</c> subclasses <c>DefaultAuthorizationRequirement</c>,
+/// WHY MINTING CHECKS THESE TOO. The delivery routes resolve the item for the capability's user on
+/// every request (<c>MediaByteAuthorizationEndToEndTests</c>); minting refuses first, so that no
+/// capability exists for an item its user may not see. Remote access and the parental schedule
+/// are not minting's to check — <c>MediaDeliveryRequirement</c> subclasses <c>DefaultAuthorizationRequirement</c>,
 /// so <c>DefaultAuthorizationHandler</c> re-evaluates both on every delivery request, for a
 /// capability principal as much as for a durable token.
 /// </remarks>
