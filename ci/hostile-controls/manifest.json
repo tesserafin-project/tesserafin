@@ -1730,7 +1730,8 @@
         "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
         "filter": "FullyQualifiedName~Tesserafin.Api.Tests.Controllers.DynamicHlsFailedAttemptTests",
         "expectedTests": [
-          "Tesserafin.Api.Tests.Controllers.DynamicHlsFailedAttemptTests.StopThatDoesNotEndTheProcess_IsAnError_AndTheOutputKeepsItsOwner"
+          "Tesserafin.Api.Tests.Controllers.DynamicHlsFailedAttemptTests.StopThatDoesNotEndTheProcess_IsAnError_AndTheOutputKeepsItsOwner",
+          "Tesserafin.Api.Tests.Controllers.DynamicHlsFailedAttemptTests.PlaybackStopReport_IsRecorded_EvenWhenTheTranscodeCouldNotBeStopped"
         ]
       },
       "mutations": [
@@ -1742,6 +1743,31 @@
         }
       ],
       "note": "The wait for a stopped process is bounded. When it ran out the job left the registry all the same, DELETE answered 204, and the output had no owner and a process still writing to it."
+    },
+    {
+      "id": "p2r4-start-a-process-for-a-job-that-left",
+      "stage": "P2R4",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "no process is started for a job that has left the registry",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Api.Tests/Tesserafin.Api.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Api.Tests.Controllers.DynamicHlsFailedAttemptTests",
+        "expectedTests": [
+          "Tesserafin.Api.Tests.Controllers.DynamicHlsFailedAttemptTests.StopBetweenAJobsRegistrationAndItsProcesssStart_CancelsTheStart_AndNoProcessIsLeftOnTheOutput"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.MediaEncoding/Transcoding/TranscodeManager.cs",
+          "find": "                if (!_activeTranscodingJobs.Contains(transcodingJob) || cancellationTokenSource.IsCancellationRequested)\n",
+          "replace": "                if (false)\n",
+          "count": 1
+        }
+      ],
+      "note": "A job is registered before its process is started. Stopped in between it left the registry with nothing to wait for, and the start went on: a process writing to an output with no owner."
     },
     {
       "id": "p2r4-failed-start-leaves-its-process",

@@ -187,6 +187,52 @@ public sealed partial class DynamicHlsFailedAttemptTests
     }
 
     [Fact]
+    public async Task StopBetweenAJobsRegistrationAndItsProcesssStart_CancelsTheStart_AndNoProcessIsLeftOnTheOutput()
+    {
+        // A job is registered before its process is started. Stopped in between, there is no
+        // process to stop yet: the job leaves the registry, and the start must not go on.
+        Configure(hardware: false);
+        var output = Path.Combine(_transcodePath, "early.m3u8");
+        using var state = new StreamState(Mock.Of<IMediaSourceManager>(), TranscodingJobType.Hls, _manager!)
+        {
+            Request = new StreamingRequestDto { Id = _item, PlaySessionId = SessionA, DeviceId = OwnerDevice, MediaSourceId = MediaSourceId },
+            MediaSource = new MediaSourceInfo { Id = MediaSourceId, Path = "film.mkv", Protocol = MediaProtocol.File },
+            OwnerDeviceId = OwnerDevice
+        };
+        using var cancellation = new CancellationTokenSource();
+        var registered = new Gate("the job registered, its process not started");
+        _beforeStartGate = registered;
+
+        var start = Task.Run(() => _manager!.StartFfMpeg(state, output, "-i film.mkv", _owner, TranscodingJobType.Hls, cancellation), TestContext.Current.CancellationToken);
+        await registered.Reached;
+        var job = _manager!.GetTranscodingJob(output, TranscodingJobType.Hls);
+        Assert.NotNull(job);
+
+        // THE BARRIER STANDS BEFORE TWO WRITES TO THE LOG THAT OBSERVE THE CANCELLATION, and the
+        // window is after them: a few lines nothing can be made to stop in. So the stop is given
+        // another source to cancel, and the start goes through those writes not knowing - as it
+        // does when the stop arrives once they have begun.
+        using var unseen = new CancellationTokenSource();
+        job.CancellationTokenSource = unseen;
+
+        await _manager.StopTranscodingJobs(SessionA, _ => true).WaitAsync(Patience, TestContext.Current.CancellationToken);
+        registered.Open();
+
+        // Either outcome keeps the output somebody's while something writes to it: the start is
+        // cancelled, or the process it started is still registered.
+        var outcome = await Record.ExceptionAsync(() => start.WaitAsync(Patience, TestContext.Current.CancellationToken));
+        var stillRegistered = ReferenceEquals(job, _manager.GetTranscodingJob(output, TranscodingJobType.Hls));
+        Assert.True(
+            _starts.IsEmpty || stillRegistered,
+            "a process was started for a job that had already left the registry: it writes to an output with no owner");
+        if (_starts.IsEmpty)
+        {
+            Assert.IsAssignableFrom<OperationCanceledException>(outcome);
+            Assert.Throws<InvalidOperationException>(() => job.Process!.Id);
+        }
+    }
+
+    [Fact]
     public async Task LivePlaylistGoneButItsSegmentsLeft_AnotherUsersStartDoesNotInheritThem()
     {
         Configure(hardware: false);
@@ -477,6 +523,41 @@ public sealed partial class DynamicHlsFailedAttemptTests
         Assert.IsType<NoContentResult>(result);
         Assert.Equal(reportedByItsOwner, Stopped(theirs));
         Assert.Equal(reportedByItsOwner, _manager!.GetTranscodingJob(theirs.Job.Path!, TranscodingJobType.Hls) is null);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PlaybackStopReport_IsRecorded_EvenWhenTheTranscodeCouldNotBeStopped(bool legacyRoute)
+    {
+        // The same probe as StopThatDoesNotEndTheProcess: a stop that ends nothing.
+        var mine = await StartPlayback(hardware: false, segments: 6);
+        mine.Job.Process = System.Diagnostics.Process.GetProcessById(mine.Process.Id);
+        _sessionManager
+            .Setup(s => s.LogSessionActivity(It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<Tesserafin.Database.Implementations.Entities.User?>()))
+            .ReturnsAsync(() => new SessionInfo(_sessionManager.Object, NullLogger.Instance) { Id = "a-session" });
+        var controller = new PlaystateController(
+            Mock.Of<IUserManager>(),
+            Mock.Of<IUserDataManager>(),
+            Mock.Of<IItemAccessService>(),
+            _sessionManager.Object,
+            NullLoggerFactory.Instance,
+            _gated!,
+            new HlsJobOwnershipAuthorizer(_manager!, _sessionManager.Object))
+        {
+            ControllerContext = new ControllerContext { HttpContext = Context("/Sessions/Playing/Stopped", null, OwnerDevice, out _) }
+        };
+
+#pragma warning disable CS0618 // The obsolete route is one of the two under test.
+        var error = await Assert.ThrowsAsync<AggregateException>(() => Task.Run(
+            () => legacyRoute
+                ? controller.OnPlaybackStopped(_item, null, null, null, null, SessionA)
+                : controller.ReportPlaybackStopped(new PlaybackStopInfo { PlaySessionId = SessionA }),
+            TestContext.Current.CancellationToken));
+#pragma warning restore CS0618
+
+        Assert.Contains(error.Flatten().InnerExceptions, e => e is TimeoutException);
+        _sessionManager.Verify(s => s.OnPlaybackStopped(It.Is<PlaybackStopInfo>(i => i.PlaySessionId == SessionA && i.SessionId == "a-session")), Times.Once);
     }
 
     /// <summary>

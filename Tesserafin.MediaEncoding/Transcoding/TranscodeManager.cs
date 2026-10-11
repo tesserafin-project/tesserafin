@@ -472,13 +472,17 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
         // The wait is bounded, so it can end with the process still there. Then the stop has not
         // happened: the job keeps its place and its owner, nothing is removed, and the caller is
         // told. Leaving the registry is not what proves a process has ended.
-        if (!HasEnded(job))
-        {
-            throw new TimeoutException(string.Format(CultureInfo.InvariantCulture, "The FFmpeg process of transcoding job {0} did not end when stopped; its output is still its owner's.", job.Id));
-        }
-
+        //
+        // Asked under the registry's lock, where StartFfMpeg starts a process: a job that is
+        // stopped before its process exists has nothing to wait for, and that process must not
+        // be started once the job has left.
         lock (_activeTranscodingJobs)
         {
+            if (!HasEnded(job))
+            {
+                throw new TimeoutException(string.Format(CultureInfo.InvariantCulture, "The FFmpeg process of transcoding job {0} did not end when stopped; its output is still its owner's.", job.Id));
+            }
+
             _activeTranscodingJobs.Remove(job);
         }
 
@@ -710,7 +714,8 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
             var user = userId.IsEmpty() ? null : _userManager.GetUserById(userId);
             if (user is not null && !user.HasPermission(PermissionKind.EnableVideoPlaybackTranscoding))
             {
-                OnTranscodeFailedToStart(outputPath, transcodingJobType, state);
+                // No job is registered for this start yet: there is none to stop.
+                OnTranscodeFailedToStart(null, state);
 
                 throw new ArgumentException("User does not have access to video transcoding.");
             }
@@ -814,12 +819,24 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
 
         try
         {
-            process.Start();
+            // A job is registered before its process is started, and can be stopped in between.
+            // There is no process to stop then, so the job leaves the registry - and a process
+            // started after that would write to an output nobody owns. Decided under the lock a
+            // job leaves the registry under.
+            lock (_activeTranscodingJobs)
+            {
+                if (!_activeTranscodingJobs.Contains(transcodingJob) || cancellationTokenSource.IsCancellationRequested)
+                {
+                    throw new OperationCanceledException("The transcoding job was stopped before its process was started.");
+                }
+
+                process.Start();
+            }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "Error starting FFmpeg");
-            OnTranscodeFailedToStart(outputPath, transcodingJobType, state);
+            OnTranscodeFailedToStart(transcodingJob, state);
 
             throw;
         }
@@ -882,7 +899,7 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
             var pumpFault = transcodingJob.DirectStreamPump?.Fault;
             if (pumpFault is not null)
             {
-                OnTranscodeFailedToStart(outputPath, transcodingJobType, state);
+                OnTranscodeFailedToStart(transcodingJob, state);
 
                 throw new FfmpegException("The live stream feeding FFmpeg failed before any output was produced.", pumpFault);
             }
@@ -1018,14 +1035,10 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
         }
     }
 
-    private void OnTranscodeFailedToStart(string path, TranscodingJobType type, StreamState state)
+    private void OnTranscodeFailedToStart(TranscodingJob? job, StreamState state)
     {
-        TranscodingJob? job;
-        lock (_activeTranscodingJobs)
-        {
-            job = _activeTranscodingJobs.FirstOrDefault(j => j.Type == type && string.Equals(j.Path, path, StringComparison.OrdinalIgnoreCase));
-        }
-
+        // The job of the start that failed, itself - not whichever job is found on its output,
+        // which a start that failed before it registered anything has no claim on.
         if (job is not null)
         {
             try

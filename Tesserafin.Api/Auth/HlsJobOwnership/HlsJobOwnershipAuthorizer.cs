@@ -43,7 +43,8 @@ namespace Tesserafin.Api.Auth.HlsJobOwnership;
 /// <item>A REQUEST PAST THAT POINT MAY FINISH SENDING. Its bytes were authorized when the decision
 /// was taken; the stop does not reach back into a response already in flight.</item>
 /// <item>THE STOP REMOVES THE BINDING FOR EVERY NEW REQUEST. The job leaves the registry, so the
-/// next <see cref="Decide"/> resolves nothing.</item>
+/// next <see cref="Decide"/> resolves nothing. A stop that did not end the job's process is not
+/// one: the binding stays, and so does its owner (POLISH-2-R4).</item>
 /// <item>NO NEW OPENING CAN BE AUTHORIZED AFTERWARDS. <c>NoSuchJob</c> carries no binding at all,
 /// and a refusal carries none either, so a request that arrives after the stop has no path to
 /// open — not even to a residual file still on disk.</item>

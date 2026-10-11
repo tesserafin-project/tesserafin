@@ -255,13 +255,21 @@ public class PlaystateController : BaseTesserafinApiController
     public async Task<ActionResult> ReportPlaybackStopped([FromBody] PlaybackStopInfo playbackStopInfo)
     {
         _logger.LogDebug("ReportPlaybackStopped PlaySessionId: {0}", (playbackStopInfo.PlaySessionId ?? string.Empty).ToSingleLogLine());
-        if (!string.IsNullOrWhiteSpace(playbackStopInfo.PlaySessionId))
+        try
         {
-            await StopCallersTranscodes(playbackStopInfo.PlaySessionId).ConfigureAwait(false);
+            if (!string.IsNullOrWhiteSpace(playbackStopInfo.PlaySessionId))
+            {
+                await StopCallersTranscodes(playbackStopInfo.PlaySessionId).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            // The report is recorded whether or not the transcode could be stopped: where the
+            // viewer got to does not depend on a process ending in time.
+            playbackStopInfo.SessionId = await RequestHelpers.GetSessionId(_sessionManager, _userManager, HttpContext).ConfigureAwait(false);
+            await _sessionManager.OnPlaybackStopped(playbackStopInfo).ConfigureAwait(false);
         }
 
-        playbackStopInfo.SessionId = await RequestHelpers.GetSessionId(_sessionManager, _userManager, HttpContext).ConfigureAwait(false);
-        await _sessionManager.OnPlaybackStopped(playbackStopInfo).ConfigureAwait(false);
         return NoContent();
     }
 
@@ -471,13 +479,21 @@ public class PlaystateController : BaseTesserafinApiController
         };
 
         _logger.LogDebug("ReportPlaybackStopped PlaySessionId: {0}", (playbackStopInfo.PlaySessionId ?? string.Empty).ToSingleLogLine());
-        if (!string.IsNullOrWhiteSpace(playbackStopInfo.PlaySessionId))
+        try
         {
-            await StopCallersTranscodes(playbackStopInfo.PlaySessionId).ConfigureAwait(false);
+            if (!string.IsNullOrWhiteSpace(playbackStopInfo.PlaySessionId))
+            {
+                await StopCallersTranscodes(playbackStopInfo.PlaySessionId).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            // The report is recorded whether or not the transcode could be stopped: where the
+            // viewer got to does not depend on a process ending in time.
+            playbackStopInfo.SessionId = await RequestHelpers.GetSessionId(_sessionManager, _userManager, HttpContext).ConfigureAwait(false);
+            await _sessionManager.OnPlaybackStopped(playbackStopInfo).ConfigureAwait(false);
         }
 
-        playbackStopInfo.SessionId = await RequestHelpers.GetSessionId(_sessionManager, _userManager, HttpContext).ConfigureAwait(false);
-        await _sessionManager.OnPlaybackStopped(playbackStopInfo).ConfigureAwait(false);
         return NoContent();
     }
 

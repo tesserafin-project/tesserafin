@@ -95,6 +95,7 @@ public sealed partial class DynamicHlsFailedAttemptTests : IDisposable
     private Gate? _verdictGate;
     private Gate? _stopGate;
     private Gate? _stopDecisionGate;
+    private Gate? _beforeStartGate;
     private Func<DynamicHlsController>? _newController;
     private Func<HlsSegmentController>? _newLegacyController;
     private ITranscodeManager? _gated;
@@ -562,6 +563,7 @@ public sealed partial class DynamicHlsFailedAttemptTests : IDisposable
         _verdictGate?.Open();
         _stopGate?.Open();
         _stopDecisionGate?.Open();
+        _beforeStartGate?.Open();
 
         foreach (var start in _starts)
         {
@@ -776,6 +778,11 @@ public sealed partial class DynamicHlsFailedAttemptTests : IDisposable
                 {
                     // Said by a job that is being stopped, just before its process is told to end.
                     Interlocked.Exchange(ref _stopGate, null)?.Hit();
+                }
+                else if (message.StartsWith(ffmpeg, StringComparison.Ordinal))
+                {
+                    // The command, said once the job is registered and before its process is started.
+                    Interlocked.Exchange(ref _beforeStartGate, null)?.Hit();
                 }
             }),
             _fileSystem,
