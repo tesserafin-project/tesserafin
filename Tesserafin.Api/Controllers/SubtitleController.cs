@@ -15,6 +15,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Tesserafin.Api.Attributes;
+using Tesserafin.Api.Auth.PlaybackCapabilityPolicy;
 using Tesserafin.Api.Extensions;
 using Tesserafin.Api.Helpers;
 using Tesserafin.Api.Models.SubtitleDtos;
@@ -227,6 +228,16 @@ public class SubtitleController : BaseTesserafinApiController
         [FromQuery] bool addVttTimeMap = false,
         [FromQuery] long startPositionTicks = 0)
     {
+        // The obsolete query parameters replace the route's item and media source - after a
+        // capability was validated against the route's. Refused as a capability presented for
+        // something else is.
+        if (ValidatedPlaybackCapability.From(HttpContext) is not null
+            && ((itemId is not null && !itemId.Equals(routeItemId))
+                || (mediaSourceId is not null && !string.Equals(mediaSourceId, routeMediaSourceId, StringComparison.OrdinalIgnoreCase))))
+        {
+            return Unauthorized();
+        }
+
         // Set parameters to route value if not provided via query.
         itemId ??= routeItemId;
         mediaSourceId ??= routeMediaSourceId;

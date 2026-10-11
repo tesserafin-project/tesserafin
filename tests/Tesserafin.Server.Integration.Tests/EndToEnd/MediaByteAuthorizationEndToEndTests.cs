@@ -335,6 +335,43 @@ public sealed class MediaByteAuthorizationEndToEndTests : IClassFixture<HlsIsola
     }
 
     /// <summary>
+    /// A subtitle capability is validated against the item and media source in the route; the
+    /// obsolete query parameters name another item afterwards.
+    /// </summary>
+    /// <param name="template">The subtitle route, with the item and its media source to fill in.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
+    [Theory(Timeout = 120_000)]
+    [InlineData("Videos/{0}/{0:N}/Subtitles/2/Stream.vtt")]
+    [InlineData("Videos/{0}/{0:N}/Subtitles/2/0/Stream.vtt")]
+    public async Task SubtitleCapabilityForOneItem_WithObsoleteParametersNamingAnother_IsRefused(string template)
+    {
+        var playSession = "smr1-subtitles-" + Guid.NewGuid().ToString("N");
+        var capability = await MediaBoundaryFixture.MintWithAsync(_allowed, [PlaybackCapabilityScope.Subtitles], _own, _own.ToString("N", CultureInfo.InvariantCulture), playSession);
+        var credential = "playbackCapability=" + Uri.EscapeDataString(capability.Value);
+        using var anonymous = _factory.CreateClient();
+
+        // What the capability was minted for is asked for, and answered, by the route's own values.
+        var own = string.Format(CultureInfo.InvariantCulture, template, _own);
+        var bound = await SendAsync(anonymous, "GET", string.Format(CultureInfo.InvariantCulture, template, _item) + "?" + credential, string.Empty);
+        Assert.Equal(HttpStatusCode.Unauthorized, bound.Status);
+
+        foreach (var rewrite in new[] { FormattableString.Invariant($"itemId={_item}&mediaSourceId={_item:N}"), FormattableString.Invariant($"itemId={_item}"), FormattableString.Invariant($"mediaSourceId={_item:N}") })
+        {
+            var rewritten = await SendAsync(anonymous, "GET", own + "?" + rewrite + "&" + credential, string.Empty);
+
+            Assert.False(Carries(rewritten.Body, Encoding.UTF8.GetBytes(SubtitleText)), rewrite + ": the capability was served the subtitles of an item it was not minted for");
+            Assert.Equal(HttpStatusCode.Unauthorized, rewritten.Status);
+        }
+
+        // Naming what the route already names changes nothing, with a capability or with a token.
+        var same = FormattableString.Invariant($"itemId={_item}&mediaSourceId={_item:N}");
+        var item = string.Format(CultureInfo.InvariantCulture, template, _item);
+        var itemCapability = await MediaBoundaryFixture.MintWithAsync(_allowed, [PlaybackCapabilityScope.Subtitles], _item, _item.ToString("N", CultureInfo.InvariantCulture), playSession);
+        Assert.True(Carries((await SendAsync(anonymous, "GET", item + "?" + same + "&playbackCapability=" + Uri.EscapeDataString(itemCapability.Value), string.Empty)).Body, Encoding.UTF8.GetBytes(SubtitleText)));
+        Assert.True(Carries((await SendAsync(_allowed, "GET", own + "?" + same, string.Empty)).Body, Encoding.UTF8.GetBytes(SubtitleText)));
+    }
+
+    /// <summary>
     /// A user who may see the item plays it; the right is withdrawn; the same requests are sent again.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
