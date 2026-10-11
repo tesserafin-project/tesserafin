@@ -519,7 +519,7 @@ public class PlaylistsController : BaseTesserafinApiController
         [FromQuery] int? imageTypeLimit,
         [FromQuery, ModelBinder(typeof(CommaDelimitedCollectionModelBinder))] ImageType[] enableImageTypes)
     {
-        var callingUserId = userId ?? User.GetUserId();
+        var callingUserId = RequestHelpers.GetUserId(User, userId);
         var playlist = _playlistManager.GetPlaylistForUser(playlistId, callingUserId);
         if (playlist is null)
         {

@@ -292,13 +292,6 @@ public class ItemsController : BaseTesserafinApiController
         var dtoOptions = new DtoOptions { Fields = fields }
             .AddAdditionalDtoOptions(enableImages, enableUserData, imageTypeLimit, enableImageTypes);
 
-        // A parent the user may not see is a parent that does not exist, and is answered as one.
-        if (user is not null && parentId.HasValue && _libraryManager.GetItemById<BaseItem>(parentId.Value, user) is null)
-        {
-            _logger.LogWarning("{UserName} is not permitted to access {ItemId}", user.Username, parentId.Value);
-            throw new ArgumentException($"Invalid parent id: {parentId.Value}");
-        }
-
         // A query that names ids is not scoped to its user's libraries: each id is asked what
         // Items/{id} asks, and a selection with nothing left in it names nothing.
         // ponytail: one lookup per id, on top of the query; batch it if selections grow past hundreds.

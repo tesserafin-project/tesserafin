@@ -103,6 +103,34 @@ public sealed class ExplicitItemSelectionAuthorizationEndToEndTests : IClassFixt
         { "GET", "Movies/Recommendations" },
         { "GET", "Items/Latest" },
         { "GET", "Search/Hints?searchTerm=SECURITY" },
+        { "GET", "Items?parentId={root}" },
+        { "GET", "Items?parentId={root}&recursive=true" },
+        { "GET", "Items/Latest?parentId={hiddenLibrary}" },
+        { "GET", "Items/Latest?parentId={hiddenFolder}" },
+        { "GET", "Items/Latest?parentId={root}" },
+        { "GET", "UserItems/Resume?parentId={hiddenLibrary}" },
+        { "GET", "UserItems/Resume?parentId={root}" },
+        { "GET", "Items/Filters" },
+        { "GET", "Items/Filters?parentId={hiddenFolder}" },
+        { "GET", "Items/Filters?parentId={root}" },
+        { "GET", "Items/Filters2" },
+        { "GET", "Items/Filters2?parentId={hiddenFolder}" },
+        { "GET", "Items/Filters2?parentId={root}" },
+        { "GET", "Genres" },
+        { "GET", "Genres?parentId={hiddenLibrary}" },
+        { "GET", "Genres?parentId={hiddenFolder}" },
+        { "GET", "Genres?parentId={root}" },
+        { "GET", "Studios" },
+        { "GET", "Studios?parentId={hiddenLibrary}" },
+        { "GET", "Studios?parentId={hiddenFolder}" },
+        { "GET", "Studios?parentId={root}" },
+        { "GET", "Years?parentId={hiddenLibrary}" },
+        { "GET", "Persons?parentId={hiddenLibrary}" },
+        { "GET", "Artists?parentId={hiddenLibrary}" },
+        { "GET", "Artists/AlbumArtists?parentId={hiddenLibrary}" },
+        { "GET", "MusicGenres?parentId={hiddenLibrary}" },
+        { "GET", "Shows/Upcoming?parentId={hiddenLibrary}" },
+        { "GET", "Shows/NextUp?parentId={hiddenLibrary}" },
     };
 
     public async ValueTask InitializeAsync()
@@ -170,6 +198,20 @@ public sealed class ExplicitItemSelectionAuthorizationEndToEndTests : IClassFixt
         Assert.Equal(HttpStatusCode.OK, (await SendAsync(_restricted, "GET", "Items/" + _visible)).Status);
         Assert.Equal(HttpStatusCode.NotFound, (await SendAsync(_restricted, "GET", "Items/" + _hidden)).Status);
         Assert.Equal(HttpStatusCode.OK, (await SendAsync(_admin, "GET", "Items/" + _hidden)).Status);
+
+        // What the by-name routes are searched for is there to be found, by who may see it.
+        // (Genres, Studios and the other by-name routes list items only a scan creates: on this
+        // harness they answer with nothing for anyone, and their rows below cannot fail.)
+        foreach (var mark in new[] { "-genre", "-tag" })
+        {
+            var all = await SendAsync(_admin, "GET", FormattableString.Invariant($"Items/Filters?userId={_adminId}&parentId={_withheldFolder}"));
+            Assert.Contains("withheld-" + _suffix + mark, all.Body, StringComparison.Ordinal);
+            var mine = await SendAsync(_restricted, "GET", FormattableString.Invariant($"Items/Filters?userId={_restrictedId}&parentId={_openFolder}"));
+            Assert.Contains("open-" + _suffix + mark, mine.Body, StringComparison.Ordinal);
+        }
+
+        var latest = await SendAsync(_restricted, "GET", "Items/Latest?userId=" + _restrictedId + "&parentId=" + _openLibrary);
+        Assert.Contains(_visibleName, latest.Body, StringComparison.Ordinal);
 
         var listing = await SendAsync(_restricted, "GET", "Items?recursive=true&includeItemTypes=Movie&" + Everything);
         Assert.Contains(_visibleName, listing.Body, StringComparison.Ordinal);
@@ -461,11 +503,16 @@ public sealed class ExplicitItemSelectionAuthorizationEndToEndTests : IClassFixt
         {
             var read = await SendAsync(_restricted, "GET", url);
             Assert.True(read.Status == HttpStatusCode.OK, FormattableString.Invariant($"{url} answered {(int)read.Status}"));
-            AssertNothingOfTheWithheldItem(url, read.Body);
+            AssertNothingOfTheWithheldItem(url, read.Body, container: url.StartsWith("Items/", StringComparison.Ordinal));
         }
 
         var mine = await SendAsync(_restricted, "GET", FormattableString.Invariant($"Playlists/{playlist}/Items?userId={_restrictedId}&{Everything}"));
         Assert.Contains(_visibleName, mine.Body, StringComparison.Ordinal);
+
+        // Nor by asking as the user who may see it.
+        var asAnother = await SendAsync(_restricted, "GET", FormattableString.Invariant($"Playlists/{playlist}/Items?userId={_adminId}&{Everything}"));
+        Assert.Equal(HttpStatusCode.Forbidden, asAnother.Status);
+        AssertNothingOfTheWithheldItem("the playlist, asked as the administrator", asAnother.Body);
     }
 
     /// <summary>
@@ -500,8 +547,8 @@ public sealed class ExplicitItemSelectionAuthorizationEndToEndTests : IClassFixt
         })
         {
             var read = await SendAsync(_restricted, "GET", url);
-            Assert.True((int)read.Status < 500, FormattableString.Invariant($"{url} answered {(int)read.Status}"));
-            AssertNothingOfTheWithheldItem(url, read.Body);
+            Assert.True(read.Status == HttpStatusCode.OK, FormattableString.Invariant($"{url} answered {(int)read.Status}"));
+            AssertNothingOfTheWithheldItem(url, read.Body, container: !url.Contains("parentId", StringComparison.Ordinal));
         }
 
         var mine = await SendAsync(_restricted, "GET", FormattableString.Invariant($"Items?parentId={collection}&recursive=true&userId={_restrictedId}&{Everything}"));
@@ -516,6 +563,18 @@ public sealed class ExplicitItemSelectionAuthorizationEndToEndTests : IClassFixt
     [Fact(Timeout = 120_000)]
     public async Task WithheldIdReportedAsPlayedOrViewed_IsNotHandedBackDescribed()
     {
+        // The instrument sees what it looks for: an item the user may see is described back.
+        using (var playing = await _restricted.PostAsJsonAsync("Sessions/Playing", new { ItemId = _visible, MediaSourceId = _visible.ToString("N", CultureInfo.InvariantCulture), PlaySessionId = "smr3-open-" + _suffix, CanSeek = true }, JsonDefaults.Options, TestContext.Current.CancellationToken))
+        {
+            Assert.Equal(HttpStatusCode.NoContent, playing.StatusCode);
+        }
+
+        Assert.Contains(_visibleName, (await SendAsync(_restricted, "GET", "Sessions")).Body, StringComparison.Ordinal);
+        using (var viewing = await _restricted.PostAsync("Sessions/Viewing?itemId=" + _visible, null, TestContext.Current.CancellationToken))
+        {
+            Assert.Equal(HttpStatusCode.NoContent, viewing.StatusCode);
+        }
+
         // A session repeats the ids its client reported; it is what the server adds that is looked for.
         using (var playing = await _restricted.PostAsJsonAsync("Sessions/Playing", new { ItemId = _hidden, MediaSourceId = _hidden.ToString("N", CultureInfo.InvariantCulture), PlaySessionId = "smr3-" + _suffix, CanSeek = true }, JsonDefaults.Options, TestContext.Current.CancellationToken))
         {
@@ -566,13 +625,17 @@ public sealed class ExplicitItemSelectionAuthorizationEndToEndTests : IClassFixt
             .Replace("{visible}", _visible.ToString(), StringComparison.Ordinal)
             .Replace("{hiddenFolder}", _withheldFolder.ToString(), StringComparison.Ordinal)
             .Replace("{hiddenLibrary}", _withheldLibrary.ToString(), StringComparison.Ordinal)
-            .Replace("{openLibrary}", _openLibrary.ToString(), StringComparison.Ordinal);
+            .Replace("{openLibrary}", _openLibrary.ToString(), StringComparison.Ordinal)
+            .Replace("{root}", _factory.Services.GetRequiredService<ILibraryManager>().RootFolder.Id.ToString(), StringComparison.Ordinal);
 
-    private void AssertNothingOfTheWithheldItem(string what, string body, bool idToo = true)
+    private void AssertNothingOfTheWithheldItem(string what, string body, bool idToo = true, bool container = false)
     {
+        // A playlist or a collection carries the genres its refresh gathered from every child, as
+        // metadata of its own: not looked for on the container itself (known, not repaired here).
+        var file = container ? "withheld-" + _suffix + ".mp4" : "withheld-" + _suffix;
         string[] marks = idToo
-            ? [_hiddenName, "withheld-" + _suffix, _hidden.ToString("N", CultureInfo.InvariantCulture), _hidden.ToString()]
-            : [_hiddenName, "withheld-" + _suffix];
+            ? [_hiddenName, file, _hidden.ToString("N", CultureInfo.InvariantCulture), _hidden.ToString()]
+            : [_hiddenName, file];
         foreach (var mark in marks)
         {
             Assert.False(body.Contains(mark, StringComparison.OrdinalIgnoreCase), FormattableString.Invariant($"{what}: the answer carries \"{mark}\": {(body.Length > 600 ? body[..600] : body)}"));
@@ -592,7 +655,15 @@ public sealed class ExplicitItemSelectionAuthorizationEndToEndTests : IClassFixt
                 new MediaStream { Index = 1, Type = MediaStreamType.Audio, Codec = "aac", Channels = 2, IsDefault = true },
             ],
             name,
-            parentId: folder);
+            parentId: folder,
+            configure: movie =>
+            {
+                // Named after the file, so that what is withheld is recognisable wherever it comes out.
+                var mark = Path.GetFileNameWithoutExtension(file);
+                movie.Genres = [mark + "-genre"];
+                movie.Studios = [mark + "-studio"];
+                movie.Tags = [mark + "-tag"];
+            });
     }
 
     private async Task<string> AddLibraryAsync(string name)

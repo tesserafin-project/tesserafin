@@ -30,6 +30,7 @@ namespace Tesserafin.Server.Implementations.Tests.Library;
 public class ItemQueryScopeServiceTests
 {
     private readonly Mock<IItemLookupService> _itemLookupServiceMock = new();
+    private readonly Mock<IItemAccessService> _itemAccessServiceMock = new();
     private readonly Mock<IUserViewCatalog> _userViewCatalogMock = new();
     private readonly Mock<IItemSortService> _itemSortServiceMock = new();
     private readonly Mock<IUserRootFolderProvider> _rootFolderProviderMock = new();
@@ -39,6 +40,7 @@ public class ItemQueryScopeServiceTests
     {
         _scopeService = new ItemQueryScopeService(
             _itemLookupServiceMock.Object,
+            _itemAccessServiceMock.Object,
             _userViewCatalogMock.Object,
             _itemSortServiceMock.Object,
             _rootFolderProviderMock.Object);
@@ -249,5 +251,79 @@ public class ItemQueryScopeServiceTests
         {
             BaseItem.LibraryManager = previous;
         }
+    }
+
+    // ---------------------------------------------------------------
+    // SECURITY-MEDIA-R3. A parent, or a playlist's linked children, stand in for scoping a query
+    // to its user's libraries: with a user on the query each is asked for through
+    // IItemAccessService, and an ancestor is scoped to the user's views as well.
+    // ---------------------------------------------------------------
+
+    [Fact]
+    public void SetTopParentIdsOrAncestors_ParentTheUserMayNotSee_ScopesToNothing()
+    {
+        var user = new User("test-user", "provider", "provider");
+        var folder = new Folder { Id = Guid.NewGuid(), Name = "Withheld" };
+        var query = new InternalItemsQuery(user) { Recursive = true };
+
+        _scopeService.SetTopParentIdsOrAncestors(query, [folder]);
+
+        Assert.Single(query.TopParentIds);
+        Assert.NotEqual(folder.Id, query.TopParentIds[0]);
+        Assert.Empty(query.AncestorIds);
+        Assert.Empty(query.ItemIds);
+    }
+
+    [Fact]
+    public void SetTopParentIdsOrAncestors_AncestorTheUserMaySee_IsScopedToTheUsersViewsToo()
+    {
+        var user = new User("test-user", "provider", "provider");
+        var physicalFolderId = Guid.NewGuid();
+        var view = new CollectionFolder { Id = Guid.NewGuid(), Name = "Movies", PhysicalFolderIds = [physicalFolderId] };
+        var root = new AggregateFolder { Id = Guid.NewGuid(), Name = "Root" };
+        _itemAccessServiceMock.Setup(m => m.GetVisibleItemById<BaseItem>(root.Id, user)).Returns(root);
+        _userViewCatalogMock.Setup(m => m.GetUserViews(It.IsAny<UserViewQuery>())).Returns([view]);
+        var query = new InternalItemsQuery(user) { Recursive = true };
+
+        _scopeService.SetTopParentIdsOrAncestors(query, [root]);
+
+        Assert.Equal(new[] { root.Id }, query.AncestorIds);
+        Assert.Equal(new[] { physicalFolderId }, query.TopParentIds);
+    }
+
+    [Fact]
+    public void SetTopParentIdsOrAncestors_PlaylistWithAUser_KeepsTheLinkedChildrenThatUserMaySee()
+    {
+        var user = new User("test-user", "provider", "provider");
+        var seen = new Folder { Id = Guid.NewGuid(), Name = "Seen" };
+        var withheldId = Guid.NewGuid();
+        var playlist = new Playlist
+        {
+            Id = Guid.NewGuid(),
+            Name = "Playlist",
+            LinkedChildren = [new LinkedChild { ItemId = withheldId }, new LinkedChild { ItemId = seen.Id }]
+        };
+        _itemAccessServiceMock.Setup(m => m.GetVisibleItemById<BaseItem>(playlist.Id, user)).Returns(playlist);
+        _itemAccessServiceMock.Setup(m => m.GetVisibleItemById<BaseItem>(seen.Id, user)).Returns(seen);
+        var query = new InternalItemsQuery(user) { Recursive = true };
+
+        _scopeService.SetTopParentIdsOrAncestors(query, [playlist]);
+
+        Assert.Equal(new[] { seen.Id }, query.ItemIds);
+    }
+
+    [Fact]
+    public void SetTopParentIdsOrAncestors_PlaylistWhoseEveryChildIsWithheld_ScopesToNothing()
+    {
+        var user = new User("test-user", "provider", "provider");
+        var withheldId = Guid.NewGuid();
+        var playlist = new Playlist { Id = Guid.NewGuid(), Name = "Playlist", LinkedChildren = [new LinkedChild { ItemId = withheldId }] };
+        _itemAccessServiceMock.Setup(m => m.GetVisibleItemById<BaseItem>(playlist.Id, user)).Returns(playlist);
+        var query = new InternalItemsQuery(user) { Recursive = true };
+
+        _scopeService.SetTopParentIdsOrAncestors(query, [playlist]);
+
+        Assert.Single(query.ItemIds);
+        Assert.NotEqual(withheldId, query.ItemIds[0]);
     }
 }

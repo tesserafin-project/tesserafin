@@ -343,7 +343,7 @@ namespace Tesserafin.Server.Core.Playlists
 
             var user = _userManager.GetUserById(callingUserId);
             var children = playlist.GetManageableItems().ToList();
-            var accessibleChildren = children.Where(c => c.Item2.IsVisible(user)).ToArray();
+            var accessibleChildren = children.Where(c => c.Item2.IsVisibleStandalone(user)).ToArray();
 
             var oldIndexAll = children.FindIndex(i => string.Equals(entryId, i.Item1.ItemId?.ToString("N", CultureInfo.InvariantCulture), StringComparison.OrdinalIgnoreCase));
             var oldIndexAccessible = accessibleChildren.FindIndex(i => string.Equals(entryId, i.Item1.ItemId?.ToString("N", CultureInfo.InvariantCulture), StringComparison.OrdinalIgnoreCase));

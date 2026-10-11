@@ -144,7 +144,9 @@ public class FilterController : BaseTesserafinApiController
         }
         else if (parentId.HasValue)
         {
-            parentItem = _libraryManager.GetItemById<BaseItem>(parentId.Value);
+            parentItem = user is null
+                ? _libraryManager.GetItemById<BaseItem>(parentId.Value)
+                : _libraryManager.GetItemById<BaseItem>(parentId.Value, user);
         }
 
         var filters = new QueryFilters();

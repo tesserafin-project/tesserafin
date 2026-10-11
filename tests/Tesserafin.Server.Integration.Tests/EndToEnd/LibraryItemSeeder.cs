@@ -54,6 +54,7 @@ public static class LibraryItemSeeder
     /// <param name="runTimeTicks">The duration of <paramref name="mediaPath"/>.</param>
     /// <param name="tags">The item's tags, for a test that restricts a user by tag.</param>
     /// <param name="parentId">The folder the item is in, for a test that restricts a user by library.</param>
+    /// <param name="configure">Anything else a test wants the item to carry before it is saved.</param>
     /// <returns>The new item's id.</returns>
     public static Guid SeedVideo(
         ILibraryManager libraryManager,
@@ -64,7 +65,8 @@ public static class LibraryItemSeeder
         string name = "PR119 End-to-End Fixture",
         long runTimeTicks = EndToEndMediaFixtures.DurationTicks,
         string[]? tags = null,
-        Guid parentId = default)
+        Guid parentId = default,
+        Action<Movie>? configure = null)
     {
         ArgumentNullException.ThrowIfNull(libraryManager);
         ArgumentNullException.ThrowIfNull(mediaStreamRepository);
@@ -85,6 +87,8 @@ public static class LibraryItemSeeder
             Tags = tags ?? [],
             ParentId = parentId,
         };
+
+        configure?.Invoke(movie);
 
         // What a scan's refresh would have set: without it every seeded item shares one (empty) key,
         // and a query that groups versions by that key answers with one of them for all.

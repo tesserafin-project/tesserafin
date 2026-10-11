@@ -1955,6 +1955,19 @@ namespace Tesserafin.Server.Core.Library
 
         private void SetTopParentIdsOrAncestors(InternalItemsQuery query, IReadOnlyCollection<BaseItem> parents)
         {
+            // A parent stands in for scoping the query to its user's libraries, so it has to be one
+            // that user may see: with none left, the query is scoped to nothing.
+            if (query.User is not null && parents.Count != 0)
+            {
+                parents = parents.Where(i => _itemAccessService.GetVisibleItemById<BaseItem>(i.Id, query.User) is not null).ToList();
+                if (parents.Count == 0)
+                {
+                    query.TopParentIds = [Guid.NewGuid()];
+                    query.Parent = null;
+                    return;
+                }
+            }
+
             if (parents.All(i => i is ICollectionFolder || i is UserView))
             {
                 // Optimize by querying against top level views
@@ -1974,22 +1987,18 @@ namespace Tesserafin.Server.Core.Library
                 // populate AncestorIds for those items, so a recursive AncestorIds query
                 // would return zero rows. Resolve to the linked child IDs up front and
                 // route through the existing indexed ItemIds filter.
+                // These ids stand in for the scoping a parent gives, and a query that names ids is
+                // not scoped to its user's libraries afterwards: each child is asked for here.
                 query.ItemIds = folder.LinkedChildren
                     .Where(lc => lc.ItemId.HasValue && !lc.ItemId.Value.IsEmpty())
                     .Select(lc => lc.ItemId!.Value)
+                    .Where(id => query.User is null || _itemAccessService.GetVisibleItemById<BaseItem>(id, query.User) is not null)
                     .ToArray();
 
                 // Empty linked-children should still return empty rather than scanning everything.
                 if (query.ItemIds.Length == 0)
                 {
                     query.ItemIds = [Guid.NewGuid()];
-                }
-
-                // These ids stand in for the scoping a parent gives, and a query that names ids is
-                // not scoped to its user's libraries afterwards: do it here.
-                if (query.User is not null)
-                {
-                    SetTopParentIdsToUserViews(query, query.User, true);
                 }
             }
             else
@@ -2001,6 +2010,12 @@ namespace Tesserafin.Server.Core.Library
                 if (query.AncestorIds.Length == 0)
                 {
                     query.AncestorIds = [Guid.NewGuid()];
+                }
+
+                // An ancestor can hold more than its user's libraries - the root holds them all.
+                if (query.User is not null)
+                {
+                    SetTopParentIdsToUserViews(query, query.User, true);
                 }
             }
 
@@ -2857,7 +2872,14 @@ namespace Tesserafin.Server.Core.Library
         {
             if (parentId.HasValue)
             {
-                return GetItemById(parentId.Value) ?? throw new ArgumentException($"Invalid parent id: {parentId.Value}");
+                // For a user, a parent it may not see is a parent that does not exist - and so is
+                // the root of every library, which is no user's.
+                var parent = userId.IsNullOrEmpty()
+                    ? GetItemById(parentId.Value)
+                    : GetItemById<BaseItem>(parentId.Value, userId.Value);
+                return parent is null || (parent is AggregateFolder && !userId.IsNullOrEmpty())
+                    ? throw new ArgumentException($"Invalid parent id: {parentId.Value}")
+                    : parent;
             }
 
             if (!userId.IsNullOrEmpty())
