@@ -777,6 +777,9 @@ public sealed class DynamicHlsStartTimeTicksBoundaryTests : IDisposable
         public HlsJobOwnershipDecision AuthorizeBySegmentName(HttpContext context, string segmentName)
             => HlsJobOwnershipDecision.NoSuchJob();
 
+        public HlsJobOwnershipDecision AuthorizeProgressiveByOutputPath(HttpContext context, string outputPath)
+            => throw new NotSupportedException("The HLS routes never ask about a progressive output.");
+
         public HlsJobOwnershipDecision AuthorizeByOutputPath(HttpContext context, string outputPath)
         {
             Questions.Add((context, outputPath));

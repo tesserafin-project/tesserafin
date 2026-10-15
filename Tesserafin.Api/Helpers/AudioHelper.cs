@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Tesserafin.Api.Auth.HlsJobOwnership;
 using Tesserafin.Common.Configuration;
 using Tesserafin.Common.Extensions;
 using Tesserafin.Common.Net;
@@ -27,6 +28,7 @@ public class AudioHelper
     private readonly IServerConfigurationManager _serverConfigurationManager;
     private readonly IMediaEncoder _mediaEncoder;
     private readonly ITranscodeManager _transcodeManager;
+    private readonly IHlsJobOwnershipAuthorizer _jobOwnership;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly EncodingHelper _encodingHelper;
@@ -40,6 +42,7 @@ public class AudioHelper
     /// <param name="serverConfigurationManager">Instance of the <see cref="IServerConfigurationManager"/> interface.</param>
     /// <param name="mediaEncoder">Instance of the <see cref="IMediaEncoder"/> interface.</param>
     /// <param name="transcodeManager">Instance of <see cref="ITranscodeManager"/> interface.</param>
+    /// <param name="jobOwnership">Instance of the <see cref="IHlsJobOwnershipAuthorizer"/> interface.</param>
     /// <param name="httpClientFactory">Instance of the <see cref="IHttpClientFactory"/> interface.</param>
     /// <param name="httpContextAccessor">Instance of the <see cref="IHttpContextAccessor"/> interface.</param>
     /// <param name="encodingHelper">Instance of <see cref="EncodingHelper"/>.</param>
@@ -50,6 +53,7 @@ public class AudioHelper
         IServerConfigurationManager serverConfigurationManager,
         IMediaEncoder mediaEncoder,
         ITranscodeManager transcodeManager,
+        IHlsJobOwnershipAuthorizer jobOwnership,
         IHttpClientFactory httpClientFactory,
         IHttpContextAccessor httpContextAccessor,
         EncodingHelper encodingHelper)
@@ -60,6 +64,7 @@ public class AudioHelper
         _serverConfigurationManager = serverConfigurationManager;
         _mediaEncoder = mediaEncoder;
         _transcodeManager = transcodeManager;
+        _jobOwnership = jobOwnership;
         _httpClientFactory = httpClientFactory;
         _httpContextAccessor = httpContextAccessor;
         _encodingHelper = encodingHelper;
@@ -150,6 +155,7 @@ public class AudioHelper
             isHeadRequest,
             _httpContextAccessor.HttpContext,
             _transcodeManager,
+            _jobOwnership,
             ffmpegCommandLineArguments,
             transcodingJobType,
             cancellationTokenSource).ConfigureAwait(false);

@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Tesserafin.Api.Attributes;
+using Tesserafin.Api.Auth.HlsJobOwnership;
 using Tesserafin.Api.Extensions;
 using Tesserafin.Api.Helpers;
 using Tesserafin.Api.ModelBinders;
@@ -46,6 +47,7 @@ public class VideosController : BaseTesserafinApiController
     private readonly IServerConfigurationManager _serverConfigurationManager;
     private readonly IMediaEncoder _mediaEncoder;
     private readonly ITranscodeManager _transcodeManager;
+    private readonly IHlsJobOwnershipAuthorizer _jobOwnership;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly EncodingHelper _encodingHelper;
 
@@ -61,6 +63,7 @@ public class VideosController : BaseTesserafinApiController
     /// <param name="serverConfigurationManager">Instance of the <see cref="IServerConfigurationManager"/> interface.</param>
     /// <param name="mediaEncoder">Instance of the <see cref="IMediaEncoder"/> interface.</param>
     /// <param name="transcodeManager">Instance of the <see cref="ITranscodeManager"/> interface.</param>
+    /// <param name="jobOwnership">Instance of the <see cref="IHlsJobOwnershipAuthorizer"/> interface.</param>
     /// <param name="httpClientFactory">Instance of the <see cref="IHttpClientFactory"/> interface.</param>
     /// <param name="encodingHelper">Instance of <see cref="EncodingHelper"/>.</param>
     public VideosController(
@@ -71,6 +74,7 @@ public class VideosController : BaseTesserafinApiController
         IServerConfigurationManager serverConfigurationManager,
         IMediaEncoder mediaEncoder,
         ITranscodeManager transcodeManager,
+        IHlsJobOwnershipAuthorizer jobOwnership,
         IHttpClientFactory httpClientFactory,
         EncodingHelper encodingHelper)
     {
@@ -81,6 +85,7 @@ public class VideosController : BaseTesserafinApiController
         _serverConfigurationManager = serverConfigurationManager;
         _mediaEncoder = mediaEncoder;
         _transcodeManager = transcodeManager;
+        _jobOwnership = jobOwnership;
         _httpClientFactory = httpClientFactory;
         _encodingHelper = encodingHelper;
     }
@@ -494,6 +499,7 @@ public class VideosController : BaseTesserafinApiController
             isHeadRequest,
             HttpContext,
             _transcodeManager,
+            _jobOwnership,
             ffmpegCommandLineArguments,
             _transcodingJobType,
             cancellationTokenSource).ConfigureAwait(false);

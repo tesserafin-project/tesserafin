@@ -467,6 +467,9 @@ public sealed class ActiveEncodingsOwnershipTests : IDisposable
         public HlsJobOwnershipDecision AuthorizeByOutputPath(HttpContext context, string outputPath)
             => _inner.AuthorizeByOutputPath(context, outputPath);
 
+        public HlsJobOwnershipDecision AuthorizeProgressiveByOutputPath(HttpContext context, string outputPath)
+            => _inner.AuthorizeProgressiveByOutputPath(context, outputPath);
+
         public bool OwnsJob(HttpContext context, Guid ownerUserId, string? ownerDeviceId)
         {
             Count++;
@@ -489,6 +492,9 @@ public sealed class ActiveEncodingsOwnershipTests : IDisposable
             => HlsJobOwnershipDecision.NoSuchJob();
 
         public HlsJobOwnershipDecision AuthorizeByOutputPath(HttpContext context, string outputPath)
+            => HlsJobOwnershipDecision.NoSuchJob();
+
+        public HlsJobOwnershipDecision AuthorizeProgressiveByOutputPath(HttpContext context, string outputPath)
             => HlsJobOwnershipDecision.NoSuchJob();
 
         public bool OwnsJob(HttpContext context, Guid ownerUserId, string? ownerDeviceId)

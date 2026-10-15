@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Net.Http.Headers;
+using Tesserafin.Api.Auth.HlsJobOwnership;
 using Tesserafin.Api.Extensions;
 using Tesserafin.Controller.MediaEncoding;
 using Tesserafin.Controller.Streaming;
@@ -116,15 +117,24 @@ public static class FileStreamResponseHelpers
     /// <param name="isHeadRequest">Whether the current request is a HTTP HEAD request so only the headers get returned.</param>
     /// <param name="httpContext">The current http context.</param>
     /// <param name="transcodeManager">The <see cref="ITranscodeManager"/> singleton.</param>
+    /// <param name="jobOwnership">Compares the caller with the job that writes the output.</param>
     /// <param name="ffmpegCommandLineArguments">The command line arguments to start ffmpeg.</param>
     /// <param name="transcodingJobType">The <see cref="TranscodingJobType"/>.</param>
     /// <param name="cancellationTokenSource">The <see cref="CancellationTokenSource"/>.</param>
     /// <returns>A <see cref="Task{ActionResult}"/> containing the transcoded file.</returns>
+    /// <remarks>
+    /// tesserafin#293. The output file is named from the request's path, device id, play session
+    /// id and User-Agent, all of which are the client's to send, so a replayed url arrives at
+    /// another user's file. The file's existence used to be the whole decision. The rule is now
+    /// the one #292 set for HLS: an output is its job owner's while the job is registered, and
+    /// an output with no job is nobody's, so it is removed before a start and never served.
+    /// </remarks>
     public static async Task<ActionResult> GetTranscodedFile(
         StreamState state,
         bool isHeadRequest,
         HttpContext httpContext,
         ITranscodeManager transcodeManager,
+        IHlsJobOwnershipAuthorizer jobOwnership,
         string ffmpegCommandLineArguments,
         TranscodingJobType transcodingJobType,
         CancellationTokenSource cancellationTokenSource)
@@ -136,18 +146,33 @@ public static class FileStreamResponseHelpers
 
         var contentType = state.GetMimeType(outputPath);
 
-        // Headers only
-        if (isHeadRequest)
-        {
-            httpContext.Response.Headers[HeaderNames.ContentType] = contentType;
-            return new OkResult();
-        }
-
         using (await transcodeManager.LockAsync(outputPath, cancellationTokenSource.Token).ConfigureAwait(false))
         {
-            TranscodingJob? job;
-            if (!File.Exists(outputPath))
+            var ownership = jobOwnership.AuthorizeProgressiveByOutputPath(httpContext, outputPath);
+            if (ownership.Outcome == HlsJobOwnershipOutcome.Refused)
             {
+                state.Dispose();
+                return new UnauthorizedResult();
+            }
+
+            // Headers only. Answered after the owner is asked: a HEAD names another user's output
+            // as well as a GET does.
+            if (isHeadRequest)
+            {
+                httpContext.Response.Headers[HeaderNames.ContentType] = contentType;
+                return new OkResult();
+            }
+
+            TranscodingJob? job;
+            if (!ownership.IsAuthorized || !File.Exists(outputPath))
+            {
+                if (!ownership.IsAuthorized)
+                {
+                    // Left by a job that is no longer registered. If it cannot be removed, the
+                    // exception ends the request: nothing is started on a file that is not ours.
+                    File.Delete(outputPath);
+                }
+
                 job = await transcodeManager.StartFfMpeg(
                     state,
                     outputPath,

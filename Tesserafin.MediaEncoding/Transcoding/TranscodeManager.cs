@@ -33,7 +33,7 @@ using Tesserafin.Model.Session;
 namespace Tesserafin.MediaEncoding.Transcoding;
 
 /// <inheritdoc cref="ITranscodeManager"/>
-public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegistry, IHardwareTranscodeFallback, ITranscodeOutputStop, ITranscodeOwnedStop, IDisposable
+public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegistry, IProgressiveJobBindingRegistry, IHardwareTranscodeFallback, ITranscodeOutputStop, ITranscodeOwnedStop, IDisposable
 {
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<TranscodeManager> _logger;
@@ -211,12 +211,28 @@ public sealed class TranscodeManager : ITranscodeManager, IHlsSegmentBindingRegi
             string.Equals(Path.GetFullPath(j.Path!), canonical, StringComparison.Ordinal)));
     }
 
+    /// <inheritdoc />
+    public HlsSegmentBinding? ResolveProgressiveByOutputPath(string outputPath)
+    {
+        if (string.IsNullOrEmpty(outputPath))
+        {
+            return null;
+        }
+
+        var canonical = Path.GetFullPath(outputPath);
+        return Project(SelectJob(TranscodingJobType.Progressive, j =>
+            string.Equals(Path.GetFullPath(j.Path!), canonical, StringComparison.Ordinal)));
+    }
+
     private TranscodingJob? SelectHlsJob(Func<TranscodingJob, bool> predicate)
+        => SelectJob(TranscodingJobType.Hls, predicate);
+
+    private TranscodingJob? SelectJob(TranscodingJobType type, Func<TranscodingJob, bool> predicate)
     {
         lock (_activeTranscodingJobs)
         {
             return _activeTranscodingJobs.FirstOrDefault(j =>
-                j.Type == TranscodingJobType.Hls
+                j.Type == type
                 && j.Path is not null
                 && predicate(j));
         }

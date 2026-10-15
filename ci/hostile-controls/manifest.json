@@ -1286,8 +1286,8 @@
       "mutations": [
         {
           "file": "Tesserafin.MediaEncoding/Transcoding/TranscodeManager.cs",
-          "find": "            return _activeTranscodingJobs.FirstOrDefault(j =>\n                j.Type == TranscodingJobType.Hls\n                && j.Path is not null\n                && predicate(j));",
-          "replace": "            return _activeTranscodingJobs.FirstOrDefault(j =>\n                j.Type == TranscodingJobType.Hls\n                && j.Path is not null);"
+          "find": "            return _activeTranscodingJobs.FirstOrDefault(j =>\n                j.Type == type\n                && j.Path is not null\n                && predicate(j));",
+          "replace": "            return _activeTranscodingJobs.FirstOrDefault(j =>\n                j.Type == type\n                && j.Path is not null);"
         }
       ],
       "note": "The literal `FirstOrDefault` the mission names, at the one place all three resolutions share. It degrades every member at once, which is why it is graded separately from the predicate mutations above."

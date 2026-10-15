@@ -88,6 +88,12 @@ public sealed class HlsJobOwnershipAuthorizer : IHlsJobOwnershipAuthorizer
         => Decide(context, _bindings.ResolveByOutputPath(outputPath));
 
     /// <inheritdoc />
+    public HlsJobOwnershipDecision AuthorizeProgressiveByOutputPath(HttpContext context, string outputPath)
+        => _bindings is IProgressiveJobBindingRegistry progressive
+            ? Decide(context, progressive.ResolveProgressiveByOutputPath(outputPath))
+            : throw new NotSupportedException("This registry cannot resolve a progressive job by its output.");
+
+    /// <inheritdoc />
     public bool OwnsJob(HttpContext context, Guid ownerUserId, string? ownerDeviceId)
     {
         ArgumentNullException.ThrowIfNull(context);

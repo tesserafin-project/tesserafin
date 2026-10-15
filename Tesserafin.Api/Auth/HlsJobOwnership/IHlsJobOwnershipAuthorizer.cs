@@ -44,6 +44,14 @@ public interface IHlsJobOwnershipAuthorizer
     HlsJobOwnershipDecision AuthorizeByOutputPath(HttpContext context, string outputPath);
 
     /// <summary>
+    /// Authorizes a caller against the progressive job that writes a resolved output file (#293).
+    /// </summary>
+    /// <param name="context">The request.</param>
+    /// <param name="outputPath">The output file the route resolved for this request.</param>
+    /// <returns>The decision, carrying the binding it was made against.</returns>
+    HlsJobOwnershipDecision AuthorizeProgressiveByOutputPath(HttpContext context, string outputPath);
+
+    /// <summary>
     /// Answers whether a caller owns a job, given the job's recorded owner.
     /// </summary>
     /// <remarks>
