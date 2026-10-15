@@ -49,6 +49,30 @@ updates:
     commit-message:
       prefix: build
       include: scope
+    # The .NET 10 runtime packages ship as one train and are pinned to one
+    # patch. One-package PRs split it (10.0.10 for two packages while the rest
+    # stayed on 10.0.9, #207/#208), so they move together.
+    groups:
+      dotnet-runtime:
+        patterns:
+          - "Microsoft.AspNetCore.*"
+          - "Microsoft.Data.Sqlite"
+          - "Microsoft.EntityFrameworkCore*"
+          - "Microsoft.Extensions.*"
+          - "System.Text.Json"
+    # Tesserafin.CodeAnalysis is an analyzer. The Roslyn version it references
+    # is the oldest compiler that will load it: built against 5.6 it is
+    # skipped (CS9057) by any SDK whose compiler is older — the 10.0.1xx band
+    # global.json allows ships 5.0 — and the rules go silent. Microsoft.CodeAnalysis.CSharp
+    # 5.6 also pins Common to exactly [5.6.0] while Common is pinned to 5.0.0
+    # here (#209/#210). Raise these by hand, with the global.json floor.
+    ignore:
+      - dependency-name: "Microsoft.CodeAnalysis.CSharp"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "Microsoft.CodeAnalysis.Common"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "Microsoft.CodeAnalysis.Analyzers"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
     # No auto-merge, no reviewers, no assignees and no labels. Every proposal is
     # reviewed by a human, and this repository has no verified label set or
     # reviewer group to point at.

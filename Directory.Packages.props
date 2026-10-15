@@ -27,28 +27,28 @@
     <PackageVersion Include="libse" Version="4.0.12" />
     <PackageVersion Include="LrcParser" Version="2025.623.0" />
     <PackageVersion Include="MetaBrainz.MusicBrainz" Version="8.0.1" />
-    <PackageVersion Include="Microsoft.AspNetCore.Authorization" Version="10.0.9" />
-    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.AspNetCore.Authorization" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.13" />
     <PackageVersion Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.6.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Common" Version="5.0.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="5.3.0" />
-    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.9" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.9" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.9" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.9" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Tools" Version="10.0.9" />
-    <PackageVersion Include="Microsoft.Extensions.Caching.Abstractions" Version="10.0.9" />
-    <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="10.0.9" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.9" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.9" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.9" />
-    <PackageVersion Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="10.0.9" />
-    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.9" />
-    <PackageVersion Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.9" />
-    <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.9" />
-    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.9" />
-    <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Tools" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.Caching.Abstractions" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.13" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.7.0" />
     <PackageVersion Include="MimeTypes" Version="2.5.2" />
     <PackageVersion Include="Morestachio" Version="5.0.1.670" />
@@ -79,7 +79,7 @@
     <PackageVersion Include="Svg.Skia" Version="3.7.0" />
     <PackageVersion Include="Swashbuckle.AspNetCore.ReDoc" Version="10.2.3" />
     <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.2.3" />
-    <PackageVersion Include="System.Text.Json" Version="10.0.9" />
+    <PackageVersion Include="System.Text.Json" Version="10.0.13" />
     <PackageVersion Include="TagLibSharp" Version="2.3.0" />
     <PackageVersion Include="z440.atl.core" Version="7.15.3" />
     <PackageVersion Include="TMDbLib" Version="3.0.0" />
@@ -99,15 +99,9 @@
   -->
   <ItemGroup Label="Security Pins">
     <!--
-      GHSA-2m69-gcr7-jv3q / CVE-2025-6965: SQLitePCLRaw.lib.e_sqlite3 <= 2.1.11
-      bundles a SQLite with a memory-corruption defect fixed upstream in SQLite
-      3.50.2. The advisory records no patched version, so this is floored by
-      inspection of the shipped native library rather than by advisory metadata:
-      2.1.11 embeds SQLite 3.49.1, 2.1.12 embeds 3.53.3. Microsoft.Data.Sqlite
-      and Microsoft.EntityFrameworkCore.Sqlite 10.0.9 both resolve the 2.1.11
-      family through SQLitePCLRaw.bundle_e_sqlite3, whose dependency is a
-      floor rather than an exact pin, so raising this one package is enough.
+      None. GHSA-2m69-gcr7-jv3q (SQLitePCLRaw.lib.e_sqlite3 <= 2.1.11) was pinned
+      here to 2.1.12 until Microsoft.Data.Sqlite and EntityFrameworkCore.Sqlite
+      10.0.13 floored it on their own (bundle_e_sqlite3 2.1.13, SQLite 3.53.3).
     -->
-    <PackageVersion Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.12" />
   </ItemGroup>
 </Project>
