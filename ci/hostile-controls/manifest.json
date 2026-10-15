@@ -1895,6 +1895,80 @@
         }
       ],
       "note": "The identifier alone, with an extension the url supplies separately, is the file a progressive transcode of the same request writes; the playlist and its temporary file carry the prefix too."
+    },
+    {
+      "id": "p293-progressive-refusal-ignored",
+      "stage": "P293",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "a progressive output another user's job writes is refused, not taken over",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Server.Integration.Tests/Tesserafin.Server.Integration.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Server.Integration.Tests.EndToEnd.ProgressiveOutputIsolationEndToEndTests",
+        "expectedTests": [
+          "Tesserafin.Server.Integration.Tests.EndToEnd.ProgressiveOutputIsolationEndToEndTests.UrlOfARunningTranscode_ReplayedByAnotherUser_IsRefused",
+          "Tesserafin.Server.Integration.Tests.EndToEnd.ProgressiveOutputIsolationEndToEndTests.UrlOfAReleasedTranscode_ReplayedByAnotherUser_IsNotAnsweredFromWhatWasLeft"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Helpers/FileStreamResponseHelpers.cs",
+          "find": "            if (ownership.Outcome == HlsJobOwnershipOutcome.Refused)\n            {\n                state.Dispose();\n                return new UnauthorizedResult();\n            }\n\n",
+          "replace": "",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "p293-progressive-serves-a-file-nobody-owns",
+      "stage": "P293",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "a progressive output no job is registered on is not served, its former owner's bytes included",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Server.Integration.Tests/Tesserafin.Server.Integration.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Server.Integration.Tests.EndToEnd.ProgressiveOutputIsolationEndToEndTests",
+        "expectedTests": [
+          "Tesserafin.Server.Integration.Tests.EndToEnd.ProgressiveOutputIsolationEndToEndTests.UrlOfAReleasedTranscode_ReplayedByAnotherUser_IsNotAnsweredFromWhatWasLeft"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Helpers/FileStreamResponseHelpers.cs",
+          "find": "            if (!ownership.IsAuthorized || !File.Exists(outputPath))",
+          "replace": "            if (!File.Exists(outputPath))",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "p293-progressive-asks-the-hls-registry",
+      "stage": "P293",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "the progressive route is compared with the progressive job on its output, not with an HLS job",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Server.Integration.Tests/Tesserafin.Server.Integration.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Server.Integration.Tests.EndToEnd.ProgressiveOutputIsolationEndToEndTests",
+        "expectedTests": [
+          "Tesserafin.Server.Integration.Tests.EndToEnd.ProgressiveOutputIsolationEndToEndTests.UrlOfARunningTranscode_ReplayedByAnotherUser_IsRefused",
+          "Tesserafin.Server.Integration.Tests.EndToEnd.ProgressiveOutputIsolationEndToEndTests.UrlOfAReleasedTranscode_ReplayedByAnotherUser_IsNotAnsweredFromWhatWasLeft"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.MediaEncoding/Transcoding/TranscodeManager.cs",
+          "find": "        return Project(SelectJob(TranscodingJobType.Progressive, j =>",
+          "replace": "        return Project(SelectJob(TranscodingJobType.Hls, j =>",
+          "count": 1
+        }
+      ]
     }
   ]
 }
