@@ -1933,7 +1933,8 @@
         "project": "tests/Tesserafin.Server.Integration.Tests/Tesserafin.Server.Integration.Tests.csproj",
         "filter": "FullyQualifiedName~Tesserafin.Server.Integration.Tests.EndToEnd.ProgressiveOutputIsolationEndToEndTests",
         "expectedTests": [
-          "Tesserafin.Server.Integration.Tests.EndToEnd.ProgressiveOutputIsolationEndToEndTests.UrlOfAReleasedTranscode_ReplayedByAnotherUser_IsNotAnsweredFromWhatWasLeft"
+          "Tesserafin.Server.Integration.Tests.EndToEnd.ProgressiveOutputIsolationEndToEndTests.UrlOfAReleasedTranscode_ReplayedByAnotherUser_IsNotAnsweredFromWhatWasLeft",
+          "Tesserafin.Server.Integration.Tests.EndToEnd.ProgressiveOutputIsolationEndToEndTests.UrlOfAReleasedTranscode_ReplayedWhileTheNewFfmpegIsHeld_IsServedNoByteOfWhatWasLeft"
         ]
       },
       "mutations": [
@@ -1941,6 +1942,30 @@
           "file": "Tesserafin.Api/Helpers/FileStreamResponseHelpers.cs",
           "find": "            if (!ownership.IsAuthorized || !File.Exists(outputPath))",
           "replace": "            if (!File.Exists(outputPath))",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "p293-progressive-residual-not-removed",
+      "stage": "P293",
+      "status": "NEW",
+      "expect": "RED",
+      "property": "a residual progressive output is removed before the new ffmpeg starts, so none of it is served while that ffmpeg is held",
+      "timeoutSeconds": 1800,
+      "gate": {
+        "kind": "dotnet-test",
+        "project": "tests/Tesserafin.Server.Integration.Tests/Tesserafin.Server.Integration.Tests.csproj",
+        "filter": "FullyQualifiedName~Tesserafin.Server.Integration.Tests.EndToEnd.ProgressiveOutputIsolationEndToEndTests",
+        "expectedTests": [
+          "Tesserafin.Server.Integration.Tests.EndToEnd.ProgressiveOutputIsolationEndToEndTests.UrlOfAReleasedTranscode_ReplayedWhileTheNewFfmpegIsHeld_IsServedNoByteOfWhatWasLeft"
+        ]
+      },
+      "mutations": [
+        {
+          "file": "Tesserafin.Api/Helpers/FileStreamResponseHelpers.cs",
+          "find": "                    File.Delete(outputPath);",
+          "replace": "                    // removal removed",
           "count": 1
         }
       ]
