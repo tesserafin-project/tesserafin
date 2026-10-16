@@ -98,6 +98,13 @@ public class PersonsController : BaseTesserafinApiController
             ? null
             : _userManager.GetUserById(userId.Value);
 
+        // The people of an item, or under a parent, its user may not see are the people of nothing.
+        if (user is not null)
+        {
+            parentId = parentId.HasValue && _libraryManager.GetItemById<BaseItem>(parentId.Value, user) is null ? Guid.NewGuid() : parentId;
+            appearsInItemId = appearsInItemId.HasValue && _libraryManager.GetItemById<BaseItem>(appearsInItemId.Value, user) is null ? Guid.NewGuid() : appearsInItemId;
+        }
+
         var isFavoriteInFilters = filters.Any(f => f == ItemFilter.IsFavorite);
         var peopleItems = _libraryManager.GetPeopleItems(new InternalPeopleQuery(
             personTypes,

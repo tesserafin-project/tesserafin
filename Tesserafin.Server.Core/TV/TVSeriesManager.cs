@@ -58,7 +58,8 @@ namespace Tesserafin.Server.Core.TV
             string? presentationUniqueKey = null;
             if (!query.SeriesId.IsNullOrEmpty())
             {
-                if (_libraryManager.GetItemById(query.SeriesId.Value) is Series series)
+                // A series its user may not see is a series that does not exist.
+                if (_libraryManager.GetItemById<BaseItem>(query.SeriesId.Value, user) is Series series)
                 {
                     presentationUniqueKey = GetUniqueSeriesKey(series);
                 }
@@ -73,7 +74,8 @@ namespace Tesserafin.Server.Core.TV
 
             if (query.ParentId.HasValue)
             {
-                var parent = _libraryManager.GetItemById(query.ParentId.Value);
+                // So is a parent.
+                var parent = _libraryManager.GetItemById<BaseItem>(query.ParentId.Value, user);
 
                 if (parent is not null)
                 {
@@ -103,7 +105,7 @@ namespace Tesserafin.Server.Core.TV
             int? limit = null;
             if (!request.SeriesId.IsNullOrEmpty())
             {
-                if (_libraryManager.GetItemById(request.SeriesId.Value) is Series series)
+                if (_libraryManager.GetItemById<BaseItem>(request.SeriesId.Value, user) is Series series)
                 {
                     presentationUniqueKey = GetUniqueSeriesKey(series);
                     limit = 1;

@@ -1898,6 +1898,17 @@ namespace Tesserafin.Server.Core.Library
             for (int i = 0; i < len; i++)
             {
                 parents[i] = GetItemById(ancestorIds[i]) ?? throw new ArgumentException($"Failed to find parent with id: {ancestorIds[i]}");
+
+                // As in SetTopParentIdsOrAncestors: an ancestor its user may not see, or the root
+                // of every library, scopes the query to nothing.
+                if (query.User is not null
+                    && (parents[i] is AggregateFolder || _itemAccessService.GetVisibleItemById<BaseItem>(ancestorIds[i], query.User) is null))
+                {
+                    query.TopParentIds = [Guid.NewGuid()];
+                    query.AncestorIds = [];
+                    return;
+                }
+
                 if (parents[i] is not (ICollectionFolder or UserView))
                 {
                     return;
