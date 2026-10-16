@@ -19,7 +19,7 @@ namespace Tesserafin.Server.Integration.Tests.EndToEnd;
 /// Only the removal that belongs to no segment request fails. What a segment request removes
 /// itself is the repair under test, and is left alone.
 /// </remarks>
-public sealed class HlsIsolationApplicationFactory : E2eApplicationFactory
+public class HlsIsolationApplicationFactory : E2eApplicationFactory
 {
     /// <inheritdoc/>
     protected override void ConfigureWebHost(IWebHostBuilder builder)

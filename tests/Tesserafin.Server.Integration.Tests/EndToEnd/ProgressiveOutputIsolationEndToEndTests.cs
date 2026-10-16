@@ -28,7 +28,7 @@ namespace Tesserafin.Server.Integration.Tests.EndToEnd;
 /// local file and a real ffmpeg. The second user sends the first user's url - path, device id,
 /// play session id, User-Agent - under its own token, from its own device.
 /// </summary>
-public sealed class ProgressiveOutputIsolationEndToEndTests : IClassFixture<HlsIsolationApplicationFactory>, IAsyncLifetime
+public sealed class ProgressiveOutputIsolationEndToEndTests : IClassFixture<HeldFfmpegApplicationFactory>, IAsyncLifetime
 {
     private const string OwnerDevice = "p293-owner-device";
     private const string OtherDevice = "p293-other-device";
@@ -43,7 +43,7 @@ public sealed class ProgressiveOutputIsolationEndToEndTests : IClassFixture<HlsI
         new MediaStream { Index = 1, Type = MediaStreamType.Audio, Codec = EndToEndCapabilityPresets.FixtureAudioCodec, Channels = 2, IsDefault = true },
     ];
 
-    private readonly HlsIsolationApplicationFactory _factory;
+    private readonly HeldFfmpegApplicationFactory _factory;
     private readonly ConcurrentQueue<TranscodingJob> _started = new();
     private HttpClient _owner = null!;
     private HttpClient _other = null!;
@@ -55,7 +55,7 @@ public sealed class ProgressiveOutputIsolationEndToEndTests : IClassFixture<HlsI
     private ITranscodeManager _transcodeManager = null!;
     private FailingRemovals _fileSystem = null!;
 
-    public ProgressiveOutputIsolationEndToEndTests(HlsIsolationApplicationFactory factory)
+    public ProgressiveOutputIsolationEndToEndTests(HeldFfmpegApplicationFactory factory)
     {
         _factory = factory;
     }
@@ -91,6 +91,7 @@ public sealed class ProgressiveOutputIsolationEndToEndTests : IClassFixture<HlsI
     {
         _transcodeManager.TranscodingJobStarted -= OnStarted;
         _fileSystem.FailDeferredRemovalsUnder = null;
+        File.Delete(_factory.HoldFile);
         _owner.Dispose();
         _other.Dispose();
         try
@@ -180,6 +181,66 @@ public sealed class ProgressiveOutputIsolationEndToEndTests : IClassFixture<HlsI
         Assert.Equal(outputFile, successor.Path);
         Assert.Equal(_otherId, successor.UserId);
         Assert.Equal(HttpStatusCode.Unauthorized, (await GetAsync(_owner, url)).Status);
+    }
+
+    /// <summary>
+    /// As above, with the second user's ffmpeg held before it starts: the server has decided what to
+    /// serve, and ffmpeg has not yet overwritten what was left. Every byte left is the mark, so not
+    /// one of them may reach the second user, and none may be on disk while ffmpeg is held.
+    /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
+    /// <param name="audio">Whether the audio route is asked rather than the video route.</param>
+    [Theory(Timeout = 120_000)]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task UrlOfAReleasedTranscode_ReplayedWhileTheNewFfmpegIsHeld_IsServedNoByteOfWhatWasLeft(bool audio)
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "ffmpeg is held by a shell script");
+        var playSession = "p293-held-" + Guid.NewGuid().ToString("N");
+        var url = audio ? AudioUrl(playSession) : StreamUrl(playSession);
+        Assert.Equal(HttpStatusCode.OK, (await GetAsync(_owner, url)).Status);
+        var job = Assert.Single(_started, j => j.PlaySessionId == playSession);
+        var outputFile = job.Path!;
+
+        _fileSystem.FailDeferredRemovalsUnder = _transcodes;
+        var failedBefore = _fileSystem.Failed;
+        using (var stopped = await _owner.DeleteAsync(FormattableString.Invariant($"Videos/ActiveEncodings?deviceId={OwnerDevice}&playSessionId={playSession}"), TestContext.Current.CancellationToken))
+        {
+            Assert.Equal(HttpStatusCode.NoContent, stopped.StatusCode);
+        }
+
+        await EventuallyAsync(() => _fileSystem.Failed > failedBefore, "the removal of the released transcode's file was never attempted");
+        Assert.Null(_transcodeManager.GetTranscodingJob(outputFile, TranscodingJobType.Progressive));
+        var left = new FileInfo(outputFile).Length;
+        Assert.True(left > 0, "the released transcode left nothing on disk: this run shows nothing");
+        await File.WriteAllBytesAsync(outputFile, Enumerable.Repeat(_mark, (int)(left / _mark.Length) + 1).SelectMany(m => m).ToArray(), TestContext.Current.CancellationToken);
+
+        Task<(HttpStatusCode Status, byte[] Body)> replaying;
+        bool leftOnDiskWhileHeld;
+        await File.WriteAllBytesAsync(_factory.HoldFile, [], TestContext.Current.CancellationToken);
+        try
+        {
+            replaying = GetAsync(_other, url);
+            await EventuallyAsync(() => _started.Any(j => j.PlaySessionId == playSession && !ReferenceEquals(j, job)), "the second user's transcode was never started");
+
+            // Held long enough for the video route's own second of waiting to have passed too.
+            await Task.Delay(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
+            leftOnDiskWhileHeld = File.Exists(outputFile);
+        }
+        finally
+        {
+            File.Delete(_factory.HoldFile);
+        }
+
+        var replay = await replaying;
+
+        Assert.False(
+            replay.Body.AsSpan().IndexOf(_mark) >= 0,
+            FormattableString.Invariant($"another user's replay was answered {(int)replay.Status} with {replay.Body.Length} bytes carrying the mark: the file the first user's transcode left on disk, served while the new ffmpeg was held"));
+        Assert.False(leftOnDiskWhileHeld, "while the new ffmpeg was held, what the first user's transcode left was still on disk");
+        Assert.Equal(HttpStatusCode.OK, replay.Status);
+        Assert.NotEmpty(replay.Body);
+        Assert.Equal(_otherId, Assert.Single(_started, j => j.PlaySessionId == playSession && !ReferenceEquals(j, job)).UserId);
     }
 
     private static async Task EventuallyAsync(Func<bool> condition, string otherwise)

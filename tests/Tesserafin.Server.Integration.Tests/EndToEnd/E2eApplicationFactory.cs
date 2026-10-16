@@ -78,6 +78,12 @@ public class E2eApplicationFactory : WebApplicationFactory<Startup>
     public static string FfmpegPath { get; } = ResolveFfmpegPath();
 
     /// <summary>
+    /// Gets the ffmpeg the server is started with: <see cref="FfmpegPath"/>, unless a factory puts
+    /// something in front of it.
+    /// </summary>
+    protected virtual string ServerFfmpegPath => FfmpegPath;
+
+    /// <summary>
     /// Completes the startup wizard exactly once for this factory's single booted server instance,
     /// caching the resulting admin token/user id for every subsequent caller. Needed because
     /// <see cref="IClassFixture{TFixture}"/> shares ONE <see cref="E2eApplicationFactory"/> (one real
@@ -140,7 +146,7 @@ public class E2eApplicationFactory : WebApplicationFactory<Startup>
         // against FfmpegPath below.
         var commandLineOpts = new StartupOptions
         {
-            FFmpegPath = FfmpegPath,
+            FFmpegPath = ServerFfmpegPath,
         };
 
         var webHostPathRoot = Path.Combine(_testPathRoot, "test-host-" + Path.GetFileNameWithoutExtension(Path.GetRandomFileName()));

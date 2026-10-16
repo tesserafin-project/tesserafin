@@ -34,7 +34,7 @@ public static class EndToEndMediaFixtures
     /// <see cref="E2eApplicationFactory.FfmpegPath"/> honours), otherwise plain <c>"ffprobe"</c> off
     /// <c>$PATH</c> - which <c>Dockerfile.ci</c> guarantees, exactly as it does for ffmpeg.
     /// </summary>
-    private static string FfprobePath { get; } = ResolveFfprobePath();
+    internal static string FfprobePath { get; } = ResolveFfprobePath();
 
     /// <summary>
     /// Synthesizes a real H.264/AAC MP4 - a container/codec pair any reasonable client declares as a
