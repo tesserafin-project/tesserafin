@@ -11,8 +11,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Tesserafin.Controller.Entities;
+using Tesserafin.Controller.Entities.TV;
 using Tesserafin.Controller.Library;
 using Tesserafin.Controller.Persistence;
+using Tesserafin.Data.Enums;
 using Tesserafin.Extensions.Json;
 using Tesserafin.Model.Dto;
 using Tesserafin.Model.Entities;
@@ -48,6 +50,7 @@ public sealed class ExplicitItemSelectionAuthorizationEndToEndTests : IClassFixt
     private Guid _openFolder;
     private Guid _visible;
     private Guid _hidden;
+    private Guid _hiddenSeries;
     private string _suffix = null!;
     private string _workDir = null!;
     private string _hiddenName = null!;
@@ -126,6 +129,9 @@ public sealed class ExplicitItemSelectionAuthorizationEndToEndTests : IClassFixt
         { "GET", "Studios?parentId={root}" },
         { "GET", "Years?parentId={hiddenLibrary}" },
         { "GET", "Persons?parentId={hiddenLibrary}" },
+        { "GET", "Persons?parentId={hiddenFolder}" },
+        { "GET", "Persons?appearsInItemId={hidden}" },
+        { "GET", "Shows/NextUp?seriesId={hiddenSeries}" },
         { "GET", "Artists?parentId={hiddenLibrary}" },
         { "GET", "Artists/AlbumArtists?parentId={hiddenLibrary}" },
         { "GET", "MusicGenres?parentId={hiddenLibrary}" },
@@ -164,6 +170,34 @@ public sealed class ExplicitItemSelectionAuthorizationEndToEndTests : IClassFixt
 
         _visible = Seed(Path.Combine(openDir, "open-" + _suffix + ".mp4"), _visibleName, _openFolder);
         _hidden = Seed(Path.Combine(withheldDir, "withheld-" + _suffix + ".mp4"), _hiddenName, _withheldFolder);
+
+        // People, and a series with one episode to come next, for the routes that name those.
+        var library = _factory.Services.GetRequiredService<ILibraryManager>();
+        foreach (var (id, who) in new[] { (_hidden, "withheld-" + _suffix + " actor"), (_visible, "open-" + _suffix + " actor") })
+        {
+            library.UpdatePeople(library.GetItemById(id)!, [new PersonInfo { Name = who, Type = PersonKind.Actor }]);
+        }
+
+        var series = new Series { Id = Guid.NewGuid(), Name = "withheld-" + _suffix + " series", Path = Path.Combine(withheldDir, "series"), ParentId = _withheldFolder, DateCreated = DateTime.UtcNow, DateModified = DateTime.UtcNow };
+        series.PresentationUniqueKey = series.CreatePresentationUniqueKey();
+        library.CreateItems([series], null, CancellationToken.None);
+        var episode = new Episode
+        {
+            Id = Guid.NewGuid(),
+            Name = "withheld-" + _suffix + " episode",
+            Path = Path.Combine(withheldDir, "series", "withheld-" + _suffix + "-s01e01.mp4"),
+            ParentId = series.Id,
+            SeriesId = series.Id,
+            SeriesName = series.Name,
+            SeriesPresentationUniqueKey = series.PresentationUniqueKey,
+            ParentIndexNumber = 1,
+            IndexNumber = 1,
+            DateCreated = DateTime.UtcNow,
+            DateModified = DateTime.UtcNow,
+        };
+        episode.PresentationUniqueKey = episode.CreatePresentationUniqueKey();
+        library.CreateItems([episode], null, CancellationToken.None);
+        _hiddenSeries = series.Id;
 
         (_restricted, _restrictedId) = await SignInAsync("smr3-restricted-" + _suffix, [_openLibrary]);
     }
@@ -210,8 +244,25 @@ public sealed class ExplicitItemSelectionAuthorizationEndToEndTests : IClassFixt
             Assert.Contains("open-" + _suffix + mark, mine.Body, StringComparison.Ordinal);
         }
 
-        var latest = await SendAsync(_restricted, "GET", "Items/Latest?userId=" + _restrictedId + "&parentId=" + _openLibrary);
-        Assert.Contains(_visibleName, latest.Body, StringComparison.Ordinal);
+        // A parent the restricted user may see still scopes to its children: the library, and the
+        // folder inside it, which is an ancestor and no library.
+        foreach (var parent in new[] { _openLibrary, _openFolder })
+        {
+            foreach (var route in new[] { "Items/Latest?", "Items?recursive=true&", "Items?recursive=true&includeItemTypes=Movie&" })
+            {
+                var under = await SendAsync(_restricted, "GET", FormattableString.Invariant($"{route}userId={_restrictedId}&parentId={parent}"));
+                Assert.True(under.Body.Contains(_visibleName, StringComparison.Ordinal), FormattableString.Invariant($"{route}parentId={(parent.Equals(_openLibrary) ? "library" : "folder")}: {(int)under.Status} {under.Body}"));
+            }
+        }
+
+        // The people and the next episode the rows below look for are there, for who may see them.
+        foreach (var route in new[] { "Persons?parentId=" + _withheldLibrary, "Persons?appearsInItemId=" + _hidden })
+        {
+            Assert.Contains("withheld-" + _suffix + " actor", (await SendAsync(_admin, "GET", route + "&userId=" + _adminId)).Body, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("open-" + _suffix + " actor", (await SendAsync(_restricted, "GET", "Persons?appearsInItemId=" + _visible + "&userId=" + _restrictedId)).Body, StringComparison.Ordinal);
+        Assert.Contains("withheld-" + _suffix + " episode", (await SendAsync(_admin, "GET", "Shows/NextUp?seriesId=" + _hiddenSeries + "&userId=" + _adminId)).Body, StringComparison.Ordinal);
 
         var listing = await SendAsync(_restricted, "GET", "Items?recursive=true&includeItemTypes=Movie&" + Everything);
         Assert.Contains(_visibleName, listing.Body, StringComparison.Ordinal);
@@ -265,6 +316,46 @@ public sealed class ExplicitItemSelectionAuthorizationEndToEndTests : IClassFixt
             {
                 Assert.Equal(1, document.RootElement.GetProperty("TotalRecordCount").GetInt32());
             }
+        }
+    }
+
+    /// <summary>
+    /// A withheld item is left out before the page is cut, not after: when it sorts first, the
+    /// first page of one still holds the visible item, the second is empty, and both count one.
+    /// The same pages, asked by a user who may see both, prove the withheld item does sort first.
+    /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
+    [Fact(Timeout = 120_000)]
+    public async Task PageOfAMixedSelection_IsCutAfterTheWithheldItemIsLeftOut()
+    {
+        const string Page = "Items?ids={ids}&userId={user}&sortBy=SortName&sortOrder=Descending&limit=1&startIndex=";
+
+        var (allowed, allowedId) = await SignInAsync("smr3-pager-" + _suffix, [_openLibrary, _withheldLibrary]);
+        using (allowed)
+        {
+            foreach (var (start, expected) in new[] { (0, _hidden), (1, _visible) })
+            {
+                var page = await SendAsync(allowed, "GET", FillAs(Page + start, allowedId, _visible, _hidden));
+                using var document = JsonDocument.Parse(page.Body);
+                Assert.Equal(expected, Guid.Parse(Assert.Single(document.RootElement.GetProperty("Items").EnumerateArray()).GetProperty("Id").GetString()!));
+                Assert.Equal(2, document.RootElement.GetProperty("TotalRecordCount").GetInt32());
+            }
+        }
+
+        var first = await SendAsync(_restricted, "GET", Fill(Page + "0", [_visible, _hidden]) + "&" + Everything);
+        AssertNothingOfTheWithheldItem("first page", first.Body);
+        using (var document = JsonDocument.Parse(first.Body))
+        {
+            Assert.Equal(_visible, Guid.Parse(Assert.Single(document.RootElement.GetProperty("Items").EnumerateArray()).GetProperty("Id").GetString()!));
+            Assert.Equal(1, document.RootElement.GetProperty("TotalRecordCount").GetInt32());
+        }
+
+        var second = await SendAsync(_restricted, "GET", Fill(Page + "1", [_visible, _hidden]) + "&" + Everything);
+        AssertNothingOfTheWithheldItem("second page", second.Body);
+        using (var document = JsonDocument.Parse(second.Body))
+        {
+            Assert.Empty(document.RootElement.GetProperty("Items").EnumerateArray());
+            Assert.Equal(1, document.RootElement.GetProperty("TotalRecordCount").GetInt32());
         }
     }
 
@@ -622,6 +713,7 @@ public sealed class ExplicitItemSelectionAuthorizationEndToEndTests : IClassFixt
             .Replace("{ids}", string.Join(',', ids), StringComparison.Ordinal)
             .Replace("{user}", user.ToString(), StringComparison.Ordinal)
             .Replace("{hidden}", _hidden.ToString(), StringComparison.Ordinal)
+            .Replace("{hiddenSeries}", _hiddenSeries.ToString(), StringComparison.Ordinal)
             .Replace("{visible}", _visible.ToString(), StringComparison.Ordinal)
             .Replace("{hiddenFolder}", _withheldFolder.ToString(), StringComparison.Ordinal)
             .Replace("{hiddenLibrary}", _withheldLibrary.ToString(), StringComparison.Ordinal)
