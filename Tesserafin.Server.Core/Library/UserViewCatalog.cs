@@ -32,66 +32,13 @@ namespace Tesserafin.Server.Core.Library
     /// <see cref="IUserViewFactory"/> (PR106b, named/shadow view creation), <see cref="IChannelCatalog"/>
     /// and <see cref="ILiveTvPresenceProvider"/> (PR108, external catalogs), <see cref="IItemSortService"/>
     /// (already a leaf, RFC §6), <see cref="IServerConfigurationManager"/> (<c>EnableFolderView</c>),
-    /// <see cref="ILocalizationManager"/> (view labels) and <c>Lazy&lt;IItemQueryService&gt;</c> (the
-    /// playlist/boxset probe, RFC §3). None of the first six reference <c>ILibraryManager</c>,
-    /// <c>IUserViewManager</c>, <c>IChannelManager</c> or <c>ILiveTvManager</c> - this satisfies RFC
-    /// invariant I1 (eager construction graph) for this leaf, verified by a dedicated architectural
-    /// test (<c>UserViewCatalogTests.DiWiring_...</c>).
-    /// </para>
-    /// <para>
-    /// <b>PR109 finding not anticipated by the RFC's §8 dependency table - <c>IItemQueryService</c>
-    /// must be <c>Lazy</c>, not direct</b>: the RFC's own table lists a plain <c>IItemQueryService</c>
-    /// dependency for this port and asserts "Non" (no SCC edge) without tracing into its concrete
-    /// implementation's own constructor. <c>ItemQueryService</c> (the sole implementation
-    /// <c>ApplicationHost</c> wires up) takes <b>both</b> <c>IUserViewManager</c> <b>and</b>
-    /// <c>IChannelManager</c> directly, non-Lazy, in its own constructor
-    /// (<c>Tesserafin.Server.Core/Library/ItemQueryService.cs:38</c>) - it needs them for its own
-    /// <c>Folder.GetItems</c>/<c>GetItemList</c> compatibility fallback (the pre-PR86 code path for
-    /// folders that don't support the raw-query fast path). A direct <c>IItemQueryService</c>
-    /// injection here would therefore create the eager construction-graph edges
-    /// <c>UserViewCatalog -&gt; IItemQueryService -&gt; IUserViewManager</c> and
-    /// <c>-&gt; IChannelManager</c> - two of the four forbidden SCC members, violating I1 exactly like
-    /// a direct (non-Lazy) <c>IProviderManager</c> injection would in <c>UserViewFactory</c> (RFC
-    /// §2/§8) or a direct <c>IEnumerable&lt;ILiveTvService&gt;</c> injection would in
-    /// <c>LiveTvPresenceProvider</c> (RFC §5/§8, PR108 finding). Worse than those two cases: nothing
-    /// depends on <see cref="UserViewCatalog"/> eagerly yet in this PR, so a direct injection would
-    /// build and pass every PR109 test, then detonate at PR110 once <c>LibraryManager</c> is wired to
-    /// inject <see cref="IUserViewCatalog"/> directly (closing a real cycle,
-    /// <c>LibraryManager -&gt; IUserViewCatalog -&gt; IItemQueryService -&gt; IUserViewManager -&gt;
-    /// ILibraryManager</c>). Same mitigation as the two precedents:
-    /// <c>Lazy&lt;IItemQueryService&gt;</c>, excluded from the eager construction graph (I1) while
-    /// still providing the real runtime dependency the probe needs.
-    /// </para>
-    /// <para>
-    /// <b>I2-relevant runtime edge, reported, not yet blessed (same register as the
-    /// <c>LiveTvPresenceProvider</c> PR108 escalation)</b>: unlike the two I2 exceptions already
-    /// accepted for <c>UserViewFactory</c> (<c>QueueRefresh</c> post-persistence; the new-item
-    /// <c>UpdateToRepositoryAsync</c> static path) and the count-only <c>Lazy&lt;IReadOnlyList&lt;
-    /// ILiveTvService&gt;&gt;</c> exception accepted for <c>LiveTvPresenceProvider</c>,
-    /// <c>Lazy&lt;IItemQueryService&gt;.Value</c> here is forced on <em>every</em>
-    /// <see cref="GetUserViews"/> call that visits a playlists/boxsets library (RFC §9's actual call
-    /// site) - i.e. a real runtime edge into the SCC (<c>ItemQueryService -&gt; IUserViewManager</c>,
-    /// <c>-&gt; IChannelManager</c>) on the view-listing path itself, not merely view-creation-adjacent.
-    /// This needs explicit sign-off at the RFC/PR110-111 boundary (add to §8's exception list if
-    /// accepted, or redesign - e.g. a narrower probe-only port over
-    /// <see cref="IItemQueryService.GetItemList(Folder, Tesserafin.Controller.Entities.InternalItemsQuery)"/> - if not); not
-    /// this PR's call to make unilaterally.
-    /// </para>
-    /// <para>
-    /// <b>Probe rewrite (RFC §3)</b>: the historical probe calls the obsolete
-    /// <c>folder.GetItemList(query, channelManager, collectionManager, userViewManager,
-    /// tvSeriesManager, itemSortService)</c> six-parameter overload. For a top-level library folder
-    /// (<c>SupportsRawQueryItems</c> true, <c>SourceType != Channel</c>, non-recursive, no
-    /// <c>ItemIds</c> - always true for the playlists/boxsets libraries this branch handles).
-    /// <c>ItemQueryService.GetItemList(Folder, InternalItemsQuery)</c>'s raw-query fast path
-    /// (<c>folder.GetRawQueryItems(query)</c> + its own relocated <c>PostFilterAndSort</c>) computes
-    /// the exact same result as the historical <c>GetItemsInternal</c> branch it replaces for this
-    /// case - both reduce to <c>postFilterAndSort(getRawQueryItems(query), query, collectionManager)</c>
-    /// (<c>Folder.cs:1137</c>) since neither the channel nor recursive branch is ever taken here. This
-    /// leaf therefore calls <c>IItemQueryService.GetItemList(Folder, InternalItemsQuery)</c> - never
-    /// <c>Folder.GetItems</c>/<c>GetItemList</c> directly, satisfying the RFC's invariant. See
-    /// <c>UserViewCatalogParityTests.GetUserViews_PlaylistBoxsetProbe_...</c> for the dedicated parity
-    /// assertion.
+    /// <see cref="ILocalizationManager"/> (view labels) and <see cref="IVisibleContentProbe"/> (the
+    /// playlist/boxset probe, RFC §3). None of them reaches <c>ILibraryManager</c>,
+    /// <c>IUserViewManager</c>, <c>IChannelManager</c>, <c>ILiveTvManager</c> or
+    /// <c>IItemQueryService</c>, directly or deferred - RFC invariant I1 (eager construction graph) holds
+    /// for this leaf, and since DEBT-SERVER-1 so does the runtime path of the probe (formerly the
+    /// <c>Lazy&lt;IItemQueryService&gt;</c> exception 4 of <c>docs/pr111-di-closure-audit.md</c>). Both
+    /// are verified by architectural tests (<c>UserViewCatalogTests.DiWiring_...</c>).
     /// </para>
     /// </remarks>
     internal sealed class UserViewCatalog : IUserViewCatalog
@@ -103,7 +50,7 @@ namespace Tesserafin.Server.Core.Library
         private readonly IItemSortService _itemSortService;
         private readonly IServerConfigurationManager _config;
         private readonly ILocalizationManager _localizationManager;
-        private readonly Lazy<IItemQueryService> _itemQueryServiceFactory;
+        private readonly IVisibleContentProbe _visibleContentProbe;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="UserViewCatalog"/> class.
@@ -115,11 +62,7 @@ namespace Tesserafin.Server.Core.Library
         /// <param name="itemSortService">The item sort service (already a leaf, RFC §6).</param>
         /// <param name="config">The server configuration manager (<c>EnableFolderView</c>).</param>
         /// <param name="localizationManager">The localization manager (view labels).</param>
-        /// <param name="itemQueryServiceFactory">
-        /// The item query service, lazily resolved - <b>must</b> stay <see cref="Lazy{T}"/>, never a
-        /// direct <see cref="IItemQueryService"/> injection (see type-level remarks: RFC I1 finding,
-        /// PR109).
-        /// </param>
+        /// <param name="visibleContentProbe">The playlist/boxset visible-content probe.</param>
         public UserViewCatalog(
             IUserRootFolderProvider userRootFolderProvider,
             IUserViewFactory userViewFactory,
@@ -128,7 +71,7 @@ namespace Tesserafin.Server.Core.Library
             IItemSortService itemSortService,
             IServerConfigurationManager config,
             ILocalizationManager localizationManager,
-            Lazy<IItemQueryService> itemQueryServiceFactory)
+            IVisibleContentProbe visibleContentProbe)
         {
             _userRootFolderProvider = userRootFolderProvider;
             _userViewFactory = userViewFactory;
@@ -137,7 +80,7 @@ namespace Tesserafin.Server.Core.Library
             _itemSortService = itemSortService;
             _config = config;
             _localizationManager = localizationManager;
-            _itemQueryServiceFactory = itemQueryServiceFactory;
+            _visibleContentProbe = visibleContentProbe;
         }
 
         /// <inheritdoc />
@@ -159,19 +102,10 @@ namespace Tesserafin.Server.Core.Library
                 var folderViewType = collectionFolder?.CollectionType;
 
                 // Playlist and BoxSet libraries require special handling because the folder only references linked items
-                if (folderViewType == CollectionType.playlists || folderViewType == CollectionType.boxsets)
+                if ((folderViewType == CollectionType.playlists || folderViewType == CollectionType.boxsets)
+                    && !_visibleContentProbe.HasVisibleContent(folder, user))
                 {
-                    var items = _itemQueryServiceFactory.Value.GetItemList(
-                        folder,
-                        new InternalItemsQuery(user)
-                        {
-                            ParentId = folder.ParentId
-                        });
-
-                    if (!items.Any(item => item.IsVisible(user)))
-                    {
-                        continue;
-                    }
+                    continue;
                 }
 
                 if (UserView.IsUserSpecific(folder))

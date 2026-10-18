@@ -9,6 +9,7 @@ using Tesserafin.Controller.Configuration;
 using Tesserafin.Controller.Entities;
 using Tesserafin.Controller.Library;
 using Tesserafin.Controller.LiveTv;
+using Tesserafin.Controller.Persistence;
 using Tesserafin.Controller.Sorting;
 using Tesserafin.Data;
 using Tesserafin.Data.Enums;
@@ -28,9 +29,8 @@ namespace Tesserafin.Server.Implementations.Tests.Library;
 /// <summary>
 /// Standalone tests for <see cref="UserViewCatalog"/> (PR109): behavior exercised with mocked
 /// leaves (grouping, <c>EnableFolderView</c>, hidden/ordered preferences, channels/LiveTV toggles),
-/// and the RFC invariant I1 (eager construction graph) / DI wiring proofs, notably the PR109-specific
-/// finding that <c>IItemQueryService</c> must be injected as <c>Lazy&lt;IItemQueryService&gt;</c>, not
-/// direct (see <see cref="UserViewCatalog"/>'s type-level remarks). Cross-checks against the real
+/// and the RFC invariant I1 (eager construction graph) / DI wiring proofs. The playlist/boxset probe
+/// itself is characterised in <see cref="VisibleContentProbeTests"/>. Cross-checks against the real
 /// <c>UserViewManager.GetUserViews</c> on shared fakes live in
 /// <see cref="UserViewCatalogParityTests"/>.
 /// </summary>
@@ -63,10 +63,11 @@ public sealed class UserViewCatalogTests
         return new FakeChildrenFolder(children);
     }
 
-    private static Lazy<IItemQueryService> MakeItemQueryServiceFactory(IItemQueryService? service = null)
+    private static IVisibleContentProbe MakeProbe(Folder library, User user, bool hasVisibleContent)
     {
-        var used = service ?? Mock.Of<IItemQueryService>();
-        return new Lazy<IItemQueryService>(() => used);
+        var probe = new Mock<IVisibleContentProbe>(MockBehavior.Strict);
+        probe.Setup(p => p.HasVisibleContent(library, user)).Returns(hasVisibleContent);
+        return probe.Object;
     }
 
     private static UserViewCatalog Build(
@@ -77,7 +78,7 @@ public sealed class UserViewCatalogTests
         IItemSortService? itemSortService = null,
         IServerConfigurationManager? config = null,
         ILocalizationManager? localizationManager = null,
-        Lazy<IItemQueryService>? itemQueryServiceFactory = null)
+        IVisibleContentProbe? visibleContentProbe = null)
     {
         return new UserViewCatalog(
             userRootFolderProvider ?? Mock.Of<IUserRootFolderProvider>(),
@@ -87,7 +88,7 @@ public sealed class UserViewCatalogTests
             itemSortService ?? new NoOpItemSortService(),
             config ?? MakeConfig(),
             localizationManager ?? Mock.Of<ILocalizationManager>(),
-            itemQueryServiceFactory ?? MakeItemQueryServiceFactory());
+            visibleContentProbe ?? new Mock<IVisibleContentProbe>(MockBehavior.Strict).Object);
     }
 
     // ---------------------------------------------------------------
@@ -266,11 +267,6 @@ public sealed class UserViewCatalogTests
         var user = MakeUser();
         var playlists = new CollectionFolder { Id = Guid.NewGuid(), Name = "Playlists", CollectionType = CollectionType.playlists };
 
-        var itemQueryServiceMock = new Mock<IItemQueryService>();
-        itemQueryServiceMock
-            .Setup(s => s.GetItemList(playlists, It.IsAny<InternalItemsQuery>()))
-            .Returns(new List<BaseItem> { MakeVisibleItem() });
-
         var namedView = new UserView { Id = Guid.NewGuid(), Name = "Playlists", ViewType = CollectionType.playlists, UserId = user.Id };
         var userViewFactoryMock = new Mock<IUserViewFactory>();
         userViewFactoryMock
@@ -283,7 +279,7 @@ public sealed class UserViewCatalogTests
         var catalog = Build(
             userRootFolderProvider: rootFolderProviderMock.Object,
             userViewFactory: userViewFactoryMock.Object,
-            itemQueryServiceFactory: MakeItemQueryServiceFactory(itemQueryServiceMock.Object));
+            visibleContentProbe: MakeProbe(playlists, user, hasVisibleContent: true));
 
         var result = catalog.GetUserViews(new UserViewQuery { User = user, IncludeExternalContent = false });
 
@@ -296,11 +292,6 @@ public sealed class UserViewCatalogTests
         var user = MakeUser();
         var playlists = new CollectionFolder { Id = Guid.NewGuid(), Name = "Playlists", CollectionType = CollectionType.playlists };
 
-        var itemQueryServiceMock = new Mock<IItemQueryService>();
-        itemQueryServiceMock
-            .Setup(s => s.GetItemList(playlists, It.IsAny<InternalItemsQuery>()))
-            .Returns(new List<BaseItem> { MakeInvisibleItem() });
-
         var rootFolderProviderMock = new Mock<IUserRootFolderProvider>();
         rootFolderProviderMock.Setup(p => p.GetUserRootFolder()).Returns(MakeRoot(playlists));
 
@@ -309,7 +300,7 @@ public sealed class UserViewCatalogTests
         var catalog = Build(
             userRootFolderProvider: rootFolderProviderMock.Object,
             userViewFactory: userViewFactoryMock.Object,
-            itemQueryServiceFactory: MakeItemQueryServiceFactory(itemQueryServiceMock.Object));
+            visibleContentProbe: MakeProbe(playlists, user, hasVisibleContent: false));
 
         var result = catalog.GetUserViews(new UserViewQuery { User = user, IncludeExternalContent = false });
 
@@ -402,13 +393,11 @@ public sealed class UserViewCatalogTests
     }
 
     // ---------------------------------------------------------------
-    // I2-adjacent: Lazy<IItemQueryService>.Value is never forced unless a playlists/boxsets folder
-    // is actually present - mirrors the analogous checks for Lazy<IProviderManager> (PR106b) and
-    // Lazy<IReadOnlyList<ILiveTvService>> (PR108, permission-gate case).
+    // The probe is only asked about playlists/boxsets libraries.
     // ---------------------------------------------------------------
 
     [Fact]
-    public void GetUserViews_NoPlaylistOrBoxsetFolder_LazyItemQueryServiceNeverEvaluated()
+    public void GetUserViews_NoPlaylistOrBoxsetFolder_ProbeNeverAsked()
     {
         var user = MakeUser();
         var movies = new CollectionFolder { Id = Guid.NewGuid(), Name = "Movies", CollectionType = CollectionType.movies };
@@ -416,71 +405,47 @@ public sealed class UserViewCatalogTests
         var rootFolderProviderMock = new Mock<IUserRootFolderProvider>();
         rootFolderProviderMock.Setup(p => p.GetUserRootFolder()).Returns(MakeRoot(movies));
 
-        var evaluated = false;
-        var throwingFactory = new Lazy<IItemQueryService>(() =>
-        {
-            evaluated = true;
-            throw new InvalidOperationException("Lazy<IItemQueryService>.Value evaluated with no playlists/boxsets folder present.");
-        });
+        // Strict with no setup: any call throws.
+        var catalog = Build(userRootFolderProvider: rootFolderProviderMock.Object);
 
-        var catalog = Build(userRootFolderProvider: rootFolderProviderMock.Object, itemQueryServiceFactory: throwingFactory);
-
-        catalog.GetUserViews(new UserViewQuery { User = user, IncludeExternalContent = false });
-
-        Assert.False(evaluated);
+        Assert.Same(movies, Assert.Single(catalog.GetUserViews(new UserViewQuery { User = user, IncludeExternalContent = false })));
     }
 
     // ---------------------------------------------------------------
-    // RFC I1 (§8): eager construction graph - no ctor parameter of UserViewCatalog is
-    // ILibraryManager/IUserViewManager/IChannelManager/ILiveTvManager, and IItemQueryService only
-    // ever appears wrapped in Lazy<T>, never direct (PR109 finding, see type-level remarks).
+    // RFC I1 (§8): no constructor parameter of UserViewCatalog or VisibleContentProbe is a member of
+    // the former SCC or IItemQueryService, plain or deferred. The transitive proof over the real
+    // registrations lives in Tesserafin.Server.Integration.Tests (UserViewCatalogDependencyTests).
     // ---------------------------------------------------------------
 
-    [Fact]
-    public void DiWiring_UserViewCatalogConstructorGraph_NoEagerEdgeToSccMembers()
+    [Theory]
+    [InlineData(typeof(UserViewCatalog))]
+    [InlineData(typeof(VisibleContentProbe))]
+    public void DiWiring_ConstructorTakesNoSccMemberOrItemQueryService_PlainOrDeferred(Type type)
     {
         var forbiddenTypes = new[]
         {
             typeof(ILibraryManager),
             typeof(IUserViewManager),
             typeof(IChannelManager),
-            typeof(ILiveTvManager)
+            typeof(ILiveTvManager),
+            typeof(IItemQueryService),
+            typeof(ItemQueryService),
+            typeof(IServiceProvider)
         };
 
-        var ctor = typeof(UserViewCatalog).GetConstructors().Single();
-        var directParameterTypes = ctor.GetParameters().Select(p => p.ParameterType).ToArray();
+        var parameterTypes = type.GetConstructors().Single().GetParameters()
+            .Select(p => p.ParameterType)
+            .Select(t => t.IsGenericType ? t.GetGenericArguments()[0] : t)
+            .ToArray();
 
         foreach (var forbidden in forbiddenTypes)
         {
-            Assert.DoesNotContain(forbidden, directParameterTypes);
+            Assert.DoesNotContain(forbidden, parameterTypes);
         }
-
-        // IItemQueryService must never appear as a direct parameter - only under Lazy<T> (PR109
-        // finding: ItemQueryService's own ctor takes IUserViewManager and IChannelManager directly).
-        Assert.DoesNotContain(typeof(IItemQueryService), directParameterTypes);
-        Assert.Contains(typeof(Lazy<IItemQueryService>), directParameterTypes);
-    }
-
-    /// <summary>
-    /// The PR109 finding, asserted directly: <c>ItemQueryService</c> (the concrete
-    /// <c>ApplicationHost</c> actually registers behind <c>IItemQueryService</c>) has real eager
-    /// edges to <c>IUserViewManager</c> and <c>IChannelManager</c> in its own constructor - proving
-    /// that a direct (non-Lazy) <c>IItemQueryService</c> injection on <see cref="UserViewCatalog"/>
-    /// would have violated I1, and that the <c>Lazy&lt;IItemQueryService&gt;</c> wrapping is
-    /// load-bearing, not decorative.
-    /// </summary>
-    [Fact]
-    public void DiWiring_ItemQueryServiceConcrete_HasEagerEdgesToUserViewManagerAndChannelManager_JustifyingLazyWrapping()
-    {
-        var itemQueryServiceCtor = typeof(ItemQueryService).GetConstructors().Single();
-        var parameterTypes = itemQueryServiceCtor.GetParameters().Select(p => p.ParameterType).ToArray();
-
-        Assert.Contains(typeof(IUserViewManager), parameterTypes);
-        Assert.Contains(typeof(IChannelManager), parameterTypes);
     }
 
     [Fact]
-    public void DiWiring_ApplicationHostStyleRegistration_UserViewCatalogResolvesToAutonomousImplementation()
+    public void DiWiring_ApplicationHostStyleRegistration_UserViewCatalogResolvesWithoutItemQueryService()
     {
         var services = new ServiceCollection();
         services.AddSingleton(Mock.Of<IUserRootFolderProvider>());
@@ -490,47 +455,23 @@ public sealed class UserViewCatalogTests
         services.AddSingleton<IItemSortService>(new NoOpItemSortService());
         services.AddSingleton(MakeConfig());
         services.AddSingleton(Mock.Of<ILocalizationManager>());
-        services.AddSingleton(Mock.Of<IItemQueryService>());
-        services.AddTransient(provider => new Lazy<IItemQueryService>(provider.GetRequiredService<IItemQueryService>));
+        services.AddSingleton(Mock.Of<IItemLookupService>());
+        services.AddSingleton(Mock.Of<IItemRepository>());
+        services.AddSingleton<IVisibleContentProbe, VisibleContentProbe>();
         services.AddSingleton<IUserViewCatalog, UserViewCatalog>();
 
-        using var provider = services.BuildServiceProvider();
-
-        var resolved = provider.GetRequiredService<IUserViewCatalog>();
-
-        Assert.IsType<UserViewCatalog>(resolved);
-    }
-
-    [Fact]
-    public void DiWiring_ApplicationHostStyleRegistration_UserViewCatalogIsSingleton()
-    {
-        var services = new ServiceCollection();
-        services.AddSingleton(Mock.Of<IUserRootFolderProvider>());
-        services.AddSingleton(Mock.Of<IUserViewFactory>());
-        services.AddSingleton(Mock.Of<IChannelCatalog>());
-        services.AddSingleton(Mock.Of<ILiveTvPresenceProvider>());
-        services.AddSingleton<IItemSortService>(new NoOpItemSortService());
-        services.AddSingleton(MakeConfig());
-        services.AddSingleton(Mock.Of<ILocalizationManager>());
-        services.AddSingleton(Mock.Of<IItemQueryService>());
-        services.AddTransient(provider => new Lazy<IItemQueryService>(provider.GetRequiredService<IItemQueryService>));
-        services.AddSingleton<IUserViewCatalog, UserViewCatalog>();
-
-        using var provider = services.BuildServiceProvider();
+        using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateOnBuild = true });
 
         var first = provider.GetRequiredService<IUserViewCatalog>();
-        var second = provider.GetRequiredService<IUserViewCatalog>();
 
-        Assert.Same(first, second);
+        Assert.IsType<UserViewCatalog>(first);
+        Assert.Same(first, provider.GetRequiredService<IUserViewCatalog>());
+        Assert.IsType<VisibleContentProbe>(provider.GetRequiredService<IVisibleContentProbe>());
     }
 
     // ---------------------------------------------------------------
     // Test doubles.
     // ---------------------------------------------------------------
-
-    private static BaseItem MakeVisibleItem() => new ProbeItem(visible: true) { Id = Guid.NewGuid() };
-
-    private static BaseItem MakeInvisibleItem() => new ProbeItem(visible: false) { Id = Guid.NewGuid() };
 
     /// <summary>
     /// Hand-written <see cref="Folder"/> double whose <see cref="GetChildren(User, bool, InternalItemsQuery, IItemSortService)"/>
@@ -550,23 +491,6 @@ public sealed class UserViewCatalogTests
         {
             return _children;
         }
-    }
-
-    /// <summary>
-    /// Minimal <see cref="BaseItem"/> double with a directly-controlled <see cref="IsVisible"/>
-    /// result, bypassing parental-rating/tag machinery entirely - only the boolean matters for the
-    /// playlist/boxset probe (RFC §3).
-    /// </summary>
-    private sealed class ProbeItem : BaseItem
-    {
-        private readonly bool _visible;
-
-        public ProbeItem(bool visible)
-        {
-            _visible = visible;
-        }
-
-        public override bool IsVisible(User user, bool skipAllowedTagsCheck = false) => _visible;
     }
 
     /// <summary>

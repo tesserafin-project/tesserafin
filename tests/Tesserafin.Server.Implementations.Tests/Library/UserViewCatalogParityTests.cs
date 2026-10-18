@@ -52,15 +52,9 @@ namespace Tesserafin.Server.Implementations.Tests.Library;
 /// by <c>OrderedViews</c> and input order, both fully controlled by the test.
 /// </para>
 /// <para>
-/// <b>Probe rewrite (RFC §3)</b>: the manager side's playlist/boxset probe calls the real, obsolete
-/// <c>Folder.GetItemList(query, channelManager, collectionManager, userViewManager, tvSeriesManager,
-/// itemSortService)</c> six-parameter overload directly; the catalog side calls a real, shared
-/// <see cref="Tesserafin.Server.Core.Library.ItemQueryService"/> instance's
-/// <c>GetItemList(Folder, InternalItemsQuery)</c> - two independently-implemented code paths (see
-/// <see cref="UserViewCatalog"/>'s type-level remarks) that are supposed to reduce to the same
-/// <c>GetRawQueryItems</c> + <c>PostFilterAndSort</c> computation for a plain top-level library
-/// folder. <see cref="ProbeFolder"/> overrides <c>GetRawQueryItems</c> to return a fixed, directly
-/// controlled item set so this equivalence is exercised for real, not assumed.
+/// <b>Probe</b>: both sides share one <see cref="IVisibleContentProbe"/> double answering from the
+/// <see cref="ProbeFolder"/>'s directly controlled items; the real probe is characterised against the
+/// historical computation in <see cref="VisibleContentProbeTests"/>.
 /// </para>
 /// </remarks>
 [Collection(Tesserafin.Server.Implementations.Tests.Library.LibraryManager.LibraryManagerStaticStateFixture.Name)]
@@ -169,10 +163,8 @@ public sealed class UserViewCatalogParityTests
     }
 
     // ---------------------------------------------------------------
-    // Dedicated probe parity (RFC §3): playlists/boxsets libraries. The real (obsolete)
-    // Folder.GetItemList 6-parameter overload vs. the real ItemQueryService.GetItemList(Folder,
-    // InternalItemsQuery) - independently implemented code paths compared directly, not assumed
-    // equivalent.
+    // Playlists/boxsets libraries: listed or left out on the probe's answer, identically on both
+    // sides (the probe itself is characterised in VisibleContentProbeTests).
     // ---------------------------------------------------------------
 
     [Fact]
@@ -429,7 +421,7 @@ public sealed class UserViewCatalogParityTests
         /// <b>PR110</b>: <c>UserViewManager.GetUserViews</c> now delegates entirely to
         /// <see cref="IUserViewCatalog"/> - the manager side is built on the exact same catalog
         /// construction as <see cref="BuildCatalog"/> (shared <see cref="UserViewFactory"/>, same
-        /// channel/Live TV provider functions, same real <see cref="ItemQueryService"/> probe wiring),
+        /// channel/Live TV provider functions, same probe double),
         /// so these parity tests are now trivially green by construction (the point: they still prove
         /// the façade delegates without duplicating the listing logic, RFC §9/PR110 exit criterion
         /// "one real GetUserViews implementation"). <see cref="ILibraryManager"/> is kept as an inert
@@ -472,21 +464,10 @@ public sealed class UserViewCatalogParityTests
                 .Setup(l => l.GetLiveTvFolder(It.IsAny<CancellationToken>()))
                 .Returns((CancellationToken ct) => LiveTvFolderProvider(ct));
 
-            // Real, shared ItemQueryService (PR86) - the same concrete type ApplicationHost wires
-            // up behind IItemQueryService in production, driving the rewritten probe (RFC §3). Its
-            // channel/user-view/tv-series/lookup/repository/scope dependencies are never exercised
-            // by the raw-query fast path CanUseRawQueryItemsFastPath takes for a plain top-level
-            // library folder (see UserViewCatalog's type-level remarks), so they are inert mocks.
-            var itemQueryService = new Tesserafin.Server.Core.Library.ItemQueryService(
-                Mock.Of<IChannelManager>(),
-                CollectionManager,
-                Mock.Of<IUserViewManager>(),
-                TvSeriesManager,
-                ConfigMock.Object,
-                ItemSortService,
-                Mock.Of<IItemLookupService>(),
-                Mock.Of<IItemRepository>(),
-                Mock.Of<IItemQueryScopeService>());
+            var probeMock = new Mock<IVisibleContentProbe>();
+            probeMock
+                .Setup(p => p.HasVisibleContent(It.IsAny<Folder>(), It.IsAny<User>()))
+                .Returns((Folder library, User user) => library is ProbeFolder probeFolder && probeFolder.Items.Any(item => item.IsVisible(user)));
 
             return new UserViewCatalog(
                 rootProviderMock.Object,
@@ -496,7 +477,7 @@ public sealed class UserViewCatalogParityTests
                 ItemSortService,
                 ConfigMock.Object,
                 Localization,
-                new Lazy<IItemQueryService>(() => itemQueryService));
+                probeMock.Object);
         }
     }
 
@@ -521,31 +502,20 @@ public sealed class UserViewCatalogParityTests
     }
 
     /// <summary>
-    /// Playlists/boxsets library folder double whose <see cref="GetRawQueryItems(InternalItemsQuery)"/>
-    /// is overridden to return a fixed item set - both the legacy
-    /// <c>Folder.GetItemsInternal</c>/<c>PostFilterAndSort</c> path and
-    /// <see cref="Tesserafin.Server.Core.Library.ItemQueryService"/>'s raw-query fast path reduce to
-    /// <c>PostFilterAndSort(GetRawQueryItems(query), query, collectionManager)</c> for a plain,
-    /// non-recursive, non-channel folder (RFC §3, see <see cref="UserViewCatalog"/>'s type-level
-    /// remarks) - overriding this one virtual member is therefore sufficient to drive both probes
-    /// off the exact same input.
+    /// Playlists/boxsets library folder double carrying the items the shared probe double answers from.
     /// </summary>
     private sealed class ProbeFolder : CollectionFolder
     {
-        private readonly IReadOnlyList<BaseItem> _items;
-
         public ProbeFolder(params BaseItem[] items)
         {
-            _items = items;
+            Items = items;
         }
 
-        public override IEnumerable<BaseItem> GetRawQueryItems(InternalItemsQuery query) => _items;
+        public IReadOnlyList<BaseItem> Items { get; }
     }
 
     /// <summary>
-    /// Minimal <see cref="Video"/> double with a directly-controlled <see cref="IsVisible"/> result -
-    /// only the boolean matters for the playlist/boxset probe's <c>items.Any(item =&gt;
-    /// item.IsVisible(user))</c> check (RFC §3).
+    /// Minimal <see cref="Video"/> double with a directly-controlled <see cref="IsVisible"/> result.
     /// </summary>
     private sealed class ProbeVideo : Video
     {

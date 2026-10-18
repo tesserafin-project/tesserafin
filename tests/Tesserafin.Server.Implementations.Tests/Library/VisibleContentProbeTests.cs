@@ -31,11 +31,12 @@ namespace Tesserafin.Server.Implementations.Tests.Library;
 
 /// <summary>
 /// Characterisation of the playlists/boxsets probe that decides whether <see cref="UserViewCatalog"/>
-/// lists such a library: every scenario is run through the historical computation
+/// lists such a library: every scenario is run through both the historical computation
 /// (<c>ItemQueryService.GetItemList(library, new InternalItemsQuery(user) { ParentId = library.ParentId })
-/// .Any(item =&gt; item.IsVisible(user))</c>, on a real <see cref="ItemQueryService"/>) and asserted
-/// against a hand-derived expectation, over real <see cref="CollectionFolder"/>,
-/// <see cref="PlaylistsFolder"/>, <see cref="Playlist"/> and <see cref="BoxSet"/> entities.
+/// .Any(item =&gt; item.IsVisible(user))</c>, on a real <see cref="ItemQueryService"/>) and
+/// <see cref="VisibleContentProbe"/>, and both are asserted against a hand-derived expectation, over
+/// real <see cref="CollectionFolder"/>, <see cref="PlaylistsFolder"/>, <see cref="Playlist"/> and
+/// <see cref="BoxSet"/> entities.
 /// </summary>
 /// <remarks>
 /// The two library types are the only <see cref="ICollectionFolder"/> implementations in production,
@@ -44,6 +45,10 @@ namespace Tesserafin.Server.Implementations.Tests.Library;
 /// physical folders), while <see cref="PlaylistsFolder"/> reports <c>SupportsRawQueryItems = false</c>
 /// and goes through <c>Folder.GetItemList</c> (its children are its own <see cref="Playlist"/>
 /// children). Both end in "is any eligible or linked child visible to this user".
+/// <see cref="VisibleContentProbe"/> must get there through its injected lookup and repository only:
+/// each run also asserts it never reads the static <see cref="BaseItem.ItemRepository"/>, and reaches
+/// the static <see cref="BaseItem.LibraryManager"/> only from inside <c>IsVisible</c> (tag inheritance
+/// and rating country of a real item - the visibility rule itself, unchanged).
 /// </remarks>
 [Collection(Tesserafin.Server.Implementations.Tests.Library.LibraryManager.LibraryManagerStaticStateFixture.Name)]
 public sealed class VisibleContentProbeTests
@@ -354,6 +359,10 @@ public sealed class VisibleContentProbeTests
         private readonly Dictionary<Guid, List<BaseItem>> _children = new();
         private readonly Guid _rootId = Guid.NewGuid();
         private readonly Mock<IServerConfigurationManager> _config = new();
+        private readonly Mock<IItemRepository> _staticRepository = new();
+        private readonly Mock<ILibraryManager> _libraryManager = new(MockBehavior.Strict);
+        private readonly List<System.Diagnostics.StackTrace> _libraryManagerCalls = new();
+        private bool _recordLibraryManagerCalls;
 
         public World()
         {
@@ -374,24 +383,26 @@ public sealed class VisibleContentProbeTests
                 .Returns(new ParentalRatingScore(17, null));
             BaseItem.LocalizationManager = localization.Object;
 
-            var repository = new Mock<IItemRepository>();
-            repository.Setup(r => r.RetrieveItem(It.IsAny<Guid>())).Returns((Guid id) => Find(id)!);
-            repository.Setup(r => r.GetItemList(It.IsAny<InternalItemsQuery>())).Returns((InternalItemsQuery q) => ChildrenOf(q.ParentId));
-            repository.Setup(r => r.GetItemIdsList(It.IsAny<InternalItemsQuery>())).Returns((InternalItemsQuery q) => ChildrenOf(q.ParentId).Select(i => i.Id).ToArray());
-            Repository = repository.Object;
-            BaseItem.ItemRepository = Repository;
+            BackRepository(_staticRepository);
+            BaseItem.ItemRepository = _staticRepository.Object;
 
-            var libraryManager = new Mock<ILibraryManager>();
-            libraryManager.Setup(l => l.GetItemById(It.IsAny<Guid>())).Returns((Guid id) => Find(id));
-            libraryManager
+            var injectedRepository = new Mock<IItemRepository>();
+            BackRepository(injectedRepository);
+            var lookup = new Mock<IItemLookupService>();
+            lookup.Setup(l => l.GetItemById(It.IsAny<Guid>())).Returns((Guid id) => Find(id));
+            Probe = new VisibleContentProbe(lookup.Object, injectedRepository.Object);
+
+            _libraryManager.Setup(l => l.GetItemById(It.IsAny<Guid>())).Callback(RecordLibraryManagerCall).Returns((Guid id) => Find(id));
+            _libraryManager
                 .Setup(l => l.GetItemList(It.IsAny<InternalItemsQuery>()))
+                .Callback(RecordLibraryManagerCall)
                 .Returns((InternalItemsQuery q) => q.ItemIds.Select(Find).OfType<BaseItem>().ToArray());
-            libraryManager.Setup(l => l.GetCollectionFolders(It.IsAny<BaseItem>())).Returns([]);
-            libraryManager.Setup(l => l.GetLibraryOptions(It.IsAny<BaseItem>())).Returns(new LibraryOptions());
-            BaseItem.LibraryManager = libraryManager.Object;
+            _libraryManager.Setup(l => l.GetCollectionFolders(It.IsAny<BaseItem>())).Callback(RecordLibraryManagerCall).Returns([]);
+            _libraryManager.Setup(l => l.GetLibraryOptions(It.IsAny<BaseItem>())).Callback(RecordLibraryManagerCall).Returns(new LibraryOptions());
+            BaseItem.LibraryManager = _libraryManager.Object;
         }
 
-        public IItemRepository Repository { get; }
+        public VisibleContentProbe Probe { get; }
 
         public T Register<T>(T item)
             where T : BaseItem
@@ -437,6 +448,26 @@ public sealed class VisibleContentProbeTests
         public void AssertProbe(Folder library, User user, bool expected)
         {
             Assert.Equal(expected, LegacyProbe(library, user));
+
+            ResetChildCaches();
+            _staticRepository.Invocations.Clear();
+            _libraryManagerCalls.Clear();
+            _recordLibraryManagerCalls = true;
+
+            try
+            {
+                Assert.Equal(expected, Probe.HasVisibleContent(library, user));
+            }
+            finally
+            {
+                _recordLibraryManagerCalls = false;
+            }
+
+            Assert.Empty(_staticRepository.Invocations);
+            Assert.All(_libraryManagerCalls, stack => Assert.Contains(
+                stack.GetFrames(),
+                frame => frame.GetMethod() is { Name: nameof(BaseItem.IsVisible) } method
+                    && typeof(BaseItem).IsAssignableFrom(method.DeclaringType)));
         }
 
         public static Guid NamedViewId(User user, Folder library) =>
@@ -464,7 +495,7 @@ public sealed class VisibleContentProbeTests
                 sortService,
                 _config.Object,
                 Mock.Of<ILocalizationManager>(),
-                new Lazy<IItemQueryService>(() => NewItemQueryService()));
+                Probe);
         }
 
         private ItemQueryService NewItemQueryService() =>
@@ -482,12 +513,7 @@ public sealed class VisibleContentProbeTests
         private bool LegacyProbe(Folder library, User user)
         {
             var itemQueryService = NewItemQueryService();
-
-            // Physical folders cache their children on first read: start every probe cold.
-            foreach (var folder in _items.Values.OfType<Folder>())
-            {
-                folder.Children = null;
-            }
+            ResetChildCaches();
 
             return itemQueryService
                 .GetItemList(library, new InternalItemsQuery(user) { ParentId = library.ParentId })
@@ -495,6 +521,31 @@ public sealed class VisibleContentProbeTests
         }
 
         private BaseItem? Find(Guid id) => _items.GetValueOrDefault(id);
+
+        // Folders cache their children on first read: start every probe cold, so neither run can
+        // lean on a cache the other one filled.
+        private void ResetChildCaches()
+        {
+            foreach (var folder in _items.Values.OfType<Folder>())
+            {
+                folder.Children = null;
+            }
+        }
+
+        private void RecordLibraryManagerCall()
+        {
+            if (_recordLibraryManagerCalls)
+            {
+                _libraryManagerCalls.Add(new System.Diagnostics.StackTrace());
+            }
+        }
+
+        private void BackRepository(Mock<IItemRepository> repository)
+        {
+            repository.Setup(r => r.RetrieveItem(It.IsAny<Guid>())).Returns((Guid id) => Find(id)!);
+            repository.Setup(r => r.GetItemList(It.IsAny<InternalItemsQuery>())).Returns((InternalItemsQuery q) => ChildrenOf(q.ParentId));
+            repository.Setup(r => r.GetItemIdsList(It.IsAny<InternalItemsQuery>())).Returns((InternalItemsQuery q) => ChildrenOf(q.ParentId).Select(i => i.Id).ToArray());
+        }
 
         private IReadOnlyList<BaseItem> ChildrenOf(Guid parentId) =>
             _children.TryGetValue(parentId, out var list) ? list.ToArray() : [];
