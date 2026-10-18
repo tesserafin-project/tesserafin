@@ -390,7 +390,38 @@ InternalItemsQuery)` (sans les dépendances `IUserViewManager`/`IChannelManager`
 de compat) éliminerait le cycle d'objets résiduel — mentionné explicitement par
 la RFC comme alternative « si non accepté ».
 
+**Levée — DEBT-SERVER-1 (2026-10-18).** `UserViewCatalog` ne dépend plus de
+`Lazy<IItemQueryService>` : le probe passe par le port étroit
+`IVisibleContentProbe` (`Tesserafin.Controller/Library/IVisibleContentProbe.cs`),
+implémenté par `VisibleContentProbe` sur `IItemLookupService` +
+`IItemRepository` seuls. L'enregistrement `Lazy<IItemQueryService>` est
+supprimé d'`ApplicationHost`, et `UserViewManagerDelegationRecursionTests`
+avec lui (le cycle d'objets qu'il gardait n'existe plus).
+
+Constat de la caractérisation : l'argument « fast-path toujours emprunté »
+ci-dessus ne valait que pour `CollectionFolder`. Le `PlaylistsFolder` (enfant
+virtuel de la racine, remonté par
+`UserRootFolder.GetEligibleChildrenForRecursiveChildren`) a
+`SupportsRawQueryItems = false` : son probe prenait le slow-path
+`folder.GetItemList(…, _channelManager, …, _userViewManager, …)`. Il ne
+bouclait pas seulement parce que la surcharge à 6 paramètres de
+`GetItemsInternal` n'utilise pas `userViewManager` (`PlaylistsFolder` ne
+redéfinit que celle à 5).
+
+Preuves : `VisibleContentProbeTests` (chaque scénario passe par l'ancien calcul
+et par le nouveau port, sans lecture du `BaseItem.ItemRepository` statique ni
+appel au `BaseItem.LibraryManager` statique hors de `IsVisible`) et
+`UserViewCatalogDependencyTests` (graphe des enregistrements réels, fabriques
+lues en IL : ni membre de l'ex-SCC ni `IItemQueryService` atteignable depuis le
+port, même différé ; seules arêtes différées du catalogue = exceptions 1 et 3).
+Reste hors périmètre : la règle `IsVisible` elle-même lit le
+`BaseItem.LibraryManager` statique (tags hérités, dossiers d'une collection) —
+chantier statics.
+
 ### Synthèse
+
+*(Mise à jour DEBT-SERVER-1, 2026-10-18 : l'exception 4 est levée, voir
+ci-dessus ; les trois autres restent en l'état.)*
 
 Les 4 exceptions sont **conservées telles quelles**, aucune n'a été éliminée par
 ce chantier (hors périmètre RFC), toutes restent I1-safe (construction). Les
@@ -421,7 +452,8 @@ le cycle d'objets exception 4) ajouté :
    `Folder.GetItems`/`GetItemList` pré-PR86 (`:55,65`) — feuille entrante, jamais
    appelée eager grâce à `Lazy<IItemQueryService>` partout où elle est atteinte
    depuis la SCC (exception 4 ci-dessus, `UserViewCatalog.cs:131`).
-6. **Cycle d'objets runtime (pas de construction)** :
+   *DEBT-SERVER-1 : plus atteinte depuis `UserViewCatalog` du tout.*
+6. *(Supprimé par DEBT-SERVER-1, 2026-10-18.)* **Cycle d'objets runtime (pas de construction)** :
    `UserViewManager → IUserViewCatalog → Lazy<IItemQueryService> →
    ItemQueryService → IUserViewManager` (retour à la même instance) — cassé au
    niveau construction par le `Lazy<T>`, mais un vrai cycle de références
@@ -471,8 +503,9 @@ bloquants)** :
   périmètre séparé déjà documenté ; l'exception 2 a une portée élargie à
   documenter dans le RFC (fait ci-dessous).
 - Port « service count » pour retirer l'exception 3 (`LiveTvPresenceProvider`).
-- Port probe-only pour retirer l'exception 4 (`UserViewCatalog`), ce qui
-  éliminerait aussi le cycle d'objets résiduel #6.
+- ~~Port probe-only pour retirer l'exception 4 (`UserViewCatalog`), ce qui
+  éliminerait aussi le cycle d'objets résiduel #6.~~ Fait : DEBT-SERVER-1
+  (`IVisibleContentProbe`, 2026-10-18).
 - Les 4 arêtes à sens unique restantes (§ « chemins résiduels » #1-4) sont
   attendues et non problématiques (ce sont des consommateurs légitimes de
   `LibraryManager`/`ChannelManager`, pas des membres d'une SCC) — aucune action
