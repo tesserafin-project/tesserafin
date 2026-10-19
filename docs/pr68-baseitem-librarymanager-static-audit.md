@@ -96,7 +96,9 @@ combination and the filter stay single, as static entity helpers (`BaseItem.Comb
 `BaseItem.EvaluateTagVisibility`) used by both the service and the static-backed `GetInheritedTags()`.
 `ItemAccessService` (`GetVisibleItemById`, and `LibraryManager.GetItemById<T>(id, user)` through it)
 passes the service down `IsVisibleStandalone`/`IsVisible`, so the entity overrides keep their rules
-while the tags no longer come through the static. Still static on that path: the parent walk and the
+while the tags no longer come through the static. The service-taking members are new overloads; the
+published `IsVisible(User, bool)`, `IsVisibleStandalone(User)`, `IsParentalAllowed(User, bool)` and
+`IsVisibleStandaloneInternal(User, bool)` stay (ABI gate) and forward with no service, i.e. the static. Still static on that path: the parent walk and the
 enabled/blocked-library restriction in `IsVisibleStandaloneInternal`, box set and channel visibility.
 Still static elsewhere: every caller that passes no service, and `ItemPersistenceService`'s stored
 inherited tags (the persistence service sits below the resolver, so it cannot take the port without a

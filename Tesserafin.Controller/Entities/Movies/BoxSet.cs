@@ -207,7 +207,7 @@ namespace Tesserafin.Controller.Entities.Movies
             return GetItemLookupInfo<BoxSetInfo>();
         }
 
-        public override bool IsVisible(User user, bool skipAllowedTagsCheck = false, ITagVisibilityService tagVisibility = null)
+        public override bool IsVisible(User user, bool skipAllowedTagsCheck, ITagVisibilityService tagVisibility)
         {
             if (IsLegacyBoxSet)
             {
@@ -278,7 +278,7 @@ namespace Tesserafin.Controller.Entities.Movies
             }
         }
 
-        public override bool IsVisibleStandalone(User user, ITagVisibilityService tagVisibility = null)
+        public override bool IsVisibleStandalone(User user, ITagVisibilityService tagVisibility)
         {
             if (IsLegacyBoxSet)
             {

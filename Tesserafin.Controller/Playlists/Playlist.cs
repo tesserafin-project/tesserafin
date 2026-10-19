@@ -232,7 +232,7 @@ namespace Tesserafin.Controller.Playlists
             return [item];
         }
 
-        public override bool IsVisible(User user, bool skipAllowedTagsCheck = false, ITagVisibilityService tagVisibility = null)
+        public override bool IsVisible(User user, bool skipAllowedTagsCheck, ITagVisibilityService tagVisibility)
         {
             if (!IsSharedItem)
             {
@@ -264,7 +264,7 @@ namespace Tesserafin.Controller.Playlists
             return user.HasPermission(PermissionKind.IsAdministrator) || user.Id.Equals(OwnerUserId);
         }
 
-        public override bool IsVisibleStandalone(User user, ITagVisibilityService tagVisibility = null)
+        public override bool IsVisibleStandalone(User user, ITagVisibilityService tagVisibility)
         {
             if (!IsSharedItem)
             {

@@ -250,7 +250,7 @@ namespace Tesserafin.Controller.Entities
             LibraryManager.CreateItem(item, this);
         }
 
-        public override bool IsVisible(User user, bool skipAllowedTagsCheck = false, ITagVisibilityService tagVisibility = null)
+        public override bool IsVisible(User user, bool skipAllowedTagsCheck, ITagVisibilityService tagVisibility)
         {
             if (this is ICollectionFolder && this is not BasePluginFolder)
             {

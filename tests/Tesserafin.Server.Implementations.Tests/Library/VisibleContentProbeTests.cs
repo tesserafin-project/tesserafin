@@ -560,7 +560,7 @@ public sealed class VisibleContentProbeTests
             _visible = visible;
         }
 
-        public override bool IsVisible(User user, bool skipAllowedTagsCheck = false, ITagVisibilityService? tagVisibility = null) => _visible;
+        public override bool IsVisible(User user, bool skipAllowedTagsCheck, ITagVisibilityService? tagVisibility) => _visible;
     }
 
     private sealed class FlagPlaylist : Playlist
@@ -572,6 +572,6 @@ public sealed class VisibleContentProbeTests
             _visible = visible;
         }
 
-        public override bool IsVisible(User user, bool skipAllowedTagsCheck = false, ITagVisibilityService? tagVisibility = null) => _visible;
+        public override bool IsVisible(User user, bool skipAllowedTagsCheck, ITagVisibilityService? tagVisibility) => _visible;
     }
 }

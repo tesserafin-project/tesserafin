@@ -1555,7 +1555,12 @@ namespace Tesserafin.Controller.Entities
             return await ProviderManager.RefreshSingleItem(this, refreshOptions, cancellationToken).ConfigureAwait(false);
         }
 
-        protected bool IsVisibleStandaloneInternal(User user, bool checkFolders, ITagVisibilityService tagVisibility = null)
+        protected bool IsVisibleStandaloneInternal(User user, bool checkFolders)
+        {
+            return IsVisibleStandaloneInternal(user, checkFolders, null);
+        }
+
+        protected bool IsVisibleStandaloneInternal(User user, bool checkFolders, ITagVisibilityService tagVisibility)
         {
             if (!IsVisible(user, false, tagVisibility))
             {
@@ -1840,6 +1845,18 @@ namespace Tesserafin.Controller.Entities
         }
 
         /// <summary>
+        /// Determines if a given user has access to this item, reading tags through the static <see cref="LibraryManager"/>.
+        /// </summary>
+        /// <param name="user">The user.</param>
+        /// <param name="skipAllowedTagsCheck">Don't check for allowed tags.</param>
+        /// <returns><c>true</c> if [is parental allowed] [the specified user]; otherwise, <c>false</c>.</returns>
+        /// <exception cref="ArgumentNullException">If user is null.</exception>
+        public bool IsParentalAllowed(User user, bool skipAllowedTagsCheck)
+        {
+            return IsParentalAllowed(user, skipAllowedTagsCheck, null);
+        }
+
+        /// <summary>
         /// Determines if a given user has access to this item.
         /// </summary>
         /// <param name="user">The user.</param>
@@ -1847,7 +1864,7 @@ namespace Tesserafin.Controller.Entities
         /// <param name="tagVisibility">Where the tags come from; <c>null</c> reads them through the static <see cref="LibraryManager"/>.</param>
         /// <returns><c>true</c> if [is parental allowed] [the specified user]; otherwise, <c>false</c>.</returns>
         /// <exception cref="ArgumentNullException">If user is null.</exception>
-        public bool IsParentalAllowed(User user, bool skipAllowedTagsCheck, ITagVisibilityService tagVisibility = null)
+        public bool IsParentalAllowed(User user, bool skipAllowedTagsCheck, ITagVisibilityService tagVisibility)
         {
             ArgumentNullException.ThrowIfNull(user);
 
@@ -2041,6 +2058,18 @@ namespace Tesserafin.Controller.Entities
         }
 
         /// <summary>
+        /// Determines if this item should be visible to a given user, reading tags through the static <see cref="LibraryManager"/>.
+        /// Kept for the published surface; overrides belong on the overload that takes an <see cref="ITagVisibilityService"/>.
+        /// </summary>
+        /// <param name="user">The user.</param>
+        /// <param name="skipAllowedTagsCheck">Don't check for allowed tags.</param>
+        /// <returns><c>true</c> if the specified user is visible; otherwise, <c>false</c>.</returns>
+        public virtual bool IsVisible(User user, bool skipAllowedTagsCheck = false)
+        {
+            return IsVisible(user, skipAllowedTagsCheck, null);
+        }
+
+        /// <summary>
         /// Determines if this folder should be visible to a given user.
         /// Default is just parental allowed. Can be overridden for more functionality.
         /// </summary>
@@ -2049,11 +2078,22 @@ namespace Tesserafin.Controller.Entities
         /// <param name="tagVisibility">Where the tags come from; <c>null</c> reads them through the static <see cref="LibraryManager"/>. Overrides pass it on.</param>
         /// <returns><c>true</c> if the specified user is visible; otherwise, <c>false</c>.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="user" /> is <c>null</c>.</exception>
-        public virtual bool IsVisible(User user, bool skipAllowedTagsCheck = false, ITagVisibilityService tagVisibility = null)
+        public virtual bool IsVisible(User user, bool skipAllowedTagsCheck, ITagVisibilityService tagVisibility)
         {
             ArgumentNullException.ThrowIfNull(user);
 
             return IsParentalAllowed(user, skipAllowedTagsCheck, tagVisibility);
+        }
+
+        /// <summary>
+        /// Determines if this item, its parents and its libraries admit a given user, reading tags through the static <see cref="LibraryManager"/>.
+        /// Kept for the published surface; overrides belong on the overload that takes an <see cref="ITagVisibilityService"/>.
+        /// </summary>
+        /// <param name="user">The user.</param>
+        /// <returns><c>true</c> if the item is visible to the user.</returns>
+        public virtual bool IsVisibleStandalone(User user)
+        {
+            return IsVisibleStandalone(user, null);
         }
 
         /// <summary>
@@ -2062,7 +2102,7 @@ namespace Tesserafin.Controller.Entities
         /// <param name="user">The user.</param>
         /// <param name="tagVisibility">Where the tags come from; <c>null</c> reads them through the static <see cref="LibraryManager"/>. Overrides pass it on.</param>
         /// <returns><c>true</c> if the item is visible to the user.</returns>
-        public virtual bool IsVisibleStandalone(User user, ITagVisibilityService tagVisibility = null)
+        public virtual bool IsVisibleStandalone(User user, ITagVisibilityService tagVisibility)
         {
             if (SourceType == SourceType.Channel)
             {

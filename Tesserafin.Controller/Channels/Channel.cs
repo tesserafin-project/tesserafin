@@ -28,7 +28,7 @@ namespace Tesserafin.Controller.Channels
 
         public override bool SupportsRawQueryItems => false;
 
-        public override bool IsVisible(User user, bool skipAllowedTagsCheck = false, ITagVisibilityService tagVisibility = null)
+        public override bool IsVisible(User user, bool skipAllowedTagsCheck, ITagVisibilityService tagVisibility)
         {
             var blockedChannelsPreference = user.GetPreferenceValues<Guid>(PreferenceKind.BlockedChannels);
             if (blockedChannelsPreference.Length != 0)
