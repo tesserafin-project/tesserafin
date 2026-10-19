@@ -51,6 +51,18 @@ namespace Tesserafin.Controller.Entities
 
         public override bool SupportsRawQueryItems => false;
 
+        /// <summary>
+        /// Gets or sets the libraries, read each time from the item cache: a list kept here would be
+        /// copies of them that an edit through the cache never reaches, so a tag saved on a library
+        /// would not apply to its items until the root was validated again.
+        /// </summary>
+        [JsonIgnore]
+        public override IEnumerable<BaseItem> Children
+        {
+            get => LoadChildren();
+            set => base.Children = value;
+        }
+
         private void ClearCache()
         {
             lock (_childIdsLock)
