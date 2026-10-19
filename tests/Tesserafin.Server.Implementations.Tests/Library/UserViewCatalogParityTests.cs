@@ -521,6 +521,6 @@ public sealed class UserViewCatalogParityTests
     {
         public bool Visible { get; init; }
 
-        public override bool IsVisible(User user, bool skipAllowedTagsCheck = false) => Visible;
+        public override bool IsVisible(User user, bool skipAllowedTagsCheck = false, ITagVisibilityService? tagVisibility = null) => Visible;
     }
 }

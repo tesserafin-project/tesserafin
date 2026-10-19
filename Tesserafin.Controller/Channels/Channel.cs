@@ -28,7 +28,7 @@ namespace Tesserafin.Controller.Channels
 
         public override bool SupportsRawQueryItems => false;
 
-        public override bool IsVisible(User user, bool skipAllowedTagsCheck = false)
+        public override bool IsVisible(User user, bool skipAllowedTagsCheck = false, ITagVisibilityService tagVisibility = null)
         {
             var blockedChannelsPreference = user.GetPreferenceValues<Guid>(PreferenceKind.BlockedChannels);
             if (blockedChannelsPreference.Length != 0)
@@ -47,7 +47,7 @@ namespace Tesserafin.Controller.Channels
                 }
             }
 
-            return base.IsVisible(user, skipAllowedTagsCheck);
+            return base.IsVisible(user, skipAllowedTagsCheck, tagVisibility);
         }
 
         protected override QueryResult<BaseItem> GetItemsInternal(InternalItemsQuery query, IChannelManager channelManager, ICollectionManager collectionManager, IUserViewManager userViewManager, ITVSeriesManager tvSeriesManager)

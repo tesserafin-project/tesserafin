@@ -44,7 +44,9 @@ public class ItemAccessServiceTests
         _itemRepositoryMock.Setup(i => i.RetrieveItem(It.IsAny<Guid>())).Returns<BaseItem>(null);
 
         _itemLookupService = new Tesserafin.Server.Core.Library.ItemLookupService(_itemRepositoryMock.Object, _configurationManagerMock.Object);
-        _itemAccessService = new ItemAccessService(_itemLookupService);
+        // No library membership: these items live outside every library.
+        var noLibraries = Mock.Of<ICollectionFolderResolver>(r => r.GetCollectionFolders(It.IsAny<BaseItem>()) == new List<Folder>());
+        _itemAccessService = new ItemAccessService(_itemLookupService, new TagVisibilityService(_itemLookupService, noLibraries));
     }
 
     private static void SetLibraryManagerStatic(ILibraryManager libraryManager)
@@ -84,11 +86,10 @@ public class ItemAccessServiceTests
     [Fact]
     public void GetVisibleItemById_InvisibleViaBlockedTag_ReturnsNull()
     {
-        // Blocked-tag path calls BaseItem.GetInheritedTags(), which unconditionally consults
-        // LibraryManager.GetCollectionFolders(this) - requires the static to be set. This is the
-        // residual static dependency documented on ItemAccessService: reached through
-        // BaseItem.IsVisibleStandalone -> GetInheritedTags -> the static BaseItem.LibraryManager.
-        SetLibraryManagerStatic(Mock.Of<ILibraryManager>(m => m.GetCollectionFolders(It.IsAny<BaseItem>()) == new List<Folder>()));
+        // The blocked-tag path used to read the item's libraries through the static
+        // BaseItem.LibraryManager (GetInheritedTags). Since DEBT-SERVER-3 the tags come from
+        // ITagVisibilityService, so a strict static that throws on any call proves it is not read.
+        SetLibraryManagerStatic(new Mock<ILibraryManager>(MockBehavior.Strict).Object);
 
         var audio = new Audio { Id = Guid.NewGuid(), Name = "Track", Tags = new[] { "blocked" } };
         _itemRepositoryMock.Setup(r => r.RetrieveItem(audio.Id)).Returns(audio);
@@ -132,6 +133,8 @@ public class ItemAccessServiceTests
         services.AddSingleton<Tesserafin.Server.Core.Library.ItemLookupService>();
         services.AddSingleton<IItemLookupService>(sp => sp.GetRequiredService<Tesserafin.Server.Core.Library.ItemLookupService>());
         services.AddSingleton<Tesserafin.Server.Core.Library.IItemCacheStore>(sp => sp.GetRequiredService<Tesserafin.Server.Core.Library.ItemLookupService>());
+        services.AddSingleton(Mock.Of<ICollectionFolderResolver>());
+        services.AddSingleton<ITagVisibilityService, TagVisibilityService>();
         services.AddSingleton<IItemAccessService, ItemAccessService>();
 
         using var provider = services.BuildServiceProvider();

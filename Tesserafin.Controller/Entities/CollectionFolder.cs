@@ -114,11 +114,11 @@ namespace Tesserafin.Controller.Entities
             return GetLibraryOptions(Path);
         }
 
-        public override bool IsVisible(User user, bool skipAllowedTagsCheck = false)
+        public override bool IsVisible(User user, bool skipAllowedTagsCheck = false, ITagVisibilityService tagVisibility = null)
         {
             if (GetLibraryOptions().Enabled)
             {
-                return base.IsVisible(user, skipAllowedTagsCheck);
+                return base.IsVisible(user, skipAllowedTagsCheck, tagVisibility);
             }
 
             return false;

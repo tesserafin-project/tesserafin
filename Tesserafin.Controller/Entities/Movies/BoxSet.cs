@@ -207,14 +207,14 @@ namespace Tesserafin.Controller.Entities.Movies
             return GetItemLookupInfo<BoxSetInfo>();
         }
 
-        public override bool IsVisible(User user, bool skipAllowedTagsCheck = false)
+        public override bool IsVisible(User user, bool skipAllowedTagsCheck = false, ITagVisibilityService tagVisibility = null)
         {
             if (IsLegacyBoxSet)
             {
-                return base.IsVisible(user, skipAllowedTagsCheck);
+                return base.IsVisible(user, skipAllowedTagsCheck, tagVisibility);
             }
 
-            if (!IsParentalAllowed(user, skipAllowedTagsCheck))
+            if (!IsParentalAllowed(user, skipAllowedTagsCheck, tagVisibility))
             {
                 return false;
             }
@@ -278,14 +278,14 @@ namespace Tesserafin.Controller.Entities.Movies
             }
         }
 
-        public override bool IsVisibleStandalone(User user)
+        public override bool IsVisibleStandalone(User user, ITagVisibilityService tagVisibility = null)
         {
             if (IsLegacyBoxSet)
             {
-                return base.IsVisibleStandalone(user);
+                return base.IsVisibleStandalone(user, tagVisibility);
             }
 
-            return IsVisible(user);
+            return IsVisible(user, false, tagVisibility);
         }
 
         private Guid[] GetLibraryFolderIds(User user)

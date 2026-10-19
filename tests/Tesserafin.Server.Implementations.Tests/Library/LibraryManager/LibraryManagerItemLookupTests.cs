@@ -89,7 +89,9 @@ public class LibraryManagerItemLookupTests
         // Register a *real* ItemAccessService wrapping the same ItemLookupService instance above -
         // an auto-mocked IItemAccessService would silently return null for every visibility check
         // instead of exercising the real ItemIsVisible/IsVisibleStandalone logic.
-        _itemAccessService = new Tesserafin.Server.Core.Library.ItemAccessService(_itemLookupService);
+        _itemAccessService = new Tesserafin.Server.Core.Library.ItemAccessService(
+            _itemLookupService,
+            new Tesserafin.Server.Core.Library.TagVisibilityService(_itemLookupService, fixture.Freeze<ICollectionFolderResolver>()));
         fixture.Register<IItemAccessService>(() => _itemAccessService);
 
         _libraryManager = fixture.Build<Tesserafin.Server.Core.Library.LibraryManager>().Do(s => s.AddParts(

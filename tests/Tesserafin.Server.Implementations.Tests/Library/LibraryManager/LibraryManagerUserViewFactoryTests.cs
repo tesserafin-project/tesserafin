@@ -84,7 +84,9 @@ public class LibraryManagerUserViewFactoryTests
         fixture.Register<IItemLookupService>(() => _itemLookupService);
         fixture.Register<Tesserafin.Server.Core.Library.IItemCacheStore>(() => _itemLookupService);
 
-        var itemAccessService = new Tesserafin.Server.Core.Library.ItemAccessService(_itemLookupService);
+        var itemAccessService = new Tesserafin.Server.Core.Library.ItemAccessService(
+            _itemLookupService,
+            new Tesserafin.Server.Core.Library.TagVisibilityService(_itemLookupService, fixture.Freeze<ICollectionFolderResolver>()));
         fixture.Register<IItemAccessService>(() => itemAccessService);
 
         // PR106a: one real ItemStore instance backs both the concrete type and IItemStore.

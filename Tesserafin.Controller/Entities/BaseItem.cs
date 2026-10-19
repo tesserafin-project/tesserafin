@@ -1555,15 +1555,15 @@ namespace Tesserafin.Controller.Entities
             return await ProviderManager.RefreshSingleItem(this, refreshOptions, cancellationToken).ConfigureAwait(false);
         }
 
-        protected bool IsVisibleStandaloneInternal(User user, bool checkFolders)
+        protected bool IsVisibleStandaloneInternal(User user, bool checkFolders, ITagVisibilityService tagVisibility = null)
         {
-            if (!IsVisible(user))
+            if (!IsVisible(user, false, tagVisibility))
             {
                 return false;
             }
 
             var parents = GetParents().ToList();
-            if (parents.Any(i => !i.IsVisible(user, true)))
+            if (parents.Any(i => !i.IsVisible(user, true, tagVisibility)))
             {
                 return false;
             }
@@ -1844,13 +1844,14 @@ namespace Tesserafin.Controller.Entities
         /// </summary>
         /// <param name="user">The user.</param>
         /// <param name="skipAllowedTagsCheck">Don't check for allowed tags.</param>
+        /// <param name="tagVisibility">Where the tags come from; <c>null</c> reads them through the static <see cref="LibraryManager"/>.</param>
         /// <returns><c>true</c> if [is parental allowed] [the specified user]; otherwise, <c>false</c>.</returns>
         /// <exception cref="ArgumentNullException">If user is null.</exception>
-        public bool IsParentalAllowed(User user, bool skipAllowedTagsCheck)
+        public bool IsParentalAllowed(User user, bool skipAllowedTagsCheck, ITagVisibilityService tagVisibility = null)
         {
             ArgumentNullException.ThrowIfNull(user);
 
-            if (!IsVisibleViaTags(user, skipAllowedTagsCheck))
+            if (!(tagVisibility?.IsVisibleViaTags(this, user, skipAllowedTagsCheck) ?? IsVisibleViaTags(user, skipAllowedTagsCheck)))
             {
                 return false;
             }
@@ -1916,15 +1917,28 @@ namespace Tesserafin.Controller.Entities
 
         public List<string> GetInheritedTags()
         {
-            var list = new List<string>();
-            list.AddRange(Tags);
+            return CombineInheritedTags(this, GetParents(), LibraryManager.GetCollectionFolders(this)).ToList();
+        }
 
-            foreach (var parent in GetParents())
+        /// <summary>
+        /// Combines the item's own tags, then each parent's in the given order, then each library's,
+        /// deduplicated ignoring case (the first spelling is kept).
+        /// </summary>
+        /// <param name="item">The item.</param>
+        /// <param name="parents">The item's parents, nearest first.</param>
+        /// <param name="libraries">The libraries the item belongs to.</param>
+        /// <returns>The inherited tags.</returns>
+        public static IReadOnlyList<string> CombineInheritedTags(BaseItem item, IEnumerable<BaseItem> parents, IEnumerable<Folder> libraries)
+        {
+            var list = new List<string>();
+            list.AddRange(item.Tags);
+
+            foreach (var parent in parents)
             {
                 list.AddRange(parent.Tags);
             }
 
-            foreach (var folder in LibraryManager.GetCollectionFolders(this))
+            foreach (var folder in libraries)
             {
                 list.AddRange(folder.Tags);
             }
@@ -1934,6 +1948,24 @@ namespace Tesserafin.Controller.Entities
 
         protected bool IsVisibleViaTags(User user, bool skipAllowedTagsCheck)
         {
+            return EvaluateTagVisibility(user, skipAllowedTagsCheck, GetInheritedTags, () => GetParents().FirstOrDefault() ?? this);
+        }
+
+        /// <summary>
+        /// Applies the user's blocked tags, then allowed tags, to an item's inherited tags. Blocked tags
+        /// always apply; allowed tags are skipped on request and for a direct child of a root folder.
+        /// </summary>
+        /// <param name="user">The user.</param>
+        /// <param name="skipAllowedTagsCheck">Whether to ignore the user's allowed tags.</param>
+        /// <param name="getInheritedTags">Gets the item's inherited tags; only called when the user has tag preferences.</param>
+        /// <param name="getParentOrSelf">Gets the item's direct parent, or the item itself without one; only called past the blocked tags.</param>
+        /// <returns>Whether the tags admit the item.</returns>
+        public static bool EvaluateTagVisibility(User user, bool skipAllowedTagsCheck, Func<IEnumerable<string>> getInheritedTags, Func<BaseItem> getParentOrSelf)
+        {
+            ArgumentNullException.ThrowIfNull(user);
+            ArgumentNullException.ThrowIfNull(getInheritedTags);
+            ArgumentNullException.ThrowIfNull(getParentOrSelf);
+
             var blockedTags = user.GetPreference(PreferenceKind.BlockedTags);
             var allowedTags = user.GetPreference(PreferenceKind.AllowedTags);
 
@@ -1948,7 +1980,7 @@ namespace Tesserafin.Controller.Entities
                 .Select(t => t.GetCleanValue())
                 .ToHashSet(StringComparer.Ordinal);
 
-            var normalizedItemTags = GetInheritedTags()
+            var normalizedItemTags = getInheritedTags()
                 .Select(t => t.GetCleanValue())
                 .ToHashSet(StringComparer.Ordinal);
 
@@ -1958,7 +1990,7 @@ namespace Tesserafin.Controller.Entities
                 return false;
             }
 
-            var parent = GetParents().FirstOrDefault() ?? this;
+            var parent = getParentOrSelf();
             if (parent is UserRootFolder or AggregateFolder or UserView)
             {
                 return true;
@@ -2014,23 +2046,30 @@ namespace Tesserafin.Controller.Entities
         /// </summary>
         /// <param name="user">The user.</param>
         /// <param name="skipAllowedTagsCheck">Don't check for allowed tags.</param>
+        /// <param name="tagVisibility">Where the tags come from; <c>null</c> reads them through the static <see cref="LibraryManager"/>. Overrides pass it on.</param>
         /// <returns><c>true</c> if the specified user is visible; otherwise, <c>false</c>.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="user" /> is <c>null</c>.</exception>
-        public virtual bool IsVisible(User user, bool skipAllowedTagsCheck = false)
+        public virtual bool IsVisible(User user, bool skipAllowedTagsCheck = false, ITagVisibilityService tagVisibility = null)
         {
             ArgumentNullException.ThrowIfNull(user);
 
-            return IsParentalAllowed(user, skipAllowedTagsCheck);
+            return IsParentalAllowed(user, skipAllowedTagsCheck, tagVisibility);
         }
 
-        public virtual bool IsVisibleStandalone(User user)
+        /// <summary>
+        /// Determines if this item, its parents and its libraries admit a given user.
+        /// </summary>
+        /// <param name="user">The user.</param>
+        /// <param name="tagVisibility">Where the tags come from; <c>null</c> reads them through the static <see cref="LibraryManager"/>. Overrides pass it on.</param>
+        /// <returns><c>true</c> if the item is visible to the user.</returns>
+        public virtual bool IsVisibleStandalone(User user, ITagVisibilityService tagVisibility = null)
         {
             if (SourceType == SourceType.Channel)
             {
-                return IsVisibleStandaloneInternal(user, false) && Channel.IsChannelVisible(this, user);
+                return IsVisibleStandaloneInternal(user, false, tagVisibility) && Channel.IsChannelVisible(this, user);
             }
 
-            return IsVisibleStandaloneInternal(user, true);
+            return IsVisibleStandaloneInternal(user, true, tagVisibility);
         }
 
         public virtual string GetClientTypeName()

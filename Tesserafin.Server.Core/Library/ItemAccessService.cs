@@ -16,24 +16,27 @@ namespace Tesserafin.Server.Core.Library
     /// <c>ItemLookupService.GetItemById&lt;T&gt;(Guid, User?)</c>/<c>ItemIsVisible</c> - lookup
     /// (finding an item) and access control (deciding whether a user may see it) are different
     /// responsibilities, and the latter was leaking a hidden static dependency into the former.
-    /// That residual static dependency - <see cref="BaseItem.LibraryManager"/>, reached indirectly
-    /// through <see cref="BaseItem.IsVisibleStandalone(User)"/> (collection folder / channel
-    /// visibility) and <see cref="BaseItem.GetInheritedTags"/> (tag inheritance through parents) -
-    /// is now explicitly and exclusively localized here, at the visibility boundary, instead of
-    /// being an implicit dependency of the plain item lookup cache. <see cref="ItemLookupService"/>
-    /// itself has no knowledge of users or visibility any more.
+    /// <see cref="ItemLookupService"/> itself has no knowledge of users or visibility any more.
+    /// Tag inheritance and the tag filter come from <see cref="ITagVisibilityService"/>, passed down
+    /// the entities' visibility overrides (DEBT-SERVER-3). What still reads the static
+    /// <see cref="BaseItem.LibraryManager"/> on this path, through
+    /// <see cref="BaseItem.IsVisibleStandalone(User, ITagVisibilityService)"/>, is the parent walk and
+    /// the folder restriction (enabled/blocked libraries), and channel and box set visibility.
     /// </remarks>
     internal sealed class ItemAccessService : IItemAccessService
     {
         private readonly IItemLookupService _itemLookupService;
+        private readonly ITagVisibilityService _tagVisibility;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ItemAccessService"/> class.
         /// </summary>
         /// <param name="itemLookupService">The item lookup service used to resolve the item before applying visibility.</param>
-        public ItemAccessService(IItemLookupService itemLookupService)
+        /// <param name="tagVisibility">Tag inheritance and the tag filter.</param>
+        public ItemAccessService(IItemLookupService itemLookupService, ITagVisibilityService tagVisibility)
         {
             _itemLookupService = itemLookupService;
+            _tagVisibility = tagVisibility;
         }
 
         /// <inheritdoc />
@@ -49,14 +52,14 @@ namespace Tesserafin.Server.Core.Library
         /// <see cref="UserRootFolder"/> is always visible regardless of a user's tag/parental
         /// restrictions.
         /// </summary>
-        private static bool ItemIsVisible(BaseItem? item, User user)
+        private bool ItemIsVisible(BaseItem? item, User user)
         {
             if (item is null)
             {
                 return false;
             }
 
-            return item is UserRootFolder || item.IsVisibleStandalone(user);
+            return item is UserRootFolder || item.IsVisibleStandalone(user, _tagVisibility);
         }
     }
 }

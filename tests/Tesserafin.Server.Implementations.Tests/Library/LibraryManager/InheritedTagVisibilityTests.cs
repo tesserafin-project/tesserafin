@@ -28,13 +28,16 @@ namespace Tesserafin.Server.Implementations.Tests.Library.LibraryManager;
 /// kept) and of the tag filter that reads it: blocked tags first, then allowed tags, the
 /// <c>skipAllowedTagsCheck</c> switch and the root-folder exception. Every expectation is
 /// hand-derived and was green on the unmodified entities, read through the static
-/// <see cref="BaseItem.LibraryManager"/>.
+/// <see cref="BaseItem.LibraryManager"/>; since DEBT-SERVER-3 the same expectations hold through
+/// <see cref="ITagVisibilityService"/>, and the static and the service must agree.
 /// </summary>
 /// <remarks>
 /// The item graph is real entities over a real <c>ItemLookupService</c>; only the repository
 /// (id to item) and the user root folder (its library children) are stubbed. The visibility
 /// decisions are taken through <see cref="IItemAccessService.GetVisibleItemById{T}"/>, the
-/// production path used by the playback, play-state and media-info endpoints.
+/// production path used by the playback, play-state and media-info endpoints, which now passes the
+/// service down the entities' overrides. The <c>ServicePath_</c> tests make the static blind to
+/// libraries, so a decision that still read tags through it would differ.
 /// </remarks>
 [Collection(LibraryManagerStaticStateFixture.Name)]
 public sealed class InheritedTagVisibilityTests
@@ -42,6 +45,8 @@ public sealed class InheritedTagVisibilityTests
     private readonly Dictionary<Guid, BaseItem> _items = [];
     private readonly List<Folder> _libraries = [];
     private readonly IItemAccessService _access;
+    private readonly ITagVisibilityService _tags;
+    private readonly IItemLookupService _lookup;
 
     public InheritedTagVisibilityTests()
     {
@@ -72,7 +77,9 @@ public sealed class InheritedTagVisibilityTests
                 Array.Empty<ILibraryPostScanTask>()))
             .Create();
 
-        _access = new Tesserafin.Server.Core.Library.ItemAccessService(lookup);
+        _lookup = lookup;
+        _tags = new Tesserafin.Server.Core.Library.TagVisibilityService(lookup, resolver);
+        _access = new Tesserafin.Server.Core.Library.ItemAccessService(lookup, _tags);
 
         BaseItem.LibraryManager = manager;
         BaseItem.ConfigurationManager = configuration.Object;
@@ -189,9 +196,12 @@ public sealed class InheritedTagVisibilityTests
         AddLibrary("Movies", ["lib"], "/media/movies");
         var movie = AddMovie(Add(new Folder { Path = "/media/movies" }), "/media/movies/a.mkv");
 
-        Assert.False(movie.IsVisible(User(allowed: ["family"])));
-        Assert.True(movie.IsVisible(User(allowed: ["family"]), true));
-        Assert.False(movie.IsVisible(User(blocked: ["lib"]), true));
+        foreach (var tags in new[] { null, _tags })
+        {
+            Assert.False(movie.IsVisible(User(allowed: ["family"]), false, tags));
+            Assert.True(movie.IsVisible(User(allowed: ["family"]), true, tags));
+            Assert.False(movie.IsVisible(User(blocked: ["lib"]), true, tags));
+        }
     }
 
     [Fact]
@@ -211,8 +221,11 @@ public sealed class InheritedTagVisibilityTests
         var root = Add((Folder)Activator.CreateInstance(rootType)!);
         var library = Add(new Folder { Path = "/media/movies", ParentId = root.Id, Tags = ["lib"] });
 
-        Assert.True(library.IsVisible(User(allowed: ["family"])));
-        Assert.False(library.IsVisible(User(blocked: ["lib"])));
+        foreach (var tags in new[] { null, _tags })
+        {
+            Assert.True(library.IsVisible(User(allowed: ["family"]), false, tags));
+            Assert.False(library.IsVisible(User(blocked: ["lib"]), false, tags));
+        }
     }
 
     [Fact]
@@ -221,6 +234,7 @@ public sealed class InheritedTagVisibilityTests
         var movie = Add(new Movie { Path = "/media/other/a.mkv" });
 
         Assert.False(movie.IsVisible(User(allowed: ["family"])));
+        Assert.False(movie.IsVisible(User(allowed: ["family"]), false, _tags));
     }
 
     [Fact]
@@ -246,6 +260,63 @@ public sealed class InheritedTagVisibilityTests
 
         Assert.Equal([true, true, true], new[] { cartoon, thriller, plain }.Select(m => IsVisible(m, admin)));
         Assert.Equal([true, false, false], new[] { cartoon, thriller, plain }.Select(m => IsVisible(m, child)));
+    }
+
+    [Fact]
+    public void ServicePath_Movie_ReadsLibraryTagsThroughTheService()
+    {
+        var movie = AddMovie(Add(new Folder { Path = "/media/movies" }), "/media/movies/a.mkv");
+
+        AssertServiceDecides(movie);
+    }
+
+    [Fact]
+    public void ServicePath_Folder_KeepsItsOverride_AndReadsLibraryTagsThroughTheService()
+    {
+        var folder = Add(new Folder { Path = "/media/movies/saga", ParentId = Add(new Folder { Path = "/media/movies" }).Id });
+
+        AssertServiceDecides(folder);
+    }
+
+    [Fact]
+    public void ServicePath_BoxSet_KeepsItsOverride_AndReadsLibraryTagsThroughTheService()
+    {
+        var boxSet = Add(new BoxSet { ParentId = Add(new Folder { Path = "/media/movies" }).Id });
+
+        AssertServiceDecides(boxSet);
+    }
+
+    [Fact]
+    public void ServicePath_Playlist_KeepsItsOverride_AndReadsLibraryTagsThroughTheService()
+    {
+        var playlist = Add(new Tesserafin.Controller.Playlists.Playlist { ParentId = Add(new Folder { Path = "/media/movies" }).Id });
+
+        AssertServiceDecides(playlist);
+    }
+
+    /// <summary>
+    /// Puts the item's top folder in a library tagged "lib", blinds the static to libraries, then
+    /// asserts the access path decides on that tag (blocked hides, allowed admits) while the static
+    /// path, which no longer sees it, decides the other way.
+    /// </summary>
+    private void AssertServiceDecides(BaseItem item)
+    {
+        AddLibrary("Movies", ["lib"], "/media/movies");
+        BlindStatic();
+
+        Assert.False(IsVisible(item, User(blocked: ["lib"])));
+        Assert.True(IsVisible(item, User(allowed: ["lib"])));
+
+        Assert.True(item.IsVisibleStandalone(User(blocked: ["lib"])));
+        Assert.False(item.IsVisibleStandalone(User(allowed: ["lib"])));
+    }
+
+    private void BlindStatic()
+    {
+        var blind = new Mock<ILibraryManager>();
+        blind.Setup(m => m.GetItemById(It.IsAny<Guid>())).Returns((Guid id) => _lookup.GetItemById(id));
+        blind.Setup(m => m.GetCollectionFolders(It.IsAny<BaseItem>())).Returns([]);
+        BaseItem.LibraryManager = blind.Object;
     }
 
     private static User User(string[]? blocked = null, string[]? allowed = null)
@@ -289,8 +360,9 @@ public sealed class InheritedTagVisibilityTests
 
     private Movie AddMovie(Folder parent, string path, params string[] tags) => Add(new Movie { Path = path, ParentId = parent.Id, Tags = tags });
 
-    private static void AssertTags(BaseItem item, params string[] expected)
+    private void AssertTags(BaseItem item, params string[] expected)
     {
         Assert.Equal(expected, item.GetInheritedTags());
+        Assert.Equal(expected, _tags.GetInheritedTags(item));
     }
 }
