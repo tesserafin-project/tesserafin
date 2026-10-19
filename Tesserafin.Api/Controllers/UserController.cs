@@ -290,7 +290,28 @@ public class UserController : BaseTesserafinApiController
 
         if (request.ResetPassword)
         {
+            // Clearing a credential is an administrative action. A caller acting on its own account
+            // must prove the credential it is clearing, otherwise possession of an access token is by
+            // itself enough to void the account password — which is exactly what the current-password
+            // check below exists to prevent.
+            if (!User.IsInRole(UserRoles.Administrator) && !string.IsNullOrEmpty(user.Password))
+            {
+                var resetAuthentication = await _userManager.AuthenticateUser(
+                    user.Username,
+                    request.CurrentPw ?? string.Empty,
+                    HttpContext.GetNormalizedRemoteIP().ToString(),
+                    false).ConfigureAwait(false);
+
+                if (resetAuthentication is null)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, "Invalid user or password entered.");
+                }
+            }
+
             await _userManager.ResetPassword(user.Id).ConfigureAwait(false);
+
+            // Match the change-password branch: a credential change must not leave other sessions live.
+            await _sessionManager.RevokeUserTokens(user.Id, User.GetToken()).ConfigureAwait(false);
         }
         else
         {
