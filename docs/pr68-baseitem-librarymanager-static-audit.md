@@ -90,6 +90,18 @@ through the `BaseItem.LibraryManager` static; moving them onto the port is the n
 `GetLibraryOptions` and content-type resolution are unchanged. `CollectionFolderMembershipTests` pins
 membership and the visibility, deletion and library-option rules that read it.
 
+DEBT-SERVER-3 (2026-10-19): tag inheritance and the tag filter have a port, `ITagVisibilityService`
+(`TagVisibilityService`, built on `IItemLookupService` and `ICollectionFolderResolver` only). The
+combination and the filter stay single, as static entity helpers (`BaseItem.CombineInheritedTags`,
+`BaseItem.EvaluateTagVisibility`) used by both the service and the static-backed `GetInheritedTags()`.
+`ItemAccessService` (`GetVisibleItemById`, and `LibraryManager.GetItemById<T>(id, user)` through it)
+passes the service down `IsVisibleStandalone`/`IsVisible`, so the entity overrides keep their rules
+while the tags no longer come through the static. Still static on that path: the parent walk and the
+enabled/blocked-library restriction in `IsVisibleStandaloneInternal`, box set and channel visibility.
+Still static elsewhere: every caller that passes no service, and `ItemPersistenceService`'s stored
+inherited tags (the persistence service sits below the resolver, so it cannot take the port without a
+cycle). `InheritedTagVisibilityTests` pins inheritance and the filter on both paths.
+
 ### Mutation And Registration
 
 Representative sites:
