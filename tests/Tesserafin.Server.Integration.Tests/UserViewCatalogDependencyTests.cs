@@ -26,7 +26,8 @@ namespace Tesserafin.Server.Integration.Tests
     /// DEBT-SERVER-1: the user-view catalog's playlist/boxset probe no longer reaches the former
     /// <c>ILibraryManager</c>/<c>IUserViewManager</c>/<c>IChannelManager</c>/<c>ILiveTvManager</c> cycle
     /// nor <c>IItemQueryService</c> - not directly, not deferred, not moved elsewhere. DEBT-SERVER-2
-    /// holds the library membership resolver extracted from <c>LibraryManager</c> to the same rule.
+    /// holds the library membership resolver extracted from <c>LibraryManager</c> to the same rule, and
+    /// DEBT-SERVER-3 the tag visibility service built on it.
     /// </summary>
     /// <remarks>
     /// The graph is built from the server's real registrations (<see cref="ApplicationHost.Init"/> on a
@@ -104,6 +105,51 @@ namespace Tesserafin.Server.Integration.Tests
         }
 
         [Fact]
+        public void TagVisibilityService_WholeGraph_ReachesNoCycleMemberNorLocator()
+        {
+            var graph = new DependencyGraph(_registrations.Value);
+
+            var reached = graph.Walk(typeof(ITagVisibilityService), followDeferred: true);
+
+            AssertNone(reached.Where(n => _cycleTypes.Contains(n.Type)).Select(n => n.Path));
+
+            // The walk reports each node once, on its first path: the application host, held by the
+            // repository behind the lookup only for virtual paths (as for the probe above), and by the
+            // persistence service behind the resolver for the same reason. Equality, as for the resolver.
+            Assert.Equal(
+                ["ITagVisibilityService -> IItemLookupService -> ItemLookupService -> IItemRepository -> BaseItemRepository -> IServerApplicationHost"],
+                reached.Where(n => _locatorTypes.Contains(n.Type)).Select(n => n.Path).Order(StringComparer.Ordinal));
+        }
+
+        [Fact]
+        public void TagVisibilityService_ImplementationAndEntityHelpers_ReachNoStaticBackedEntityMember()
+        {
+            // The service delegates the combination and the filter to two static entity helpers. Neither
+            // they nor the service may reach the statics through the entity members that read them:
+            // parameterless parent/owner walks and the static-backed tag members.
+            var implementation = _registrations.Value.Single(d => d.ServiceType == typeof(ITagVisibilityService)).ImplementationType!;
+            var helpers = typeof(BaseItem).GetMethods(BindingFlags.Public | BindingFlags.Static)
+                .Where(m => m.Name is nameof(BaseItem.CombineInheritedTags) or nameof(BaseItem.EvaluateTagVisibility))
+                .ToArray();
+            Assert.Equal(2, helpers.Length);
+
+            var offending = IlReader.MethodsOf(implementation)
+                .Concat(helpers.SelectMany(IlReader.ReachableMethods))
+                .SelectMany(m => IlReader.References(m).Select(r => (Method: m, Reference: r)))
+                .Where(x => IsForbiddenReference(x.Reference) || IsStaticBackedEntityMember(x.Reference))
+                .Select(x => $"{x.Method.DeclaringType!.Name}.{x.Method.Name} -> {x.Reference.DeclaringType?.Name}.{x.Reference.Name}")
+                .ToArray();
+
+            AssertNone(offending);
+        }
+
+        private static bool IsStaticBackedEntityMember(MemberInfo member) =>
+            member is MethodInfo method
+            && typeof(BaseItem).IsAssignableFrom(method.DeclaringType)
+            && ((method.Name is nameof(BaseItem.GetParent) or nameof(BaseItem.GetParents) or nameof(BaseItem.GetOwner) && method.GetParameters().Length == 0)
+                || method.Name is nameof(BaseItem.GetInheritedTags) or "IsVisibleViaTags");
+
+        [Fact]
         public void UserViewCatalog_EagerGraph_ReachesNoCycleMember()
         {
             var graph = new DependencyGraph(_registrations.Value);
@@ -155,6 +201,7 @@ namespace Tesserafin.Server.Integration.Tests
         [InlineData(typeof(IUserViewCatalog))]
         [InlineData(typeof(IVisibleContentProbe))]
         [InlineData(typeof(ICollectionFolderResolver))]
+        [InlineData(typeof(ITagVisibilityService))]
         public void ImplementationCode_ReferencesNoCycleMemberLocatorOrEntityStaticLocator(Type service)
         {
             var implementation = _registrations.Value.Single(d => d.ServiceType == service).ImplementationType!;
