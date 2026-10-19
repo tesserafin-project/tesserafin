@@ -84,6 +84,12 @@ public class E2eApplicationFactory : WebApplicationFactory<Startup>
     protected virtual string ServerFfmpegPath => FfmpegPath;
 
     /// <summary>
+    /// Gets the directory the server keeps its data, config and cache under: a new one per factory,
+    /// unless a factory boots again on what an earlier one left behind.
+    /// </summary>
+    protected virtual string DataRoot { get; } = Path.Combine(_testPathRoot, "test-host-" + Path.GetFileNameWithoutExtension(Path.GetRandomFileName()));
+
+    /// <summary>
     /// Completes the startup wizard exactly once for this factory's single booted server instance,
     /// caching the resulting admin token/user id for every subsequent caller. Needed because
     /// <see cref="IClassFixture{TFixture}"/> shares ONE <see cref="E2eApplicationFactory"/> (one real
@@ -149,7 +155,7 @@ public class E2eApplicationFactory : WebApplicationFactory<Startup>
             FFmpegPath = ServerFfmpegPath,
         };
 
-        var webHostPathRoot = Path.Combine(_testPathRoot, "test-host-" + Path.GetFileNameWithoutExtension(Path.GetRandomFileName()));
+        var webHostPathRoot = DataRoot;
         Directory.CreateDirectory(Path.Combine(webHostPathRoot, "logs"));
         var configDir = Path.Combine(webHostPathRoot, "config");
         Directory.CreateDirectory(configDir);
