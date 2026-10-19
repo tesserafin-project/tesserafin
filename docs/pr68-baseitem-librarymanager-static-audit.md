@@ -82,6 +82,14 @@ Risks before migration:
 - These calls combine configuration, physical paths, collection scoping, and grouping preferences.
 - A future replacement probably needs a collection-context/options service, not raw `GetItemById` plumbing.
 
+DEBT-SERVER-2 (2026-10-19): membership resolution itself now lives in `ICollectionFolderResolver`
+(`CollectionFolderResolver`, built on `IItemLookupService` and `IUserRootFolderProvider` only, guarded in
+`UserViewCatalogDependencyTests` against reaching `ILibraryManager` or a service locator).
+`LibraryManager.GetCollectionFolders` is a delegating facade, so the entity sites above still reach it
+through the `BaseItem.LibraryManager` static; moving them onto the port is the next step.
+`GetLibraryOptions` and content-type resolution are unchanged. `CollectionFolderMembershipTests` pins
+membership and the visibility, deletion and library-option rules that read it.
+
 ### Mutation And Registration
 
 Representative sites:
