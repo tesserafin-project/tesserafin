@@ -10,6 +10,7 @@ using Tesserafin.Controller.Entities;
 using Tesserafin.Controller.Entities.Movies;
 using Tesserafin.Controller.Entities.TV;
 using Tesserafin.Controller.Library;
+using Tesserafin.Controller.Persistence;
 using Tesserafin.Controller.Playlists;
 using Tesserafin.Controller.Sorting;
 using Tesserafin.Controller.TV;
@@ -348,6 +349,43 @@ public class FolderGetChildrenCharacterizationTests
                     : items.OrderBy(i => i.SortName, StringComparer.OrdinalIgnoreCase));
 
         return libraryManager;
+    }
+
+    [Fact]
+    public void UserRootFolderChildren_AfterTheFirstLoad_AreTheItemCacheInstancesInTheLoadedOrder()
+    {
+        // MEDIA-ACCESS-R2: the repository's copies of the libraries are not the instances an edit
+        // through the item cache changes, so only the first read may return them.
+        var first = new CollectionFolder { Id = Guid.NewGuid(), Name = "First" };
+        var missing = new CollectionFolder { Id = Guid.NewGuid(), Name = "Missing" };
+        var last = new CollectionFolder { Id = Guid.NewGuid(), Name = "Last" };
+        var cachedFirst = new CollectionFolder { Id = first.Id, Name = "First" };
+        var cachedLast = new CollectionFolder { Id = last.Id, Name = "Last" };
+        var root = new UserRootFolder { Id = Guid.NewGuid() };
+
+        var repository = new Mock<IItemRepository>();
+        repository.Setup(x => x.GetItemList(It.IsAny<InternalItemsQuery>())).Returns(new BaseItem[] { first, missing, last });
+        var libraryManager = new Mock<ILibraryManager>();
+        libraryManager.Setup(x => x.GetItemById(first.Id)).Returns(cachedFirst);
+        libraryManager.Setup(x => x.GetItemById(last.Id)).Returns(cachedLast);
+        SetStatics(libraryManager.Object);
+        var previousRepository = BaseItem.ItemRepository;
+        BaseItem.ItemRepository = repository.Object;
+        try
+        {
+            Assert.Equal(new BaseItem[] { first, missing, last }, root.Children);
+            Assert.Equal(new BaseItem[] { cachedFirst, cachedLast }, root.Children);
+
+            var replaced = new CollectionFolder { Id = last.Id, Name = "Last" };
+            libraryManager.Setup(x => x.GetItemById(last.Id)).Returns(replaced);
+            Assert.Equal(new BaseItem[] { cachedFirst, replaced }, root.Children);
+
+            repository.Verify(x => x.GetItemList(It.IsAny<InternalItemsQuery>()), Times.Once);
+        }
+        finally
+        {
+            BaseItem.ItemRepository = previousRepository;
+        }
     }
 
     private sealed class RecordingItemSortService : IItemSortService
