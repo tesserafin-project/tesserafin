@@ -97,6 +97,7 @@ namespace Tesserafin.Server.Core.Library
         private readonly IItemStore _itemStore;
         private readonly IUserViewFactory _userViewFactory;
         private readonly IUserRootFolderProvider _userRootFolderProvider;
+        private readonly ICollectionFolderResolver _collectionFolderResolver;
         private readonly DotIgnoreIgnoreRule _dotIgnoreIgnoreRule;
         private readonly IMediaStreamLanguageService _mediaStreamLanguageService;
         private readonly Lazy<IExternalDataManager> _externalDataManagerFactory;
@@ -157,6 +158,7 @@ namespace Tesserafin.Server.Core.Library
         /// <param name="itemStore">The item store leaf (id generation, save+register; see PR106a). <see cref="LibraryManager"/> subscribes to its <see cref="IItemStore.ItemSaved"/> event and relays it as <see cref="ItemAdded"/> - a leaf dependency, not a cycle: <c>ItemStore</c> never references <see cref="ILibraryManager"/>.</param>
         /// <param name="userViewFactory">The user-view factory leaf (named/shadow view creation; see PR106b). <see cref="GetNamedView(User, string, CollectionType?, string)"/> and the other overloads delegate to it - a leaf dependency, not a cycle: <c>UserViewFactory</c> never references <see cref="ILibraryManager"/>.</param>
         /// <param name="userRootFolderProvider">The user root folder provider leaf (construction/cache of the per-server <see cref="UserRootFolder"/>; see PR107). <see cref="GetUserRootFolder"/> and this class's internal callers delegate to it - a leaf dependency, not a cycle: <c>UserRootFolderProvider</c> never references <see cref="ILibraryManager"/>. <see cref="LibraryManager"/> no longer implements <see cref="IUserRootFolderProvider"/> itself (it used to be aliased onto it via a DI factory cast - RFC <c>docs/rfc-di-query-user-views-v2.md</c> §0/§1's "piège n°1").</param>
+        /// <param name="collectionFolderResolver">The library membership leaf (<see cref="GetCollectionFolders(BaseItem)"/> and its overload delegate to it; see DEBT-SERVER-2) - a leaf dependency, not a cycle: <c>CollectionFolderResolver</c> never references <see cref="ILibraryManager"/>.</param>
         public LibraryManager(
             IServerApplicationHost appHost,
             ILoggerFactory loggerFactory,
@@ -190,7 +192,8 @@ namespace Tesserafin.Server.Core.Library
             IItemAccessService itemAccessService,
             IItemStore itemStore,
             IUserViewFactory userViewFactory,
-            IUserRootFolderProvider userRootFolderProvider)
+            IUserRootFolderProvider userRootFolderProvider,
+            ICollectionFolderResolver collectionFolderResolver)
         {
             _appHost = appHost;
             _logger = loggerFactory.CreateLogger<LibraryManager>();
@@ -221,6 +224,7 @@ namespace Tesserafin.Server.Core.Library
             _itemStore.ItemSaved += OnItemStoreItemSaved;
             _userViewFactory = userViewFactory;
             _userRootFolderProvider = userRootFolderProvider;
+            _collectionFolderResolver = collectionFolderResolver;
 
             _namingOptions = namingOptions;
             _peopleRepository = peopleRepository;
@@ -2656,53 +2660,15 @@ namespace Tesserafin.Server.Core.Library
             return _itemRepository.RetrieveItem(id);
         }
 
+        /// <inheritdoc />
+        /// <remarks>Delegates to <see cref="ICollectionFolderResolver"/> (DEBT-SERVER-2).</remarks>
         public List<Folder> GetCollectionFolders(BaseItem item)
-        {
-            return GetCollectionFolders(item, GetUserRootFolder().Children.OfType<Folder>());
-        }
+            => _collectionFolderResolver.GetCollectionFolders(item);
 
+        /// <inheritdoc />
+        /// <remarks>Delegates to <see cref="ICollectionFolderResolver"/> (DEBT-SERVER-2).</remarks>
         public List<Folder> GetCollectionFolders(BaseItem item, IEnumerable<Folder> allUserRootChildren)
-        {
-            while (item is not null)
-            {
-                var parent = item.GetParent(this);
-
-                if (parent is AggregateFolder)
-                {
-                    break;
-                }
-
-                if (parent is null)
-                {
-                    var owner = item.GetOwner(this);
-
-                    if (owner is null)
-                    {
-                        break;
-                    }
-
-                    item = owner;
-                }
-                else
-                {
-                    item = parent;
-                }
-            }
-
-            if (item is null)
-            {
-                return [];
-            }
-
-            return GetCollectionFoldersInternal(item, allUserRootChildren);
-        }
-
-        private static List<Folder> GetCollectionFoldersInternal(BaseItem item, IEnumerable<Folder> allUserRootChildren)
-        {
-            return allUserRootChildren
-                .Where(i => string.Equals(i.Path, item.Path, StringComparison.OrdinalIgnoreCase) || i.PhysicalLocations.Contains(item.Path.AsSpan(), StringComparison.OrdinalIgnoreCase))
-                .ToList();
-        }
+            => _collectionFolderResolver.GetCollectionFolders(item, allUserRootChildren);
 
         public LibraryOptions GetLibraryOptions(BaseItem item)
         {

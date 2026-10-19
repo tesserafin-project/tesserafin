@@ -26,8 +26,9 @@ namespace Tesserafin.Server.Implementations.Tests.Library.LibraryManager;
 /// <summary>
 /// Characterisation of library membership resolution (<c>GetCollectionFolders</c>): which top-level
 /// libraries an item belongs to, and the visibility and deletion rules that read it through the
-/// static <see cref="BaseItem.LibraryManager"/>. Every expectation is hand-derived, so the same
-/// assertions hold before and after the resolution moves out of <c>LibraryManager</c>.
+/// static <see cref="BaseItem.LibraryManager"/>. Every expectation is hand-derived and was green on
+/// the unmodified <c>LibraryManager</c>; membership is now asserted through both the
+/// <see cref="ILibraryManager"/> facade and <see cref="ICollectionFolderResolver"/> (DEBT-SERVER-2).
 /// </summary>
 /// <remarks>
 /// The item graph is real entities over a real <c>ItemLookupService</c>; only the repository
@@ -39,6 +40,7 @@ public sealed class CollectionFolderMembershipTests
     private readonly Dictionary<Guid, BaseItem> _items = [];
     private readonly List<Folder> _libraries = [];
     private readonly ILibraryManager _libraryManager;
+    private readonly ICollectionFolderResolver _resolver;
 
     public CollectionFolderMembershipTests()
     {
@@ -55,7 +57,11 @@ public sealed class CollectionFolderMembershipTests
         fixture.Register<Tesserafin.Server.Core.Library.IItemCacheStore>(() => lookup);
 
         var root = new Folder { Id = Guid.NewGuid(), Children = _libraries };
-        fixture.Register(() => Mock.Of<IUserRootFolderProvider>(p => p.GetUserRootFolder() == root));
+        var rootProvider = Mock.Of<IUserRootFolderProvider>(p => p.GetUserRootFolder() == root);
+        fixture.Register(() => rootProvider);
+
+        _resolver = new Tesserafin.Server.Core.Library.CollectionFolderResolver(lookup, rootProvider);
+        fixture.Register<ICollectionFolderResolver>(() => _resolver);
 
         var manager = fixture.Build<Tesserafin.Server.Core.Library.LibraryManager>().Do(s => s.AddParts(
                 Array.Empty<IResolverIgnoreRule>(),
@@ -169,6 +175,8 @@ public sealed class CollectionFolderMembershipTests
 
         Assert.Empty(_libraryManager.GetCollectionFolders(null!));
         Assert.Empty(_libraryManager.GetCollectionFolders(null!, _libraries));
+        Assert.Empty(_resolver.GetCollectionFolders(null!));
+        Assert.Empty(_resolver.GetCollectionFolders(null!, _libraries));
     }
 
     [Fact]
@@ -180,6 +188,8 @@ public sealed class CollectionFolderMembershipTests
 
         Assert.Equal([alsoMovies.Id], _libraryManager.GetCollectionFolders(movie, [alsoMovies]).Select(f => f.Id));
         Assert.Equal([movies.Id], _libraryManager.GetCollectionFolders(movie).Select(f => f.Id));
+        Assert.Equal([alsoMovies.Id], _resolver.GetCollectionFolders(movie, [alsoMovies]).Select(f => f.Id));
+        Assert.Equal([movies.Id], _resolver.GetCollectionFolders(movie).Select(f => f.Id));
     }
 
     [Fact]
@@ -272,5 +282,7 @@ public sealed class CollectionFolderMembershipTests
         var ids = expected.Select(f => f.Id).ToArray();
         Assert.Equal(ids, _libraryManager.GetCollectionFolders(item).Select(f => f.Id));
         Assert.Equal(ids, _libraryManager.GetCollectionFolders(item, _libraries).Select(f => f.Id));
+        Assert.Equal(ids, _resolver.GetCollectionFolders(item).Select(f => f.Id));
+        Assert.Equal(ids, _resolver.GetCollectionFolders(item, _libraries).Select(f => f.Id));
     }
 }

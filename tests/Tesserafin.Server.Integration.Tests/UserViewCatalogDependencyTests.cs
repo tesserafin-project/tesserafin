@@ -25,7 +25,8 @@ namespace Tesserafin.Server.Integration.Tests
     /// <summary>
     /// DEBT-SERVER-1: the user-view catalog's playlist/boxset probe no longer reaches the former
     /// <c>ILibraryManager</c>/<c>IUserViewManager</c>/<c>IChannelManager</c>/<c>ILiveTvManager</c> cycle
-    /// nor <c>IItemQueryService</c> - not directly, not deferred, not moved elsewhere.
+    /// nor <c>IItemQueryService</c> - not directly, not deferred, not moved elsewhere. DEBT-SERVER-2
+    /// holds the library membership resolver extracted from <c>LibraryManager</c> to the same rule.
     /// </summary>
     /// <remarks>
     /// The graph is built from the server's real registrations (<see cref="ApplicationHost.Init"/> on a
@@ -85,6 +86,24 @@ namespace Tesserafin.Server.Integration.Tests
         }
 
         [Fact]
+        public void CollectionFolderResolver_WholeGraph_ReachesNoCycleMemberNorLocator()
+        {
+            var graph = new DependencyGraph(_registrations.Value);
+
+            var reached = graph.Walk(typeof(ICollectionFolderResolver), followDeferred: true);
+
+            AssertNone(reached.Where(n => _cycleTypes.Contains(n.Type)).Select(n => n.Path));
+
+            // Exactly one locator edge, pre-existing, through the user root folder leaf: the persistence
+            // service holds the application host only to map virtual paths (BaseItemMapper.Map), and the
+            // walk stops there. Equality, not a filter: any further locator path fails, and so does this
+            // one disappearing, so the exception can neither widen nor outlive its reason.
+            Assert.Equal(
+                ["ICollectionFolderResolver -> IUserRootFolderProvider -> IItemStore -> IItemPersistenceService -> IServerApplicationHost"],
+                reached.Where(n => _locatorTypes.Contains(n.Type)).Select(n => n.Path).Order(StringComparer.Ordinal));
+        }
+
+        [Fact]
         public void UserViewCatalog_EagerGraph_ReachesNoCycleMember()
         {
             var graph = new DependencyGraph(_registrations.Value);
@@ -135,6 +154,7 @@ namespace Tesserafin.Server.Integration.Tests
         [Theory]
         [InlineData(typeof(IUserViewCatalog))]
         [InlineData(typeof(IVisibleContentProbe))]
+        [InlineData(typeof(ICollectionFolderResolver))]
         public void ImplementationCode_ReferencesNoCycleMemberLocatorOrEntityStaticLocator(Type service)
         {
             var implementation = _registrations.Value.Single(d => d.ServiceType == service).ImplementationType!;
