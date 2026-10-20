@@ -119,11 +119,23 @@ signature changed (one interface and one method added; local `ci/abi-compat.sh` 
 Still static on the access-by-id path:
 - a rating's country code once neither the item, its parents nor its libraries carry one
   (`LibraryManager.GetLibraryOptions`, library options);
-- box sets that are not legacy (`BoxSet.IsVisible`: `GetUserRootFolder().GetChildren(user, true)`,
-  `GetLibraryFolderIds()` through `GetCollectionFolders`, linked children through `GetLinkedChild`, and
-  `IsParentalAllowed(user, true)` on them without the service);
+- ~~box sets that are not legacy~~ (DEBT-SERVER-5, below);
 - channel content (`IsVisibleStandalone` for `SourceType.Channel`: `Channel.IsChannelVisible` reads the
   static `ChannelManager`, then `Channel.IsVisible(User)` without the service).
+
+DEBT-SERVER-5 (2026-10-20): a box set that is not legacy reads its data through
+`IBoxSetVisibilityService` (an `IStandaloneVisibilityService` that also supplies an item by id;
+`TagVisibilityService` implements it, a new interface because a member added to the existing one breaks
+its implementers). `BoxSet.IsVisible` recognises it: the user's libraries are the library ids through the
+lookup, each kept when visible to the user (enabled/blocked, options, tags) as `GetChildren(user, true)`
+kept them; the children's libraries come from the membership resolver; the linked children, flattened
+for nested box sets and read again for the parental step, are resolved by id through the lookup, and
+their ratings through the service. The static listing of the user root also held the aggregate root's
+virtual children and the user root's linked children; neither is a library and the box set's libraries
+are only libraries, so they never matched and the service lists libraries only. `StandaloneVisibilityTests`
+pins the box set on both paths and under a strict static. Still static there: a linked child without an
+id or that the lookup does not find (`GetLinkedChild`, path search), besides the country-code fallback and
+channel content above.
 
 ### Mutation And Registration
 
