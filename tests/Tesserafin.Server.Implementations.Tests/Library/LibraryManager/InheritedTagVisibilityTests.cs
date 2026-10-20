@@ -45,7 +45,7 @@ public sealed class InheritedTagVisibilityTests
     private readonly Dictionary<Guid, BaseItem> _items = [];
     private readonly List<Folder> _libraries = [];
     private readonly IItemAccessService _access;
-    private readonly ITagVisibilityService _tags;
+    private readonly IStandaloneVisibilityService _tags;
     private readonly IItemLookupService _lookup;
 
     public InheritedTagVisibilityTests()
@@ -78,7 +78,7 @@ public sealed class InheritedTagVisibilityTests
             .Create();
 
         _lookup = lookup;
-        _tags = new Tesserafin.Server.Core.Library.TagVisibilityService(lookup, resolver);
+        _tags = new Tesserafin.Server.Core.Library.TagVisibilityService(lookup, resolver, rootProvider);
         _access = new Tesserafin.Server.Core.Library.ItemAccessService(lookup, _tags);
 
         BaseItem.LibraryManager = manager;

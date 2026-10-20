@@ -36,8 +36,18 @@ namespace Tesserafin.Server.Core.Library
         /// <inheritdoc />
         public List<Folder> GetCollectionFolders(BaseItem item)
         {
-            return GetCollectionFolders(item, _userRootFolderProvider.GetUserRootFolder().Children.OfType<Folder>());
+            return GetCollectionFolders(item, GetLibraries(_userRootFolderProvider.GetUserRootFolder(), _itemLookupService).OfType<Folder>());
         }
+
+        /// <summary>
+        /// Gets the root's children, resolving a <see cref="UserRootFolder"/>'s through the given lookup
+        /// rather than the static <see cref="BaseItem.LibraryManager"/> (DEBT-SERVER-4).
+        /// </summary>
+        /// <param name="root">The user root folder.</param>
+        /// <param name="lookup">The id lookup.</param>
+        /// <returns>The libraries.</returns>
+        internal static IEnumerable<BaseItem> GetLibraries(Folder root, IItemLookupService lookup)
+            => root is UserRootFolder userRoot ? userRoot.GetLibraries(lookup) : root.Children;
 
         /// <inheritdoc />
         public List<Folder> GetCollectionFolders(BaseItem item, IEnumerable<Folder> allUserRootChildren)

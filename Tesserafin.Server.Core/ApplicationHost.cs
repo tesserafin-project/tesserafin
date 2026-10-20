@@ -580,6 +580,7 @@ namespace Tesserafin.Server.Core
             serviceCollection.AddSingleton<IUserRootFolderProvider, UserRootFolderProvider>();
             serviceCollection.AddSingleton<ICollectionFolderResolver, CollectionFolderResolver>();
             serviceCollection.AddSingleton<ITagVisibilityService, TagVisibilityService>();
+            serviceCollection.AddSingleton<IStandaloneVisibilityService, TagVisibilityService>();
             serviceCollection.AddSingleton<IChannelCatalog, ChannelCatalog>();
             serviceCollection.AddSingleton<ILiveTvPresenceProvider, LiveTvPresenceProvider>();
             serviceCollection.AddSingleton<IVisibleContentProbe, VisibleContentProbe>();

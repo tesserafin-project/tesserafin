@@ -77,7 +77,7 @@ public class LibraryManagerGlobalQueryTests
 
         var itemAccessService = new Tesserafin.Server.Core.Library.ItemAccessService(
             itemLookupService,
-            new Tesserafin.Server.Core.Library.TagVisibilityService(itemLookupService, fixture.Freeze<ICollectionFolderResolver>()));
+            new Tesserafin.Server.Core.Library.TagVisibilityService(itemLookupService, fixture.Freeze<ICollectionFolderResolver>(), fixture.Freeze<IUserRootFolderProvider>()));
         fixture.Register<IItemAccessService>(() => itemAccessService);
 
         _libraryManager = fixture.Build<Tesserafin.Server.Core.Library.LibraryManager>().Do(s => s.AddParts(

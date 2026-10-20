@@ -17,6 +17,8 @@ using Tesserafin.Data.Enums;
 using Tesserafin.Database.Implementations.Entities;
 using Tesserafin.Database.Implementations.Enums;
 using Tesserafin.Model.Configuration;
+using Tesserafin.Model.Entities;
+using Tesserafin.Model.Globalization;
 using Tesserafin.Model.MediaInfo;
 using Tesserafin.Model.Serialization;
 using Xunit;
@@ -44,6 +46,7 @@ public sealed class StandaloneVisibilityTests
     private readonly List<Folder> _libraries = [];
     private readonly Dictionary<string, LibraryOptions> _options = [];
     private readonly IItemAccessService _access;
+    private Folder _root;
 
     public StandaloneVisibilityTests()
     {
@@ -60,8 +63,9 @@ public sealed class StandaloneVisibilityTests
         fixture.Register<IItemLookupService>(() => lookup);
         fixture.Register<Tesserafin.Server.Core.Library.IItemCacheStore>(() => lookup);
 
-        var root = new Folder { Id = Guid.NewGuid(), Children = _libraries };
-        var rootProvider = Mock.Of<IUserRootFolderProvider>(p => p.GetUserRootFolder() == root);
+        _root = new Folder { Id = Guid.NewGuid(), Children = _libraries };
+        var rootProvider = Mock.Of<IUserRootFolderProvider>();
+        Mock.Get(rootProvider).Setup(p => p.GetUserRootFolder()).Returns(() => _root);
         fixture.Register(() => rootProvider);
 
         var resolver = new Tesserafin.Server.Core.Library.CollectionFolderResolver(lookup, rootProvider);
@@ -75,7 +79,7 @@ public sealed class StandaloneVisibilityTests
                 Array.Empty<ILibraryPostScanTask>()))
             .Create();
 
-        _access = new Tesserafin.Server.Core.Library.ItemAccessService(lookup, new Tesserafin.Server.Core.Library.TagVisibilityService(lookup, resolver));
+        _access = new Tesserafin.Server.Core.Library.ItemAccessService(lookup, new Tesserafin.Server.Core.Library.TagVisibilityService(lookup, resolver, rootProvider));
 
         var xml = new Mock<IXmlSerializer>();
         xml.Setup(x => x.DeserializeFromFile(typeof(LibraryOptions), It.IsAny<string>()))
@@ -83,6 +87,7 @@ public sealed class StandaloneVisibilityTests
         CollectionFolder.XmlSerializer = xml.Object;
 
         BaseItem.LibraryManager = manager;
+        BaseItem.ItemRepository = repository.Object;
         BaseItem.ConfigurationManager = configuration.Object;
         BaseItem.MediaSourceManager = Mock.Of<IMediaSourceManager>(m => m.GetPathProtocol(It.IsAny<string>()) == MediaProtocol.File);
         Video.RecordingsManager = Mock.Of<IRecordingsManager>();
@@ -370,6 +375,124 @@ public sealed class StandaloneVisibilityTests
         Assert.Equal([true, false, true], all.Select(m => Decide(m, child)));
         Assert.Equal([false, false, true], all.Select(m => Decide(m, guest)));
     }
+
+    [Fact]
+    public void AccessPath_MovieWithParentsAndLibraryRestrictions_DecidesWithAStaticThatThrowsOnEveryCall()
+    {
+        var (saga, movies, vault, kids) = ProductionLikeGraph();
+        var users = Users(movies, vault, kids);
+        var expected = new[] { true, false, false, true, false, false, true, false, false, false, true };
+
+        // Control: the static-backed path reads the throwing static.
+        Assert.Equal(expected, users.Select(u => saga.IsVisibleStandalone(u)));
+        ThrowingStatic();
+        Assert.Throws<MockException>(() => saga.IsVisibleStandalone(users[0]));
+
+        Assert.Equal(expected, users.Select(u => _access.GetVisibleItemById<BaseItem>(saga.Id, u) is not null));
+    }
+
+    [Fact]
+    public void AccessPath_RatedMovie_TakesTheCountryCodeFromItsParentsAndLibrariesThroughTheService()
+    {
+        var (saga, movies, _, _) = ProductionLikeGraph();
+        BaseItem.LocalizationManager = Mock.Of<ILocalizationManager>(l =>
+            l.GetRatingScore("R", "FR") == new ParentalRatingScore(18, null)
+            && l.GetRatingScore("R", "US") == new ParentalRatingScore(17, null));
+        saga.OfficialRating = "R";
+        var teen = User(enabled: [movies.Id]);
+        teen.MaxParentalRatingScore = 17;
+
+        Assert.True(saga.IsVisibleStandalone(teen));
+        movies.PreferredMetadataCountryCode = "FR";
+        Assert.False(saga.IsVisibleStandalone(teen));
+        ThrowingStatic();
+
+        Assert.Null(_access.GetVisibleItemById<BaseItem>(saga.Id, teen));
+        movies.PreferredMetadataCountryCode = null;
+        _items[saga.ParentId].PreferredMetadataCountryCode = "US";
+        Assert.NotNull(_access.GetVisibleItemById<BaseItem>(saga.Id, teen));
+
+        // Out of this slice: without a country code on the item, its parents or its libraries, the
+        // rating falls back to the library options, still read through the static.
+        _items[saga.ParentId].PreferredMetadataCountryCode = null;
+        Assert.Throws<MockException>(() => _access.GetVisibleItemById<BaseItem>(saga.Id, teen));
+    }
+
+    [Fact]
+    public void AccessPath_SameProcess_RightsAndTagChangesApplyWithoutRebuildingAnything()
+    {
+        var (saga, movies, vault, _) = ProductionLikeGraph();
+        ThrowingStatic();
+        var bea = User(enabled: [movies.Id]);
+        var alex = User(all: true);
+
+        Assert.Equal([true, true], Decisions(saga, bea, alex));
+
+        bea.SetPreference(PreferenceKind.EnabledFolders, [Guid.NewGuid()]);
+        Assert.Equal([false, true], Decisions(saga, bea, alex));
+
+        bea.SetPreference(PreferenceKind.BlockedMediaFolders, [vault.Id]);
+        Assert.Equal([true, true], Decisions(saga, bea, alex));
+
+        alex.SetPreference(PreferenceKind.BlockedMediaFolders, [movies.Id, vault.Id]);
+        Assert.Equal([true, false], Decisions(saga, bea, alex));
+
+        alex.SetPreference(PreferenceKind.BlockedMediaFolders, []);
+        bea.SetPreference(PreferenceKind.BlockedTags, ["vault only"]);
+        movies.Tags = ["Vault Only"];
+        Assert.Equal([false, true], Decisions(saga, bea, alex));
+
+        movies.Tags = [];
+        _items[saga.ParentId].Tags = ["vault only"];
+        Assert.Equal([false, true], Decisions(saga, bea, alex));
+
+        _items[saga.ParentId].Tags = [];
+        Assert.Equal([true, true], Decisions(saga, bea, alex));
+    }
+
+    private bool[] Decisions(BaseItem item, params User[] users) =>
+        users.Select(u => _access.GetVisibleItemById<BaseItem>(item.Id, u) is not null).ToArray();
+
+    /// <summary>
+    /// The production shape: an aggregate root holding the libraries, a <see cref="UserRootFolder"/>
+    /// whose children are those libraries, and a movie in a tagged folder of the Movies library.
+    /// </summary>
+    private (Movie Saga, CollectionFolder Movies, CollectionFolder Vault, CollectionFolder Kids) ProductionLikeGraph()
+    {
+        var aggregate = Add(new AggregateFolder { Path = "/config/root" });
+        var movies = AddLibrary("Movies", "/media/movies");
+        var vault = AddLibrary("Vault", "/media/vault", "/media/movies");
+        var kids = AddLibrary("Kids", "/media/kids");
+        foreach (var library in _libraries)
+        {
+            library.ParentId = aggregate.Id;
+        }
+
+        var userRoot = Add(new UserRootFolder { Path = "/config/data/root/default" });
+        Mock.Get(BaseItem.ItemRepository).Setup(r => r.GetItemList(It.Is<InternalItemsQuery>(q => q.ParentId.Equals(userRoot.Id)))).Returns(_libraries);
+        _root = userRoot;
+        Assert.Equal(_libraries, userRoot.Children);
+
+        var middle = Add(new Folder { Path = "/media/movies/saga", ParentId = movies.Id, Tags = ["saga"] });
+        return (AddMovie(middle, "/media/movies/saga/a.mkv"), movies, vault, kids);
+    }
+
+    private static User[] Users(CollectionFolder movies, CollectionFolder vault, CollectionFolder kids) =>
+    [
+        User(all: true),
+        User(enabled: [vault.Id]),
+        User(enabled: [kids.Id]),
+        User(blocked: [vault.Id]),
+        User(blocked: [movies.Id, vault.Id]),
+        User(all: true, blocked: [movies.Id, vault.Id], enabled: [movies.Id]),
+        User(blocked: [kids.Id], enabled: [kids.Id]),
+        User(),
+        User(all: true, blockedTags: ["saga"]),
+        User(all: true, allowedTags: ["other"], blockedTags: ["x"]),
+        User(enabled: [movies.Id]),
+    ];
+
+    private static void ThrowingStatic() => BaseItem.LibraryManager = new Mock<ILibraryManager>(MockBehavior.Strict).Object;
 
     private static User User(bool all = false, Guid[]? enabled = null, Guid[]? blocked = null, string[]? blockedTags = null, string[]? allowedTags = null)
     {

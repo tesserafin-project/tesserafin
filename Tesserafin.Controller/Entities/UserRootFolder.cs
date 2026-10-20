@@ -73,6 +73,24 @@ namespace Tesserafin.Controller.Entities
 
         protected override IReadOnlyList<BaseItem> LoadChildren()
         {
+            return LoadChildren(id => LibraryManager.GetItemById(id));
+        }
+
+        /// <summary>
+        /// Gets the libraries as <see cref="Children"/> does, resolving them through the given lookup
+        /// instead of the static <see cref="BaseItem.LibraryManager"/> (DEBT-SERVER-4).
+        /// </summary>
+        /// <param name="lookup">The id lookup.</param>
+        /// <returns>The libraries.</returns>
+        public IReadOnlyList<BaseItem> GetLibraries(IItemLookupService lookup)
+        {
+            ArgumentNullException.ThrowIfNull(lookup);
+
+            return LoadChildren(lookup.GetItemById);
+        }
+
+        private IReadOnlyList<BaseItem> LoadChildren(Func<Guid, BaseItem> getItemById)
+        {
             lock (_childIdsLock)
             {
                 if (_childrenIds is null)
@@ -82,7 +100,7 @@ namespace Tesserafin.Controller.Entities
                     return list;
                 }
 
-                return _childrenIds.Select(LibraryManager.GetItemById).Where(i => i is not null).ToList();
+                return _childrenIds.Select(getItemById).Where(i => i is not null).ToList();
             }
         }
 

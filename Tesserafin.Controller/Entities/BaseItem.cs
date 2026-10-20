@@ -680,19 +680,7 @@ namespace Tesserafin.Controller.Entities
         {
             get
             {
-                var officialRating = OfficialRating;
-                if (!string.IsNullOrEmpty(officialRating))
-                {
-                    return officialRating;
-                }
-
-                var parent = DisplayParent;
-                if (parent is not null)
-                {
-                    return parent.OfficialRatingForComparison;
-                }
-
-                return null;
+                return GetOfficialRatingForComparison(null);
             }
         }
 
@@ -701,7 +689,7 @@ namespace Tesserafin.Controller.Entities
         {
             get
             {
-                return GetCustomRatingForComparision();
+                return GetCustomRatingForComparision(null);
             }
         }
 
@@ -810,7 +798,24 @@ namespace Tesserafin.Controller.Entities
         /// <value>The remote trailers.</value>
         public IReadOnlyList<MediaUrl> RemoteTrailers { get; set; }
 
-        private string GetCustomRatingForComparision(HashSet<Guid> callstack = null)
+        private string GetOfficialRatingForComparison(IStandaloneVisibilityService scope)
+        {
+            var officialRating = OfficialRating;
+            if (!string.IsNullOrEmpty(officialRating))
+            {
+                return officialRating;
+            }
+
+            var parent = scope is null ? DisplayParent : scope.GetDisplayParent(this);
+            if (parent is not null)
+            {
+                return parent.GetOfficialRatingForComparison(scope);
+            }
+
+            return null;
+        }
+
+        private string GetCustomRatingForComparision(IStandaloneVisibilityService scope, HashSet<Guid> callstack = null)
         {
             callstack ??= new();
             var customRating = CustomRating;
@@ -821,10 +826,10 @@ namespace Tesserafin.Controller.Entities
 
             callstack.Add(Id);
 
-            var parent = DisplayParent;
+            var parent = scope is null ? DisplayParent : scope.GetDisplayParent(this);
             if (parent is not null && !callstack.Contains(parent.Id))
             {
-                return parent.GetCustomRatingForComparision(callstack);
+                return parent.GetCustomRatingForComparision(scope, callstack);
             }
 
             return null;
@@ -1562,12 +1567,16 @@ namespace Tesserafin.Controller.Entities
 
         protected bool IsVisibleStandaloneInternal(User user, bool checkFolders, ITagVisibilityService tagVisibility)
         {
+            // An IStandaloneVisibilityService also supplies the parents and libraries; otherwise they
+            // come through the static LibraryManager (DEBT-SERVER-4).
+            var scope = tagVisibility as IStandaloneVisibilityService;
+
             if (!IsVisible(user, false, tagVisibility))
             {
                 return false;
             }
 
-            var parents = GetParents().ToList();
+            var parents = scope?.GetParents(this) ?? GetParents().ToList();
             if (parents.Any(i => !i.IsVisible(user, true, tagVisibility)))
             {
                 return false;
@@ -1582,7 +1591,7 @@ namespace Tesserafin.Controller.Entities
                     return true;
                 }
 
-                var itemCollectionFolders = LibraryManager.GetCollectionFolders(this).Select(i => i.Id).ToList();
+                var itemCollectionFolders = (scope?.GetCollectionFolders(this) ?? LibraryManager.GetCollectionFolders(this)).Select(i => i.Id).ToList();
 
                 if (itemCollectionFolders.Count > 0)
                 {
@@ -1591,8 +1600,7 @@ namespace Tesserafin.Controller.Entities
                     if (blockedMediaFolders.Length > 0)
                     {
                         // User has blocked folders - get all library folders and exclude blocked ones
-                        userCollectionFolderIds = LibraryManager.GetUserRootFolder().Children
-                            .Select(i => i.Id)
+                        userCollectionFolderIds = (scope?.GetLibraryIds() ?? LibraryManager.GetUserRootFolder().Children.Select(i => i.Id))
                             .Where(id => !blockedMediaFolders.Contains(id));
                     }
                     else if (user.HasPermission(PermissionKind.EnableAllFolders))
@@ -1794,18 +1802,23 @@ namespace Tesserafin.Controller.Entities
         /// <returns>System.String.</returns>
         public string GetPreferredMetadataCountryCode()
         {
+            return GetPreferredMetadataCountryCode(null);
+        }
+
+        private string GetPreferredMetadataCountryCode(IStandaloneVisibilityService scope)
+        {
             string lang = PreferredMetadataCountryCode;
 
             if (string.IsNullOrEmpty(lang))
             {
-                lang = GetParents()
+                lang = (scope?.GetParents(this) ?? GetParents())
                     .Select(i => i.PreferredMetadataCountryCode)
                     .FirstOrDefault(i => !string.IsNullOrEmpty(i));
             }
 
             if (string.IsNullOrEmpty(lang))
             {
-                lang = LibraryManager.GetCollectionFolders(this)
+                lang = (scope?.GetCollectionFolders(this) ?? LibraryManager.GetCollectionFolders(this))
                     .Select(i => i.PreferredMetadataCountryCode)
                     .FirstOrDefault(i => !string.IsNullOrEmpty(i));
             }
@@ -1873,13 +1886,16 @@ namespace Tesserafin.Controller.Entities
                 return false;
             }
 
+            // The parents and libraries the rating reads come from the service when it supplies them
+            // (DEBT-SERVER-4).
+            var scope = tagVisibility as IStandaloneVisibilityService;
             var maxAllowedRating = user.MaxParentalRatingScore;
             var maxAllowedSubRating = user.MaxParentalRatingSubScore;
-            var rating = CustomRatingForComparison;
+            var rating = GetCustomRatingForComparision(scope);
 
             if (string.IsNullOrEmpty(rating))
             {
-                rating = OfficialRatingForComparison;
+                rating = GetOfficialRatingForComparison(scope);
             }
 
             if (string.IsNullOrEmpty(rating))
@@ -1887,7 +1903,7 @@ namespace Tesserafin.Controller.Entities
                 return !GetBlockUnratedValue(user);
             }
 
-            var ratingScore = LocalizationManager.GetRatingScore(rating, GetPreferredMetadataCountryCode());
+            var ratingScore = LocalizationManager.GetRatingScore(rating, GetPreferredMetadataCountryCode(scope));
 
             // Could not determine rating level
             if (ratingScore is null)

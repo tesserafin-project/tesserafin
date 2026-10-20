@@ -17,23 +17,25 @@ namespace Tesserafin.Server.Core.Library
     /// (finding an item) and access control (deciding whether a user may see it) are different
     /// responsibilities, and the latter was leaking a hidden static dependency into the former.
     /// <see cref="ItemLookupService"/> itself has no knowledge of users or visibility any more.
-    /// Tag inheritance and the tag filter come from <see cref="ITagVisibilityService"/>, passed down
-    /// the entities' visibility overrides (DEBT-SERVER-3). What still reads the static
-    /// <see cref="BaseItem.LibraryManager"/> on this path, through
-    /// <see cref="BaseItem.IsVisibleStandalone(User, ITagVisibilityService)"/>, is the parent walk and
-    /// the folder restriction (enabled/blocked libraries), and channel and box set visibility.
+    /// Tag inheritance and the tag filter (DEBT-SERVER-3), then the parents and the libraries of the
+    /// folder restriction (DEBT-SERVER-4), come from <see cref="IStandaloneVisibilityService"/>, passed
+    /// down the entities' visibility overrides through
+    /// <see cref="BaseItem.IsVisibleStandalone(User, ITagVisibilityService)"/>. What still reads the
+    /// static <see cref="BaseItem.LibraryManager"/> on this path is channel and box set visibility, and
+    /// the library options read for a rating's country code once neither the item, its parents nor its
+    /// libraries carry one.
     /// </remarks>
     internal sealed class ItemAccessService : IItemAccessService
     {
         private readonly IItemLookupService _itemLookupService;
-        private readonly ITagVisibilityService _tagVisibility;
+        private readonly IStandaloneVisibilityService _tagVisibility;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ItemAccessService"/> class.
         /// </summary>
         /// <param name="itemLookupService">The item lookup service used to resolve the item before applying visibility.</param>
-        /// <param name="tagVisibility">Tag inheritance and the tag filter.</param>
-        public ItemAccessService(IItemLookupService itemLookupService, ITagVisibilityService tagVisibility)
+        /// <param name="tagVisibility">Tag inheritance and the tag filter, the parents and the libraries.</param>
+        public ItemAccessService(IItemLookupService itemLookupService, IStandaloneVisibilityService tagVisibility)
         {
             _itemLookupService = itemLookupService;
             _tagVisibility = tagVisibility;

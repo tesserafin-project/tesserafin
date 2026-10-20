@@ -91,7 +91,7 @@ public class LibraryManagerItemLookupTests
         // instead of exercising the real ItemIsVisible/IsVisibleStandalone logic.
         _itemAccessService = new Tesserafin.Server.Core.Library.ItemAccessService(
             _itemLookupService,
-            new Tesserafin.Server.Core.Library.TagVisibilityService(_itemLookupService, fixture.Freeze<ICollectionFolderResolver>()));
+            new Tesserafin.Server.Core.Library.TagVisibilityService(_itemLookupService, fixture.Freeze<ICollectionFolderResolver>(), fixture.Freeze<IUserRootFolderProvider>()));
         fixture.Register<IItemAccessService>(() => _itemAccessService);
 
         _libraryManager = fixture.Build<Tesserafin.Server.Core.Library.LibraryManager>().Do(s => s.AddParts(
