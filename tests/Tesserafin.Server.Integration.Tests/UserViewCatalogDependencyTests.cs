@@ -155,6 +155,16 @@ namespace Tesserafin.Server.Integration.Tests
                 implementation.GetConstructors().Single().GetParameters().Select(p => p.ParameterType));
         }
 
+        [Fact]
+        public void StandaloneVisibilityService_AlsoSuppliesTheBoxSetData()
+        {
+            // A box set reads its libraries and linked children from the service only when it is one;
+            // otherwise the access path falls back to the static without failing (DEBT-SERVER-5).
+            var implementation = _registrations.Value.Single(d => d.ServiceType == typeof(IStandaloneVisibilityService)).ImplementationType!;
+
+            Assert.True(typeof(IBoxSetVisibilityService).IsAssignableFrom(implementation));
+        }
+
         [Theory]
         [InlineData("direct")]
         [InlineData("alias")]

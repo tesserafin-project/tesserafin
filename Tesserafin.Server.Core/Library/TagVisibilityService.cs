@@ -8,17 +8,18 @@ using Tesserafin.Database.Implementations.Entities;
 namespace Tesserafin.Server.Core.Library
 {
     /// <summary>
-    /// Sole production implementation of <see cref="ITagVisibilityService"/> and
-    /// <see cref="IStandaloneVisibilityService"/>, built on the id lookup (parents), the library
+    /// Sole production implementation of <see cref="ITagVisibilityService"/>,
+    /// <see cref="IStandaloneVisibilityService"/> and <see cref="IBoxSetVisibilityService"/>, built on the id lookup (parents), the library
     /// membership resolver and the user root folder (libraries) only.
     /// </summary>
     /// <remarks>
     /// The combination and the filter are the entities' own (<see cref="BaseItem.CombineInheritedTags"/>,
     /// <see cref="BaseItem.EvaluateTagVisibility"/>); only where the parents and libraries come from
     /// differs from <see cref="BaseItem.GetInheritedTags()"/> (DEBT-SERVER-3). The same holds for the
-    /// parent and library checks of the standalone visibility, which stay in the entities (DEBT-SERVER-4).
+    /// parent and library checks of the standalone visibility, which stay in the entities (DEBT-SERVER-4),
+    /// and for the box set's library and linked-children checks (DEBT-SERVER-5).
     /// </remarks>
-    internal sealed class TagVisibilityService : IStandaloneVisibilityService
+    internal sealed class TagVisibilityService : IBoxSetVisibilityService
     {
         private readonly IItemLookupService _itemLookupService;
         private readonly ICollectionFolderResolver _collectionFolderResolver;
@@ -60,6 +61,12 @@ namespace Tesserafin.Server.Core.Library
         public IReadOnlyList<Guid> GetLibraryIds()
         {
             return CollectionFolderResolver.GetLibraries(_userRootFolderProvider.GetUserRootFolder(), _itemLookupService).Select(i => i.Id).ToList();
+        }
+
+        /// <inheritdoc />
+        public BaseItem? GetItemById(Guid id)
+        {
+            return _itemLookupService.GetItemById(id);
         }
 
         /// <inheritdoc />

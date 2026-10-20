@@ -555,7 +555,10 @@ public sealed class StandaloneVisibilityTests
     public void AccessPath_BoxSet_DecidesWithAStaticThatThrowsOnEveryCall()
     {
         var (saga, movies, vault, kids) = ProductionLikeGraph();
+
+        // A country code on each library keeps the rating off its library options fallback (static, out of slice).
         movies.PreferredMetadataCountryCode = "US";
+        kids.PreferredMetadataCountryCode = "US";
         RatingScores();
         var family = MovieIn(kids);
         family.OfficialRating = "PG";

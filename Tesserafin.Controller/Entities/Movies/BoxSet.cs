@@ -224,8 +224,11 @@ namespace Tesserafin.Controller.Entities.Movies
                 return true;
             }
 
-            var userLibraryFolderIds = GetLibraryFolderIds(user);
-            var libraryFolderIds = LibraryFolderIds ?? GetLibraryFolderIds();
+            // An IBoxSetVisibilityService also supplies the libraries and the linked children; otherwise
+            // they come through the static LibraryManager (DEBT-SERVER-5).
+            var scope = tagVisibility as IBoxSetVisibilityService;
+            var userLibraryFolderIds = scope is null ? GetLibraryFolderIds(user) : GetLibraryFolderIds(user, scope);
+            var libraryFolderIds = LibraryFolderIds ?? GetLibraryFolderIds(scope);
 
             if (libraryFolderIds.Length == 0)
             {
@@ -240,8 +243,8 @@ namespace Tesserafin.Controller.Entities.Movies
             // If user has parental controls, hide the BoxSet when all children are restricted
             if (user.MaxParentalRatingScore.HasValue)
             {
-                var linkedItems = GetLinkedChildren();
-                if (linkedItems.Count > 0 && linkedItems.All(child => !child.IsParentalAllowed(user, true)))
+                var linkedItems = GetLinkedChildren(scope);
+                if (linkedItems.Count > 0 && linkedItems.All(child => !child.IsParentalAllowed(user, true, scope)))
                 {
                     return false;
                 }
@@ -295,24 +298,64 @@ namespace Tesserafin.Controller.Entities.Movies
                 .ToArray();
         }
 
+        /// <summary>
+        /// Gets the user's libraries as <see cref="GetLibraryFolderIds(User)"/> does, through the service.
+        /// </summary>
+        /// <remarks>
+        /// The user root's children are the libraries (<see cref="IStandaloneVisibilityService.GetLibraryIds"/>);
+        /// the static path also lists the aggregate root's virtual children and the user root's linked
+        /// children, which <see cref="GetLibraryFolderIds()"/> never returns, so they cannot match.
+        /// </remarks>
+        private static Guid[] GetLibraryFolderIds(User user, IBoxSetVisibilityService scope)
+        {
+            return scope.GetLibraryIds()
+                .Select(scope.GetItemById)
+                .Where(i => i is not null && i.IsVisible(user, false, scope))
+                .Select(i => i.Id)
+                .ToArray();
+        }
+
         public Guid[] GetLibraryFolderIds()
+        {
+            return GetLibraryFolderIds((IBoxSetVisibilityService)null);
+        }
+
+        private Guid[] GetLibraryFolderIds(IBoxSetVisibilityService scope)
         {
             var expandedFolders = new List<Guid>();
 
-            return FlattenItems(this, expandedFolders)
-                .SelectMany(LibraryManager.GetCollectionFolders)
+            return FlattenItems(this, expandedFolders, scope)
+                .SelectMany(i => scope?.GetCollectionFolders(i) ?? LibraryManager.GetCollectionFolders(i))
                 .Select(i => i.Id)
                 .Distinct()
                 .ToArray();
         }
 
-        private IEnumerable<BaseItem> FlattenItems(IEnumerable<BaseItem> items, List<Guid> expandedFolders)
+        /// <summary>
+        /// Gets the linked children as <see cref="Folder.GetLinkedChildren()"/> does, by id through the service
+        /// when there is one. An entry without an id, or whose item the service does not find, takes
+        /// <see cref="BaseItem.GetLinkedChild"/>, which searches by path through the static.
+        /// </summary>
+        private List<BaseItem> GetLinkedChildren(IBoxSetVisibilityService scope)
         {
-            return items
-                .SelectMany(i => FlattenItems(i, expandedFolders));
+            if (scope is null)
+            {
+                return GetLinkedChildren();
+            }
+
+            return LinkedChildren
+                .Select(i => (i.ItemId is { } id && !id.Equals(Guid.Empty) ? scope.GetItemById(id) : null) ?? GetLinkedChild(i))
+                .Where(i => i is not null)
+                .ToList();
         }
 
-        private IEnumerable<BaseItem> FlattenItems(BaseItem item, List<Guid> expandedFolders)
+        private IEnumerable<BaseItem> FlattenItems(IEnumerable<BaseItem> items, List<Guid> expandedFolders, IBoxSetVisibilityService scope)
+        {
+            return items
+                .SelectMany(i => FlattenItems(i, expandedFolders, scope));
+        }
+
+        private IEnumerable<BaseItem> FlattenItems(BaseItem item, List<Guid> expandedFolders, IBoxSetVisibilityService scope)
         {
             if (item is BoxSet boxset)
             {
@@ -320,7 +363,7 @@ namespace Tesserafin.Controller.Entities.Movies
                 {
                     expandedFolders.Add(item.Id);
 
-                    return FlattenItems(boxset.GetLinkedChildren(), expandedFolders);
+                    return FlattenItems(boxset.GetLinkedChildren(scope), expandedFolders, scope);
                 }
 
                 return Array.Empty<BaseItem>();
