@@ -22,15 +22,17 @@ printf 'Baseline: %s\nCandidate lookup: %s\n' "${BASELINE}" "${CANDIDATE_TAG}"
 
 # Inspect manifests first: an absent/unreadable candidate is a failed
 # prerequisite, never a green migration run or permission to rebuild 1.1.0.
+UNREADABLE=0
 if ! docker manifest inspect "${BASELINE}" > "${EVIDENCE}/baseline-manifest.json"; then
   echo 'BLOCKED: canonical baseline manifest is unavailable; check package access/retention.' >&2
-  exit 1
+  UNREADABLE=1
 fi
 if ! docker manifest inspect "${CANDIDATE_TAG}" > "${EVIDENCE}/candidate-manifest.json"; then
   echo 'BLOCKED: no readable published container at the v1.1.0 source tag.' >&2
   echo 'Record the registry error. Supply verified existing image provenance before changing this lookup.' >&2
-  exit 1
+  UNREADABLE=1
 fi
+[[ "${UNREADABLE}" == 0 ]] || exit 1
 
 docker pull --platform linux/amd64 "${BASELINE}"
 docker pull --platform linux/amd64 "${CANDIDATE_TAG}"
