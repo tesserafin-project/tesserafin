@@ -2850,12 +2850,13 @@ namespace Tesserafin.Server.Core.Library
             if (parentId.HasValue)
             {
                 // For a user, a parent it may not see is a parent that does not exist - and so is
-                // the root of every library, which is no user's.
+                // the root of every library, which is no user's. Both answer 404, as access by id does;
+                // a malformed id never gets here (400 from binding).
                 var parent = userId.IsNullOrEmpty()
                     ? GetItemById(parentId.Value)
                     : GetItemById<BaseItem>(parentId.Value, userId.Value);
                 return parent is null || (parent is AggregateFolder && !userId.IsNullOrEmpty())
-                    ? throw new ArgumentException($"Invalid parent id: {parentId.Value}")
+                    ? throw new ResourceNotFoundException($"Invalid parent id: {parentId.Value}")
                     : parent;
             }
 

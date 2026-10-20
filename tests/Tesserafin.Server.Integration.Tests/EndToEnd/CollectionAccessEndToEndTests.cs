@@ -165,11 +165,15 @@ public sealed class CollectionAccessEndToEndTests : IDisposable
                 Expect(at + ": children status", HttpStatusCode.OK, status);
                 Check(at + ": children", childAllowed ? [child!.Value] : [], children?.Ids ?? [], children?.Total ?? -1);
             }
-            else if (status == HttpStatusCode.OK && children!.Ids.Count != 0)
+            else
             {
-                _wrong.Add(FormattableString.Invariant($"{at}: children of a refused box set listed [{string.Join(", ", children.Ids)}]"));
+                // A parent the user may not see answers as one that does not exist.
+                Expect(at + ": children of a refused box set", HttpStatusCode.NotFound, status);
             }
         }
+
+        Expect(what + ": children of an absent parent", HttpStatusCode.NotFound, (await TryListAsync(client, FormattableString.Invariant($"Items?parentId={Guid.NewGuid()}&userId={userId}"))).Status);
+        Expect(what + ": children of a malformed parent id", HttpStatusCode.BadRequest, (await TryListAsync(client, FormattableString.Invariant($"Items?parentId=not-an-id&userId={userId}"))).Status);
 
         var expectedSets = sets.Where(s => s.Item3).Select(s => s.Item1).ToArray();
         var expectedMovies = new[] { (seeded.FilmsMovie, filmsMovie), (seeded.KidsMovie, kidsMovie) }.Where(m => m.Item2).Select(m => m.Item1).ToArray();
