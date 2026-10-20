@@ -623,6 +623,16 @@ public sealed class ExplicitItemSelectionAuthorizationEndToEndTests : IClassFixt
             collection = Guid.Parse(document.RootElement.GetProperty("Id").GetString()!);
         }
 
+        // A box set is reached through the library that hosts it (#320): the restricted user is granted it,
+        // and still not the withheld library.
+        using (var folders = JsonDocument.Parse(await _admin.GetStringAsync("Library/VirtualFolders", TestContext.Current.CancellationToken)))
+        {
+            var hosting = Guid.Parse(folders.RootElement.EnumerateArray()
+                .Single(f => f.TryGetProperty("CollectionType", out var type) && type.GetString() == "boxsets")
+                .GetProperty("ItemId").GetString()!);
+            await RestrictAsync(_restrictedId, [_openLibrary, hosting]);
+        }
+
         var held = await SendAsync(_admin, "GET", FormattableString.Invariant($"Items?parentId={collection}&userId={_adminId}"));
         Assert.Contains(_visibleName, held.Body, StringComparison.Ordinal);
         Assert.Contains(_hiddenName, held.Body, StringComparison.Ordinal);

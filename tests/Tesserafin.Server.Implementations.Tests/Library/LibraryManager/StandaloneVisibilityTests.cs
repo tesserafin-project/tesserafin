@@ -48,6 +48,8 @@ public sealed class StandaloneVisibilityTests
     private readonly IItemAccessService _access;
     private readonly Tesserafin.Server.Core.Library.LibraryManager _manager;
     private Folder _root;
+    private CollectionFolder? _sets;
+    private Folder? _setsFolder;
 
     public StandaloneVisibilityTests()
     {
@@ -328,12 +330,20 @@ public sealed class StandaloneVisibilityTests
     }
 
     [Fact]
-    public void BoxSet_WithoutLinkedChildrenNorPath_KeepsItsOverride_NoLibraryRestriction()
+    public void BoxSet_WithoutLinkedChildren_NeedsOnlyItsHostingLibrary()
     {
-        AddLibrary("Movies", "/media/movies");
-        var boxSet = Add(new BoxSet { ParentId = Add(new Folder { Path = "/media/movies" }).Id });
+        // No children, so no children's libraries to match: the hosting library alone decides (#320).
+        var movies = AddLibrary("Movies", "/media/movies");
+        var hostedInMovies = Add(new BoxSet { ParentId = Add(new Folder { Path = "/media/movies" }).Id });
+        var empty = AddBoxSet();
 
-        AssertVisible(boxSet, User(), true);
+        AssertVisible(hostedInMovies, User(), false);
+        AssertVisible(hostedInMovies, User(enabled: [movies.Id]), true);
+        AssertVisible(hostedInMovies, User(all: true), true);
+        AssertVisible(empty, User(), false);
+        AssertVisible(empty, User(enabled: [movies.Id]), false);
+        AssertVisible(empty, User(enabled: [Sets().Id]), true);
+        AssertVisible(empty, User(blocked: [Sets().Id]), false);
     }
 
     [Fact]
@@ -454,20 +464,28 @@ public sealed class StandaloneVisibilityTests
     [Fact]
     public void BoxSet_LinkedChildren_AdmittedWhenOneOfTheirLibrariesIsTheUsers()
     {
-        // Not the item check: the box set's own parents are not walked, and the libraries are the user's
-        // visible ones (enabled/blocked, then options and tags), matched against its children's libraries.
+        // The hosting library first, like any item's; then the user's visible libraries (enabled/blocked,
+        // then options and tags), matched against its children's libraries.
         var movies = AddLibrary("Movies", "/media/movies");
         var vault = AddLibrary("Vault", "/media/vault", "/media/movies");
         var kids = AddLibrary("Kids", "/media/kids");
         var boxSet = AddBoxSet(MovieIn(movies));
 
         AssertVisible(boxSet, User(all: true), true);
-        AssertVisible(boxSet, User(enabled: [vault.Id]), true);
-        AssertVisible(boxSet, User(enabled: [kids.Id]), false);
+        AssertVisible(boxSet, User(enabled: [vault.Id, Sets().Id]), true);
+        AssertVisible(boxSet, User(enabled: [kids.Id, Sets().Id]), false);
         AssertVisible(boxSet, User(blocked: [movies.Id]), true);
         AssertVisible(boxSet, User(blocked: [movies.Id, vault.Id]), false);
         AssertVisible(boxSet, User(blocked: [kids.Id], enabled: [kids.Id]), true);
         AssertVisible(boxSet, User(), false);
+
+        // The hosting library is required, and grants nothing on the children by itself (#320).
+        AssertVisible(boxSet, User(enabled: [vault.Id]), false);
+        AssertVisible(boxSet, User(enabled: [movies.Id, vault.Id]), false);
+        AssertVisible(boxSet, User(enabled: [Sets().Id]), false);
+        AssertVisible(boxSet, User(blocked: [Sets().Id]), false);
+        AssertVisible(boxSet, User(all: true, blocked: [Sets().Id]), false);
+        AssertVisible(boxSet, User(blocked: [Sets().Id], enabled: [movies.Id, Sets().Id]), false);
     }
 
     [Fact]
@@ -481,6 +499,12 @@ public sealed class StandaloneVisibilityTests
 
         movies.Tags = ["vault only"];
         AssertVisible(boxSet, User(all: true, blockedTags: ["vault only"]), false);
+        movies.Tags = [];
+        Sets().Tags = ["vault only"];
+        AssertVisible(boxSet, User(all: true, blockedTags: ["vault only"]), false);
+        AssertVisible(boxSet, User(all: true), true);
+        Sets().Tags = [];
+        movies.Tags = ["vault only"];
         AssertVisible(boxSet, User(all: true, allowedTags: ["other"]), false);
         AssertVisible(AddBoxSet(MovieIn(disabled)), User(all: true), false);
 
@@ -500,7 +524,23 @@ public sealed class StandaloneVisibilityTests
         AddLibrary("Movies", "/media/movies");
         var boxSet = AddBoxSet(AddMovie(Add(new Folder { Path = "/media/other" }), "/media/other/a.mkv"));
 
-        AssertVisible(boxSet, User(), true);
+        AssertVisible(boxSet, User(enabled: [Sets().Id]), true);
+        AssertVisible(boxSet, User(), false);
+    }
+
+    [Fact]
+    public void BoxSet_LinkedChildNotFound_ContributesNoLibrary_TheHostingLibraryStillApplies()
+    {
+        var movies = AddLibrary("Movies", "/media/movies");
+        var boxSet = AddBoxSet();
+        boxSet.LinkedChildren = [new LinkedChild { ItemId = Guid.NewGuid() }];
+
+        // The search by path logs the miss.
+        BaseItem.Logger = Microsoft.Extensions.Logging.Abstractions.NullLogger<BaseItem>.Instance;
+
+        AssertVisible(boxSet, User(enabled: [Sets().Id]), true);
+        AssertVisible(boxSet, User(enabled: [movies.Id]), false);
+        AssertVisible(boxSet, User(all: true, blocked: [Sets().Id]), false);
     }
 
     [Fact]
@@ -511,11 +551,17 @@ public sealed class StandaloneVisibilityTests
         var boxSet = AddBoxSet(MovieIn(movies));
 
         boxSet.LibraryFolderIds = [kids.Id];
-        AssertVisible(boxSet, User(enabled: [kids.Id]), true);
+        AssertVisible(boxSet, User(enabled: [kids.Id, Sets().Id]), true);
+        AssertVisible(boxSet, User(enabled: [movies.Id, Sets().Id]), false);
+
+        // The stored ids are the children's libraries, never the hosting one.
+        boxSet.LibraryFolderIds = [Sets().Id];
+        AssertVisible(boxSet, User(enabled: [Sets().Id]), true);
         AssertVisible(boxSet, User(enabled: [movies.Id]), false);
 
         boxSet.LibraryFolderIds = [];
-        AssertVisible(boxSet, User(), true);
+        AssertVisible(boxSet, User(enabled: [Sets().Id]), true);
+        AssertVisible(boxSet, User(), false);
     }
 
     [Fact]
@@ -528,9 +574,10 @@ public sealed class StandaloneVisibilityTests
         var outer = AddBoxSet(MovieIn(movies), inner);
         inner.LinkedChildren = [.. inner.LinkedChildren, LinkedChild.Create(outer)];
 
-        AssertVisible(outer, User(enabled: [kids.Id]), true);
-        AssertVisible(inner, User(enabled: [movies.Id]), true);
-        AssertVisible(outer, User(enabled: [shows.Id]), false);
+        AssertVisible(outer, User(enabled: [kids.Id, Sets().Id]), true);
+        AssertVisible(inner, User(enabled: [movies.Id, Sets().Id]), true);
+        AssertVisible(outer, User(enabled: [shows.Id, Sets().Id]), false);
+        AssertVisible(outer, User(enabled: [kids.Id]), false);
     }
 
     [Fact]
@@ -572,9 +619,10 @@ public sealed class StandaloneVisibilityTests
         }
 
         // The rated children make the parental step read them, the nested box set the flattening. Saga
-        // belongs to Movies only (its parent chain), so Vault alone does not admit the box set.
-        var expectedRated = new[] { true, false, true, true, true, true, true, false, true, false, true };
-        var expectedNested = new[] { true, false, true, true, true, true, false, false, true, false, false };
+        // belongs to Movies only (its parent chain), so Vault alone does not admit the box set; and no
+        // enabled-libraries list here names the hosting library, so none admits a box set (#320).
+        var expectedRated = new[] { true, false, false, true, true, true, true, false, true, false, false };
+        var expectedNested = new[] { true, false, false, true, true, true, false, false, true, false, false };
         Assert.Equal(expectedRated, users.Select(u => rated.IsVisibleStandalone(u)));
         Assert.Equal(expectedNested, users.Select(u => nested.IsVisibleStandalone(u)));
         family.OfficialRating = "R";
@@ -593,14 +641,46 @@ public sealed class StandaloneVisibilityTests
         Assert.Throws<MockException>(() => _access.GetVisibleItemById<BaseItem>(rated.Id, users[0]));
     }
 
+    [Fact]
+    public void AccessPath_BoxSet_HostingLibraryRightsApplyWithoutRebuildingAnything()
+    {
+        var (saga, movies, _, kids) = ProductionLikeGraph();
+        var boxSet = AddBoxSet(saga);
+        ThrowingStatic();
+        var bea = User(enabled: [movies.Id]);
+        var alex = User(all: true);
+
+        Assert.Equal([false, true], Decisions(boxSet, bea, alex));
+
+        bea.SetPreference(PreferenceKind.EnabledFolders, [movies.Id, Sets().Id]);
+        Assert.Equal([true, true], Decisions(boxSet, bea, alex));
+
+        bea.SetPreference(PreferenceKind.EnabledFolders, [kids.Id, Sets().Id]);
+        Assert.Equal([false, true], Decisions(boxSet, bea, alex));
+
+        bea.SetPermission(PermissionKind.EnableAllFolders, true);
+        alex.SetPreference(PreferenceKind.BlockedMediaFolders, [Sets().Id]);
+        Assert.Equal([true, false], Decisions(boxSet, bea, alex));
+
+        alex.SetPreference(PreferenceKind.BlockedMediaFolders, []);
+        Assert.Equal([true, true], Decisions(boxSet, bea, alex));
+    }
+
     private static void RatingScores() => BaseItem.LocalizationManager = Mock.Of<ILocalizationManager>(l =>
         l.GetRatingScore("R", "US") == new ParentalRatingScore(17, null)
         && l.GetRatingScore("PG", "US") == new ParentalRatingScore(10, null));
 
+    /// <summary>
+    /// The library that hosts the box sets, the production shape: a box-set library over the
+    /// collections directory, whose physical folder is each box set's parent. Not named "Collections",
+    /// so nothing may depend on the name.
+    /// </summary>
+    private CollectionFolder Sets() => _sets ??= AddLibrary("Sets", "/config/data/collections");
+
     private BoxSet AddBoxSet(params BaseItem[] linked) => Add(new BoxSet
     {
         Path = "/config/data/collections/" + Guid.NewGuid().ToString("N") + " [boxset]",
-        ParentId = Add(new Folder { Path = "/config/data/collections" }).Id,
+        ParentId = (_setsFolder ??= Add(new Folder { Path = Sets().PhysicalLocations[0] })).Id,
         LinkedChildren = linked.Select(LinkedChild.Create).ToArray(),
     });
 
@@ -617,6 +697,7 @@ public sealed class StandaloneVisibilityTests
         var movies = AddLibrary("Movies", "/media/movies");
         var vault = AddLibrary("Vault", "/media/vault", "/media/movies");
         var kids = AddLibrary("Kids", "/media/kids");
+        Sets();
         foreach (var library in _libraries)
         {
             library.ParentId = aggregate.Id;

@@ -288,7 +288,10 @@ namespace Tesserafin.Controller.Entities.Movies
                 return base.IsVisibleStandalone(user, tagVisibility);
             }
 
-            return IsVisible(user, false, tagVisibility);
+            // The library that holds the box set (the Collections library, found through its parents and
+            // path like any item's) is checked first, then the box set's own rules on its children, tags
+            // and rating (#320): a user not granted that library reaches none of its box sets by id.
+            return IsVisibleStandaloneInternal(user, true, tagVisibility);
         }
 
         private Guid[] GetLibraryFolderIds(User user)
