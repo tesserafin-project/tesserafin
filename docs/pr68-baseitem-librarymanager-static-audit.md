@@ -104,6 +104,27 @@ Still static elsewhere: every caller that passes no service, and `ItemPersistenc
 inherited tags (the persistence service sits below the resolver, so it cannot take the port without a
 cycle). `InheritedTagVisibilityTests` pins inheritance and the filter on both paths.
 
+DEBT-SERVER-4 (2026-10-20): the parents and the library restriction of the standalone check have a port,
+`IStandaloneVisibilityService` (an `ITagVisibilityService` that also supplies the parents, the display
+parent, the member libraries and the library ids; `TagVisibilityService`, now also built on
+`IUserRootFolderProvider`). `ItemAccessService` takes it and passes it down as before; the entities
+recognise it in `IsVisibleStandaloneInternal` and `IsParentalAllowed`, so the parent walk, the
+enabled/blocked-library restriction, and the rating's display-parent walk and parent/library country code
+no longer go through the static. The rules stay single: the same entity methods run on both paths, only
+the data source differs (no service, or a plain `ITagVisibilityService`: the static). `UserRootFolder.Children`
+resolved the libraries through the static since MEDIA-ACCESS-R2; `UserRootFolder.GetLibraries(IItemLookupService)`
+does the same through the lookup, and `CollectionFolderResolver` and the service use it. No public
+signature changed (one interface and one method added; local `ci/abi-compat.sh` 8/8).
+`StandaloneVisibilityTests` pins the check on both paths and runs the access path under a strict static.
+Still static on the access-by-id path:
+- a rating's country code once neither the item, its parents nor its libraries carry one
+  (`LibraryManager.GetLibraryOptions`, library options);
+- box sets that are not legacy (`BoxSet.IsVisible`: `GetUserRootFolder().GetChildren(user, true)`,
+  `GetLibraryFolderIds()` through `GetCollectionFolders`, linked children through `GetLinkedChild`, and
+  `IsParentalAllowed(user, true)` on them without the service);
+- channel content (`IsVisibleStandalone` for `SourceType.Channel`: `Channel.IsChannelVisible` reads the
+  static `ChannelManager`, then `Channel.IsVisible(User)` without the service).
+
 ### Mutation And Registration
 
 Representative sites:
