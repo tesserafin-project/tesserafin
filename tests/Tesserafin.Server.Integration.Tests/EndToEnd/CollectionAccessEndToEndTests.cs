@@ -188,17 +188,9 @@ public sealed class CollectionAccessEndToEndTests : IDisposable
             _wrong.Add(FormattableString.Invariant($"{what}: paged box set listing total {page.Total} [{string.Join(", ", page.Ids)}], expected total {expectedSets.Length}"));
         }
 
-        // A listing mixing types: the movies are exactly the user's, and every admitted box set is there.
-        // Box sets the children rule refuses still appear when the hosting library is granted: only a
-        // listing of box sets and playlists alone is filtered item by item (Folder.GetItemsInternal),
-        // pre-existing and out of this slice. Without the hosting library none appears.
+        // A listing mixing types holds exactly the user's movies and the box sets access by id admits.
         var mixed = await ListAsync(client, FormattableString.Invariant($"Items?recursive=true&includeItemTypes=Movie,BoxSet&userId={userId}"));
-        var mixedSets = mixed.Ids.Where(i => sets.Any(s => s.Item1.Equals(i))).ToArray();
-        Check(what + ": movies of the mixed listing", expectedMovies, mixed.Ids.Except(mixedSets).ToList(), expectedMovies.Length);
-        if (!expectedSets.All(mixedSets.Contains) || (!hosting && mixedSets.Length != 0))
-        {
-            _wrong.Add(FormattableString.Invariant($"{what}: box sets of the mixed listing [{string.Join(", ", mixedSets)}], expected at least [{string.Join(", ", expectedSets)}]"));
-        }
+        Check(what + ": movies and box sets listing", [.. expectedSets, .. expectedMovies], mixed.Ids, mixed.Total);
 
         var movies = await ListAsync(client, FormattableString.Invariant($"Items?recursive=true&includeItemTypes=Movie&userId={userId}"));
         Check(what + ": movie listing", expectedMovies, movies.Ids, movies.Total);

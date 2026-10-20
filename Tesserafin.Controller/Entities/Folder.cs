@@ -962,7 +962,39 @@ namespace Tesserafin.Controller.Entities
                 return QueryWithPostFiltering(query);
             }
 
+            ExcludeBoxSetsAndPlaylistsRefusedToTheUser(query);
             return LibraryManager.GetItemsResult(query);
+        }
+
+        /// <summary>
+        /// A listing that can hold box sets or playlists among other types (or names no type) excludes, in the
+        /// query itself, those the user is refused by id, so its pages and total stay the database's.
+        /// </summary>
+        // ponytail: decides every box set and playlist of the server per such listing; scope the candidates
+        // to the query if their number makes listings slow.
+        private void ExcludeBoxSetsAndPlaylistsRefusedToTheUser(InternalItemsQuery query)
+        {
+            var user = query.User;
+            if (user is null
+                || (query.IncludeItemTypes.Length > 0 && !query.IncludeItemTypes.Any(t => t == BaseItemKind.BoxSet || t == BaseItemKind.Playlist)))
+            {
+                return;
+            }
+
+            var refused = LibraryManager.GetItemList(new InternalItemsQuery
+            {
+                IncludeItemTypes = [BaseItemKind.BoxSet, BaseItemKind.Playlist],
+                Recursive = true,
+                DtoOptions = new DtoOptions(false) { EnableImages = false }
+            })
+                .Where(i => !i.IsVisibleStandalone(user))
+                .Select(i => i.Id)
+                .ToArray();
+
+            if (refused.Length > 0)
+            {
+                query.ExcludeItemIds = [.. query.ExcludeItemIds, .. refused];
+            }
         }
 
         protected QueryResult<BaseItem> QueryWithPostFiltering(InternalItemsQuery query)

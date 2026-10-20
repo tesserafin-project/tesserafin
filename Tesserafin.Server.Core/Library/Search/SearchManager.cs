@@ -7,8 +7,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Tesserafin.Controller.Dto;
 using Tesserafin.Controller.Entities;
+using Tesserafin.Controller.Entities.Movies;
 using Tesserafin.Controller.Library;
 using Tesserafin.Controller.Persistence;
+using Tesserafin.Controller.Playlists;
 using Tesserafin.Data.Enums;
 using Tesserafin.Database.Implementations;
 using Tesserafin.Database.Implementations.Entities;
@@ -238,6 +240,13 @@ public class SearchManager : ISearchManager
         else
         {
             items = _libraryManager.GetItemList(internalQuery);
+        }
+
+        // Box sets and playlists are decided item by item, as access by id decides them; the query only scopes
+        // the libraries (GHSA-c5pr-6h39-jp86). Before the total and the paging below.
+        if (user is not null)
+        {
+            items = items.Where(i => i is not (BoxSet or Playlist) || i.IsVisibleStandalone(user)).ToList();
         }
 
         var orderedResults = items
