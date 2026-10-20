@@ -26,8 +26,9 @@ namespace Tesserafin.Server.Integration.Tests
     /// DEBT-SERVER-1: the user-view catalog's playlist/boxset probe no longer reaches the former
     /// <c>ILibraryManager</c>/<c>IUserViewManager</c>/<c>IChannelManager</c>/<c>ILiveTvManager</c> cycle
     /// nor <c>IItemQueryService</c> - not directly, not deferred, not moved elsewhere. DEBT-SERVER-2
-    /// holds the library membership resolver extracted from <c>LibraryManager</c> to the same rule, and
-    /// DEBT-SERVER-3 the tag visibility service built on it.
+    /// holds the library membership resolver extracted from <c>LibraryManager</c> to the same rule,
+    /// DEBT-SERVER-3 the tag visibility service built on it, and DEBT-SERVER-4 the standalone visibility
+    /// service and the access path that takes it.
     /// </summary>
     /// <remarks>
     /// The graph is built from the server's real registrations (<see cref="ApplicationHost.Init"/> on a
@@ -75,7 +76,7 @@ namespace Tesserafin.Server.Integration.Tests
 
             var reached = graph.Walk(typeof(IVisibleContentProbe), followDeferred: true);
 
-            AssertNone(reached.Where(n => _cycleTypes.Contains(n.Type)).Select(n => n.Path));
+            AssertNone(reached.Where(n => IsCycleMember(n.Type)).Select(n => n.Path));
 
             // The repository holds the application host only to expand and reverse virtual paths
             // (BaseItemRepository / BaseItemMapper: ExpandVirtualPath, ReverseVirtualPath); the walk
@@ -93,7 +94,7 @@ namespace Tesserafin.Server.Integration.Tests
 
             var reached = graph.Walk(typeof(ICollectionFolderResolver), followDeferred: true);
 
-            AssertNone(reached.Where(n => _cycleTypes.Contains(n.Type)).Select(n => n.Path));
+            AssertNone(reached.Where(n => IsCycleMember(n.Type)).Select(n => n.Path));
 
             // Exactly one locator edge, pre-existing, through the user root folder leaf: the persistence
             // service holds the application host only to map virtual paths (BaseItemMapper.Map), and the
@@ -111,15 +112,88 @@ namespace Tesserafin.Server.Integration.Tests
 
             var reached = graph.Walk(typeof(ITagVisibilityService), followDeferred: true);
 
-            AssertNone(reached.Where(n => _cycleTypes.Contains(n.Type)).Select(n => n.Path));
+            AssertNone(reached.Where(n => IsCycleMember(n.Type)).Select(n => n.Path));
 
             // The walk reports each node once, on its first path: the application host, held by the
-            // repository behind the lookup only for virtual paths (as for the probe above), and by the
-            // persistence service behind the resolver for the same reason. Equality, as for the resolver.
+            // persistence service behind the user root folder only to map virtual paths (the resolver's
+            // exception; the service reads the libraries through the root since DEBT-SERVER-4), and by the
+            // repository behind the lookup for the same reason. Equality, as for the resolver.
             Assert.Equal(
-                ["ITagVisibilityService -> IItemLookupService -> ItemLookupService -> IItemRepository -> BaseItemRepository -> IServerApplicationHost"],
+                ["ITagVisibilityService -> IUserRootFolderProvider -> IItemStore -> IItemPersistenceService -> IServerApplicationHost"],
                 reached.Where(n => _locatorTypes.Contains(n.Type)).Select(n => n.Path).Order(StringComparer.Ordinal));
         }
+
+        [Theory]
+        [InlineData(typeof(IStandaloneVisibilityService))]
+        [InlineData(typeof(IItemAccessService))]
+        public void StandaloneVisibilityAndAccess_WholeGraph_ReachNoCycleMemberNorLocator(Type service)
+        {
+            var graph = new DependencyGraph(_registrations.Value);
+
+            var reached = graph.Walk(service, followDeferred: true);
+
+            AssertNone(reached.Where(n => IsCycleMember(n.Type)).Select(n => n.Path));
+
+            // As for the tag visibility service: the application host, held for virtual paths only, reported
+            // once on its first path - behind the user root folder for the service itself, behind the
+            // lookup for the access path, which takes the lookup first. Equality, as above.
+            var expected = service == typeof(IItemAccessService)
+                ? "IItemAccessService -> IItemLookupService -> ItemLookupService -> IItemRepository -> BaseItemRepository -> IServerApplicationHost"
+                : "IStandaloneVisibilityService -> IUserRootFolderProvider -> IItemStore -> IItemPersistenceService -> IServerApplicationHost";
+            Assert.Equal(
+                [expected],
+                reached.Where(n => _locatorTypes.Contains(n.Type)).Select(n => n.Path).Order(StringComparer.Ordinal));
+        }
+
+        [Fact]
+        public void ItemAccessService_TakesTheStandaloneVisibilityService()
+        {
+            var implementation = _registrations.Value.Single(d => d.ServiceType == typeof(IItemAccessService)).ImplementationType!;
+
+            Assert.Equal(
+                [typeof(IItemLookupService), typeof(IStandaloneVisibilityService)],
+                implementation.GetConstructors().Single().GetParameters().Select(p => p.ParameterType));
+        }
+
+        [Theory]
+        [InlineData("direct")]
+        [InlineData("alias")]
+        [InlineData("deferred")]
+        public void Control_AReturnToTheLibraryManager_IsCaughtByTheWalk(string how)
+        {
+            // The walk itself, on a controlled failure: the real registrations plus one way back to the
+            // library manager behind the root provider the standalone service depends on.
+            var services = new ServiceCollection();
+            foreach (var descriptor in _registrations.Value)
+            {
+                ((ICollection<ServiceDescriptor>)services).Add(descriptor);
+            }
+
+            switch (how)
+            {
+                case "direct":
+                    services.AddSingleton<IUserRootFolderProvider, RootProviderOver<ILibraryManager>>();
+                    break;
+                case "alias":
+                    var concrete = typeof(ApplicationHost).Assembly.GetType("Tesserafin.Server.Core.Library.LibraryManager", throwOnError: true)!;
+                    services.AddSingleton(typeof(UserViewCatalogDependencyTests).GetMethod(nameof(AliasOnto), BindingFlags.NonPublic | BindingFlags.Static)!
+                        .MakeGenericMethod(concrete)
+                        .CreateDelegate<Func<IServiceProvider, IUserRootFolderProvider>>());
+                    break;
+                default:
+                    services.AddSingleton<IUserRootFolderProvider, RootProviderOver<Lazy<ILibraryManager>>>();
+                    break;
+            }
+
+            var reached = new DependencyGraph(services).Walk(typeof(IStandaloneVisibilityService), followDeferred: true);
+
+            Assert.Contains(reached, n => IsCycleMember(n.Type));
+        }
+
+        // A factory alias onto the concrete, internal library manager.
+        private static IUserRootFolderProvider AliasOnto<T>(IServiceProvider services)
+            where T : notnull
+            => new RootProviderOver<T>(services.GetRequiredService<T>());
 
         [Fact]
         public void TagVisibilityService_ImplementationAndEntityHelpers_ReachNoStaticBackedEntityMember()
@@ -156,7 +230,7 @@ namespace Tesserafin.Server.Integration.Tests
 
             var reached = graph.Walk(typeof(IUserViewCatalog), followDeferred: false);
 
-            AssertNone(reached.Where(n => _cycleTypes.Contains(n.Type)).Select(n => n.Path));
+            AssertNone(reached.Where(n => IsCycleMember(n.Type)).Select(n => n.Path));
         }
 
         [Fact]
@@ -202,6 +276,8 @@ namespace Tesserafin.Server.Integration.Tests
         [InlineData(typeof(IVisibleContentProbe))]
         [InlineData(typeof(ICollectionFolderResolver))]
         [InlineData(typeof(ITagVisibilityService))]
+        [InlineData(typeof(IStandaloneVisibilityService))]
+        [InlineData(typeof(IItemAccessService))]
         public void ImplementationCode_ReferencesNoCycleMemberLocatorOrEntityStaticLocator(Type service)
         {
             var implementation = _registrations.Value.Single(d => d.ServiceType == service).ImplementationType!;
@@ -253,6 +329,10 @@ namespace Tesserafin.Server.Integration.Tests
             return member is FieldInfo field && IsForbiddenType(field.FieldType);
         }
 
+        // A concrete implementation counts as its interface: an alias resolving LibraryManager itself
+        // (which also implements the lookup) would otherwise read as an unknown leaf.
+        private static bool IsCycleMember(Type type) => _cycleTypes.Any(c => c.IsAssignableFrom(type));
+
         private static bool IsForbiddenType(Type type)
         {
             if (type.IsGenericType)
@@ -260,7 +340,7 @@ namespace Tesserafin.Server.Integration.Tests
                 return type.GetGenericArguments().Any(IsForbiddenType);
             }
 
-            return _cycleTypes.Contains(type) || _locatorTypes.Contains(type);
+            return IsCycleMember(type) || _locatorTypes.Contains(type);
         }
 
         private static IServiceCollection BuildRegistrations()
@@ -282,6 +362,16 @@ namespace Tesserafin.Server.Integration.Tests
             var services = new ServiceCollection();
             appHost.Init(services);
             return services;
+        }
+
+        private sealed class RootProviderOver<T> : IUserRootFolderProvider
+        {
+            public RootProviderOver(T dependency)
+            {
+                _ = dependency;
+            }
+
+            public Folder GetUserRootFolder() => throw new NotSupportedException();
         }
 
         private sealed record Node(Type Type, string Path, IReadOnlyList<string> DeferredEdges);
