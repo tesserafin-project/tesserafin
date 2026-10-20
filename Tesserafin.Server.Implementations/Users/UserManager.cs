@@ -865,6 +865,11 @@ namespace Tesserafin.Server.Implementations.Users
                     user.SetPreference(PreferenceKind.EnabledChannels, policy.EnabledChannels);
                     user.SetPreference(PreferenceKind.EnabledDevices, policy.EnabledDevices);
                     user.SetPreference(PreferenceKind.EnabledFolders, policy.EnabledFolders);
+
+                    // Null clears: the web library-access page sends both null so that the libraries and
+                    // channels it shows are the whole of the user's access to them.
+                    user.SetPreference(PreferenceKind.BlockedMediaFolders, policy.BlockedMediaFolders ?? []);
+                    user.SetPreference(PreferenceKind.BlockedChannels, policy.BlockedChannels ?? []);
                     user.SetPreference(PreferenceKind.EnableContentDeletionFromFolders, policy.EnableContentDeletionFromFolders);
 
                     dbContext.Update(user);

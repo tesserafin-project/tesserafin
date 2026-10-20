@@ -149,6 +149,47 @@ public sealed class ChannelCatalogTests
         Assert.Same(enabledItem, returned);
     }
 
+    /// <summary>
+    /// <c>BlockedChannels</c>, now stored by the user policy: a non-empty list hides exactly the
+    /// blocked channels and wins over <c>EnableAllChannels</c> and an <c>EnabledChannels</c> list
+    /// naming the blocked one; an empty list defers to them again.
+    /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
+    [Fact]
+    public async Task GetChannelsAsync_UserSet_BlockedChannelsWinOverEnabledChannels()
+    {
+        var keptId = Guid.NewGuid();
+        var blockedId = Guid.NewGuid();
+        var keptItem = MakeChannelItem(keptId, "Kept");
+        var blockedItem = MakeChannelItem(blockedId, "Blocked");
+
+        var itemStoreMock = new Mock<IItemStore>();
+        itemStoreMock.Setup(s => s.GetNewItemId("Channel Kept", typeof(Channel))).Returns(keptId);
+        itemStoreMock.Setup(s => s.GetNewItemId("Channel Blocked", typeof(Channel))).Returns(blockedId);
+
+        var itemLookupServiceMock = new Mock<IItemLookupService>();
+        itemLookupServiceMock.Setup(l => l.GetItemById<Channel>(keptId)).Returns(keptItem);
+        itemLookupServiceMock.Setup(l => l.GetItemById<Channel>(blockedId)).Returns(blockedItem);
+
+        var user = MakeUserWithChannelAccess();
+        var userManagerMock = new Mock<IUserManager>();
+        userManagerMock.Setup(u => u.GetUserById(user.Id)).Returns(user);
+
+        var catalog = new ChannelCatalog(new[] { MakeChannel("Kept"), MakeChannel("Blocked") }, itemLookupServiceMock.Object, itemStoreMock.Object, userManagerMock.Object);
+
+        async Task<BaseItem[]> VisibleAsync() => (await catalog.GetChannelsAsync(new ChannelQuery { UserId = user.Id })).Items.ToArray();
+
+        user.SetPreference(PreferenceKind.BlockedChannels, [blockedId]);
+        Assert.Same(keptItem, Assert.Single(await VisibleAsync()));
+
+        user.SetPermission(PermissionKind.EnableAllChannels, false);
+        user.SetPreference(PreferenceKind.EnabledChannels, [blockedId]);
+        Assert.Same(keptItem, Assert.Single(await VisibleAsync()));
+
+        user.SetPreference(PreferenceKind.BlockedChannels, []);
+        Assert.Same(blockedItem, Assert.Single(await VisibleAsync()));
+    }
+
     [Fact]
     public async Task GetChannelsAsync_NoUserId_DoesNotResolveUserAndSkipsUserFiltering()
     {
