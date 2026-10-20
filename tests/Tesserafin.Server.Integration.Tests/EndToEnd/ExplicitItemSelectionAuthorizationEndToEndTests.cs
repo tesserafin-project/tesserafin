@@ -18,6 +18,7 @@ using Tesserafin.Data.Enums;
 using Tesserafin.Extensions.Json;
 using Tesserafin.Model.Dto;
 using Tesserafin.Model.Entities;
+using Tesserafin.Model.Tasks;
 using Tesserafin.Server.Integration.Tests.PlaybackCredentials;
 using Xunit;
 
@@ -156,10 +157,24 @@ public sealed class ExplicitItemSelectionAuthorizationEndToEndTests : IClassFixt
         var openDir = await AddLibraryAsync("smr3-open-" + _suffix);
         var withheldDir = await AddLibraryAsync("smr3-withheld-" + _suffix);
 
-        // So does the first collection a server is asked for: it creates the collections library.
+        // So does the first collection a server is asked for: it creates the collections library, which also
+        // queues a library scan nothing awaits. A scan running during the seeding below removes what it did
+        // not resolve, and the next seeding write then fails on a foreign key (#317): wait for it to end.
+        var beforeFirst = DateTime.UtcNow;
+        bool createdTheCollectionsLibrary;
+        using (var before = JsonDocument.Parse(await _admin.GetStringAsync("Library/VirtualFolders", TestContext.Current.CancellationToken)))
+        {
+            createdTheCollectionsLibrary = !before.RootElement.EnumerateArray().Any(f => f.TryGetProperty("CollectionType", out var type) && type.GetString() == "boxsets");
+        }
+
         using (var first = await _admin.PostAsync("Collections?name=smr3-first-" + _suffix, null, TestContext.Current.CancellationToken))
         {
             first.EnsureSuccessStatusCode();
+        }
+
+        if (createdTheCollectionsLibrary)
+        {
+            await WaitForLibraryScanAsync(beforeFirst);
         }
 
         var libraries = await LibrariesAsync();
@@ -198,6 +213,17 @@ public sealed class ExplicitItemSelectionAuthorizationEndToEndTests : IClassFixt
         episode.PresentationUniqueKey = episode.CreatePresentationUniqueKey();
         library.CreateItems([episode], null, CancellationToken.None);
         _hiddenSeries = series.Id;
+
+        // The scenario holds only if the seeding did: every seeded item exists, under the folder of its library.
+        foreach (var (id, parent) in new[] { (_visible, _openFolder), (_hidden, _withheldFolder), (series.Id, _withheldFolder), (episode.Id, series.Id) })
+        {
+            var seeded = library.GetItemById(id);
+            Assert.True(seeded is not null, FormattableString.Invariant($"seeded item {id} is gone"));
+            Assert.Equal(parent, seeded.ParentId);
+        }
+
+        Assert.Equal([_openLibrary], library.GetCollectionFolders(library.GetItemById(_visible)!).Select(f => f.Id));
+        Assert.Equal([_withheldLibrary], library.GetCollectionFolders(library.GetItemById(_hidden)!).Select(f => f.Id));
 
         (_restricted, _restrictedId) = await SignInAsync("smr3-restricted-" + _suffix, [_openLibrary]);
     }
@@ -766,6 +792,22 @@ public sealed class ExplicitItemSelectionAuthorizationEndToEndTests : IClassFixt
                 movie.Studios = [mark + "-studio"];
                 movie.Tags = [mark + "-tag"];
             });
+    }
+
+    private async Task WaitForLibraryScanAsync(DateTime since)
+    {
+        var scan = _factory.Services.GetRequiredService<ITaskManager>().ScheduledTasks.Single(w => w.ScheduledTask.Key == "RefreshLibrary");
+        for (var i = 0; i < 600; i++)
+        {
+            if (scan.State == TaskState.Idle && scan.LastExecutionResult?.EndTimeUtc >= since)
+            {
+                return;
+            }
+
+            await Task.Delay(100, TestContext.Current.CancellationToken);
+        }
+
+        Assert.Fail("the library scan queued by the collections library did not finish");
     }
 
     private async Task<string> AddLibraryAsync(string name)
