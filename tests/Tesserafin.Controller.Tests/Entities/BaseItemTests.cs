@@ -392,6 +392,9 @@ public class BaseItemTests
         var mediaSourceManager = new Mock<IMediaSourceManager>(MockBehavior.Strict);
         var segmentManager = new Mock<IMediaSegmentManager>(MockBehavior.Strict);
 
+        // Video.SourceType reads the static Video.RecordingsManager; set it here, as above.
+        Video.RecordingsManager = Mock.Of<IRecordingsManager>();
+
         var result = channelItem.GetMediaSources(false, mediaSourceManager.Object, segmentManager.Object, channelManager.Object);
 
         Assert.Single(result);
