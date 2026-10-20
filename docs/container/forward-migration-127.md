@@ -1,6 +1,6 @@
 # Published forward-migration evidence (#127)
 
-Status: execution preparation, 2026-10-20. No successful migration run is claimed.
+Status: hosted preflight executed and blocked, 2026-10-20. No successful migration run is claimed. Preparation PR: [#316](https://github.com/tesserafin-project/tesserafin/pull/316).
 
 ## Selected boundary and outstanding image proof
 
@@ -44,6 +44,21 @@ bash ci/upgrade/published-forward-migration.sh
 The execution environment used to prepare this PR has no Docker daemon and cannot create the required namespaces. Local syntax checks are not a migration result.
 
 ## Acceptance and limits
+
+### First hosted result
+
+[Run 39423877774, job 118631385687](https://github.com/tesserafin-project/tesserafin/actions/runs/39423877774/job/118631385687) checked out wrapper revision `628c2f1c968af9544e8c218e1d64ba29f1540cc4` on Ubuntu 24.04:
+
+| Check | Result |
+| --- | --- |
+| Four preflight tests, eight mock scenarios | Passed; these are wrapper controls, not a migration |
+| Registry authentication | Succeeded; this alone does not prove package-read access |
+| Canonical baseline manifest | `manifest unknown` |
+| Candidate source-tag manifest | `denied` |
+| Server/container startup, migration, preservation harness | Not executed; preflight exited 1 |
+| Evidence upload and registry-credential cleanup | Succeeded |
+
+The result does not distinguish missing/retired content from package authorization restrictions. Resolve access to the exact historical baseline and establish a readable, published candidate digest with source provenance before rerunning. The `v1.1.0` source tag and native release assets do not satisfy that container prerequisite.
 
 A successful image preflight is not a successful upgrade. #127 stays open until the original harness exits zero with non-zero pending migrations, successful application and all original preservation assertions passing: users, libraries, visible items, playback state, configuration, volume identity/ownership and version agreement.
 
