@@ -46,6 +46,7 @@ public sealed class StandaloneVisibilityTests
     private readonly List<Folder> _libraries = [];
     private readonly Dictionary<string, LibraryOptions> _options = [];
     private readonly IItemAccessService _access;
+    private readonly Tesserafin.Server.Core.Library.LibraryManager _manager;
     private Folder _root;
 
     public StandaloneVisibilityTests()
@@ -71,7 +72,7 @@ public sealed class StandaloneVisibilityTests
         var resolver = new Tesserafin.Server.Core.Library.CollectionFolderResolver(lookup, rootProvider);
         fixture.Register<ICollectionFolderResolver>(() => resolver);
 
-        var manager = fixture.Build<Tesserafin.Server.Core.Library.LibraryManager>().Do(s => s.AddParts(
+        var manager = _manager = fixture.Build<Tesserafin.Server.Core.Library.LibraryManager>().Do(s => s.AddParts(
                 Array.Empty<IResolverIgnoreRule>(),
                 Array.Empty<IItemResolver>(),
                 Array.Empty<IIntroProvider>(),
@@ -450,6 +451,156 @@ public sealed class StandaloneVisibilityTests
         Assert.Equal([true, true], Decisions(saga, bea, alex));
     }
 
+    [Fact]
+    public void BoxSet_LinkedChildren_AdmittedWhenOneOfTheirLibrariesIsTheUsers()
+    {
+        // Not the item check: the box set's own parents are not walked, and the libraries are the user's
+        // visible ones (enabled/blocked, then options and tags), matched against its children's libraries.
+        var movies = AddLibrary("Movies", "/media/movies");
+        var vault = AddLibrary("Vault", "/media/vault", "/media/movies");
+        var kids = AddLibrary("Kids", "/media/kids");
+        var boxSet = AddBoxSet(MovieIn(movies));
+
+        AssertVisible(boxSet, User(all: true), true);
+        AssertVisible(boxSet, User(enabled: [vault.Id]), true);
+        AssertVisible(boxSet, User(enabled: [kids.Id]), false);
+        AssertVisible(boxSet, User(blocked: [movies.Id]), true);
+        AssertVisible(boxSet, User(blocked: [movies.Id, vault.Id]), false);
+        AssertVisible(boxSet, User(blocked: [kids.Id], enabled: [kids.Id]), true);
+        AssertVisible(boxSet, User(), false);
+    }
+
+    [Fact]
+    public void BoxSet_DisabledOrTaggedLibrary_IsNotTheUsers()
+    {
+        var movies = AddLibrary("Movies", "/media/movies");
+        var boxSet = AddBoxSet(MovieIn(movies));
+
+        var disabled = AddLibrary("Disabled", "/media/disabled");
+        _options[System.IO.Path.Combine(disabled.Path, "options.xml")] = new LibraryOptions { Enabled = false };
+
+        movies.Tags = ["vault only"];
+        AssertVisible(boxSet, User(all: true, blockedTags: ["vault only"]), false);
+        AssertVisible(boxSet, User(all: true, allowedTags: ["other"]), false);
+        AssertVisible(AddBoxSet(MovieIn(disabled)), User(all: true), false);
+
+        // The libraries are checked with the allowed tags too: a box set carrying the user's allowed tag
+        // still needs a library that carries one. (Under the aggregate root, as in production, a library
+        // skips the allowed tags.)
+        movies.Tags = [];
+        boxSet.Tags = ["family"];
+        AssertVisible(boxSet, User(all: true, allowedTags: ["family"]), false);
+        movies.Tags = ["family"];
+        AssertVisible(boxSet, User(all: true, allowedTags: ["family"]), true);
+    }
+
+    [Fact]
+    public void BoxSet_ChildrenOutsideEveryLibrary_AreNotFolderRestricted()
+    {
+        AddLibrary("Movies", "/media/movies");
+        var boxSet = AddBoxSet(AddMovie(Add(new Folder { Path = "/media/other" }), "/media/other/a.mkv"));
+
+        AssertVisible(boxSet, User(), true);
+    }
+
+    [Fact]
+    public void BoxSet_StoredLibraryFolderIds_ReplaceItsChildrensLibraries()
+    {
+        var movies = AddLibrary("Movies", "/media/movies");
+        var kids = AddLibrary("Kids", "/media/kids");
+        var boxSet = AddBoxSet(MovieIn(movies));
+
+        boxSet.LibraryFolderIds = [kids.Id];
+        AssertVisible(boxSet, User(enabled: [kids.Id]), true);
+        AssertVisible(boxSet, User(enabled: [movies.Id]), false);
+
+        boxSet.LibraryFolderIds = [];
+        AssertVisible(boxSet, User(), true);
+    }
+
+    [Fact]
+    public void BoxSet_NestedBoxSets_ContributeTheirChildrensLibraries_CycleIncluded()
+    {
+        var movies = AddLibrary("Movies", "/media/movies");
+        var kids = AddLibrary("Kids", "/media/kids");
+        var shows = AddLibrary("Shows", "/media/shows");
+        var inner = AddBoxSet(MovieIn(kids));
+        var outer = AddBoxSet(MovieIn(movies), inner);
+        inner.LinkedChildren = [.. inner.LinkedChildren, LinkedChild.Create(outer)];
+
+        AssertVisible(outer, User(enabled: [kids.Id]), true);
+        AssertVisible(inner, User(enabled: [movies.Id]), true);
+        AssertVisible(outer, User(enabled: [shows.Id]), false);
+    }
+
+    [Fact]
+    public void BoxSet_WithAMaximumRating_HiddenOnlyWhenEveryChildIsAboveIt()
+    {
+        var movies = AddLibrary("Movies", "/media/movies");
+        movies.PreferredMetadataCountryCode = "US";
+        RatingScores();
+        var adult = MovieIn(movies);
+        adult.OfficialRating = "R";
+        var family = MovieIn(movies);
+        family.OfficialRating = "PG";
+        var teen = User(all: true);
+        teen.MaxParentalRatingScore = 12;
+
+        AssertVisible(AddBoxSet(adult), teen, false);
+        AssertVisible(AddBoxSet(adult, family), teen, true);
+        AssertVisible(AddBoxSet(adult), User(all: true), true);
+    }
+
+    [Fact]
+    public void AccessPath_BoxSet_DecidesWithAStaticThatThrowsOnEveryCall()
+    {
+        var (saga, movies, vault, kids) = ProductionLikeGraph();
+        movies.PreferredMetadataCountryCode = "US";
+        RatingScores();
+        var family = MovieIn(kids);
+        family.OfficialRating = "PG";
+        saga.OfficialRating = "R";
+        var rated = AddBoxSet(saga, family);
+        var nested = AddBoxSet(AddBoxSet(family));
+        var users = Users(movies, vault, kids);
+        foreach (var user in users)
+        {
+            user.MaxParentalRatingScore = 12;
+        }
+
+        // The rated children make the parental step read them, the nested box set the flattening. Saga
+        // belongs to Movies only (its parent chain), so Vault alone does not admit the box set.
+        var expectedRated = new[] { true, false, true, true, true, true, true, false, true, false, true };
+        var expectedNested = new[] { true, false, true, true, true, true, false, false, true, false, false };
+        Assert.Equal(expectedRated, users.Select(u => rated.IsVisibleStandalone(u)));
+        Assert.Equal(expectedNested, users.Select(u => nested.IsVisibleStandalone(u)));
+        family.OfficialRating = "R";
+        Assert.All(users, u => Assert.False(rated.IsVisibleStandalone(u)));
+        family.OfficialRating = "PG";
+        ThrowingStatic();
+        Assert.Throws<MockException>(() => rated.IsVisibleStandalone(users[0]));
+
+        Assert.Equal(expectedRated, Decisions(rated, users));
+        Assert.Equal(expectedNested, Decisions(nested, users));
+        family.OfficialRating = "R";
+        Assert.All(Decisions(rated, users), Assert.False);
+
+        // Out of this slice: a linked child the lookup does not find is searched by path, through the static.
+        rated.LinkedChildren = [.. rated.LinkedChildren, new LinkedChild { ItemId = Guid.NewGuid() }];
+        Assert.Throws<MockException>(() => _access.GetVisibleItemById<BaseItem>(rated.Id, users[0]));
+    }
+
+    private static void RatingScores() => BaseItem.LocalizationManager = Mock.Of<ILocalizationManager>(l =>
+        l.GetRatingScore("R", "US") == new ParentalRatingScore(17, null)
+        && l.GetRatingScore("PG", "US") == new ParentalRatingScore(10, null));
+
+    private BoxSet AddBoxSet(params BaseItem[] linked) => Add(new BoxSet
+    {
+        Path = "/config/data/collections/" + Guid.NewGuid().ToString("N") + " [boxset]",
+        ParentId = Add(new Folder { Path = "/config/data/collections" }).Id,
+        LinkedChildren = linked.Select(LinkedChild.Create).ToArray(),
+    });
+
     private bool[] Decisions(BaseItem item, params User[] users) =>
         users.Select(u => _access.GetVisibleItemById<BaseItem>(item.Id, u) is not null).ToArray();
 
@@ -467,6 +618,10 @@ public sealed class StandaloneVisibilityTests
         {
             library.ParentId = aggregate.Id;
         }
+
+        // The user's root lists the aggregate root's virtual children too (a box set never belongs to one).
+        aggregate.AddVirtualChild(Add(new Tesserafin.Server.Core.Playlists.PlaylistsFolder { Path = "/config/data/playlists", ParentId = aggregate.Id }));
+        typeof(Tesserafin.Server.Core.Library.LibraryManager).GetField("_rootFolder", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.SetValue(_manager, aggregate);
 
         var userRoot = Add(new UserRootFolder { Path = "/config/data/root/default" });
         Mock.Get(BaseItem.ItemRepository).Setup(r => r.GetItemList(It.Is<InternalItemsQuery>(q => q.ParentId.Equals(userRoot.Id)))).Returns(_libraries);
