@@ -91,7 +91,7 @@ public sealed partial class BaseItemRepository
 
         if (filter.CollapseBoxSetItems == true)
         {
-            dbQuery = ApplyBoxSetCollapsing(context, dbQuery, filter.CollapseBoxSetItemTypes);
+            dbQuery = ApplyBoxSetCollapsing(context, dbQuery, filter.CollapseBoxSetItemTypes, filter.ExcludeItemIds);
 
             // Name filters run after collapse so BoxSets match by their own name, not a child's.
             dbQuery = ApplyNameFilters(dbQuery, filter);
@@ -102,10 +102,13 @@ public sealed partial class BaseItemRepository
         return dbQuery;
     }
 
+    // A box set the query excludes (one the user is refused, GHSA-c5pr-6h39-jp86) groups nothing: its children
+    // stay themselves, decided like any item, instead of bringing it back in their place.
     private IQueryable<BaseItemEntity> ApplyBoxSetCollapsing(
         TesserafinDbContext context,
         IQueryable<BaseItemEntity> dbQuery,
-        BaseItemKind[] collapsibleTypes)
+        BaseItemKind[] collapsibleTypes,
+        Guid[] excludedIds)
     {
         var boxSetTypeName = _itemTypeLookup.BaseItemKindNames[BaseItemKind.BoxSet];
 
@@ -114,7 +117,7 @@ public sealed partial class BaseItemRepository
         if (collapsibleTypes.Length == 0)
         {
             // Collapse all item types into box sets
-            return ApplyBoxSetCollapsingAll(context, currentIds, boxSetTypeName);
+            return ApplyBoxSetCollapsingAll(context, currentIds, boxSetTypeName, excludedIds);
         }
 
         // Only collapse specific item types, keep others untouched
@@ -138,7 +141,7 @@ public sealed partial class BaseItemRepository
             .Where(lc => lc.ChildType == Database.Implementations.Entities.LinkedChildType.Manual
                 && currentIds.Contains(lc.ChildId))
             .Join(
-                context.BaseItems.Where(bs => bs.Type == boxSetTypeName),
+                context.BaseItems.Where(bs => bs.Type == boxSetTypeName && !excludedIds.Contains(bs.Id)),
                 lc => lc.ParentId,
                 bs => bs.Id,
                 (lc, bs) => new { lc.ChildId, lc.ParentId });
@@ -167,14 +170,15 @@ public sealed partial class BaseItemRepository
     private static IQueryable<BaseItemEntity> ApplyBoxSetCollapsingAll(
         TesserafinDbContext context,
         IQueryable<Guid> currentIds,
-        string boxSetTypeName)
+        string boxSetTypeName,
+        Guid[] excludedIds)
     {
         // Single JOIN: manual links to BoxSet parents, restricted to currentIds children.
         var manualBoxSetLinks = context.LinkedChildren
             .Where(lc => lc.ChildType == Database.Implementations.Entities.LinkedChildType.Manual
                 && currentIds.Contains(lc.ChildId))
             .Join(
-                context.BaseItems.Where(bs => bs.Type == boxSetTypeName),
+                context.BaseItems.Where(bs => bs.Type == boxSetTypeName && !excludedIds.Contains(bs.Id)),
                 lc => lc.ParentId,
                 bs => bs.Id,
                 (lc, bs) => new { lc.ChildId, lc.ParentId });

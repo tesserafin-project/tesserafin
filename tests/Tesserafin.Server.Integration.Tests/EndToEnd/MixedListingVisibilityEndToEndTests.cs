@@ -42,6 +42,10 @@ public sealed class MixedListingVisibilityEndToEndTests : IDisposable
         "includeItemTypes=BoxSet,Playlist",
         "includeItemTypes=Movie,BoxSet,Playlist",
         string.Empty,
+
+        // Movies grouped into their box sets: the listing names Movie, yet returns box sets.
+        "includeItemTypes=Movie&collapseBoxSetItems=true",
+        "collapseBoxSetItems=true",
     ];
 
     private readonly string _dataRoot = Path.Combine(Path.GetTempPath(), "reefin-e2e-test-data", "mix-" + Guid.NewGuid().ToString("N")[..8]);
@@ -165,6 +169,20 @@ public sealed class MixedListingVisibilityEndToEndTests : IDisposable
                 }
             }
 
+            // Grouped into box sets: a movie the user may see is listed, itself or through an admitted box set
+            // holding it, never lost behind a refused one.
+            if (filter.Contains("collapseBoxSetItems=true", StringComparison.Ordinal))
+            {
+                foreach (var (movie, set) in new[] { (s.FilmsMovie, s.FilmsSet), (s.KidsMovie, s.KidsSet) })
+                {
+                    using var byId = await client.GetAsync(FormattableString.Invariant($"Items/{movie}?userId={userId}"), TestContext.Current.CancellationToken);
+                    if (byId.StatusCode == HttpStatusCode.OK && !ids.Contains(movie) && !(admitted.Contains(set) && ids.Contains(set)))
+                    {
+                        _wrong.Add(FormattableString.Invariant($"{at}: movie {movie} admitted by id, neither listed nor grouped into an admitted box set"));
+                    }
+                }
+            }
+
             // Paged one at a time: the pages hold the same items, the total never counts a refused one.
             var paged = new List<Guid>();
             for (var start = 0; start < ids.Count + 2; start++)
@@ -210,8 +228,10 @@ public sealed class MixedListingVisibilityEndToEndTests : IDisposable
 
     private static bool Names(string filter, Guid id, Seeded s)
     {
+        // Only a type the filter names must be there; a grouped listing shows a box set only in place of its movies.
         var isSet = id.Equals(s.FilmsSet) || id.Equals(s.KidsSet) || id.Equals(s.EmptySet);
-        return filter.Length != 0 && filter.Contains(isSet ? "BoxSet" : "Playlist", StringComparison.Ordinal);
+        var types = filter.Split('&').FirstOrDefault(p => p.StartsWith("includeItemTypes=", StringComparison.Ordinal))?["includeItemTypes=".Length..].Split(',') ?? [];
+        return types.Contains(isSet ? "BoxSet" : "Playlist");
     }
 
     private async Task<Seeded> SeedAsync(Boot server)
@@ -265,7 +285,7 @@ public sealed class MixedListingVisibilityEndToEndTests : IDisposable
             Assert.Contains(child.ToString("N"), children.RootElement.GetRawText().Replace("-", string.Empty, StringComparison.Ordinal), StringComparison.Ordinal);
         }
 
-        return new Seeded(adminToken, beaToken, beaId, ids["mix-films"], ids["mix-kids"], sets, filmsSet, kidsSet, emptySet, privateList, sharedList, publicList);
+        return new Seeded(adminToken, beaToken, beaId, ids["mix-films"], ids["mix-kids"], sets, filmsSet, kidsSet, emptySet, privateList, sharedList, publicList, filmsMovie, kidsMovie);
     }
 
     private static async Task<Guid> CreatePlaylistAsync(HttpClient owner, Guid ownerId, string name, Guid item, bool isPublic, params Guid[] sharedWith)
@@ -371,7 +391,9 @@ public sealed class MixedListingVisibilityEndToEndTests : IDisposable
         Guid EmptySet,
         Guid PrivateList,
         Guid SharedList,
-        Guid PublicList);
+        Guid PublicList,
+        Guid FilmsMovie,
+        Guid KidsMovie);
 
     private sealed class Boot(string dataRoot) : E2eApplicationFactory
     {

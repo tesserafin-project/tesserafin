@@ -967,8 +967,9 @@ namespace Tesserafin.Controller.Entities
         }
 
         /// <summary>
-        /// A listing that can hold box sets or playlists among other types (or names no type) excludes, in the
-        /// query itself, those the user is refused by id, so its pages and total stay the database's.
+        /// A listing that can hold box sets or playlists among other types (or names no type, or groups its items
+        /// into their box sets) excludes, in the query itself, those the user is refused by id, so its pages and
+        /// total stay the database's.
         /// </summary>
         // ponytail: decides every box set and playlist of the server per such listing; scope the candidates
         // to the query if their number makes listings slow.
@@ -976,7 +977,9 @@ namespace Tesserafin.Controller.Entities
         {
             var user = query.User;
             if (user is null
-                || (query.IncludeItemTypes.Length > 0 && !query.IncludeItemTypes.Any(t => t == BaseItemKind.BoxSet || t == BaseItemKind.Playlist)))
+                || (query.CollapseBoxSetItems != true
+                    && query.IncludeItemTypes.Length > 0
+                    && !query.IncludeItemTypes.Any(t => t == BaseItemKind.BoxSet || t == BaseItemKind.Playlist)))
             {
                 return;
             }
