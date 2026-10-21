@@ -35,6 +35,7 @@ published-image forward-migration proof.
 | Task | Reference |
 | --- | --- |
 | Build, test and format the server | [BUILDING](../BUILDING.md) |
+| Evaluate experimental Jellyfin adoption tooling | [Read-only capture/simulation](adoption/jellyfin-dry-run.md), [reviewed existing-account state apply](adoption/jellyfin-state-apply.md) |
 | Run the local merge gate and understand CI | [Local CI](local-ci.md) |
 | Change/generate the canonical API contract | [OpenAPI contract](openapi-contract.md); use its current-status notes when reading historical sections |
 | Verify the paired generated Web SDK | [SDK provenance gate](../ci/verify-sdk-provenance.sh), [pair lock](../ci/web-pair.lock.json) |
