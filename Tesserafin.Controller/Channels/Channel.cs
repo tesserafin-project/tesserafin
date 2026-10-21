@@ -82,11 +82,20 @@ namespace Tesserafin.Controller.Channels
             return false;
         }
 
-        internal static bool IsChannelVisible(BaseItem channelItem, User user)
+        /// <summary>
+        /// Determines if the channel of a channel item admits a given user.
+        /// </summary>
+        /// <param name="channelItem">The channel item, or the channel itself.</param>
+        /// <param name="user">The user.</param>
+        /// <param name="tagVisibility">Where the data comes from: an <see cref="IBoxSetVisibilityService"/> also supplies the channel by id; otherwise the channel comes through the static <see cref="BaseItem.ChannelManager"/>.</param>
+        /// <returns><c>true</c> if the channel is visible to the user.</returns>
+        internal static bool IsChannelVisible(BaseItem channelItem, User user, ITagVisibilityService tagVisibility)
         {
-            var channel = ChannelManager.GetChannel(channelItem.ChannelId.ToString(string.Empty));
+            var channel = tagVisibility is IBoxSetVisibilityService lookup
+                ? lookup.GetItemById(channelItem.ChannelId) as Channel
+                : ChannelManager.GetChannel(channelItem.ChannelId.ToString(string.Empty));
 
-            return channel.IsVisible(user);
+            return channel.IsVisible(user, false, tagVisibility);
         }
     }
 }

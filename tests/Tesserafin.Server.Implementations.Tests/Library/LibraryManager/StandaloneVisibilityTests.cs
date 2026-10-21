@@ -741,6 +741,38 @@ public sealed class StandaloneVisibilityTests
         Assert.Throws<NullReferenceException>(() => _access.GetVisibleItemById<BaseItem>(item.Id, user));
     }
 
+    [Fact]
+    public void AccessPath_ChannelContent_DecidesWithStaticsThatThrowOnEveryCall()
+    {
+        var (channel, item) = ChannelWithItem();
+        channel.Tags = ["kids"];
+        var users = new[]
+        {
+            ChannelUser(all: true),
+            ChannelUser(enabled: [channel.Id]),
+            ChannelUser(),
+            ChannelUser(all: true, blocked: [channel.Id]),
+            ChannelUser(all: true, blockedTags: ["kids"]),
+            ChannelUser(all: true, allowedTags: ["kids"]),
+        };
+        // The item inherits the channel's tags (its parent), so the allowed tag on the channel admits it.
+        var expected = new[] { true, true, false, false, false, true };
+        Assert.Equal(expected, users.Select(u => item.IsVisibleStandalone(u)));
+
+        // Both statics of the channel branch throw on any call: the channel lookup and the library manager.
+        ThrowingStatic();
+        BaseItem.ChannelManager = new Mock<IChannelManager>(MockBehavior.Strict).Object;
+        Assert.Throws<MockException>(() => item.IsVisibleStandalone(users[0]));
+
+        Assert.Equal(expected, Decisions(item, users));
+        Assert.Equal(expected, Decisions(channel, users));
+
+        // Same process, nothing rebuilt: rights and tags apply on the next decision.
+        users[2].SetPreference(PreferenceKind.EnabledChannels, [channel.Id]);
+        item.Tags = ["kids"];
+        Assert.Equal([true, true, true, false, false, true], Decisions(item, users));
+    }
+
     private static void RatingScores() => BaseItem.LocalizationManager = Mock.Of<ILocalizationManager>(l =>
         l.GetRatingScore("R", "US") == new ParentalRatingScore(17, null)
         && l.GetRatingScore("PG", "US") == new ParentalRatingScore(10, null));

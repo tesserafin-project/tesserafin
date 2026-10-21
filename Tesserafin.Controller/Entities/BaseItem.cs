@@ -2122,7 +2122,7 @@ namespace Tesserafin.Controller.Entities
         {
             if (SourceType == SourceType.Channel)
             {
-                return IsVisibleStandaloneInternal(user, false, tagVisibility) && Channel.IsChannelVisible(this, user);
+                return IsVisibleStandaloneInternal(user, false, tagVisibility) && Channel.IsChannelVisible(this, user, tagVisibility);
             }
 
             return IsVisibleStandaloneInternal(user, true, tagVisibility);

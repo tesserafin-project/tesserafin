@@ -120,8 +120,7 @@ Still static on the access-by-id path:
 - a rating's country code once neither the item, its parents nor its libraries carry one
   (`LibraryManager.GetLibraryOptions`, library options);
 - ~~box sets that are not legacy~~ (DEBT-SERVER-5, below);
-- channel content (`IsVisibleStandalone` for `SourceType.Channel`: `Channel.IsChannelVisible` reads the
-  static `ChannelManager`, then `Channel.IsVisible(User)` without the service).
+- ~~channel content~~ (DEBT-SERVER-6, below).
 
 DEBT-SERVER-5 (2026-10-20): a box set that is not legacy reads its data through
 `IBoxSetVisibilityService` (an `IStandaloneVisibilityService` that also supplies an item by id;
@@ -136,6 +135,18 @@ are only libraries, so they never matched and the service lists libraries only. 
 pins the box set on both paths and under a strict static. Still static there: a linked child without an
 id or that the lookup does not find (`GetLinkedChild`, path search), besides the country-code fallback and
 channel content above.
+
+DEBT-SERVER-6 (2026-10-21): channel content (`IsVisibleStandalone` for `SourceType.Channel`, the channel
+itself included, whose channel id is its own) takes its channel by id from `IBoxSetVisibilityService.GetItemById`
+when the check carries that service, as the access path does, instead of the static `ChannelManager`
+(`GetChannel` was `LibraryManager.GetItemById(id) as Channel`, the same lookup). The channel's own check
+(`Channel.IsVisible`: blocked/enabled channels, then the folder and parental rules with allowed tags applied)
+now receives the service too, so its tags and parents no longer come through the static `LibraryManager`.
+No service: unchanged, the static. A channel id that resolves to nothing is still dereferenced (pre-existing,
+pinned, not changed here). `IsChannelVisible` is internal: no public signature changed. `StandaloneVisibilityTests`
+pins the branch on both paths and runs the access path with both statics strict; dropping either the lookup
+or the service hand-off reddens it (`IChannelManager.GetChannel`, `ILibraryManager.GetCollectionFolders`).
+Still static on the access-by-id path: the country-code fallback and box-set linked children not found by id.
 
 ### Mutation And Registration
 
