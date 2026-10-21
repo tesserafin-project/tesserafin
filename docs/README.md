@@ -44,6 +44,12 @@ published-image forward-migration proof.
 
 ## Engineering records
 
+The [metadata access proposal](metadata-provider-decision.md) records dated
+primary-source findings and unresolved commercial/distribution questions for
+TMDB, TheAudioDB and OMDb. It is pending owner decision and changes no credentials
+or provider defaults.
+
+
 The [documentation inventory](documentation-inventory.md) records the selected
 cleanup, which entry points remain authoritative, and which material is retained
 as evidence. No archive or removal is implied by a filename.
