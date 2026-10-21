@@ -137,11 +137,20 @@ echo "== image under test: ${IMAGE} =="
 # ===========================================================================
 echo "== 0. prepare volumes + one media fixture =="
 mkdir -p "${MEDIA}/Test Movie (2020)"
+# The work directory and snapshots stay private (umask 077), but this generated
+# public fixture must be traversable by the candidate server UID 10000. A bind
+# mount preserves host modes; 0700 host-runner directories make an empty scan.
+chmod 755 "${MEDIA}" "${MEDIA}/Test Movie (2020)"
 mkvol "${V_CFG}" "${V_CACHE}" "${V_DATA}"
 docker run --rm --user 0:0 --entrypoint /usr/lib/jellyfin-ffmpeg/ffmpeg \
   -v "${MEDIA}:/m" "${IMAGE}" \
   -y -f lavfi -i testsrc=duration=30:size=160x120:rate=5 \
   -pix_fmt yuv420p "/m/Test Movie (2020)/Test Movie (2020).mp4" >/dev/null 2>&1
+chmod 644 "${MEDIA}/Test Movie (2020)/Test Movie (2020).mp4"
+docker run --rm --entrypoint /bin/sh -v "${MEDIA}:/media:ro" "${IMAGE}" \
+  -c 'test -r "/media/Test Movie (2020)/Test Movie (2020).mp4"' \
+  && pass "generated fixture readable as the candidate server user" \
+  || { fail "generated fixture unreadable as the candidate server user"; exit 1; }
 chown_vols "${V_CFG}" "${V_CACHE}" "${V_DATA}"
 
 echo "== 1. first boot on empty volumes (Gate 1: migrations create the schema) =="
