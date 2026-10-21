@@ -26,6 +26,14 @@ a credential bound to your own account with that provider.
 All three keys are read once, when the provider is first resolved. **Changing a key
 requires a server restart** to take effect.
 
+## Usage rights and paid clients
+
+An API key enables requests; it does not by itself establish permission for every
+use of the returned data or artwork. Review the provider's current terms for your
+use. Project-owned access and the planned paid official clients remain a separate
+[provider-by-provider decision](metadata-provider-decision.md); supplying an
+operator key does not resolve that product decision.
+
 ## TheMovieDb (TMDb)
 
 ### Getting a key
