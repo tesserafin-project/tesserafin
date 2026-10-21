@@ -61,77 +61,22 @@ clients are roadmap items, not shipped software.
 
 ## Install and run
 
-The prebuilt container image is the 1.0 install path. Nothing needs to be built
-from source. Tesserafin 1.1.0 adds native Linux packages
-([`docs/distribution/L0-linux-packages.md`](docs/distribution/L0-linux-packages.md))
-and an unsigned native `win-x64` portable ZIP
-([`docs/distribution/install-windows.md`](docs/distribution/install-windows.md),
-which also documents the MSI; the MSI is not attached to the 1.1.0 release).
+[Choose an installation path](docs/install.md) for Docker/NAS, native Linux or
+the Windows `win-x64` portable ZIP. The guide identifies published artifacts,
+verification steps and the limitations of each path; building from source is
+[development](#development).
 
-The native Linux files are on the
-[1.1.0 release page](https://github.com/tesserafin-project/tesserafin/releases/tag/v1.1.0)
-(attached 2026-09-17). They are unsigned, and there is no APT or DNF repository: download the
-file for your distribution and architecture and install it with your package manager. For
-`linux-x64`, download `SHA256SUMS-linux-x64.txt` into the same directory and check the file
-first:
+| Task | Start here |
+| --- | --- |
+| First installation | [Installation guide](docs/install.md) |
+| Onboarding, browsing and playback | [User guide](docs/user-guide.md) |
+| Health, logs, backup, restore and upgrades | [Administrator guide](docs/admin-guide.md) |
+| Find a guide or an engineering reference | [Documentation index](docs/README.md) |
+| Report a problem | [Support](docs/support.md) |
 
-```bash
-sha256sum -c --ignore-missing SHA256SUMS-linux-x64.txt
-```
-
-The output must name the file you are about to install, followed by `OK` — for example
-`tesserafin-server_1.0.0-1_amd64.deb: OK`. `--ignore-missing` skips every listed file that is not
-in the directory (the list also names two `1.0.0-2` packages that are not attached), so a file
-the output does not name was not checked. This establishes that the download is intact. It does
-not establish where the file came from: the checksum list is served from the same release page
-and neither it nor the packages are signed.
-
-No checksum file is published for the `arm64` / `aarch64` files. What a package installs, the
-service it registers and what is not claimed are in L0.
-
-**Start here: [`docs/container/A3-guided-install.md`](docs/container/A3-guided-install.md)**
-— the guided NAS / Docker operator guide, five steps from nothing to an onboarded
-server.
-
-That guide covers:
-
-- **Docker Compose** as the canonical path, using the repository's
-  [`docker-compose.yml`](docker-compose.yml) and [`.env.example`](.env.example).
-  The Compose file pins its image by immutable digest, so the shipped file and the
-  guide bring up the same build.
-- **Persistent volumes** for `/config`, `/data` and `/cache`, created with the
-  correct ownership on first boot. The volume, permission, backup and restore
-  contract is [`docs/container/A2-persistent-state.md`](docs/container/A2-persistent-state.md).
-- **NAS guidance**, including a host bind-mount variant, an
-  [Unraid template](deployment/unraid/docker-templates/tesserafin.xml) and
-  Synology DSM Container Manager steps.
-- **Browser onboarding** at `http://<host-ip>:8096/`, where the server redirects
-  `/` to `/web/` and serves the wizard: language, admin account, first library.
-- **Hardware acceleration** is optional — see
-  [`docs/container/A4-hardware-acceleration.md`](docs/container/A4-hardware-acceleration.md).
-  A host with no GPU transcodes in software with zero configuration.
-
-The public release package is `ghcr.io/tesserafin-project/server`.
-
-```console
-$ docker pull ghcr.io/tesserafin-project/server:1.0.0
-```
-
-> **Only the release package is public.** `ghcr.io/tesserafin-project/server`
-> holds the published release and nothing else, and it needs no authentication.
-> The build package `ghcr.io/tesserafin-project/tesserafin-server`, the web-assets
-> package `ghcr.io/tesserafin-project/tesserafin-web-assets` and the frozen pre-v1
-> archive `ghcr.io/tesserafin-project/tesserafin` stay private; they are build
-> provenance, not something you install from.
-
-Once it is installed, [`docs/user-guide.md`](docs/user-guide.md) covers first-run
-onboarding, signing in, browsing a library and searching, and
-[`docs/admin-guide.md`](docs/admin-guide.md) is the entry point for running it:
-what you are running, health and logs, backup and restore, upgrades,
-transcoding, and the limits worth knowing. Upgrades and the tag
-contract are documented in full in
-[`docs/container/A6-versioning-and-upgrades.md`](docs/container/A6-versioning-and-upgrades.md).
-Building from source is a development activity — see [Development](#development).
+The public container package is `ghcr.io/tesserafin-project/server`. Private
+build packages and inherited development images are not installation fallbacks.
+No mutable public image channel is published.
 
 ## Product principles
 
@@ -155,7 +100,9 @@ Building from source is a development activity — see [Development](#developmen
 | [tesserafin-project/tesserafin](https://github.com/tesserafin-project/tesserafin) | This repository: the server, its container packaging, and the server-owned contracts (OpenAPI document, version contract, release-pair gate). |
 | [tesserafin-project/tesserafin-web](https://github.com/tesserafin-project/tesserafin-web) | Tesserafin Web — the browser and desktop reference client, bundled into the server image. |
 
-Native mobile and TV clients have no repository yet; they are roadmap items.
+Native Android foundations live in the separately developed mobile repository.
+They are not a shipped client: [the native tracker](https://github.com/tesserafin-project/tesserafin/issues/221)
+distinguishes the incomplete phone vertical from later Android TV delivery.
 
 ## Development
 

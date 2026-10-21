@@ -4,6 +4,12 @@ Issue [#225]. This document is the artifact contract for the downloadable native
 Linux server distribution: what is produced, what is inside it, what the service
 does on your machine, and — just as importantly — what is *not* claimed.
 
+For the current release downloads and installation commands, start with the
+[installation guide](../install.md#native-linux). The provenance and acceptance
+records below describe their original artifacts; they are not a promise that
+every build output or sidecar is attached to a public release. In particular,
+there is no APT/DNF repository and no signed-package claim.
+
 Docker/OCI remains an equally supported distribution path. Nothing here changes
 it. See `docs/container/` for that half.
 

@@ -2,7 +2,7 @@
 
 This is the contributor guide for building, testing, and linting the Tesserafin
 server from a fresh clone. It is a development document — for installing a
-release, see the [README](README.md) and `docs/container/`.
+release, see the [installation guide](docs/install.md).
 
 Everything below is exactly what Continuous Integration runs, so a change that
 is green locally is green in CI for the same reasons.

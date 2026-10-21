@@ -8,127 +8,52 @@ Prerequisites: [A1](./A1-implementation-note.md) (the image),
 [A2](./A2-persistent-state.md) (volumes, migrations, backup/restore),
 [A3](./A3-guided-install.md) (installation).
 
-> **Epoch note (added after the fact; nothing below is rewritten).** Every image
-> reference, tag and digest recorded in this document is a **pre-v1 development
-> artifact** in the frozen archive package
-> `ghcr.io/tesserafin-project/tesserafin`. Tesserafin public SemVer begins at
-> `1.0.0` and the public release package is
-> `ghcr.io/tesserafin-project/server` — see
-> [docs/versioning-policy.md](../versioning-policy.md).
+> **Current operator scope.** Use the public release package
+> `ghcr.io/tesserafin-project/server` and the immutable reference selected in
+> [the installation guide](../install.md). The development/audit evidence in the
+> later sections is retained at its original paths and identities; it is not a
+> source of supported installation defaults. No mutable public channel exists.
 >
-> The evidence recorded here remains valid **as evidence**: it proves the upgrade
-> harness preserves users, libraries, configuration and playback state across two
-> immutable builds. It does **not** establish a forward-migration boundary inside
-> the `1.x` epoch, and none of these `12.x` images is a member of the supported
-> `1.x` upgrade graph. [#127](https://github.com/tesserafin-project/tesserafin/issues/127)
-> remains open for that reason.
+> The historical harness proves state preservation between its recorded builds.
+> It does not prove a pending forward migration between published `1.x` images;
+> [#127](https://github.com/tesserafin-project/tesserafin/issues/127) remains the
+> separate acceptance gate. No database downgrade or backport is promised here.
 
 ---
 
 ## 1. Where the version comes from
 
-There is exactly one canonical version source:
+`SharedVersion.cs` supplies the numeric application version. Ask the existing
+contract rather than inferring it from a release label:
 
+```sh
+docker/version-contract.sh version
 ```
-SharedVersion.cs  ->  [assembly: AssemblyVersion("12.0.0")]
-```
 
-An assembly version is numeric-only, so it carries the release **core**
-(`MAJOR.MINOR.PATCH`) and never a SemVer pre-release suffix. A pre-release is
-expressed by the git release tag (`v12.1.0-rc.1`); the contract requires the
-tag's core to equal the canonical version.
-
-Everything downstream is derived, never re-declared:
-
-| Surface | Derived from |
-|---|---|
-| Image tags | `docker/version-contract.sh` |
-| `org.opencontainers.image.version` | the `VERSION` build arg, from the contract |
-| `org.opencontainers.image.revision` | the `VCS_REF` build arg, from the contract |
-| `/health` `version` field | the running assembly version |
-| `/System/Info/Public` `Version` | the running assembly version |
-| `<VersionPrefix>` in every csproj | `./bump_version` |
-
-`docker/version-verify.sh` asserts that all of them agree for a real image, and
-`docker/version-contract.test.sh` asserts the tag derivation itself, including
-that `docker buildx bake --print` reproduces the contract's tags byte for byte.
-
----
+The published `v1.1.0` native assets still contain `1.0.0` in their filenames and
+application version. Those are different identifiers, not a reason to rename the
+downloads. [The version policy](../versioning-policy.md) owns this distinction.
+Image labels, `/health`, `/System/Info/Public` and build metadata must agree with
+the application version of the artifact they describe.
 
 ## 2. The tag policy
 
-`docker/version-contract.sh` is the only place that derives a tag. Ask it rather
-than constructing one by hand:
+[The version policy](../versioning-policy.md) is authoritative for publication.
+The existing public container release is `ghcr.io/tesserafin-project/server:1.0.0`;
+the checked-in Compose file pins its immutable digest. There is no published
+`latest`, `stable`, `preview`, `1` or `1.0` channel. Do not invent one or use a
+private development package as an installation fallback.
 
-```console
-$ docker/version-contract.sh version
-12.0.0
-
-$ docker/version-contract.sh tags --channel dev
-ghcr.io/tesserafin-project/tesserafin:12.0.0-dev.<12-char commit>
-ghcr.io/tesserafin-project/tesserafin:sha-<40-char commit>
-
-$ docker/version-contract.sh check --channel stable --release-tag v12.1.0
-```
-
-### Development tags — immutable
-
-| Tag | Mutability | Audience |
-|---|---|---|
-| `<version>-dev.<12-char commit>` | **immutable** | maintainers, gate runs, pre-release pinning |
-| `sha-<40-char commit>` | **immutable** | automation that already knows the commit |
-
-Both name exactly one source commit forever. They are what every pre-release
-Tesserafin image published so far uses, and what the checked-in Compose file
-pins. A dev build can never produce `latest`, `preview`, or a bare version tag.
-
-### Pre-release tags
-
-For an explicit SemVer pre-release such as `12.1.0-rc.1`:
-
-| Tag | Mutability | Audience |
-|---|---|---|
-| `12.1.0-rc.1` | **immutable** | testers who want that exact release candidate |
-| `preview` | **mutable** | testers who want the newest pre-release, whatever it is |
-| `sha-<commit>` | **immutable** | automation |
-
-A pre-release **never** updates `latest`. The contract refuses it, and the
-release workflow asserts it separately.
-
-### Stable release tags
-
-For a stable release such as `12.1.0`:
-
-| Tag | Mutability | Audience |
-|---|---|---|
-| `12.1.0` | **immutable** | production; the only tag suitable for pinning |
-| `12.1` | **mutable** — moves on every 12.1.x patch | operators who accept automatic patch updates |
-| `12` | **mutable** — moves on every 12.x release | operators who accept automatic minor updates |
-| `latest` | **mutable** — moves on every stable release | evaluation and demos, not production |
-| `sha-<commit>` | **immutable** | automation |
-
-Only an explicit stable release may move `latest`.
+Development tag derivation in `docker/version-contract.sh` serves build
+provenance; it does not publish a release. Historical `12.x` references below
+belong to the frozen archive and are outside the supported `1.x` upgrade graph.
 
 ### Compose policy
 
-The checked-in `docker-compose.yml` and the NAS examples default to an
-**immutable** reference — a digest or an exact immutable version tag. They never
-default to `latest`, `preview`, a major tag or a minor tag, because a
-`docker compose pull` would then silently change the running version, possibly
-across a schema migration, at a moment nobody chose.
-
-Opting into a moving channel is a deliberate, documented act:
-
-```dotenv
-# .env — opt in explicitly, and understand what you are accepting
-TESSERAFIN_IMAGE=ghcr.io/tesserafin-project/tesserafin:12
-```
-
-**Channel-tag risks.** With a moving tag, `docker compose pull && docker compose
-up -d` can cross a version boundary you did not plan, run forward migrations you
-did not schedule, and leave you with a database the previous image can no longer
-read. Nothing warns you first. If you take a channel tag, take the backup in §4
-on a schedule, not on intuition.
+Keep `TESSERAFIN_IMAGE` unset to use the checked-in digest, or select an exact
+published immutable reference in `.env`. Pulling that reference does not choose
+a future version for you. Before deliberately replacing it, record the old
+reference and take the backup in section 4. See section 3 for the current pin.
 
 ---
 
@@ -140,7 +65,7 @@ was not produced by the contract and should not be trusted.
 ```console
 # What the image claims
 $ docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}} {{index .Config.Labels "org.opencontainers.image.revision"}}' \
-    ghcr.io/tesserafin-project/tesserafin:<tag>
+    ghcr.io/tesserafin-project/server:1.0.0
 
 # Which exact image is running, by digest
 $ docker inspect --format '{{.Image}} {{.Config.Image}}' tesserafin
@@ -148,7 +73,7 @@ $ docker image inspect --format '{{index .RepoDigests 0}}' <image>
 
 # What the running application reports
 $ curl -fsS http://localhost:8096/health
-{"status":"healthy","version":"12.0.0","database":"healthy"}
+{"status":"healthy","version":"1.0.0","database":"healthy"}
 ```
 
 `/health` answers the same JSON schema from the moment the container starts. It
@@ -159,7 +84,7 @@ the readiness contract, not a fault. Readiness is `200` **and**
 To check everything at once against a real container:
 
 ```console
-$ docker/version-verify.sh ghcr.io/tesserafin-project/tesserafin:<tag> --require-digest
+$ docker/version-verify.sh ghcr.io/tesserafin-project/server:1.0.0 --require-digest
 ```
 
 ### Pinning to an exact version or digest
@@ -175,8 +100,8 @@ TESSERAFIN_IMAGE=ghcr.io/tesserafin-project/server@sha256:bc7587bc7d99b40d777700
 Resolve a tag to its digest before pinning:
 
 ```console
-$ docker pull ghcr.io/tesserafin-project/tesserafin:<tag>
-$ docker image inspect --format '{{index .RepoDigests 0}}' ghcr.io/tesserafin-project/tesserafin:<tag>
+$ docker pull ghcr.io/tesserafin-project/server:1.0.0
+$ docker image inspect --format '{{index .RepoDigests 0}}' ghcr.io/tesserafin-project/server:1.0.0
 ```
 
 ---
@@ -185,9 +110,10 @@ $ docker image inspect --format '{{index .RepoDigests 0}}' ghcr.io/tesserafin-pr
 
 ### What is supported
 
-* **Forward upgrades across one minor version** (for example 12.0.x → 12.1.x)
-  are supported. Skipping several minor versions in one step is not covered by
-  the rehearsal; upgrade through the intervening minor versions.
+* **Use only an explicitly published and accepted target.** A release label is
+  not a verified database migration boundary. When newer minor targets exist,
+  proceed through intervening minors; skipping them has no acceptance evidence.
+  The genuine published-image forward-migration proof remains #127.
 * **Migrations run automatically on container replacement.** There is no manual
   migration command, no SQL to run, and no maintenance mode. The server runs its
   migration routines during startup and only then answers `/health` as healthy.

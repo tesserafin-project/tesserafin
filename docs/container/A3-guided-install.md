@@ -12,7 +12,7 @@ Related docs:
   [`A4-hardware-acceleration.md`](./A4-hardware-acceleration.md) — optional; this
   guide needs none of it, since the server transcodes in software with no
   configuration when it finds no GPU
-- Image publication tracker: #113
+- Installation choices and published artifacts: [installation guide](../install.md)
 
 ## The image
 
@@ -54,14 +54,12 @@ ghcr.io/tesserafin-project/server:1.0.0
   recorded in the image's `org.tesserafin.web.revision` label and in
   `/opt/tesserafin-web.revision.json` inside the image.
 
-- **This is a development pre-release tag. It does NOT auto-update.** To move to a
-  newer build you change the tag yourself (and take a backup first — see A2). The
-  tag policy, the digest-pinning procedure and the full upgrade contract are in
-  [`A6-versioning-and-upgrades.md`](./A6-versioning-and-upgrades.md); this guide
-  covers installation only and does not restate them.
-- The GHCR package is currently **private**: run `docker login ghcr.io` once with a
-  GitHub token that can read packages before pulling. (A public, login-free pull is
-  a project-owner decision tracked in #113.)
+- This is the published **1.0.0 release**, not a development channel. It does
+  not auto-update. Choose any future replacement deliberately and take a backup
+  first; see [A6](./A6-versioning-and-upgrades.md).
+- The release package is **public**. No GHCR login or GitHub token is needed.
+  The similarly named `tesserafin-server` build package and frozen `tesserafin`
+  archive are separate; do not substitute them for the release package.
 
 > **Do not use `12.0.0-dev.e2999e4e2feb` for this guide.** That earlier image is
 > API-only: it runs with `--nowebclient` and bundles no web client, so
@@ -86,7 +84,6 @@ ghcr.io/tesserafin-project/server:1.0.0
   (`docker compose version` works), or a NAS with a container manager (Unraid /
   Synology sections below).
 - Somewhere to keep your media files, reachable from the host.
-- `docker login ghcr.io` completed (see above).
 
 You do **not** need: the Tesserafin source, a compiler, the .NET SDK, or Jellyfin's
 installation docs.
@@ -189,11 +186,14 @@ spaces are supported (quote them). See A2 for the full permission model.
 
 ## Unraid
 
-Add the template repository and install from Community Applications:
+Use the repository’s [Unraid template](../../deployment/unraid/docker-templates/tesserafin.xml);
+this does not claim a published Community Applications catalogue listing:
 
 1. Docker tab → Template Repositories →
    `https://github.com/tesserafin-project/tesserafin/tree/master/deployment/unraid/docker-templates`
-2. Add Container → select **Tesserafin**.
+2. Add Container → select **Tesserafin** from the template, if your Unraid version
+   supports adding template repositories; otherwise import the linked template
+   using its supported custom-template mechanism.
 3. Confirm the mappings: WebUI port `8096`; `/config`, `/data`, `/cache` under
    `/mnt/user/appdata/tesserafin/…`; `/media` set to your library and **read-only**.
 4. Apply, then open `http://<unraid-ip>:8096/` and complete onboarding (as above).
@@ -223,7 +223,7 @@ DSM 7.2+ with **Container Manager** installed.
 7. **Run**, then open `http://<synology-ip>:8096/` and complete onboarding.
 
 Notes:
-- The immutable dev tag does **not** auto-update; pull a new tag deliberately and
+- The immutable release reference does **not** auto-update; pull a new tag deliberately and
   back up first — see [`A6-versioning-and-upgrades.md`](./A6-versioning-and-upgrades.md).
 - Back up `/config` + `/data` per [`A2-persistent-state.md`](./A2-persistent-state.md).
 - Only DSM steps that are standard Container Manager operations are described here;
