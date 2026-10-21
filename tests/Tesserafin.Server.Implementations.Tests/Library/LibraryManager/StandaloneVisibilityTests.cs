@@ -4,6 +4,7 @@ using System.Linq;
 using AutoFixture;
 using AutoFixture.AutoMoq;
 using Moq;
+using Tesserafin.Controller.Channels;
 using Tesserafin.Controller.Configuration;
 using Tesserafin.Controller.Entities;
 using Tesserafin.Controller.Entities.Movies;
@@ -90,6 +91,8 @@ public sealed class StandaloneVisibilityTests
         CollectionFolder.XmlSerializer = xml.Object;
 
         BaseItem.LibraryManager = manager;
+        BaseItem.ChannelManager = Mock.Of<IChannelManager>();
+        Mock.Get(BaseItem.ChannelManager).Setup(c => c.GetChannel(It.IsAny<string>())).Returns((string id) => (manager.GetItemById(id) as Channel)!);
         BaseItem.ItemRepository = repository.Object;
         BaseItem.ConfigurationManager = configuration.Object;
         BaseItem.MediaSourceManager = Mock.Of<IMediaSourceManager>(m => m.GetPathProtocol(It.IsAny<string>()) == MediaProtocol.File);
@@ -666,6 +669,78 @@ public sealed class StandaloneVisibilityTests
         Assert.Equal([true, true], Decisions(boxSet, bea, alex));
     }
 
+    [Fact]
+    public void ChannelContent_EnabledAndBlockedChannels_DecideTheItemAndTheChannel()
+    {
+        var (channel, item) = ChannelWithItem();
+        var other = Guid.NewGuid();
+
+        // A blocked-channels list, when the user has one, replaces both the enable-all permission and the enabled list.
+        var users = new[]
+        {
+            ChannelUser(all: true),
+            ChannelUser(enabled: [channel.Id]),
+            ChannelUser(enabled: [other]),
+            ChannelUser(),
+            ChannelUser(all: true, blocked: [channel.Id]),
+            ChannelUser(blocked: [other]),
+            ChannelUser(enabled: [channel.Id], blocked: [channel.Id]),
+        };
+        var expected = new[] { true, true, false, false, false, true, false };
+
+        Assert.Equal(expected, users.Select(u => Decide(item, u)));
+        Assert.Equal(expected, users.Select(u => Decide(channel, u)));
+    }
+
+    [Fact]
+    public void ChannelContent_ItemTags_ChannelTags_AndAllowedTagsOnBoth()
+    {
+        var (channel, item) = ChannelWithItem();
+
+        AssertVisible(item, ChannelUser(all: true, blockedTags: ["late"]), true);
+        item.Tags = ["late"];
+        AssertVisible(item, ChannelUser(all: true, blockedTags: ["late"]), false);
+        item.Tags = [];
+        channel.Tags = ["late"];
+        AssertVisible(item, ChannelUser(all: true, blockedTags: ["late"]), false);
+
+        // The channel is checked with allowed tags applied, so an allowed tag on the item alone is not enough.
+        channel.Tags = [];
+        item.Tags = ["kids"];
+        AssertVisible(item, ChannelUser(all: true, allowedTags: ["kids"]), false);
+        channel.Tags = ["kids"];
+        AssertVisible(item, ChannelUser(all: true, allowedTags: ["kids"]), true);
+    }
+
+    [Fact]
+    public void ChannelContent_ARatedChannel_HidesItsContentAboveTheUsersMaximum()
+    {
+        var (channel, item) = ChannelWithItem();
+        RatingScores();
+        channel.PreferredMetadataCountryCode = "US";
+        item.PreferredMetadataCountryCode = "US";
+        channel.OfficialRating = "R";
+        var teen = ChannelUser(all: true);
+        teen.MaxParentalRatingScore = 12;
+
+        AssertVisible(item, teen, false);
+        channel.OfficialRating = "PG";
+        AssertVisible(item, teen, true);
+        item.OfficialRating = "R";
+        AssertVisible(item, teen, false);
+    }
+
+    [Fact]
+    public void ChannelContent_ChannelNotFound_Throws_OnBothPaths()
+    {
+        // Pre-existing: a channel id that resolves to nothing is dereferenced, not denied.
+        var item = Add(new Movie { Path = "http://channel.invalid/a.mp4", ChannelId = Guid.NewGuid() });
+        var user = ChannelUser(all: true);
+
+        Assert.Throws<NullReferenceException>(() => item.IsVisibleStandalone(user));
+        Assert.Throws<NullReferenceException>(() => _access.GetVisibleItemById<BaseItem>(item.Id, user));
+    }
+
     private static void RatingScores() => BaseItem.LocalizationManager = Mock.Of<ILocalizationManager>(l =>
         l.GetRatingScore("R", "US") == new ParentalRatingScore(17, null)
         && l.GetRatingScore("PG", "US") == new ParentalRatingScore(10, null));
@@ -741,6 +816,26 @@ public sealed class StandaloneVisibilityTests
         user.SetPreference(PreferenceKind.BlockedMediaFolders, blocked ?? []);
         user.SetPreference(PreferenceKind.BlockedTags, blockedTags ?? []);
         user.SetPreference(PreferenceKind.AllowedTags, allowedTags ?? []);
+        return user;
+    }
+
+    /// <summary>
+    /// The production shape of channel content: a channel under no parent whose channel id is its own
+    /// id, under its internal metadata path, and an item of that channel parented to it, with a remote path.
+    /// </summary>
+    private (Channel Channel, Movie Item) ChannelWithItem()
+    {
+        var id = Guid.NewGuid();
+        var channel = Add(new Channel { Id = id, ChannelId = id, Path = Channel.GetInternalMetadataPath("/config/metadata", id) });
+        return (channel, Add(new Movie { Path = "http://channel.invalid/a.mp4", ChannelId = id, ParentId = id }));
+    }
+
+    private static User ChannelUser(bool all = false, Guid[]? enabled = null, Guid[]? blocked = null, string[]? blockedTags = null, string[]? allowedTags = null)
+    {
+        var user = User(all: true, blockedTags: blockedTags, allowedTags: allowedTags);
+        user.SetPermission(PermissionKind.EnableAllChannels, all);
+        user.SetPreference(PreferenceKind.EnabledChannels, enabled ?? []);
+        user.SetPreference(PreferenceKind.BlockedChannels, blocked ?? []);
         return user;
     }
 
