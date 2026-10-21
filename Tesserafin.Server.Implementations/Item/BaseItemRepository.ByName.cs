@@ -122,6 +122,9 @@ public sealed partial class BaseItemRepository
             MediaTypes = filter.MediaTypes,
             AncestorIds = filter.AncestorIds,
             ItemIds = filter.ItemIds,
+
+            // The items whose values are listed: those the user is refused by id add none (GHSA-c5pr-6h39-jp86).
+            ExcludeItemIds = filter.ExcludeItemIds,
             TopParentIds = filter.TopParentIds,
             ParentId = filter.ParentId,
             IsAiring = filter.IsAiring,

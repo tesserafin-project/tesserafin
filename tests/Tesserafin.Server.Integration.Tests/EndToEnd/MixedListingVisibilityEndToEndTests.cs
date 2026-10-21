@@ -104,6 +104,130 @@ public sealed class MixedListingVisibilityEndToEndTests : IDisposable
         Assert.True(_wrong.Count == 0, string.Join(Environment.NewLine, _wrong));
     }
 
+    /// <summary>
+    /// Counts, filters, genres and studios aggregate only what access by id admits: a refused box set or playlist
+    /// adds no count and no value, an admitted one still does.
+    /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
+    [Fact(Timeout = 600_000)]
+    public async Task Aggregates_CountAndDescribeOnlyWhatAccessByIdAdmits()
+    {
+        using var server = new Boot(_dataRoot);
+        var s = await SeedAsync(server);
+        using var admin = server.AdminClient(s.AdminToken);
+        using var bea = server.ClientFor("mix-bea", s.BeaToken);
+
+        // Each value is carried by one item only, so it may appear exactly when that item is admitted.
+        var marked = new (Guid Id, string Mark, int Year)[]
+        {
+            (s.FilmsMovie, "film", 1903), (s.KidsSet, "kidsset", 1901), (s.PrivateList, "private", 1902), (s.SharedList, "shared", 1904),
+        };
+        var library = server.Services.GetRequiredService<ILibraryManager>();
+        foreach (var (id, mark, year) in marked)
+        {
+            var item = library.GetItemById(id)!;
+            item.Genres = ["mixg-" + mark];
+            item.Studios = ["mixs-" + mark];
+            item.Tags = ["mixt-" + mark];
+            item.OfficialRating = "mixr-" + mark;
+            item.ProductionYear = year;
+            await item.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, CancellationToken.None);
+
+            // As the library validators leave them: one presentation key each, or the by-name listing folds them into one.
+            foreach (BaseItem byName in new BaseItem[] { library.GetGenre("mixg-" + mark), library.GetStudio("mixs-" + mark) })
+            {
+                byName.PresentationUniqueKey = byName.CreatePresentationUniqueKey();
+                await byName.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, CancellationToken.None);
+            }
+        }
+
+        // Scoped to a parent too: each library and the playlists folder that hold the marked items.
+        var parents = new[] { Guid.Empty, s.Films, s.Sets, library.GetItemById(s.SharedList)!.ParentId };
+
+        await UpdatePolicyAsync(admin, s.BeaId, p =>
+        {
+            p["EnableAllFolders"] = false;
+            p["EnabledFolders"] = Ids(s.Films, s.Sets);
+        });
+        await AssertAggregatesAsync("Films and the box-set library", bea, s.BeaId, marked, parents);
+
+        await UpdatePolicyAsync(admin, s.BeaId, p => p["EnabledFolders"] = Ids(s.Films, s.Kids, s.Sets));
+        await AssertAggregatesAsync("Films, Kids and the box-set library", bea, s.BeaId, marked, parents);
+
+        await UpdatePolicyAsync(admin, s.BeaId, p =>
+        {
+            p["EnableAllFolders"] = true;
+            p["EnabledFolders"] = Ids();
+            p["BlockedMediaFolders"] = Ids(s.Kids);
+        });
+        await AssertAggregatesAsync("all libraries, Kids blocked", bea, s.BeaId, marked, parents);
+
+        Assert.True(_wrong.Count == 0, string.Join(Environment.NewLine, _wrong));
+    }
+
+    private async Task AssertAggregatesAsync(string state, HttpClient client, Guid userId, (Guid Id, string Mark, int Year)[] marked, Guid[] parents)
+    {
+        var admitted = new HashSet<Guid>();
+        foreach (var (id, _, _) in marked)
+        {
+            using var response = await client.GetAsync(FormattableString.Invariant($"Items/{id}?userId={userId}"), TestContext.Current.CancellationToken);
+            if (response.StatusCode == HttpStatusCode.OK)
+            {
+                admitted.Add(id);
+            }
+        }
+
+        // Counts: as many box sets as the (already fixed) box-set listing holds.
+        using (var counts = JsonDocument.Parse(await client.GetStringAsync(FormattableString.Invariant($"Items/Counts?userId={userId}"), TestContext.Current.CancellationToken)))
+        {
+            using var sets = JsonDocument.Parse(await client.GetStringAsync(FormattableString.Invariant($"Items?recursive=true&includeItemTypes=BoxSet&userId={userId}"), TestContext.Current.CancellationToken));
+            var expected = sets.RootElement.GetProperty("TotalRecordCount").GetInt32();
+            var actual = counts.RootElement.GetProperty("BoxSetCount").GetInt32();
+            if (actual != expected)
+            {
+                _wrong.Add(FormattableString.Invariant($"{state}, Items/Counts: BoxSetCount {actual}, the listing holds {expected}"));
+            }
+        }
+
+        var seen = new HashSet<(string Route, Guid Id)>();
+        var typeFilters = new[] { string.Empty, "Movie", "BoxSet", "Playlist", "Movie,BoxSet", "Movie,Playlist", "Movie,BoxSet,Playlist" };
+        foreach (var (parent, types) in parents.SelectMany(p => typeFilters.Select(t => (p, t))))
+        {
+            var filter = (types.Length == 0 ? string.Empty : "&includeItemTypes=" + types) + (parent.Equals(Guid.Empty) ? string.Empty : "&parentId=" + parent);
+            foreach (var route in new[] { "Items/Filters", "Items/Filters2", "Genres", "Studios" })
+            {
+                var url = FormattableString.Invariant($"{route}?userId={userId}{filter}");
+                var body = await client.GetStringAsync(url, TestContext.Current.CancellationToken);
+                using var document = JsonDocument.Parse(body);
+                var years = route == "Items/Filters" && document.RootElement.TryGetProperty("Years", out var y) && y.ValueKind == JsonValueKind.Array
+                    ? y.EnumerateArray().Select(e => e.GetInt32()).ToHashSet()
+                    : [];
+                foreach (var (id, mark, year) in marked)
+                {
+                    var shown = body.Contains("-" + mark + "\"", StringComparison.Ordinal) || years.Contains(year);
+                    if (shown && !admitted.Contains(id))
+                    {
+                        _wrong.Add(FormattableString.Invariant($"{state}, {url}: describes '{mark}', refused by id"));
+                    }
+
+                    if (shown)
+                    {
+                        seen.Add((route, id));
+                    }
+                }
+            }
+        }
+
+        // The control: each route shows every admitted item's values somewhere, so an absence above means something.
+        foreach (var route in new[] { "Items/Filters", "Items/Filters2", "Genres", "Studios" })
+        {
+            foreach (var (id, mark, _) in marked.Where(m => admitted.Contains(m.Id) && !seen.Contains((route, m.Id))))
+            {
+                _wrong.Add(FormattableString.Invariant($"{state}, {route}: never shows '{mark}', admitted by id"));
+            }
+        }
+    }
+
     private static JsonArray Ids(params Guid[] ids) => new(ids.Select(i => (JsonNode)i.ToString()).ToArray());
 
     private static async Task UpdatePolicyAsync(HttpClient admin, Guid userId, Action<JsonObject> change)
