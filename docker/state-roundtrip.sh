@@ -310,6 +310,16 @@ docker run -d --name "${C_B}" -p "127.0.0.1:${PORT_B}:8096" \
 wait_api "${PORT_B}" || { echo "restored server never answered"; docker logs "${C_B}" | tail -40; exit 1; }
 wait_ready "${PORT_B}" || { echo "restored server never left the 503 startup phase"; docker logs "${C_B}" | tail -40; exit 1; }
 
+# Check the ORIGINAL persisted tokens before a fresh login on the same device
+# rotates its token. Reauthentication is still asserted immediately afterwards.
+python3 "${REPO_ROOT}/docker/recovery-state.py" capture "${PORT_B}" \
+  < "${WORK}/recovery-fixture.json" > "${WORK}/recovery-after.json"
+if cmp -s "${WORK}/recovery-before.json" "${WORK}/recovery-after.json"; then
+  pass "extended state restored identically by user/item/pack identity"
+else
+  fail "extended recovery state differs; no private snapshots printed"
+fi
+
 AUTH2="$(apipost "${PORT_B}" "/Users/AuthenticateByName" "" \
   "{\"Username\":\"${ADMIN_USER}\",\"Pw\":\"${ADMIN_PASS}\"}")"
 TOKEN2="$(echo "${AUTH2}" | jq_py 'd["AccessToken"]')"
@@ -325,13 +335,6 @@ echo "  after:  users=${AFTER_USERS} libs=${AFTER_LIBS} play=${AFTER_PLAY}"
 [[ "${AFTER_LIBS}"  == "${BEFORE_LIBS}"  ]] && pass "libraries restored identically" || fail "library set differs"
 [[ "${AFTER_PLAY}"  == "${BEFORE_PLAY}" && "${AFTER_PLAY}" != "MISSING" ]] \
   && pass "playback state restored (${AFTER_PLAY})" || fail "playback state differs (${AFTER_PLAY} != ${BEFORE_PLAY})"
-python3 "${REPO_ROOT}/docker/recovery-state.py" capture "${PORT_B}" \
-  < "${WORK}/recovery-fixture.json" > "${WORK}/recovery-after.json"
-if cmp -s "${WORK}/recovery-before.json" "${WORK}/recovery-after.json"; then
-  pass "extended state restored identically by user/item/pack identity"
-else
-  fail "extended recovery state differs; no private snapshots printed"
-fi
 docker rm -f "${C_B}" >/dev/null 2>&1 || true
 
 echo "== 6. bind-mount support incl. paths with spaces (F) =="
