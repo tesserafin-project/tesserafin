@@ -31,8 +31,6 @@ jobs:
       packages: read
     env:
       CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
-      DOCKER_CONFIG: ${{ runner.temp }}/recovery-docker-config
-      EVIDENCE_DIR: ${{ runner.temp }}/recovery-evidence
     steps:
       - name: Checkout exact candidate
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -43,6 +41,9 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
+          export EVIDENCE_DIR="$RUNNER_TEMP/recovery-evidence"
+          export DOCKER_CONFIG="$RUNNER_TEMP/recovery-docker-config"
+          printf 'EVIDENCE_DIR=%s\nDOCKER_CONFIG=%s\n' "$EVIDENCE_DIR" "$DOCKER_CONFIG" >> "$GITHUB_ENV"
           mkdir -p "$EVIDENCE_DIR" "$DOCKER_CONFIG"
           python3 ci/tests/recovery-evidence.test.py
           python3 ci/recovery-evidence.py init --expected-source "$CANDIDATE_SHA" --out "$EVIDENCE_DIR/source.json"
