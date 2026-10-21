@@ -60,6 +60,9 @@ class ContainerPreflightTests(unittest.TestCase):
             # unrelated checksum failure intercepting restore first.
             if state in ("false", "true") and inspect_exit == 0:
                 checksum.unlink()
+                if script == "backup":
+                    archive.unlink()
+                    manifest.unlink()
             result = subprocess.run(args, env=env, capture_output=True, text=True,
                                     timeout=10, check=False)
             recorded = [json.loads(line) for line in calls.read_text().splitlines()] if calls.exists() else []

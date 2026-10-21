@@ -5,7 +5,11 @@ on:
     paths:
       - 'docker/backup.sh'
       - 'docker/restore.sh'
+      - 'docker/state-roundtrip.sh'
+      - 'docker/recovery-state.py'
       - 'ci/tests/backup-container-preflight.test.py'
+      - 'ci/tests/backup-output-preservation.test.py'
+      - 'ci/tests/recovery-state.test.py'
       - 'docs/backup-recovery.md'
       - '.github/workflows/backup-preflight.yml'
   push:
@@ -13,7 +17,11 @@ on:
     paths:
       - 'docker/backup.sh'
       - 'docker/restore.sh'
+      - 'docker/state-roundtrip.sh'
+      - 'docker/recovery-state.py'
       - 'ci/tests/backup-container-preflight.test.py'
+      - 'ci/tests/backup-output-preservation.test.py'
+      - 'ci/tests/recovery-state.test.py'
       - '.github/workflows/backup-preflight.yml'
 
 permissions:
@@ -21,7 +29,7 @@ permissions:
 
 jobs:
   preflight:
-    name: Container-state refusal
+    name: Container state and recovery artifacts
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -31,6 +39,9 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - name: Check shell syntax
-        run: bash -n docker/backup.sh docker/restore.sh
+        run: bash -n docker/backup.sh docker/restore.sh docker/state-roundtrip.sh
       - name: Exercise backup and restore entry points
-        run: python3 ci/tests/backup-container-preflight.test.py
+        run: |
+          python3 ci/tests/backup-container-preflight.test.py
+          python3 ci/tests/backup-output-preservation.test.py
+          python3 ci/tests/recovery-state.test.py

@@ -32,7 +32,11 @@ these names.
    deployment configuration. Record any external certificates/proxy configuration
    separately too. Keep source media on its own backup plan.
 2. Choose a new archive filename in an existing private backup directory. Avoid
-   overwriting an earlier recovery point. When supplying `--container`, the script
+   overwriting an earlier recovery point: the script refuses an existing archive
+   or either sidecar, including dangling symlinks, before stopping the source.
+   Concurrent backups to that filename are excluded by an adjacent `.lock`
+   directory. If a process was forcibly killed, verify no backup is active before
+   removing its stale lock, or choose a fresh filename. When supplying `--container`, the script
    must successfully inspect that container before any snapshot; a missing or
    uninspectable container is an error, not evidence that the server is stopped.
 
@@ -50,7 +54,9 @@ these names.
 3. Retain the archive, `.sha256` and `.manifest.json` together on separate storage.
    The files contain users, tokens and private configuration; the script creates
    them owner-only. The manifest describes sources and exclusions, not a restore
-   success. The checksum detects changed bytes when the sidecar is trusted; it
+   success. Files are published without replacing an existing destination; a
+   failed attempt removes only sidecars it created. The checksum detects changed
+   bytes when the sidecar is trusted; it
    does not authenticate the archive's origin.
 4. Restore into new, empty volumes. Create each volume separately. Keep the
    original state intact and ensure no server writes to the replacement volumes.
@@ -99,11 +105,48 @@ including restore with `--force`. Positive controls reach the helper for a known
 stopped container and stop a running backup source before snapshotting. It does
 **not** simulate a database restore or certify a Docker daemon.
 
+The output-preservation check also drives the actual backup CLI. It verifies
+refusal of an existing archive, either sidecar, dangling symlinks and an existing
+lock before volume access; failed-snapshot cleanup; private successful output;
+and collisions introduced during snapshotting. This protects earlier recovery
+points without claiming a new artifact-based server restore run.
+
 ```sh
 python3 ci/tests/backup-container-preflight.test.py
+python3 ci/tests/backup-output-preservation.test.py
+python3 ci/tests/recovery-state.test.py
 # Requires Docker and the selected image; this is a separate, heavier test:
 docker/state-roundtrip.sh <immutable-image-reference> <unused-local-port>
 ```
+
+## Extended recovery rehearsal (prepared, not executed here)
+
+The A2 script now uses [`docker/recovery-state.py`](../docker/recovery-state.py)
+to seed and capture a second user before backup, and to validate and compare an
+independent restored instance. Its oracle requires nonempty expected values both
+before and after, so equally empty snapshots do not pass:
+
+| State | Assertion prepared in the rehearsal |
+| --- | --- |
+| User identity and credentials | Both user IDs are stable; both pre-backup tokens still identify their respective users; the member password authenticates again, alongside the existing fresh administrator login. |
+| Policy and user preferences | Full API policy/configuration snapshots are equal; the member is non-administrator, has audio transcoding disabled, prefers French audio and disables next-episode autoplay. |
+| Per-user item state | The administrator retains watched-state; the member retains a distinct favourite, play count, last-played date and a nonzero, non-completed saved position for the same item. |
+| Libraries | IDs, names, collection type, mount paths and library options are equal. |
+| Server configuration | A deliberately changed server name is preserved. This is one setting, not every possible external service/plugin setting. |
+| Content packs | Created pack ID/metadata and exact member item IDs are equal. |
+
+The saved position is seeded through the public user-data API, independently of
+the existing playback-report fixture. It checks persisted user state, not a
+browser's ability to resume a playable media version or A/V synchronization.
+Tokens and fixture snapshots remain in the private temporary work directory and
+are removed by cleanup; mismatch output does not print their contents.
+
+The oracle's local tests reject missing favourites/positions, mixed user state,
+policy/preference loss, missing libraries, changed pack identity/membership and
+server-setting loss. These tests do **not** execute Docker or certify a server
+artifact. A full run on the selected immutable current-contract image is still
+required before treating any new assertion as recovery evidence. Native service,
+off-host/disk-loss and genuine cross-schema migration rehearsals remain separate.
 
 ## Remaining acceptance work
 
@@ -112,7 +155,7 @@ be lost. Create implementation issues only after a reproducible defect.
 
 | Scenario | Required evidence before claiming it |
 | --- | --- |
-| Favourites and resume position | Seed a favourite and a nonzero, non-completed resume point; assert both before backup and after an independent restore, by user and item identity. The current A2 clip proves watched-state only. |
+| Favourites and resume position | Execute the extended rehearsal on the selected immutable image. The oracle now requires a favourite and nonzero saved position by user/item identity, but this change does not supply a new Docker execution or real player-resume proof. |
 | Native Linux and Windows disaster recovery | Artifact-based stopped-service backup/restore on the selected platform, preserving persistent directories, credentials, service identity/permissions and media paths. |
 | Newer database schema | Genuine published-image migration with preservation assertions under #127; an unchanged-schema round trip is insufficient. |
 | Disk-loss recovery | Off-host copy available, matching artifact and deployment configuration retained, and an isolated recovery with source storage unavailable. |

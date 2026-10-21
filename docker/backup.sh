@@ -24,7 +24,8 @@
 #                    [--container NAME] [--helper-image IMG]
 #
 #   --out         destination archive path on the host (a .sha256 sidecar and a
-#                 .manifest.json sidecar are written next to it)
+#                 .manifest.json sidecar are written next to it; an existing
+#                 archive or sidecar is never overwritten)
 #   --config      docker volume (or host path) mounted at /config in the server
 #   --data        docker volume (or host path) mounted at /data in the server
 #   --container   server container to quiesce around the snapshot (recommended)
@@ -88,9 +89,19 @@ umask 077
 OUT_DIR="$(cd "$(dirname "${OUT}")" && pwd)"
 OUT_BASE="$(basename "${OUT}")"
 OUT_ABS="${OUT_DIR}/${OUT_BASE}"
-# Stream into a clearly-invalid partial name; only rename to the real archive once
+# Stream into a private temporary directory; only publish the real archive once
 # the whole snapshot succeeded, so a mid-stream failure never looks like a backup.
-TMP_OUT="${OUT_ABS}.partial.$$"
+# Reserve this destination before stopping the source. The directory lock excludes
+# other cooperating backup processes; a leftover lock refuses conservatively.
+LOCK_DIR="${OUT_ABS}.lock"
+if ! mkdir -- "${LOCK_DIR}"; then
+  echo "backup destination is locked: ${OUT_ABS}; choose another filename" >&2
+  exit 1
+fi
+TMP_DIR=""
+TMP_OUT=""
+SHA_PUBLISHED=0
+MANIFEST_PUBLISHED=0
 
 WAS_RUNNING=0
 PUBLISHED=0
@@ -98,7 +109,12 @@ cleanup() {
   # On any early/error exit: drop partial output and (best-effort) restart the
   # server. The authoritative restart with its exit-code handling runs in-line
   # below; this trap only covers failures that abort before we reach it.
-  [[ "${PUBLISHED}" == 1 ]] || rm -f "${TMP_OUT}" "${OUT_ABS}.sha256" "${OUT_ABS}.manifest.json"
+  if [[ "${PUBLISHED}" != 1 ]]; then
+    [[ "${SHA_PUBLISHED}" == 0 ]] || rm -f -- "${OUT_ABS}.sha256"
+    [[ "${MANIFEST_PUBLISHED}" == 0 ]] || rm -f -- "${OUT_ABS}.manifest.json"
+  fi
+  [[ -z "${TMP_DIR}" ]] || rm -rf -- "${TMP_DIR}"
+  rmdir -- "${LOCK_DIR}"
   if [[ "${WAS_RUNNING}" == 1 ]]; then
     if [[ "$(docker inspect -f '{{.State.Running}}' "${CONTAINER}" 2>/dev/null || echo false)" != "true" ]]; then
       ${TF_RESTART_CMD:-docker start} "${CONTAINER}" >/dev/null 2>&1 || true
@@ -106,6 +122,17 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
+
+# Refuse every existing recovery artifact, including dangling symlinks. The
+# cleanup trap only removes sidecars actually published by this invocation.
+for artifact in "${OUT_ABS}" "${OUT_ABS}.sha256" "${OUT_ABS}.manifest.json"; do
+  if [[ -e "${artifact}" || -L "${artifact}" ]]; then
+    echo "backup destination already exists: ${artifact}; choose another filename" >&2
+    exit 1
+  fi
+done
+TMP_DIR="$(mktemp -d -- "${OUT_ABS}.partial.XXXXXXXX")"
+TMP_OUT="${TMP_DIR}/archive"
 
 # --- Quiesce the server for a consistent SQLite snapshot -------------------
 if [[ -n "${CONTAINER}" ]]; then
@@ -135,13 +162,13 @@ fi
 # --- Sidecars: integrity + manifest (written before publishing the archive) ---
 SHA="$(sha256sum "${TMP_OUT}" | awk '{print $1}')"
 SIZE="$(stat -c %s "${TMP_OUT}")"
-echo "${SHA}  ${OUT_BASE}" > "${OUT_ABS}.sha256"
+echo "${SHA}  ${OUT_BASE}" > "${TMP_DIR}/checksum"
 
 # Emit the manifest with a real JSON encoder so free-form host paths / container
 # names cannot break the document (no unescaped interpolation).
 CONTAINER="${CONTAINER}" CONFIG_VOL="${CONFIG_VOL}" DATA_VOL="${DATA_VOL}" \
 OUT_BASE="${OUT_BASE}" SHA="${SHA}" SIZE="${SIZE}" HELPER="${HELPER}" \
-python3 - > "${OUT_ABS}.manifest.json" <<'PY'
+python3 - > "${TMP_DIR}/manifest" <<'PY'
 import json, os
 print(json.dumps({
     "tool": "tesserafin backup.sh",
@@ -159,8 +186,14 @@ print(json.dumps({
 }, indent=2))
 PY
 
-# Publish the archive atomically now that its sidecars are in place.
-mv "${TMP_OUT}" "${OUT_ABS}"
+# Publish without replacing any file, even if a non-cooperating writer creates
+# one after the preflight. All files are on the same filesystem. The archive is
+# the final publication marker; failures remove only this invocation's sidecars.
+ln -- "${TMP_DIR}/checksum" "${OUT_ABS}.sha256"
+SHA_PUBLISHED=1
+ln -- "${TMP_DIR}/manifest" "${OUT_ABS}.manifest.json"
+MANIFEST_PUBLISHED=1
+ln -- "${TMP_OUT}" "${OUT_ABS}"
 PUBLISHED=1
 
 # --- Restart the server, and FAIL LOUDLY if it cannot be restored ----------
@@ -171,6 +204,8 @@ if [[ "${WAS_RUNNING}" == 1 ]]; then
     RESTART_FAILED=1
   fi
 fi
+rm -rf -- "${TMP_DIR}"
+rmdir -- "${LOCK_DIR}"
 trap - EXIT
 
 echo "== backup complete =="

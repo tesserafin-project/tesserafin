@@ -33,6 +33,7 @@
 #
 # Usage: docker/state-roundtrip.sh [<image-ref>] [<host-port>]
 set -euo pipefail
+umask 077
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # Default image: the dev tag for THIS working tree, asked of the one place that
@@ -204,6 +205,14 @@ echo "  before: users=${BEFORE_USERS} libs=${BEFORE_LIBS} play=${BEFORE_PLAY}"
 [[ "${BEFORE_PLAY}" == "Played=True|PlayCount=1" ]] && pass "playback state recorded (${BEFORE_PLAY})" \
   || fail "playback state not stored (got ${BEFORE_PLAY})"
 
+echo "== 2a. seed and capture extended per-user recovery state =="
+TF_RECOVERY_TOKEN="${TOKEN}" python3 "${REPO_ROOT}/docker/recovery-state.py" \
+  seed "${PORT_A}" "${USERID}" "${ITEMID}" > "${WORK}/recovery-fixture.json"
+python3 "${REPO_ROOT}/docker/recovery-state.py" capture "${PORT_A}" \
+  < "${WORK}/recovery-fixture.json" > "${WORK}/recovery-before.json"
+BEFORE_USERS="$(apiget "${PORT_A}" "/Users" "${TOKEN}" | jq_py 'sorted(u["Name"] for u in d)')"
+pass "distinct users, saved position, favourite, policies, configuration, pack and tokens seeded"
+
 echo "== 3. backup (server stopped for a consistent snapshot, then restarted) =="
 "${REPO_ROOT}/docker/backup.sh" --out "${ARCHIVE}" \
   --config "${V_CFG}" --data "${V_DATA}" --container "${C_A}"
@@ -307,6 +316,13 @@ echo "  after:  users=${AFTER_USERS} libs=${AFTER_LIBS} play=${AFTER_PLAY}"
 [[ "${AFTER_LIBS}"  == "${BEFORE_LIBS}"  ]] && pass "libraries restored identically" || fail "library set differs"
 [[ "${AFTER_PLAY}"  == "${BEFORE_PLAY}" && "${AFTER_PLAY}" != "MISSING" ]] \
   && pass "playback state restored (${AFTER_PLAY})" || fail "playback state differs (${AFTER_PLAY} != ${BEFORE_PLAY})"
+python3 "${REPO_ROOT}/docker/recovery-state.py" capture "${PORT_B}" \
+  < "${WORK}/recovery-fixture.json" > "${WORK}/recovery-after.json"
+if cmp -s "${WORK}/recovery-before.json" "${WORK}/recovery-after.json"; then
+  pass "extended state restored identically by user/item/pack identity"
+else
+  fail "extended recovery state differs; no private snapshots printed"
+fi
 docker rm -f "${C_B}" >/dev/null 2>&1 || true
 
 echo "== 6. bind-mount support incl. paths with spaces (F) =="
