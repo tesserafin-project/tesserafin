@@ -64,7 +64,7 @@ class RecoveryOracleTests(unittest.TestCase):
             def __init__(self):
                 self.calls = []
 
-            def call(self, method, path, token="", body=None, device="recovery-admin"):
+            def call(self, method, path, token="", body=None, device="tf-a2-rt"):
                 self.calls.append((method, path, token, body, device))
                 if path == "/Users/Me":
                     return {"Id": "member" if token == "member-secret" else "admin"}

@@ -22,8 +22,8 @@ class Api:
             raise ValueError("expected a local test port between 1024 and 65535")
         self.base = f"http://127.0.0.1:{port}"
 
-    def call(self, method, path, token="", body=None, device="recovery-admin"):
-        header = f'MediaBrowser Client="tf-a2", Device="recovery", DeviceId="{device}", Version="1.0"'
+    def call(self, method, path, token="", body=None, device="tf-a2-rt"):
+        header = f'MediaBrowser Client="tf-a2", Device="roundtrip", DeviceId="{device}", Version="1.0"'
         if token:
             header += f', Token="{token}"'
         data = json.dumps(body).encode() if body is not None else None
@@ -74,11 +74,12 @@ def capture(api, fixture):
         token = fixture[role + "_token"]
         # This deliberately uses the pre-backup token after recovery, proving its
         # persisted authentication rather than silently replacing it with a login.
-        current = api.call("GET", "/Users/Me", token, device="recovery-" + role)
+        device = "tf-a2-rt" if role == "admin" else "recovery-member"
+        current = api.call("GET", "/Users/Me", token, device=device)
         require(current["Id"] == fixture[role + "_id"], f"{role} token changed identity")
         user = api.call("GET", f'/Users/{current["Id"]}', admin_token)
         items = api.call("GET", f'/Items?userId={current["Id"]}&ids={fixture["item_id"]}',
-                         token, device="recovery-" + role)["Items"]
+                         token, device=device)["Items"]
         require(len(items) == 1 and items[0]["Id"] == fixture["item_id"],
                 f"{role} item missing or changed identity")
         users.append({"role": role, "Id": user["Id"], "Name": user["Name"],
