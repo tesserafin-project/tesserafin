@@ -142,7 +142,7 @@ mkdir -p "${MEDIA}/Test Movie (2020)"
 # mount preserves host modes; 0700 host-runner directories make an empty scan.
 chmod 755 "${MEDIA}" "${MEDIA}/Test Movie (2020)"
 mkvol "${V_CFG}" "${V_CACHE}" "${V_DATA}"
-docker run --rm --user 0:0 --entrypoint /usr/lib/jellyfin-ffmpeg/ffmpeg \
+docker run --rm --user "$(id -u):$(id -g)" --entrypoint /usr/lib/jellyfin-ffmpeg/ffmpeg \
   -v "${MEDIA}:/m" "${IMAGE}" \
   -y -f lavfi -i testsrc=duration=30:size=160x120:rate=5 \
   -pix_fmt yuv420p "/m/Test Movie (2020)/Test Movie (2020).mp4" >/dev/null 2>&1
