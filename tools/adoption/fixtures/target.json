@@ -1,0 +1,45 @@
+{
+  "items": [
+    {
+      "Id": "t-item",
+      "Name": "Example",
+      "Path": "/media/movies/movie.mkv",
+      "ProviderIds": {
+        "Tmdb": "fixture-provider"
+      },
+      "RunTimeTicks": 1000000000,
+      "Type": "Movie"
+    }
+  ],
+  "libraries": [
+    {
+      "Locations": [
+        "/media"
+      ],
+      "Name": "Movies"
+    }
+  ],
+  "product": "tesserafin",
+  "schemaVersion": 1,
+  "serverId": "t-server",
+  "userItems": {
+    "t-user": [
+      {
+        "Id": "t-item",
+        "UserData": {
+          "IsFavorite": false,
+          "PlayCount": 0,
+          "PlaybackPositionTicks": 0,
+          "Played": false
+        }
+      }
+    ]
+  },
+  "users": [
+    {
+      "Id": "t-user",
+      "Name": "Household"
+    }
+  ],
+  "version": "1.0.0"
+}

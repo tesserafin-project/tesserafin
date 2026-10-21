@@ -1,0 +1,46 @@
+{
+  "items": [
+    {
+      "Id": "s-item",
+      "Name": "Example",
+      "Path": "D:\\Movies\\movie.mkv",
+      "ProviderIds": {
+        "Tmdb": "fixture-provider"
+      },
+      "RunTimeTicks": 1000000000,
+      "Type": "Movie"
+    }
+  ],
+  "libraries": [
+    {
+      "Locations": [
+        "/media"
+      ],
+      "Name": "Movies"
+    }
+  ],
+  "product": "jellyfin",
+  "schemaVersion": 1,
+  "serverId": "s-server",
+  "userItems": {
+    "s-user": [
+      {
+        "Id": "s-item",
+        "UserData": {
+          "IsFavorite": true,
+          "LastPlayedDate": "2026-10-20T12:00:00Z",
+          "PlayCount": 3,
+          "PlaybackPositionTicks": 0,
+          "Played": true
+        }
+      }
+    ]
+  },
+  "users": [
+    {
+      "Id": "s-user",
+      "Name": "Household"
+    }
+  ],
+  "version": "10.10.7"
+}

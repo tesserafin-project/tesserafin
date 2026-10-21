@@ -1,0 +1,24 @@
+name: Adoption dry run
+on:
+  pull_request:
+    paths:
+      - 'tools/adoption/**'
+      - 'docs/adoption/jellyfin-dry-run.md'
+      - '.github/workflows/adoption-dry-run.yml'
+  push:
+    branches: [master]
+    paths:
+      - 'tools/adoption/**'
+      - '.github/workflows/adoption-dry-run.yml'
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - run: python3 -m unittest discover -s tools/adoption -p 'test_*.py' -v
