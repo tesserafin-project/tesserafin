@@ -27,6 +27,7 @@ topic, but paths, service commands and log locations are the ones in L0 and
 | know exactly which build is running | [A6 §3 — inspecting what you are actually running](./container/A6-versioning-and-upgrades.md) |
 | check whether the server is healthy | [A5 §1 — `GET /health`](./container/A5-observability.md) |
 | read or ship the logs | [A5 §2 — structured logs](./container/A5-observability.md) |
+| inspect remote-access network observations | [Read-only diagnostics API](./remote-access-diagnostics.md) |
 | back up, or restore a backup | [A2 — backup and restore](./container/A2-persistent-state.md) |
 | upgrade to a newer image | [A6 §4 — the upgrade contract](./container/A6-versioning-and-upgrades.md) |
 | understand or fix transcoding | [A4 — hardware acceleration and the software fallback](./container/A4-hardware-acceleration.md) |
