@@ -72,6 +72,9 @@ Take a backup first (below) so a failed upgrade can be rolled back.
 
 ## Backup and restore
 
+For the recovery sequence, archive-format distinction and remaining proof gaps,
+see the [backup and recovery baseline](../backup-recovery.md).
+
 Both scripts operate on the **stateful volumes** (`config` + `data`) through a throwaway
 helper container, so they work with docker named volumes as well as host bind mounts and
 need no host-side root. SQLite is only guaranteed consistent while the server is stopped,
@@ -83,7 +86,8 @@ docker/backup.sh --out /backups/tesserafin-$(date +%F).tgz \
   --config tf_config --data tf_data --container tesserafin
 
 # Restore into fresh volumes (target must be empty, or pass --force)
-docker volume create tf_config_new tf_data_new
+docker volume create tf_config_new
+docker volume create tf_data_new
 docker/restore.sh --archive /backups/tesserafin-2026-07-23.tgz \
   --config tf_config_new --data tf_data_new
 # then start the server on the restored volumes; migrations apply on boot
@@ -93,7 +97,9 @@ docker/restore.sh --archive /backups/tesserafin-2026-07-23.tgz \
 `<archive>.manifest.json` (contents, expected uid/gid, source volumes, helper image).
 `restore.sh` verifies the `.sha256` when present, validates the archive structure,
 refuses to overwrite non-empty target volumes without `--force`, and re-asserts
-`10000:10000` ownership after extraction.
+`10000:10000` ownership after extraction. When `--container` is supplied, both scripts
+refuse an unsuccessful or malformed container-state inspection before accessing
+volumes. An unknown state is never treated as stopped, including with `--force`.
 
 ### Safety contract
 

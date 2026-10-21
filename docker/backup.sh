@@ -66,6 +66,22 @@ done
 [[ -n "${OUT}" && -n "${CONFIG_VOL}" && -n "${DATA_VOL}" ]] \
   || { echo "usage: backup.sh --out ARCHIVE --config VOL --data VOL [--container NAME]" >&2; exit 2; }
 
+# Unknown is not stopped. A misspelled container, inaccessible daemon or failed
+# inspection must never silently turn a requested cold snapshot/restore into
+# volume access while the real server could still be writing. Validate before
+# backup output/cleanup is armed and before restore reads any volume.
+CONTAINER_RUNNING=""
+if [[ -n "${CONTAINER}" ]]; then
+  if ! CONTAINER_RUNNING="$(docker inspect --type container -f '{{.State.Running}}' "${CONTAINER}")"; then
+    echo "cannot determine whether ${CONTAINER} is running; refusing volume access" >&2
+    exit 1
+  fi
+  case "${CONTAINER_RUNNING}" in
+    true|false) ;;
+    *) echo "cannot determine whether ${CONTAINER} is running (unexpected inspect result); refusing volume access" >&2; exit 1 ;;
+  esac
+fi
+
 # Private-by-default: archive + sidecars are created 0600, owned by the invoking user.
 umask 077
 
@@ -93,7 +109,7 @@ trap cleanup EXIT
 
 # --- Quiesce the server for a consistent SQLite snapshot -------------------
 if [[ -n "${CONTAINER}" ]]; then
-  if [[ "$(docker inspect -f '{{.State.Running}}' "${CONTAINER}" 2>/dev/null || echo false)" == "true" ]]; then
+  if [[ "${CONTAINER_RUNNING}" == "true" ]]; then
     WAS_RUNNING=1
     echo "== stopping ${CONTAINER} for a consistent snapshot =="
     docker stop "${CONTAINER}" >/dev/null

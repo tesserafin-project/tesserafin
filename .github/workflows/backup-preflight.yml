@@ -1,0 +1,36 @@
+name: Backup preflight
+
+on:
+  pull_request:
+    paths:
+      - 'docker/backup.sh'
+      - 'docker/restore.sh'
+      - 'ci/tests/backup-container-preflight.test.py'
+      - 'docs/backup-recovery.md'
+      - '.github/workflows/backup-preflight.yml'
+  push:
+    branches: [master]
+    paths:
+      - 'docker/backup.sh'
+      - 'docker/restore.sh'
+      - 'ci/tests/backup-container-preflight.test.py'
+      - '.github/workflows/backup-preflight.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    name: Container-state refusal
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Check shell syntax
+        run: bash -n docker/backup.sh docker/restore.sh
+      - name: Exercise backup and restore entry points
+        run: python3 ci/tests/backup-container-preflight.test.py
