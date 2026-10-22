@@ -46,6 +46,7 @@ public sealed class StandaloneVisibilityTests
     private readonly Dictionary<Guid, BaseItem> _items = [];
     private readonly List<Folder> _libraries = [];
     private readonly Dictionary<string, LibraryOptions> _options = [];
+    private readonly HashSet<string> _recordings = [];
     private readonly IItemAccessService _access;
     private readonly IServerConfigurationManager _configuration;
     private readonly Tesserafin.Server.Core.Library.LibraryManager _manager;
@@ -103,7 +104,10 @@ public sealed class StandaloneVisibilityTests
         BaseItem.ItemRepository = repository.Object;
         BaseItem.ConfigurationManager = configuration.Object;
         BaseItem.MediaSourceManager = Mock.Of<IMediaSourceManager>(m => m.GetPathProtocol(It.IsAny<string>()) == MediaProtocol.File);
+        // A path in _recordings is an active recording (Record).
         Video.RecordingsManager = Mock.Of<IRecordingsManager>();
+        Mock.Get(Video.RecordingsManager).Setup(r => r.GetActiveRecordingInfo(It.IsAny<string>()))
+            .Returns((string path) => _recordings.Contains(path) ? new ActiveRecordingInfo { Path = path } : null);
 
         var fileSystem = new Mock<Tesserafin.Model.IO.IFileSystem>();
         fileSystem.Setup(f => f.ContainsSubPath(It.IsAny<string>(), It.IsAny<string>()))
@@ -998,6 +1002,48 @@ public sealed class StandaloneVisibilityTests
     }
 
     [Fact]
+    public void ActiveRecording_AVideoOfAnUnknownChannel_TakesTheLibraryBranch_OnBothPaths()
+    {
+        // A video with a channel id is channel content, unless it is an active recording: its source type is then
+        // live TV, and the check takes the library branch, which does not look the channel up.
+        var item = Add(new Video { Path = "/media/recordings/a.ts", ChannelId = Guid.NewGuid() });
+        var user = ChannelUser(all: true);
+
+        Assert.Throws<NullReferenceException>(() => item.IsVisibleStandalone(user));
+        Assert.Throws<NullReferenceException>(() => _access.GetVisibleItemById<BaseItem>(item.Id, user));
+
+        Record(item);
+        AssertVisible(item, user, true);
+
+        _recordings.Clear();
+        Assert.Throws<NullReferenceException>(() => _access.GetVisibleItemById<BaseItem>(item.Id, user));
+    }
+
+    [Fact]
+    public void ActiveRecording_AnUnratedChannelVideo_IsUnratedOtherInsteadOfChannelContent()
+    {
+        // The unrated type of a plain video is channel content when its source type is the channel, else other;
+        // a movie's is its own, recording or not.
+        var (channel, movie) = ChannelWithItem();
+        var video = Add(new Video { Path = "/media/recordings/b.ts", ChannelId = channel.Id, ParentId = channel.Id });
+        var users = new[]
+        {
+            ChannelUser(all: true),
+            BlockingUnrated(UnratedItem.ChannelContent),
+            BlockingUnrated(UnratedItem.Other),
+            BlockingUnrated(UnratedItem.Movie),
+        };
+
+        Assert.Equal([true, false, true, true], users.Select(u => Decide(video, u)));
+        Assert.Equal([true, true, true, false], users.Select(u => Decide(movie, u)));
+
+        Record(video);
+        Record(movie);
+        Assert.Equal([true, true, false, true], users.Select(u => Decide(video, u)));
+        Assert.Equal([true, true, true, false], users.Select(u => Decide(movie, u)));
+    }
+
+    [Fact]
     public void AccessPath_ChannelContent_DecidesWithStaticsThatThrowOnEveryCall()
     {
         var (channel, item) = ChannelWithItem();
@@ -1132,6 +1178,15 @@ public sealed class StandaloneVisibilityTests
         var id = Guid.NewGuid();
         var channel = Add(new Channel { Id = id, ChannelId = id, Path = Channel.GetInternalMetadataPath("/config/metadata", id) });
         return (channel, Add(new Movie { Path = "http://channel.invalid/a.mp4", ChannelId = id, ParentId = id }));
+    }
+
+    private void Record(BaseItem item) => _recordings.Add(item.Path);
+
+    private static User BlockingUnrated(UnratedItem type)
+    {
+        var user = ChannelUser(all: true);
+        user.SetPreference(PreferenceKind.BlockUnratedItems, [type]);
+        return user;
     }
 
     private static User ChannelUser(bool all = false, Guid[]? enabled = null, Guid[]? blocked = null, string[]? blockedTags = null, string[]? allowedTags = null)
