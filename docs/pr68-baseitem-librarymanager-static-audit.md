@@ -175,6 +175,22 @@ cached by path); the debug log of an unrecognised rating (`BaseItem.Logger`); an
 resolution of a legacy linked child (`BaseItem.FileSystem.MakeAbsolutePath`). Every caller that passes no
 service still takes the statics.
 
+DEBT-SERVER-9 (2026-10-22): a video's source type asks whether it is an active recording through
+`IRecordingVisibilityService` when the check carries it, instead of the static `Video.RecordingsManager`
+(whose implementation depends on `ILibraryManager`). The recordings in progress move out of
+`RecordingsManager` into `ActiveRecordings`, a dependency-free singleton registered by `ApplicationHost`: the
+recordings manager writes it, `TagVisibilityService` reads it. Two entity seams, both internal: the
+standalone check's channel branch reads `BaseItem.GetSourceType(scope)`, and the parental check's unrated
+value reads `BaseItem.GetBlockUnratedValue(user, scope)`, which a plain `Video` (not its subclasses, whose
+unrated type is their own) answers from that source type. No service: unchanged. `StandaloneVisibilityTests`
+pins a channel video that leaves the channel branch while it records and a plain video's unrated type on
+both paths, and decides them with `LibraryManager`, `ChannelManager`, `ConfigurationManager`,
+`LocalizationManager` and `Video.RecordingsManager` all strict.
+Still static on the access-by-id path: the library options file (`CollectionFolder.XmlSerializer`), the
+debug log of an unrecognised rating (`BaseItem.Logger`) and the relative-path resolution of a legacy linked
+child (`BaseItem.FileSystem.MakeAbsolutePath`). None reaches the `LibraryManager` cycle; they are I/O and
+logging, not item-graph lookups, and are left as they are.
+
 ### Mutation And Registration
 
 Representative sites:
