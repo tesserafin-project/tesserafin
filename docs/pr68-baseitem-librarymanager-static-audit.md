@@ -148,6 +148,33 @@ pins the branch on both paths and runs the access path with both statics strict;
 or the service hand-off reddens it (`IChannelManager.GetChannel`, `ILibraryManager.GetCollectionFolders`).
 Still static on the access-by-id path: the country-code fallback and box-set linked children not found by id.
 
+DEBT-SERVER-7 (2026-10-22): the last two `LibraryManager` lookups of the access-by-id path go through the
+service. The rating's country-code fallback to the library options reads the options of the item itself
+when it is a library, else of its first library from `IStandaloneVisibilityService.GetCollectionFolders`
+(the rule of `LibraryManager.GetLibraryOptions`). A box set's linked children go through
+`BaseItem.GetLinkedChild(info, scope)`: id, stale id and library item id through
+`IBoxSetVisibilityService.GetItemById`, path through `ILinkedChildVisibilityService.FindByPath` (a derived
+interface, for the same ABI reason as above); `TagVisibilityService` takes `IItemRepository` and
+`LibraryManager.FindByPath`'s own query (`ItemPathQuery`; the DI guards forbid it any reference to
+`LibraryManager`). The found id is still cached on the entry, a miss still marks it empty.
+`StandaloneVisibilityTests` pins both on both paths; a box set whose children are found only by path,
+rated through library options, decides identically under a strict static (#332).
+
+DEBT-SERVER-8 (2026-10-22): the parental check scores the rating through `IRatingVisibilityService` (an
+`IStandaloneVisibilityService` that also supplies the score of a rating in a country and the server's
+metadata country code) when the check carries it, instead of the statics `BaseItem.LocalizationManager`
+and `BaseItem.ConfigurationManager`; `TagVisibilityService` implements it over `ILocalizationManager` and
+`IServerConfigurationManager`. No service: unchanged. `StandaloneVisibilityTests` pins the scoring (country,
+custom before official, display parent, sub-score, unrated items) on both paths and decides it with
+`LibraryManager`, `ConfigurationManager` and `LocalizationManager` all strict.
+Still static on the access-by-id path (found by running the access-path tests with every other entity
+static strict): every video's source type, which asks whether it is an active recording
+(`Video.SourceType`, `Video.RecordingsManager.GetActiveRecordingInfo`, read before the channel branch);
+the library options file (`CollectionFolder.XmlSerializer`, behind `CollectionFolder.GetLibraryOptions`,
+cached by path); the debug log of an unrecognised rating (`BaseItem.Logger`); and the relative-path
+resolution of a legacy linked child (`BaseItem.FileSystem.MakeAbsolutePath`). Every caller that passes no
+service still takes the statics.
+
 ### Mutation And Registration
 
 Representative sites:
