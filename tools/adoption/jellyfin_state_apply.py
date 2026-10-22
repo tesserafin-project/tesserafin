@@ -123,7 +123,7 @@ class Api(dry.Reader):
         self.requests_remaining -= 1
         url = self.base_url + path + ("?" + urlencode(query) if query else "")
         request = Request(url, data=json.dumps(body).encode() if body is not None else None,
-                          method=method, headers={"X-Emby-Token": self.token, "Accept": "application/json",
+                          method=method, headers={"Authorization": self.authorization, "Accept": "application/json",
                                                   "Content-Type": "application/json"})
         try:
             with self.opener.open(request, timeout=min(15, remaining)) as response:

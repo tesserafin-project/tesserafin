@@ -57,7 +57,7 @@ class ApplyTests(unittest.TestCase):
                 self.wfile.write(raw)
 
             def do_GET(self):
-                owner.calls.append(("GET", self.path, self.headers.get("X-Emby-Token")))
+                owner.calls.append(("GET", self.path, self.headers.get("Authorization")))
                 url = urlsplit(self.path)
                 query = parse_qs(url.query)
                 if owner.fault == "redirect":
@@ -89,7 +89,7 @@ class ApplyTests(unittest.TestCase):
                     self.reply({}, 404)
 
             def do_POST(self):
-                owner.calls.append(("POST", self.path, self.headers.get("X-Emby-Token")))
+                owner.calls.append(("POST", self.path, self.headers.get("Authorization")))
                 url = urlsplit(self.path)
                 query = parse_qs(url.query)
                 if url.path != f"/UserItems/{ITEM}/UserData" or set(query) != {"userId"}:
@@ -148,7 +148,7 @@ class ApplyTests(unittest.TestCase):
         for entry in self.journal.iterdir():
             self.assertEqual(stat.S_IMODE(entry.stat().st_mode), 0o600)
             self.assertNotIn(TOKEN, entry.read_text())
-        self.assertTrue(all(call[2] == TOKEN for call in self.calls))
+        self.assertTrue(all(call[2] == f'MediaBrowser Token="{TOKEN}"' for call in self.calls))
 
     def test_lost_post_response_reconciles_committed_intent_without_double_write(self):
         self.fault = "after-commit"

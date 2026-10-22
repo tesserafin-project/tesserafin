@@ -22,6 +22,11 @@ def docker(*arguments):
                                    text=True, timeout=600).strip()
 
 
+def host_port(name):
+    # The host port is ephemeral, and docker restart allocates a new one.
+    return json.loads(docker("inspect", name))[0]["NetworkSettings"]["Ports"]["8096/tcp"][0]["HostPort"]
+
+
 class FixtureApi:
     def __init__(self, port):
         self.url = f"http://127.0.0.1:{port}"
@@ -125,8 +130,7 @@ def run(args):
                            image, "-c", "chown -R 10000:10000 /config /cache /data")
                 docker("run", "-d", "--name", name, "-p", "127.0.0.1::8096", *mounts,
                        "-v", f"{media}:/media:ro", image)
-                port = json.loads(docker("inspect", name))[0]["NetworkSettings"]["Ports"]["8096/tcp"][0]["HostPort"]
-                api = FixtureApi(port)
+                api = FixtureApi(host_port(name))
                 api.wait_ready()
                 fixture_ids.append(api.setup())
                 apis.append(api)
@@ -156,6 +160,7 @@ def run(args):
                             "applied state/user separation/date preservation mismatch")
             stage = "restart"
             docker("restart", names[1])
+            target.url = FixtureApi(host_port(names[1])).url
             target.wait_ready()
             for user, expected in zip((target_admin, target_member), desired):
                 observed = app.observe(app.Api(target.url, target.token),
