@@ -475,6 +475,57 @@ public sealed class StandaloneVisibilityTests
     }
 
     [Fact]
+    public void RatedItem_ScoredInTheCountry_CustomBeforeOfficial_DisplayParentInherited_SubScoresAndUnratedItems()
+    {
+        var movies = AddLibrary("Movies", "/media/movies");
+        var movie = MovieIn(movies);
+        BaseItem.LocalizationManager = Mock.Of<ILocalizationManager>(l =>
+            l.GetRatingScore("R", "US") == new ParentalRatingScore(17, null)
+            && l.GetRatingScore("R", "FR") == new ParentalRatingScore(12, null)
+            && l.GetRatingScore("TV-14", "US") == new ParentalRatingScore(14, 2));
+        BaseItem.Logger = Microsoft.Extensions.Logging.Abstractions.NullLogger<BaseItem>.Instance;
+        var teen = User(all: true);
+        teen.MaxParentalRatingScore = 14;
+        teen.MaxParentalRatingSubScore = 1;
+        var blocksUnrated = User(all: true);
+        blocksUnrated.MaxParentalRatingScore = 14;
+        blocksUnrated.SetPreference(PreferenceKind.BlockUnratedItems, [UnratedItem.Movie]);
+        var unrestricted = User(all: true);
+
+        // No country code on the chain and no library options: the server's (US by default).
+        movie.OfficialRating = "R";
+        AssertVisible(movie, teen, false);
+        AssertVisible(movie, unrestricted, true);
+        BaseItem.ConfigurationManager.Configuration.MetadataCountryCode = "FR";
+        AssertVisible(movie, teen, true);
+        BaseItem.ConfigurationManager.Configuration.MetadataCountryCode = "US";
+
+        // The custom rating comes before the official one; on an equal score the sub-score decides.
+        movie.CustomRating = "TV-14";
+        AssertVisible(movie, teen, false);
+        teen.MaxParentalRatingSubScore = 2;
+        AssertVisible(movie, teen, true);
+        teen.MaxParentalRatingSubScore = null;
+        AssertVisible(movie, teen, true);
+
+        // A rating the localization does not know, or no rating at all, is decided by the unrated items.
+        movie.CustomRating = "X-UNKNOWN";
+        AssertVisible(movie, teen, true);
+        AssertVisible(movie, blocksUnrated, false);
+        movie.CustomRating = null;
+        movie.OfficialRating = null;
+        AssertVisible(movie, teen, true);
+        AssertVisible(movie, blocksUnrated, false);
+
+        // Without its own, the item takes its display parent's (its parent folder).
+        _items[movie.ParentId].OfficialRating = "R";
+        AssertVisible(movie, teen, false);
+        AssertVisible(movie, blocksUnrated, false);
+        _items[movie.ParentId].CustomRating = "TV-14";
+        AssertVisible(movie, blocksUnrated, true);
+    }
+
+    [Fact]
     public void AccessPath_SameProcess_RightsAndTagChangesApplyWithoutRebuildingAnything()
     {
         var (saga, movies, vault, _) = ProductionLikeGraph();
