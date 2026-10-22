@@ -433,6 +433,46 @@ public sealed class StandaloneVisibilityTests
     }
 
     [Fact]
+    public void RatedItem_WithoutACountryCodeOnItsChain_TakesItsFirstLibrarysOptions_ThenTheServers()
+    {
+        var movies = AddLibrary("Movies", "/media/movies");
+        var vault = AddLibrary("Vault", "/media/vault", "/media/movies");
+        var saga = MovieIn(movies);
+        Assert.Equal([movies, vault], BaseItem.LibraryManager.GetCollectionFolders(saga));
+        BaseItem.LocalizationManager = Mock.Of<ILocalizationManager>(l =>
+            l.GetRatingScore("R", "FR") == new ParentalRatingScore(18, null)
+            && l.GetRatingScore("R", "DE") == new ParentalRatingScore(18, null)
+            && l.GetRatingScore("R", "US") == new ParentalRatingScore(17, null));
+
+        // The options are cached by library path on first read: the instances are mutated afterwards.
+        var moviesOptions = _options[System.IO.Path.Combine(movies.Path, "options.xml")] = new LibraryOptions();
+        _options[System.IO.Path.Combine(vault.Path, "options.xml")] = new LibraryOptions { MetadataCountryCode = "DE" };
+        saga.OfficialRating = "R";
+        var teen = User(all: true);
+        teen.MaxParentalRatingScore = 17;
+
+        // Saga belongs to Movies then Vault: only the first library's options are read, so Vault's DE is
+        // ignored and Movies' empty code falls back to the server's (US).
+        AssertVisible(saga, teen, true);
+        moviesOptions.MetadataCountryCode = "FR";
+        AssertVisible(saga, teen, false);
+        moviesOptions.MetadataCountryCode = null;
+        BaseItem.ConfigurationManager.Configuration.MetadataCountryCode = "FR";
+        AssertVisible(saga, teen, false);
+        BaseItem.ConfigurationManager.Configuration.MetadataCountryCode = "US";
+
+        // A library requested directly reads its own options, even outside the user root.
+        movies.OfficialRating = "R";
+        AssertVisible(movies, teen, true);
+        moviesOptions.MetadataCountryCode = "FR";
+        AssertVisible(movies, teen, false);
+        var orphan = Add(new CollectionFolder { Path = "/config/root/Orphan", PhysicalLocationsList = ["/media/orphan"], OfficialRating = "R" });
+        _options[System.IO.Path.Combine(orphan.Path, "options.xml")] = new LibraryOptions { MetadataCountryCode = "FR" };
+        Assert.Empty(BaseItem.LibraryManager.GetCollectionFolders(orphan));
+        AssertVisible(orphan, teen, false);
+    }
+
+    [Fact]
     public void AccessPath_SameProcess_RightsAndTagChangesApplyWithoutRebuildingAnything()
     {
         var (saga, movies, vault, _) = ProductionLikeGraph();
@@ -545,6 +585,55 @@ public sealed class StandaloneVisibilityTests
         AssertVisible(boxSet, User(enabled: [movies.Id]), false);
         AssertVisible(boxSet, User(all: true, blocked: [Sets().Id]), false);
     }
+
+#pragma warning disable CS0618 // the legacy LinkedChild path and library item id are the data under test
+    [Fact]
+    public void BoxSet_LegacyLinkedChild_FoundByPathOrLibraryItemId_ContributesItsLibrary_AndCachesItsId()
+    {
+        var movies = AddLibrary("Movies", "/media/movies");
+        var kids = AddLibrary("Kids", "/media/kids");
+        var movie = MovieIn(movies);
+        Mock.Get(BaseItem.ItemRepository).Setup(r => r.GetItemList(It.Is<InternalItemsQuery>(q => q.Path != null)))
+            .Returns((InternalItemsQuery q) => _items.Values.Where(i => i.Path == q.Path).OrderByDescending(i => i.DateCreated).Take(1).ToList());
+        Mock.Get(BaseItem.FileSystem).Setup(f => f.MakeAbsolutePath(It.IsAny<string>(), It.IsAny<string>()))
+            .Returns((string folder, string file) => System.IO.Path.GetFullPath(file, folder));
+        BaseItem.Logger = Microsoft.Extensions.Logging.Abstractions.NullLogger<BaseItem>.Instance;
+        var admitted = User(enabled: [movies.Id, Sets().Id]);
+        var other = User(enabled: [kids.Id, Sets().Id]);
+
+        // No id: searched by path (absolute, or relative to the box set's folder), then the id is kept.
+        var byPath = AddBoxSet();
+        byPath.LinkedChildren = [new LinkedChild { Path = movie.Path }];
+        AssertVisible(byPath, admitted, true);
+        Assert.Equal(movie.Id, byPath.LinkedChildren[0].ItemId);
+        AssertVisible(byPath, other, false);
+
+        var relative = AddBoxSet();
+        relative.LinkedChildren = [new LinkedChild { Path = System.IO.Path.GetRelativePath(relative.ContainingFolderPath, movie.Path) }];
+        AssertVisible(relative, other, false);
+        Assert.Equal(movie.Id, relative.LinkedChildren[0].ItemId);
+
+        // A stale id falls through to the path.
+        var stale = AddBoxSet();
+        stale.LinkedChildren = [new LinkedChild { ItemId = Guid.NewGuid(), Path = movie.Path }];
+        AssertVisible(stale, other, false);
+        Assert.Equal(movie.Id, stale.LinkedChildren[0].ItemId);
+
+        // Without a path, the library item id.
+        var byLibraryItemId = AddBoxSet();
+        byLibraryItemId.LinkedChildren = [new LinkedChild { LibraryItemId = movie.Id.ToString("N") }];
+        AssertVisible(byLibraryItemId, other, false);
+        Assert.Equal(movie.Id, byLibraryItemId.LinkedChildren[0].ItemId);
+        AssertVisible(byLibraryItemId, admitted, true);
+
+        // A path that finds nothing marks the entry empty: no library, the hosting library still applies.
+        var missing = AddBoxSet();
+        missing.LinkedChildren = [new LinkedChild { Path = "/media/movies/gone.mkv" }];
+        AssertVisible(missing, User(enabled: [Sets().Id]), true);
+        Assert.Equal(Guid.Empty, missing.LinkedChildren[0].ItemId);
+        AssertVisible(missing, other, true);
+    }
+#pragma warning restore CS0618
 
     [Fact]
     public void BoxSet_StoredLibraryFolderIds_ReplaceItsChildrensLibraries()
