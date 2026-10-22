@@ -47,10 +47,12 @@ public sealed class StandaloneVisibilityTests
     private readonly List<Folder> _libraries = [];
     private readonly Dictionary<string, LibraryOptions> _options = [];
     private readonly IItemAccessService _access;
+    private readonly IServerConfigurationManager _configuration;
     private readonly Tesserafin.Server.Core.Library.LibraryManager _manager;
     private Folder _root;
     private CollectionFolder? _sets;
     private Folder? _setsFolder;
+    private ILocalizationManager? _scores;
 
     public StandaloneVisibilityTests()
     {
@@ -59,6 +61,7 @@ public sealed class StandaloneVisibilityTests
         var configuration = fixture.Freeze<Mock<IServerConfigurationManager>>();
         configuration.Setup(c => c.Configuration).Returns(new ServerConfiguration());
         configuration.Setup(c => c.ApplicationPaths.DataPath).Returns("/config/data");
+        _configuration = configuration.Object;
 
         var repository = fixture.Freeze<Mock<IItemRepository>>();
         repository.Setup(r => r.RetrieveItem(It.IsAny<Guid>())).Returns((Guid id) => _items.GetValueOrDefault(id)!);
@@ -83,7 +86,11 @@ public sealed class StandaloneVisibilityTests
                 Array.Empty<ILibraryPostScanTask>()))
             .Create();
 
-        _access = new Tesserafin.Server.Core.Library.ItemAccessService(lookup, new Tesserafin.Server.Core.Library.TagVisibilityService(lookup, resolver, rootProvider, repository.Object));
+        // The service scores through the same stub as the static (Scores), held here so that the static can throw.
+        var localization = new Mock<ILocalizationManager>();
+        localization.Setup(l => l.GetRatingScore(It.IsAny<string>(), It.IsAny<string?>()))
+            .Returns((string rating, string? country) => _scores?.GetRatingScore(rating, country)!);
+        _access = new Tesserafin.Server.Core.Library.ItemAccessService(lookup, new Tesserafin.Server.Core.Library.TagVisibilityService(lookup, resolver, rootProvider, repository.Object, localization.Object, configuration.Object));
 
         var xml = new Mock<IXmlSerializer>();
         xml.Setup(x => x.DeserializeFromFile(typeof(LibraryOptions), It.IsAny<string>()))
@@ -409,7 +416,7 @@ public sealed class StandaloneVisibilityTests
     public void AccessPath_RatedMovie_TakesTheCountryCodeFromItsParentsAndLibrariesThroughTheService()
     {
         var (saga, movies, _, _) = ProductionLikeGraph();
-        BaseItem.LocalizationManager = Mock.Of<ILocalizationManager>(l =>
+        Scores(l =>
             l.GetRatingScore("R", "FR") == new ParentalRatingScore(18, null)
             && l.GetRatingScore("R", "US") == new ParentalRatingScore(17, null));
         saga.OfficialRating = "R";
@@ -441,7 +448,7 @@ public sealed class StandaloneVisibilityTests
         var vault = AddLibrary("Vault", "/media/vault", "/media/movies");
         var saga = MovieIn(movies);
         Assert.Equal([movies, vault], BaseItem.LibraryManager.GetCollectionFolders(saga));
-        BaseItem.LocalizationManager = Mock.Of<ILocalizationManager>(l =>
+        Scores(l =>
             l.GetRatingScore("R", "FR") == new ParentalRatingScore(18, null)
             && l.GetRatingScore("R", "DE") == new ParentalRatingScore(18, null)
             && l.GetRatingScore("R", "US") == new ParentalRatingScore(17, null));
@@ -479,7 +486,7 @@ public sealed class StandaloneVisibilityTests
     {
         var movies = AddLibrary("Movies", "/media/movies");
         var movie = MovieIn(movies);
-        BaseItem.LocalizationManager = Mock.Of<ILocalizationManager>(l =>
+        Scores(l =>
             l.GetRatingScore("R", "US") == new ParentalRatingScore(17, null)
             && l.GetRatingScore("R", "FR") == new ParentalRatingScore(12, null)
             && l.GetRatingScore("TV-14", "US") == new ParentalRatingScore(14, 2));
@@ -523,6 +530,65 @@ public sealed class StandaloneVisibilityTests
         AssertVisible(movie, blocksUnrated, false);
         _items[movie.ParentId].CustomRating = "TV-14";
         AssertVisible(movie, blocksUnrated, true);
+    }
+
+    [Fact]
+    public void AccessPath_Rating_DecidesWithStaticsThatThrowOnEveryCall()
+    {
+        var movies = AddLibrary("Movies", "/media/movies");
+        var movie = MovieIn(movies);
+        var folder = _items[movie.ParentId];
+        Scores(l =>
+            l.GetRatingScore("R", "US") == new ParentalRatingScore(17, null)
+            && l.GetRatingScore("R", "FR") == new ParentalRatingScore(12, null)
+            && l.GetRatingScore("TV-14", "US") == new ParentalRatingScore(14, 2));
+        BaseItem.Logger = Microsoft.Extensions.Logging.Abstractions.NullLogger<BaseItem>.Instance;
+        var users = new[] { User(all: true), User(all: true), User(all: true), User(all: true) };
+        users[0].MaxParentalRatingScore = 14;
+        users[0].MaxParentalRatingSubScore = 1;
+        users[1].MaxParentalRatingScore = 14;
+        users[1].MaxParentalRatingSubScore = 2;
+        users[2].MaxParentalRatingScore = 14;
+        users[2].SetPreference(PreferenceKind.BlockUnratedItems, [UnratedItem.Movie]);
+
+        // Each state: the item's custom and official ratings, its folder's official rating, the server's
+        // country code; then the decisions for a sub-score 1, a sub-score 2, a blocker of unrated movies and
+        // an unrestricted user.
+        var states = new (string? Custom, string? Official, string? Folder, string Server, bool[] Expected)[]
+        {
+            (null, "R", null, "US", [false, false, false, true]),
+            (null, "R", null, "FR", [true, true, true, true]),
+            ("TV-14", "R", null, "US", [false, true, true, true]),
+            ("X-UNKNOWN", "R", null, "US", [true, true, false, true]),
+            (null, null, "R", "US", [false, false, false, true]),
+            (null, null, null, "US", [true, true, false, true]),
+        };
+
+        void Apply((string? Custom, string? Official, string? Folder, string Server, bool[] Expected) state)
+        {
+            movie.CustomRating = state.Custom;
+            movie.OfficialRating = state.Official;
+            folder.OfficialRating = state.Folder;
+            _configuration.Configuration.MetadataCountryCode = state.Server;
+        }
+
+        foreach (var state in states)
+        {
+            Apply(state);
+            Assert.Equal(state.Expected, users.Select(u => movie.IsVisibleStandalone(u)));
+        }
+
+        // The three statics the check could read throw on any call.
+        ThrowingStatic();
+        BaseItem.ConfigurationManager = new Mock<IServerConfigurationManager>(MockBehavior.Strict).Object;
+        BaseItem.LocalizationManager = new Mock<ILocalizationManager>(MockBehavior.Strict).Object;
+        Assert.Throws<MockException>(() => movie.IsVisibleStandalone(users[0]));
+
+        foreach (var state in states)
+        {
+            Apply(state);
+            Assert.Equal(state.Expected, Decisions(movie, users));
+        }
     }
 
     [Fact]
@@ -786,7 +852,7 @@ public sealed class StandaloneVisibilityTests
         // No country code on any chain: the rating reads the first library's options. Kids' are set before
         // the first read (they are cached by path).
         var kidsOptions = _options[System.IO.Path.Combine(kids.Path, "options.xml")] = new LibraryOptions { MetadataCountryCode = "US" };
-        BaseItem.LocalizationManager = Mock.Of<ILocalizationManager>(l =>
+        Scores(l =>
             l.GetRatingScore("R", "US") == new ParentalRatingScore(17, null)
             && l.GetRatingScore("PG", "US") == new ParentalRatingScore(10, null)
             && l.GetRatingScore("PG", "FR") == new ParentalRatingScore(18, null));
@@ -976,7 +1042,10 @@ public sealed class StandaloneVisibilityTests
         BaseItem.Logger = Microsoft.Extensions.Logging.Abstractions.NullLogger<BaseItem>.Instance;
     }
 
-    private static void RatingScores() => BaseItem.LocalizationManager = Mock.Of<ILocalizationManager>(l =>
+    private void Scores(System.Linq.Expressions.Expression<Func<ILocalizationManager, bool>> scores) =>
+        BaseItem.LocalizationManager = _scores = Mock.Of(scores);
+
+    private void RatingScores() => Scores(l =>
         l.GetRatingScore("R", "US") == new ParentalRatingScore(17, null)
         && l.GetRatingScore("PG", "US") == new ParentalRatingScore(10, null));
 

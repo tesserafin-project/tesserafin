@@ -165,6 +165,9 @@ namespace Tesserafin.Server.Integration.Tests
             var implementation = _registrations.Value.Single(d => d.ServiceType == typeof(IStandaloneVisibilityService)).ImplementationType!;
 
             Assert.True(typeof(ILinkedChildVisibilityService).IsAssignableFrom(implementation));
+
+            // And the parental check its rating score and the server's country code (DEBT-SERVER-8).
+            Assert.True(typeof(IRatingVisibilityService).IsAssignableFrom(implementation));
         }
 
         [Theory]

@@ -15,6 +15,7 @@ using Tesserafin.Controller.Persistence;
 using Tesserafin.Controller.Resolvers;
 using Tesserafin.Controller.Sorting;
 using Tesserafin.Model.Configuration;
+using Tesserafin.Model.Globalization;
 using Tesserafin.Model.IO;
 using Tesserafin.Naming.Common;
 using Tesserafin.Server.Core.IO;
@@ -102,7 +103,7 @@ public sealed class LibraryManagerUserRootFolderProviderTests : IDisposable
 
         var itemAccessService = new Tesserafin.Server.Core.Library.ItemAccessService(
             _itemLookupService,
-            new Tesserafin.Server.Core.Library.TagVisibilityService(_itemLookupService, fixture.Freeze<ICollectionFolderResolver>(), fixture.Freeze<IUserRootFolderProvider>(), _itemRepositoryMock.Object));
+            new Tesserafin.Server.Core.Library.TagVisibilityService(_itemLookupService, fixture.Freeze<ICollectionFolderResolver>(), fixture.Freeze<IUserRootFolderProvider>(), _itemRepositoryMock.Object, fixture.Freeze<ILocalizationManager>(), fixture.Freeze<IServerConfigurationManager>()));
         fixture.Register<IItemAccessService>(() => itemAccessService);
 
         _itemStore = new Tesserafin.Server.Core.Library.ItemStore(

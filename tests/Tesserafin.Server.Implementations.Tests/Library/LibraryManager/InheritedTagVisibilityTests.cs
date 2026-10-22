@@ -17,6 +17,7 @@ using Tesserafin.Data.Enums;
 using Tesserafin.Database.Implementations.Entities;
 using Tesserafin.Database.Implementations.Enums;
 using Tesserafin.Model.Configuration;
+using Tesserafin.Model.Globalization;
 using Tesserafin.Model.MediaInfo;
 using Xunit;
 
@@ -78,7 +79,7 @@ public sealed class InheritedTagVisibilityTests
             .Create();
 
         _lookup = lookup;
-        _tags = new Tesserafin.Server.Core.Library.TagVisibilityService(lookup, resolver, rootProvider, repository.Object);
+        _tags = new Tesserafin.Server.Core.Library.TagVisibilityService(lookup, resolver, rootProvider, repository.Object, Mock.Of<ILocalizationManager>(), configuration.Object);
         _access = new Tesserafin.Server.Core.Library.ItemAccessService(lookup, _tags);
 
         BaseItem.LibraryManager = manager;

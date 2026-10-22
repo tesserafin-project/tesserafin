@@ -1,32 +1,39 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Tesserafin.Controller.Configuration;
 using Tesserafin.Controller.Entities;
 using Tesserafin.Controller.Library;
 using Tesserafin.Controller.Persistence;
 using Tesserafin.Database.Implementations.Entities;
+using Tesserafin.Model.Entities;
+using Tesserafin.Model.Globalization;
 
 namespace Tesserafin.Server.Core.Library
 {
     /// <summary>
     /// Sole production implementation of <see cref="ITagVisibilityService"/>,
-    /// <see cref="IStandaloneVisibilityService"/>, <see cref="IBoxSetVisibilityService"/> and
-    /// <see cref="ILinkedChildVisibilityService"/>, built on the id lookup (parents), the library
-    /// membership resolver, the user root folder (libraries) and the item repository (path search) only.
+    /// <see cref="IStandaloneVisibilityService"/>, <see cref="IBoxSetVisibilityService"/>,
+    /// <see cref="ILinkedChildVisibilityService"/> and <see cref="IRatingVisibilityService"/>, built on the id
+    /// lookup (parents), the library membership resolver, the user root folder (libraries), the item repository
+    /// (path search), the localization (rating scores) and the server configuration (country code) only.
     /// </summary>
     /// <remarks>
     /// The combination and the filter are the entities' own (<see cref="BaseItem.CombineInheritedTags"/>,
     /// <see cref="BaseItem.EvaluateTagVisibility"/>); only where the parents and libraries come from
     /// differs from <see cref="BaseItem.GetInheritedTags()"/> (DEBT-SERVER-3). The same holds for the
     /// parent and library checks of the standalone visibility, which stay in the entities (DEBT-SERVER-4),
-    /// and for the box set's library and linked-children checks (DEBT-SERVER-5, DEBT-SERVER-7).
+    /// and for the box set's library and linked-children checks (DEBT-SERVER-5, DEBT-SERVER-7), and the
+    /// rating score (DEBT-SERVER-8).
     /// </remarks>
-    internal sealed class TagVisibilityService : ILinkedChildVisibilityService
+    internal sealed class TagVisibilityService : ILinkedChildVisibilityService, IRatingVisibilityService
     {
         private readonly IItemLookupService _itemLookupService;
         private readonly ICollectionFolderResolver _collectionFolderResolver;
         private readonly IUserRootFolderProvider _userRootFolderProvider;
         private readonly IItemRepository _itemRepository;
+        private readonly ILocalizationManager _localizationManager;
+        private readonly IServerConfigurationManager _configurationManager;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="TagVisibilityService"/> class.
@@ -35,12 +42,16 @@ namespace Tesserafin.Server.Core.Library
         /// <param name="collectionFolderResolver">The library membership resolver.</param>
         /// <param name="userRootFolderProvider">The user root folder (its children are the libraries).</param>
         /// <param name="itemRepository">The item repository (path search).</param>
-        public TagVisibilityService(IItemLookupService itemLookupService, ICollectionFolderResolver collectionFolderResolver, IUserRootFolderProvider userRootFolderProvider, IItemRepository itemRepository)
+        /// <param name="localizationManager">The localization (rating scores).</param>
+        /// <param name="configurationManager">The server configuration (country code).</param>
+        public TagVisibilityService(IItemLookupService itemLookupService, ICollectionFolderResolver collectionFolderResolver, IUserRootFolderProvider userRootFolderProvider, IItemRepository itemRepository, ILocalizationManager localizationManager, IServerConfigurationManager configurationManager)
         {
             _itemLookupService = itemLookupService;
             _collectionFolderResolver = collectionFolderResolver;
             _userRootFolderProvider = userRootFolderProvider;
             _itemRepository = itemRepository;
+            _localizationManager = localizationManager;
+            _configurationManager = configurationManager;
         }
 
         /// <inheritdoc />
@@ -78,6 +89,18 @@ namespace Tesserafin.Server.Core.Library
         public BaseItem? FindByPath(string path)
         {
             return _itemRepository.GetItemList(ItemPathQuery.Create(path, null)).FirstOrDefault();
+        }
+
+        /// <inheritdoc />
+        public ParentalRatingScore? GetRatingScore(string rating, string? countryCode)
+        {
+            return _localizationManager.GetRatingScore(rating, countryCode);
+        }
+
+        /// <inheritdoc />
+        public string GetServerMetadataCountryCode()
+        {
+            return _configurationManager.Configuration.MetadataCountryCode;
         }
 
         /// <inheritdoc />

@@ -19,6 +19,7 @@ using Tesserafin.Data.Enums;
 using Tesserafin.Database.Implementations.Entities;
 using Tesserafin.Extensions;
 using Tesserafin.Model.Configuration;
+using Tesserafin.Model.Globalization;
 using Tesserafin.Model.IO;
 using Tesserafin.Naming.Common;
 using Xunit;
@@ -86,7 +87,7 @@ public class LibraryManagerUserViewFactoryTests
 
         var itemAccessService = new Tesserafin.Server.Core.Library.ItemAccessService(
             _itemLookupService,
-            new Tesserafin.Server.Core.Library.TagVisibilityService(_itemLookupService, fixture.Freeze<ICollectionFolderResolver>(), fixture.Freeze<IUserRootFolderProvider>(), _itemRepositoryMock.Object));
+            new Tesserafin.Server.Core.Library.TagVisibilityService(_itemLookupService, fixture.Freeze<ICollectionFolderResolver>(), fixture.Freeze<IUserRootFolderProvider>(), _itemRepositoryMock.Object, fixture.Freeze<ILocalizationManager>(), fixture.Freeze<IServerConfigurationManager>()));
         fixture.Register<IItemAccessService>(() => itemAccessService);
 
         // PR106a: one real ItemStore instance backs both the concrete type and IItemStore.

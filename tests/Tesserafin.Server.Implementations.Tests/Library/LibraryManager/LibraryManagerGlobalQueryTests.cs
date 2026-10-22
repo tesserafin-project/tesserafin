@@ -17,6 +17,7 @@ using Tesserafin.Controller.Resolvers;
 using Tesserafin.Controller.Sorting;
 using Tesserafin.Database.Implementations.Entities;
 using Tesserafin.Model.Configuration;
+using Tesserafin.Model.Globalization;
 using Tesserafin.Model.Library;
 using Tesserafin.Model.Querying;
 using Tesserafin.Naming.Common;
@@ -77,7 +78,7 @@ public class LibraryManagerGlobalQueryTests
 
         var itemAccessService = new Tesserafin.Server.Core.Library.ItemAccessService(
             itemLookupService,
-            new Tesserafin.Server.Core.Library.TagVisibilityService(itemLookupService, fixture.Freeze<ICollectionFolderResolver>(), fixture.Freeze<IUserRootFolderProvider>(), _itemRepositoryMock.Object));
+            new Tesserafin.Server.Core.Library.TagVisibilityService(itemLookupService, fixture.Freeze<ICollectionFolderResolver>(), fixture.Freeze<IUserRootFolderProvider>(), _itemRepositoryMock.Object, fixture.Freeze<ILocalizationManager>(), fixture.Freeze<IServerConfigurationManager>()));
         fixture.Register<IItemAccessService>(() => itemAccessService);
 
         _libraryManager = fixture.Build<Tesserafin.Server.Core.Library.LibraryManager>().Do(s => s.AddParts(

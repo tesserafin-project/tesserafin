@@ -1834,7 +1834,10 @@ namespace Tesserafin.Controller.Entities
 
             if (string.IsNullOrEmpty(lang))
             {
-                lang = ConfigurationManager.Configuration.MetadataCountryCode;
+                // The server's, through the service when it supplies it (DEBT-SERVER-8).
+                lang = scope is IRatingVisibilityService ratings
+                    ? ratings.GetServerMetadataCountryCode()
+                    : ConfigurationManager.Configuration.MetadataCountryCode;
             }
 
             return lang;
@@ -1907,7 +1910,10 @@ namespace Tesserafin.Controller.Entities
                 return !GetBlockUnratedValue(user);
             }
 
-            var ratingScore = LocalizationManager.GetRatingScore(rating, GetPreferredMetadataCountryCode(scope));
+            var countryCode = GetPreferredMetadataCountryCode(scope);
+            var ratingScore = scope is IRatingVisibilityService ratings
+                ? ratings.GetRatingScore(rating, countryCode)
+                : LocalizationManager.GetRatingScore(rating, countryCode);
 
             // Could not determine rating level
             if (ratingScore is null)

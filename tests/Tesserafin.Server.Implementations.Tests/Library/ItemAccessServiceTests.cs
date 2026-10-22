@@ -12,6 +12,7 @@ using Tesserafin.Data;
 using Tesserafin.Database.Implementations.Entities;
 using Tesserafin.Database.Implementations.Enums;
 using Tesserafin.Model.Configuration;
+using Tesserafin.Model.Globalization;
 using Tesserafin.Server.Core.Library;
 using Xunit;
 
@@ -46,7 +47,7 @@ public class ItemAccessServiceTests
         _itemLookupService = new Tesserafin.Server.Core.Library.ItemLookupService(_itemRepositoryMock.Object, _configurationManagerMock.Object);
         // No library membership: these items live outside every library.
         var noLibraries = Mock.Of<ICollectionFolderResolver>(r => r.GetCollectionFolders(It.IsAny<BaseItem>()) == new List<Folder>());
-        _itemAccessService = new ItemAccessService(_itemLookupService, new TagVisibilityService(_itemLookupService, noLibraries, Mock.Of<IUserRootFolderProvider>(), _itemRepositoryMock.Object));
+        _itemAccessService = new ItemAccessService(_itemLookupService, new TagVisibilityService(_itemLookupService, noLibraries, Mock.Of<IUserRootFolderProvider>(), _itemRepositoryMock.Object, Mock.Of<ILocalizationManager>(), _configurationManagerMock.Object));
     }
 
     private static void SetLibraryManagerStatic(ILibraryManager libraryManager)
@@ -135,6 +136,7 @@ public class ItemAccessServiceTests
         services.AddSingleton<Tesserafin.Server.Core.Library.IItemCacheStore>(sp => sp.GetRequiredService<Tesserafin.Server.Core.Library.ItemLookupService>());
         services.AddSingleton(Mock.Of<ICollectionFolderResolver>());
         services.AddSingleton(Mock.Of<IUserRootFolderProvider>());
+        services.AddSingleton(Mock.Of<ILocalizationManager>());
         services.AddSingleton<IStandaloneVisibilityService, TagVisibilityService>();
         services.AddSingleton<IItemAccessService, ItemAccessService>();
 
