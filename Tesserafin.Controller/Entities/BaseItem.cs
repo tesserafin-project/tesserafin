@@ -1825,7 +1825,11 @@ namespace Tesserafin.Controller.Entities
 
             if (string.IsNullOrEmpty(lang))
             {
-                lang = LibraryManager.GetLibraryOptions(this).MetadataCountryCode;
+                // The options of the item itself when it is a library, else of its first library (DEBT-SERVER-7).
+                var options = scope is null
+                    ? LibraryManager.GetLibraryOptions(this)
+                    : (this as CollectionFolder ?? scope.GetCollectionFolders(this).OfType<CollectionFolder>().FirstOrDefault())?.GetLibraryOptions();
+                lang = options?.MetadataCountryCode;
             }
 
             if (string.IsNullOrEmpty(lang))
@@ -2150,6 +2154,18 @@ namespace Tesserafin.Controller.Entities
         /// <returns>BaseItem.</returns>
         protected BaseItem GetLinkedChild(LinkedChild info)
         {
+            return GetLinkedChild(info, null);
+        }
+
+        /// <summary>
+        /// Gets the linked child.
+        /// </summary>
+        /// <param name="info">The info.</param>
+        /// <param name="scope">Where the items come from: by id from it, and by path when it is an
+        /// <see cref="ILinkedChildVisibilityService"/>; <c>null</c> reads them through the static <see cref="LibraryManager"/>.</param>
+        /// <returns>BaseItem.</returns>
+        protected BaseItem GetLinkedChild(LinkedChild info, IBoxSetVisibilityService scope)
+        {
             // First get using the cached Id
             if (info.ItemId.HasValue)
             {
@@ -2158,7 +2174,7 @@ namespace Tesserafin.Controller.Entities
                     return null;
                 }
 
-                var itemById = LibraryManager.GetItemById(info.ItemId.Value);
+                var itemById = GetLinkedItemById(info.ItemId.Value, scope);
 
                 if (itemById is not null)
                 {
@@ -2166,7 +2182,7 @@ namespace Tesserafin.Controller.Entities
                 }
             }
 
-            var item = FindLinkedChild(info);
+            var item = FindLinkedChild(info, scope);
 
             // If still null, log
             if (item is null)
@@ -2184,12 +2200,12 @@ namespace Tesserafin.Controller.Entities
         }
 
 #pragma warning disable CS0618 // Type or member is obsolete - fallback for legacy LinkedChild data
-        private BaseItem FindLinkedChild(LinkedChild info)
+        private BaseItem FindLinkedChild(LinkedChild info, IBoxSetVisibilityService scope)
         {
             // First try to find by ItemId (new preferred method)
             if (info.ItemId.HasValue && !info.ItemId.Value.Equals(Guid.Empty))
             {
-                var item = LibraryManager.GetItemById(info.ItemId.Value);
+                var item = GetLinkedItemById(info.ItemId.Value, scope);
                 if (item is not null)
                 {
                     return item;
@@ -2204,7 +2220,9 @@ namespace Tesserafin.Controller.Entities
             {
                 path = FileSystem.MakeAbsolutePath(ContainingFolderPath, path);
 
-                var itemByPath = LibraryManager.FindByPath(path, null);
+                var itemByPath = scope is ILinkedChildVisibilityService paths
+                    ? paths.FindByPath(path)
+                    : LibraryManager.FindByPath(path, null);
 
                 if (itemByPath is null)
                 {
@@ -2217,7 +2235,7 @@ namespace Tesserafin.Controller.Entities
             // Fall back to LibraryItemId (legacy method)
             if (!string.IsNullOrEmpty(info.LibraryItemId))
             {
-                var item = LibraryManager.GetItemById(info.LibraryItemId);
+                var item = GetLinkedItemById(new Guid(info.LibraryItemId), scope);
 
                 if (item is null)
                 {
@@ -2230,6 +2248,11 @@ namespace Tesserafin.Controller.Entities
             return null;
         }
 #pragma warning restore CS0618
+
+        private static BaseItem GetLinkedItemById(Guid id, IBoxSetVisibilityService scope)
+        {
+            return scope is null ? LibraryManager.GetItemById(id) : scope.GetItemById(id);
+        }
 
         /// <summary>
         /// Adds a studio to the item.

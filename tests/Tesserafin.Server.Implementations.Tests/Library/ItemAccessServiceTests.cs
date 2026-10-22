@@ -46,7 +46,7 @@ public class ItemAccessServiceTests
         _itemLookupService = new Tesserafin.Server.Core.Library.ItemLookupService(_itemRepositoryMock.Object, _configurationManagerMock.Object);
         // No library membership: these items live outside every library.
         var noLibraries = Mock.Of<ICollectionFolderResolver>(r => r.GetCollectionFolders(It.IsAny<BaseItem>()) == new List<Folder>());
-        _itemAccessService = new ItemAccessService(_itemLookupService, new TagVisibilityService(_itemLookupService, noLibraries, Mock.Of<IUserRootFolderProvider>()));
+        _itemAccessService = new ItemAccessService(_itemLookupService, new TagVisibilityService(_itemLookupService, noLibraries, Mock.Of<IUserRootFolderProvider>(), _itemRepositoryMock.Object));
     }
 
     private static void SetLibraryManagerStatic(ILibraryManager libraryManager)

@@ -114,12 +114,13 @@ namespace Tesserafin.Server.Integration.Tests
 
             AssertNone(reached.Where(n => IsCycleMember(n.Type)).Select(n => n.Path));
 
-            // The walk reports each node once, on its first path: the application host, held by the
-            // persistence service behind the user root folder only to map virtual paths (the resolver's
-            // exception; the service reads the libraries through the root since DEBT-SERVER-4), and by the
-            // repository behind the lookup for the same reason. Equality, as for the resolver.
+            // The walk reports each node once, on its shortest path: the application host, held only to map
+            // virtual paths by the repository (taken directly for the path search since DEBT-SERVER-7, and
+            // behind the lookup) and by the persistence service behind the user root folder (the
+            // resolver's exception; the service reads the libraries through the root since DEBT-SERVER-4).
+            // Equality, as for the resolver.
             Assert.Equal(
-                ["ITagVisibilityService -> IUserRootFolderProvider -> IItemStore -> IItemPersistenceService -> IServerApplicationHost"],
+                ["ITagVisibilityService -> IItemRepository -> BaseItemRepository -> IServerApplicationHost"],
                 reached.Where(n => _locatorTypes.Contains(n.Type)).Select(n => n.Path).Order(StringComparer.Ordinal));
         }
 
@@ -135,11 +136,11 @@ namespace Tesserafin.Server.Integration.Tests
             AssertNone(reached.Where(n => IsCycleMember(n.Type)).Select(n => n.Path));
 
             // As for the tag visibility service: the application host, held for virtual paths only, reported
-            // once on its first path - behind the user root folder for the service itself, behind the
-            // lookup for the access path, which takes the lookup first. Equality, as above.
+            // once on its shortest path - behind the service's own repository (DEBT-SERVER-7), shorter than
+            // behind the lookup. Equality, as above.
             var expected = service == typeof(IItemAccessService)
-                ? "IItemAccessService -> IItemLookupService -> ItemLookupService -> IItemRepository -> BaseItemRepository -> IServerApplicationHost"
-                : "IStandaloneVisibilityService -> IUserRootFolderProvider -> IItemStore -> IItemPersistenceService -> IServerApplicationHost";
+                ? "IItemAccessService -> IStandaloneVisibilityService -> IItemRepository -> BaseItemRepository -> IServerApplicationHost"
+                : "IStandaloneVisibilityService -> IItemRepository -> BaseItemRepository -> IServerApplicationHost";
             Assert.Equal(
                 [expected],
                 reached.Where(n => _locatorTypes.Contains(n.Type)).Select(n => n.Path).Order(StringComparer.Ordinal));
@@ -158,11 +159,12 @@ namespace Tesserafin.Server.Integration.Tests
         [Fact]
         public void StandaloneVisibilityService_AlsoSuppliesTheBoxSetData()
         {
-            // A box set reads its libraries and linked children from the service only when it is one;
-            // otherwise the access path falls back to the static without failing (DEBT-SERVER-5).
+            // A box set reads its libraries and linked children (by id, then by path) from the service only
+            // when it is one; otherwise the access path falls back to the static without failing
+            // (DEBT-SERVER-5, DEBT-SERVER-7).
             var implementation = _registrations.Value.Single(d => d.ServiceType == typeof(IStandaloneVisibilityService)).ImplementationType!;
 
-            Assert.True(typeof(IBoxSetVisibilityService).IsAssignableFrom(implementation));
+            Assert.True(typeof(ILinkedChildVisibilityService).IsAssignableFrom(implementation));
         }
 
         [Theory]

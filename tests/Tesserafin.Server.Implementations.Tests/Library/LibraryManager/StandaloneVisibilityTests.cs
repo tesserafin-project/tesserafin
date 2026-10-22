@@ -83,7 +83,7 @@ public sealed class StandaloneVisibilityTests
                 Array.Empty<ILibraryPostScanTask>()))
             .Create();
 
-        _access = new Tesserafin.Server.Core.Library.ItemAccessService(lookup, new Tesserafin.Server.Core.Library.TagVisibilityService(lookup, resolver, rootProvider));
+        _access = new Tesserafin.Server.Core.Library.ItemAccessService(lookup, new Tesserafin.Server.Core.Library.TagVisibilityService(lookup, resolver, rootProvider, repository.Object));
 
         var xml = new Mock<IXmlSerializer>();
         xml.Setup(x => x.DeserializeFromFile(typeof(LibraryOptions), It.IsAny<string>()))
@@ -426,10 +426,12 @@ public sealed class StandaloneVisibilityTests
         _items[saga.ParentId].PreferredMetadataCountryCode = "US";
         Assert.NotNull(_access.GetVisibleItemById<BaseItem>(saga.Id, teen));
 
-        // Out of this slice: without a country code on the item, its parents or its libraries, the
-        // rating falls back to the library options, still read through the static.
+        // Without a country code on the item, its parents or its libraries, the rating falls back to the
+        // library options (none here), then the server's code (DEBT-SERVER-7).
         _items[saga.ParentId].PreferredMetadataCountryCode = null;
-        Assert.Throws<MockException>(() => _access.GetVisibleItemById<BaseItem>(saga.Id, teen));
+        Assert.NotNull(_access.GetVisibleItemById<BaseItem>(saga.Id, teen));
+        BaseItem.ConfigurationManager.Configuration.MetadataCountryCode = "FR";
+        Assert.Null(_access.GetVisibleItemById<BaseItem>(saga.Id, teen));
     }
 
     [Fact]
@@ -593,11 +595,7 @@ public sealed class StandaloneVisibilityTests
         var movies = AddLibrary("Movies", "/media/movies");
         var kids = AddLibrary("Kids", "/media/kids");
         var movie = MovieIn(movies);
-        Mock.Get(BaseItem.ItemRepository).Setup(r => r.GetItemList(It.Is<InternalItemsQuery>(q => q.Path != null)))
-            .Returns((InternalItemsQuery q) => _items.Values.Where(i => i.Path == q.Path).OrderByDescending(i => i.DateCreated).Take(1).ToList());
-        Mock.Get(BaseItem.FileSystem).Setup(f => f.MakeAbsolutePath(It.IsAny<string>(), It.IsAny<string>()))
-            .Returns((string folder, string file) => System.IO.Path.GetFullPath(file, folder));
-        BaseItem.Logger = Microsoft.Extensions.Logging.Abstractions.NullLogger<BaseItem>.Instance;
+        LegacyLinkedChildSearch();
         var admitted = User(enabled: [movies.Id, Sets().Id]);
         var other = User(enabled: [kids.Id, Sets().Id]);
 
@@ -695,7 +693,6 @@ public sealed class StandaloneVisibilityTests
     {
         var (saga, movies, vault, kids) = ProductionLikeGraph();
 
-        // A country code on each library keeps the rating off its library options fallback (static, out of slice).
         movies.PreferredMetadataCountryCode = "US";
         kids.PreferredMetadataCountryCode = "US";
         RatingScores();
@@ -727,11 +724,64 @@ public sealed class StandaloneVisibilityTests
         Assert.Equal(expectedNested, Decisions(nested, users));
         family.OfficialRating = "R";
         Assert.All(Decisions(rated, users), Assert.False);
-
-        // Out of this slice: a linked child the lookup does not find is searched by path, through the static.
-        rated.LinkedChildren = [.. rated.LinkedChildren, new LinkedChild { ItemId = Guid.NewGuid() }];
-        Assert.Throws<MockException>(() => _access.GetVisibleItemById<BaseItem>(rated.Id, users[0]));
     }
+
+#pragma warning disable CS0618 // the legacy LinkedChild path is the data under test
+    [Fact]
+    public void AccessPath_BoxSet_LegacyLinkedChildrenAndLibraryOptions_DecideWithAStaticThatThrowsOnEveryCall()
+    {
+        var (saga, movies, vault, kids) = ProductionLikeGraph();
+
+        // No country code on any chain: the rating reads the first library's options. Kids' are set before
+        // the first read (they are cached by path).
+        var kidsOptions = _options[System.IO.Path.Combine(kids.Path, "options.xml")] = new LibraryOptions { MetadataCountryCode = "US" };
+        BaseItem.LocalizationManager = Mock.Of<ILocalizationManager>(l =>
+            l.GetRatingScore("R", "US") == new ParentalRatingScore(17, null)
+            && l.GetRatingScore("PG", "US") == new ParentalRatingScore(10, null)
+            && l.GetRatingScore("PG", "FR") == new ParentalRatingScore(18, null));
+        LegacyLinkedChildSearch();
+        var family = MovieIn(kids);
+        family.OfficialRating = "PG";
+        saga.OfficialRating = "R";
+        var boxSet = AddBoxSet();
+
+        // Each decision starts from entries without a usable id (a found id is cached on the entry): the
+        // family movie by path only, saga by a stale id then its path.
+        LinkedChild[] Legacy() => [new LinkedChild { Path = family.Path }, new LinkedChild { ItemId = Guid.NewGuid(), Path = saga.Path }];
+        bool Static(User u)
+        {
+            boxSet.LinkedChildren = Legacy();
+            return boxSet.IsVisibleStandalone(u);
+        }
+
+        bool Access(User u)
+        {
+            boxSet.LinkedChildren = Legacy();
+            return _access.GetVisibleItemById<BaseItem>(boxSet.Id, u) is not null;
+        }
+
+        var users = Users(movies, vault, kids);
+        foreach (var user in users)
+        {
+            user.MaxParentalRatingScore = 12;
+        }
+
+        // Saga is above the maximum, the family movie (PG, US: 10) is not, so the box set is not hidden for
+        // its rating; the children's libraries (Movies and Vault, Kids) decide, the hosting library first.
+        var expected = new[] { true, false, false, true, true, true, true, false, true, false, false };
+        Assert.Equal(expected, users.Select(Static));
+        ThrowingStatic();
+        Assert.Throws<MockException>(() => Static(users[0]));
+
+        Assert.Equal(expected, users.Select(Access));
+        Assert.Equal(family.Id, boxSet.LinkedChildren[0].ItemId);
+        Assert.Equal(saga.Id, boxSet.LinkedChildren[1].ItemId);
+
+        // Kids' options now rate the family movie above the maximum too: every child is restricted.
+        kidsOptions.MetadataCountryCode = "FR";
+        Assert.All(users.Select(Access), Assert.False);
+    }
+#pragma warning restore CS0618
 
     [Fact]
     public void AccessPath_BoxSet_HostingLibraryRightsApplyWithoutRebuildingAnything()
@@ -860,6 +910,19 @@ public sealed class StandaloneVisibilityTests
         users[2].SetPreference(PreferenceKind.EnabledChannels, [channel.Id]);
         item.Tags = ["kids"];
         Assert.Equal([true, true, true, false, false, true], Decisions(item, users));
+    }
+
+    /// <summary>
+    /// The path search of a legacy linked child: the repository answers a path query with the newest item
+    /// at that path, and relative paths resolve against the box set's folder. The misses are logged.
+    /// </summary>
+    private void LegacyLinkedChildSearch()
+    {
+        Mock.Get(BaseItem.ItemRepository).Setup(r => r.GetItemList(It.Is<InternalItemsQuery>(q => q.Path != null)))
+            .Returns((InternalItemsQuery q) => _items.Values.Where(i => i.Path == q.Path).OrderByDescending(i => i.DateCreated).Take(1).ToList());
+        Mock.Get(BaseItem.FileSystem).Setup(f => f.MakeAbsolutePath(It.IsAny<string>(), It.IsAny<string>()))
+            .Returns((string folder, string file) => System.IO.Path.GetFullPath(file, folder));
+        BaseItem.Logger = Microsoft.Extensions.Logging.Abstractions.NullLogger<BaseItem>.Instance;
     }
 
     private static void RatingScores() => BaseItem.LocalizationManager = Mock.Of<ILocalizationManager>(l =>

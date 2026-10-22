@@ -1867,7 +1867,7 @@ namespace Tesserafin.Controller.Entities
         /// <summary>
         /// Resolves a list of <see cref="LinkedChild"/> entries to their <see cref="BaseItem"/> targets,
         /// batching the database lookup across all entries with a known ItemId.
-        /// Entries without a usable ItemId fall back to the per-entry <see cref="BaseItem.GetLinkedChild"/>
+        /// Entries without a usable ItemId fall back to the per-entry <see cref="BaseItem.GetLinkedChild(LinkedChild)"/>
         /// path (legacy path-based resolution).
         /// </summary>
         /// <param name="linkedChildren">Linked children to resolve.</param>

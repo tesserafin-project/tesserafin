@@ -3,27 +3,30 @@ using System.Collections.Generic;
 using System.Linq;
 using Tesserafin.Controller.Entities;
 using Tesserafin.Controller.Library;
+using Tesserafin.Controller.Persistence;
 using Tesserafin.Database.Implementations.Entities;
 
 namespace Tesserafin.Server.Core.Library
 {
     /// <summary>
     /// Sole production implementation of <see cref="ITagVisibilityService"/>,
-    /// <see cref="IStandaloneVisibilityService"/> and <see cref="IBoxSetVisibilityService"/>, built on the id lookup (parents), the library
-    /// membership resolver and the user root folder (libraries) only.
+    /// <see cref="IStandaloneVisibilityService"/>, <see cref="IBoxSetVisibilityService"/> and
+    /// <see cref="ILinkedChildVisibilityService"/>, built on the id lookup (parents), the library
+    /// membership resolver, the user root folder (libraries) and the item repository (path search) only.
     /// </summary>
     /// <remarks>
     /// The combination and the filter are the entities' own (<see cref="BaseItem.CombineInheritedTags"/>,
     /// <see cref="BaseItem.EvaluateTagVisibility"/>); only where the parents and libraries come from
     /// differs from <see cref="BaseItem.GetInheritedTags()"/> (DEBT-SERVER-3). The same holds for the
     /// parent and library checks of the standalone visibility, which stay in the entities (DEBT-SERVER-4),
-    /// and for the box set's library and linked-children checks (DEBT-SERVER-5).
+    /// and for the box set's library and linked-children checks (DEBT-SERVER-5, DEBT-SERVER-7).
     /// </remarks>
-    internal sealed class TagVisibilityService : IBoxSetVisibilityService
+    internal sealed class TagVisibilityService : ILinkedChildVisibilityService
     {
         private readonly IItemLookupService _itemLookupService;
         private readonly ICollectionFolderResolver _collectionFolderResolver;
         private readonly IUserRootFolderProvider _userRootFolderProvider;
+        private readonly IItemRepository _itemRepository;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="TagVisibilityService"/> class.
@@ -31,11 +34,13 @@ namespace Tesserafin.Server.Core.Library
         /// <param name="itemLookupService">The cached id lookup (parents).</param>
         /// <param name="collectionFolderResolver">The library membership resolver.</param>
         /// <param name="userRootFolderProvider">The user root folder (its children are the libraries).</param>
-        public TagVisibilityService(IItemLookupService itemLookupService, ICollectionFolderResolver collectionFolderResolver, IUserRootFolderProvider userRootFolderProvider)
+        /// <param name="itemRepository">The item repository (path search).</param>
+        public TagVisibilityService(IItemLookupService itemLookupService, ICollectionFolderResolver collectionFolderResolver, IUserRootFolderProvider userRootFolderProvider, IItemRepository itemRepository)
         {
             _itemLookupService = itemLookupService;
             _collectionFolderResolver = collectionFolderResolver;
             _userRootFolderProvider = userRootFolderProvider;
+            _itemRepository = itemRepository;
         }
 
         /// <inheritdoc />
@@ -67,6 +72,12 @@ namespace Tesserafin.Server.Core.Library
         public BaseItem? GetItemById(Guid id)
         {
             return _itemLookupService.GetItemById(id);
+        }
+
+        /// <inheritdoc />
+        public BaseItem? FindByPath(string path)
+        {
+            return _itemRepository.GetItemList(ItemPathQuery.Create(path, null)).FirstOrDefault();
         }
 
         /// <inheritdoc />

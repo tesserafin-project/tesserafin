@@ -1199,16 +1199,7 @@ namespace Tesserafin.Server.Core.Library
             // In most cases, the newest one will be and the others obsolete but not yet cleaned up
             ArgumentException.ThrowIfNullOrEmpty(path);
 
-            var query = new InternalItemsQuery
-            {
-                Path = path,
-                IsFolder = isFolder,
-                OrderBy = [(ItemSortBy.DateCreated, SortOrder.Descending)],
-                Limit = 1,
-                DtoOptions = new DtoOptions(true)
-            };
-
-            return GetItemList(query)
+            return GetItemList(ItemPathQuery.Create(path, isFolder))
                 .FirstOrDefault();
         }
 

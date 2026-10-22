@@ -78,7 +78,7 @@ public sealed class InheritedTagVisibilityTests
             .Create();
 
         _lookup = lookup;
-        _tags = new Tesserafin.Server.Core.Library.TagVisibilityService(lookup, resolver, rootProvider);
+        _tags = new Tesserafin.Server.Core.Library.TagVisibilityService(lookup, resolver, rootProvider, repository.Object);
         _access = new Tesserafin.Server.Core.Library.ItemAccessService(lookup, _tags);
 
         BaseItem.LibraryManager = manager;

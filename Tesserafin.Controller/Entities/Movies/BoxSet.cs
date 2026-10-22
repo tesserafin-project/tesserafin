@@ -335,9 +335,9 @@ namespace Tesserafin.Controller.Entities.Movies
         }
 
         /// <summary>
-        /// Gets the linked children as <see cref="Folder.GetLinkedChildren()"/> does, by id through the service
-        /// when there is one. An entry without an id, or whose item the service does not find, takes
-        /// <see cref="BaseItem.GetLinkedChild"/>, which searches by path through the static.
+        /// Gets the linked children as <see cref="Folder.GetLinkedChildren()"/> does, through the service when
+        /// there is one: by id, then, for an entry without an id or whose id finds nothing, by path
+        /// (DEBT-SERVER-7).
         /// </summary>
         private List<BaseItem> GetLinkedChildren(IBoxSetVisibilityService scope)
         {
@@ -347,7 +347,7 @@ namespace Tesserafin.Controller.Entities.Movies
             }
 
             return LinkedChildren
-                .Select(i => (i.ItemId is { } id && !id.Equals(Guid.Empty) ? scope.GetItemById(id) : null) ?? GetLinkedChild(i))
+                .Select(i => GetLinkedChild(i, scope))
                 .Where(i => i is not null)
                 .ToList();
         }
