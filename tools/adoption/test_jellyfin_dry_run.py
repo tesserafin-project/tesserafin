@@ -170,7 +170,7 @@ class CaptureTests(unittest.TestCase):
                 pass
 
             def do_GET(self):
-                owner.calls.append((self.command, self.path, self.headers.get("X-Emby-Token")))
+                owner.calls.append((self.command, self.path, self.headers.get("Authorization")))
                 url = urlsplit(self.path)
                 path = url.path.removeprefix("/jellyfin")
                 if owner.fault == "redirect":
@@ -218,7 +218,7 @@ class CaptureTests(unittest.TestCase):
         self.assertEqual(result["userItems"]["bob"][0]["UserData"]["PlaybackPositionTicks"], 100_000_000)
         self.assertNotIn("PRIVATE_TOKEN", json.dumps(result))
         self.assertNotIn("MUST_NOT_EXPORT", json.dumps(result))
-        self.assertTrue(all(method == "GET" and token == "PRIVATE_TOKEN" and "PRIVATE_TOKEN" not in url for method, url, token in self.calls))
+        self.assertTrue(all(method == "GET" and token == 'MediaBrowser Token="PRIVATE_TOKEN"' and "PRIVATE_TOKEN" not in url for method, url, token in self.calls))
         queries = [parse_qs(urlsplit(url).query) for _, url, _ in self.calls if "/Items?" in url]
         self.assertEqual([q["userId"] for q in queries], [["alice"], ["bob"]])
 

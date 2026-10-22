@@ -1,0 +1,65 @@
+name: Adoption state application
+
+on:
+  pull_request:
+    paths:
+      - 'tools/adoption/**'
+      - 'docs/adoption/jellyfin-state-apply.md'
+      - '.github/workflows/adoption-state-apply.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: adoption-state-apply-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  artifact-rehearsal:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read
+    env:
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Test planner, capture and apply failure boundaries
+        run: python3 -m unittest discover -s tools/adoption -p 'test_*.py' -v
+      - name: Prepare private build credentials and public evidence directory
+        run: |
+          umask 077
+          mkdir "$RUNNER_TEMP/adoption-docker-config" "$RUNNER_TEMP/adoption-evidence"
+          printf 'DOCKER_CONFIG=%s\n' "$RUNNER_TEMP/adoption-docker-config" >> "$GITHUB_ENV"
+      - name: Authenticate read-only access to pinned Web build input
+        env:
+          REGISTRY_TOKEN: ${{ github.token }}
+        run: printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+      - name: Build the exact target candidate without publishing
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+          epoch="$(git show -s --format=%ct HEAD)"
+          docker build --platform linux/amd64 --build-arg VCS_REF="$CANDIDATE_SHA" \
+            --build-arg SOURCE_DATE_EPOCH="$epoch" --iidfile "$RUNNER_TEMP/adoption-image-id" .
+      - name: Capture, apply, restart and conditionally roll back across real images
+        run: |
+          python3 tools/adoption/rehearse_state_apply.py \
+            --target-image "$(cat "$RUNNER_TEMP/adoption-image-id")" \
+            --expected-source "$CANDIDATE_SHA" \
+            --output "$RUNNER_TEMP/adoption-evidence/result.json"
+      - name: Retain allowlisted image identities and result only
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: adoption-state-apply-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/adoption-evidence/result.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Remove transient registry credentials
+        if: always()
+        run: rm -rf -- "$DOCKER_CONFIG"

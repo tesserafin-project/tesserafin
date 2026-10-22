@@ -8,6 +8,10 @@ copy/move media, transfer policy, write user state, change passwords or provide
 an import execution command. Upgrading an existing Tesserafin server and restoring
 a Tesserafin backup are different operations.
 
+The separate [experimental state-apply tool](jellyfin-state-apply.md) consumes
+these snapshots and mappings with narrower conflict rules. This capture/simulation
+command remains GET-only/offline and never applies its candidate records itself.
+
 ## Selected source/version matrix
 
 | Input | Selected adapter | Evidence / limitation |

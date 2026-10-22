@@ -135,10 +135,12 @@ class Reader:
         except ValueError:
             local = parsed.hostname.lower() == "localhost"
         require(parsed.scheme == "https" or local or allow_http, "LAN HTTP requires --allow-http")
-        require(isinstance(token, str) and 0 < len(token) <= 8192 and token.strip() and not any(c in token for c in "\r\n"),
+        require(isinstance(token, str) and 0 < len(token) <= 8192 and token.strip() and not any(c in token for c in "\r\n\""),
                 "credential file is empty or malformed")
         self.base_url = base_url.rstrip("/")
         self.token = token
+        # Tesserafin disables the legacy X-Emby-Token header; both products accept this form.
+        self.authorization = f'MediaBrowser Token="{token}"'
         # Never forward a credential through an environment-configured proxy or redirect.
         self.opener = build_opener(ProxyHandler({}), NoRedirect())
         self.remaining = MAX_ROWS
@@ -153,7 +155,7 @@ class Reader:
         require(remaining > 0 and self.requests_remaining > 0, "capture time/request budget exceeded")
         self.requests_remaining -= 1
         url = self.base_url + path + ("?" + urlencode(query) if query else "")
-        request = Request(url, method="GET", headers={"X-Emby-Token": self.token, "Accept": "application/json"})
+        request = Request(url, method="GET", headers={"Authorization": self.authorization, "Accept": "application/json"})
         try:
             with self.opener.open(request, timeout=min(15, remaining)) as response:
                 chunks = []
