@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -52,7 +51,7 @@ public sealed class RecordingsManager : IRecordingsManager, IDisposable
     private readonly SeriesTimerManager _seriesTimerManager;
     private readonly RecordingsMetadataManager _recordingsMetadataManager;
 
-    private readonly ConcurrentDictionary<string, ActiveRecordingInfo> _activeRecordings = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ActiveRecordings _activeRecordings;
     private readonly AsyncNonKeyedLocker _recordingDeleteSemaphore = new();
     private bool _disposed;
 
@@ -72,6 +71,7 @@ public sealed class RecordingsManager : IRecordingsManager, IDisposable
     /// <param name="timerManager">The <see cref="TimerManager"/>.</param>
     /// <param name="seriesTimerManager">The <see cref="SeriesTimerManager"/>.</param>
     /// <param name="recordingsMetadataManager">The <see cref="RecordingsMetadataManager"/>.</param>
+    /// <param name="activeRecordings">The <see cref="ActiveRecordings"/>.</param>
     public RecordingsManager(
         ILogger<RecordingsManager> logger,
         IServerConfigurationManager config,
@@ -85,7 +85,8 @@ public sealed class RecordingsManager : IRecordingsManager, IDisposable
         IStreamHelper streamHelper,
         TimerManager timerManager,
         SeriesTimerManager seriesTimerManager,
-        RecordingsMetadataManager recordingsMetadataManager)
+        RecordingsMetadataManager recordingsMetadataManager,
+        ActiveRecordings activeRecordings)
     {
         _logger = logger;
         _config = config;
@@ -100,6 +101,7 @@ public sealed class RecordingsManager : IRecordingsManager, IDisposable
         _timerManager = timerManager;
         _seriesTimerManager = seriesTimerManager;
         _recordingsMetadataManager = recordingsMetadataManager;
+        _activeRecordings = activeRecordings;
 
         _config.NamedConfigurationUpdated += OnNamedConfigurationUpdated;
     }
@@ -122,23 +124,7 @@ public sealed class RecordingsManager : IRecordingsManager, IDisposable
 
     /// <inheritdoc />
     public ActiveRecordingInfo? GetActiveRecordingInfo(string path)
-    {
-        if (string.IsNullOrWhiteSpace(path) || _activeRecordings.IsEmpty)
-        {
-            return null;
-        }
-
-        foreach (var (_, recordingInfo) in _activeRecordings)
-        {
-            if (string.Equals(recordingInfo.Path, path, StringComparison.Ordinal)
-                && !recordingInfo.CancellationTokenSource.IsCancellationRequested)
-            {
-                return recordingInfo.Timer.Status == RecordingStatus.InProgress ? recordingInfo : null;
-            }
-        }
-
-        return null;
-    }
+        => _activeRecordings.GetActiveRecordingInfo(path);
 
     /// <inheritdoc />
     public IEnumerable<VirtualFolderInfo> GetRecordingFolders()

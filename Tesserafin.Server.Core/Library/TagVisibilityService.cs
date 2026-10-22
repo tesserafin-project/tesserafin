@@ -4,6 +4,7 @@ using System.Linq;
 using Tesserafin.Controller.Configuration;
 using Tesserafin.Controller.Entities;
 using Tesserafin.Controller.Library;
+using Tesserafin.Controller.LiveTv;
 using Tesserafin.Controller.Persistence;
 using Tesserafin.Database.Implementations.Entities;
 using Tesserafin.Model.Entities;
@@ -14,9 +15,10 @@ namespace Tesserafin.Server.Core.Library
     /// <summary>
     /// Sole production implementation of <see cref="ITagVisibilityService"/>,
     /// <see cref="IStandaloneVisibilityService"/>, <see cref="IBoxSetVisibilityService"/>,
-    /// <see cref="ILinkedChildVisibilityService"/> and <see cref="IRatingVisibilityService"/>, built on the id
-    /// lookup (parents), the library membership resolver, the user root folder (libraries), the item repository
-    /// (path search), the localization (rating scores) and the server configuration (country code) only.
+    /// <see cref="ILinkedChildVisibilityService"/>, <see cref="IRatingVisibilityService"/> and
+    /// <see cref="IRecordingVisibilityService"/>, built on the id lookup (parents), the library membership
+    /// resolver, the user root folder (libraries), the item repository (path search), the localization (rating
+    /// scores), the server configuration (country code) and the active recordings only.
     /// </summary>
     /// <remarks>
     /// The combination and the filter are the entities' own (<see cref="BaseItem.CombineInheritedTags"/>,
@@ -24,9 +26,9 @@ namespace Tesserafin.Server.Core.Library
     /// differs from <see cref="BaseItem.GetInheritedTags()"/> (DEBT-SERVER-3). The same holds for the
     /// parent and library checks of the standalone visibility, which stay in the entities (DEBT-SERVER-4),
     /// and for the box set's library and linked-children checks (DEBT-SERVER-5, DEBT-SERVER-7), and the
-    /// rating score (DEBT-SERVER-8).
+    /// rating score (DEBT-SERVER-8) and a video's source type (DEBT-SERVER-9).
     /// </remarks>
-    internal sealed class TagVisibilityService : ILinkedChildVisibilityService, IRatingVisibilityService
+    internal sealed class TagVisibilityService : ILinkedChildVisibilityService, IRatingVisibilityService, IRecordingVisibilityService
     {
         private readonly IItemLookupService _itemLookupService;
         private readonly ICollectionFolderResolver _collectionFolderResolver;
@@ -34,6 +36,7 @@ namespace Tesserafin.Server.Core.Library
         private readonly IItemRepository _itemRepository;
         private readonly ILocalizationManager _localizationManager;
         private readonly IServerConfigurationManager _configurationManager;
+        private readonly ActiveRecordings _activeRecordings;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="TagVisibilityService"/> class.
@@ -44,7 +47,8 @@ namespace Tesserafin.Server.Core.Library
         /// <param name="itemRepository">The item repository (path search).</param>
         /// <param name="localizationManager">The localization (rating scores).</param>
         /// <param name="configurationManager">The server configuration (country code).</param>
-        public TagVisibilityService(IItemLookupService itemLookupService, ICollectionFolderResolver collectionFolderResolver, IUserRootFolderProvider userRootFolderProvider, IItemRepository itemRepository, ILocalizationManager localizationManager, IServerConfigurationManager configurationManager)
+        /// <param name="activeRecordings">The recordings in progress.</param>
+        public TagVisibilityService(IItemLookupService itemLookupService, ICollectionFolderResolver collectionFolderResolver, IUserRootFolderProvider userRootFolderProvider, IItemRepository itemRepository, ILocalizationManager localizationManager, IServerConfigurationManager configurationManager, ActiveRecordings activeRecordings)
         {
             _itemLookupService = itemLookupService;
             _collectionFolderResolver = collectionFolderResolver;
@@ -52,6 +56,7 @@ namespace Tesserafin.Server.Core.Library
             _itemRepository = itemRepository;
             _localizationManager = localizationManager;
             _configurationManager = configurationManager;
+            _activeRecordings = activeRecordings;
         }
 
         /// <inheritdoc />
@@ -101,6 +106,12 @@ namespace Tesserafin.Server.Core.Library
         public string GetServerMetadataCountryCode()
         {
             return _configurationManager.Configuration.MetadataCountryCode;
+        }
+
+        /// <inheritdoc />
+        public bool IsActiveRecording(string path)
+        {
+            return _activeRecordings.GetActiveRecordingInfo(path) is not null;
         }
 
         /// <inheritdoc />

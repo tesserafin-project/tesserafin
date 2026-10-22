@@ -1907,7 +1907,7 @@ namespace Tesserafin.Controller.Entities
 
             if (string.IsNullOrEmpty(rating))
             {
-                return !GetBlockUnratedValue(user);
+                return !GetBlockUnratedValue(user, scope);
             }
 
             var countryCode = GetPreferredMetadataCountryCode(scope);
@@ -1918,7 +1918,7 @@ namespace Tesserafin.Controller.Entities
             // Could not determine rating level
             if (ratingScore is null)
             {
-                var isAllowed = !GetBlockUnratedValue(user);
+                var isAllowed = !GetBlockUnratedValue(user, scope);
 
                 if (!isAllowed)
                 {
@@ -2084,6 +2084,29 @@ namespace Tesserafin.Controller.Entities
         }
 
         /// <summary>
+        /// As <see cref="GetBlockUnratedValue(User)"/>, for the parental check: a plain video reads its source type
+        /// through the service when it supplies it (DEBT-SERVER-9).
+        /// </summary>
+        /// <param name="user">The user.</param>
+        /// <param name="scope">The service of the check; <c>null</c> when it has none.</param>
+        /// <returns><c>true</c> if blocked, <c>false</c> otherwise.</returns>
+        internal virtual bool GetBlockUnratedValue(User user, IStandaloneVisibilityService scope)
+        {
+            return GetBlockUnratedValue(user);
+        }
+
+        /// <summary>
+        /// Gets the <see cref="SourceType"/> the visibility check reads: a video asks the service whether it is an
+        /// active recording when the service supplies it (DEBT-SERVER-9).
+        /// </summary>
+        /// <param name="scope">The service of the check; <c>null</c> when it has none.</param>
+        /// <returns>The source type.</returns>
+        internal virtual SourceType GetSourceType(IStandaloneVisibilityService scope)
+        {
+            return SourceType;
+        }
+
+        /// <summary>
         /// Determines if this item should be visible to a given user, reading tags through the static <see cref="LibraryManager"/>.
         /// Kept for the published surface; overrides belong on the overload that takes an <see cref="ITagVisibilityService"/>.
         /// </summary>
@@ -2130,7 +2153,7 @@ namespace Tesserafin.Controller.Entities
         /// <returns><c>true</c> if the item is visible to the user.</returns>
         public virtual bool IsVisibleStandalone(User user, ITagVisibilityService tagVisibility)
         {
-            if (SourceType == SourceType.Channel)
+            if (GetSourceType(tagVisibility as IStandaloneVisibilityService) == SourceType.Channel)
             {
                 return IsVisibleStandaloneInternal(user, false, tagVisibility) && Channel.IsChannelVisible(this, user, tagVisibility);
             }

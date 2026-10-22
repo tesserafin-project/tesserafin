@@ -14,8 +14,10 @@ using Tesserafin.Controller.Library;
 using Tesserafin.Controller.LiveTv;
 using Tesserafin.Controller.Persistence;
 using Tesserafin.Controller.Providers;
+using Tesserafin.Data;
 using Tesserafin.Data.Enums;
 using Tesserafin.Database.Implementations.Entities;
+using Tesserafin.Database.Implementations.Enums;
 using Tesserafin.Extensions;
 using Tesserafin.Model.Dto;
 using Tesserafin.Model.Entities;
@@ -454,6 +456,28 @@ namespace Tesserafin.Controller.Entities
         protected override bool IsActiveRecording()
         {
             return RecordingsManager.GetActiveRecordingInfo(Path) is not null;
+        }
+
+        internal override SourceType GetSourceType(IStandaloneVisibilityService scope)
+        {
+            if (scope is not IRecordingVisibilityService recordings)
+            {
+                return SourceType;
+            }
+
+            return recordings.IsActiveRecording(Path) ? SourceType.LiveTV : base.SourceType;
+        }
+
+        internal override bool GetBlockUnratedValue(User user, IStandaloneVisibilityService scope)
+        {
+            // Only the base unrated type reads the source type; the subclasses return their own (Movie, Episode...).
+            if (GetType() != typeof(Video))
+            {
+                return GetBlockUnratedValue(user);
+            }
+
+            var type = GetSourceType(scope) == SourceType.Channel ? UnratedItem.ChannelContent : UnratedItem.Other;
+            return user.GetPreferenceValues<UnratedItem>(PreferenceKind.BlockUnratedItems).Contains(type);
         }
 
         public override bool CanDelete()

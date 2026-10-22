@@ -20,6 +20,7 @@ using Tesserafin.Database.Implementations.Enums;
 using Tesserafin.Model.Configuration;
 using Tesserafin.Model.Entities;
 using Tesserafin.Model.Globalization;
+using Tesserafin.Model.LiveTv;
 using Tesserafin.Model.MediaInfo;
 using Tesserafin.Model.Serialization;
 using Xunit;
@@ -46,7 +47,7 @@ public sealed class StandaloneVisibilityTests
     private readonly Dictionary<Guid, BaseItem> _items = [];
     private readonly List<Folder> _libraries = [];
     private readonly Dictionary<string, LibraryOptions> _options = [];
-    private readonly HashSet<string> _recordings = [];
+    private readonly ActiveRecordings _activeRecordings = new();
     private readonly IItemAccessService _access;
     private readonly IServerConfigurationManager _configuration;
     private readonly Tesserafin.Server.Core.Library.LibraryManager _manager;
@@ -91,7 +92,7 @@ public sealed class StandaloneVisibilityTests
         var localization = new Mock<ILocalizationManager>();
         localization.Setup(l => l.GetRatingScore(It.IsAny<string>(), It.IsAny<string?>()))
             .Returns((string rating, string? country) => _scores?.GetRatingScore(rating, country)!);
-        _access = new Tesserafin.Server.Core.Library.ItemAccessService(lookup, new Tesserafin.Server.Core.Library.TagVisibilityService(lookup, resolver, rootProvider, repository.Object, localization.Object, configuration.Object));
+        _access = new Tesserafin.Server.Core.Library.ItemAccessService(lookup, new Tesserafin.Server.Core.Library.TagVisibilityService(lookup, resolver, rootProvider, repository.Object, localization.Object, configuration.Object, _activeRecordings));
 
         var xml = new Mock<IXmlSerializer>();
         xml.Setup(x => x.DeserializeFromFile(typeof(LibraryOptions), It.IsAny<string>()))
@@ -104,10 +105,10 @@ public sealed class StandaloneVisibilityTests
         BaseItem.ItemRepository = repository.Object;
         BaseItem.ConfigurationManager = configuration.Object;
         BaseItem.MediaSourceManager = Mock.Of<IMediaSourceManager>(m => m.GetPathProtocol(It.IsAny<string>()) == MediaProtocol.File);
-        // A path in _recordings is an active recording (Record).
+        // The static answers from the same recordings as the service (Record).
         Video.RecordingsManager = Mock.Of<IRecordingsManager>();
         Mock.Get(Video.RecordingsManager).Setup(r => r.GetActiveRecordingInfo(It.IsAny<string>()))
-            .Returns((string path) => _recordings.Contains(path) ? new ActiveRecordingInfo { Path = path } : null);
+            .Returns((string path) => _activeRecordings.GetActiveRecordingInfo(path));
 
         var fileSystem = new Mock<Tesserafin.Model.IO.IFileSystem>();
         fileSystem.Setup(f => f.ContainsSubPath(It.IsAny<string>(), It.IsAny<string>()))
@@ -1015,7 +1016,7 @@ public sealed class StandaloneVisibilityTests
         Record(item);
         AssertVisible(item, user, true);
 
-        _recordings.Clear();
+        _activeRecordings.Clear();
         Assert.Throws<NullReferenceException>(() => _access.GetVisibleItemById<BaseItem>(item.Id, user));
     }
 
@@ -1041,6 +1042,42 @@ public sealed class StandaloneVisibilityTests
         Record(movie);
         Assert.Equal([true, true, false, true], users.Select(u => Decide(video, u)));
         Assert.Equal([true, true, true, false], users.Select(u => Decide(movie, u)));
+    }
+
+    [Fact]
+    public void AccessPath_ActiveRecording_DecidesWithStaticsThatThrowOnEveryCall()
+    {
+        var (channel, movie) = ChannelWithItem();
+        var video = Add(new Video { Path = "/media/recordings/b.ts", ChannelId = channel.Id, ParentId = channel.Id });
+        var orphan = Add(new Video { Path = "/media/recordings/a.ts", ChannelId = Guid.NewGuid() });
+        var movies = AddLibrary("Movies", "/media/movies");
+        var inLibrary = MovieIn(movies);
+        var homeVideo = Add(new Video { Path = movies.PhysicalLocations[0] + "/home.mp4", ParentId = inLibrary.ParentId });
+        var users = new[] { BlockingUnrated(UnratedItem.ChannelContent), BlockingUnrated(UnratedItem.Other), BlockingUnrated(UnratedItem.Movie) };
+        var items = new BaseItem[] { video, orphan, movie, inLibrary, homeVideo };
+        foreach (var item in items)
+        {
+            Record(item);
+        }
+
+        // Every video records: none is channel content, so a plain one is unrated other and a movie unrated movie.
+        bool[][] expected = [[true, false, true], [true, false, true], [true, true, false], [true, true, false], [true, false, true]];
+        Assert.Equal(expected, items.Select(i => users.Select(u => i.IsVisibleStandalone(u)).ToArray()));
+
+        // Every static the check could read throws on any call.
+        ThrowingStatic();
+        BaseItem.ChannelManager = new Mock<IChannelManager>(MockBehavior.Strict).Object;
+        BaseItem.ConfigurationManager = new Mock<IServerConfigurationManager>(MockBehavior.Strict).Object;
+        BaseItem.LocalizationManager = new Mock<ILocalizationManager>(MockBehavior.Strict).Object;
+        Video.RecordingsManager = new Mock<IRecordingsManager>(MockBehavior.Strict).Object;
+        Assert.Throws<MockException>(() => homeVideo.IsVisibleStandalone(users[0]));
+
+        Assert.Equal(expected, items.Select(i => Decisions(i, users)));
+
+        // Same process: the recordings that stop apply on the next decision; the channel video is channel content again.
+        _activeRecordings.Clear();
+        Record(orphan);
+        Assert.Equal([[false, true, true], [true, false, true], [true, true, false], [true, true, false], [true, false, true]], items.Select(i => Decisions(i, users)));
     }
 
     [Fact]
@@ -1180,7 +1217,12 @@ public sealed class StandaloneVisibilityTests
         return (channel, Add(new Movie { Path = "http://channel.invalid/a.mp4", ChannelId = id, ParentId = id }));
     }
 
-    private void Record(BaseItem item) => _recordings.Add(item.Path);
+    private void Record(BaseItem item) => _activeRecordings[item.Id.ToString("N")] = new ActiveRecordingInfo
+    {
+        Path = item.Path,
+        Timer = new TimerInfo { Status = RecordingStatus.InProgress },
+        CancellationTokenSource = new System.Threading.CancellationTokenSource(),
+    };
 
     private static User BlockingUnrated(UnratedItem type)
     {

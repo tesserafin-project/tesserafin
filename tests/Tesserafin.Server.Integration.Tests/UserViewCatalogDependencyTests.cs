@@ -168,6 +168,8 @@ namespace Tesserafin.Server.Integration.Tests
 
             // And the parental check its rating score and the server's country code (DEBT-SERVER-8).
             Assert.True(typeof(IRatingVisibilityService).IsAssignableFrom(implementation));
+            // And a video's source type whether it is an active recording (DEBT-SERVER-9).
+            Assert.True(typeof(IRecordingVisibilityService).IsAssignableFrom(implementation));
         }
 
         [Theory]
