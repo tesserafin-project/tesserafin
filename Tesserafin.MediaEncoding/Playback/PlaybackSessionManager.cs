@@ -299,9 +299,11 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
         // all has been mutated at this point.
         if (v2Captured is { ExecutionPlan: null })
         {
+            // #203: id.Value.ToString("N") is PlaybackSessionId.ToString()'s own body projected at the
+            // logging boundary - the same 32 hex characters, visible to the analysis.
             _logger.LogInformation(
                 "Playback session {SessionId} re-plan refused (authoritative v2 decision {DecisionMethod} produced no executable plan, viable {IsViable}, engine {EngineVersion}) - previous session, plan and v2 record left intact.",
-                id,
+                id.Value.ToString("N"),
                 v2Captured.Decision.Method,
                 v2Captured.Decision.IsViable,
                 v2Captured.Decision.EngineVersion);
@@ -613,9 +615,11 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
         // Issue #71: THE line. PlaybackAttemptId is what joins this teardown to the created/replaced
         // lines PR #69 emits on the HTTP edges; RemovalReason is what separates "the client asked"
         // from "an ffmpeg job ended while the user was still watching".
+        // #203: id.Value.ToString("N") is PlaybackSessionId.ToString()'s own body projected at the
+        // logging boundary - the same 32 hex characters, visible to the analysis.
         _logger.LogInformation(
             "Playback session {SessionId} removed (play session {PlaySessionId}, attempt {PlaybackAttemptId}, reason {RemovalReason}, created {CreatedAt}, updated {UpdatedAt}, age {AgeSeconds}s).",
-            id,
+            id.Value.ToString("N"),
             session.PlaySessionId.ToSingleLogLine(),
             session.PlaybackAttemptId.ToSingleLogLine(),
             reason,

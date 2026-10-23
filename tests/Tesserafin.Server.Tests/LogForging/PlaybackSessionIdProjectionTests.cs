@@ -202,6 +202,85 @@ namespace Tesserafin.Server.Tests.LogForging
             Assert.Single(json.Lines());
         }
 
+        /// <summary>
+        /// The rollout's other four statements (#203: the two "already gone" lines of the
+        /// controller, the manager's "re-plan refused" and "removed" lines), templates verbatim.
+        /// Each takes the id first, then the siblings it has always taken; the siblings are
+        /// identical in both calls, so any difference is the projection's.
+        /// </summary>
+        /// <returns>The statements.</returns>
+        public static TheoryData<string, object?[]> RolloutStatements() => new()
+        {
+            {
+                "Playback session {SessionId} delete requested, but the session was already gone.",
+                []
+            },
+            {
+                "Playback session {SessionId} re-plan refused (authoritative v2 decision {DecisionMethod} produced no executable plan, viable {IsViable}, engine {EngineVersion}) - previous session, plan and v2 record left intact.",
+                ["DirectPlay", false, "2.0.0"]
+            },
+            {
+                "Playback session {SessionId} removed (play session {PlaySessionId}, attempt {PlaybackAttemptId}, reason {RemovalReason}, created {CreatedAt}, updated {UpdatedAt}, age {AgeSeconds}s).",
+                ["play-session-1", OrdinaryAttempt, "HttpDelete", new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero), new DateTimeOffset(2026, 1, 2, 3, 4, 6, TimeSpan.Zero), 1.5d]
+            },
+        };
+
+        [Theory]
+        [MemberData(nameof(RolloutStatements))]
+        public void TextFormatter_RendersTheProjectionAndTheStructIdentically_ForEveryRolloutStatement(string template, object?[] siblings)
+        {
+            using var probe = RealFormatterLogProbe.Text();
+            var logger = probe.LoggerFor<PlaybackSessionsController>();
+            var id = PlaybackSessionId.NewId();
+
+#pragma warning disable CA2254 // The templates are constants; both calls are the same statement.
+            logger.LogInformation(template, [id, .. siblings]);
+            logger.LogInformation(template, [id.Value.ToString("N"), .. siblings]);
+#pragma warning restore CA2254
+
+            var lines = probe.Lines();
+            Assert.Equal(2, lines.Length);
+            Assert.Equal(2, probe.TextRecordCount());
+            Assert.Equal(MessageOf(lines[0]), MessageOf(lines[1]), StringComparer.Ordinal);
+            Assert.StartsWith("Playback session " + id.Value.ToString("N") + " ", MessageOf(lines[1]), StringComparison.Ordinal);
+        }
+
+        [Theory]
+        [MemberData(nameof(RolloutStatements))]
+        public void JsonFormatter_RendersTheProjectionAndTheStructIdentically_ForEveryRolloutStatement(string template, object?[] siblings)
+        {
+            using var probe = RealFormatterLogProbe.Json();
+            var logger = probe.LoggerFor<PlaybackSessionsController>();
+            var id = PlaybackSessionId.NewId();
+
+#pragma warning disable CA2254 // The templates are constants; both calls are the same statement.
+            logger.LogInformation(template, [id, .. siblings]);
+            logger.LogInformation(template, [id.Value.ToString("N"), .. siblings]);
+#pragma warning restore CA2254
+
+            var lines = probe.Lines();
+            Assert.Equal(2, lines.Length);
+            var before = JsonDocument.Parse(lines[0]).RootElement;
+            var after = JsonDocument.Parse(lines[1]).RootElement;
+
+            Assert.Equal(before.GetProperty("message").GetString(), after.GetProperty("message").GetString(), StringComparer.Ordinal);
+            Assert.Equal(before.GetProperty("SessionId").ValueKind, after.GetProperty("SessionId").ValueKind);
+            Assert.Equal(id.Value.ToString("N"), after.GetProperty("SessionId").GetString(), StringComparer.Ordinal);
+            Assert.Equal(before.GetProperty("SessionId").GetString(), after.GetProperty("SessionId").GetString(), StringComparer.Ordinal);
+
+            // Every sibling field renders as before, so the projection is the only change.
+            foreach (var property in before.EnumerateObject())
+            {
+                if (property.Name is "SessionId" or "timestamp")
+                {
+                    continue;
+                }
+
+                Assert.True(after.TryGetProperty(property.Name, out var counterpart), property.Name);
+                Assert.Equal(property.Value.GetRawText(), counterpart.GetRawText(), StringComparer.Ordinal);
+            }
+        }
+
         private static void AssertProjectionIsTheSameString(PlaybackSessionId id)
         {
             var declared = id.ToString();
