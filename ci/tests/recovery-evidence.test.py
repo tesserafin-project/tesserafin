@@ -45,6 +45,35 @@ class RecoveryEvidenceTests(unittest.TestCase):
         self.assertFalse(evidence.summarize(self.complete_log(), 0, "recover")["accepted"])
         self.assertFalse(evidence.summarize(self.complete_log(), 0, "source")["accepted"])
 
+    def test_native_deb_phase_requires_loss_files_and_oracle(self):
+        # Literal marker text, not evidence.*: renaming a marker in the parser or the
+        # script without the other must fail here.
+        markers = ("  PASS  distinct users, saved position, favourite, policies, configuration, pack and tokens seeded",
+                   "  PASS  package purged and all persistent state removed before restore",
+                   "  PASS  restored files identical in content, owner, group and mode",
+                   "  PASS  extended state restored identically by user/item/pack identity",
+                   "NATIVE-ROUNDTRIP: deb cold snapshot restored and verified")
+        log = "\n".join(["== 2a. extended ==", markers[0], "== 3e. loss ==", markers[1],
+                         "== 4. restore ==", markers[2], "== 5. restored ==", *markers[3:]])
+        data = evidence.summarize(log, 0, "native-deb")
+        self.assertTrue(data["accepted"])
+        self.assertEqual(data["stages"], ["extended-seed", "state-loss", "restore", "restored-state"])
+        for marker in markers:
+            with self.subTest(marker=marker):
+                self.assertFalse(evidence.summarize(log.replace(marker, ""), 0, "native-deb")["accepted"])
+        # A container run cannot stand in for the native one, nor the reverse.
+        self.assertFalse(evidence.summarize(self.complete_log(), 0, "native-deb")["accepted"])
+        self.assertFalse(evidence.summarize(log, 0, "all")["accepted"])
+        script = (ROOT / "ci/native-recovery-deb.sh").read_text()
+        for marker in markers[1:3] + markers[4:]:
+            self.assertIn(marker.strip().removeprefix("PASS  "), script)
+
+    def test_systemd_states_are_retained_as_diagnostics(self):
+        data = evidence.summarize("DIAG restored-ready restart_count=0 status=active exit_code=0"
+                                  " health_http=200", 1, "native-deb")
+        self.assertEqual(data["diagnostics"], [{"label": "restored-ready", "restart_count": "0",
+                                                "status": "active", "exit_code": "0", "health_http": "200"}])
+
     def test_failure_and_empty_log_cannot_pass(self):
         self.assertFalse(evidence.summarize("", 0)["accepted"])
         self.assertFalse(evidence.summarize(self.complete_log(), 1)["accepted"])

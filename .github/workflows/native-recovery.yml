@@ -1,0 +1,79 @@
+name: Native recovery rehearsal
+
+# Cold-snapshot recovery of the published linux-x64 .deb on a disposable hosted
+# runner (#144). The package is the v1.1.0 release asset, pinned by SHA-256; nothing
+# is built or published. The runner is destroyed afterwards, which is why the
+# rehearsal may purge the package and delete /etc/tesserafin and /var/lib/tesserafin.
+
+on:
+  pull_request:
+    paths:
+      - 'ci/native-recovery-deb.sh'
+      - 'docker/recovery-state.py'
+      - 'ci/recovery-evidence.py'
+      - 'ci/tests/recovery-evidence.test.py'
+      - '.github/workflows/native-recovery.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-recovery-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deb:
+    name: Published .deb cold-snapshot recovery (ubuntu-24.04, amd64)
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      RELEASE_TAG: v1.1.0
+      DEB_FILE: tesserafin-server_1.0.0-1_amd64.deb
+      DEB_SHA256: a01121d984b9cfbbe4f3e494ac1c72f16084f2c43c8cc682f4d365c9fff44495
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ env.CANDIDATE_SHA }}
+          persist-credentials: false
+      - name: Record source provenance and test the evidence boundary
+        run: |
+          set -euo pipefail
+          umask 077
+          export EVIDENCE_DIR="$RUNNER_TEMP/recovery-evidence"
+          printf 'EVIDENCE_DIR=%s\n' "$EVIDENCE_DIR" >> "$GITHUB_ENV"
+          mkdir -p "$EVIDENCE_DIR" "$RUNNER_TEMP/deb"
+          python3 ci/tests/recovery-evidence.test.py
+          python3 ci/recovery-evidence.py init --expected-source "$CANDIDATE_SHA" \
+            --scope "native .deb cold-snapshot recovery; same host, same package, no forward migration" \
+            --out "$EVIDENCE_DIR/source.json"
+      - name: Download the published package and check its pinned digest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release download "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" -p "$DEB_FILE" -D "$RUNNER_TEMP/deb"
+          python3 ci/recovery-evidence.py package --deb "$RUNNER_TEMP/deb/$DEB_FILE" \
+            --expected-sha256 "$DEB_SHA256" --out "$EVIDENCE_DIR/package.json"
+      - name: Install, populate, cold backup, destroy, reinstall, restore and compare
+        run: |
+          set -euo pipefail
+          status=0
+          sudo TF_NATIVE_RECOVERY_DISPOSABLE=1 bash ci/native-recovery-deb.sh \
+            "$RUNNER_TEMP/deb/$DEB_FILE" "$DEB_SHA256" > "$RUNNER_TEMP/recovery-raw.log" 2>&1 || status=$?
+          python3 ci/recovery-evidence.py result --phase native-deb --raw "$RUNNER_TEMP/recovery-raw.log" \
+            --exit-code "$status" --out "$EVIDENCE_DIR/result.json"
+      - name: Retain allowlisted recovery evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-recovery-deb-${{ env.CANDIDATE_SHA }}
+          path: ${{ runner.temp }}/recovery-evidence/*.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Remove raw transient output
+        if: always()
+        run: sudo rm -rf -- "$RUNNER_TEMP/recovery-raw.log" "$RUNNER_TEMP/deb"
