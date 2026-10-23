@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Allowlisted provenance/results for an isolated Docker recovery rehearsal.
+"""Allowlisted provenance/results for an isolated Docker or native recovery rehearsal.
 
 Never copies raw server output, authentication responses, fixture snapshots or
 archive files into the retained evidence directory.
@@ -16,7 +16,7 @@ import sys
 
 STAGES = {"0": "prepare", "1": "first-boot", "2": "populate", "2a": "extended-seed",
           "3": "backup", "3a": "artifact-permissions", "3b": "archive-validation",
-          "3c": "restart-failure", "3d": "off-host-verification", "4": "restore", "5": "restored-state",
+          "3c": "restart-failure", "3d": "off-host-verification", "3e": "state-loss", "4": "restore", "5": "restored-state",
           "6": "bind-mounts", "7": "helper-pin"}
 SEED_MARKER = "  PASS  distinct users, saved position, favourite, policies, configuration, pack and tokens seeded"
 RESTORE_MARKER = "  PASS  extended state restored identically by user/item/pack identity"
@@ -24,18 +24,25 @@ COMPLETE_MARKER = "ROUNDTRIP: all gates + safety assertions passed"
 SOURCE_MARKER = "ROUNDTRIP-SOURCE: snapshot handed off"
 ABSENT_MARKER = "  PASS  recovery host holds no source volumes"
 OFFHOST_MARKER = "  PASS  off-host snapshot matches its retained checksum"
+# ci/native-recovery-deb.sh: purged package and deleted state, then the same oracle.
+LOSS_MARKER = "  PASS  package purged and all persistent state removed before restore"
+FILES_MARKER = "  PASS  restored files identical in content, owner, group and mode"
+NATIVE_MARKER = "NATIVE-ROUNDTRIP: deb cold snapshot restored and verified"
 # Markers each docker/state-roundtrip.sh phase must print before it can be accepted.
 REQUIRED = {"all": (SEED_MARKER, RESTORE_MARKER, COMPLETE_MARKER),
             "source": (SEED_MARKER, SOURCE_MARKER),
-            "recover": (ABSENT_MARKER, OFFHOST_MARKER, RESTORE_MARKER, COMPLETE_MARKER)}
+            "recover": (ABSENT_MARKER, OFFHOST_MARKER, RESTORE_MARKER, COMPLETE_MARKER),
+            "native-deb": (SEED_MARKER, LOSS_MARKER, FILES_MARKER, RESTORE_MARKER, NATIVE_MARKER)}
 # Allowlisted diagnostic lines emitted by docker/state-roundtrip.sh. Only fixed labels,
 # keys and narrowly typed values are retained; any other DIAG line is dropped whole.
-DIAG_LABELS = {"first-boot-ready", "restored-never-ready", "restored-ready",
+DIAG_LABELS = {"first-boot-ready", "first-boot-never-ready", "restored-never-ready", "restored-ready",
                "restored-capture-failed", "restored-users-me-window", "restored-after-window"}
 HTTP_CODE = r"[0-9]{3}"
 DIAG_VALUES = {
     "restart_count": r"[0-9]{1,4}",
-    "status": r"created|restarting|running|removing|paused|exited|dead|missing",
+    # Docker container states, then systemd ActiveState words.
+    "status": r"created|restarting|running|removing|paused|exited|dead|missing"
+              r"|active|inactive|activating|deactivating|failed|reloading",
     "oom_killed": r"true|false",
     "exit_code": r"[0-9]{1,3}",
     "interval_s": r"[0-9]{1,2}",
@@ -67,7 +74,7 @@ def diagnostics(lines):
 def summarize(raw, exit_code, phase="all"):
     lines = raw.splitlines()
     stages = [STAGES[match[1]] for line in lines
-              if (match := re.match(r"^== ([0-7](?:[abcd])?)\. ", line))
+              if (match := re.match(r"^== ([0-7](?:[a-e])?)\. ", line))
               and match[1] in STAGES]
     fail_count = sum(line.startswith("  FAIL  ") for line in lines)
     complete = exit_code == 0 and fail_count == 0 and all(
@@ -98,6 +105,10 @@ def main():
     image.add_argument("--image-id", required=True)
     image.add_argument("--expected-source", required=True)
     image.add_argument("--out", required=True, type=Path)
+    package = sub.add_parser("package")
+    package.add_argument("--deb", required=True, type=Path)
+    package.add_argument("--expected-sha256", required=True)
+    package.add_argument("--out", required=True, type=Path)
     result = sub.add_parser("result")
     result.add_argument("--raw", required=True, type=Path)
     result.add_argument("--exit-code", required=True, type=int)
@@ -128,6 +139,18 @@ def main():
                 "user": metadata["Config"]["User"],
                 "paired_web_revision": labels.get("org.tesserafin.web.revision"),
                 "paired_web_image": labels.get("org.tesserafin.web.assets.image")}
+    elif args.mode == "package":
+        digest = hashlib.sha256(args.deb.read_bytes()).hexdigest()
+        if digest != args.expected_sha256:
+            raise ValueError("package does not match the pinned SHA-256")
+        fields = {key: subprocess.check_output(["dpkg-deb", "-f", str(args.deb), key], text=True).strip()
+                  for key in ("Package", "Version", "Architecture")}
+        description = subprocess.check_output(["dpkg-deb", "-f", str(args.deb), "Description"], text=True)
+        commits = dict(re.findall(r"^ (Server commit|Bundled Tesserafin Web commit): ([0-9a-f]{40})$",
+                                  description, re.M))
+        data = {"schema": 1, "file": args.deb.name, "sha256": digest, **fields,
+                "server_commit": commits.get("Server commit"),
+                "web_commit": commits.get("Bundled Tesserafin Web commit")}
     else:
         data = summarize(args.raw.read_text(errors="replace"), args.exit_code, args.phase)
     args.out.write_text(json.dumps(data, sort_keys=True, indent=2) + "\n")
