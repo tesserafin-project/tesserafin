@@ -42,6 +42,26 @@ class RecoveryEvidenceTests(unittest.TestCase):
         self.assertEqual(data["oracle_error_lines"], [78])
         self.assertFalse(data["accepted"])
 
+    def test_only_allowlisted_diagnostics_are_retained(self):
+        raw = "\n".join([
+            "DIAG restored-ready restart_count=1 status=running oom_killed=false exit_code=0"
+            " health_http=200 startup_config_http=401 users_me_http=503",
+            "DIAG restored-users-me-window interval_s=2 users_me_http=503,503,200",
+            "DIAG restored-ready status=private-secret",
+            "DIAG restored-ready health_http=200 token=private-secret",
+            "DIAG private-secret health_http=200",
+            "DIAG restored-ready users_me_http=503,private-secret",
+            "DIAG restored-ready health_http=200 health_http=503"])
+        data = evidence.summarize(raw, 1)
+        self.assertNotIn("private-secret", json.dumps(data))
+        self.assertEqual(data["diagnostics"], [
+            {"label": "restored-ready", "restart_count": "1", "status": "running",
+             "oom_killed": "false", "exit_code": "0", "health_http": "200",
+             "startup_config_http": "401", "users_me_http": "503"},
+            {"label": "restored-users-me-window", "interval_s": "2",
+             "users_me_http": "503,503,200"}])
+        self.assertFalse(data["accepted"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -21,6 +21,40 @@ STAGES = {"0": "prepare", "1": "first-boot", "2": "populate", "2a": "extended-se
 SEED_MARKER = "  PASS  distinct users, saved position, favourite, policies, configuration, pack and tokens seeded"
 RESTORE_MARKER = "  PASS  extended state restored identically by user/item/pack identity"
 COMPLETE_MARKER = "ROUNDTRIP: all gates + safety assertions passed"
+# Allowlisted diagnostic lines emitted by docker/state-roundtrip.sh. Only fixed labels,
+# keys and narrowly typed values are retained; any other DIAG line is dropped whole.
+DIAG_LABELS = {"first-boot-ready", "restored-never-ready", "restored-ready",
+               "restored-capture-failed", "restored-users-me-window", "restored-after-window"}
+HTTP_CODE = r"[0-9]{3}"
+DIAG_VALUES = {
+    "restart_count": r"[0-9]{1,4}",
+    "status": r"created|restarting|running|removing|paused|exited|dead|missing",
+    "oom_killed": r"true|false",
+    "exit_code": r"[0-9]{1,3}",
+    "interval_s": r"[0-9]{1,2}",
+    "health_http": HTTP_CODE,
+    "startup_config_http": HTTP_CODE,
+    "users_me_http": HTTP_CODE + r"(?:," + HTTP_CODE + r"){0,29}",
+}
+
+
+def diagnostics(lines):
+    result = []
+    for line in lines:
+        parts = line.split(" ")
+        if len(parts) < 3 or parts[0] != "DIAG" or parts[1] not in DIAG_LABELS:
+            continue
+        fields = {}
+        for part in parts[2:]:
+            key, sep, value = part.partition("=")
+            if not sep or key not in DIAG_VALUES or key in fields \
+                    or not re.fullmatch(DIAG_VALUES[key], value):
+                fields = None
+                break
+            fields[key] = value
+        if fields:
+            result.append({"label": parts[1], **fields})
+    return result
 
 
 def summarize(raw, exit_code):
@@ -42,6 +76,7 @@ def summarize(raw, exit_code):
             "curl_error_codes": sorted(set(re.findall(r"curl: \(([0-9]{1,3})\)", raw))),
             "oracle_error_lines": sorted(set(int(line) for line in re.findall(
                 r'File "[^"\n]*/docker/recovery-state\.py", line ([0-9]+)', raw))),
+            "diagnostics": diagnostics(lines),
             "raw_log_sha256": hashlib.sha256(raw.encode()).hexdigest()}
 
 

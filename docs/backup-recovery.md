@@ -148,6 +148,16 @@ artifact. A full run on the selected immutable current-contract image is still
 required before treating any new assertion as recovery evidence. Native service,
 off-host/disk-loss and genuine cross-schema migration rehearsals remain separate.
 
+Readiness is judged from `/health` (200 only once core startup has completed),
+not from `/Startup/Configuration`: after the wizard is complete, authorization
+answers that endpoint 401 before the startup middleware runs, so it reported a
+restored instance ready while authenticated calls still received 503. The
+hosted evidence keeps allowlisted `DIAG` observations only: container restart
+count, state and exit code, and HTTP status codes for `/health`,
+`/Startup/Configuration` and `/Users/Me` (including a 30-second observation
+window after a failed capture). It never retains bodies, tokens or log text,
+and the observations never retry or replace an assertion.
+
 ## Remaining acceptance work
 
 These are gaps in evidence, not claims that the corresponding data is known to
