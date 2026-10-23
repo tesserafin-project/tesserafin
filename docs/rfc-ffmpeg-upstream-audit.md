@@ -121,6 +121,31 @@ Tableau complet en annexe A. L'arbre porté est conservé pour la compilation (�
 
 Les lignes « absent » sont soit devenues inutiles avec le code upstream 8.x, soit perdues par Jellyfin. Chacune doit être rattachée à un scénario (§6) avant une décision.
 
+### 3.5 Dépendances de build : n9.0.2 exige le SDK AMF ≥ 1.5.2
+
+Premier essai de compilation de l'arbre porté (§6) dans le builder `ci/ffmpeg`, configuration linux-x64 de F0 : le configure s'arrête sur `ERROR: amf requested but not found`. `ffbuild/config.log` montre la condition qui échoue :
+
+```
+check_cpp_condition amf AMF/core/Version.h (AMF_VERSION_MAJOR << 48 | AMF_VERSION_MINOR << 32 | AMF_VERSION_RELEASE << 16 | AMF_VERSION_BUILD_NUM) >= 0x1000500020000
+```
+
+Version minimale du SDK AMF exigée par le `configure` FFmpeg :
+
+| FFmpeg | Minimum AMF |
+|---|---|
+| n7.1.4 | 1.4.33 |
+| n8.1.3 | 1.4.36 (la série jellyfin 8.1.3-1 le relève à 1.5.0, patch 0005) |
+| n9.0.2 | **1.5.2** |
+
+`components.json` épingle `amf-headers` en **v1.5.0** (`afed28d37aca1938da2eedc50599bb3535a987ec`), choisi comme minimum pour la série 7.1.4-3 (v1.4.35 n'a pas `AMF_VIDEO_ENCODER_AV1_B_PIC_PATTERN`). Les options B et C imposent donc de monter ce pin, au moins en v1.5.2 (`eadd00804d5f7e5cd8c85d540073198312870776`) ; la dernière étiquette est v1.5.3 (`57ee0cfb0e1a08d9041f77435653794c1b012be0`).
+
+Conséquences :
+- Monter le pin touche la chaîne F0 (`components.json`, empreintes acceptées, SBOM, reproductibilité) sur linux-x64 et win-x64, les deux plateformes qui compilent AMF. linux-arm64 n'est pas concernée (AMF n'y est pas compilé).
+- Les en-têtes ne suffisent pas : le pilote AMD installé doit fournir un runtime AMF compatible. Aucun banc ne le vérifie (§4.2).
+- C'est le premier coût de dépendance mesuré du passage en 9.x. D'autres peuvent apparaître une fois le configure passé.
+
+L'essai continue en substituant les en-têtes AMF v1.5.3 dans une copie du cache, sans toucher au pin du dépôt.
+
 ## 4. Ce qui change déjà la discussion
 
 1. **Le coût de l'option C est plus bas que redouté** si on part de la série 8.1.3-1 et non de 7.1.4-3 : 78 patches sur 100 passent tels quels sur n9.0.2, et le portage lourd se concentre sur AMF, Vulkan et CUDA. Reste à prouver : compilation, puis comportement.
@@ -135,7 +160,7 @@ Les lignes « absent » sont soit devenues inutiles avec le code upstream 8.x, s
 
 ## 6. Étapes suivantes
 
-1. **Compilation** de l'arbre porté (n9.0.2 + 8.1.3-1) avec le builder `ci/ffmpeg/builder/Dockerfile` et la configuration linux-x64 actuelle, puis linux-arm64. Critère : build complet, puis `-filters`, `-encoders` et `-bsfs` comparés au contrat de §3.2.
+1. **Compilation** de l'arbre porté (n9.0.2 + 8.1.3-1) avec le builder `ci/ffmpeg/builder/Dockerfile` et la configuration linux-x64 actuelle, puis linux-arm64. Critère : build complet, puis `-filters`, `-encoders` et `-bsfs` comparés au contrat de §3.2. Premier essai linux-x64 : arrêt au configure sur la version du SDK AMF (§3.5). linux-arm64 demande un hôte arm64 natif : le builder refuse la cross-compilation et l'émulation.
 2. **Inventaire des scénarios** : rattacher chaque patch conservé à un scénario de l'issue (« quel scénario échoue sans lui ? »), dépendances comprises.
 3. **Audit Windows séparé**, puisque `win-x64` applique toute la série.
 4. **Prototype** des cinq cas de l'issue, avec les critères chiffrés une fois fixés.
