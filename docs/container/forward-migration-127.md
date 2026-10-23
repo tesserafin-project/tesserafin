@@ -1,6 +1,6 @@
 # Published forward-migration evidence (#127)
 
-Status: hosted preflight executed and blocked, 2026-10-20. No successful migration run is claimed. Preparation PR: [#316](https://github.com/tesserafin-project/tesserafin/pull/316).
+Status: **green hosted run with a real forward migration, 2026-10-23**, in [run 39944964845](https://github.com/tesserafin-project/tesserafin/actions/runs/39944964845). The baseline is the 1.0.0-era image and the candidate is the post-migration dev build, not a released image (see "Selected candidate"). Earlier blocked runs are kept below. PR: [#316](https://github.com/tesserafin-project/tesserafin/pull/316).
 
 ## Selected boundary and outstanding image proof
 
@@ -73,7 +73,29 @@ The result does not distinguish missing/retired content from package authorizati
 
 A successful image preflight is not a successful upgrade. #127 stays open until the original harness exits zero with non-zero pending migrations, successful application and all original preservation assertions passing: users, libraries, visible items, playback state, configuration, volume identity/ownership and version agreement.
 
-The harness currently counts application migration-stage log entries. The content-pack change is an EF Core SQLite migration; verify that the actual historical runtime logs expose this boundary to the existing counter. If a real EF migration runs while the application-stage count remains zero, keep the gate red and add explicit EF execution evidence rather than deleting `--require-migration`.
+### EF migrations were invisible to the counter (resolved 2026-10-23)
+
+[Run 39944442029](https://github.com/tesserafin-project/tesserafin/actions/runs/39944442029) was the first run to execute the full harness, with the dev-build candidate. Every preservation assertion passed, but `--require-migration` failed with "ZERO pending migrations". The cause is in `Tesserafin.Server/Migrations/TesserafinMigrationService.cs`: the line `There are {Pending} migrations for stage {Stage}` logs `pendingCodeMigrations.Length`. EF Core schema migrations are applied in the same loop but are never counted. The one visible trace was that `CoreInitialisation` was swept twice.
+
+`docker/upgrade-roundtrip.sh` now also counts the distinct `Migration <id> was successfully applied` lines. The runner emits that line for code and EF migrations alike, and the harness prints each id. `--require-migration` and every preservation assertion are unchanged.
+
+### Green hosted result
+
+[Run 39944964845, job 120385253265](https://github.com/tesserafin-project/tesserafin/actions/runs/39944964845/job/120385253265), harness source `cc4be41cabe5c05d98f10147e90dfde0c0c94f05`, Ubuntu runner, linux/amd64:
+
+| Check | Result |
+| --- | --- |
+| Baseline | `tesserafin-server@sha256:fd1fa9e0…6249`, revision `44f5ab62b522`, `1.0.0` |
+| Candidate | `tesserafin-server@sha256:ac038fbe…2c07`, revision `60f7a9c9bfd2`, `1.0.0` |
+| Migration | `applied: 20260807161612_AddContentPacks`, pending applied = **1**, 4 stages swept, no rollback |
+| Before = after | 2 users (ids unchanged, both authenticate), library `Movies`, item `Upgrade Fixture (2021)`, playstate `Played=True\|PlayCount=1\|Position=0`, ServerName `A6 Upgrade Rehearsal` |
+| Volumes | same three volume objects, still owned by `10000:10000`; container runs as uid 10000 |
+| Version agreement | `/health`, OCI label, `SharedVersion.cs` and application all `1.0.0` |
+| Verdict | `UPGRADE-ROUNDTRIP: all assertions passed` |
+
+The evidence artifact `forward-migration-39944964845-1` expires on 2026-11-06. The table above is the durable record.
+
+Limit: both images report `1.0.0`, because `SharedVersion.cs` was never bumped for 1.1. This proves a schema migration across source commits, not across two released version numbers.
 
 Any source-tag lookup failure, access denial, revision mismatch, zero migration count or lost state is a concrete unmet gate. Retain its evidence; do not close #127 on a prepared workflow or substitute a locally rebuilt image for a published artifact.
 
