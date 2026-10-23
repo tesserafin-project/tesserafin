@@ -105,6 +105,43 @@ public sealed class MixedListingVisibilityEndToEndTests : IDisposable
     }
 
     /// <summary>
+    /// The same mixed and untyped listings scoped to a parent (each library and the playlists folder), recursive
+    /// or not: Folder.QueryRecursive only post-filters listings naming box sets or playlists alone, so a mixed
+    /// listing under a parent must still hold nothing access by id refuses.
+    /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
+    [Fact(Timeout = 600_000)]
+    public async Task ParentScopedMixedListings_HoldOnlyWhatAccessByIdAdmits()
+    {
+        using var server = new Boot(_dataRoot);
+        var s = await SeedAsync(server);
+        using var admin = server.AdminClient(s.AdminToken);
+        using var bea = server.ClientFor("mix-bea", s.BeaToken);
+        var library = server.Services.GetRequiredService<ILibraryManager>();
+        var parents = new[] { s.Films, s.Kids, s.Sets, library.GetItemById(s.SharedList)!.ParentId };
+
+        await UpdatePolicyAsync(admin, s.BeaId, p =>
+        {
+            p["EnableAllFolders"] = false;
+            p["EnabledFolders"] = Ids(s.Films, s.Sets);
+        });
+        await AssertParentScopedListingsAsync("Films and the box-set library", bea, s.BeaId, s, parents);
+
+        await UpdatePolicyAsync(admin, s.BeaId, p => p["EnabledFolders"] = Ids(s.Films, s.Kids, s.Sets));
+        await AssertParentScopedListingsAsync("Films, Kids and the box-set library", bea, s.BeaId, s, parents);
+
+        await UpdatePolicyAsync(admin, s.BeaId, p =>
+        {
+            p["EnableAllFolders"] = true;
+            p["EnabledFolders"] = Ids();
+            p["BlockedMediaFolders"] = Ids(s.Kids);
+        });
+        await AssertParentScopedListingsAsync("all libraries, Kids blocked", bea, s.BeaId, s, parents);
+
+        Assert.True(_wrong.Count == 0, string.Join(Environment.NewLine, _wrong));
+    }
+
+    /// <summary>
     /// Counts, filters, genres and studios aggregate only what access by id admits: a refused box set or playlist
     /// adds no count and no value, an admitted one still does.
     /// </summary>
@@ -237,6 +274,56 @@ public sealed class MixedListingVisibilityEndToEndTests : IDisposable
         using var content = new StringContent(policy.ToJsonString(), System.Text.Encoding.UTF8, "application/json");
         using var saved = await admin.PostAsync(FormattableString.Invariant($"Users/{userId}/Policy"), content, TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
+    }
+
+    private async Task AssertParentScopedListingsAsync(string state, HttpClient client, Guid userId, Seeded s, Guid[] parents)
+    {
+        var guarded = new (Guid Id, string Name)[]
+        {
+            (s.FilmsSet, "mix Films Set"), (s.KidsSet, "mix Kids Set"), (s.EmptySet, "mix Empty Set"),
+            (s.PrivateList, "mix private list"), (s.SharedList, "mix shared list"), (s.PublicList, "mix public list"),
+        };
+        var refused = new List<(Guid Id, string Name)>();
+        foreach (var item in guarded)
+        {
+            using var response = await client.GetAsync(FormattableString.Invariant($"Items/{item.Id}?userId={userId}"), TestContext.Current.CancellationToken);
+            if (response.StatusCode != HttpStatusCode.OK)
+            {
+                refused.Add(item);
+            }
+        }
+
+        if (refused.Count == 0)
+        {
+            _wrong.Add(state + ": the oracle refuses nothing, so the listings below prove nothing");
+        }
+
+        foreach (var parent in parents)
+        {
+            foreach (var recursive in new[] { "true", "false" })
+            {
+                foreach (var filter in Queries)
+                {
+                    var url = FormattableString.Invariant($"Items?recursive={recursive}&parentId={parent}&fields=Overview,Path,Tags,ParentId&userId={userId}") + (filter.Length == 0 ? string.Empty : "&" + filter);
+                    using var response = await client.GetAsync(url, TestContext.Current.CancellationToken);
+                    if (response.StatusCode != HttpStatusCode.OK)
+                    {
+                        continue;
+                    }
+
+                    var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+                    using var document = JsonDocument.Parse(body);
+                    var ids = document.RootElement.GetProperty("Items").EnumerateArray().Select(i => Guid.Parse(i.GetProperty("Id").GetString()!)).ToList();
+                    foreach (var (id, name) in refused)
+                    {
+                        if (ids.Contains(id) || body.Contains(name, StringComparison.Ordinal))
+                        {
+                            _wrong.Add(FormattableString.Invariant($"{state}, {url}: lists '{name}', refused by id"));
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private async Task AssertListingsAsync(string state, HttpClient client, Guid userId, Seeded s)
