@@ -64,8 +64,9 @@ wait_ready() { # STABLY past core startup: only /health 200 means ready
 }
 http_code() { # $1=path [$2=token]
   local hdr="${AUTH_HDR}"; [[ -n "${2:-}" ]] && hdr="${AUTH_HDR}, Token=\"${2}\""
+  # curl already writes 000 when nothing answers; do not append a second one.
   curl -s -o /dev/null -w '%{http_code}' --max-time 10 "http://127.0.0.1:${PORT}${1}" \
-    -H "Authorization: ${hdr}" 2>/dev/null || echo 000
+    -H "Authorization: ${hdr}" 2>/dev/null || true
 }
 # Allowlisted diagnostics (ci/recovery-evidence.py): systemd counters/state words and
 # HTTP status codes only. Never bodies, tokens or journal text.
