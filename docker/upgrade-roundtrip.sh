@@ -154,11 +154,16 @@ wait_health() { # $1 = container name
 }
 # The startup wizard and the first library scan are served by endpoints that
 # exist before core startup completes; this rides out the first-boot restart.
+# Only valid BEFORE /Startup/Complete: once the wizard is complete, an anonymous
+# /Startup/Configuration answers 401 from authorization even while the host is
+# still starting (see #329), so it is not a readiness signal. Readiness itself
+# is wait_health above. Require 200 rather than "not 503": on this fresh
+# baseline a 401 would mean the wizard is already complete, which is wrong state.
 wait_startup_api() {
   local code streak=0
   for _ in $(seq 1 150); do
     code="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PORT}/Startup/Configuration" 2>/dev/null || echo 000)"
-    if [[ "${code}" != "503" && "${code}" != "000" ]]; then
+    if [[ "${code}" == "200" ]]; then
       streak=$((streak + 1)); [[ "${streak}" -ge 5 ]] && return 0
     else
       streak=0
