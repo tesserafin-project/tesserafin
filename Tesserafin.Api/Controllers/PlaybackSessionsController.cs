@@ -275,7 +275,8 @@ public class PlaybackSessionsController : BaseTesserafinApiController
             // Issue #43: no session means no stored attempt id to scope with - inventing one would
             // be worse than none. The line still ties the 404 to the request via the ambient
             // RequestId scope (#42).
-            _logger.LogInformation("Playback session {SessionId} delete requested, but the session was already gone.", id);
+            // #203: same projection as the deleted line below - same bytes, visible to the analysis.
+            _logger.LogInformation("Playback session {SessionId} delete requested, but the session was already gone.", id.Value.ToString("N"));
             return NotFound();
         }
 
@@ -294,7 +295,8 @@ public class PlaybackSessionsController : BaseTesserafinApiController
         {
             // Raced away between the Get above and the Delete (PlaybackStopped, TTL sweep, a
             // concurrent DELETE) - same observable outcome as the not-found path above.
-            _logger.LogInformation("Playback session {SessionId} delete requested, but the session was already gone.", id);
+            // #203: same projection as the deleted line below - same bytes, visible to the analysis.
+            _logger.LogInformation("Playback session {SessionId} delete requested, but the session was already gone.", id.Value.ToString("N"));
             return NotFound();
         }
 

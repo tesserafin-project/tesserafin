@@ -498,7 +498,9 @@ public class PlaybackSessionsControllerTests
 
         Assert.IsType<NotFoundResult>(deleted);
         var entry = Assert.Single(logger.Entries, e => e.Message.Contains("already gone", StringComparison.Ordinal));
-        Assert.Equal(id, entry.Properties["SessionId"]);
+        // #203: projected at the logging boundary - the state dictionary carries the rendered
+        // string; both shipped formatters write the same bytes (PlaybackSessionIdProjectionTests).
+        Assert.Equal(id.Value.ToString("N"), Assert.IsType<string>(entry.Properties["SessionId"]));
     }
 
     /// <summary>
@@ -1538,7 +1540,9 @@ public class PlaybackSessionsControllerTests
         _playbackSessionManager.Verify(m => m.Delete(It.IsAny<PlaybackSessionId>()), Times.Never);
         var entry = Assert.Single(logger.Entries);
         Assert.Contains("already gone", entry.Message, StringComparison.Ordinal);
-        Assert.Equal(id, entry.Properties["SessionId"]);
+        // #203: projected at the logging boundary - the state dictionary carries the rendered
+        // string; both shipped formatters write the same bytes (PlaybackSessionIdProjectionTests).
+        Assert.Equal(id.Value.ToString("N"), Assert.IsType<string>(entry.Properties["SessionId"]));
         Assert.Empty(logger.Scopes);
     }
 
@@ -1560,7 +1564,9 @@ public class PlaybackSessionsControllerTests
         Assert.IsType<NotFoundResult>(result);
         var entry = Assert.Single(logger.Entries);
         Assert.Contains("already gone", entry.Message, StringComparison.Ordinal);
-        Assert.Equal(id, entry.Properties["SessionId"]);
+        // #203: projected at the logging boundary - the state dictionary carries the rendered
+        // string; both shipped formatters write the same bytes (PlaybackSessionIdProjectionTests).
+        Assert.Equal(id.Value.ToString("N"), Assert.IsType<string>(entry.Properties["SessionId"]));
     }
 
     /// <summary>

@@ -189,7 +189,9 @@ public class PlaybackSessionManagerLifecycleTests
         Assert.True(fixture.Manager.Delete(session.Id));
 
         var entry = Assert.Single(fixture.Logger.Entries, e => e.Message.Contains("removed", StringComparison.Ordinal));
-        Assert.Equal(session.Id, entry.Properties["SessionId"]);
+        // #203: projected at the logging boundary - the state dictionary carries the rendered
+        // string; both shipped formatters write the same bytes (PlaybackSessionIdProjectionTests).
+        Assert.Equal(session.Id.Value.ToString("N"), Assert.IsType<string>(entry.Properties["SessionId"]));
         Assert.Equal(PlaySessionA, entry.Properties["PlaySessionId"]);
         Assert.Equal(AttemptId, entry.Properties["PlaybackAttemptId"]);
         Assert.Equal(PlaybackSessionRemovalReason.HttpDelete, entry.Properties["RemovalReason"]);
@@ -217,7 +219,9 @@ public class PlaybackSessionManagerLifecycleTests
 
         var removal = Assert.Single(fixture.Logger.Entries, e => e.Message.Contains("removed", StringComparison.Ordinal));
         Assert.Equal(PlaybackSessionRemovalReason.TtlSweep, removal.Properties["RemovalReason"]);
-        Assert.Equal(session.Id, removal.Properties["SessionId"]);
+        // #203: projected at the logging boundary - the state dictionary carries the rendered
+        // string; both shipped formatters write the same bytes (PlaybackSessionIdProjectionTests).
+        Assert.Equal(session.Id.Value.ToString("N"), Assert.IsType<string>(removal.Properties["SessionId"]));
     }
 
     /// <summary>
