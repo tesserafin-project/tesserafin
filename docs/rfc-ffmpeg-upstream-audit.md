@@ -1,7 +1,7 @@
 # RFC — Audit de compatibilité FFmpeg upstream (n9.0.2) pour Tesserafin
 
 - **Issue** : #340 (parente #335)
-- **Statut** : brouillon. Phase 1 (inventaire mécanique) faite. Restent : preuve de compilation, inventaire des scénarios, prototype, audit Windows.
+- **Statut** : brouillon. Faits : inventaire mécanique (phase 1), preuve de compilation linux-x64 (§3.6). Restent : inventaire des scénarios, linux-arm64, audit Windows, prototype.
 - **Date** : 2026-10-23
 - **Nature** : design et preuves uniquement, aucun changement de runtime, de pins ou d'`EncodingHelper`.
 
@@ -39,7 +39,7 @@ FFmpeg 9.1 n'est pas sortie (seul `n9.1-dev` existe). jellyfin-ffmpeg n'a pas de
 - Calibrage du test isolé sur la base d'origine : 8.1.3-1 sur n8.1.3 donne 909/939 hunks OK (97 %), 7.1.4-3 sur n7.1.4 donne 791/805 (98 %). Un patch testé seul échoue donc sur ~2-3 % de hunks à cause de ses dépendances dans la série, sans aucun écart upstream.
 
 **Ce que l'instrument ne prouve pas.**
-- Un hunk qui s'applique n'est pas un code qui compile, ni un code correct. Aucun build n'a encore été fait (§6).
+- Un hunk qui s'applique n'est pas un code qui compile, ni un code correct. La compilation est traitée en §3.6.
 - « Déjà présent » peut être une coïncidence de contexte sur de petits hunks. Les cas qui décident sont à relire à la main.
 - L'inventaire côté serveur (§3.2) lit les littéraux de chaîne du code non-test. Un nom composé à l'exécution lui échappe. Un seul cas trouvé : `"tonemap_{0}=…"` dans `EncodingHelper.cs`, qui couvre `tonemap_cuda` et `tonemap_opencl`.
 
@@ -144,11 +144,44 @@ Conséquences :
 - Les en-têtes ne suffisent pas : le pilote AMD installé doit fournir un runtime AMF compatible. Aucun banc ne le vérifie (§4.2).
 - C'est le premier coût de dépendance mesuré du passage en 9.x. D'autres peuvent apparaître une fois le configure passé.
 
-L'essai continue en substituant les en-têtes AMF v1.5.3 dans une copie du cache, sans toucher au pin du dépôt.
+La suite de l'essai (§3.6) substitue les en-têtes AMF v1.5.3 dans une copie du cache, sans toucher au pin du dépôt.
+
+### 3.6 Preuve de compilation linux-x64
+
+**Montage.** Le vrai pipeline F0 (`fetch-sources.sh`, dépendances épinglées, image `ci/ffmpeg/builder` figée, `ffmpeg-configure.txt` + `ffmpeg-configure.linux-x64.txt`, `--network none`), avec une seule substitution : la source FFmpeg est l'arbre porté, placé dans une copie du cache à la place de `git/jellyfin-ffmpeg`. Le dépôt n'est pas modifié. Les contrôles du builder s'exécutent sur l'arbre porté : `tonemapx` et `alphasrc` présents, `libfdk_aac` toujours dans la liste nonfree. Le patch fdk-aac de la série 8.1 (0026) est retiré, conformément à F0. Build incrémental de développement : il ne vaut pas preuve de reproductibilité.
+
+**Référence.** Le F0 actuel (jellyfin-ffmpeg 7.1.4-3) est reconstruit avec les mêmes dépendances. Écart à noter : il utilise lui aussi les en-têtes AMF v1.5.3 au lieu du pin v1.5.0.
+
+**Résultat.** Le build aboutit et produit `ffmpeg version 9.0.2-tesserafin.1`, configuré `--disable-libfdk-aac`, sans encodeur `libfdk_aac`, avec pour seules bibliothèques partagées non système `libva` et `libva-drm`, comme F0. Il a fallu :
+
+| Correction manuelle | Patch d'origine | Cause |
+|---|---|---|
+| 7 lignes `*_deps` de `configure` (`tonemap_cuda` ×2, `scale_opencl`, `tonemap_d3d11`, `overlay_videotoolbox`, décodeur `mpeg4_rkmpp` ×2) | 0004, 0006, 0042, 0044, 0094 | Hunks rejetés. Sans ces lignes, le composant s'active sans condition : `tonemap_d3d11` cassait la compilation Linux (`windows.h`) |
+| 4 enregistrements (`ff_vf_scale_opencl` et son `OBJS-`, `OBJS-` de `mpeg4_rkmpp`, `ff_vf_transpose_d3d11`) | 0006, 0042, 0092 | Hunks rejetés. Sans erreur de compilation : `scale_opencl` manquait silencieusement au binaire jusqu'au contrôle de contrat |
+| Doublon de `saturate_rintf` retiré de `cuda/vector_helpers.cuh` | 0003 | Upstream 9.0 a intégré l'helper de Jellyfin ; le patch l'ajoutait une seconde fois |
+| `#include "libavcodec/itut35.h"` dans `bsf/av1_metadata.c` et `bsf/h265_metadata.c` | 0061 | Hunk rejeté |
+| `amfenc_av1.c` : `ff_amf_pix_fmts` → `ff_amf_pix_fmts_10b_8b` | 0005 | Upstream a une liste unique, Jellyfin l'a scindée ; le hunk AV1 n'est pas passé |
+
+Diff total : 8 fichiers, +14 / −24 lignes (annexe C).
+
+**Contrat.** L'inventaire de §3.2 relève 202 noms de composants dans le code serveur (filtres, codecs, BSF ; quelques faux positifs, comme `ulti`, fragment d'une regex de `VideoListResolver`). Comparaison du binaire porté au F0 de référence :
+- **Aucun composant nommé par le serveur n'est perdu.** Ceux qui manquent aux deux binaires relèvent de backends que F0 ne compile pas (RKMPP, VideoToolbox, Vulkan, libplacebo) ou d'exclusions voulues (`libfdk_aac`, `aac_at`).
+- Les 14 sondes d'option d'`EncoderValidator` (§3.2), rejouées par `ffmpeg -h filter=…` / `-h bsf=…`, donnent des résultats **identiques** : 13 positives, plus `overlay_vulkan` négative sur les deux binaires (Vulkan non compilé). Cette réponse négative montre aussi que la sonde sait dire non.
+- Pertes, toutes dues à des retraits upstream et non nommées par le serveur : codecs `sonic`, `sonicls`, `v308`, `v408`, `v410` et filtre `pp` (retrait de libpostproc en FFmpeg 8).
+- Gains : notamment `vpp_amf`, `sr_amf`, `vp9_amf`, `pad_cuda`, BSF `dovi_split`.
+- `EncoderValidator` lit la version (`^ffmpeg version n?((?:[0-9]+\.?)+)` donne 9.0.2). Sa table `_ffmpegMinimumLibraryVersions` cite encore `libpostproc`, qui n'existe plus. Elle ne sert que si la version est illisible, mais il faudra la nettoyer.
+
+**Exécution (pas une preuve de fidélité).** Sur le VAAPI AMD de l'hôte (`/dev/dri/renderD128`) : `h264_vaapi` via `hwupload_vaapi` et `hevc_vaapi` en HLS fMP4 fonctionnent. En logiciel, `tonemapx` et `alphasrc` + `overlay` fonctionnent avec la syntaxe d'`EncodingHelper`. Mes premières commandes échouaient de la même façon sur la référence 7.1.4 : l'erreur venait de la ligne de commande, pas du portage.
+
+**Écart `tonemapx`.** Sur une même source, la sortie brute de `tonemapx` (BT.2390, sans encodeur) diffère entre 9.0.2 et la référence 7.1.4 : PSNR 38,3 dB, SSIM 0,997. Source et conversion 10 bits sont identiques au bit près. Le code `tonemapx` de l'arbre porté est identique octet pour octet à celui de jellyfin-ffmpeg 8.1.3-1, et le patch `tonemapx` a changé entre 7.1.4-3 et 8.1.3-1. L'écart vient donc vraisemblablement de la série 8.1, et toucherait aussi l'option A2, plutôt que du passage en 9.0. Ce n'est pas prouvé au pixel : aucun binaire jellyfin 8.1.3 n'a été construit. Ce point relève du prototype HDR10 → SDR (§6.4), avec une référence externe.
+
+**Ce que la compilation n'établit pas** : la correction des chemins CUDA, QSV et AMF (pas de banc), la fidélité des couleurs, le comportement Dolby Vision, linux-arm64 (le builder exige un hôte arm64 natif) et win-x64.
+
+**Leçon pour tout portage de la série.** Un test hunk par hunk ne suffit pas. Il faut aussi contrôler que chaque ligne `configure` et chaque enregistrement (`allfilters.c`, `allcodecs.c`, `Makefile`) ajoutés par la série sont présents, puis comparer `-filters`, `-encoders`, `-decoders` et `-bsfs` à une référence. La perte de `scale_opencl` n'a été détectée qu'à ce dernier contrôle.
 
 ## 4. Ce qui change déjà la discussion
 
-1. **Le coût de l'option C est plus bas que redouté** si on part de la série 8.1.3-1 et non de 7.1.4-3 : 78 patches sur 100 passent tels quels sur n9.0.2, et le portage lourd se concentre sur AMF, Vulkan et CUDA. Reste à prouver : compilation, puis comportement.
+1. **Le coût de l'option C est plus bas que redouté** si on part de la série 8.1.3-1 et non de 7.1.4-3 : 78 patches sur 100 passent tels quels sur n9.0.2, et l'arbre porté compile en linux-x64 avec 8 fichiers retouchés (+14 / −24 lignes), sans perte sur le contrat serveur (§3.6). Reste à prouver : comportement, autres plateformes, et coût des rebases futurs.
 2. **Le périmètre des backends décide de la taille du fork.** Les patches lourds à porter correspondent à des backends (AMF, Vulkan, CUDA) qu'aucun banc ne valide aujourd'hui. Seul AMD VAAPI est testable.
 3. **Les écarts entre livraisons sont un problème indépendant du fork.** Docker et natif n'exposent pas les mêmes capacités, et l'image Docker embarque `libfdk_aac` avec `--enable-gpl`.
 
@@ -160,7 +193,7 @@ L'essai continue en substituant les en-têtes AMF v1.5.3 dans une copie du cache
 
 ## 6. Étapes suivantes
 
-1. **Compilation** de l'arbre porté (n9.0.2 + 8.1.3-1) avec le builder `ci/ffmpeg/builder/Dockerfile` et la configuration linux-x64 actuelle, puis linux-arm64. Critère : build complet, puis `-filters`, `-encoders` et `-bsfs` comparés au contrat de §3.2. Premier essai linux-x64 : arrêt au configure sur la version du SDK AMF (§3.5). linux-arm64 demande un hôte arm64 natif : le builder refuse la cross-compilation et l'émulation.
+1. **Compilation.** linux-x64 : faite (§3.6). Restent linux-arm64, qui demande un hôte arm64 natif (le builder refuse la cross-compilation et l'émulation), et win-x64 (étape 3).
 2. **Inventaire des scénarios** : rattacher chaque patch conservé à un scénario de l'issue (« quel scénario échoue sans lui ? »), dépendances comprises.
 3. **Audit Windows séparé**, puisque `win-x64` applique toute la série.
 4. **Prototype** des cinq cas de l'issue, avec les critères chiffrés une fois fixés.
@@ -301,3 +334,148 @@ done
 ```
 
 Usage : `hunks.sh <arbre FFmpeg vierge> <dossier debian/patches> <sortie.tsv>`. Les dossiers de patches sont extraits par `git archive <tag> debian/patches` du dépôt jellyfin-ffmpeg.
+
+## Annexe C — Corrections manuelles du portage (§3.6)
+
+Appliquées après la série 8.1.3-1 en séquence (fuzz 2, rejets écartés) sur n9.0.2, puis le retrait de 0026. L'arbre porté vit dans le rig d'audit, il n'est pas publié.
+
+```diff
+diff --git a/configure b/configure
+index e46cd5a8bf..5ef591f65a 100755
+--- a/configure
++++ b/configure
+@@ -3744,6 +3744,8 @@ vp9_mediacodec_decoder_deps="mediacodec"
+ vp9_mediacodec_encoder_deps="mediacodec"
+ vp9_qsv_decoder_select="qsvdec"
+ vp9_rkmpp_decoder_deps="rkmpp"
++mpeg4_rkmpp_decoder_deps="rkmpp"
++mpeg4_rkmpp_decoder_select="mpeg4_unpack_bframes_bsf dump_extradata_bsf"
+ vp9_vaapi_encoder_deps="VAEncPictureParameterBufferVP9"
+ vp9_vaapi_encoder_select="vaapi_encode"
+ vp9_qsv_encoder_deps="libmfx MFX_CODEC_VP9"
+@@ -4315,6 +4317,11 @@ tonemapx_filter_deps="const_nan"
+ tonemap_vaapi_filter_deps="vaapi VAProcFilterParameterBufferHDRToneMapping"
+ tonemap_videotoolbox_filter_deps="metal corevideo videotoolbox const_nan"
+ tonemap_opencl_filter_deps="opencl const_nan"
++tonemap_cuda_filter_deps="ffnvcodec const_nan"
++tonemap_cuda_filter_deps_any="cuda_nvcc cuda_llvm"
++scale_opencl_filter_deps="opencl const_nan"
++tonemap_d3d11_filter_deps="d3d11va const_nan d3dcompiler_h"
++overlay_videotoolbox_filter_deps="metal corevideo coreimage videotoolbox"
+ transpose_opencl_filter_deps="opencl"
+ transpose_vaapi_filter_deps="vaapi VAProcPipelineCaps_rotation_flags"
+ transpose_vt_filter_deps="videotoolbox VTPixelRotationSessionCreate"
+diff --git a/libavcodec/Makefile b/libavcodec/Makefile
+index 525c560843..1255d91f24 100644
+--- a/libavcodec/Makefile
++++ b/libavcodec/Makefile
+@@ -1099,6 +1099,7 @@ OBJS-$(CONFIG_MPEG4_NVDEC_HWACCEL)        += nvdec_mpeg4.o
+ OBJS-$(CONFIG_MPEG4_VAAPI_HWACCEL)        += vaapi_mpeg4.o
+ OBJS-$(CONFIG_MPEG4_VDPAU_HWACCEL)        += vdpau_mpeg4.o
+ OBJS-$(CONFIG_MPEG4_VIDEOTOOLBOX_HWACCEL) += videotoolbox.o
++OBJS-$(CONFIG_MPEG4_RKMPP_DECODER)     += rkmppdec.o
+ OBJS-$(CONFIG_VC1_D3D11VA_HWACCEL)        += dxva2_vc1.o
+ OBJS-$(CONFIG_VC1_DXVA2_HWACCEL)          += dxva2_vc1.o
+ OBJS-$(CONFIG_VC1_D3D12VA_HWACCEL)        += dxva2_vc1.o d3d12va_vc1.o
+diff --git a/libavcodec/amfenc_av1.c b/libavcodec/amfenc_av1.c
+index 47326a1499..91da4b2178 100644
+--- a/libavcodec/amfenc_av1.c
++++ b/libavcodec/amfenc_av1.c
+@@ -751,7 +751,7 @@ const FFCodec ff_av1_amf_encoder = {
+     .p.capabilities   = AV_CODEC_CAP_DELAY | AV_CODEC_CAP_HARDWARE |
+                       AV_CODEC_CAP_DR1,
+     .caps_internal  = FF_CODEC_CAP_INIT_CLEANUP,
+-    CODEC_PIXFMTS_ARRAY(ff_amf_pix_fmts),
++    CODEC_PIXFMTS_ARRAY(ff_amf_pix_fmts_10b_8b),
+     .color_ranges   = AVCOL_RANGE_MPEG | AVCOL_RANGE_JPEG,
+     .p.wrapper_name   = "amf",
+     .hw_configs     = ff_amfenc_hw_configs,
+diff --git a/libavcodec/bsf/av1_metadata.c b/libavcodec/bsf/av1_metadata.c
+index 22274b2988..9fd8333792 100644
+--- a/libavcodec/bsf/av1_metadata.c
++++ b/libavcodec/bsf/av1_metadata.c
+@@ -24,6 +24,7 @@
+ #include "libavcodec/bsf_internal.h"
+ #include "libavcodec/cbs.h"
+ #include "libavcodec/cbs_bsf.h"
++#include "libavcodec/itut35.h"
+ #include "libavcodec/cbs_av1.h"
+ 
+ typedef struct AV1MetadataContext {
+diff --git a/libavcodec/bsf/h265_metadata.c b/libavcodec/bsf/h265_metadata.c
+index 9590097e72..08887a6c0b 100644
+--- a/libavcodec/bsf/h265_metadata.c
++++ b/libavcodec/bsf/h265_metadata.c
+@@ -23,6 +23,7 @@
+ #include "libavcodec/bsf_internal.h"
+ #include "libavcodec/cbs.h"
+ #include "libavcodec/cbs_bsf.h"
++#include "libavcodec/itut35.h"
+ #include "libavcodec/cbs_h265.h"
+ #include "libavcodec/h2645data.h"
+ #include "libavcodec/h265_profile_level.h"
+diff --git a/libavfilter/Makefile b/libavfilter/Makefile
+index 10d0feb6df..25e25d8246 100644
+--- a/libavfilter/Makefile
++++ b/libavfilter/Makefile
+@@ -489,6 +489,7 @@ OBJS-$(CONFIG_SCALE_D3D11_FILTER)            += vf_scale_d3d11.o scale_eval.o d3
+ OBJS-$(CONFIG_SCALE_D3D12_FILTER)            += vf_scale_d3d12.o scale_eval.o
+ OBJS-$(CONFIG_SCALE_CUDA_FILTER)             += vf_scale_cuda.o scale_eval.o \
+                                                 vf_scale_cuda.ptx.o cuda/load_helper.o
++OBJS-$(CONFIG_SCALE_OPENCL_FILTER)           += vf_scale_opencl.o opencl.o opencl/scale.o scale_eval.o
+ OBJS-$(CONFIG_SCALE_QSV_FILTER)              += vf_vpp_qsv.o
+ OBJS-$(CONFIG_SCALE_RKRGA_FILTER)            += vf_vpp_rkrga.o scale_eval.o
+ OBJS-$(CONFIG_SCALE_VAAPI_FILTER)            += vf_scale_vaapi.o scale_eval.o vaapi_vpp.o
+diff --git a/libavfilter/allfilters.c b/libavfilter/allfilters.c
+index 3685c3ffdc..73d1a0f97e 100644
+--- a/libavfilter/allfilters.c
++++ b/libavfilter/allfilters.c
+@@ -452,6 +452,7 @@ extern const FFFilter ff_vf_vpp_amf;
+ extern const FFFilter ff_vf_sr_amf;
+ extern const FFFilter ff_vf_frc_amf;
+ extern const FFFilter ff_vf_scale_cuda;
++extern const FFFilter ff_vf_scale_opencl;
+ extern const FFFilter ff_vf_scale_d3d11;
+ extern const FFFilter ff_vf_scale_d3d12;
+ extern const FFFilter ff_vf_scale_qsv;
+@@ -525,6 +526,7 @@ extern const FFFilter ff_vf_tpad;
+ extern const FFFilter ff_vf_transpose;
+ extern const FFFilter ff_vf_transpose_cuda;
+ extern const FFFilter ff_vf_transpose_opencl;
++extern const FFFilter ff_vf_transpose_d3d11;
+ extern const FFFilter ff_vf_transpose_vaapi;
+ extern const FFFilter ff_vf_transpose_vt;
+ extern const FFFilter ff_vf_transpose_vulkan;
+diff --git a/libavfilter/cuda/vector_helpers.cuh b/libavfilter/cuda/vector_helpers.cuh
+index e4a9353ff1..ca8246e5a0 100644
+--- a/libavfilter/cuda/vector_helpers.cuh
++++ b/libavfilter/cuda/vector_helpers.cuh
+@@ -132,27 +132,4 @@ inline __device__ float4 saturate_rintf<float4>(float4 a, float factor) {
+     );
+ }
+ 
+-template<typename T>
+-inline __device__ T saturate_rintf(T a, float factor) {
+-    return rintf(__saturatef(a) * factor);
+-}
+-
+-template<>
+-inline __device__ float2 saturate_rintf<float2>(float2 a, float factor) {
+-    return make_float2(
+-        saturate_rintf(a.x, factor),
+-        saturate_rintf(a.y, factor)
+-    );
+-}
+-
+-template<>
+-inline __device__ float4 saturate_rintf<float4>(float4 a, float factor) {
+-    return make_float4(
+-        saturate_rintf(a.x, factor),
+-        saturate_rintf(a.y, factor),
+-        saturate_rintf(a.z, factor),
+-        saturate_rintf(a.w, factor)
+-    );
+-}
+-
+ #endif
+```
