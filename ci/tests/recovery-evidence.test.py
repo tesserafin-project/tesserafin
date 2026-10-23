@@ -24,6 +24,23 @@ class RecoveryEvidenceTests(unittest.TestCase):
             with self.subTest(marker=marker):
                 self.assertFalse(evidence.summarize(self.complete_log().replace(marker, ""), 0)["accepted"])
 
+    def test_split_phases_require_their_own_markers(self):
+        source = "\n".join(["== 2a. extended ==", evidence.SEED_MARKER, evidence.SOURCE_MARKER])
+        recover = "\n".join([evidence.ABSENT_MARKER, "== 3d. off-host ==", evidence.OFFHOST_MARKER,
+                              "== 5. restored ==", evidence.RESTORE_MARKER, evidence.COMPLETE_MARKER])
+        self.assertTrue(evidence.summarize(source, 0, "source")["accepted"])
+        self.assertEqual(evidence.summarize(recover, 0, "recover")["stages"],
+                         ["off-host-verification", "restored-state"])
+        for phase, log in (("source", source), ("recover", recover)):
+            self.assertTrue(evidence.summarize(log, 0, phase)["accepted"])
+            self.assertFalse(evidence.summarize(log, 0, "all")["accepted"])
+            for marker in evidence.REQUIRED[phase]:
+                with self.subTest(phase=phase, marker=marker):
+                    self.assertFalse(evidence.summarize(log.replace(marker, ""), 0, phase)["accepted"])
+        # A one-host run cannot stand in for either half of the disk-loss split.
+        self.assertFalse(evidence.summarize(self.complete_log(), 0, "recover")["accepted"])
+        self.assertFalse(evidence.summarize(self.complete_log(), 0, "source")["accepted"])
+
     def test_failure_and_empty_log_cannot_pass(self):
         self.assertFalse(evidence.summarize("", 0)["accepted"])
         self.assertFalse(evidence.summarize(self.complete_log(), 1)["accepted"])

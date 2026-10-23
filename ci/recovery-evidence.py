@@ -16,11 +16,18 @@ import sys
 
 STAGES = {"0": "prepare", "1": "first-boot", "2": "populate", "2a": "extended-seed",
           "3": "backup", "3a": "artifact-permissions", "3b": "archive-validation",
-          "3c": "restart-failure", "4": "restore", "5": "restored-state",
+          "3c": "restart-failure", "3d": "off-host-verification", "4": "restore", "5": "restored-state",
           "6": "bind-mounts", "7": "helper-pin"}
 SEED_MARKER = "  PASS  distinct users, saved position, favourite, policies, configuration, pack and tokens seeded"
 RESTORE_MARKER = "  PASS  extended state restored identically by user/item/pack identity"
 COMPLETE_MARKER = "ROUNDTRIP: all gates + safety assertions passed"
+SOURCE_MARKER = "ROUNDTRIP-SOURCE: snapshot handed off"
+ABSENT_MARKER = "  PASS  recovery host holds no source volumes"
+OFFHOST_MARKER = "  PASS  off-host snapshot matches its retained checksum"
+# Markers each docker/state-roundtrip.sh phase must print before it can be accepted.
+REQUIRED = {"all": (SEED_MARKER, RESTORE_MARKER, COMPLETE_MARKER),
+            "source": (SEED_MARKER, SOURCE_MARKER),
+            "recover": (ABSENT_MARKER, OFFHOST_MARKER, RESTORE_MARKER, COMPLETE_MARKER)}
 # Allowlisted diagnostic lines emitted by docker/state-roundtrip.sh. Only fixed labels,
 # keys and narrowly typed values are retained; any other DIAG line is dropped whole.
 DIAG_LABELS = {"first-boot-ready", "restored-never-ready", "restored-ready",
@@ -57,15 +64,15 @@ def diagnostics(lines):
     return result
 
 
-def summarize(raw, exit_code):
+def summarize(raw, exit_code, phase="all"):
     lines = raw.splitlines()
     stages = [STAGES[match[1]] for line in lines
-              if (match := re.match(r"^== ([0-7](?:[abc])?)\. ", line))
+              if (match := re.match(r"^== ([0-7](?:[abcd])?)\. ", line))
               and match[1] in STAGES]
     fail_count = sum(line.startswith("  FAIL  ") for line in lines)
     complete = exit_code == 0 and fail_count == 0 and all(
-        marker in lines for marker in (SEED_MARKER, RESTORE_MARKER, COMPLETE_MARKER))
-    return {"schema": 1, "exit_code": exit_code, "accepted": complete,
+        marker in lines for marker in REQUIRED[phase])
+    return {"schema": 1, "phase": phase, "exit_code": exit_code, "accepted": complete,
             "passed_assertions": sum(line.startswith("  PASS  ") for line in lines),
             "failed_assertions": fail_count, "stages": stages,
             "extended_seed_verified": SEED_MARKER in lines,
@@ -86,6 +93,7 @@ def main():
     init = sub.add_parser("init")
     init.add_argument("--expected-source", required=True)
     init.add_argument("--out", required=True, type=Path)
+    init.add_argument("--scope", default="same-image independent-volume recovery; no forward migration")
     image = sub.add_parser("image")
     image.add_argument("--image-id", required=True)
     image.add_argument("--expected-source", required=True)
@@ -94,6 +102,7 @@ def main():
     result.add_argument("--raw", required=True, type=Path)
     result.add_argument("--exit-code", required=True, type=int)
     result.add_argument("--out", required=True, type=Path)
+    result.add_argument("--phase", choices=sorted(REQUIRED), default="all")
     args = parser.parse_args()
     args.out.parent.mkdir(parents=True, exist_ok=True)
     if args.mode == "init":
@@ -104,7 +113,7 @@ def main():
                 "source_tree": subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], text=True).strip(),
                 "dockerfile_sha256": hashlib.sha256(Path("Dockerfile").read_bytes()).hexdigest(),
                 "run_id": os.environ.get("GITHUB_RUN_ID"), "run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT"),
-                "publication": False, "scope": "same-image independent-volume recovery; no forward migration"}
+                "publication": False, "scope": args.scope}
     elif args.mode == "image":
         if not re.fullmatch(r"sha256:[0-9a-f]{64}", args.image_id):
             raise ValueError("expected an immutable local Docker image ID")
@@ -120,7 +129,7 @@ def main():
                 "paired_web_revision": labels.get("org.tesserafin.web.revision"),
                 "paired_web_image": labels.get("org.tesserafin.web.assets.image")}
     else:
-        data = summarize(args.raw.read_text(errors="replace"), args.exit_code)
+        data = summarize(args.raw.read_text(errors="replace"), args.exit_code, args.phase)
     args.out.write_text(json.dumps(data, sort_keys=True, indent=2) + "\n")
     print(json.dumps(data, sort_keys=True))
     if args.mode == "result" and not data["accepted"]:

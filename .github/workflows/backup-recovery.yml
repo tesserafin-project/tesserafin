@@ -86,3 +86,164 @@ jobs:
         run: |
           rm -rf -- "$DOCKER_CONFIG"
           rm -f -- "$RUNNER_TEMP/recovery-raw.log" "$RUNNER_TEMP/recovery-image-id"
+
+  # Disk-loss recovery: the snapshot leaves the source runner, and a second, fresh
+  # runner that never held the source volumes restores it. The handoff artifact
+  # holds only the disposable fixture server's archive, sidecars, fixture tokens and
+  # the exact image; it is kept for one day at most and deleted once recovery ends.
+  disk-loss-source:
+    name: Disk-loss recovery - source host
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: read
+    env:
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+    outputs:
+      image-id: ${{ steps.build.outputs.image-id }}
+      host: ${{ steps.host.outputs.host }}
+      handoff-id: ${{ steps.handoff.outputs.artifact-id }}
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Record source provenance and host identity
+        id: host
+        run: |
+          set -euo pipefail
+          umask 077
+          export EVIDENCE_DIR="$RUNNER_TEMP/recovery-evidence"
+          export DOCKER_CONFIG="$RUNNER_TEMP/recovery-docker-config"
+          export HANDOFF="$RUNNER_TEMP/recovery-handoff"
+          printf 'EVIDENCE_DIR=%s\nDOCKER_CONFIG=%s\nHANDOFF=%s\n' "$EVIDENCE_DIR" "$DOCKER_CONFIG" "$HANDOFF" >> "$GITHUB_ENV"
+          mkdir -p "$EVIDENCE_DIR" "$DOCKER_CONFIG" "$HANDOFF"
+          python3 ci/recovery-evidence.py init --expected-source "$CANDIDATE_SHA" \
+            --scope "disk-loss recovery, source host; same image, no forward migration" \
+            --out "$EVIDENCE_DIR/source.json"
+          echo "host=$(sha256sum /proc/sys/kernel/random/boot_id | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+      - name: Authenticate read-only access to pinned Web build input
+        env:
+          REGISTRY_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+      - name: Build the exact server candidate without publishing
+        id: build
+        run: |
+          set -euo pipefail
+          epoch="$(git show -s --format=%ct HEAD)"
+          docker build --platform linux/amd64 \
+            --build-arg VCS_REF="$CANDIDATE_SHA" \
+            --build-arg SOURCE_DATE_EPOCH="$epoch" \
+            --iidfile "$RUNNER_TEMP/recovery-image-id" .
+          image_id="$(cat "$RUNNER_TEMP/recovery-image-id")"
+          python3 ci/recovery-evidence.py image --image-id "$image_id" \
+            --expected-source "$CANDIDATE_SHA" --out "$EVIDENCE_DIR/image.json"
+          echo "image-id=$image_id" >> "$GITHUB_OUTPUT"
+      - name: Populate, seed and take the cold snapshot
+        run: |
+          set -euo pipefail
+          umask 077
+          image_id="$(cat "$RUNNER_TEMP/recovery-image-id")"
+          status=0
+          TF_ROUNDTRIP_PHASE=source TF_ROUNDTRIP_HANDOFF="$HANDOFF" \
+            bash docker/state-roundtrip.sh "$image_id" 19096 > "$RUNNER_TEMP/recovery-raw.log" 2>&1 || status=$?
+          python3 ci/recovery-evidence.py result --phase source --raw "$RUNNER_TEMP/recovery-raw.log" \
+            --exit-code "$status" --out "$EVIDENCE_DIR/result.json"
+          docker save -o "$HANDOFF/image.tar" "$image_id"
+      - name: Hand the snapshot and exact image off the source host
+        id: handoff
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: recovery-handoff-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/recovery-handoff/
+          if-no-files-found: error
+          retention-days: 1
+      - name: Retain allowlisted source evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: disk-loss-source-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/recovery-evidence/*.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Remove registry credentials, handoff and raw transient output
+        if: always()
+        run: |
+          rm -rf -- "$DOCKER_CONFIG" "$HANDOFF"
+          rm -f -- "$RUNNER_TEMP/recovery-raw.log" "$RUNNER_TEMP/recovery-image-id"
+
+  disk-loss-recover:
+    name: Disk-loss recovery - fresh host
+    needs: disk-loss-source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: write   # delete the handoff artifact once recovery ends
+    env:
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+      IMAGE_ID: ${{ needs.disk-loss-source.outputs.image-id }}
+      SOURCE_HOST: ${{ needs.disk-loss-source.outputs.host }}
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Record provenance and prove this is a different host
+        run: |
+          set -euo pipefail
+          umask 077
+          export EVIDENCE_DIR="$RUNNER_TEMP/recovery-evidence"
+          export HANDOFF="$RUNNER_TEMP/recovery-handoff"
+          printf 'EVIDENCE_DIR=%s\nHANDOFF=%s\n' "$EVIDENCE_DIR" "$HANDOFF" >> "$GITHUB_ENV"
+          mkdir -p "$EVIDENCE_DIR" "$HANDOFF"
+          python3 ci/recovery-evidence.py init --expected-source "$CANDIDATE_SHA" \
+            --scope "disk-loss recovery, fresh host; same image, no forward migration" \
+            --out "$EVIDENCE_DIR/source.json"
+          host="$(sha256sum /proc/sys/kernel/random/boot_id | cut -d' ' -f1)"
+          [[ "$SOURCE_HOST" =~ ^[0-9a-f]{64}$ && "$host" != "$SOURCE_HOST" ]]
+          printf '{"recovery_host_boot_id_sha256": "%s", "schema": 1, "source_host_boot_id_sha256": "%s"}\n' \
+            "$host" "$SOURCE_HOST" > "$EVIDENCE_DIR/hosts.json"
+      - name: Fetch the off-host snapshot
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: recovery-handoff-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/recovery-handoff
+      - name: Load the exact image recorded by the source host
+        run: |
+          set -euo pipefail
+          docker load -i "$HANDOFF/image.tar" >/dev/null
+          rm -f -- "$HANDOFF/image.tar"
+          python3 ci/recovery-evidence.py image --image-id "$IMAGE_ID" \
+            --expected-source "$CANDIDATE_SHA" --out "$EVIDENCE_DIR/image.json"
+      - name: Verify the snapshot and recover on independent volumes
+        run: |
+          set -euo pipefail
+          umask 077
+          status=0
+          TF_ROUNDTRIP_PHASE=recover TF_ROUNDTRIP_HANDOFF="$HANDOFF" \
+            bash docker/state-roundtrip.sh "$IMAGE_ID" 19096 > "$RUNNER_TEMP/recovery-raw.log" 2>&1 || status=$?
+          python3 ci/recovery-evidence.py result --phase recover --raw "$RUNNER_TEMP/recovery-raw.log" \
+            --exit-code "$status" --out "$EVIDENCE_DIR/result.json"
+      - name: Retain allowlisted recovery evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: disk-loss-recover-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/recovery-evidence/*.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Delete the handoff artifact and local copies
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HANDOFF_ID: ${{ needs.disk-loss-source.outputs.handoff-id }}
+        run: |
+          rm -rf -- "$HANDOFF" "$RUNNER_TEMP/recovery-raw.log"
+          gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$HANDOFF_ID"

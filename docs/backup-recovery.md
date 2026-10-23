@@ -119,6 +119,39 @@ python3 ci/tests/recovery-state.test.py
 docker/state-roundtrip.sh <immutable-image-reference> <unused-local-port>
 ```
 
+## Disk-loss recovery rehearsal
+
+The same script can be split across two hosts with `TF_ROUNDTRIP_PHASE`:
+
+```sh
+# Source host: populate, seed, cold snapshot; writes into an existing empty directory.
+TF_ROUNDTRIP_PHASE=source TF_ROUNDTRIP_HANDOFF=<dir> docker/state-roundtrip.sh <image> <port>
+# Copy <dir> off the host. On a host that never held the source volumes:
+TF_ROUNDTRIP_PHASE=recover TF_ROUNDTRIP_HANDOFF=<dir> docker/state-roundtrip.sh <image> <port>
+```
+
+The recovery phase first requires that the host holds no `tf_a2_` volumes. It
+then requires the archive, both sidecars and the private fixture, and checks the
+archive against its retained `.sha256` before restoring. `restore.sh` alone only
+warns when that sidecar is missing. The media fixture is regenerated at the same
+path, because media is on its own backup plan. Steps 4–7 then run unchanged,
+including the byte-identical before/after oracle comparison using the original
+pre-backup tokens.
+
+The `Backup recovery rehearsal` workflow runs this on two GitHub-hosted runners.
+The source job builds the exact candidate without publishing it. It hands the
+snapshot, sidecars, fixture and `docker save` output of that image to the
+recovery job through an artifact kept for one day at most, which the recovery
+job deletes when it finishes. The recovery job loads the image, re-checks its
+image ID, labels and user, and confirms that its kernel boot ID differs from the
+source runner's. Only allowlisted JSON (provenance, image identity, host
+boot-ID hashes, phase results) is retained.
+
+The handoff artifact contains the disposable fixture server's database, tokens
+and fixture passwords. That server never exists outside the job. Use a separate,
+access-controlled store for real backups; this rehearsal does not test
+encryption, transfer authenticity or a particular off-host storage product.
+
 ## Extended recovery rehearsal (prepared, not executed here)
 
 The A2 script now uses [`docker/recovery-state.py`](../docker/recovery-state.py)
@@ -168,7 +201,7 @@ be lost. Create implementation issues only after a reproducible defect.
 | Favourites and resume position | Execute the extended rehearsal on the selected immutable image. The oracle now requires a favourite and nonzero saved position by user/item identity, but this change does not supply a new Docker execution or real player-resume proof. |
 | Native Linux and Windows disaster recovery | Artifact-based stopped-service backup/restore on the selected platform, preserving persistent directories, credentials, service identity/permissions and media paths. |
 | Newer database schema | Genuine published-image migration with preservation assertions under #127; an unchanged-schema round trip is insufficient. |
-| Disk-loss recovery | Off-host copy available, matching artifact and deployment configuration retained, and an isolated recovery with source storage unavailable. |
+| Disk-loss recovery | Off-host copy available, matching artifact and deployment configuration retained, and an isolated recovery with source storage unavailable. The [two-host rehearsal](#disk-loss-recovery-rehearsal) covers the container path once a hosted run is green; native disk-loss recovery remains with the native row. |
 | Import from another product | Separately selected source/version and identity mapping; not restoring a Tesserafin backup and not assuming Jellyfin compatibility. |
 
 No scheduled-backup service, retention UI, recovery key, automatic rollback or

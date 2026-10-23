@@ -32,6 +32,13 @@
 # round-trip proves portability, not in-place mutation.
 #
 # Usage: docker/state-roundtrip.sh [<image-ref>] [<host-port>]
+#
+# Disk-loss split (TF_ROUNDTRIP_PHASE, default "all" = both halves in one process):
+#   source   steps 0-3c, writing the snapshot, its sidecars and the private fixture
+#            into the existing directory $TF_ROUNDTRIP_HANDOFF for off-host transfer.
+#   recover  on a host that never held the source volumes: verify that handoff,
+#            then steps 0 and 4-7 against it. The media fixture is regenerated,
+#            as media has its own backup plan.
 set -euo pipefail
 umask 077
 
@@ -58,6 +65,15 @@ C_A="tf-a2-src-${SFX}"           ; C_B="tf-a2-restored-${SFX}"       ; C_RF="tf-
 WORK="$(mktemp -d)"
 MEDIA="${WORK}/media"
 ARCHIVE="${WORK}/tesserafin-state-${SFX}.tgz"
+PHASE="${TF_ROUNDTRIP_PHASE:-all}"
+HANDOFF="${TF_ROUNDTRIP_HANDOFF:-}"
+case "${PHASE}" in
+  all) ;;
+  source|recover)
+    [[ -d "${HANDOFF}" ]] || { echo "TF_ROUNDTRIP_HANDOFF must be an existing directory" >&2; exit 2; }
+    ARCHIVE="${HANDOFF}/tesserafin-state.tgz" ;;
+  *) echo "TF_ROUNDTRIP_PHASE must be all, source or recover" >&2; exit 2 ;;
+esac
 
 FAILED=0
 pass() { echo "  PASS  $*"; }
@@ -154,7 +170,13 @@ seed_junk() { # $1=cfg vol $2=data vol
     mkdir -p /v/data/.hidden_dir && echo stale > /v/data/.hidden_dir/x'
 }
 
-echo "== image under test: ${IMAGE} =="
+echo "== image under test: ${IMAGE} (phase ${PHASE}) =="
+if [[ "${PHASE}" == recover ]]; then
+  # Checked before this run creates any volume of its own.
+  SOURCE_VOLS="$(docker volume ls -q | grep '^tf_a2_' || true)"
+  [[ -z "${SOURCE_VOLS}" ]] && pass "recovery host holds no source volumes" \
+    || { fail "recovery host already holds tf_a2_ volumes"; exit 1; }
+fi
 
 # ===========================================================================
 echo "== 0. prepare volumes + one media fixture =="
@@ -175,6 +197,8 @@ docker run --rm --entrypoint /bin/sh -v "${MEDIA}:/media:ro" "${IMAGE}" \
   || { fail "generated fixture unreadable as the candidate server user"; exit 1; }
 chown_vols "${V_CFG}" "${V_CACHE}" "${V_DATA}"
 
+# Steps 1-3c run only where the source lives; deliberately not re-indented.
+if [[ "${PHASE}" != recover ]]; then
 echo "== 1. first boot on empty volumes (Gate 1: migrations create the schema) =="
 docker run -d --name "${C_A}" -p "127.0.0.1:${PORT_A}:8096" \
   -v "${V_CFG}:/config" -v "${V_CACHE}:/cache" -v "${V_DATA}:/data" \
@@ -306,6 +330,35 @@ grep -q "remains STOPPED" "${WORK}/rf.out" && pass "restart-failure message stat
 [[ "$(docker inspect -f '{{.State.Running}}' "${C_RF}" 2>/dev/null)" == "false" ]] \
   && pass "server left stopped after failed restart" || fail "server unexpectedly running"
 docker rm -f "${C_RF}" >/dev/null 2>&1 || true
+fi
+
+if [[ "${PHASE}" == source ]]; then
+  cp "${WORK}/recovery-fixture.json" "${WORK}/recovery-before.json" "${HANDOFF}/"
+  printf '%s\n' "${ITEMID}" "${BEFORE_USERS}" "${BEFORE_LIBS}" "${BEFORE_PLAY}" > "${HANDOFF}/baseline.txt"
+  echo
+  if [[ "${FAILED}" == 0 ]]; then
+    echo "ROUNDTRIP-SOURCE: snapshot handed off"; exit 0
+  else
+    echo "ROUNDTRIP-SOURCE: FAILED"; exit 1
+  fi
+fi
+
+if [[ "${PHASE}" == recover ]]; then
+echo "== 3d. off-host snapshot: sidecars present and checksum verified before restore =="
+# restore.sh only warns on a missing .sha256; a disk-loss recovery must not.
+for f in "${ARCHIVE}" "${ARCHIVE}.sha256" "${ARCHIVE}.manifest.json" \
+         "${HANDOFF}/recovery-fixture.json" "${HANDOFF}/recovery-before.json" "${HANDOFF}/baseline.txt"; do
+  [[ -s "${f}" ]] || { fail "handoff missing $(basename "${f}")"; exit 1; }
+done
+( cd "${HANDOFF}" && sha256sum --quiet -c tesserafin-state.tgz.sha256 ) \
+  && pass "off-host snapshot matches its retained checksum" \
+  || { fail "off-host snapshot does not match its checksum"; exit 1; }
+python3 -c "import json,sys; json.load(open(sys.argv[1]))" "${ARCHIVE}.manifest.json" \
+  && pass "off-host manifest is valid JSON" || fail "off-host manifest is not valid JSON"
+cp "${HANDOFF}/recovery-fixture.json" "${HANDOFF}/recovery-before.json" "${WORK}/"
+{ read -r ITEMID; read -r BEFORE_USERS; read -r BEFORE_LIBS; read -r BEFORE_PLAY; } < "${HANDOFF}/baseline.txt"
+[[ "${ITEMID}" =~ ^[0-9a-f]{32}$ ]] || { fail "handoff baseline has no item identity"; exit 1; }
+fi
 
 echo "== 4. restore into fresh volumes: seed junk, test guard + --force cleanup (B) =="
 mkvol "${V_CFG2}" "${V_CACHE2}" "${V_DATA2}"
