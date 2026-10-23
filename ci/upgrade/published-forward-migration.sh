@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# #127: use published historical images, never build a substitute candidate.
+# #127: use published immutable images only; never build an image in this job.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -9,10 +9,12 @@ mkdir -p "${EVIDENCE}"
 
 BASELINE='ghcr.io/tesserafin-project/tesserafin-server@sha256:fd1fa9e0f5a28a07e5872cc5ff13257a92d988717a33519f62c4b26c6ab36249'
 BASE_REVISION='44f5ab62b522684b4fa58ed10de80b8c6a7bb392'
-# Annotated v1.1.0 tag -> bb2234aebbf0ff2c1cbe291df48f2ffa62beea46.
-# This is the version-contract's immutable source tag, NOT a claim that an
-# image was published for this source revision. Preflight must prove that.
-CAND_REVISION='bb2234aebbf0ff2c1cbe291df48f2ffa62beea46'
+# No container was ever published for v1.1.0 (bb2234ae). The candidate is the
+# owner-approved immutable dev build of master 60f7a9c9bf, pushed 2026-10-23 as
+# index sha256:ac038fbe9d862a738c411871b45b41965e837704e5dc86c011c864a9d7652c07.
+# It contains migration 20260807161612_AddContentPacks; the baseline does not.
+# Preflight still proves the tag is readable and its OCI revision matches.
+CAND_REVISION='60f7a9c9bfd22e9fa8714248998a51a1ef26e88b'
 CANDIDATE_TAG="ghcr.io/tesserafin-project/tesserafin-server:sha-${CAND_REVISION}"
 
 HARNESS_SOURCE="$(git rev-parse HEAD)"
@@ -28,7 +30,7 @@ if ! docker manifest inspect "${BASELINE}" > "${EVIDENCE}/baseline-manifest.json
   UNREADABLE=1
 fi
 if ! docker manifest inspect "${CANDIDATE_TAG}" > "${EVIDENCE}/candidate-manifest.json"; then
-  echo 'BLOCKED: no readable published container at the v1.1.0 source tag.' >&2
+  echo 'BLOCKED: no readable published container at the candidate source tag.' >&2
   echo 'Record the registry error. Supply verified existing image provenance before changing this lookup.' >&2
   UNREADABLE=1
 fi

@@ -43,7 +43,7 @@ elif args[:2] == ['image', 'inspect']:
     images = []
     for revision, digest in [
         ('44f5ab62b522684b4fa58ed10de80b8c6a7bb392', 'f' * 64),
-        ('bb2234aebbf0ff2c1cbe291df48f2ffa62beea46', 'a' * 64),
+        ('60f7a9c9bfd22e9fa8714248998a51a1ef26e88b', 'a' * 64),
     ]:
         images.append({'Architecture':'amd64', 'Os':'linux',
             'Config':{'Labels':{'org.opencontainers.image.revision':revision,

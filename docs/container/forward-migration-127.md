@@ -19,7 +19,18 @@ That source fact does **not** prove publication of a matching container:
 - The private build package requires authentication. Its published candidates must be checked from a runner with package-read access.
 - The GitHub release contains native packages; these are not interchangeable with a container digest.
 
-The first candidate lookup is the version contract's source tag, `tesserafin-server:sha-bb2234aebbf0ff2c1cbe291df48f2ffa62beea46`. This is a lookup to verify, not an asserted publication. If absent, identify an existing published image and its exact source/release provenance before changing the selected candidate. No historical rebuild, new release, tag movement or substitute baseline is authorized by this rehearsal.
+The first candidate lookup was the version contract's source tag, `tesserafin-server:sha-bb2234aebbf0ff2c1cbe291df48f2ffa62beea46`. On 2026-10-23, a `read:packages` listing of all three server packages showed no version after 2026-08-04. **No container for `v1.1.0` was ever published.**
+
+### Selected candidate (owner decision, 2026-10-23)
+
+Instead of cutting a 1.2.0 release, the owner approved one immutable **development** build of `master`. It was built through the normal `docker/build-clean.sh --target server --output push` path into the private build package:
+
+- Source: `60f7a9c9bfd22e9fa8714248998a51a1ef26e88b`. Contains `20260807161612_AddContentPacks`.
+- Tags: `1.0.0-dev.60f7a9c9bfd2`, `sha-60f7a9c9bfd22e9fa8714248998a51a1ef26e88b`.
+- Index: `sha256:ac038fbe9d862a738c411871b45b41965e837704e5dc86c011c864a9d7652c07`. Children: `linux/amd64` `sha256:ad0d63b955068d0fc6771a298cfc25291a1dc371bb196be9a87a96c9f5b9c2a7`, `linux/arm64` `sha256:baef0488a0a9689bafb4a40b6091110fe9ddc0948f3cd8572d9113e77042ea70`.
+- `docker/version-verify.sh --require-digest` passed: tag, `SharedVersion.cs`, OCI labels, `/health` and the running application all report `1.0.0`.
+
+This satisfies `versioning-policy.md` §5: "a digest built after a real schema migration landed". It is **not** a released image. A green run therefore proves 1.0.0-era baseline → post-migration dev build. It does not prove release → release. The post-v1 minor-upgrade promise stays open until the next release is published as a container. No tag, release or public package was changed.
 
 ## Reproducible execution
 
