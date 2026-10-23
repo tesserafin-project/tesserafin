@@ -1,7 +1,7 @@
 # RFC — Audit de compatibilité FFmpeg upstream (n9.0.2) pour Tesserafin
 
 - **Issue** : #340 (parente #335)
-- **Statut** : brouillon. Faits : inventaire mécanique (phase 1), preuve de compilation linux-x64 (§3.6). Restent : inventaire des scénarios, linux-arm64, audit Windows, prototype.
+- **Statut** : brouillon. Faits : inventaire mécanique (phase 1), preuve de compilation linux-x64 (§3.6), inventaire des scénarios et contrat mesuré sur A1, B et C (§3.7). Restent : linux-arm64, audit Windows, prototype.
 - **Date** : 2026-10-23
 - **Nature** : design et preuves uniquement, aucun changement de runtime, de pins ou d'`EncodingHelper`.
 
@@ -74,7 +74,8 @@ Conséquences :
 | `*_rkmpp`, `*_rkrga` | `EncodingHelper`, `EncoderValidator` | 0042 | Docker arm64 seulement |
 | `*_videotoolbox` (overlay, tonemap, bwdif, encodeur mjpeg) | `EncodingHelper`, `EncoderValidator` | 0044, 0046, 0047, 0056 | aucune (pas de plateforme macOS déclarée) |
 
-Options sondées par `EncoderValidator` et déjà présentes upstream : le framesync (« Action to take when encountering EOF ») d'`overlay_vaapi`, `overlay_opencl`, `overlay_vulkan` et `overlay_cuda`, et `format` de `scale_cuda`. Absentes upstream :
+Options sondées par `EncoderValidator` et déjà présentes upstream : le framesync (« Action to take when encountering EOF ») d'`overlay_vaapi` et d'`overlay_cuda`, et `format` de `scale_cuda`. Absentes upstream (mesuré sur un binaire n9.0.2 vierge, §3.7) :
+- le framesync d'`overlay_opencl` (0008) et d'`overlay_vulkan` (0082). Une version précédente de ce RFC le donnait présent upstream, à tort ;
 - `alpha_format` d'`overlay_opencl` et `overlay_cuda` (0008, 0031), passé par `EncodingHelper.cs:4227,4451` pour l'incrustation de sous-titres ;
 - `bt2390` de `tonemap_opencl` (0007 ; upstream ne le propose que dans `libplacebo`) ;
 - le demi-tour de `transpose_opencl` (0051). Upstream l'a pour `transpose_cuda`, `transpose_vaapi`, `transpose_vt` et `vpp_qsv`. `fork-patches.json` classe ce patch `useful` (« le serveur ne le nomme pas »), alors que `EncoderValidator` sonde `TransposeOpenclReversal` : premier exemple de classement à revoir.
@@ -162,11 +163,11 @@ La suite de l'essai (§3.6) substitue les en-têtes AMF v1.5.3 dans une copie du
 | `#include "libavcodec/itut35.h"` dans `bsf/av1_metadata.c` et `bsf/h265_metadata.c` | 0061 | Hunk rejeté |
 | `amfenc_av1.c` : `ff_amf_pix_fmts` → `ff_amf_pix_fmts_10b_8b` | 0005 | Upstream a une liste unique, Jellyfin l'a scindée ; le hunk AV1 n'est pas passé |
 
-Diff total : 8 fichiers, +14 / −24 lignes (annexe C).
+Diff total : 8 fichiers, +14 / −24 lignes (annexe C). Deux comportements perdus ont été trouvés ensuite et corrigés (§3.7) : le diff passe à 10 fichiers, +48 / −31.
 
 **Contrat.** L'inventaire de §3.2 relève 202 noms de composants dans le code serveur (filtres, codecs, BSF ; quelques faux positifs, comme `ulti`, fragment d'une regex de `VideoListResolver`). Comparaison du binaire porté au F0 de référence :
 - **Aucun composant nommé par le serveur n'est perdu.** Ceux qui manquent aux deux binaires relèvent de backends que F0 ne compile pas (RKMPP, VideoToolbox, Vulkan, libplacebo) ou d'exclusions voulues (`libfdk_aac`, `aac_at`).
-- Les 14 sondes d'option d'`EncoderValidator` (§3.2), rejouées par `ffmpeg -h filter=…` / `-h bsf=…`, donnent des résultats **identiques** : 13 positives, plus `overlay_vulkan` négative sur les deux binaires (Vulkan non compilé). Cette réponse négative montre aussi que la sonde sait dire non.
+- Les 14 sondes d'option d'`EncoderValidator` (§3.2), rejouées par `ffmpeg -h filter=…` / `-h bsf=…`, donnent des résultats **identiques** : 13 positives, plus `overlay_vulkan` négative sur les deux binaires (Vulkan non compilé). Cette réponse négative montre aussi que la sonde sait dire non. Ce contrat de noms et de sondes ne voit pas les comportements : deux pertes lui ont échappé (§3.7).
 - Pertes, toutes dues à des retraits upstream et non nommées par le serveur : codecs `sonic`, `sonicls`, `v308`, `v408`, `v410` et filtre `pp` (retrait de libpostproc en FFmpeg 8).
 - Gains : notamment `vpp_amf`, `sr_amf`, `vp9_amf`, `pad_cuda`, BSF `dovi_split`.
 - `EncoderValidator` lit la version (`^ffmpeg version n?((?:[0-9]+\.?)+)` donne 9.0.2). Sa table `_ffmpegMinimumLibraryVersions` cite encore `libpostproc`, qui n'existe plus. Elle ne sert que si la version est illisible, mais il faudra la nettoyer.
@@ -179,22 +180,168 @@ Diff total : 8 fichiers, +14 / −24 lignes (annexe C).
 
 **Leçon pour tout portage de la série.** Un test hunk par hunk ne suffit pas. Il faut aussi contrôler que chaque ligne `configure` et chaque enregistrement (`allfilters.c`, `allcodecs.c`, `Makefile`) ajoutés par la série sont présents, puis comparer `-filters`, `-encoders`, `-decoders` et `-bsfs` à une référence. La perte de `scale_opencl` n'a été détectée qu'à ce dernier contrôle.
 
+### 3.7 Inventaire des scénarios et contrat mesuré sur trois binaires
+
+**Montage.** Trois binaires linux-x64 sortent du même pipeline F0 (§3.6) :
+- **A1** : F0 actuel, jellyfin-ffmpeg 7.1.4-3 ;
+- **C** : n9.0.2 avec la série 8.1.3-1 portée, corrections de l'annexe C comprises ;
+- **B** : n9.0.2 vierge. Seules les deux assertions du builder « `tonemapx` et `alphasrc` présents » sont neutralisées, dans une copie de `ci/` hors dépôt.
+
+A2 (jellyfin 8.1.3-1 sur n8.1.3) n'est pas construit. Quand le code concerné est identique à C, son résultat est déduit de C et marqué comme tel.
+
+Le serveur choisit une voie à l'aide de **barrières** :
+- des prédicats évalués sur ce que liste le binaire (`EncodingHelper.cs:302-363`) ;
+- les 14 sondes d'option ;
+- trois sondes d'exécution de `MediaEncoder` (`MediaEncoder.cs:237-239`) ;
+- des seuils de version.
+
+Une barrière fausse fait basculer sur une autre voie, en général sans erreur visible. Les instruments de l'annexe B rejouent chaque barrière comme le serveur la calcule. Chaque instrument a été contrôlé dans les deux sens : réponse positive sur A1 et C, négative sur B.
+
+**Barrières (linux-x64)**
+
+| Barrière | Code serveur | A1 | C | B | Patch 8.1.3-1 | Si elle est fausse |
+|---|---|---|---|---|---|---|
+| filtre `alphasrc` | `EncodingHelper.cs:4063, 4273, 4506, 5109, 5847, 6035` ; décodeurs `:6830, 6902, 6977, 7034, 7186` | oui | oui | **non** | 0023 | Les voies matérielles complètes (NVIDIA, AMD D3D11, Intel QSV, VAAPI) retombent toutes sur `GetSwVidFilterChain` : filtres et incrustation en logiciel, encodeur matériel au mieux derrière un `hwupload` |
+| `IsSwTonemapAvailable` (`tonemapx`) | `:366` | oui | oui | **non** | 0053 | Aucun tonemap logiciel : un HDR transcodé hors voie matérielle sort sans conversion SDR |
+| `IsVaapiFullSupported` | `:302` | oui | oui | **non** | 0014 (`hwupload_vaapi`) | Voie VAAPI complète indisponible. Elle exige aussi `IsOpenclFullSupported` (`:5103`) |
+| `IsOpenclFullSupported` | `:323` | oui | oui | **non** | 0006, 0007, 0008 | Pas de tonemap OpenCL (VAAPI et D3D11) |
+| `IsCudaFullSupported` | `:333` | oui | oui | **non** | 0004 (`tonemap_cuda`) | Voie CUDA complète indisponible |
+| `IsVulkanFullSupported` | `:345` | non | non | non | 0082 et `libplacebo` | Indisponible partout : `libplacebo` n'est pas compilé (§3.1) |
+| retrait HDR10+ | `:1507` | oui | oui | **non** | 0061 | Pas de remux pour un client DV qui refuse HDR10+. Le retrait DV reste possible via `dovi_rpu=strip` (upstream) |
+| touche `p`/`u` | `MediaEncoder.cs:237`, `TranscodeManager.cs:956` | oui | oui | **non** | 0028 | Throttling désactivé (FFmpeg > 6.1) |
+| `-only_first_vframe` | `MediaEncoder.cs:239, 639` | oui, 1 trame | oui, 1 trame après correction | **non** | 0066 | HDR10+ non détecté à l'analyse (`ProbeResultNormalizer.cs:954`) |
+| pièces jointes MKV, nom avec espace | `AttachmentExtractor.cs:291` | 2/2 extraites | 2/2 | **0/2, ffmpeg en échec** | 0089 | Upstream 8+ refuse le premier nom non strict et abandonne l'entrée : aucune pièce jointe extraite, donc pas de polices pour l'incrustation ASS |
+
+A2 : 0089 et 0066 sont nouveaux en 8.1. A2 a donc le comportement de C sur les deux dernières lignes. Ce n'est pas mesuré.
+
+**Options écrites sans sonde.** Le contrôle porte sur deux ensembles :
+- les 89 couples (filtre, option) qu'écrit `EncodingHelper` ;
+- toutes les options listées par `-h full` : 5 553 pour C, 5 475 pour B.
+
+Les 79 options propres à C sont toutes des options de filtres ou de BSF du fork, à deux exceptions près : `main10sp` de `hevc_qsv` et une option du décodeur AC-4. Le serveur n'utilise aucune option d'encodeur propre au fork. Trois options écrites ne sont protégées par aucune sonde :
+- `sub2video` de `subtitles` (0022), écrit dans les voies matérielles qui incrustent via `alphasrc` ;
+- `passthrough` de `vpp_qsv` (0019), dans la voie QSV ;
+- `tonemap_mode` de `tonemap_opencl` et `tonemap_cuda` (0004, 0007). Elle n'est protégée que par les seuils de version `_minFFmpegOclCuTonemapMode` (5.1.3) et `_minFFmpegAdvancedTonemapMode` (7.0.1).
+
+Sous B, ces options ne sont jamais atteintes, car les barrières ci-dessus sont fausses. Dans un C réduit, retirer le patch tout en gardant la voie fait échouer la commande. Un sous-ensemble doit donc garder ces paires ensemble : 0023 avec 0022, la voie QSV avec 0019, le tonemap matériel avec 0004 et 0007.
+
+**Seuils de version.** `EncodingHelper` compte 17 seuils `_minFFmpeg*`, qui suivent la chronologie de jellyfin-ffmpeg. En 9.0.2, tous sont franchis. Un seul protège une option propre au fork (`tonemap_mode`) ; les autres protègent des options upstream. Ce seuil est à remplacer par une sonde, quelle que soit l'option retenue.
+
+**Correction de §3.2.** Upstream, le framesync (« Action to take when encountering EOF ») n'existe que pour `overlay_vaapi` et `overlay_cuda`. Pour `overlay_opencl`, il vient de 0008 ; pour `overlay_vulkan`, de 0082. La version précédente de ce RFC avait lu l'arbre porté au lieu de l'arbre vierge. Conséquence : même avec `libplacebo` compilé, la voie Vulkan d'upstream ne passe pas `IsVulkanFullSupported` sans 0082.
+
+**Correction de §3.6 : deux comportements perdus.** Le contrat de noms et de sondes était bien identique, mais le portage avait perdu deux comportements, sans erreur de compilation ni de sonde :
+- **0066, hunk 7** : `-only_first_vframe` était accepté mais ne s'arrêtait plus. Mesuré : 25 trames décodées au lieu d'une sur un fichier d'une seconde. Comme le serveur ne sonde que le code de sortie, chaque analyse de bibliothèque aurait décodé le fichier entier.
+- **0027, hunk 5** : le muxer MKV écrivait la configuration DV sans la valider. Corrigé, mais non testé faute d'échantillon DV.
+
+Détection : pour chaque hunk de la série, l'instrument vérifie que ses lignes ajoutées sont présentes dans l'arbre (`lost-hunks.py`, annexe B). Il a été étalonné sur l'arbre jellyfin 8.1.3 complet, où il produit 21 faux positifs : des patches ultérieurs réécrivent ces lignes. Il détecte bien 0066 sur l'arbre d'avant correction. Après les deux corrections, il reste 27 écarts :
+- **22 dans des backends que F0 ne compile pas**, à porter si la voie est retenue : Vulkan (0078 ×7, 0082 ×13), RKMPP (0042), VideoToolbox (0055) ;
+- **5 faux positifs vérifiés à la main**, sur 4 patches : 0002 (`tex2D`) et 0083 (`nvenc`), absorbés upstream sous une autre forme ; 0005, dont le seuil AMF est remplacé par l'exigence upstream 1.5.2 ; 0061 (2 hunks), dont l'include est écrit sous un autre chemin.
+
+L'annexe C est mise à jour : 10 fichiers, +48 / −31.
+
+**Leçon, s'ajoutant à celle de §3.6.** Un portage se vérifie à quatre niveaux :
+1. hunks ;
+2. lignes `configure` et enregistrements ;
+3. listes de composants et sondes ;
+4. lignes ajoutées par chaque hunk.
+
+Un hunk rejeté qui ne casse ni la compilation ni une sonde ne se voit qu'au quatrième niveau.
+
+**Scénarios.** Chaque scénario est rattaché au code serveur qui le pilote et aux patches qui le portent. Le rattachement patch par patch, avec l'effet de chaque absence, est en annexe D.
+
+| # | Scénario | Code serveur | Patches 8.1.3-1 (Linux) |
+|---|---|---|---|
+| S1 | Transcodage vidéo logiciel SDR | `GetSwVidFilterChain` (`:3924`) | aucun |
+| S2 | HDR10 / HLG → SDR | `IsSwTonemapAvailable`, `GetHwTonemapFilter` (`:3762`), `GetLibplaceboFilter` (`:3843`) | 0053 ; en matériel : 0004, 0007, 0032, 0070, 0085, 0099 |
+| S3 | Dolby Vision : profil, retrait, reshaping, remux | `ShouldRemoveDynamicHdrMetadata`, `GetBitStreamArgs` (`:1532`) | 0061, 0027 ; reshaping P5 : 0053, 0007, 0004 |
+| S4 | Voie VAAPI complète | `GetVaapiVidFilterChain` (`:5088`) et ses variantes Intel/AMD | 0014, 0023, 0015, 0024, 0034, 0039, 0067, 0068, 0070, 0074, 0075, 0086 |
+| S5 | Filtres et tonemap OpenCL | `IsOpenclFullSupported` (`:323`) | 0006, 0007, 0008, 0010 |
+| S6 | Voie CUDA / NVENC | `GetNvidiaVidFilterChain` (`:4046`) | 0002, 0003, 0004, 0031, 0032, 0083 |
+| S7 | Voie QSV | `GetIntelVidFilterChain` (`:4480`) | 0011, 0017–0020, 0036, 0037, 0059, 0064, 0071, 0099 |
+| S8 | Voie Vulkan / libplacebo | `GetAmdVaapiFullVidFiltersPrefered` (`:5385`) | 0035, 0038, 0078–0082, 0085, plus `libplacebo` à compiler |
+| S9 | Windows : D3D11, AMF, Media Foundation | voies D3D11 et AMF | 0005, 0009, 0012, 0013, 0030, 0033, 0040, 0072, 0076, 0091–0095, 0097 (audit séparé, §6) |
+| S10 | Incrustation de sous-titres texte | `GetTextSubtitlesFilter` (`:1987`), `AttachmentExtractor` | 0022, 0023, 0065, 0089 |
+| S11 | Incrustation de sous-titres image | `overlay_*` des voies matérielles | 0008, 0015, 0031, 0058, 0098 |
+| S12 | HLS TS / fMP4 | `DynamicHlsController`, `GetHlsVideoKeyFrameArguments` | 0027, 0039, 0086 |
+| S13 | Throttling | `TranscodingThrottler` | 0028 |
+| S14 | Analyse (probe) | `MediaEncoder` (`:639`), `ProbeResultNormalizer` | 0066, 0087 (DTS:X) ; 0084 absorbé |
+| S15 | Audio | `GetAudioEncoder` (`:782`), décodeurs | 0052, 0054 (AC-4) |
+| S16 | Désentrelacement matériel | `GetHwDeinterlaceFilter` (`:3706`) | 0069 |
+| S17 | Rotation matérielle | `transpose_*` | 0051 |
+| S18 | Métadonnées et images | analyse des tags et des pièces jointes | 0025, 0088 |
+| S19 | Extraction d'images, trickplay | `MediaEncoder` (`:918`), `GetMjpegEncoder` (`:245`) | 0096 |
+| S20 | VideoToolbox | voies Apple | 14 patches, hors matrice |
+| S21 | RKMPP | voies Rockchip | 0042, Docker arm64 seulement |
+
+**Répartition des 100 patches.**
+
+| Catégorie | Patches | Nombre |
+|---|---|---:|
+| Rattachés à un scénario serveur (Linux) | voir annexe D | 60 |
+| Windows seul | 0009, 0012, 0013, 0030, 0033, 0040, 0072, 0076, 0091–0095, 0097 | 14 |
+| VideoToolbox | 0043–0049, 0055–0057, 0060, 0062, 0063, 0073 | 14 |
+| RKMPP | 0042 | 1 |
+| Absorbés ou remplacés upstream | 0016, 0050, 0084, 0090 | 4 |
+| Exclu (unsafe) | 0026 | 1 |
+| Sans scénario | 0001, 0021, 0029, 0041, 0077, 0100 | 6 |
+
+Le détail des six patches sans scénario :
+- **0001** : correctif du muxer `segment`. Il est classé `required` (« HLS segmenting »), mais le serveur segmente avec `-f hls` et ne nomme jamais le muxer `segment`. Deuxième classement à revoir après 0051.
+- **0021** et **0077** : journaux seulement.
+- **0029** : performance.
+- **0041** : icône Windows.
+- **0100** : BSF `trim`, inutilisé (le trim audio passe par `noise=drop`).
+
+Parmi les 60 patches rattachés à un scénario, **18 sont visibles par une barrière ou une option écrite** : 0003, 0004, 0006, 0007, 0008, 0014, 0019, 0022, 0023, 0028, 0031, 0051, 0053, 0054, 0061, 0066, 0069, 0089. Les 42 autres sont **comportementaux** : ils ne changent aucune barrière, et seul un test de scénario sur le backend concerné peut les valider. Le banc VAAPI AMD peut en exercer dix : 0015, 0024, 0034, 0039, 0067, 0068, 0074, 0075, 0086, 0096. Les patches d'interopérabilité Vulkan (0035, 0038, 0079, 0081) demandent d'abord de compiler la voie Vulkan.
+
+**Dépendances.** Elles sont tracées de deux façons :
+- par les symboles qu'un patch ajoute dans un en-tête et qu'un patch ultérieur utilise (`symdeps.py`, annexe B) ;
+- par les échecs d'un patch testé seul sur sa base d'origine (§2).
+
+Dépendances qui contraignent un sous-ensemble :
+- **0053 (`tonemapx`) dépend de 0004 (CUDA)**, qui apporte les helpers DoVi de `colorspace.{c,h}` (`FFDOVIReshapeData`, `ff_map_dovi_metadata`…), et de 0007 (`tonemap_lut`). 0007 et 0094 (tonemap D3D11) dépendent des mêmes helpers. Garder `tonemapx` sans la voie CUDA oblige à scinder 0004.
+- 0004 dépend de 0002 et 0003 (CUDA). 0092, 0094 et 0095 dépendent de 0091 (D3D11).
+- L'exemple de l'issue, 0006/0007 → 0010, n'est pas une dépendance de symbole : 0010 modifie le comportement de `hwmap=reverse=1` à l'exécution, ce que seul un test révèle.
+- Trois faux positifs ont été écartés : des helpers homonymes de noyaux OpenCL, CUDA et GLSL compilés séparément (0031 → 0008, 0082 → 0008, 0083 → 0069).
+
+**Alternatives côté serveur pour B.**
+
+| Barrière | Alternative upstream | État |
+|---|---|---|
+| `-only_first_vframe` | `-show_frames -select_streams v:0 -read_intervals "%+#1"` | Testé sur B : 1 trame. La présence de la side data HDR10+ n'est pas vérifiée faute d'échantillon |
+| pièces jointes | extraction par index avec un nom explicite (`-dump_attachment:N <chemin>`), forme déjà utilisée par `AttachmentExtractor.cs:160, 422` | Testé sur B : 2/2 |
+| `p`/`u` | aucune dans `ffmpeg`. `SIGSTOP`/`SIGCONT` sous Linux uniquement, ou `-readrate` | Non testé |
+| `alphasrc` | source `color` à alpha nul et `format=yuva420p`. Le paramètre `start` d'`alphasrc` sert à la synchronisation après un seek | Hypothèse non testée |
+| `hwupload_vaapi` | `hwupload` générique | Non testé |
+| `tonemapx` | `zscale` + `tonemap` (sans reshaping DV, plus lent), ou `libplacebo` (Vulkan, chaîne de build différée) | Coût élevé |
+| retrait HDR10+ | aucune ; repli sur un transcodage | — |
+
+**Lecture.**
+1. **B ne revient pas à « upstream plus quelques retouches serveur ».** Sur linux-x64, B coupe les quatre voies matérielles complètes et le tonemap logiciel. Il perd aussi le throttling, la détection et le retrait HDR10+, et l'extraction des polices dès qu'un nom contient un espace. Pour chaque barrière, il faut un patch ou un changement serveur.
+2. **Deux changements serveur sont utiles quelle que soit l'option** : l'analyse par `-read_intervals` et l'extraction des pièces jointes par index. Ils suppriment la dépendance à 0066 et à 0089. 0089 relâche en outre un durcissement upstream. Les deux sont testés sur B ; le premier reste à vérifier sur un échantillon HDR10+.
+3. **Le noyau d'un C Linux** se lit dans la colonne « Patch » des barrières : 0023, 0053 (avec 0004 scindé et 0007), 0014, 0006–0008, 0022, 0028 et 0061, plus 0069 et 0051 pour le désentrelacement et la rotation OpenCL. Les 42 patches comportementaux restent à trier par test de scénario. Sans banc, ils restent non validés.
+
 ## 4. Ce qui change déjà la discussion
 
-1. **Le coût de l'option C est plus bas que redouté** si on part de la série 8.1.3-1 et non de 7.1.4-3 : 78 patches sur 100 passent tels quels sur n9.0.2, et l'arbre porté compile en linux-x64 avec 8 fichiers retouchés (+14 / −24 lignes), sans perte sur le contrat serveur (§3.6). Reste à prouver : comportement, autres plateformes, et coût des rebases futurs.
+1. **Le coût de l'option C est plus bas que redouté** si on part de la série 8.1.3-1 et non de 7.1.4-3 : 78 patches sur 100 passent tels quels sur n9.0.2, et l'arbre porté compile en linux-x64 avec 10 fichiers retouchés (+48 / −31 lignes), sans perte sur le contrat serveur (§3.6, §3.7). Reste à prouver : le comportement des 42 patches comportementaux, les autres plateformes et le coût des rebases futurs. Un portage se vérifie à quatre niveaux, pas seulement à la compilation (§3.7).
 2. **Le périmètre des backends décide de la taille du fork.** Les patches lourds à porter correspondent à des backends (AMF, Vulkan, CUDA) qu'aucun banc ne valide aujourd'hui. Seul AMD VAAPI est testable.
-3. **Les écarts entre livraisons sont un problème indépendant du fork.** Docker et natif n'exposent pas les mêmes capacités, et l'image Docker embarque `libfdk_aac` avec `--enable-gpl`.
+3. **Les écarts entre livraisons sont un problème indépendant du fork.** Docker et natif n'exposent pas les mêmes capacités, et l'image Docker embarque `libfdk_aac` avec `--enable-gpl` (#342).
+4. **L'option B est mesurée, et elle coupe beaucoup plus que des filtres** (§3.7). Sur linux-x64, sans changement serveur, elle désactive les quatre voies matérielles complètes (barrière `alphasrc`), le tonemap logiciel, le throttling, la détection et le retrait HDR10+. Elle fait aussi échouer l'extraction des pièces jointes d'un MKV dès qu'un nom contient un espace. B demande donc, pour chaque barrière, un changement serveur dont plusieurs n'ont pas d'équivalent upstream (`tonemapx`, retrait HDR10+, pause).
+5. **Le fork utile est petit, mais il n'est pas découpable au hasard.** 18 patches sont visibles par une barrière ou une option écrite, 42 sont comportementaux, et 40 n'ont aucun scénario linux-x64 (Windows, VideoToolbox, RKMPP, absorbés, sans usage). Les dépendances imposent des paires : `tonemapx` exige de scinder 0004 (CUDA), et `sub2video` doit suivre `alphasrc`.
+6. **Deux changements serveur sont utiles quelle que soit l'option** : l'analyse par `-read_intervals "%+#1"` à la place de `-only_first_vframe`, et l'extraction des pièces jointes par index. Tous deux sont testés sur B. Le seuil de version qui protège `tonemap_mode` est à remplacer par une sonde.
 
 ## 5. Questions ouvertes
 
 - Seuil chiffré de fidélité des couleurs (ΔE/SSIM) et profils DV testés (5, 7, 8.1 proposés). À fixer avant les mesures.
 - Périmètre des backends par plateforme (§4.2).
-- Traitement de la question `libfdk_aac` de l'image Docker (§3.1), à porter dans une issue dédiée.
+- Traitement de la question `libfdk_aac` de l'image Docker (§3.1) : issue #342.
+- Classements de `fork-patches.json` à corriger quelle que soit l'option : 0051 (`useful`, alors que le serveur le sonde) et 0001 (`required`, alors que le muxer `segment` n'est pas utilisé). Ce sont des numéros 8.1.3-1 ; la correspondance avec 7.1.4-3 est en annexe A.
+- Les deux changements serveur de §4.6 : issue dédiée, ou partie de l'option retenue ?
 
 ## 6. Étapes suivantes
 
 1. **Compilation.** linux-x64 : faite (§3.6). Restent linux-arm64, qui demande un hôte arm64 natif (le builder refuse la cross-compilation et l'émulation), et win-x64 (étape 3).
-2. **Inventaire des scénarios** : rattacher chaque patch conservé à un scénario de l'issue (« quel scénario échoue sans lui ? »), dépendances comprises.
+2. **Inventaire des scénarios** : fait pour linux-x64 (§3.7, annexe D). Restent les 42 patches comportementaux, qui ne se trient que par test de scénario (étape 4), et la vérification de l'alternative `-read_intervals` sur un échantillon HDR10+.
 3. **Audit Windows séparé**, puisque `win-x64` applique toute la série.
 4. **Prototype** des cinq cas de l'issue, avec les critères chiffrés une fois fixés.
 
@@ -335,9 +482,23 @@ done
 
 Usage : `hunks.sh <arbre FFmpeg vierge> <dossier debian/patches> <sortie.tsv>`. Les dossiers de patches sont extraits par `git archive <tag> debian/patches` du dépôt jellyfin-ffmpeg.
 
+Instruments de §3.6 et §3.7, conservés dans le rig d'audit (non publiés) :
+
+| Script | Ce qu'il rejoue | Contrôle |
+|---|---|---|
+| `build-port.sh` | pipeline F0 avec une source FFmpeg substituée (C, ou B avec `REPO_MOUNT` sur une copie de `ci/` sans les assertions du fork) | le builder a vérifié `tonemapx` et `alphasrc` sur C, et a signalé leur absence sur B |
+| `gates.sh` | prédicats `Is*FullSupported`, `alphasrc`, `tonemapx` (`EncodingHelper.cs:302-366`) | oui sur A1 et C, non sur B |
+| `probe-options.sh` | les 14 sondes d'option d'`EncoderValidator` | `overlay_vulkan` non partout, 13 oui sur A1 et C |
+| `check-options.sh` | les 89 couples (filtre, option) écrits par `EncodingHelper` contre `-h filter=` | 23 écarts sur B, 5 (Vulkan non compilé) sur A1 et C. `extra_hw_frames` est écarté : c'est une option générique d'`AVFilterContext`, absente de `-h filter=` |
+| `runtime-probes.sh` | sondes `p`, `-only_first_vframe`, `low_priority` de `MediaEncoder` | oui sur A1 et C, non sur B. La sonde `p` exige un stdin ouvert, comme celui du serveur ; avec un stdin fermé, elle répond non à tort |
+| `attach-test.sh` | `AttachmentExtractor.cs:291` sur un MKV dont la première pièce jointe s'appelle `Font One.ttf` | 2/2 sur A1 et C, échec sur B |
+| `lost-hunks.py` | lignes ajoutées par chaque hunk présentes dans l'arbre | 21 faux positifs sur l'arbre jellyfin 8.1.3 complet ; détecte 0066 sur l'arbre porté avant correction |
+| `symdeps.py` | symboles ajoutés à un en-tête par un patch et utilisés par un patch ultérieur | faux positifs relus à la main (§3.7) |
+| `filter-options.py`, `chain-components.py` | extraction des options et des composants nommés par méthode d'`EncodingHelper` | relu à la main pour les noms composés (`tonemap_{0}`, `{scale,vpp}_{suffixe}`) et les fragments ajoutés (`":alpha=1"`…) |
+
 ## Annexe C — Corrections manuelles du portage (§3.6)
 
-Appliquées après la série 8.1.3-1 en séquence (fuzz 2, rejets écartés) sur n9.0.2, puis le retrait de 0026. L'arbre porté vit dans le rig d'audit, il n'est pas publié.
+Appliquées après la série 8.1.3-1 en séquence (fuzz 2, rejets écartés) sur n9.0.2, puis le retrait de 0026. L'arbre porté vit dans le rig d'audit, il n'est pas publié. Deux blocs : les corrections de compilation et de contrat (§3.6), puis les comportements perdus trouvés en §3.7.
 
 ```diff
 diff --git a/configure b/configure
@@ -479,3 +640,189 @@ index e4a9353ff1..ca8246e5a0 100644
 -
  #endif
 ```
+
+Comportements perdus (§3.7) :
+
+```diff
+diff --git a/fftools/ffprobe.c b/fftools/ffprobe.c
+index a113b71cae..b696d41f6e 100644
+--- a/fftools/ffprobe.c
++++ b/fftools/ffprobe.c
+@@ -1860,23 +1860,49 @@ static int read_interval_packets(AVTextFormatContext *tfc, InputFile *ifile,
+                 fd->pkt_pos  = pkt->pos;
+                 fd->pkt_size = pkt->size;
+ 
+-                while (process_frame(tfc, ifile, frame, pkt, &packet_new) > 0);
++                while (1) {
++                    int frame_ret = process_frame(tfc, ifile, frame, pkt, &packet_new);
++
++                    if (frame_ret <= 0)
++                        break;
++                    if (!only_show_first_video_frame)
++                        continue;
++                    if (++decode_iterations >= ONLY_FIRST_VFRAME_MAX_DECODE_ITERATIONS) {
++                        av_log(NULL, AV_LOG_WARNING,
++                               "Stopping only_first_vframe after %d decoder iterations "
++                               "for stream %d on a single packet\n",
++                               decode_iterations, pkt->stream_index);
++                        break;
++                    }
++                }
++                if (only_show_first_video_frame &&
++                    nb_streams_frames[pkt->stream_index] > frame_count_before) {
++                    finished_video_stream[pkt->stream_index] = 1;
++                    nb_finished_video_streams++;
++                    if (nb_finished_video_streams >= nb_video_streams)
++                        break;
++                }
+             }
+         }
+         av_packet_unref(pkt);
+     }
+     av_packet_unref(pkt);
+-    //Flush remaining frames that are cached in the decoder
+-    for (int i = 0; i < ifile->nb_streams; i++) {
+-        pkt->stream_index = i;
+-        if (do_read_frames) {
+-            while (process_frame(tfc, ifile, frame, pkt, &(int){1}) > 0);
++    if (!only_show_first_video_frame) {
++        //Flush remaining frames that are cached in the decoder
++        for (int i = 0; i < ifile->nb_streams; i++) {
++            pkt->stream_index = i;
++            if (do_read_frames) {
++                while (process_frame(tfc, ifile, frame, pkt, &(int){1}) > 0);
++            }
+         }
+     }
+ 
+ end:
+     av_frame_free(&frame);
+     av_packet_free(&pkt);
++    av_freep(&finished_video_stream);
++    av_freep(&target_video_stream);
++    av_freep(&video_packets);
+     if (ret < 0) {
+         av_log(NULL, AV_LOG_ERROR, "Could not read packets in interval ");
+         log_read_interval(interval, NULL, AV_LOG_ERROR);
+diff --git a/libavformat/matroskaenc.c b/libavformat/matroskaenc.c
+index f278271e24..f0e03dfcc5 100644
+--- a/libavformat/matroskaenc.c
++++ b/libavformat/matroskaenc.c
+@@ -1760,7 +1760,8 @@ static void mkv_write_blockadditionmapping(AVFormatContext *s, const MatroskaMux
+ 
+     const AVDOVIDecoderConfigurationRecord *dovi =
+         (const AVDOVIDecoderConfigurationRecord *)sd->data;
+-    if (dovi->dv_profile <= 10) {
++    if (dovi->dv_profile <= 10 &&
++        !ff_isom_validate_dovi_config(dovi, par, (int)par->codec_tag)) {
+         ebml_master mapping;
+         uint8_t buf[ISOM_DVCC_DVVC_SIZE];
+         uint32_t type;
+```
+
+## Annexe D — Série 8.1.3-1 rattachée aux scénarios (§3.7)
+
+Scénarios S1–S21 : §3.7. « Sans lui » : ce que le serveur perd si le patch manque, observé sur B quand une barrière le rend visible, déduit du code sinon. « Dépend de » : dépendances de symboles et de contexte (§3.7). Plateformes : L = linux-x64 et linux-arm64, W = win-x64, D = image Docker seulement ; « — » = aucune.
+
+| Patch | Scénarios | Sans lui (option B), vu du serveur | Dépend de | Plateformes |
+|---|---|---|---|---|
+| `0001-add-fixes-for-segment-muxer` | — | aucun : le serveur n'utilise pas le muxer `segment` (HLS = `-f hls`) | — | — |
+| `0002-update-cuda-func-header` | S6 | base des filtres CUDA | — | L W |
+| `0003-add-enhanced-cuda-pixfmt-converter-impl` | S6 | `scale_cuda` sans `format` : `IsCudaFullSupported` faux, repli copie système | 0002 | L W |
+| `0004-add-cuda-tonemap-impl` | S6 S2 S3 S5 | `tonemap_cuda` absent ; porte aussi les helpers DoVi de `colorspace.{c,h}` dont 0007, 0053, 0094 dépendent | 0002 0003 | L W |
+| `0005-add-amf-fixes-from-upstream-and-custom-tunings` | S9 | réglages AMF (comportement) ; non testable | — | W L(x64) |
+| `0006-add-opencl-scaler-and-pixfmt-converter-impl` | S5 | `scale_opencl` absent : `IsOpenclFullSupported` faux, pas de tonemap OpenCL | — | L W |
+| `0007-add-bt2390-eetf-and-code-refactor-to-opencl-tonemap` | S5 S3 | `tonemap_opencl` sans `bt2390` ni reshaping DoVi : `IsOpenclFullSupported` faux | 0004 | L W |
+| `0008-add-pgs-support-to-opencl-overlay` | S11 S5 | `overlay_opencl` sans `alpha_format` : PGS incrusté avec alpha faux sur la voie OpenCL | — | L W |
+| `0009-add-d3d11-opencl-interop-for-amd` | S9 | interop D3D11↔OpenCL AMD | — | W |
+| `0010-add-a-hack-for-opencl-reverse-mapping` | S5 S7 | `hwmap=reverse=1` (D3D11/VAAPI→OpenCL→retour) : comportement | — | L W |
+| `0011-add-fixes-for-mapping-from-qsv-source-device` | S7 | dérivation de périphérique depuis QSV | — | L W |
+| `0012-add-d3d11-opencl-interop-for-qsv` | S7 S9 | interop D3D11↔OpenCL Intel | — | W |
+| `0013-add-vendor-id-option-for-d3d11` | S9 | option `vendor_id` D3D11 | — | W |
+| `0014-add-vaapi-hwupload-filter` | S4 | `hwupload_vaapi` absent : `IsVaapiFullSupported` faux, toute la voie VAAPI complète tombe | — | L |
+| `0015-check-alpha-mode-for-vaapi-overlay-filter` | S4 S11 | vérification du mode alpha d'`overlay_vaapi` (comportement) | — | L |
+| `0016-add-fixes-for-nvdec-exceed-32-surfaces-error` | S6 | absorbé upstream | — | — |
+| `0017-backport-fixes-for-qsv-from-upstream` | S7 | backports QSV (comportement) | — | L W |
+| `0018-backport-fixes-for-qsv-from-cartwheel` | S7 | backports QSV cartwheel (comportement) | — | L W |
+| `0019-add-fixes-for-qsv-vpp-filters` | S7 | correctifs filtres VPP QSV (comportement) | — | L W |
+| `0020-add-external-frame-support-for-qsv-enc` | S7 | trames externes pour l'encodeur QSV (comportement) | — | L W |
+| `0021-suppress-overlay-warning-logs` | — | journaux d'`overlay` seulement | — | — |
+| `0022-add-sub2video-option-to-subtitles-filter` | S10 | `subtitles` sans `sub2video` : écrit sans sonde (`EncodingHelper.cs:1997`) dans les voies matérielles qui incrustent via `alphasrc` ; avec 0023 et sans 0022, la commande échoue | — | L W |
+| `0023-add-alphasrc-source-video-filter` | S4 S5 S6 S7 S10 | `alphasrc` absent : barrière de **toutes** les voies matérielles complètes (`Get*VidFilterChain`, décodeurs `hwSurface`), repli copie système partout | — | L W |
+| `0024-increase-the-default-async-depth-for-vaapi-encode` | S4 | `async_depth` VAAPI par défaut (performance) | — | L |
+| `0025-add-multiple-values-tags-and-webp-support-for-id3v2` | S18 | tags id3v2 multivaleurs et pochettes WebP | — | L W |
+| `0026-remove-fdk-aac-from-nonfree` | — | retrait de libfdk_aac de nonfree : **unsafe**, exclu (= 0029 de 7.1.4-3) | — | — |
+| `0027-pass-dovi-sidedata-to-hlsenc-and-mpegtsenc` | S12 S3 | side data DoVi non transmise à hlsenc/mpegtsenc : remux DV en HLS perd la signalisation | — | L W |
+| `0028-add-pause-support-for-ffmpeg-cli` | S13 | pas de touche `p`/`u` : `IsPkeyPauseSupported` faux, throttling désactivé (FFmpeg > 6.1) | — | L W |
+| `0029-enable-gcc-vectorization-and-fix-cpuflags` | — | vectorisation gcc et cpuflags (performance) | — | L W |
+| `0030-tune-dxva-align-for-intel-to-avoid-copy-on-qsv` | S7 | alignement DXVA Intel | — | W |
+| `0031-add-10bit-support-for-cuda-overlay` | S6 S11 | `overlay_cuda` 10 bits et `alpha_format` absents | — | L W |
+| `0032-add-hdr-metadata-for-nvenc-hevc-encoder` | S6 S2 | métadonnées HDR dans NVENC HEVC | — | L W |
+| `0033-add-d3d11va-dxva2-hevc-422-444-decoding-on-intel` | S9 | décodage HEVC 4:2:2/4:4:4 D3D11/DXVA Intel | — | W |
+| `0034-default-vaapi-scaler-algorithm-to-fast` | S4 | algorithme par défaut de `scale_vaapi` = rapide (performance) | — | L |
+| `0035-dont-fail-on-vaapi-to-drm-export-vasync` | S8 | export VAAPI→DRM sans `vaSyncSurface` en échec | — | L |
+| `0036-skip-loading-plugins-on-vpl-runtime` | S7 | chargement des plugins VPL | — | L W |
+| `0037-tune-the-default-bf-for-qsv-enc` | S7 | `bf` par défaut QSV | — | L W |
+| `0038-allow-vaapi-import-drm-prime2-planar-formats` | S8 | import DRM PRIME2 planaire dans VAAPI | — | L |
+| `0039-add-vui-info-to-the-seq-header-of-hevc-vaapi-encoder` | S12 S4 | VUI dans l'en-tête HEVC VAAPI | — | L |
+| `0040-sync-intel-d3d11va-textures-before-mapping-to-opencl` | S7 S9 | synchronisation D3D11 Intel avant OpenCL | — | W |
+| `0041-add-icon-for-windows-version-ffmpeg` | — | icône Windows | — | W |
+| `0042-add-full-hwa-pipeline-for-rockchip-rk3588-platform` | S21 | RKMPP/RKRGA | — | D(arm64) |
+| `0043-add-format-option-to-vt-scale-filter` | S20 | VideoToolbox | — | — |
+| `0044-add-vf-overlay-videotoolbox-filter` | S20 | VideoToolbox | — | — |
+| `0045-add-coreimage-based-vf-transpose-vt-filter` | S20 | VideoToolbox | — | — |
+| `0046-add-vf-tonemap-videotoolbox-filter` | S20 | VideoToolbox | 0004 | — |
+| `0047-add-mjpeg-videotoolbox-encoder` | S20 | VideoToolbox | — | — |
+| `0048-add-vt-low-priority-keyframe-decoding` | S20 | VideoToolbox (`low_priority`) | — | — |
+| `0049-add-dummy-device-derive-to-videotoolbox-hwcontext` | S20 | VideoToolbox | — | — |
+| `0050-add-cuda-transpose-filter-impl` | S6 | remplacé upstream (`vf_transpose_cuda.c`) | — | — |
+| `0051-add-flip-feat-to-opencl-transpose-filter` | S17 | `transpose_opencl` sans demi-tour : sonde `TransposeOpenclReversal` fausse | — | L W |
+| `0052-opus-allow-5point1-side-inputs` | S15 | opus 5.1 « side » refusé par libopus | — | L W |
+| `0053-add-simd-optimized-tonemapx-filter` | S2 S3 | `tonemapx` absent : `IsSwTonemapAvailable` faux, **aucun tonemap logiciel** (HDR servi sans conversion) ; reshaping DV P5 logiciel absent | 0004 0007 | L W |
+| `0054-add-ac4-decoder-for-atsc-3-0` | S15 | décodeur AC-4 absent | — | L W |
+| `0055-allow-vt-sw-decoder-for-every-codec` | S20 | VideoToolbox | — | — |
+| `0056-add-bwdif-videotoolbox-filter` | S20 | VideoToolbox | — | — |
+| `0057-add-12bit-decoding-on-videotoolbox` | S20 | VideoToolbox | — | — |
+| `0058-fix-the-sub2video-perf-regressions` | S11 | régression de performance sub2video (PGS) | — | L W |
+| `0059-allow-vpl-qsv-to-init-with-the-legacy-msdk-path` | S7 | init VPL par le chemin MSDK historique | — | L W |
+| `0060-alway-set-videotoolboxenc-pixel-buffer-info` | S20 | VideoToolbox | — | — |
+| `0061-add-remove-dovi-hdr10plus-bsf` | S3 | `remove_dovi`/`remove_hdr10plus` absents : retrait DV possible par `dovi_rpu=strip`, retrait **HDR10+ impossible** | — | L W |
+| `0062-fix-atenc-layout-samplerate` | S20 | AudioToolbox | — | — |
+| `0063-videotoolbox-remove-opengl-compatability` | S20 | VideoToolbox | — | — |
+| `0064-use-dynamic-pool-for-vpl-qsv-hwupload` | S7 | pool dynamique pour `hwupload` VPL | — | L W |
+| `0065-fix-ass-incorrect-null-copy` | S10 | copie nulle dans le muxer ASS | — | L W |
+| `0066-add-first-vframe-only-to-ffprobe` | S14 | pas de `-only_first_vframe` : probe sans trame, **HDR10+ non détecté** (`ProbeResultNormalizer.cs:954`) | — | L W |
+| `0067-fix-auto-inserting-sw-color-conv-filters-between-hw-fmts` | S4 S6 S7 | conversion couleur logicielle insérée entre formats matériels (CLI) | — | L W |
+| `0068-fix-dummy-hw-frame-missing-hw-frames-ctx` | S4 S6 S7 | trame matérielle factice sans `hw_frames_ctx` (CLI) | — | L W |
+| `0069-add-yadif-and-bwdif-opencl-filter-impl` | S16 | `yadif_opencl`/`bwdif_opencl` absents | — | L W |
+| `0070-allow-vpp-tonemap-without-hdr10-metadata` | S4 S2 | `tonemap_vaapi` exige les métadonnées HDR10 | — | L |
+| `0071-allow-qsvenc-to-bail-out-from-unsupported-low-power-mode` | S7 | repli QSV hors mode basse consommation | — | L W |
+| `0072-add-array-of-textures-support-for-d3d11va-hwaccel` | S9 | array of textures D3D11VA | — | W |
+| `0073-dont-return-ext-error-for-invalid-vt-frame` | S20 | VideoToolbox | — | — |
+| `0074-fix-mapped-hwframe-to-swframe-swscale-conversion` | S4 S6 S7 | conversion swscale des trames matérielles mappées | — | L W |
+| `0075-fix-hwupload-filter-cannot-use-devices-created-by-hwaccel` | S4 S6 S7 | `hwupload` avec un périphérique créé par hwaccel | — | L W |
+| `0076-fix-seeking-h264-open-gop-videos-with-d3d11va-on-amd` | S9 | seek H.264 open-GOP D3D11VA AMD | — | W |
+| `0077-suppress-the-resumed-reading-at-pts-with-rate-warning` | — | journaux de demux seulement | — | — |
+| `0078-backport-fixes-for-vulkan-from-upstream` | S8 | backports Vulkan | — | L W |
+| `0079-add-fixes-for-vaapi-drm-prime-vulkan-interop` | S8 | interop VAAPI DRM PRIME↔Vulkan | — | L |
+| `0080-prefer-vulkan-device-with-higher-api-version` | S8 | choix du périphérique Vulkan | — | L W |
+| `0081-signal-vulkan-semaphores-in-drm-prime-reverse-mapping` | S8 | sémaphores Vulkan au mappage inverse DRM PRIME | — | L |
+| `0082-add-fixes-and-enhancements-for-vulkan-filters` | S8 | correctifs filtres Vulkan | — | L W |
+| `0083-backport-fixes-for-cuda-from-upstream` | S6 | backports CUDA | — | L W |
+| `0084-backport-fixes-for-detecting-ac4-streams-in-mpegts` | S14 | absorbé upstream | — | — |
+| `0085-fix-hdr10-sidedata-not-removed-in-libplacebo-outlink` | S8 S2 | side data HDR10 non retirée en sortie de libplacebo | — | L W |
+| `0086-fix-amd-hevc-vaapi-encoder-extradata-with-overrides` | S12 S4 | extradata HEVC VAAPI AMD (fMP4) | — | L |
+| `0087-add-dtsx-detect-for-dts-hd-hra` | S14 | DTS:X non détecté dans DTS-HD HRA | — | L W |
+| `0088-add-webp-to-matroskadec-image-mime-types` | S18 | WebP absent des types MIME d'image MKV | — | L W |
+| `0089-relax-to-allow-safe-filenames-in-mkv-attachments` | S10 | `-dump_attachment:t ""` (`AttachmentExtractor.cs:291`) : upstream 8+ arrête l'extraction au premier nom non strict (espace, accent…) ; les pièces jointes suivantes, dont les polices de l'ASS, ne sont pas extraites | — | L W |
+| `0090-backport-a-fix-to-use-sw-pix-fmt-in-codec-par-if-set` | — | absorbé upstream | — | — |
+| `0091-add-d3d11-deinterlace-filter` | S9 S16 | désentrelacement D3D11 | — | W |
+| `0092-add-d3d11-video-processor-overlay-transpose-filters` | S9 | overlay/transpose D3D11 | 0091 | W |
+| `0093-fix-d3d11-scale-visible-source-rect` | S9 | `scale_d3d11` rectangle source | — | W |
+| `0094-add-d3d11-tonemap-filter` | S9 S2 | tonemap D3D11 | 0004 0091 | W |
+| `0095-add-scale-d3d11-p010-shader-fallback` | S9 | repli shader P010 de `scale_d3d11` | 0091 | W |
+| `0096-fix-full-range-input-for-mjpeg-vaapi-encoder` | S19 | MJPEG VAAPI plage complète | — | L |
+| `0097-add-misc-enhancements-to-mfenc-hw-encoder` | S9 | encodeur Media Foundation | — | W |
+| `0098-backport-a-fix-to-not-stall-sub2video-on-stream-eof` | S11 | sub2video bloqué en fin de flux | — | L W |
+| `0099-fix-qsv-av1-decoder-exporting-hdr-side-data` | S7 S2 | side data HDR du décodeur AV1 QSV | — | L W |
+| `0100-backport-trim-bitstream-filter` | — | BSF `trim` : le serveur ne le nomme pas (`noise=drop` pour le trim audio) | — | — |
