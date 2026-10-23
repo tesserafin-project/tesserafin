@@ -1,0 +1,88 @@
+name: Backup recovery rehearsal
+
+on:
+  pull_request:
+    paths:
+      - 'Dockerfile'
+      - 'docker/backup.sh'
+      - 'docker/restore.sh'
+      - 'docker/state-roundtrip.sh'
+      - 'docker/recovery-state.py'
+      - 'ci/recovery-evidence.py'
+      - 'ci/tests/recovery-evidence.test.py'
+      - '.github/workflows/backup-recovery.yml'
+      - 'docs/backup-recovery.md'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backup-recovery-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  recovery:
+    name: Exact-image independent-volume recovery
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: read
+    env:
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Record source provenance and test the evidence boundary
+        run: |
+          set -euo pipefail
+          umask 077
+          export EVIDENCE_DIR="$RUNNER_TEMP/recovery-evidence"
+          export DOCKER_CONFIG="$RUNNER_TEMP/recovery-docker-config"
+          printf 'EVIDENCE_DIR=%s\nDOCKER_CONFIG=%s\n' "$EVIDENCE_DIR" "$DOCKER_CONFIG" >> "$GITHUB_ENV"
+          mkdir -p "$EVIDENCE_DIR" "$DOCKER_CONFIG"
+          python3 ci/tests/recovery-evidence.test.py
+          python3 ci/recovery-evidence.py init --expected-source "$CANDIDATE_SHA" --out "$EVIDENCE_DIR/source.json"
+      - name: Authenticate read-only access to pinned Web build input
+        env:
+          REGISTRY_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+      - name: Build the exact server candidate without publishing
+        run: |
+          set -euo pipefail
+          epoch="$(git show -s --format=%ct HEAD)"
+          docker build --platform linux/amd64 \
+            --build-arg VCS_REF="$CANDIDATE_SHA" \
+            --build-arg SOURCE_DATE_EPOCH="$epoch" \
+            --iidfile "$RUNNER_TEMP/recovery-image-id" .
+          image_id="$(cat "$RUNNER_TEMP/recovery-image-id")"
+          python3 ci/recovery-evidence.py image --image-id "$image_id" \
+            --expected-source "$CANDIDATE_SHA" --out "$EVIDENCE_DIR/image.json"
+      - name: Rehearse cold backup and independent recovery on the selected image ID
+        run: |
+          set -euo pipefail
+          umask 077
+          image_id="$(cat "$RUNNER_TEMP/recovery-image-id")"
+          status=0
+          bash docker/state-roundtrip.sh "$image_id" 19096 > "$RUNNER_TEMP/recovery-raw.log" 2>&1 || status=$?
+          python3 ci/recovery-evidence.py result --raw "$RUNNER_TEMP/recovery-raw.log" \
+            --exit-code "$status" --out "$EVIDENCE_DIR/result.json"
+      - name: Retain allowlisted recovery evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: backup-recovery-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/recovery-evidence/*.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Remove registry credentials and raw transient output
+        if: always()
+        run: |
+          rm -rf -- "$DOCKER_CONFIG"
+          rm -f -- "$RUNNER_TEMP/recovery-raw.log" "$RUNNER_TEMP/recovery-image-id"

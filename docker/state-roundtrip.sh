@@ -33,6 +33,7 @@
 #
 # Usage: docker/state-roundtrip.sh [<image-ref>] [<host-port>]
 set -euo pipefail
+umask 077
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # Default image: the dev tag for THIS working tree, asked of the one place that
@@ -89,11 +90,17 @@ wait_api() { # $1=port -> liveness: the public info endpoint answers
   done
   return 1
 }
-wait_ready() { # $1=port -> STABLY past the startup phase (rides the first-boot restart)
+wait_ready() { # $1=port -> STABLY past core startup (rides the first-boot restart)
+  # Probe /health, not /Startup/Configuration. UseAuthorization runs before the
+  # startup-message middleware, so once the wizard is complete (a restored
+  # instance) an anonymous /Startup/Configuration answers 401 while the host is
+  # still starting and every authenticated call still gets 503: a false ready.
+  # /health is anonymous, bypasses that middleware and is held at 503 until
+  # CoreStartupHasCompleted (HealthResponseWriter), so only 200 means ready.
   local p="$1" code streak=0
   for _ in $(seq 1 150); do   # up to ~300s
-    code="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${p}/Startup/Configuration" 2>/dev/null || echo 000)"
-    if [[ "${code}" != "503" && "${code}" != "000" ]]; then
+    code="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${p}/health" 2>/dev/null || echo 000)"
+    if [[ "${code}" == "200" ]]; then
       streak=$((streak + 1))
       [[ "${streak}" -ge 5 ]] && return 0
     else
@@ -102,6 +109,22 @@ wait_ready() { # $1=port -> STABLY past the startup phase (rides the first-boot 
     sleep 2
   done
   return 1
+}
+http_code() { # $1=port $2=path [$3=token] -> HTTP status only (000 when unreachable)
+  local hdr="${AUTH_HDR}"; [[ -n "${3:-}" ]] && hdr="${AUTH_HDR}, Token=\"${3}\""
+  curl -s -o /dev/null -w '%{http_code}' --max-time 10 "http://127.0.0.1:${1}${2}" \
+    -H "Authorization: ${hdr}" 2>/dev/null || echo 000
+}
+# Allowlisted diagnostics: fixed labels, integers, Docker state words and HTTP status
+# codes only (parsed by ci/recovery-evidence.py). Never bodies, tokens or log text.
+diag() { # $1=label $2=container $3=port [$4=token]
+  local state
+  state="$(docker inspect -f '{{.RestartCount}} {{.State.Status}} {{.State.OOMKilled}} {{.State.ExitCode}}' "$2" 2>/dev/null || echo "0 missing false 0")"
+  read -r d_restarts d_status d_oom d_exit <<<"${state}"
+  local line="DIAG $1 restart_count=${d_restarts} status=${d_status} oom_killed=${d_oom} exit_code=${d_exit}"
+  line+=" health_http=$(http_code "$3" /health) startup_config_http=$(http_code "$3" /Startup/Configuration)"
+  [[ -n "${4:-}" ]] && line+=" users_me_http=$(http_code "$3" /Users/Me "$4")"
+  echo "${line}"
 }
 RETRY=(--retry 6 --retry-delay 2 --retry-all-errors)
 apipost() { # $1=port $2=path $3=token("" for none) [$4=json-body]
@@ -136,11 +159,20 @@ echo "== image under test: ${IMAGE} =="
 # ===========================================================================
 echo "== 0. prepare volumes + one media fixture =="
 mkdir -p "${MEDIA}/Test Movie (2020)"
+# The work directory and snapshots stay private (umask 077), but this generated
+# public fixture must be traversable by the candidate server UID 10000. A bind
+# mount preserves host modes; 0700 host-runner directories make an empty scan.
+chmod 755 "${MEDIA}" "${MEDIA}/Test Movie (2020)"
 mkvol "${V_CFG}" "${V_CACHE}" "${V_DATA}"
-docker run --rm --user 0:0 --entrypoint /usr/lib/jellyfin-ffmpeg/ffmpeg \
+docker run --rm --user "$(id -u):$(id -g)" --entrypoint /usr/lib/jellyfin-ffmpeg/ffmpeg \
   -v "${MEDIA}:/m" "${IMAGE}" \
   -y -f lavfi -i testsrc=duration=30:size=160x120:rate=5 \
   -pix_fmt yuv420p "/m/Test Movie (2020)/Test Movie (2020).mp4" >/dev/null 2>&1
+chmod 644 "${MEDIA}/Test Movie (2020)/Test Movie (2020).mp4"
+docker run --rm --entrypoint /bin/sh -v "${MEDIA}:/media:ro" "${IMAGE}" \
+  -c 'test -r "/media/Test Movie (2020)/Test Movie (2020).mp4"' \
+  && pass "generated fixture readable as the candidate server user" \
+  || { fail "generated fixture unreadable as the candidate server user"; exit 1; }
 chown_vols "${V_CFG}" "${V_CACHE}" "${V_DATA}"
 
 echo "== 1. first boot on empty volumes (Gate 1: migrations create the schema) =="
@@ -149,6 +181,7 @@ docker run -d --name "${C_A}" -p "127.0.0.1:${PORT_A}:8096" \
   -v "${MEDIA}:/media:ro" "${IMAGE}" >/dev/null
 wait_api "${PORT_A}" || { echo "server A never answered"; docker logs "${C_A}" | tail -40; exit 1; }
 wait_ready "${PORT_A}" || { echo "server A never left the 503 startup phase"; docker logs "${C_A}" | tail -40; exit 1; }
+diag first-boot-ready "${C_A}" "${PORT_A}"
 
 LOGA="$(docker logs "${C_A}" 2>&1)"
 # Herestrings, NOT `echo "${LOGA}" | grep -q`. Under `set -o pipefail` that pipeline
@@ -203,6 +236,14 @@ BEFORE_LIBS="$(apiget "${PORT_A}" "/Library/VirtualFolders" "${TOKEN}" | jq_py '
 echo "  before: users=${BEFORE_USERS} libs=${BEFORE_LIBS} play=${BEFORE_PLAY}"
 [[ "${BEFORE_PLAY}" == "Played=True|PlayCount=1" ]] && pass "playback state recorded (${BEFORE_PLAY})" \
   || fail "playback state not stored (got ${BEFORE_PLAY})"
+
+echo "== 2a. seed and capture extended per-user recovery state =="
+TF_RECOVERY_TOKEN="${TOKEN}" python3 "${REPO_ROOT}/docker/recovery-state.py" \
+  seed "${PORT_A}" "${USERID}" "${ITEMID}" > "${WORK}/recovery-fixture.json"
+python3 "${REPO_ROOT}/docker/recovery-state.py" capture "${PORT_A}" \
+  < "${WORK}/recovery-fixture.json" > "${WORK}/recovery-before.json"
+BEFORE_USERS="$(apiget "${PORT_A}" "/Users" "${TOKEN}" | jq_py 'sorted(u["Name"] for u in d)')"
+pass "distinct users, saved position, favourite, policies, configuration, pack and tokens seeded"
 
 echo "== 3. backup (server stopped for a consistent snapshot, then restarted) =="
 "${REPO_ROOT}/docker/backup.sh" --out "${ARCHIVE}" \
@@ -290,7 +331,32 @@ docker run -d --name "${C_B}" -p "127.0.0.1:${PORT_B}:8096" \
   -v "${V_CFG2}:/config" -v "${V_CACHE2}:/cache" -v "${V_DATA2}:/data" \
   -v "${MEDIA}:/media:ro" "${IMAGE}" >/dev/null
 wait_api "${PORT_B}" || { echo "restored server never answered"; docker logs "${C_B}" | tail -40; exit 1; }
-wait_ready "${PORT_B}" || { echo "restored server never left the 503 startup phase"; docker logs "${C_B}" | tail -40; exit 1; }
+wait_ready "${PORT_B}" || { diag restored-never-ready "${C_B}" "${PORT_B}"; echo "restored server never left the 503 startup phase"; docker logs "${C_B}" | tail -40; exit 1; }
+FIXTURE_ADMIN_TOKEN="$(jq_py 'd["admin_token"]' < "${WORK}/recovery-fixture.json")"
+diag restored-ready "${C_B}" "${PORT_B}" "${FIXTURE_ADMIN_TOKEN}"
+
+# Check the ORIGINAL persisted tokens before a fresh login on the same device
+# rotates its token. Reauthentication is still asserted immediately afterwards.
+if ! python3 "${REPO_ROOT}/docker/recovery-state.py" capture "${PORT_B}" \
+     < "${WORK}/recovery-fixture.json" > "${WORK}/recovery-after.json"; then
+  # Observation only: record how the restored server answers for ~30s, then fail
+  # exactly as before. Nothing here retries or replaces the oracle.
+  diag restored-capture-failed "${C_B}" "${PORT_B}" "${FIXTURE_ADMIN_TOKEN}"
+  OBS=""
+  for _ in $(seq 1 15); do
+    OBS+="${OBS:+,}$(http_code "${PORT_B}" /Users/Me "${FIXTURE_ADMIN_TOKEN}")"
+    sleep 2
+  done
+  echo "DIAG restored-users-me-window interval_s=2 users_me_http=${OBS}"
+  diag restored-after-window "${C_B}" "${PORT_B}" "${FIXTURE_ADMIN_TOKEN}"
+  fail "restored state capture failed"
+  exit 1
+fi
+if cmp -s "${WORK}/recovery-before.json" "${WORK}/recovery-after.json"; then
+  pass "extended state restored identically by user/item/pack identity"
+else
+  fail "extended recovery state differs; no private snapshots printed"
+fi
 
 AUTH2="$(apipost "${PORT_B}" "/Users/AuthenticateByName" "" \
   "{\"Username\":\"${ADMIN_USER}\",\"Pw\":\"${ADMIN_PASS}\"}")"
