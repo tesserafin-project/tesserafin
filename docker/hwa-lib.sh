@@ -42,13 +42,20 @@ api_post() { # $1=port $2=path $3=token("" for none) [$4=json-body]
 
 json_field() { python3 -c "import sys,json; d=json.load(sys.stdin); print($1)"; }
 
-# Stably past the startup phase. /System/Info/Public is answered by the startup
+# Stably past core startup. /System/Info/Public is answered by the startup
 # SetupServer while the application is still coming up, so it is liveness only.
+# Probe /health, not /Startup/Configuration: UseAuthorization runs before the
+# startup-message middleware, so once the wizard is complete (the restart and
+# device-removal steps of hwa-vaapi.sh reuse onboarded state) an anonymous
+# /Startup/Configuration answers 401 while the host is still starting and every
+# authenticated call still gets 503 -- a false ready. /health is anonymous,
+# bypasses that middleware and is held at 503 until CoreStartupHasCompleted, so
+# only 200 means ready. Same contract as docker/state-roundtrip.sh (#329).
 wait_ready() { # $1=port
   local p="$1" code streak=0
-  for _ in $(seq 1 150); do
-    code="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${p}/Startup/Configuration" 2>/dev/null || echo 000)"
-    if [[ "${code}" != "503" && "${code}" != "000" ]]; then
+  for _ in $(seq 1 150); do   # up to ~300s
+    code="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${p}/health" 2>/dev/null || echo 000)"
+    if [[ "${code}" == "200" ]]; then
       streak=$((streak + 1))
       [[ "${streak}" -ge 5 ]] && return 0
     else
