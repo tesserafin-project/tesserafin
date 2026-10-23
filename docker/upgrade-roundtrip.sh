@@ -390,6 +390,21 @@ if [[ -n "${PENDING_LINES}" ]]; then
   done <<<"${PENDING_LINES}"
 fi
 echo "  migration stages swept: ${STAGE_COUNT}"
+
+# The per-stage line counts CODE migrations only: TesserafinMigrationService logs
+# pendingCodeMigrations.Length, so an EF Core schema migration (#127's
+# AddContentPacks) never appears in it. Every migration the runner performs,
+# code or EF, logs "Migration <id> was successfully applied"; count those too.
+# The id may be quoted (and JSON-escaped) depending on the console formatter.
+APPLIED_IDS="$(grep -oE 'Migration [^ ]+ was successfully applied' <<<"${CLOG}" \
+  | awk '{print $2}' | tr -d '"\\' | sort -u || true)"
+APPLIED_TOTAL=0
+if [[ -n "${APPLIED_IDS}" ]]; then
+  APPLIED_TOTAL="$(wc -l <<<"${APPLIED_IDS}")"
+  while IFS= read -r id; do echo "    applied: ${id}"; done <<<"${APPLIED_IDS}"
+fi
+echo "  migrations reported as successfully applied: ${APPLIED_TOTAL}"
+[[ "${APPLIED_TOTAL}" -le "${PENDING_TOTAL}" ]] || PENDING_TOTAL="${APPLIED_TOTAL}"
 echo "  pending migrations applied during the upgrade: ${PENDING_TOTAL}"
 
 # Completion evidence for an ALREADY-INITIALISED instance is the runner reporting
