@@ -92,7 +92,9 @@ The package uses the unprivileged `tesserafin` account. Give that account read
 access to the media directories you select in the wizard. The persistent paths,
 FFmpeg layout, declared environments, GPU evidence and uninstall/state retention
 are owned by [L0](distribution/L0-linux-packages.md). Do not use Docker backup
-commands against native directories as if they were Docker volumes.
+commands against native directories as if they were Docker volumes. For a
+stopped-service snapshot of a `.deb` installation, see
+[native backup and recovery](backup-recovery.md#native-linux-deb-recovery-procedure).
 
 ## Windows x64
 

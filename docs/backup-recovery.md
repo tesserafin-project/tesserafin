@@ -11,7 +11,8 @@ cross-platform recovery. It implements a bounded part of
 | --- | --- | --- | --- |
 | Docker cold snapshot, `docker/backup.sh` | Whole `config` and `data` volumes, including databases, configuration and state stored there. Cache and source media are excluded. | `docker/restore.sh` into empty replacement volumes, then boot the selected server image. | Existing [A2 round trip](container/A2-persistent-state.md#verifying-the-contract) compares users, libraries and watched-state through the API. It does not certify nonzero resume position, favourites or a genuine forward migration. |
 | Server-managed ZIP, `BackupService` | Database tables when `Database` is enabled (default); selected configuration files and managed folders; metadata, trickplay and subtitles according to options. It is not a whole-volume snapshot. | Administrator backup API schedules a restart and restore; `--restore-archive` is the process-level recovery entry point. | Existing [backup tests](../tests/Tesserafin.Server.Implementations.Tests/FullSystemBackup) cover content-pack round trips and archive boundaries. They do not establish whole-server disaster recovery on every platform. |
-| Native Linux/Windows filesystem recovery | Requires the actual configured persistent directories and service configuration. | Stop the actual server/service and use a platform-specific, independently rehearsed procedure. | [Linux paths](../packaging/linux/tesserafin.conf) and [Windows state/service rules](distribution/install-windows.md) are documented. The Docker scripts are not native backup tools; this baseline does not claim a native restore rehearsal. |
+| Native Linux `.deb` cold snapshot | `/etc/tesserafin` and `/var/lib/tesserafin` with owners, modes, ACLs and xattrs. Cache, logs, the package payload and source media are excluded. | Reinstall the same package, replace both directories from the archive, then start the service. See [native `.deb` procedure](#native-linux-deb-recovery-procedure). | [Rehearsed](#native-deb-rehearsal-evidence) on the published `v1.1.0` amd64 `.deb`, same host after purge and state deletion. Not a fresh-host, forward-migration or RPM/portable result. |
+| Native Windows and other Linux forms | Requires the actual configured persistent directories and service configuration. | Stop the actual server/service and use a platform-specific, independently rehearsed procedure. | [Linux paths](../packaging/linux/tesserafin.conf) and [Windows state/service rules](distribution/install-windows.md) are documented. The Docker scripts are not native backup tools; no restore rehearsal exists for RPM, the portable archive or Windows. |
 
 A `.tgz` from the Docker script and a server-managed `.zip` are different formats.
 Do not feed one to the other's restore operation. A successful manifest listing is
@@ -87,6 +88,97 @@ image. Starting an old image on a database already migrated by a newer one is
 not a rollback. A forward upgrade that crosses a real pending migration remains
 [separate acceptance #127](https://github.com/tesserafin-project/tesserafin/issues/127).
 There is no new backport or release in this procedure.
+
+## Native Linux `.deb` recovery procedure
+
+For the `tesserafin-server` package from the [installation guide](install.md#native-linux),
+run as root. Paths are the package defaults in
+[`tesserafin.conf`](../packaging/linux/tesserafin.conf); if you changed them, archive the
+directories you actually configured.
+
+1. Record the installed package file and its SHA-256 (`dpkg -s tesserafin-server`,
+   the downloaded `.deb`), media paths, and any proxy/firewall configuration. Keep
+   the `.deb` itself: recovery reinstalls the **same** package.
+2. Stop the service and confirm nothing runs as the service account:
+
+   ```sh
+   systemctl stop tesserafin
+   systemctl is-active tesserafin   # must not print "active"
+   pgrep -u tesserafin              # must print nothing
+   ```
+
+3. Archive both state directories, keeping owners and modes, then write a checksum.
+   Restart afterwards and check `/health`.
+
+   ```sh
+   tar -C / --acls --xattrs -cpzf /backups/tesserafin-native.tgz etc/tesserafin var/lib/tesserafin
+   (cd /backups && sha256sum tesserafin-native.tgz > tesserafin-native.tgz.sha256)
+   chmod 600 /backups/tesserafin-native.tgz /backups/tesserafin-native.tgz.sha256
+   systemctl start tesserafin
+   ```
+
+   The archive contains users, tokens and private configuration. Store it with its
+   sidecar on separate, access-controlled storage.
+4. To recover, check the checksum first, then install the recorded package. A first
+   install creates the `tesserafin` account and leaves the service stopped:
+
+   ```sh
+   (cd /backups && sha256sum -c tesserafin-native.tgz.sha256)
+   apt install ./tesserafin-server_1.0.0-1_amd64.deb
+   ```
+
+5. With the service still stopped, replace both directories with the archive.
+   As root, GNU tar restores owners by account **name**, so a recreated account with a
+   different numeric UID still owns the files. The rehearsal below does not force a
+   different UID.
+
+   ```sh
+   rm -rf /etc/tesserafin /var/lib/tesserafin
+   tar -C / --acls --xattrs --same-owner -xpzf /backups/tesserafin-native.tgz
+   systemctl start tesserafin
+   ```
+
+   Extract only an archive you created. Confirm `/health`, sign-in, users,
+   libraries and playback state before relying on the instance. Media must be at
+   the same paths and readable by the `tesserafin` account.
+
+Do not restore a snapshot taken by a newer package onto an older one; that is not a
+rollback. The Docker scripts (`docker/backup.sh`, `docker/restore.sh`) are not used here.
+
+### Native `.deb` rehearsal evidence
+
+[`ci/native-recovery-deb.sh`](../ci/native-recovery-deb.sh), run by the
+`Native recovery rehearsal` workflow, performs that procedure on a disposable
+`ubuntu-24.04` amd64 hosted runner. It refuses to run outside such a host.
+
+| Step | What it asserts |
+| --- | --- |
+| Artifact | The `v1.1.0` release asset `tesserafin-server_1.0.0-1_amd64.deb`, SHA-256 `a01121d984b9cfbbe4f3e494ac1c72f16084f2c43c8cc682f4d365c9fff44495` (also listed in `SHA256SUMS-linux-x64.txt`), is checked before each install. Its control file names server commit `bb2234aebbf0ff2c1cbe291df48f2ffa62beea46` and Web commit `a9a362eec764a9fe3fa6ba9b4a7dd7473677e35a`. Nothing is built or published. |
+| Install | Clean host (no package, account, state or media); first install leaves the unit enabled and stopped; fixture generated with the bundled FFmpeg is readable by the service account. |
+| Populate | Same API fixture and [`recovery-state.py`](../docker/recovery-state.py) oracle as the container rehearsal: two users, policies, preferences, watched state, favourite, saved position, library, content pack, server name, pre-backup tokens. |
+| Backup | Service stopped with no process left under the account; archive and sidecar root-owned `0600`; service restarts and becomes ready. |
+| State loss | `apt purge`, then `/etc/tesserafin`, `/var/lib/tesserafin`, `/var/cache/tesserafin`, `/var/log/tesserafin`, the account and group deleted; nothing answers on the port. |
+| Restore | Checksum and archive layout verified; same package reinstalled; data directory empty before extraction; every restored entry identical in content, owner, group and mode to the pre-backup listing; directories `tesserafin:tesserafin 0750`, `tesserafin.conf` `root:tesserafin 0640`. |
+| Restored state | Server runs as `tesserafin`; byte-identical oracle snapshot using the original tokens; member password and fresh administrator login; users, libraries and watched state equal. |
+
+Green run: [39973087073](https://github.com/tesserafin-project/tesserafin/actions/runs/39973087073)
+at `1c4ab9f236150c856c6828cf5df23678a2365eed`, 27 assertions passed, 0 failed.
+Retained artifact `native-recovery-deb-1c4ab9f2…` (`sha256:644eab9e788e7317ca5796b873a8ff47a4d1f5d0425867b70717993f07889564`,
+expires 2026-11-06) holds only allowlisted JSON: source provenance, package
+identity, stage list, counts and HTTP/systemd status codes.
+
+What this does **not** prove:
+
+- **Fresh host or disk loss.** Same runner, after purge and deletion; no off-host
+  transfer of the archive. The container path has the [two-host rehearsal](#disk-loss-recovery-rehearsal).
+- **Player resume.** The saved position is seeded through the user-data API; no
+  client resumed playback.
+- **Encryption or authenticity.** The archive is not encrypted; the checksum sidecar
+  detects changed bytes, not origin.
+- **Upgrade or migration.** Same package both sides; no schema change.
+- **Other native forms.** RPM, portable `.tar.gz`, arm64 and Windows are not rehearsed.
+  A custom `tesserafin.conf` path layout is not exercised.
+- **Live or hot backup.** Only a stopped-service snapshot.
 
 ## What existing evidence proves
 
@@ -180,6 +272,7 @@ server-setting loss. These tests do **not** execute Docker or certify a server
 artifact. A full run on the selected immutable current-contract image is still
 required before treating any new assertion as recovery evidence. Native service,
 off-host/disk-loss and genuine cross-schema migration rehearsals remain separate.
+The native `.deb` rehearsal reuses this oracle (see [above](#native-deb-rehearsal-evidence)).
 
 Readiness is judged from `/health` (200 only once core startup has completed),
 not from `/Startup/Configuration`: after the wizard is complete, authorization
@@ -199,7 +292,7 @@ be lost. Create implementation issues only after a reproducible defect.
 | Scenario | Required evidence before claiming it |
 | --- | --- |
 | Favourites and resume position | Execute the extended rehearsal on the selected immutable image. The oracle now requires a favourite and nonzero saved position by user/item identity, but this change does not supply a new Docker execution or real player-resume proof. |
-| Native Linux and Windows disaster recovery | Artifact-based stopped-service backup/restore on the selected platform, preserving persistent directories, credentials, service identity/permissions and media paths. |
+| Native Linux and Windows disaster recovery | The amd64 `.deb` [same-host rehearsal](#native-deb-rehearsal-evidence) is green. Still open: a fresh-host (disk-loss) `.deb` recovery, RPM, portable archive, arm64 and Windows (ZIP/service), each with an artifact-based stopped-service backup/restore preserving persistent directories, credentials, service identity/permissions and media paths. |
 | Newer database schema | Genuine published-image migration with preservation assertions under #127; an unchanged-schema round trip is insufficient. |
 | Disk-loss recovery | Off-host copy available, matching artifact and deployment configuration retained, and an isolated recovery with source storage unavailable. The [two-host rehearsal](#disk-loss-recovery-rehearsal) covers the container path once a hosted run is green; native disk-loss recovery remains with the native row. |
 | Import from another product | Separately selected source/version and identity mapping; not restoring a Tesserafin backup and not assuming Jellyfin compatibility. |
