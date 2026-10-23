@@ -855,7 +855,7 @@ namespace Tesserafin.Server.Core.Session
                 _logger.LogInformation(
                     "User {0} started playback of '{1}' ({2} {3})",
                     session.UserName,
-                    info.Item.Name,
+                    info.Item.Name.ToSingleLogLine(),
                     session.Client,
                     session.ApplicationVersion);
             }
@@ -1155,7 +1155,7 @@ namespace Tesserafin.Server.Core.Session
                 _logger.LogInformation(
                     "User {0} stopped playback of '{1}' at {2}ms ({3} {4})",
                     session.UserName,
-                    info.Item.Name,
+                    info.Item.Name.ToSingleLogLine(),
                     msString,
                     session.Client,
                     session.ApplicationVersion);

@@ -442,7 +442,7 @@ namespace Tesserafin.Model.Dlna
             {
                 _logger.LogDebug(
                     "Profile: {0}, No audio direct play profiles found for {1} with codec {2}",
-                    options.Profile.Name ?? "Unknown Profile",
+                    (options.Profile.Name ?? "Unknown Profile").ToSingleLogLine(),
                     item.Path ?? "Unknown path",
                     audioStream.Codec ?? "Unknown codec");
 
@@ -743,7 +743,7 @@ namespace Tesserafin.Model.Dlna
 
             _logger.LogDebug(
                 "Profile: {0}, Path: {1}, isEligibleForDirectPlay: {2}, isEligibleForDirectStream: {3}",
-                options.Profile.Name ?? "Unknown Profile",
+                (options.Profile.Name ?? "Unknown Profile").ToSingleLogLine(),
                 item.Path ?? "Unknown path",
                 isEligibleForDirectPlay,
                 isEligibleForDirectStream);
@@ -799,7 +799,7 @@ namespace Tesserafin.Model.Dlna
 
                 _logger.LogDebug(
                     "DirectPlay Result for Profile: {0}, Path: {1}, PlayMethod: {2}, AudioStreamIndex: {3}, SubtitleStreamIndex: {4}, Reasons: {5}",
-                    options.Profile.Name ?? "Anonymous Profile",
+                    (options.Profile.Name ?? "Anonymous Profile").ToSingleLogLine(),
                     item.Path ?? "Unknown path",
                     directPlayInfo.PlayMethod,
                     directPlayInfo.AudioStreamIndex ?? audioStream?.Index,
@@ -853,13 +853,13 @@ namespace Tesserafin.Model.Dlna
 
             _logger.LogDebug(
                 "StreamBuilder.BuildVideoItem( Profile={0}, Path={1}, AudioStreamIndex={2}, SubtitleStreamIndex={3} ) => ( PlayMethod={4}, TranscodeReason={5} ) {6}",
-                options.Profile.Name ?? "Anonymous Profile",
+                (options.Profile.Name ?? "Anonymous Profile").ToSingleLogLine(),
                 item.Path ?? "Unknown path",
                 options.AudioStreamIndex,
                 options.SubtitleStreamIndex,
                 playlistItem.PlayMethod,
                 playlistItem.TranscodeReasons,
-                playlistItem.ToUrl("media:", "<token>", null));
+                playlistItem.ToUrl("media:", "<token>", null).ToSingleLogLine());
 
             item.Container = NormalizeMediaSourceFormatIntoSingleContainer(item.Container, options.Profile, DlnaProfileType.Video, directPlayProfile);
             return playlistItem;
@@ -1192,7 +1192,7 @@ namespace Tesserafin.Model.Dlna
 
             _logger.LogDebug(
                 "Transcode Result for Profile: {Profile}, Path: {Path}, PlayMethod: {PlayMethod}, AudioStreamIndex: {AudioStreamIndex}, SubtitleStreamIndex: {SubtitleStreamIndex}, Reasons: {TranscodeReason}",
-                options.Profile.Name ?? "Anonymous Profile",
+                (options.Profile.Name ?? "Anonymous Profile").ToSingleLogLine(),
                 item.Path ?? "Unknown path",
                 playlistItem.PlayMethod,
                 audioStream?.Index,
@@ -1491,7 +1491,7 @@ namespace Tesserafin.Model.Dlna
             _logger.LogDebug(
                 "Profile: {0}, DirectPlay=false. Reason={1}.{2} Condition: {3}. ConditionValue: {4}. IsRequired: {5}. Path: {6}",
                 type,
-                profile.Name ?? "Unknown Profile",
+                (profile.Name ?? "Unknown Profile").ToSingleLogLine(),
                 condition.Property,
                 condition.Condition,
                 condition.Value ?? string.Empty,

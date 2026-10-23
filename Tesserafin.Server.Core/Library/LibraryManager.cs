@@ -3227,7 +3227,7 @@ namespace Tesserafin.Server.Core.Library
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogWarning(ex, "Failed to create person {Name}", person.Name);
+                        _logger.LogWarning(ex, "Failed to create person {Name}", person.Name.ToSingleLogLine());
                         continue;
                     }
                 }

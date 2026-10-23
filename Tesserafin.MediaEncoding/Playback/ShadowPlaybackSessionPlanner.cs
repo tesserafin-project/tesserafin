@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Linq;
 using Microsoft.Extensions.Logging;
 using Tesserafin.Controller.MediaEncoding;
+using Tesserafin.Extensions;
 using Tesserafin.Model.Configuration;
 using Tesserafin.Model.Dlna;
 using Tesserafin.Playback.Decision;
@@ -337,7 +338,7 @@ public sealed class ShadowPlaybackSessionPlanner : IPlaybackSessionPlanner
                 divergence.Class,
                 prepared.Options.ItemId,
                 prepared.Kind,
-                divergence.Summary);
+                divergence.Summary.ToSingleLogLine());
         }
 
         // Equivalent / ExpectedImprovement / KnownV2Limitation are benign: no per-execution log

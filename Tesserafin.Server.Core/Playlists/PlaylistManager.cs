@@ -361,7 +361,7 @@ namespace Tesserafin.Server.Core.Playlists
             var item = playlist.LinkedChildren.FirstOrDefault(i => string.Equals(entryId, i.ItemId?.ToString("N", CultureInfo.InvariantCulture), StringComparison.OrdinalIgnoreCase));
             if (item is null)
             {
-                _logger.LogWarning("Modified item not found in playlist. ItemId: {ItemId}, PlaylistId: {PlaylistId}", entryId, playlistId);
+                _logger.LogWarning("Modified item not found in playlist. ItemId: {ItemId}, PlaylistId: {PlaylistId}", entryId.ToSingleLogLine(), playlistId.ToSingleLogLine());
 
                 return;
             }

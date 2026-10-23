@@ -790,7 +790,7 @@ namespace Tesserafin.Providers.Manager
 
             foreach (var saver in applicableSavers)
             {
-                _logger.LogDebug("Saving {Item} to {Saver}", item.Path ?? item.Name, saver.Name);
+                _logger.LogDebug("Saving {Item} to {Saver}", (item.Path ?? item.Name).ToSingleLogLine(), saver.Name);
 
                 if (saver is IMetadataFileSaver fileSaver)
                 {
@@ -1297,7 +1297,7 @@ namespace Tesserafin.Providers.Manager
                 _metadataProviderCache.TryRemove(key, out _);
             }
 
-            _logger.LogDebug("Invalidated metadata provider cache for library: {LibraryPath}", e.LibraryPath);
+            _logger.LogDebug("Invalidated metadata provider cache for library: {LibraryPath}", e.LibraryPath.ToSingleLogLine());
         }
 
         internal void ClearMetadataProviderCache()

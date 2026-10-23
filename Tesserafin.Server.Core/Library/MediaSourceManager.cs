@@ -1035,10 +1035,10 @@ namespace Tesserafin.Server.Core.Library
                     {
                         _openStreams.TryRemove(id, out _);
 
-                        _logger.LogInformation("Closing live stream {0}", id);
+                        _logger.LogInformation("Closing live stream {0}", id.ToSingleLogLine());
 
                         await liveStream.Close().ConfigureAwait(false);
-                        _logger.LogInformation("Live stream {0} closed successfully", id);
+                        _logger.LogInformation("Live stream {0} closed successfully", id.ToSingleLogLine());
                     }
                 }
             }
