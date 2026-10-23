@@ -31,10 +31,14 @@ class RecoveryEvidenceTests(unittest.TestCase):
         self.assertTrue(evidence.summarize(source, 0, "source")["accepted"])
         self.assertEqual(evidence.summarize(recover, 0, "recover")["stages"],
                          ["off-host-verification", "restored-state"])
+        # Listed here, not read from evidence.REQUIRED, so dropping one there fails.
+        required = {"source": (evidence.SEED_MARKER, evidence.SOURCE_MARKER),
+                    "recover": (evidence.ABSENT_MARKER, evidence.OFFHOST_MARKER,
+                                evidence.RESTORE_MARKER, evidence.COMPLETE_MARKER)}
         for phase, log in (("source", source), ("recover", recover)):
             self.assertTrue(evidence.summarize(log, 0, phase)["accepted"])
             self.assertFalse(evidence.summarize(log, 0, "all")["accepted"])
-            for marker in evidence.REQUIRED[phase]:
+            for marker in required[phase]:
                 with self.subTest(phase=phase, marker=marker):
                     self.assertFalse(evidence.summarize(log.replace(marker, ""), 0, phase)["accepted"])
         # A one-host run cannot stand in for either half of the disk-loss split.
