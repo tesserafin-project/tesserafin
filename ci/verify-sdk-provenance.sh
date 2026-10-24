@@ -160,8 +160,16 @@ ok "cloned $CLONE_URL anonymously (no PAT, no deploy key, no App, no GITHUB_TOKE
 WEB_CLONED_BRANCH="$(git -C "$WEB" rev-parse --abbrev-ref HEAD 2>/dev/null)"
 [ "$WEB_CLONED_BRANCH" = "HEAD" ] && WEB_CLONED_BRANCH=""
 
-git -C "$WEB" cat-file -e "$WEB_COMMIT^{commit}" 2>/dev/null \
-    || die_fail "webCommit $WEB_COMMIT does not exist in $WEB_REPOSITORY"
+# A branch clone carries only what some branch or tag reaches. A pull-request head whose branch
+# was deleted is still served by SHA, so fetch it by SHA — same anonymous invocation — before
+# declaring it absent; the merged-commit check below is what rejects it.
+if ! git -C "$WEB" cat-file -e "$WEB_COMMIT^{commit}" 2>/dev/null; then
+    GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/true GIT_CONFIG_GLOBAL=/dev/null \
+        git -C "$WEB" -c credential.helper= -c http.extraheader= \
+        fetch --quiet origin "$WEB_COMMIT" 2>/dev/null || :
+    git -C "$WEB" cat-file -e "$WEB_COMMIT^{commit}" 2>/dev/null \
+        || die_fail "webCommit $WEB_COMMIT does not exist in $WEB_REPOSITORY"
+fi
 git -C "$WEB" -c advice.detachedHead=false checkout --quiet "$WEB_COMMIT" \
     || die_fail "cannot check out $WEB_COMMIT in the web clone"
 ok "web checkout at $WEB_COMMIT"

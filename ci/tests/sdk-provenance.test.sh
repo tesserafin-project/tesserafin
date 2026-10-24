@@ -314,6 +314,11 @@ fi
 #
 #     A commit SHA is immutable; being MERGED is not a property of the SHA, and
 #     nothing else in this gate would have noticed.
+#
+#     Since the stale web branches were deleted (2026-10-23) no branch clone
+#     contains this commit; only `refs/pull/151/head` names it. The verifier
+#     fetches a missing pin by SHA so this control still reaches the
+#     merged-commit check instead of stopping at "does not exist".
 run_control pair-lock-names-a-pull-request-head 1 "is not an ancestor of" \
     --server-repo "$REPO_ROOT" --lock "$CONTROLS_DIR/prhead.json" \
     --server-commit "$SERVER_COMMIT"
