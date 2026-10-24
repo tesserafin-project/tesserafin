@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Net.Mime;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -20,6 +21,7 @@ using Tesserafin.Controller.Devices;
 using Tesserafin.Controller.Entities;
 using Tesserafin.Controller.Library;
 using Tesserafin.Extensions;
+using Tesserafin.Extensions.Json;
 using Tesserafin.Model.MediaInfo;
 
 namespace Tesserafin.Api.Controllers;
@@ -157,7 +159,13 @@ public class MediaInfoController : BaseTesserafinApiController
             : _logger.BeginScope(new Dictionary<string, object>(1) { [PlaybackAttemptIdValidator.LogPropertyName] = playbackAttemptId.ToSingleLogLine()! });
 
         var profile = playbackInfoDto?.DeviceProfile;
-        _logger.LogDebug("GetPostedPlaybackInfo profile: {@Profile}", profile);
+        // Issue #203 (alert #6): the profile is caller-supplied. The shipped `{Message:lj}` template
+        // JSON-escapes a destructured value, but an operator template without `j` renders its nested
+        // strings with CR/LF intact. Serialising here makes the value one line under any template,
+        // whatever properties the profile grows.
+        _logger.LogDebug(
+            "GetPostedPlaybackInfo profile: {Profile}",
+            JsonSerializer.Serialize(profile, JsonDefaults.Options).ToSingleLogLine());
 
         if (profile is null)
         {
