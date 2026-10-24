@@ -45,6 +45,9 @@ namespace Tesserafin.Server.Tests.LogForging
         private const string ConsoleOutputTemplate =
             "[{Timestamp:HH:mm:ss.fff}] [{Level:u3}] [{ThreadId}] {SourceContext}: {Message:lj}{NewLine}{Exception}";
 
+        private const string FileOutputTemplate =
+            "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz}] [{Level:u3}] [{ThreadId}] {SourceContext}: {Message}{NewLine}{Exception}";
+
         private readonly StringWriter _buffer;
         private readonly Logger _logger;
         private readonly SerilogLoggerFactory _factory;
@@ -82,6 +85,16 @@ namespace Tesserafin.Server.Tests.LogForging
         /// <returns>The probe.</returns>
         public static RealFormatterLogProbe Text(LogEventLevel minimumLevel = LogEventLevel.Information)
             => new(new MessageTemplateTextFormatter(ConsoleOutputTemplate, CultureInfo.InvariantCulture), minimumLevel);
+
+        /// <summary>
+        /// Renders through the file sink's template from <c>logging.json</c>: <c>{Message}</c>
+        /// without <c>j</c>, so destructured strings are not JSON-escaped. Its record prefix is not
+        /// the one <see cref="TextRecordCount"/> matches; count <see cref="Lines"/> instead.
+        /// </summary>
+        /// <param name="minimumLevel">The minimum level.</param>
+        /// <returns>The probe.</returns>
+        public static RealFormatterLogProbe File(LogEventLevel minimumLevel = LogEventLevel.Information)
+            => new(new MessageTemplateTextFormatter(FileOutputTemplate, CultureInfo.InvariantCulture), minimumLevel);
 
         /// <summary>
         /// Renders through the JSON-lines formatter the container image selects.

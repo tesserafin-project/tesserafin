@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
@@ -17,6 +18,8 @@ using Tesserafin.Controller.Entities.Movies;
 using Tesserafin.Controller.Entities.TV;
 using Tesserafin.Controller.Library;
 using Tesserafin.Controller.Providers;
+using Tesserafin.Extensions;
+using Tesserafin.Extensions.Json;
 using Tesserafin.Model.IO;
 using Tesserafin.Model.Providers;
 
@@ -256,11 +259,13 @@ public class ItemLookupController : BaseTesserafinApiController
             return NotFound();
         }
 
+        // Issue #203 (alert #32): the shipped file sink renders `{Message}` without `j`, so a
+        // destructured dictionary would print the caller's CR/LF raw. JSON escapes them.
         _logger.LogInformation(
-            "Setting provider id's to item {ItemId}-{ItemName}: {@ProviderIds}",
+            "Setting provider id's to item {ItemId}-{ItemName}: {ProviderIds}",
             item.Id,
-            item.Name,
-            searchResult.ProviderIds);
+            item.Name.ToSingleLogLine(),
+            JsonSerializer.Serialize(searchResult.ProviderIds, JsonDefaults.Options).ToSingleLogLine());
 
         // Since the refresh process won't erase provider Ids, we need to set this explicitly now.
         item.ProviderIds = searchResult.ProviderIds;
