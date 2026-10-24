@@ -154,7 +154,7 @@ public class MediaInfoController : BaseTesserafinApiController
         // request id (different on it).
         using var attemptScope = string.IsNullOrEmpty(playbackAttemptId)
             ? null
-            : _logger.BeginScope(new Dictionary<string, object>(1) { [PlaybackAttemptIdValidator.LogPropertyName] = playbackAttemptId });
+            : _logger.BeginScope(new Dictionary<string, object>(1) { [PlaybackAttemptIdValidator.LogPropertyName] = playbackAttemptId.ToSingleLogLine()! });
 
         var profile = playbackInfoDto?.DeviceProfile;
         _logger.LogDebug("GetPostedPlaybackInfo profile: {@Profile}", profile);
