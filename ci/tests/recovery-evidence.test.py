@@ -68,6 +68,27 @@ class RecoveryEvidenceTests(unittest.TestCase):
         for marker in markers[1:3] + markers[4:]:
             self.assertIn(marker.strip().removeprefix("PASS  "), script)
 
+    def test_native_deb_disk_loss_phases_require_their_own_markers(self):
+        seed = "  PASS  distinct users, saved position, favourite, policies, configuration, pack and tokens seeded"
+        source = (seed, "NATIVE-SOURCE: snapshot handed off")
+        recover = ("  PASS  recovery host never held a Tesserafin installation",
+                   "  PASS  off-host snapshot matches its retained checksum",
+                   "  PASS  restored files identical in content, owner, group and mode",
+                   "  PASS  extended state restored identically by user/item/pack identity",
+                   "NATIVE-RECOVER: deb snapshot restored on a fresh host and verified")
+        script = (ROOT / "ci/native-recovery-deb.sh").read_text()
+        for phase, markers in (("native-deb-source", source), ("native-deb-recover", recover)):
+            log = "\n".join(markers)
+            self.assertTrue(evidence.summarize(log, 0, phase)["accepted"])
+            for marker in markers:
+                with self.subTest(phase=phase, marker=marker):
+                    self.assertFalse(evidence.summarize(log.replace(marker, ""), 0, phase)["accepted"])
+                    self.assertIn(marker.strip().removeprefix("PASS  "), script)
+        # A same-host run cannot stand in for the fresh-host one, nor the container split.
+        self.assertFalse(evidence.summarize("\n".join(recover), 0, "native-deb")["accepted"])
+        self.assertFalse(evidence.summarize("\n".join(recover), 0, "recover")["accepted"])
+        self.assertFalse(evidence.summarize("\n".join(source), 0, "source")["accepted"])
+
     def test_systemd_states_are_retained_as_diagnostics(self):
         data = evidence.summarize("DIAG restored-ready restart_count=0 status=active exit_code=0"
                                   " health_http=200", 1, "native-deb")

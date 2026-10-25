@@ -170,7 +170,7 @@ identity, stage list, counts and HTTP/systemd status codes.
 What this does **not** prove:
 
 - **Fresh host or disk loss.** Same runner, after purge and deletion; no off-host
-  transfer of the archive. The container path has the [two-host rehearsal](#disk-loss-recovery-rehearsal).
+  transfer of the archive. That is the [disk-loss pair](#native-deb-disk-loss-rehearsal) below.
 - **Player resume.** The saved position is seeded through the user-data API; no
   client resumed playback.
 - **Encryption or authenticity.** The archive is not encrypted; the checksum sidecar
@@ -179,6 +179,21 @@ What this does **not** prove:
 - **Other native forms.** RPM, portable `.tar.gz`, arm64 and Windows are not rehearsed.
   A custom `tesserafin.conf` path layout is not exercised.
 - **Live or hot backup.** Only a stopped-service snapshot.
+
+### Native `.deb` disk-loss rehearsal
+
+The same workflow also splits the procedure across two hosted runners
+(`TF_NATIVE_RECOVERY_PHASE=source|recover`):
+
+| Job | What it asserts |
+| --- | --- |
+| Source host | Steps install → populate → cold backup, as above. The archive, its checksum, the pre-backup listing and the private oracle fixture leave the runner as a one-day artifact. The package, media, logs and evidence are not in it. |
+| Fresh host | A different boot ID; no package, account, state directory or media before it starts. It downloads the same pinned `.deb` itself and checks the digest, verifies the handed-off checksum, installs, regenerates the media fixture at the same path, restores, and runs the same file-listing and `recovery-state.py` oracle. The handoff artifact is deleted afterwards. |
+
+Accepted only when both jobs pass on the same commit (evidence phases
+`native-deb-source` and `native-deb-recover`; boot-ID hashes in `hosts.json`). Every
+limit above except the first still applies: amd64 `.deb` only, same package, no
+encryption or authenticity, user-data-API position rather than player resume.
 
 ## What existing evidence proves
 
@@ -292,9 +307,9 @@ be lost. Create implementation issues only after a reproducible defect.
 | Scenario | Required evidence before claiming it |
 | --- | --- |
 | Favourites and resume position | Execute the extended rehearsal on the selected immutable image. The oracle now requires a favourite and nonzero saved position by user/item identity, but this change does not supply a new Docker execution or real player-resume proof. |
-| Native Linux and Windows disaster recovery | The amd64 `.deb` [same-host rehearsal](#native-deb-rehearsal-evidence) is green. Still open: a fresh-host (disk-loss) `.deb` recovery, RPM, portable archive, arm64 and Windows (ZIP/service), each with an artifact-based stopped-service backup/restore preserving persistent directories, credentials, service identity/permissions and media paths. |
+| Native Linux and Windows disaster recovery | The amd64 `.deb` [same-host rehearsal](#native-deb-rehearsal-evidence) is green, and the [disk-loss pair](#native-deb-disk-loss-rehearsal) covers a fresh host once its hosted run is green. Still open: RPM, portable archive, arm64 and Windows (ZIP/service), each with an artifact-based stopped-service backup/restore preserving persistent directories, credentials, service identity/permissions and media paths. |
 | Newer database schema | Genuine published-image migration with preservation assertions under #127; an unchanged-schema round trip is insufficient. |
-| Disk-loss recovery | Off-host copy available, matching artifact and deployment configuration retained, and an isolated recovery with source storage unavailable. The [two-host rehearsal](#disk-loss-recovery-rehearsal) covers the container path once a hosted run is green; native disk-loss recovery remains with the native row. |
+| Disk-loss recovery | Off-host copy available, matching artifact and deployment configuration retained, and an isolated recovery with source storage unavailable. The [two-host rehearsal](#disk-loss-recovery-rehearsal) covers the container path once a hosted run is green; the native amd64 `.deb` has its own [disk-loss pair](#native-deb-disk-loss-rehearsal). |
 | Import from another product | Separately selected source/version and identity mapping; not restoring a Tesserafin backup and not assuming Jellyfin compatibility. |
 
 No scheduled-backup service, retention UI, recovery key, automatic rollback or

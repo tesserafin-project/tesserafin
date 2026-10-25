@@ -14,8 +14,16 @@
 #
 # DESTRUCTIVE. Run only as root on a disposable host that never held Tesserafin
 # (a hosted runner). It refuses unless TF_NATIVE_RECOVERY_DISPOSABLE=1 and the host
-# has no package, account or persistent directory of its own. Same host, same
-# package: no forward migration, no fresh-disk/off-host transfer.
+# has no package, account or persistent directory of its own. Same package: no
+# forward migration.
+#
+# Disk-loss split (TF_NATIVE_RECOVERY_PHASE, default "all" = same host, one process):
+#   source   steps 0-3a, then copies the archive, its checksum, the private oracle
+#            fixture and the pre-backup listing into the existing directory
+#            $TF_NATIVE_RECOVERY_HANDOFF for off-host transfer. No loss, no restore.
+#   recover  on a host that never held Tesserafin: verifies the handed-off archive,
+#            installs the same package, restores and runs the same oracle (steps 4-5).
+#            The media fixture is regenerated, as media has its own backup plan.
 #
 # Usage: TF_NATIVE_RECOVERY_DISPOSABLE=1 ci/native-recovery-deb.sh <deb> <sha256>
 set -euo pipefail
@@ -35,6 +43,15 @@ MEDIA=/media
 MOVIE="${MEDIA}/Test Movie (2020)"
 WORK="$(mktemp -d)"
 ARCHIVE="${WORK}/tesserafin-native-state.tgz"
+PHASE="${TF_NATIVE_RECOVERY_PHASE:-all}"
+HANDOFF="${TF_NATIVE_RECOVERY_HANDOFF:-}"
+case "${PHASE}" in
+  all) ;;
+  source|recover)
+    [[ -d "${HANDOFF}" ]] || { echo "TF_NATIVE_RECOVERY_HANDOFF must be an existing directory" >&2; exit 2; }
+    [[ "${PHASE}" == recover ]] && ARCHIVE="${HANDOFF}/tesserafin-native-state.tgz" ;;
+  *) echo "TF_NATIVE_RECOVERY_PHASE must be all, source or recover" >&2; exit 2 ;;
+esac
 
 FAILED=0
 pass() { echo "  PASS  $*"; }
@@ -118,8 +135,18 @@ state_listing() {
 service_stopped() {
   ! systemctl is-active --quiet tesserafin && ! pgrep -u tesserafin >/dev/null 2>&1
 }
+make_media() { # needs the package's ffmpeg
+  mkdir -p "${MOVIE}"
+  chmod 755 "${MEDIA}" "${MOVIE}"
+  /usr/lib/tesserafin/ffmpeg/bin/ffmpeg -nostdin -y -f lavfi -i testsrc=duration=30:size=160x120:rate=5 \
+    -pix_fmt yuv420p "${MOVIE}/Test Movie (2020).mp4" >/dev/null 2>&1
+  chmod 644 "${MOVIE}/Test Movie (2020).mp4"
+  runuser -u tesserafin -- test -r "${MOVIE}/Test Movie (2020).mp4" \
+    && pass "generated fixture readable as the service account" \
+    || { fail "generated fixture unreadable as the service account"; exit 1; }
+}
 
-echo "== 0. prepare: disposable host, pinned package, media fixture =="
+echo "== 0. prepare: disposable host, pinned package, media fixture (phase ${PHASE}) =="
 CLEAN=1
 dpkg -s tesserafin-server >/dev/null 2>&1 && CLEAN=0
 getent passwd tesserafin >/dev/null && CLEAN=0
@@ -127,17 +154,12 @@ for d in "${ALL_DIRS[@]}"; do [[ -e "${d}" ]] && CLEAN=0; done
 [[ -e "${MEDIA}" && -n "$(ls -A "${MEDIA}")" ]] && CLEAN=0
 [[ "${CLEAN}" == 1 ]] && pass "host holds no Tesserafin package, account, state or media" \
   || { fail "host is not a clean disposable host"; exit 1; }
+[[ "${PHASE}" == recover ]] && pass "recovery host never held a Tesserafin installation"
 
+if [[ "${PHASE}" != recover ]]; then
 echo "== 1. install the published package and first boot =="
 install_deb
-mkdir -p "${MOVIE}"
-chmod 755 "${MEDIA}" "${MOVIE}"
-/usr/lib/tesserafin/ffmpeg/bin/ffmpeg -nostdin -y -f lavfi -i testsrc=duration=30:size=160x120:rate=5 \
-  -pix_fmt yuv420p "${MOVIE}/Test Movie (2020).mp4" >/dev/null 2>&1
-chmod 644 "${MOVIE}/Test Movie (2020).mp4"
-runuser -u tesserafin -- test -r "${MOVIE}/Test Movie (2020).mp4" \
-  && pass "generated fixture readable as the service account" \
-  || { fail "generated fixture unreadable as the service account"; exit 1; }
+make_media
 systemctl start tesserafin
 wait_ready || { diag first-boot-never-ready; echo "server never left the 503 startup phase"; exit 1; }
 diag first-boot-ready
@@ -197,6 +219,19 @@ for f in "${ARCHIVE}" "${ARCHIVE}.sha256"; do
     || fail "$(basename "${f}") is $(stat -c '%u:%a' "${f}"), expected 0:600"
 done
 
+if [[ "${PHASE}" == source ]]; then
+  systemctl stop tesserafin
+  cp "${ARCHIVE}" "${ARCHIVE}.sha256" "${WORK}/recovery-fixture.json" "${WORK}/recovery-before.json" \
+    "${WORK}/state-before.txt" "${HANDOFF}/"
+  printf '%s\n' "${ITEMID}" "${BEFORE_USERS}" "${BEFORE_LIBS}" "${BEFORE_PLAY}" > "${HANDOFF}/baseline.txt"
+  echo
+  if [[ "${FAILED}" == 0 ]]; then
+    echo "NATIVE-SOURCE: snapshot handed off"; exit 0
+  else
+    echo "NATIVE-SOURCE: FAILED"; exit 1
+  fi
+fi
+
 echo "== 3e. state loss: purge package, delete persistent directories and account =="
 systemctl stop tesserafin
 DEBIAN_FRONTEND=noninteractive apt-get purge -y -q tesserafin-server >/dev/null
@@ -211,9 +246,24 @@ for d in "${ALL_DIRS[@]}"; do [[ -e "${d}" ]] && LOST=0; done
 [[ "$(http_code /health)" == 000 ]] || LOST=0
 [[ "${LOST}" == 1 ]] && pass "package purged and all persistent state removed before restore" \
   || { fail "installation not fully removed"; exit 1; }
+fi
+
+if [[ "${PHASE}" == recover ]]; then
+echo "== 3d. off-host snapshot: sidecars present and checksum verified before restore =="
+for f in "${ARCHIVE}" "${ARCHIVE}.sha256" "${HANDOFF}/recovery-fixture.json" \
+         "${HANDOFF}/recovery-before.json" "${HANDOFF}/state-before.txt" "${HANDOFF}/baseline.txt"; do
+  [[ -s "${f}" ]] || { fail "handoff missing $(basename "${f}")"; exit 1; }
+done
+( cd "${HANDOFF}" && sha256sum --quiet -c "$(basename "${ARCHIVE}").sha256" ) \
+  && pass "off-host snapshot matches its retained checksum" \
+  || { fail "off-host snapshot does not match its checksum"; exit 1; }
+cp "${HANDOFF}/recovery-fixture.json" "${HANDOFF}/recovery-before.json" "${HANDOFF}/state-before.txt" "${WORK}/"
+{ read -r ITEMID; read -r BEFORE_USERS; read -r BEFORE_LIBS; read -r BEFORE_PLAY; } < "${HANDOFF}/baseline.txt"
+[[ "${ITEMID}" =~ ^[0-9a-f]{32}$ ]] || { fail "handoff baseline has no item identity"; exit 1; }
+fi
 
 echo "== 4. restore: verify the snapshot, reinstall the same package, extract =="
-( cd "${WORK}" && sha256sum --quiet -c "$(basename "${ARCHIVE}").sha256" ) \
+( cd "$(dirname "${ARCHIVE}")" && sha256sum --quiet -c "$(basename "${ARCHIVE}").sha256" ) \
   && pass "snapshot matches its retained checksum" || { fail "snapshot checksum mismatch"; exit 1; }
 python3 - "${ARCHIVE}" <<'PY' && pass "archive holds only etc/tesserafin and var/lib/tesserafin entries" \
   || { fail "archive has entries outside the persistent directories"; exit 1; }
@@ -227,6 +277,7 @@ with tarfile.open(sys.argv[1]) as t:
             sys.exit(1)
 PY
 install_deb
+[[ "${PHASE}" == recover ]] && make_media
 # The package recreates empty state directories and its conffile; the restore replaces them.
 [[ -z "$(ls -A /var/lib/tesserafin)" ]] && pass "reinstalled data directory is empty before restore" \
   || fail "reinstalled data directory is not empty"
@@ -271,7 +322,9 @@ AFTER_PLAY="$(playstate "${USERID2}" "${ITEMID}" "${TOKEN2}")"
 systemctl stop tesserafin
 
 echo
-if [[ "${FAILED}" == 0 ]]; then
+if [[ "${FAILED}" == 0 && "${PHASE}" == recover ]]; then
+  echo "NATIVE-RECOVER: deb snapshot restored on a fresh host and verified"; exit 0
+elif [[ "${FAILED}" == 0 ]]; then
   echo "NATIVE-ROUNDTRIP: deb cold snapshot restored and verified"; exit 0
 else
   echo "NATIVE-ROUNDTRIP: FAILED"; exit 1

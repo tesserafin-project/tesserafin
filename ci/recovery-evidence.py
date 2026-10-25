@@ -28,11 +28,18 @@ OFFHOST_MARKER = "  PASS  off-host snapshot matches its retained checksum"
 LOSS_MARKER = "  PASS  package purged and all persistent state removed before restore"
 FILES_MARKER = "  PASS  restored files identical in content, owner, group and mode"
 NATIVE_MARKER = "NATIVE-ROUNDTRIP: deb cold snapshot restored and verified"
+# Its disk-loss split: the source host hands the snapshot off, a fresh host restores it.
+NATIVE_SOURCE_MARKER = "NATIVE-SOURCE: snapshot handed off"
+NATIVE_ABSENT_MARKER = "  PASS  recovery host never held a Tesserafin installation"
+NATIVE_RECOVER_MARKER = "NATIVE-RECOVER: deb snapshot restored on a fresh host and verified"
 # Markers each docker/state-roundtrip.sh phase must print before it can be accepted.
 REQUIRED = {"all": (SEED_MARKER, RESTORE_MARKER, COMPLETE_MARKER),
             "source": (SEED_MARKER, SOURCE_MARKER),
             "recover": (ABSENT_MARKER, OFFHOST_MARKER, RESTORE_MARKER, COMPLETE_MARKER),
-            "native-deb": (SEED_MARKER, LOSS_MARKER, FILES_MARKER, RESTORE_MARKER, NATIVE_MARKER)}
+            "native-deb": (SEED_MARKER, LOSS_MARKER, FILES_MARKER, RESTORE_MARKER, NATIVE_MARKER),
+            "native-deb-source": (SEED_MARKER, NATIVE_SOURCE_MARKER),
+            "native-deb-recover": (NATIVE_ABSENT_MARKER, OFFHOST_MARKER, FILES_MARKER, RESTORE_MARKER,
+                                   NATIVE_RECOVER_MARKER)}
 # Allowlisted diagnostic lines emitted by docker/state-roundtrip.sh. Only fixed labels,
 # keys and narrowly typed values are retained; any other DIAG line is dropped whole.
 DIAG_LABELS = {"first-boot-ready", "first-boot-never-ready", "restored-never-ready", "restored-ready",
