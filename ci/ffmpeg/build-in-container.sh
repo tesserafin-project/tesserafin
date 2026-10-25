@@ -364,6 +364,59 @@ if step opencl-icd-loader; then
 fi
 
 # =============================================================================
+# Vulkan: headers, shader compiler, libplacebo (linux only; #342)
+# =============================================================================
+# Headers only. FFmpeg's vulkan check is a preprocessor test against vulkan.pc,
+# and both FFmpeg and libplacebo (vk-proc-addr disabled) load the host's
+# libvulkan.so.1 at run time, so the runtime gains no DT_NEEDED entry.
+if arch_allows vulkan-headers && step vulkan-headers; then
+    d="${CACHE}/git/vulkan-headers"
+    mkdir -p "${PREFIX}/include" "${PREFIX}/share/vulkan" "${PREFIX}/lib/pkgconfig"
+    cp -a "${d}/include/vulkan" "${d}/include/vk_video" "${PREFIX}/include/"
+    cp -a "${d}/registry" "${PREFIX}/share/vulkan/"
+    ref="$(python3 -c 'import json,sys; print(next(c["ref"] for c in json.load(open(sys.argv[1]))["components"] if c["name"] == "vulkan-headers"))' "${FF_COMPONENTS}")"
+    # shellcheck disable=SC2016 # ${prefix} is pkg-config syntax, written literally
+    printf 'prefix=%s\nincludedir=${prefix}/include\n\nName: vulkan\nDescription: Vulkan (headers only)\nVersion: %s\nCflags: -I${includedir}\n' \
+        "${PREFIX}" "${ref#v}" > "${PREFIX}/lib/pkgconfig/vulkan.pc"
+    done_step vulkan-headers
+fi
+
+if arch_allows shaderc && step shaderc; then
+    # glslang, SPIRV-Tools and SPIRV-Headers are separate pins, built in-tree
+    # where shaderc expects them, into one static shaderc_combined.
+    d="$(gitsrc shaderc)"
+    for dep in glslang spirv-tools spirv-headers; do
+        rm -rf "${d}/third_party/${dep}"; cp -a "${CACHE}/git/${dep}" "${d}/third_party/${dep}"
+    done
+    ( cd "${d}" && cmake -S . -B build -G Ninja \
+        -DCMAKE_INSTALL_PREFIX="${PREFIX}" -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_SHARED_LIBS=OFF -DSHADERC_SKIP_TESTS=ON -DSHADERC_SKIP_EXAMPLES=ON \
+        -DSHADERC_SKIP_COPYRIGHT_CHECK=ON -DENABLE_GLSLANG_BINARIES=OFF -DENABLE_CTEST=OFF \
+        -DSPIRV_SKIP_EXECUTABLES=ON -DSPIRV_SKIP_TESTS=ON -DSPIRV_TOOLS_BUILD_STATIC=ON \
+        && ninja -C build -j"${J}" && ninja -C build install )
+    # Static only, and "shaderc" must resolve to the combined archive plus the
+    # C++ runtime, or every consumer links half a compiler.
+    rm -f "${PREFIX}"/lib/libshaderc_shared.so* "${PREFIX}"/bin/glslc
+    sed -i 's/^Libs: \(.*\)$/Libs: \1 -lstdc++/' "${PREFIX}/lib/pkgconfig/shaderc_combined.pc"
+    cp "${PREFIX}/lib/pkgconfig/shaderc_combined.pc" "${PREFIX}/lib/pkgconfig/shaderc.pc"
+    done_step shaderc
+fi
+
+if arch_allows libplacebo && step libplacebo; then
+    # meson >= 0.63 is required; the builder's is 0.56, so the pinned meson
+    # checkout runs this one step.
+    d="$(gitsrc libplacebo)"; ( cd "${d}" && PYTHONDONTWRITEBYTECODE=1 python3 "${CACHE}/git/meson/meson.py" setup build \
+        --prefix="${PREFIX}" --libdir=lib --buildtype=release --default-library=static \
+        -Dvulkan=enabled -Dvk-proc-addr=disabled -Dvulkan-registry="${PREFIX}/share/vulkan/registry/vk.xml" \
+        -Dshaderc=enabled -Dglslang=disabled -Dopengl=disabled -Dd3d11=disabled -Dlcms=disabled \
+        -Ddovi=enabled -Dlibdovi=disabled -Dunwind=disabled -Dxxhash=disabled \
+        -Ddemos=false -Dtests=false -Dbench=false -Dfuzz=false \
+        && ninja -C build -j"${J}" && ninja -C build install )
+    printf 'Libs.private: -lstdc++\n' >> "${PREFIX}/lib/pkgconfig/libplacebo.pc"
+    done_step libplacebo
+fi
+
+# =============================================================================
 # FFmpeg
 # =============================================================================
 FFSRC="${BUILDROOT}/ffmpeg"
@@ -448,7 +501,7 @@ rm -rf "${FFSRC}"; cp -a "${CACHE}/git/jellyfin-ffmpeg" "${FFSRC}"
     FF_CFLAGS="-O2 -g0 -fPIC -I${PREFIX}/include"
     ./configure \
         "${FLAGS[@]}" \
-        --extra-version="tesserafin.1" \
+        --extra-version="${FF_BUILD_REVISION#*-}" \
         --pkg-config-flags=--static \
         --extra-cflags="${FF_CFLAGS}" \
         --extra-cxxflags="${FF_CFLAGS}" \

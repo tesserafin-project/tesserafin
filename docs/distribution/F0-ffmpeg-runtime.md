@@ -142,17 +142,29 @@ Jellyfin's builder happens to include.
 | AMF | AMF headers |
 | `*_opencl` filters | OpenCL headers |
 
-### Known capability gap
+### Vulkan and libplacebo (linux, #342)
 
-**`libplacebo` and the Vulkan filters are not in build revision
-`7.1.4-tesserafin.1`.** `_requiredFilters` names `libplacebo`, so this is a real
-regression against the container image: Vulkan tone-mapping is unavailable and
-the server falls back to `tonemap_vaapi`, `tonemap_opencl` or the software
-`tonemapx` path. It is deferred because the shader toolchain — libplacebo,
-Vulkan-Headers, shaderc, glslang, SPIRV-Tools, SPIRV-Headers — is the largest
-single source-closure and reproducibility risk in the component set. It is named
-here rather than dropped quietly, and it is the first candidate for
-`7.1.4-tesserafin.2`.
+`--enable-vulkan`, `--enable-libshaderc` and `--enable-libplacebo` are in the
+linux-x64 and linux-arm64 flag files, so the runtime lists `libplacebo` (named
+by `_requiredFilters`) and the `*_vulkan` filters and encoders the container's
+`.deb` has. The toolchain is pinned in `components.json`: Vulkan-Headers
+v1.4.337 (headers and registry only), shaderc v2024.2 built with glslang 14.3.0,
+SPIRV-Tools v2024.3 and SPIRV-Headers into one static `shaderc_combined`, and
+libplacebo v7.360.1 built by a pinned meson 1.4.1 (the bullseye builder's meson
+is 0.56; libplacebo needs 0.63). jellyfin-ffmpeg's newer shaderc pins need cmake
+3.22; the builder has 3.18.
+
+Neither FFmpeg nor libplacebo (`-Dvk-proc-addr=disabled`) links the Vulkan
+loader: both load the host's `libvulkan.so.1` at run time, so `DT_NEEDED` is
+unchanged and a host without Vulkan gets a failed device creation, not a
+missing-library abort. Rehearsed on an AMD host: an HDR10 → SDR
+`libplacebo=tonemapping=bt.2390` run on a Vulkan device completed cleanly.
+
+The build revision stays `7.1.4-tesserafin.1`. It is shared with win-x64,
+whose MSYS2 lock and signed build-input bundle derive from it, and the Windows
+runtime does not change here; the linux bytes are identified by
+`ci/package/f0-accepted-digests.txt` and `F0_ACCEPTED_CI_TREE`. win-x64 has no
+Vulkan or libplacebo yet.
 
 Rockchip (`rkmpp`, `rkrga`) is outside the declared `linux-x64`/`linux-arm64`
 matrix. macOS paths (`aac_at`, `*_videotoolbox`, `scale_vt`) do not apply.

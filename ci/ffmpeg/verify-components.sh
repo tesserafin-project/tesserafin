@@ -53,6 +53,9 @@ pass() { echo "  ok  : $*"; }
 # this set is not "probably fine" — it stops the build until it is classified.
 PERMITTED=(
     "Apache-2.0"
+    # glslang: per-file terms. Its LICENSE.txt also carries GPL-3.0 with the Bison
+    # exception for a generated parser the project has since removed.
+    "BSD-3-Clause AND BSD-2-Clause AND MIT AND Apache-2.0"
     "BSD-2-Clause"
     "BSD-3-Clause"
     "BSD-3-Clause AND AOM-Patent-License-1.0"

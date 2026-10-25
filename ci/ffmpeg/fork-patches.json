@@ -380,31 +380,31 @@
       "patch": "0060-backport-fixes-for-vulkan-from-upstream.patch",
       "classification": "useful",
       "applied": true,
-      "rationale": "Upstream Vulkan fixes. Vulkan filters are not built in 7.1.4-tesserafin.1."
+      "rationale": "Upstream Vulkan fixes; Vulkan and libplacebo are built in this runtime since #342."
     },
     {
       "patch": "0061-revert-the-broken-vulkan-hwupload-rewrite.patch",
       "classification": "useful",
       "applied": true,
-      "rationale": "Reverts the Vulkan hwupload rewrite. Not built in this revision."
+      "rationale": "Reverts the Vulkan hwupload rewrite; built since #342."
     },
     {
       "patch": "0062-use-linear-contiguous-vulkan-images-for-amd-encoder.patch",
       "classification": "useful",
       "applied": true,
-      "rationale": "Linear contiguous Vulkan images for the AMD encoder. Not built in this revision."
+      "rationale": "Linear contiguous Vulkan images for the AMD encoder; built since #342."
     },
     {
       "patch": "0063-prefer-vulkan-device-with-higher-api-version.patch",
       "classification": "useful",
       "applied": true,
-      "rationale": "Prefers a higher Vulkan API version. Not built in this revision."
+      "rationale": "Prefers a higher Vulkan API version; built since #342."
     },
     {
       "patch": "0064-add-pgs-support-to-vulkan-overlay.patch",
       "classification": "useful",
       "applied": true,
-      "rationale": "PGS in the Vulkan overlay. Not built in this revision."
+      "rationale": "PGS in the Vulkan overlay; built since #342."
     },
     {
       "patch": "0065-fix-yuv420p-to-p01x-unscaled-conversion.patch",

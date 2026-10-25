@@ -15,3 +15,9 @@
 #     NVPTX rather than by anything host-specific, and dropping them would make
 #     the arm64 runtime narrower than the hardware it will run on. VAAPI and
 #     OpenCL are common for the same reason.
+
+# Vulkan, the shader compiler and libplacebo (#342): linux only, because the
+# win-x64 runtime is assembled from its own MSYS2 set (ci/windows/ffmpeg).
+--enable-vulkan
+--enable-libshaderc
+--enable-libplacebo
