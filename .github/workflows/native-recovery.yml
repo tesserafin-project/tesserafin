@@ -10,6 +10,7 @@ on:
   pull_request:
     paths:
       - 'ci/native-recovery-deb.sh'
+      - 'ci/native-recovery-rpm.sh'
       - 'docker/recovery-state.py'
       - 'ci/recovery-evidence.py'
       - 'ci/tests/recovery-evidence.test.py'
@@ -78,6 +79,56 @@ jobs:
       - name: Remove raw transient output
         if: always()
         run: sudo rm -rf -- "$RUNNER_TEMP/recovery-raw.log" "$RUNNER_TEMP/deb"
+
+  rpm:
+    name: Published .rpm cold-snapshot recovery (Rocky 9 systemd container, x86_64)
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      RELEASE_TAG: v1.1.0
+      RPM_FILE: tesserafin-server-1.0.0-1.x86_64.rpm
+      RPM_SHA256: 35fa7435de643385e58b240e19a094a80fad661b8dc9e8bfd79ee1b6e2cfe369
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ env.CANDIDATE_SHA }}
+          persist-credentials: false
+      - name: Record source provenance
+        run: |
+          set -euo pipefail
+          umask 077
+          export EVIDENCE_DIR="$RUNNER_TEMP/recovery-evidence"
+          printf 'EVIDENCE_DIR=%s\n' "$EVIDENCE_DIR" >> "$GITHUB_ENV"
+          mkdir -p "$EVIDENCE_DIR" "$RUNNER_TEMP/rpm"
+          python3 ci/recovery-evidence.py init --expected-source "$CANDIDATE_SHA" \
+            --scope "native .rpm cold-snapshot recovery; same host, same package, no forward migration" \
+            --out "$EVIDENCE_DIR/source.json"
+      - name: Download the published package
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" -p "$RPM_FILE" -D "$RUNNER_TEMP/rpm"
+      - name: Install, populate, cold backup, destroy, reinstall, restore and compare
+        run: |
+          set -euo pipefail
+          status=0
+          bash ci/native-recovery-rpm.sh "$RUNNER_TEMP/rpm/$RPM_FILE" "$RPM_SHA256" \
+            > "$RUNNER_TEMP/recovery-raw.log" 2>&1 || status=$?
+          python3 ci/recovery-evidence.py result --phase native-rpm --raw "$RUNNER_TEMP/recovery-raw.log" \
+            --exit-code "$status" --out "$EVIDENCE_DIR/result.json"
+      - name: Retain allowlisted recovery evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-recovery-rpm-${{ env.CANDIDATE_SHA }}
+          path: ${{ runner.temp }}/recovery-evidence/*.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Remove raw transient output
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/recovery-raw.log" "$RUNNER_TEMP/rpm"
 
   # Disk-loss recovery: the snapshot leaves the source runner, and a second, fresh
   # runner that never held Tesserafin downloads the same pinned package itself and

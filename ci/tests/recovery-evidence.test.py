@@ -68,6 +68,23 @@ class RecoveryEvidenceTests(unittest.TestCase):
         for marker in markers[1:3] + markers[4:]:
             self.assertIn(marker.strip().removeprefix("PASS  "), script)
 
+    def test_native_rpm_phase_requires_its_own_marker(self):
+        markers = ("  PASS  distinct users, saved position, favourite, policies, configuration, pack and tokens seeded",
+                   "  PASS  package purged and all persistent state removed before restore",
+                   "  PASS  restored files identical in content, owner, group and mode",
+                   "  PASS  extended state restored identically by user/item/pack identity",
+                   "NATIVE-ROUNDTRIP: rpm cold snapshot restored and verified")
+        log = "\n".join(markers)
+        self.assertTrue(evidence.summarize(log, 0, "native-rpm")["accepted"])
+        for marker in markers:
+            with self.subTest(marker=marker):
+                self.assertFalse(evidence.summarize(log.replace(marker, ""), 0, "native-rpm")["accepted"])
+        # A .deb run cannot stand in for the .rpm one, nor the reverse.
+        self.assertFalse(evidence.summarize(log, 0, "native-deb")["accepted"])
+        deb = log.replace("rpm cold snapshot", "deb cold snapshot")
+        self.assertFalse(evidence.summarize(deb, 0, "native-rpm")["accepted"])
+        self.assertIn(markers[-1], (ROOT / "ci/native-recovery-deb.sh").read_text())
+
     def test_native_deb_disk_loss_phases_require_their_own_markers(self):
         seed = "  PASS  distinct users, saved position, favourite, policies, configuration, pack and tokens seeded"
         source = (seed, "NATIVE-SOURCE: snapshot handed off")

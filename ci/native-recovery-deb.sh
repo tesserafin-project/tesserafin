@@ -3,9 +3,10 @@
 # SC2015: `<cond> && pass || fail` is intended — pass()/fail() both return 0.
 # SC2317/SC2329: cleanup() is invoked indirectly via the EXIT trap.
 #
-# Native Linux (.deb) cold-snapshot recovery rehearsal (#144).
+# Native Linux (.deb, and .rpm via ci/native-recovery-rpm.sh) cold-snapshot
+# recovery rehearsal (#144). The package manager follows the file extension.
 #
-# Installs one published, digest-pinned tesserafin-server .deb, populates it
+# Installs one published, digest-pinned tesserafin-server package, populates it
 # through the public API (same fixture and oracle as docker/state-roundtrip.sh),
 # stops the service, archives /etc/tesserafin and /var/lib/tesserafin, then
 # destroys the installation: package purged, every persistent directory and the
@@ -32,6 +33,11 @@ umask 077
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEB="$(realpath "${1:?usage: native-recovery-deb.sh <deb> <sha256>}")"
 DEB_SHA256="${2:?usage: native-recovery-deb.sh <deb> <sha256>}"
+case "${DEB}" in
+  *.deb) PKG=deb ;;
+  *.rpm) PKG=rpm ;;
+  *) echo "expected a .deb or .rpm package" >&2; exit 2 ;;
+esac
 PORT=8096
 ADMIN_USER="a2admin"
 ADMIN_PASS="a2-round-trip-pass"
@@ -60,6 +66,10 @@ fail() { echo "  FAIL  $*"; FAILED=1; }
 [[ "${TF_NATIVE_RECOVERY_DISPOSABLE:-}" == 1 && "${EUID}" == 0 ]] \
   || { echo "refusing: run as root on a disposable host with TF_NATIVE_RECOVERY_DISPOSABLE=1" >&2; exit 2; }
 [[ "${DEB_SHA256}" =~ ^[0-9a-f]{64}$ ]] || { echo "expected a SHA-256 hex digest" >&2; exit 2; }
+# A missing comparison tool must not read as "state differs" (cmp exits 127).
+for tool in cmp curl pgrep python3 runuser sha256sum tar; do
+  command -v "${tool}" >/dev/null || { echo "refusing: ${tool} is not installed" >&2; exit 2; }
+done
 
 cleanup() { rm -rf "${WORK}"; }
 trap cleanup EXIT
@@ -116,11 +126,19 @@ playstate() { # $1=userId $2=itemId $3=token
   apiget "/Items?userId=$1&ids=$2" "$3" \
     | jq_py '"Played={}|PlayCount={}".format(d["Items"][0]["UserData"]["Played"], d["Items"][0]["UserData"]["PlayCount"]) if d.get("Items") else "MISSING"'
 }
+pkg_installed() {
+  if [[ "${PKG}" == deb ]]; then dpkg -s tesserafin-server >/dev/null 2>&1; else rpm -q tesserafin-server >/dev/null 2>&1; fi
+}
+pkg_remove() {
+  if [[ "${PKG}" == deb ]]; then DEBIAN_FRONTEND=noninteractive apt-get purge -y -q tesserafin-server >/dev/null
+  else dnf -y -q remove tesserafin-server >/dev/null; fi
+}
 install_deb() {
   [[ "$(sha256sum "${DEB}" | cut -d' ' -f1)" == "${DEB_SHA256}" ]] \
     && pass "package matches pinned SHA-256 before install" \
     || { fail "package does not match pinned SHA-256"; exit 1; }
-  DEBIAN_FRONTEND=noninteractive apt-get install -y -q "${DEB}" >/dev/null
+  if [[ "${PKG}" == deb ]]; then DEBIAN_FRONTEND=noninteractive apt-get install -y -q "${DEB}" >/dev/null
+  else dnf -y -q install "${DEB}" >/dev/null; fi
   # A first install enables the unit but leaves it stopped (docs/install.md).
   [[ "$(systemctl is-enabled tesserafin)" == enabled ]] && ! systemctl is-active --quiet tesserafin \
     && pass "fresh install: service enabled and stopped" \
@@ -148,7 +166,7 @@ make_media() { # needs the package's ffmpeg
 
 echo "== 0. prepare: disposable host, pinned package, media fixture (phase ${PHASE}) =="
 CLEAN=1
-dpkg -s tesserafin-server >/dev/null 2>&1 && CLEAN=0
+pkg_installed && CLEAN=0
 getent passwd tesserafin >/dev/null && CLEAN=0
 for d in "${ALL_DIRS[@]}"; do [[ -e "${d}" ]] && CLEAN=0; done
 [[ -e "${MEDIA}" && -n "$(ls -A "${MEDIA}")" ]] && CLEAN=0
@@ -234,12 +252,12 @@ fi
 
 echo "== 3e. state loss: purge package, delete persistent directories and account =="
 systemctl stop tesserafin
-DEBIAN_FRONTEND=noninteractive apt-get purge -y -q tesserafin-server >/dev/null
+pkg_remove
 rm -rf "${ALL_DIRS[@]}"
 userdel tesserafin
 ! getent group tesserafin >/dev/null || groupdel tesserafin
 LOST=1
-dpkg -s tesserafin-server >/dev/null 2>&1 && LOST=0
+pkg_installed && LOST=0
 getent passwd tesserafin >/dev/null && LOST=0
 getent group tesserafin >/dev/null && LOST=0
 for d in "${ALL_DIRS[@]}"; do [[ -e "${d}" ]] && LOST=0; done
@@ -324,6 +342,8 @@ systemctl stop tesserafin
 echo
 if [[ "${FAILED}" == 0 && "${PHASE}" == recover ]]; then
   echo "NATIVE-RECOVER: deb snapshot restored on a fresh host and verified"; exit 0
+elif [[ "${FAILED}" == 0 && "${PKG}" == rpm ]]; then
+  echo "NATIVE-ROUNDTRIP: rpm cold snapshot restored and verified"; exit 0
 elif [[ "${FAILED}" == 0 ]]; then
   echo "NATIVE-ROUNDTRIP: deb cold snapshot restored and verified"; exit 0
 else
