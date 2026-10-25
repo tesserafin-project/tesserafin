@@ -79,7 +79,9 @@ FROZEN_PINS = {
     ".github/workflows/w4-windows-msi.yml": "deffcba556b413f5823ec8605f3ad6560a703f0b95660763968c124fd7b001c0",
     "ci/windows/runtime-retention/consume.ps1": "f19fefcc48de9ae2175aa49ecff6e732762219a3d76c38067ba4114a1924646d",
     "ci/windows/runtime-retention/accepted-runtime.json": "593c21f59c67dd564fa488f660efc14b74b5c5bcd775bbc3ef0bdf9e94dd9ece",
-    "ci/package/pins.env": "d9a47fc89741f7674cfff9258043d419775dd1849eb118906c762d63f4cfd0ba",
+    # Re-pinned for #342: only F0_ACCEPTED_CI_TREE moved (Linux F0 baseline);
+    # WEB_PAYLOAD_SHA256, which P02 reads, is unchanged.
+    "ci/package/pins.env": "7239360f3f2d1299db4282a465c46446ff9e5694221f138f88667141e0a6cfa7",
     "SharedVersion.cs": "beeb301584718715830f5302bb483df461238388060fd821d7711c785df03fd4",
     "packaging/windows/msi/Tesserafin.wxs": "097bb7c68f62a3b15d64af0c58d947ce28377810752681407afd99f0d4b983dc",
 }
