@@ -21,6 +21,39 @@
 # reviewed commit, with every changed digest recorded. Re-pinning without listing
 # what moved converts a stale oracle into a rubber stamp.
 #
+# ── Rebaselined for #342 (Vulkan + libplacebo), ci/ffmpeg tree 39d5adbf… → 4fb8697b… ──
+#
+# The tree moved because both Linux runtimes now build vulkan-headers, shaderc
+# (with glslang, SPIRV-Tools and SPIRV-Headers), libplacebo and a pinned meson,
+# and configure with --enable-vulkan --enable-libshaderc --enable-libplacebo.
+# This is a functional change, so ALL fifteen delivered slots moved:
+#
+#   corresponding-source.tar.zst    40f7be52… → d83b2a54…   seven new source trees under src/
+#   linux-arm64.tar.xz              a7a38dbb… → 88fee3dd…   contains all of the above
+#   linux-arm64/SOURCE.json         f91c8cb4… → bfa471ca…   7 new components
+#   linux-arm64/THIRD_PARTY_NOTICES.md b1f57cad… → d1dc4f8e…   7 new licences
+#   linux-arm64/bin/ffmpeg          959eacfb… → 7650cd78…   links libplacebo, shaderc, Vulkan filters
+#   linux-arm64/bin/ffprobe         d2b8d4dc… → 19e97103…   same configure
+#   linux-arm64/capability.json     bc92fa89… → c1af5caf…   libplacebo + 14 *_vulkan filters
+#   linux-arm64/sbom.cdx.json       25b13e81… → c0ef46f8…   7 new components
+#   linux-x64.tar.xz                ef565fc0… → 3aea62ad…   contains all of the above
+#   linux-x64/SOURCE.json           55d65cef… → c96b1f8b…   7 new components
+#   linux-x64/THIRD_PARTY_NOTICES.md a4ee9f4e… → e200f4a6…   7 new licences
+#   linux-x64/bin/ffmpeg            4e5de0f6… → fa9a9727…   links libplacebo, shaderc, Vulkan filters
+#   linux-x64/bin/ffprobe           5b851bcb… → 82196950…   same configure
+#   linux-x64/capability.json       ae81546f… → 874d6ec2…   libplacebo + 14 *_vulkan filters
+#   linux-x64/sbom.cdx.json         128287de… → 941708e5…   7 new components
+#
+# The revision deliberately stays 7.1.4-tesserafin.1 (see
+# docs/distribution/F0-ffmpeg-runtime.md): the revision is shared with win-x64,
+# whose bytes do not change. These digests are what identifies the Linux bytes.
+# No new DT_NEEDED entry: FFmpeg dlopen()s libvulkan.so.1 only when Vulkan is used.
+#
+# Measured on run 40226521722 at head d8d397ae60dec63e90984de3cc0b11549553d2da,
+# both architectures built natively (ubuntu-24.04 and ubuntu-24.04-arm), each
+# rebuilt bit-for-bit on a second runner, both producing the identical
+# corresponding-source archive.
+#
 # ── Rebaselined for #236 (W1-A3), ci/ffmpeg tree 578506af… → 39d5adbf… ────────
 #
 # The tree moved because win-x64's divergence from the base fork-patch decision
@@ -66,22 +99,22 @@
 # they record it. The DECOMPRESSED stream is the content-level identity, so it is
 # recorded here as well:
 #
-# stream-sha256 tesserafin-ffmpeg-7.1.4-tesserafin.1-corresponding-source.tar.zst 4ab7ab9b0e801a3cc8cd9753dca9a087ec2ad86ea24597e4adf6279f5bbfe718
+# stream-sha256 tesserafin-ffmpeg-7.1.4-tesserafin.1-corresponding-source.tar.zst d603451b96bc14669589399d4c74c72a2e75a9f06526f9f76672e5dde05a1e42
 #
 # Hosted builds must still reproduce the compressed digests exactly: they run the
 # same runner image as the accepted run, so a difference there is a real one.
-128287de840da7b0ddaae2f3702051affac9807b1850684813905bcb774b43fa  tesserafin-ffmpeg-7.1.4-tesserafin.1-linux-x64/sbom.cdx.json
-25b13e81f60f9f59917f5b4af573ac1ecca0fa154f054dc0e90e0c96127c08c6  tesserafin-ffmpeg-7.1.4-tesserafin.1-linux-arm64/sbom.cdx.json
-40f7be52c5406534e42fcb2132c1997a36a601ba9080f15be97fe173d13af82e  tesserafin-ffmpeg-7.1.4-tesserafin.1-corresponding-source.tar.zst
-4e5de0f639fddb18440af23f2000d034bc286bbaef95506d5af64cb776f4af14  tesserafin-ffmpeg-7.1.4-tesserafin.1-linux-x64/bin/ffmpeg
-55d65cef1b0eea1920697fe7f1a2336b5b8be356c7c6e7afef1b1f1d439f3848  tesserafin-ffmpeg-7.1.4-tesserafin.1-linux-x64/SOURCE.json
-5b851bcb9e08c7c51ce4b4826f032406087a8239259f4d11ce2393656dc50903  tesserafin-ffmpeg-7.1.4-tesserafin.1-linux-x64/bin/ffprobe
-959eacfb0cd816a5808819cfb70fc7d6776fca75ce0ae51154b52d89842ec19d  tesserafin-ffmpeg-7.1.4-tesserafin.1-linux-arm64/bin/ffmpeg
-a4ee9f4ecabece8d21119714eb932eaf89a67a7ffeae371d129d39ecd0db6645  tesserafin-ffmpeg-7.1.4-tesserafin.1-linux-x64/THIRD_PARTY_NOTICES.md
-a7a38dbb01011e1118ebf73f84e7bc4bd985b05ced6a863e3193defc2e8c6a92  tesserafin-ffmpeg-7.1.4-tesserafin.1-linux-arm64.tar.xz
-ae81546f97ab7e00e37ab5d17aab2d42513d04a29b5fe567e86c8a0b828b5d71  tesserafin-ffmpeg-7.1.4-tesserafin.1-linux-x64/capability.json
-b1f57cad1ad7605e09abc401a77e9fdca701b428ae67ac96c28508d79289b0f3  tesserafin-ffmpeg-7.1.4-tesserafin.1-linux-arm64/THIRD_PARTY_NOTICES.md
-bc92fa89ccb26b942bbebe19ad86d69c30bd38364231381b6bc93889f60df8e6  tesserafin-ffmpeg-7.1.4-tesserafin.1-linux-arm64/capability.json
-d2b8d4dc830e90c04e2ffac2b2b7fb3666153304dd6fd46e029831f60d305e95  tesserafin-ffmpeg-7.1.4-tesserafin.1-linux-arm64/bin/ffprobe
-ef565fc01f4e043d51196a8fc137da6dd47abfb2e752a51883a4032a370779a1  tesserafin-ffmpeg-7.1.4-tesserafin.1-linux-x64.tar.xz
-f91c8cb4fe0469fdb802c9294032649ccf6a00827a78449e9365612d3e75c5b4  tesserafin-ffmpeg-7.1.4-tesserafin.1-linux-arm64/SOURCE.json
+19e9710392c9d65a4b22ca23cdab018aa0ee5f220ddd2c91d9ac5a1054c87c13  tesserafin-ffmpeg-7.1.4-tesserafin.1-linux-arm64/bin/ffprobe
+3aea62ad00ae1344191931d3670f89bc5d3c158be965e33dd33c482b10a2c1fe  tesserafin-ffmpeg-7.1.4-tesserafin.1-linux-x64.tar.xz
+7650cd78515fd5926b6dfe43293dedcd72f7396a0efb6d00abd723e1f44ba959  tesserafin-ffmpeg-7.1.4-tesserafin.1-linux-arm64/bin/ffmpeg
+82196950cfe533a2d2b74ce2c51fa0f758cf41ae22fe88b212152d60abae0c34  tesserafin-ffmpeg-7.1.4-tesserafin.1-linux-x64/bin/ffprobe
+874d6ec22e0f0b1725a146e78ebb3dccdc84dac04904fc25ecf91b85f7ea71eb  tesserafin-ffmpeg-7.1.4-tesserafin.1-linux-x64/capability.json
+88fee3dd72f80b12329f0431007fd677cc7528a2829294133c82d8a37760e6d1  tesserafin-ffmpeg-7.1.4-tesserafin.1-linux-arm64.tar.xz
+941708e5aaa01f5b485160d1756bf6373a4f448286597742e1fdbe00ddf52180  tesserafin-ffmpeg-7.1.4-tesserafin.1-linux-x64/sbom.cdx.json
+bfa471ca6b046e630022107c2a1f950c64b1a4c4e8b12786b44396669ba48245  tesserafin-ffmpeg-7.1.4-tesserafin.1-linux-arm64/SOURCE.json
+c0ef46f87dff1da6f7caa3a973612cdf396713274597dbe4984373dcad0f57f5  tesserafin-ffmpeg-7.1.4-tesserafin.1-linux-arm64/sbom.cdx.json
+c1af5cafaa6527252c961d126f7c2f8bc480849c0d34f93b95ae68ca9e5aa9b0  tesserafin-ffmpeg-7.1.4-tesserafin.1-linux-arm64/capability.json
+c96b1f8b68c17187c9ac9c035cc213a7255cedd52268a063eec22006f972e04c  tesserafin-ffmpeg-7.1.4-tesserafin.1-linux-x64/SOURCE.json
+d1dc4f8e097d86eaa6bb4d7e08aed61abc4e46faf7371780e180921c3db40f78  tesserafin-ffmpeg-7.1.4-tesserafin.1-linux-arm64/THIRD_PARTY_NOTICES.md
+d83b2a5479e60744d7e4604347ae673c3b8e2f67cbf7f001c9f80e963053944c  tesserafin-ffmpeg-7.1.4-tesserafin.1-corresponding-source.tar.zst
+e200f4a6f33baddabbdbda5093788949fb2abe04bc76a7468cf88277d7fe1d4c  tesserafin-ffmpeg-7.1.4-tesserafin.1-linux-x64/THIRD_PARTY_NOTICES.md
+fa9a9727c0593abd971788094919822849503ce6bf138c794cada93b48e60809  tesserafin-ffmpeg-7.1.4-tesserafin.1-linux-x64/bin/ffmpeg
