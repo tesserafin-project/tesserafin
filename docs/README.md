@@ -45,6 +45,9 @@ published-image forward-migration proof.
 
 ## Engineering records
 
+The [item persistence contract](item-persistence-conservation.md) records deletion
+ownership, history preparation, rollback evidence and remaining conflict cases.
+
 The [metadata access proposal](metadata-provider-decision.md) records dated
 primary-source findings and unresolved commercial/distribution questions for
 TMDB, TheAudioDB and OMDb. It is pending owner decision and changes no credentials

@@ -32,8 +32,9 @@ public static class DescendantQueryHelper
 
     /// <summary>
     /// Gets a queryable of all owned descendant IDs for a parent item.
-    /// Traverses only AncestorIds (hierarchical ownership), NOT LinkedChildren (associations).
-    /// Use this for deletion to avoid destroying items that are merely linked (e.g. movies in a BoxSet).
+    /// Traverses only the AncestorIds projection, not LinkedChildren (associations).
+    /// Deletion preparation must follow persisted ParentId and OwnerId relationships instead:
+    /// this projection can omit cascaded items or contain stale references to unrelated media.
     /// </summary>
     /// <param name="context">Database context.</param>
     /// <param name="parentId">Parent item ID.</param>

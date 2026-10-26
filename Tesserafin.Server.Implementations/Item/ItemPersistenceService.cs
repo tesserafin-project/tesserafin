@@ -57,94 +57,7 @@ public class ItemPersistenceService : IItemPersistenceService
         using var context = _dbProvider.CreateDbContext();
         using var transaction = context.Database.BeginTransaction();
 
-        var date = (DateTime?)DateTime.UtcNow;
-
-        var descendantIds = DescendantQueryHelper.GetOwnedDescendantIdsBatch(context, ids);
-        foreach (var id in ids)
-        {
-            descendantIds.Add(id);
-        }
-
-        // Use WhereOneOrMany instead of a raw HashSet.Contains so large id sets are bound as a
-        // single parameter (json_each) rather than one SQL variable per id, which would otherwise
-        // overflow SQLite's variable limit when deleting many items at once (e.g. migrations).
-        var ownerIds = descendantIds.ToArray();
-        var extraIds = context.BaseItems
-            .Where(e => e.OwnerId.HasValue)
-            .WhereOneOrMany(ownerIds, e => e.OwnerId!.Value)
-            .Select(e => e.Id)
-            .ToArray();
-
-        foreach (var extraId in extraIds)
-        {
-            descendantIds.Add(extraId);
-        }
-
-        var relatedItems = descendantIds.ToArray();
-
-        // When batch-deleting, multiple items may have UserData for the same (UserId, CustomDataKey).
-        // Moving all of them to PlaceholderId would violate the UNIQUE constraint.
-        // Deduplicate by loading keys client-side, keeping the best row per group.
-        var batchUserData = context.UserData.WhereOneOrMany(relatedItems, e => e.ItemId);
-
-        var allRows = batchUserData
-            .Select(ud => new { ud.ItemId, ud.UserId, ud.CustomDataKey, ud.LastPlayedDate, ud.PlayCount })
-            .ToList();
-
-        var duplicateRows = allRows
-            .GroupBy(ud => new { ud.UserId, ud.CustomDataKey })
-            .Where(g => g.Count() > 1)
-            .SelectMany(g => g
-                .OrderByDescending(ud => ud.LastPlayedDate)
-                .ThenByDescending(ud => ud.PlayCount)
-                .Skip(1))
-            .ToList();
-
-        foreach (var dup in duplicateRows)
-        {
-            context.UserData
-                .Where(ud => ud.ItemId == dup.ItemId && ud.UserId == dup.UserId && ud.CustomDataKey == dup.CustomDataKey)
-                .ExecuteDelete();
-        }
-
-        // Delete existing placeholder rows that would conflict with the incoming ones
-        context.UserData
-            .Join(
-                batchUserData,
-                placeholder => new { placeholder.UserId, placeholder.CustomDataKey },
-                userData => new { userData.UserId, userData.CustomDataKey },
-                (placeholder, userData) => placeholder)
-            .Where(e => e.ItemId == BaseItemRepository.PlaceholderId)
-            .ExecuteDelete();
-
-        batchUserData
-            .ExecuteUpdate(e => e
-                .SetProperty(f => f.RetentionDate, date)
-                .SetProperty(f => f.ItemId, BaseItemRepository.PlaceholderId));
-
-        context.AncestorIds.WhereOneOrMany(relatedItems, e => e.ItemId).ExecuteDelete();
-        context.AncestorIds.WhereOneOrMany(relatedItems, e => e.ParentItemId).ExecuteDelete();
-        context.AttachmentStreamInfos.WhereOneOrMany(relatedItems, e => e.ItemId).ExecuteDelete();
-        context.BaseItemImageInfos.WhereOneOrMany(relatedItems, e => e.ItemId).ExecuteDelete();
-        context.BaseItemMetadataFields.WhereOneOrMany(relatedItems, e => e.ItemId).ExecuteDelete();
-        context.BaseItemProviders.WhereOneOrMany(relatedItems, e => e.ItemId).ExecuteDelete();
-        context.BaseItemTrailerTypes.WhereOneOrMany(relatedItems, e => e.ItemId).ExecuteDelete();
-        context.Chapters.WhereOneOrMany(relatedItems, e => e.ItemId).ExecuteDelete();
-        context.ContentPackMemberships.WhereOneOrMany(relatedItems, e => e.ItemId).ExecuteDelete();
-        context.CustomItemDisplayPreferences.WhereOneOrMany(relatedItems, e => e.ItemId).ExecuteDelete();
-        context.ItemDisplayPreferences.WhereOneOrMany(relatedItems, e => e.ItemId).ExecuteDelete();
-        context.ItemValues.Where(e => e.BaseItemsMap!.Count == 0).ExecuteDelete();
-        context.ItemValuesMap.WhereOneOrMany(relatedItems, e => e.ItemId).ExecuteDelete();
-        context.LinkedChildren.WhereOneOrMany(relatedItems, e => e.ParentId).ExecuteDelete();
-        context.LinkedChildren.WhereOneOrMany(relatedItems, e => e.ChildId).ExecuteDelete();
-        context.BaseItems.WhereOneOrMany(relatedItems, e => e.Id).ExecuteDelete();
-        context.KeyframeData.WhereOneOrMany(relatedItems, e => e.ItemId).ExecuteDelete();
-        context.MediaSegments.WhereOneOrMany(relatedItems, e => e.ItemId).ExecuteDelete();
-        context.MediaStreamInfos.WhereOneOrMany(relatedItems, e => e.ItemId).ExecuteDelete();
-        var query = context.PeopleBaseItemMap.WhereOneOrMany(relatedItems, e => e.ItemId).Select(f => f.PeopleId).Distinct().ToArray();
-        context.PeopleBaseItemMap.WhereOneOrMany(relatedItems, e => e.ItemId).ExecuteDelete();
-        context.Peoples.WhereOneOrMany(query, e => e.Id).Where(e => e.BaseItems!.Count == 0).ExecuteDelete();
-        context.TrickplayInfos.WhereOneOrMany(relatedItems, e => e.ItemId).ExecuteDelete();
+        DeleteItems(context, ids);
         context.SaveChanges();
         transaction.Commit();
     }
@@ -232,6 +145,120 @@ public class ItemPersistenceService : IItemPersistenceService
                 await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             }
         }
+    }
+
+    // The caller owns the transaction. The save path uses the same preparation for orphaned
+    // local versions, after flushing its tracked changes and before committing that transaction.
+    private static void DeleteItems(TesserafinDbContext context, IReadOnlyList<Guid> ids)
+    {
+        var relatedItems = GetDeletionIds(context, ids);
+        var date = (DateTime?)DateTime.UtcNow;
+
+        // When batch-deleting, multiple items may have UserData for the same (UserId, CustomDataKey).
+        // Moving all of them to PlaceholderId would violate the UNIQUE constraint.
+        // Deduplicate by loading keys client-side, keeping the best row per group.
+        var batchUserData = context.UserData.WhereOneOrMany(relatedItems, e => e.ItemId);
+
+        var allRows = batchUserData
+            .Select(ud => new { ud.ItemId, ud.UserId, ud.CustomDataKey, ud.LastPlayedDate, ud.PlayCount })
+            .ToList();
+
+        var duplicateRows = allRows
+            .GroupBy(ud => new { ud.UserId, ud.CustomDataKey })
+            .Where(g => g.Count() > 1)
+            .SelectMany(g => g
+                .OrderByDescending(ud => ud.LastPlayedDate)
+                .ThenByDescending(ud => ud.PlayCount)
+                .Skip(1))
+            .ToList();
+
+        foreach (var dup in duplicateRows)
+        {
+            context.UserData
+                .Where(ud => ud.ItemId == dup.ItemId && ud.UserId == dup.UserId && ud.CustomDataKey == dup.CustomDataKey)
+                .ExecuteDelete();
+        }
+
+        // Delete existing placeholder rows that would conflict with the incoming ones
+        context.UserData
+            .Join(
+                batchUserData,
+                placeholder => new { placeholder.UserId, placeholder.CustomDataKey },
+                userData => new { userData.UserId, userData.CustomDataKey },
+                (placeholder, userData) => placeholder)
+            .Where(e => e.ItemId == BaseItemRepository.PlaceholderId)
+            .ExecuteDelete();
+
+        batchUserData
+            .ExecuteUpdate(e => e
+                .SetProperty(f => f.RetentionDate, date)
+                .SetProperty(f => f.ItemId, BaseItemRepository.PlaceholderId));
+
+        context.AncestorIds.WhereOneOrMany(relatedItems, e => e.ItemId).ExecuteDelete();
+        context.AncestorIds.WhereOneOrMany(relatedItems, e => e.ParentItemId).ExecuteDelete();
+        context.AttachmentStreamInfos.WhereOneOrMany(relatedItems, e => e.ItemId).ExecuteDelete();
+        context.BaseItemImageInfos.WhereOneOrMany(relatedItems, e => e.ItemId).ExecuteDelete();
+        context.BaseItemMetadataFields.WhereOneOrMany(relatedItems, e => e.ItemId).ExecuteDelete();
+        context.BaseItemProviders.WhereOneOrMany(relatedItems, e => e.ItemId).ExecuteDelete();
+        context.BaseItemTrailerTypes.WhereOneOrMany(relatedItems, e => e.ItemId).ExecuteDelete();
+        context.Chapters.WhereOneOrMany(relatedItems, e => e.ItemId).ExecuteDelete();
+        context.ContentPackMemberships.WhereOneOrMany(relatedItems, e => e.ItemId).ExecuteDelete();
+        context.CustomItemDisplayPreferences.WhereOneOrMany(relatedItems, e => e.ItemId).ExecuteDelete();
+        context.ItemDisplayPreferences.WhereOneOrMany(relatedItems, e => e.ItemId).ExecuteDelete();
+        var valueIds = context.ItemValuesMap
+            .WhereOneOrMany(relatedItems, e => e.ItemId)
+            .Select(e => e.ItemValueId)
+            .Distinct()
+            .ToArray();
+        context.ItemValuesMap.WhereOneOrMany(relatedItems, e => e.ItemId).ExecuteDelete();
+        if (valueIds.Length > 0)
+        {
+            context.ItemValues
+                .WhereOneOrMany(valueIds, e => e.ItemValueId)
+                .Where(e => e.BaseItemsMap!.Count == 0)
+                .ExecuteDelete();
+        }
+
+        context.LinkedChildren.WhereOneOrMany(relatedItems, e => e.ParentId).ExecuteDelete();
+        context.LinkedChildren.WhereOneOrMany(relatedItems, e => e.ChildId).ExecuteDelete();
+        context.BaseItems.WhereOneOrMany(relatedItems, e => e.Id).ExecuteDelete();
+        context.KeyframeData.WhereOneOrMany(relatedItems, e => e.ItemId).ExecuteDelete();
+        context.MediaSegments.WhereOneOrMany(relatedItems, e => e.ItemId).ExecuteDelete();
+        context.MediaStreamInfos.WhereOneOrMany(relatedItems, e => e.ItemId).ExecuteDelete();
+        var query = context.PeopleBaseItemMap.WhereOneOrMany(relatedItems, e => e.ItemId).Select(f => f.PeopleId).Distinct().ToArray();
+        context.PeopleBaseItemMap.WhereOneOrMany(relatedItems, e => e.ItemId).ExecuteDelete();
+        context.Peoples.WhereOneOrMany(query, e => e.Id).Where(e => e.BaseItems!.Count == 0).ExecuteDelete();
+        context.TrickplayInfos.WhereOneOrMany(relatedItems, e => e.ItemId).ExecuteDelete();
+    }
+
+    private static Guid[] GetDeletionIds(TesserafinDbContext context, IReadOnlyList<Guid> ids)
+    {
+        var visited = new HashSet<Guid>(ids);
+        var frontier = visited.ToArray();
+        while (frontier.Length > 0)
+        {
+            // Follow the persisted relationships that cascade or retain an owned item's FK.
+            // AncestorIds is a projection: missing entries must not lose history, and stale
+            // entries must not enlarge a destructive operation to unrelated media.
+            var children = context.BaseItems
+                .Where(e => e.ParentId.HasValue)
+                .WhereOneOrMany(frontier, e => e.ParentId!.Value)
+                .Select(e => e.Id)
+                .ToArray();
+            var ownedItems = context.BaseItems
+                .Where(e => e.OwnerId.HasValue)
+                .WhereOneOrMany(frontier, e => e.OwnerId!.Value)
+                .Select(e => e.Id)
+                .ToArray();
+            frontier = children.Concat(ownedItems).Where(visited.Add).ToArray();
+        }
+
+        if (visited.Contains(BaseItemRepository.PlaceholderId))
+        {
+            throw new InvalidOperationException("The deletion scope must not contain the UserData placeholder.");
+        }
+
+        return visited.ToArray();
     }
 
     private void UpdateOrInsertItems(IReadOnlyList<BaseItemDto> items, CancellationToken cancellationToken)
@@ -373,6 +400,10 @@ public class ItemPersistenceService : IItemPersistenceService
                 .ToHashSet()
             : new HashSet<Guid>();
 
+        // Every tuple has already been attached or added above, but a database query cannot
+        // see a new parent in this batch until SaveChanges. Keep those valid ancestors too.
+        validAncestorIdsSet.UnionWith(ids);
+
         foreach (var item in tuples)
         {
             if (item.Item.SupportsAncestors && item.AncestorIds != null)
@@ -427,6 +458,7 @@ public class ItemPersistenceService : IItemPersistenceService
                 .ToDictionary(g => g.Key, g => g.ToList());
         }
 
+        var orphanedLocalVersions = new HashSet<Guid>();
         foreach (var item in tuples)
         {
             if (item.Item is Folder folder)
@@ -625,6 +657,7 @@ public class ItemPersistenceService : IItemPersistenceService
                     {
                         var orphanedItems = context.BaseItems
                             .Where(e => orphanedLocalVersionIds.Contains(e.Id) && e.OwnerId == video.Id)
+                            .Select(e => e.Id)
                             .ToList();
 
                         if (orphanedItems.Count > 0)
@@ -634,7 +667,7 @@ public class ItemPersistenceService : IItemPersistenceService
                                 orphanedItems.Count,
                                 video.Name,
                                 video.Id);
-                            context.BaseItems.RemoveRange(orphanedItems);
+                            orphanedLocalVersions.UnionWith(orphanedItems);
                         }
                     }
                 }
@@ -642,6 +675,11 @@ public class ItemPersistenceService : IItemPersistenceService
         }
 
         context.SaveChanges();
+        if (orphanedLocalVersions.Count > 0)
+        {
+            DeleteItems(context, orphanedLocalVersions.ToArray());
+        }
+
         transaction.Commit();
     }
 
