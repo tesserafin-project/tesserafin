@@ -32,6 +32,8 @@
   <ItemGroup>
     <PackageReference Include="Diacritics" />
     <PackageReference Include="ICU4N.Transliterator" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Abstractions" VersionOverride="10.0.14" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" VersionOverride="10.0.14" />
   </ItemGroup>
 
 </Project>
