@@ -186,6 +186,91 @@ PY
 done
 rm -f /tmp/winx64-base-components.json
 
+# A change that OWNS the Linux runtime (#342 added Vulkan and libplacebo) trips
+# every statement above by design, and with them the native Windows builds that
+# `needs: controls` — the one proof such a change still owes. So the gate accepts
+# a Linux change only when it is declared and the inverse holds:
+#   1. the Linux identity is re-declared: ci/package/f0-accepted-digests.txt, the
+#      oracle the Linux packaging gates compare delivered bytes against, changed;
+#   2. no Windows build input changed — one pull request does not own both;
+#   3. the component set and fork-patch decision win-x64 takes are what master's
+#      are, so the Windows runtime cannot move through the shared catalogue.
+# The Windows builds then run and prove 3 on the bytes. A Windows change that
+# drifts Linux still fails here: it fails 2.
+if [[ "${FAILURES}" -gt 0 ]]; then
+    echo
+    echo "== the Linux change is declared and leaves win-x64 untouched"
+    DECLARED=1
+    if git diff --quiet "${BASE}" -- ci/package/f0-accepted-digests.txt; then
+        echo "  no  : ci/package/f0-accepted-digests.txt is unchanged, so the Linux identity was not re-declared"
+        DECLARED=0
+    else
+        pass "ci/package/f0-accepted-digests.txt re-declares the Linux identity"
+    fi
+    WIN_INPUTS="$(git diff --name-only "${BASE}" -- ci/windows/ffmpeg .github/workflows/w1-windows-ffmpeg-runtime.yml)"
+    if [[ -n "${WIN_INPUTS}" ]]; then
+        echo "  no  : Windows build inputs changed as well:"
+        while IFS= read -r f; do echo "          ${f}"; done <<<"${WIN_INPUTS}"
+        DECLARED=0
+    else
+        pass "no Windows build input differs from ${BASE}"
+    fi
+    git show "${BASE}:ci/ffmpeg/components.json" > /tmp/winx64-base-components.json
+    git show "${BASE}:ci/ffmpeg/fork-patches.json" > /tmp/winx64-base-fork-patches.json
+    if python3 - /tmp/winx64-base-components.json ci/ffmpeg/components.json \
+            /tmp/winx64-base-fork-patches.json ci/ffmpeg/fork-patches.json <<'PY'
+import json, sys
+
+arch = "win-x64"
+base_c, head_c, base_p, head_p = sys.argv[1:5]
+
+
+def components(path):
+    return [(c["name"], c["sourceType"], c.get("sha256") or c.get("commit"),
+             c.get("url") or c.get("repository"), c.get("license"),
+             bool(c.get("submodules", False)))
+            for c in json.load(open(path))["components"]
+            if c.get("architectures") is None or arch in c["architectures"]]
+
+
+def decision(path):
+    applied = []
+    for e in json.load(open(path))["patches"]:
+        taken = e["applied"]
+        for exc in e.get("platformExceptions", []):
+            if exc["platform"] == arch:
+                taken = exc["applied"]
+        if taken:
+            applied.append(e["patch"])
+    return sorted(applied)
+
+
+ok = True
+if components(base_c) != components(head_c):
+    print(f"    {arch}: the component set changed")
+    ok = False
+if decision(base_p) != decision(head_p):
+    print(f"    {arch}: the fork-patch decision changed")
+    ok = False
+if ok:
+    print(f"    {arch}: {len(components(head_c))} components and "
+          f"{len(decision(head_p))} applied patches, identical to the base")
+sys.exit(0 if ok else 1)
+PY
+    then
+        pass "win-x64 component set and fork-patch decision identical to ${BASE}"
+    else
+        echo "  no  : this tree moves the win-x64 runtime through the shared catalogue"
+        DECLARED=0
+    fi
+    rm -f /tmp/winx64-base-components.json /tmp/winx64-base-fork-patches.json
+    if [[ "${DECLARED}" -eq 1 ]]; then
+        echo
+        echo "LINUX IDENTITY: CHANGED BY DECLARATION — ${FAILURES} Linux statement(s) moved; win-x64 inputs unchanged"
+        exit 0
+    fi
+fi
+
 echo
 if [[ "${FAILURES}" -gt 0 ]]; then
     echo "LINUX IDENTITY: FAIL — ${FAILURES} check(s) failed" >&2

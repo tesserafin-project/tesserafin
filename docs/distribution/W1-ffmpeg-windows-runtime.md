@@ -157,6 +157,13 @@ resolved flag lists are byte-identical to `origin/master`, and the same
 `ci/ffmpeg/verify-components.sh` that gates the Linux flags is run against the
 Windows file with `--flags`.
 
+A change that owns the Linux runtime moves those statements on purpose. The gate
+accepts it only as a declared change: `ci/package/f0-accepted-digests.txt` is
+re-baselined, no Windows build input (`ci/windows/ffmpeg/**`, this workflow)
+changes in the same pull request, and the win-x64 component set and fork-patch
+decision equal the base. It then reports `CHANGED BY DECLARATION` and the native
+Windows builds still run.
+
 **Licence shape.** `--enable-gpl --enable-version3 --disable-nonfree
 --disable-libfdk-aac`. The runtime is distributed under GPL-3.0-or-later.
 
