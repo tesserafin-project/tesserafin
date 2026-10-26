@@ -40,6 +40,7 @@ published-image forward-migration proof.
 | Change/generate the canonical API contract | [OpenAPI contract](openapi-contract.md); use its current-status notes when reading historical sections |
 | Verify the paired generated Web SDK | [SDK provenance gate](../ci/verify-sdk-provenance.sh), [pair lock](../ci/web-pair.lock.json) |
 | Understand content-pack semantics | [Content-pack contract](content-pack-contract.md) |
+| Follow data-model reliability contracts and remaining work | [Data model reliability](data-model-reliability.md) |
 | Understand playback credentials | [Playback credential contract](playback-credential-server-contract.md) |
 | Run real-server integration evidence | [End-to-end guide](e2e-real-server.md) |
 
