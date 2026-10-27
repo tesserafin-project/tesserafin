@@ -58,7 +58,8 @@ Only one row per `(UserId, CustomDataKey)` can sit under the placeholder. The
 rows of the deleted items and an already detached placeholder row for the same
 user and key are arbitrated together, with the existing priorities:
 
-1. greatest `LastPlayedDate` (a missing date ranks last);
+1. greatest `LastPlayedDate` (a missing date ranks last, so two undated rows
+   fall through to the count);
 2. then greatest `PlayCount`;
 3. on a complete tie, an incoming row over the existing placeholder row
    (the previous outcome of every conflict);
@@ -78,12 +79,24 @@ always carried this deletion's date).
 
 ### Reattachment
 
-`ReattachUserDataAsync(item)` moves every placeholder row whose key is one of the
-item's user-data keys to that item and clears its retention date, for all users.
-When the item already holds a row for the same user and key, that active row is
-left unchanged and the detached row stays under the placeholder (still subject to
-retention); other users and keys are reattached. Before this rule, that conflict
-failed the UNIQUE key and rolled back the reattachment of every user.
+Callers: `MetadataService.SaveItemAsync` on an item's first refresh, and
+`Folder.ValidateChildrenInternal2` after removing children, for each remaining
+child (in enumeration order) sharing a removed child's user-data key. Each call
+runs its own transaction.
+
+`UserDataManager.SaveUserData` writes the same row under every key the item has
+at that moment, and reads take one row per user and item (`FirstOrDefault`, or
+the first row returned by the database). An item must therefore never hold two
+divergent rows for the same user.
+
+`ReattachUserDataAsync(item)` moves the placeholder rows whose key is one of the
+item's user-data keys to that item and clears their retention date, for every
+user **who holds no row on the item yet, under any key**. Such a user keeps the
+active row unchanged; their detached rows stay under the placeholder, still
+subject to retention. Before, a same-key conflict failed the UNIQUE key and
+rolled back every user's reattachment, and a conflict under another key (item
+played before its IMDb id was known) gave the user a second history that reads
+listed first.
 
 Reattachment is idempotent. With several candidate items for the same key, the
 first item reattached receives the detached history and later candidates receive
@@ -97,8 +110,10 @@ nothing; no sharing policy between ambiguous media is defined here.
   it. Today the active row wins and the old history stays detached until retention
   deletes it. Replacing or merging the active row is a product choice.
 - **Several candidate media.** Example: two editions with the same IMDb id are
-  added; whichever refreshes first takes the history. Assigning, copying or
-  splitting is a product choice.
+  added; whichever refreshes first takes the history, and after a removal the
+  folder walk reattaches in child enumeration order. Making that order stable
+  still decides which copy gets the history; assigning, copying or splitting is
+  a product choice.
 - **Fields other than `LastPlayedDate`/`PlayCount` on a complete tie.** Example:
   same date and count, but only the losing row is a favorite. The winner is kept
   whole; per-field merging is not done.
@@ -113,6 +128,9 @@ service:
 | Placeholder more relevant than incoming row | More relevant history discarded (`500` expected, `200` kept) | Kept |
 | Complete `LastPlayedDate`/`PlayCount` ties, both storage orders | Same winner (plan order) | Same winner (explicit rule) |
 | Placeholder and active row, same user/key, at reattachment | `UNIQUE constraint failed` for every user | Active kept, detached kept, other user reattached |
+| Active row under the item's own key, detached row under its IMDb key | Second, divergent history for that user, listed first | Detached row kept aside, one history |
+| Undated placeholder vs dated or undated incoming row | Incoming always kept | Date first, then count |
+| Several keys of one user, no active row | All attached | All attached |
 | Several candidates, repeated reattachment, two users | Holds | Holds |
 | Failure after the first reattached row | Whole database restored | Whole database restored |
 | Failure after placeholder arbitration (trigger) | Arbitration never reached | Whole database restored |

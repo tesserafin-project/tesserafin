@@ -597,6 +597,27 @@ public sealed class ItemPersistenceConservationTests : IDisposable
         AssertForeignKeys();
     }
 
+    [Fact]
+    public async Task ReattachUserData_SeveralKeysWithoutActiveRow_AttachEveryKey()
+    {
+        var movie = CandidateMovie("several-keys");
+        var ownKey = movie.Id.ToString();
+        var detachedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc);
+        AddHistory(BaseItemRepository.PlaceholderId, _userId, ImdbKey, day: 4, playCount: 4, ticks: 400, retention: detachedAt);
+        AddHistory(BaseItemRepository.PlaceholderId, _userId, ownKey, day: 4, playCount: 4, ticks: 400, retention: detachedAt);
+        AddHistory(BaseItemRepository.PlaceholderId, _otherUserId, ownKey, day: 5, playCount: 5, ticks: 500, retention: detachedAt);
+
+        await _service.ReattachUserDataAsync(movie, CancellationToken.None);
+
+        using var context = CreateContext();
+        Assert.Empty(context.UserData.Where(row => row.ItemId.Equals(BaseItemRepository.PlaceholderId)));
+        var rows = context.UserData.Where(row => row.ItemId.Equals(movie.Id)).ToArray();
+        Assert.Equal(3, rows.Length);
+        Assert.All(rows, row => Assert.Null(row.RetentionDate));
+        Assert.Equal(2, rows.Count(row => row.UserId.Equals(_userId)));
+        AssertForeignKeys();
+    }
+
     private Movie CandidateMovie(string name)
     {
         var entity = Item(name);

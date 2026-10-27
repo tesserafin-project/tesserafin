@@ -128,13 +128,14 @@ public class ItemPersistenceService : IItemPersistenceService
                 var retentionDate = (DateTime?)null;
                 var itemId = item.Id;
 
-                // A row the item already holds for the same user and key stays as is, and the
-                // detached row stays under the placeholder (subject to retention) rather than
-                // failing the UNIQUE key for every user of this item.
+                // A user who already holds a row on this item, under any of its keys, keeps it as
+                // is; that user's detached rows stay under the placeholder (subject to retention).
+                // Reattaching them would fail the UNIQUE key on the same key, or give the user a
+                // second, divergent history under another key that reads would pick at random.
                 await dbContext.UserData
                     .Where(e => e.ItemId == BaseItemRepository.PlaceholderId)
                     .Where(e => userKeys.Contains(e.CustomDataKey))
-                    .Where(e => !dbContext.UserData.Any(active => active.ItemId == itemId && active.UserId == e.UserId && active.CustomDataKey == e.CustomDataKey))
+                    .Where(e => !dbContext.UserData.Any(active => active.ItemId == itemId && active.UserId == e.UserId))
                     .ExecuteUpdateAsync(
                         e => e
                             .SetProperty(f => f.ItemId, item.Id)
