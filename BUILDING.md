@@ -94,7 +94,8 @@ enforcement), so a pull request cannot merge until they are green:
 
 | Check | Workflow | Proves |
 | --- | --- | --- |
-| `run-tests (ubuntu-latest)` | `ci-tests.yml` | build + full test suite |
+| `run-tests (ubuntu-latest)` | `ci-tests.yml` | build + every test project except the real-server suite |
+| `integration-tests (ubuntu-latest)` | `ci-tests.yml` | `Tesserafin.Server.Integration.Tests` (real-server end-to-end suite) |
 | `format-check` | `ci-format.yml` | `dotnet format` is clean |
 | `ABI - Controls/BASE/HEAD/Difference` | `ci-compat.yml` | no unintended public-ABI break |
 | `OpenAPI - Controls`, `Semantic Diff` | `openapi-pull-request.yml` | OpenAPI contract compatibility |

@@ -173,12 +173,73 @@ jobs:
       - name: Run DotNet CLI Tests
         # --filter matches ci/run.sh exactly: Category=Smoke is the optional,
         # explicitly non-blocking stage (PR115d), invoked by ./ci/smoke.sh.
+        # Tesserafin.Server.Integration.Tests runs in the integration-tests job
+        # below instead: on its own it takes 17-19 minutes, and together with
+        # the rest of the suite and a slow apt mirror it pushed this job past
+        # its 30-minute ceiling after every test had passed (run 40567555335).
+        # Every class of that project, and no class elsewhere, sits under that
+        # namespace, so the two filters partition the suite exactly.
         # Minute economy: coverage instrumentation and the ReportGenerator step
         # below run on master pushes only. On a pull request the question is
         # "does it build and pass", and coverage roughly doubles the test
         # stage for an answer nobody reads on the pull request itself.
         run: >
           dotnet test Tesserafin.sln
+          --configuration Release
+          --filter 'Category!=Smoke&FullyQualifiedName!~Tesserafin.Server.Integration.Tests.'
+          ${{ github.event_name == 'push' && '--collect:"XPlat Code Coverage" --settings tests/coverletArgs.runsettings' || '' }}
+          --verbosity minimal
+
+      - name: Merge code coverage results
+        if: ${{ github.event_name == 'push' }}
+        uses: danielpalme/ReportGenerator-GitHub-Action@049f7ec958c672fd31d5cc1cb01622dc8d2e23ab # v5.5.10
+        with:
+          reports: "**/coverage.cobertura.xml"
+          targetdir: "merged/"
+          reporttypes: "Cobertura"
+
+      # TODO - which action / tool to use to publish code coverage results?
+      # - name: Publish code coverage results
+
+  integration-tests:
+    # The real-server end-to-end suite, split out of run-tests so each job has
+    # its own 30-minute ceiling. Same trigger gate, matrix, runner setup and
+    # native dependencies as run-tests: the end-to-end tests are the ones that
+    # need ffmpeg (run 30230606313).
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        os: >-
+          ${{ github.event_name == 'workflow_dispatch'
+              && fromJSON('["ubuntu-latest", "macos-latest", "windows-latest"]')
+              || fromJSON('["ubuntu-latest"]') }}
+      fail-fast: true
+    runs-on: "${{ matrix.os }}"
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: ${{ env.SDK_VERSION }}
+
+      - name: Cache NuGet packages
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/Directory.Packages.props') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      - name: Install native test dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg libfontconfig1
+
+      - name: Run integration tests
+        # Same Category filter and coverage switch as run-tests.
+        run: >
+          dotnet test tests/Tesserafin.Server.Integration.Tests/Tesserafin.Server.Integration.Tests.csproj
           --configuration Release
           --filter 'Category!=Smoke'
           ${{ github.event_name == 'push' && '--collect:"XPlat Code Coverage" --settings tests/coverletArgs.runsettings' || '' }}
@@ -207,6 +268,3 @@ jobs:
           reports: "**/coverage.cobertura.xml"
           targetdir: "merged/"
           reporttypes: "Cobertura"
-
-      # TODO - which action / tool to use to publish code coverage results?
-      # - name: Publish code coverage results
