@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -17,6 +18,7 @@ using Tesserafin.Database.Implementations.Entities;
 using Tesserafin.Database.Implementations.Enums;
 using Tesserafin.Database.Implementations.Locking;
 using Tesserafin.Database.Providers.Sqlite;
+using Tesserafin.Model.Entities;
 using Tesserafin.Server.Implementations.Item;
 using Tesserafin.Server.Implementations.Tests.Library.LibraryManager;
 using Xunit;
@@ -27,6 +29,8 @@ namespace Tesserafin.Server.Implementations.Tests.Item;
 [Collection(LibraryManagerStaticStateFixture.Name)]
 public sealed class ItemPersistenceConservationTests : IDisposable
 {
+    private const string ImdbKey = "tt0351351";
+
     private readonly SqliteConnection _connection;
     private readonly DbContextOptions<TesserafinDbContext> _options;
     private readonly ILibraryManager _previousLibraryManager;
@@ -73,6 +77,8 @@ public sealed class ItemPersistenceConservationTests : IDisposable
 
         var factory = new Mock<IDbContextFactory<TesserafinDbContext>>();
         factory.Setup(value => value.CreateDbContext()).Returns(CreateContext);
+        factory.Setup(value => value.CreateDbContextAsync(It.IsAny<CancellationToken>()))
+            .Returns(() => Task.FromResult(CreateContext()));
         var appHost = new Mock<IServerApplicationHost>();
         appHost.Setup(value => value.ReverseVirtualPath(It.IsAny<string>())).Returns((string path) => path);
         _service = new ItemPersistenceService(factory.Object, appHost.Object, NullLogger<ItemPersistenceService>.Instance);
@@ -351,6 +357,219 @@ public sealed class ItemPersistenceConservationTests : IDisposable
         Assert.Contains("after-detach-and-membership-delete", error.GetBaseException().Message, StringComparison.Ordinal);
         Assert.Equal(before, Snapshot());
         AssertForeignKeys();
+    }
+
+    [Fact]
+    public void DeleteItem_PlaceholderMoreRelevantThanIncoming_KeepsTheMoreRelevantHistory()
+    {
+        var deleted = Item("deleted");
+        Seed(deleted);
+        var detachedBefore = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc);
+        AddHistory(BaseItemRepository.PlaceholderId, _userId, "arbitrated", day: 5, playCount: 9, ticks: 500, retention: detachedBefore);
+        AddHistory(deleted.Id, _userId, "arbitrated", day: 2, playCount: 2, ticks: 200);
+        AddHistory(BaseItemRepository.PlaceholderId, _otherUserId, "arbitrated", day: 1, playCount: 1, ticks: 111, retention: detachedBefore);
+        AddHistory(deleted.Id, _otherUserId, "arbitrated", day: 3, playCount: 3, ticks: 333);
+
+        _service.DeleteItem(deleted.Id);
+
+        AssertDeletedAndDetached(deleted);
+        using var context = CreateContext();
+        var rows = context.UserData.Where(row => row.CustomDataKey == "arbitrated").ToArray();
+        Assert.Equal(2, rows.Length);
+        Assert.All(rows, row =>
+        {
+            Assert.Equal(BaseItemRepository.PlaceholderId, row.ItemId);
+            Assert.True(row.RetentionDate > detachedBefore);
+        });
+        Assert.Equal(500, rows.Single(row => row.UserId.Equals(_userId)).PlaybackPositionTicks);
+        Assert.Equal(333, rows.Single(row => row.UserId.Equals(_otherUserId)).PlaybackPositionTicks);
+        AssertForeignKeys();
+    }
+
+    [Fact]
+    public void DeleteItem_CompleteTies_ResolveTheSameWayWhateverTheStorageOrder()
+    {
+        var low = Item("low", id: Guid.Parse("10000000-0000-0000-0000-000000000000"));
+        var high = Item("high", id: Guid.Parse("20000000-0000-0000-0000-000000000000"));
+        Seed(low, high);
+
+        // Same LastPlayedDate and PlayCount; only the storage order and the remaining fields differ.
+        AddHistory(low.Id, _userId, "low-first", day: 4, playCount: 4, ticks: 100);
+        AddHistory(high.Id, _userId, "low-first", day: 4, playCount: 4, ticks: 200);
+        AddHistory(high.Id, _userId, "high-first", day: 4, playCount: 4, ticks: 200);
+        AddHistory(low.Id, _userId, "high-first", day: 4, playCount: 4, ticks: 100);
+
+        // A full tie with an existing placeholder keeps the incoming row, as before.
+        AddHistory(BaseItemRepository.PlaceholderId, _otherUserId, "placeholder-tie", day: 4, playCount: 4, ticks: 900);
+        AddHistory(high.Id, _otherUserId, "placeholder-tie", day: 4, playCount: 4, ticks: 200);
+
+        _service.DeleteItem([high.Id, low.Id]);
+
+        AssertDeletedAndDetached(low, high);
+        using var context = CreateContext();
+        var lowFirst = context.UserData.Single(row => row.CustomDataKey == "low-first");
+        var highFirst = context.UserData.Single(row => row.CustomDataKey == "high-first");
+        var placeholderTie = context.UserData.Single(row => row.CustomDataKey == "placeholder-tie");
+        Assert.All(new[] { lowFirst, highFirst, placeholderTie }, row => Assert.Equal(BaseItemRepository.PlaceholderId, row.ItemId));
+        Assert.Equal(lowFirst.PlaybackPositionTicks, highFirst.PlaybackPositionTicks);
+        Assert.Equal(100, lowFirst.PlaybackPositionTicks);
+        Assert.Equal(200, placeholderTie.PlaybackPositionTicks);
+        AssertForeignKeys();
+    }
+
+    [Fact]
+    public void FailureAfterPlaceholderArbitration_RestoresTheWholeDatabase()
+    {
+        var deleted = Item("arbitrated");
+        Seed(deleted);
+        AddHistory(BaseItemRepository.PlaceholderId, _userId, "arbitrated", day: 5, playCount: 9, ticks: 500, retention: new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc));
+        AddHistory(deleted.Id, _userId, "arbitrated", day: 2, playCount: 2, ticks: 200);
+        using (var context = CreateContext())
+        {
+            // Fails only once the losing incoming row is gone and the kept placeholder was refreshed.
+            context.Database.ExecuteSqlRaw("""
+                CREATE TRIGGER fail_after_arbitration BEFORE DELETE ON BaseItems
+                WHEN OLD.Name = 'arbitrated'
+                BEGIN
+                  SELECT CASE WHEN
+                    NOT EXISTS (SELECT 1 FROM UserData WHERE ItemId = OLD.Id)
+                    AND EXISTS (SELECT 1 FROM UserData
+                      WHERE ItemId = '00000000-0000-0000-0000-000000000001'
+                        AND CustomDataKey = 'arbitrated' AND PlaybackPositionTicks = 500
+                        AND RetentionDate > '2026-09-02')
+                  THEN RAISE(ABORT, 'after-arbitration')
+                  ELSE RAISE(ABORT, 'before-arbitration') END;
+                END;
+                """);
+        }
+
+        var before = Snapshot();
+        var error = Assert.ThrowsAny<Exception>(() => _service.DeleteItem(deleted.Id));
+
+        Assert.Contains("after-arbitration", error.GetBaseException().Message, StringComparison.Ordinal);
+        Assert.Equal(before, Snapshot());
+        AssertForeignKeys();
+    }
+
+    [Fact]
+    public async Task ReattachUserData_PlaceholderAndActiveRowForTheSameUserAndKey_KeepsBothAndReattachesOthers()
+    {
+        var movie = CandidateMovie("reattached");
+        var detachedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc);
+        AddHistory(movie.Id, _userId, ImdbKey, day: 4, playCount: 4, ticks: 400);
+        AddHistory(BaseItemRepository.PlaceholderId, _userId, ImdbKey, day: 6, playCount: 6, ticks: 600, retention: detachedAt);
+        AddHistory(BaseItemRepository.PlaceholderId, _otherUserId, ImdbKey, day: 2, playCount: 2, ticks: 222, retention: detachedAt);
+
+        await _service.ReattachUserDataAsync(movie, CancellationToken.None);
+
+        using var context = CreateContext();
+        var active = context.UserData.Single(row => row.ItemId.Equals(movie.Id) && row.UserId.Equals(_userId));
+        Assert.Equal(400, active.PlaybackPositionTicks);
+        Assert.Null(active.RetentionDate);
+        var stillDetached = context.UserData.Single(row => row.ItemId.Equals(BaseItemRepository.PlaceholderId) && row.UserId.Equals(_userId));
+        Assert.Equal(600, stillDetached.PlaybackPositionTicks);
+        Assert.Equal(detachedAt, stillDetached.RetentionDate);
+        var reattached = context.UserData.Single(row => row.ItemId.Equals(movie.Id) && row.UserId.Equals(_otherUserId));
+        Assert.Equal(222, reattached.PlaybackPositionTicks);
+        Assert.Null(reattached.RetentionDate);
+        Assert.Equal(2, movie.UserData!.Count);
+        AssertForeignKeys();
+    }
+
+    [Fact]
+    public async Task ReattachUserData_SeveralCandidatesAndRepeatedCalls_AttachOnceAndIsolateUsers()
+    {
+        var first = CandidateMovie("first-candidate");
+        var second = CandidateMovie("second-candidate");
+        var detachedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc);
+        AddHistory(BaseItemRepository.PlaceholderId, _userId, ImdbKey, day: 3, playCount: 3, ticks: 300, retention: detachedAt);
+        AddHistory(BaseItemRepository.PlaceholderId, _otherUserId, ImdbKey, day: 5, playCount: 5, ticks: 500, retention: detachedAt);
+        AddHistory(BaseItemRepository.PlaceholderId, _userId, "unrelated-key", day: 1, playCount: 1, ticks: 1, retention: detachedAt);
+
+        await _service.ReattachUserDataAsync(first, CancellationToken.None);
+        var afterFirst = Snapshot();
+        await _service.ReattachUserDataAsync(first, CancellationToken.None);
+        Assert.Equal(afterFirst, Snapshot());
+        await _service.ReattachUserDataAsync(second, CancellationToken.None);
+        Assert.Equal(afterFirst, Snapshot());
+
+        using var context = CreateContext();
+        var attached = context.UserData.Where(row => row.CustomDataKey == ImdbKey).ToArray();
+        Assert.Equal(2, attached.Length);
+        Assert.All(attached, row =>
+        {
+            Assert.Equal(first.Id, row.ItemId);
+            Assert.Null(row.RetentionDate);
+        });
+        Assert.Equal(300, attached.Single(row => row.UserId.Equals(_userId)).PlaybackPositionTicks);
+        Assert.Equal(500, attached.Single(row => row.UserId.Equals(_otherUserId)).PlaybackPositionTicks);
+        Assert.Equal(2, first.UserData!.Count);
+        Assert.Empty(second.UserData!);
+        var unrelated = context.UserData.Single(row => row.CustomDataKey == "unrelated-key");
+        Assert.Equal(BaseItemRepository.PlaceholderId, unrelated.ItemId);
+        Assert.Equal(detachedAt, unrelated.RetentionDate);
+        AssertForeignKeys();
+    }
+
+    [Fact]
+    public async Task ReattachUserData_FailureAfterTheFirstReattachedRow_RestoresTheWholeDatabase()
+    {
+        var movie = CandidateMovie("reattached");
+        var detachedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc);
+        AddHistory(BaseItemRepository.PlaceholderId, _userId, ImdbKey, day: 3, playCount: 3, ticks: 300, retention: detachedAt);
+        AddHistory(BaseItemRepository.PlaceholderId, _otherUserId, ImdbKey, day: 5, playCount: 5, ticks: 500, retention: detachedAt);
+        using (var context = CreateContext())
+        {
+            await context.Database.ExecuteSqlRawAsync(
+                """
+                CREATE TRIGGER fail_after_first_reattach AFTER UPDATE ON UserData
+                WHEN NEW.ItemId <> '00000000-0000-0000-0000-000000000001'
+                  AND (SELECT COUNT(*) FROM UserData WHERE ItemId = NEW.ItemId) = 2
+                BEGIN
+                  SELECT RAISE(ABORT, 'after-first-reattach');
+                END;
+                """,
+                TestContext.Current.CancellationToken);
+        }
+
+        var before = Snapshot();
+        var error = await Assert.ThrowsAnyAsync<Exception>(() => _service.ReattachUserDataAsync(movie, CancellationToken.None));
+
+        Assert.Contains("after-first-reattach", error.GetBaseException().Message, StringComparison.Ordinal);
+        Assert.Equal(before, Snapshot());
+        AssertForeignKeys();
+    }
+
+    private Movie CandidateMovie(string name)
+    {
+        var entity = Item(name);
+        using (var context = CreateContext())
+        {
+            context.BaseItems.Add(entity);
+            context.SaveChanges();
+        }
+
+        var movie = new Movie { Id = entity.Id, Name = name, SortName = name };
+        movie.SetProviderId(MetadataProvider.Imdb, ImdbKey);
+        return movie;
+    }
+
+    private void AddHistory(Guid itemId, Guid userId, string key, int day, int playCount, long ticks, DateTime? retention = null)
+    {
+        using var context = CreateContext();
+        context.UserData.Add(new UserData
+        {
+            ItemId = itemId,
+            Item = null,
+            UserId = userId,
+            User = null,
+            CustomDataKey = key,
+            LastPlayedDate = new DateTime(2026, 10, day, 0, 0, 0, DateTimeKind.Utc),
+            PlayCount = playCount,
+            PlaybackPositionTicks = ticks,
+            RetentionDate = retention
+        });
+        context.SaveChanges();
     }
 
     private void Seed(params BaseItemEntity[] items)
