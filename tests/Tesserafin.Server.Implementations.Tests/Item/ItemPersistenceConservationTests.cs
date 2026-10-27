@@ -540,6 +540,63 @@ public sealed class ItemPersistenceConservationTests : IDisposable
         AssertForeignKeys();
     }
 
+    [Fact]
+    public void DeleteItem_MissingLastPlayedDates_RankLastThenPlayCountDecides()
+    {
+        var deleted = Item("deleted");
+        Seed(deleted);
+        var detachedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        // A dated incoming row outranks an undated placeholder, whatever its count.
+        AddHistory(BaseItemRepository.PlaceholderId, _userId, "undated", day: null, playCount: 9, ticks: 900, retention: detachedAt);
+        AddHistory(deleted.Id, _userId, "undated", day: 1, playCount: 1, ticks: 100);
+
+        // Both undated: PlayCount decides, so the placeholder is kept.
+        AddHistory(BaseItemRepository.PlaceholderId, _otherUserId, "undated", day: null, playCount: 9, ticks: 900, retention: detachedAt);
+        AddHistory(deleted.Id, _otherUserId, "undated", day: null, playCount: 2, ticks: 200);
+
+        _service.DeleteItem(deleted.Id);
+
+        using var context = CreateContext();
+        var rows = context.UserData.Where(row => row.CustomDataKey == "undated").ToArray();
+        Assert.Equal(2, rows.Length);
+        Assert.All(rows, row => Assert.Equal(BaseItemRepository.PlaceholderId, row.ItemId));
+        Assert.Equal(100, rows.Single(row => row.UserId.Equals(_userId)).PlaybackPositionTicks);
+        Assert.Equal(900, rows.Single(row => row.UserId.Equals(_otherUserId)).PlaybackPositionTicks);
+        AssertForeignKeys();
+    }
+
+    [Fact]
+    public async Task ReattachUserData_ActiveRowUnderAnotherKey_KeepsOneHistoryPerUser()
+    {
+        // The item was played before its IMDb id was known, so its active row sits under its own
+        // id key only. A detached row under the IMDb key must not give that user a second,
+        // divergent history on the same item: reads pick one row per user and item.
+        var movie = CandidateMovie("played-before-imdb");
+        var ownKey = movie.Id.ToString();
+        var detachedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc);
+        AddHistory(movie.Id, _userId, ownKey, day: 6, playCount: 6, ticks: 600);
+        AddHistory(BaseItemRepository.PlaceholderId, _userId, ImdbKey, day: 2, playCount: 2, ticks: 200, retention: detachedAt);
+        AddHistory(BaseItemRepository.PlaceholderId, _otherUserId, ImdbKey, day: 3, playCount: 3, ticks: 300, retention: detachedAt);
+        var unrelated = Item("unrelated");
+        Seed(unrelated);
+
+        await _service.ReattachUserDataAsync(movie, CancellationToken.None);
+
+        using var context = CreateContext();
+        var userRows = context.UserData.Where(row => row.ItemId.Equals(movie.Id) && row.UserId.Equals(_userId)).ToArray();
+        Assert.All(userRows, row => Assert.Equal(600, row.PlaybackPositionTicks));
+        var stillDetached = context.UserData.Single(row => row.ItemId.Equals(BaseItemRepository.PlaceholderId) && row.UserId.Equals(_userId));
+        Assert.Equal(200, stillDetached.PlaybackPositionTicks);
+        Assert.Equal(detachedAt, stillDetached.RetentionDate);
+        var otherRow = context.UserData.Single(row => row.ItemId.Equals(movie.Id) && row.UserId.Equals(_otherUserId));
+        Assert.Equal(300, otherRow.PlaybackPositionTicks);
+        Assert.Null(otherRow.RetentionDate);
+        Assert.All(movie.UserData!.GroupBy(row => row.UserId), rows => Assert.Single(rows.Select(row => row.PlaybackPositionTicks).Distinct()));
+        AssertKept(unrelated);
+        AssertForeignKeys();
+    }
+
     private Movie CandidateMovie(string name)
     {
         var entity = Item(name);
@@ -554,7 +611,7 @@ public sealed class ItemPersistenceConservationTests : IDisposable
         return movie;
     }
 
-    private void AddHistory(Guid itemId, Guid userId, string key, int day, int playCount, long ticks, DateTime? retention = null)
+    private void AddHistory(Guid itemId, Guid userId, string key, int? day, int playCount, long ticks, DateTime? retention = null)
     {
         using var context = CreateContext();
         context.UserData.Add(new UserData
@@ -564,7 +621,7 @@ public sealed class ItemPersistenceConservationTests : IDisposable
             UserId = userId,
             User = null,
             CustomDataKey = key,
-            LastPlayedDate = new DateTime(2026, 10, day, 0, 0, 0, DateTimeKind.Utc),
+            LastPlayedDate = day is null ? null : new DateTime(2026, 10, day.Value, 0, 0, 0, DateTimeKind.Utc),
             PlayCount = playCount,
             PlaybackPositionTicks = ticks,
             RetentionDate = retention
