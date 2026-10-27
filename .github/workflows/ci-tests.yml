@@ -116,30 +116,39 @@ env:
   SDK_VERSION: "10.0.x"
 
 jobs:
-  run-tests:
-    # Minute economy: draft pull requests do not spend runner time. Marking a
-    # pull request ready for review triggers a fresh run.
+  test-suites:
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
-
-    # Minute economy: a hard ceiling. Without it a hung test run bills up to
-    # the 6-hour default. The local gate finishes the same work in ~5 min.
     timeout-minutes: 30
-
     strategy:
-      # See the OS matrix note in the restoration stamp: automatic runs are
-      # ubuntu-latest only, because macOS (x10) and Windows (x2) minute
-      # multipliers are what exhausted the free allowance in July 2026. The
-      # full matrix stays reachable by hand through workflow_dispatch.
+      # Preserve the automatic Linux gate and the manually requested OS matrix.
       matrix:
         os: >-
           ${{ github.event_name == 'workflow_dispatch'
               && fromJSON('["ubuntu-latest", "macos-latest", "windows-latest"]')
               || fromJSON('["ubuntu-latest"]') }}
-      # Minute economy: stop the remaining OS legs as soon as one fails.
-      # Nothing here needs the full failure matrix to be actionable.
+        suite:
+          # Complementary filters retain every non-Smoke test. Keep the full
+          # solution build in the unit leg, including projects without tests.
+          - name: unit
+            target: Tesserafin.sln
+            filter: 'Category!=Smoke&FullyQualifiedName!~Tesserafin.Server.Integration.Tests.'
+          - name: integration
+            target: tests/Tesserafin.Server.Integration.Tests/Tesserafin.Server.Integration.Tests.csproj
+            filter: 'Category!=Smoke&FullyQualifiedName!~Tesserafin.Server.Integration.Tests.EndToEnd.'
+          - name: end-to-end
+            target: tests/Tesserafin.Server.Integration.Tests/Tesserafin.Server.Integration.Tests.csproj
+            filter: 'Category!=Smoke&FullyQualifiedName~Tesserafin.Server.Integration.Tests.EndToEnd.'
       fail-fast: true
+    name: Tests - ${{ matrix.suite.name }} (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      TEST_TARGET: ${{ matrix.suite.target }}
+      TEST_FILTER: ${{ matrix.suite.filter }}
+      TEST_RESULTS: ${{ github.workspace }}/artifacts/test-results/${{ matrix.suite.name }}
 
-    runs-on: "${{ matrix.os }}"
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
@@ -147,66 +156,123 @@ jobs:
         with:
           dotnet-version: ${{ env.SDK_VERSION }}
 
-      # Minute economy: NuGet restore is the single most repetitive cost in
-      # this job. The local gate caches it in a named Docker volume; this is
-      # the hosted equivalent.
       - name: Cache NuGet packages
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/Directory.Packages.props') }}
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/Directory.Packages.props', 'nuget.config', 'global.json') }}
           restore-keys: ${{ runner.os }}-nuget-
 
-      # Same native dependencies Dockerfile.ci installs for the local gate.
-      # Without ffmpeg the MediaEncoding and PlaybackUrlContract end-to-end
-      # tests fail on a bare hosted runner even though the tree is sound —
-      # proven by run 30230606313, which failed 2 MediaEncoding and 12
-      # Integration tests for exactly that reason. libfontconfig1 is what
-      # SkiaSharp.NativeAssets.Linux needs. This is what makes the hosted job
-      # equivalent to ./ci/run.sh rather than a weaker approximation of it.
+      # All three suites include native tests. Preserve ffmpeg/fontconfig;
+      # bound slow mirrors rather than letting apt consume the job budget.
       - name: Install native test dependencies
         if: runner.os == 'Linux'
+        timeout-minutes: 5
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ffmpeg libfontconfig1
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 install -y --no-install-recommends ffmpeg libfontconfig1
+
+      # Separate timings show whether restore, compilation or tests regressed.
+      # Build outputs remain local to this exact checkout; only NuGet is cached.
+      - name: Restore
+        run: dotnet restore "$TEST_TARGET" --verbosity minimal
+
+      - name: Build
+        run: dotnet build "$TEST_TARGET" --configuration Release --no-restore --verbosity minimal
 
       - name: Run DotNet CLI Tests
-        # --filter matches ci/run.sh exactly: Category=Smoke is the optional,
-        # explicitly non-blocking stage (PR115d), invoked by ./ci/smoke.sh.
-        # Minute economy: coverage instrumentation and the ReportGenerator step
-        # below run on master pushes only. On a pull request the question is
-        # "does it build and pass", and coverage roughly doubles the test
-        # stage for an answer nobody reads on the pull request itself.
-        run: >
-          dotnet test Tesserafin.sln
-          --configuration Release
-          --filter 'Category!=Smoke'
+        id: tests
+        # Match ci/run.sh's optional Smoke exclusion. Keep coverage on master
+        # pushes and merge all three suites below; PRs remain uninstrumented.
+        run: >-
+          dotnet test "$TEST_TARGET"
+          --configuration Release --no-build
+          --filter "$TEST_FILTER"
           ${{ github.event_name == 'push' && '--collect:"XPlat Code Coverage" --settings tests/coverletArgs.runsettings' || '' }}
+          --logger trx
+          --results-directory "$TEST_RESULTS"
           --verbosity minimal
 
-      # Diagnosis, not enforcement. The OpenAPI equality assertion is unchanged and still
-      # fails the job; this only stops a cross-machine divergence from being unreproducible.
-      # A run that disagrees used to print two hashes and discard both documents, and the
-      # machine that reports the difference is by definition not the machine you can
-      # reproduce it on. The test writes the pair only on mismatch, so on a green run there
-      # is nothing to upload and this step no-ops. Contents are the two canonical contracts
-      # and their hashes — no secrets, no environment, no absolute paths.
+      - name: Summarize test durations
+        if: ${{ !cancelled() && steps.tests.outcome != 'skipped' }}
+        run: python ci/summarize-test-results.py "$TEST_RESULTS"
+
+      - name: Retain test results
+        if: ${{ !cancelled() && steps.tests.outcome != 'skipped' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-results-${{ matrix.suite.name }}-${{ matrix.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/test-results/**/*.trx
+          if-no-files-found: error
+          retention-days: 3
+
+      # The assertion still fails the suite. Retain only the canonical contracts
+      # and their hashes, as before, when diagnosing cross-machine drift.
       - name: Retain OpenAPI drift evidence
         if: ${{ failure() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: openapi-drift-${{ matrix.os }}-${{ github.run_id }}
+          name: openapi-drift-${{ matrix.suite.name }}-${{ matrix.os }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: artifacts/openapi-drift/
           if-no-files-found: ignore
           retention-days: 3
 
-      - name: Merge code coverage results
+      - name: Retain suite coverage
         if: ${{ github.event_name == 'push' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-${{ matrix.suite.name }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/test-results/**/coverage.cobertura.xml
+          if-no-files-found: error
+          retention-days: 3
+
+  coverage:
+    if: ${{ github.event_name == 'push' }}
+    needs: test-suites
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: coverage-*-${{ github.run_id }}-${{ github.run_attempt }}
+          path: coverage/
+
+      - name: Merge code coverage results
         uses: danielpalme/ReportGenerator-GitHub-Action@049f7ec958c672fd31d5cc1cb01622dc8d2e23ab # v5.5.10
         with:
-          reports: "**/coverage.cobertura.xml"
+          reports: "coverage/**/coverage.cobertura.xml"
           targetdir: "merged/"
           reporttypes: "Cobertura"
 
-      # TODO - which action / tool to use to publish code coverage results?
-      # - name: Publish code coverage results
+      - name: Retain merged coverage
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-merged-${{ github.run_id }}-${{ github.run_attempt }}
+          path: merged/Cobertura.xml
+          if-no-files-found: error
+          retention-days: 3
+
+  # Keep the existing required check names. An ordinary `needs` job is skipped
+  # on failure, which GitHub can accept as a passing required check. Always run
+  # the verdict and explicitly reject failures, cancellation and skipped suites.
+  run-tests:
+    if: ${{ always() && (github.event_name != 'pull_request' || github.event.pull_request.draft == false) }}
+    needs: [test-suites, coverage]
+    strategy:
+      matrix:
+        os: >-
+          ${{ github.event_name == 'workflow_dispatch'
+              && fromJSON('["ubuntu-latest", "macos-latest", "windows-latest"]')
+              || fromJSON('["ubuntu-latest"]') }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - name: Verify all test suites and coverage
+        shell: bash
+        env:
+          SUITES_RESULT: ${{ needs.test-suites.result }}
+          COVERAGE_RESULT: ${{ needs.coverage.result }}
+          EXPECTED_COVERAGE: ${{ github.event_name == 'push' && 'success' || 'skipped' }}
+        run: |
+          test "$SUITES_RESULT" = success
+          test "$COVERAGE_RESULT" = "$EXPECTED_COVERAGE"
