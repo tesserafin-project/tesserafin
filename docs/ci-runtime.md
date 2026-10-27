@@ -47,6 +47,17 @@ outputs built in the same job, not cached binaries. NuGet remains cached; native
 dependencies remain installed in every Linux suite, with bounded HTTP waits and
 a five-minute installation timeout. No test timeout or assertion is relaxed.
 
+The first hosted run of this layout ([40576004694](https://github.com/tesserafin-project/tesserafin/actions/runs/40576004694))
+hit that timeout in the end-to-end suite: `apt-get update` took seconds, but the
+Azure mirror stalled on individual archives for up to a minute each and only 84
+of 87 packages arrived in five minutes. The downloaded `.deb` archives are
+therefore cached (`~/.cache/native-test-debs`, used as apt's archive directory),
+keyed on the runner image and restored from the previous image's key. apt still
+resolves every package against fresh lists and only downloads versions missing
+from the cache, so the installed set is unchanged; a warm run downloads nothing.
+Matrix `fail-fast` is off: in the same run the passing integration suite was
+cancelled because the end-to-end suite failed, discarding its verdict and report.
+
 PRs remain uninstrumented. Master pushes collect coverage in all three suites,
 merge it in a separate job, and retain the merged Cobertura report. The existing
 `run-tests (ubuntu-latest)` required-check name remains an explicit verdict over
