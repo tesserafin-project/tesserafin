@@ -49,17 +49,75 @@ ids that are neither persisted nor in the batch.
 ## Conservation policy and limits
 
 The existing placeholder model, user/key isolation and retention date assignment
-remain in use. When several deleted items share `(UserId, CustomDataKey)`, the
-existing batch arbitration keeps the greatest `LastPlayedDate`, then `PlayCount`.
-Incoming rows still replace conflicting pre-existing placeholder rows. Neither
-the quality of that latter policy nor the determinism of complete ties is solved
-here. There is no new purge, migration or change to the existing retention task.
+remain in use. There is no new purge, migration or change to the existing
+retention task.
 
-Active/placeholder conflicts at reattachment, competing candidate media and
-identity or retention policy changes remain work for #351 and the relevant
-decisions in #360. These tests do not close either tracker.
+### Arbitration at deletion
 
-## Reproduction and verification
+Only one row per `(UserId, CustomDataKey)` can sit under the placeholder. The
+rows of the deleted items and an already detached placeholder row for the same
+user and key are arbitrated together, with the existing priorities:
+
+1. greatest `LastPlayedDate` (a missing date ranks last);
+2. then greatest `PlayCount`;
+3. on a complete tie, an incoming row over the existing placeholder row
+   (the previous outcome of every conflict);
+4. then the lowest `ItemId`, so the result never depends on storage order.
+
+The winning row is kept whole; no field is merged from a losing row. Losers are
+deleted. The kept row is under the placeholder with this deletion's retention
+date, whether it came in now or was already detached (previously the key also
+always carried this deletion's date).
+
+| Example (same user, same key) | Before | Now |
+| --- | --- | --- |
+| Placeholder played 2026-10-05 ×9, deleted item played 2026-10-02 ×2 | Placeholder discarded, older history kept | Placeholder kept, retention date refreshed |
+| Placeholder played 2026-10-01 ×1, deleted item played 2026-10-03 ×3 | Incoming kept | Incoming kept |
+| Placeholder and deleted item both 2026-10-04 ×4 | Incoming kept | Incoming kept |
+| Two deleted items both 2026-10-04 ×4 | Lowest `ItemId` in the observed SQLite plan | Lowest `ItemId`, explicitly |
+
+### Reattachment
+
+`ReattachUserDataAsync(item)` moves every placeholder row whose key is one of the
+item's user-data keys to that item and clears its retention date, for all users.
+When the item already holds a row for the same user and key, that active row is
+left unchanged and the detached row stays under the placeholder (still subject to
+retention); other users and keys are reattached. Before this rule, that conflict
+failed the UNIQUE key and rolled back the reattachment of every user.
+
+Reattachment is idempotent. With several candidate items for the same key, the
+first item reattached receives the detached history and later candidates receive
+nothing; no sharing policy between ambiguous media is defined here.
+
+### Product decisions left open
+
+- **Active row versus more relevant detached row at reattachment.** Example: a
+  user watched a film to the end (2026-10-06, ×6), the file was deleted, the film
+  was re-added and started (2026-10-04, ×1) before metadata refresh reattached
+  it. Today the active row wins and the old history stays detached until retention
+  deletes it. Replacing or merging the active row is a product choice.
+- **Several candidate media.** Example: two editions with the same IMDb id are
+  added; whichever refreshes first takes the history. Assigning, copying or
+  splitting is a product choice.
+- **Fields other than `LastPlayedDate`/`PlayCount` on a complete tie.** Example:
+  same date and count, but only the losing row is a favorite. The winner is kept
+  whole; per-field merging is not done.
+
+## Reproduction and verification of the #351 slice
+
+Before the fix (base `8496c120d8`, #363 head), on migrated SQLite through the real
+service:
+
+| Scenario | Before | After |
+| --- | --- | --- |
+| Placeholder more relevant than incoming row | More relevant history discarded (`500` expected, `200` kept) | Kept |
+| Complete `LastPlayedDate`/`PlayCount` ties, both storage orders | Same winner (plan order) | Same winner (explicit rule) |
+| Placeholder and active row, same user/key, at reattachment | `UNIQUE constraint failed` for every user | Active kept, detached kept, other user reattached |
+| Several candidates, repeated reattachment, two users | Holds | Holds |
+| Failure after the first reattached row | Whole database restored | Whole database restored |
+| Failure after placeholder arbitration (trigger) | Arbitration never reached | Whole database restored |
+
+## Reproduction and verification of the deletion scope
 
 `ItemPersistenceConservationTests` invokes the actual persistence service with
 SQLite initialized by the existing migrations. It mocks domain item lookup for

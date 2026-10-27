@@ -126,10 +126,15 @@ public class ItemPersistenceService : IItemPersistenceService
             {
                 var userKeys = item.GetUserDataKeys().ToArray();
                 var retentionDate = (DateTime?)null;
+                var itemId = item.Id;
 
+                // A row the item already holds for the same user and key stays as is, and the
+                // detached row stays under the placeholder (subject to retention) rather than
+                // failing the UNIQUE key for every user of this item.
                 await dbContext.UserData
                     .Where(e => e.ItemId == BaseItemRepository.PlaceholderId)
                     .Where(e => userKeys.Contains(e.CustomDataKey))
+                    .Where(e => !dbContext.UserData.Any(active => active.ItemId == itemId && active.UserId == e.UserId && active.CustomDataKey == e.CustomDataKey))
                     .ExecuteUpdateAsync(
                         e => e
                             .SetProperty(f => f.ItemId, item.Id)
@@ -154,40 +159,59 @@ public class ItemPersistenceService : IItemPersistenceService
         var relatedItems = GetDeletionIds(context, ids);
         var date = (DateTime?)DateTime.UtcNow;
 
-        // When batch-deleting, multiple items may have UserData for the same (UserId, CustomDataKey).
-        // Moving all of them to PlaceholderId would violate the UNIQUE constraint.
-        // Deduplicate by loading keys client-side, keeping the best row per group.
+        // When batch-deleting, multiple items may have UserData for the same (UserId, CustomDataKey),
+        // and the placeholder may already hold a detached row for it. Only one row per group can
+        // stay under PlaceholderId (UNIQUE key), so arbitrate the incoming rows and the existing
+        // placeholder row together: latest LastPlayedDate, then highest PlayCount. A complete tie
+        // keeps an incoming row over the placeholder, then the lowest ItemId, so the result never
+        // depends on storage order.
         var batchUserData = context.UserData.WhereOneOrMany(relatedItems, e => e.ItemId);
 
-        var allRows = batchUserData
+        var incomingRows = batchUserData
             .Select(ud => new { ud.ItemId, ud.UserId, ud.CustomDataKey, ud.LastPlayedDate, ud.PlayCount })
             .ToList();
 
-        var duplicateRows = allRows
-            .GroupBy(ud => new { ud.UserId, ud.CustomDataKey })
-            .Where(g => g.Count() > 1)
-            .SelectMany(g => g
-                .OrderByDescending(ud => ud.LastPlayedDate)
-                .ThenByDescending(ud => ud.PlayCount)
-                .Skip(1))
-            .ToList();
-
-        foreach (var dup in duplicateRows)
-        {
-            context.UserData
-                .Where(ud => ud.ItemId == dup.ItemId && ud.UserId == dup.UserId && ud.CustomDataKey == dup.CustomDataKey)
-                .ExecuteDelete();
-        }
-
-        // Delete existing placeholder rows that would conflict with the incoming ones
-        context.UserData
+        var placeholderRows = context.UserData
             .Join(
                 batchUserData,
                 placeholder => new { placeholder.UserId, placeholder.CustomDataKey },
                 userData => new { userData.UserId, userData.CustomDataKey },
                 (placeholder, userData) => placeholder)
             .Where(e => e.ItemId == BaseItemRepository.PlaceholderId)
-            .ExecuteDelete();
+            .Select(ud => new { ud.ItemId, ud.UserId, ud.CustomDataKey, ud.LastPlayedDate, ud.PlayCount })
+            .ToList()
+            .Distinct();
+
+        var groups = incomingRows
+            .Concat(placeholderRows)
+            .GroupBy(ud => new { ud.UserId, ud.CustomDataKey })
+            .Where(g => g.Count() > 1)
+            .Select(g => g
+                .OrderByDescending(ud => ud.LastPlayedDate)
+                .ThenByDescending(ud => ud.PlayCount)
+                .ThenBy(ud => ud.ItemId.Equals(BaseItemRepository.PlaceholderId))
+                .ThenBy(ud => ud.ItemId)
+                .ToList())
+            .ToList();
+
+        foreach (var group in groups)
+        {
+            foreach (var loser in group.Skip(1))
+            {
+                context.UserData
+                    .Where(ud => ud.ItemId == loser.ItemId && ud.UserId == loser.UserId && ud.CustomDataKey == loser.CustomDataKey)
+                    .ExecuteDelete();
+            }
+
+            // A kept placeholder row was detached again by this deletion, as an incoming row would be.
+            var winner = group[0];
+            if (winner.ItemId.Equals(BaseItemRepository.PlaceholderId))
+            {
+                context.UserData
+                    .Where(ud => ud.ItemId == winner.ItemId && ud.UserId == winner.UserId && ud.CustomDataKey == winner.CustomDataKey)
+                    .ExecuteUpdate(e => e.SetProperty(f => f.RetentionDate, date));
+            }
+        }
 
         batchUserData
             .ExecuteUpdate(e => e
