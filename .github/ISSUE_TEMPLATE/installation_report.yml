@@ -1,0 +1,98 @@
+name: Installation report
+description: Share a successful, partial or failed installation, especially on ARM64 or a NAS.
+title: "[Installation report]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Help us verify the published installation guides on independent machines.
+        Successful and unsuccessful runs both help. See the [report guide](https://github.com/tesserafin-project/tesserafin/blob/master/docs/installation-reports.md) and [collection tracker #117](https://github.com/tesserafin-project/tesserafin/issues/117).
+        This is public: remove passwords, tokens, personal paths and addresses. Do not attach a database, backup, complete configuration or unreviewed logs.
+        Suspected vulnerabilities belong in the repository's Security tab → Report a vulnerability, not here.
+  - type: dropdown
+    id: installation-path
+    attributes:
+      label: Installation path
+      options:
+        - Docker Compose on Linux
+        - Unraid container template
+        - Synology DSM Container Manager
+        - Native Linux package or archive
+        - Windows portable ZIP
+        - Other (describe below)
+    validations:
+      required: true
+  - type: textarea
+    id: host
+    attributes:
+      label: Host and tools
+      description: Include hardware/CPU model, OS or NAS version, actual host architecture and container architecture. State native hardware, VM or emulation; include Docker/Compose or container-manager versions when applicable. No serial numbers needed.
+      placeholder: "Example: ARM64 NAS model, DSM version, native ARM64 container; Container Manager version."
+    validations:
+      required: true
+  - type: textarea
+    id: artifact
+    attributes:
+      label: Exact installed artifact
+      description: For containers, give the requested image tag/digest AND locally pulled RepoDigest(s), plus the running image ID if available. For native installs, give the release URL, exact filename and checksum if available. Include the displayed server version. If a value could not be obtained, say so and why.
+    validations:
+      required: true
+  - type: dropdown
+    id: initial-state
+    attributes:
+      label: State before this run
+      options:
+        - Fresh state directories or volumes on a host new to Tesserafin
+        - Fresh isolated state on a host used for Tesserafin before
+        - Existing Tesserafin state (describe version and changes below)
+        - Imported or restored state (describe below)
+        - Unknown (explain below)
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Guide and actual steps
+      description: Link the guide/revision followed and list what you actually did, including deviations, permission changes, named volumes vs bind mounts and any previous state. Use generic paths; do not paste a complete .env or configuration.
+    validations:
+      required: true
+  - type: textarea
+    id: journey
+    attributes:
+      label: Startup, onboarding and first use
+      description: For each stage, record passed, failed or not tested, and describe failures. A healthy API alone does not establish that the browser wizard works. Playback is useful context, not hardware-acceleration certification.
+      value: |
+        - Startup and health:
+        - Browser opens the Web UI:
+        - First-run wizard (or why not applicable):
+        - Sign-in and first library visible:
+        - First playback (optional; describe direct play/transcoding if known):
+    validations:
+      required: true
+  - type: textarea
+    id: persistence
+    attributes:
+      label: Persistence after restart and replacement
+      description: Record restart and container recreation separately, including the actual steps, state paths retained and whether account, library and a chosen preference survived. Use the same artifact and persistent state; do not remove volumes. Native installs can mark container recreation not applicable. Not tested is a useful answer; do not risk your main installation to complete this field.
+      value: |
+        - Restart (passed / failed / not tested):
+        - Container recreation (passed / failed / not tested / not applicable):
+        - Steps, retained state and observations:
+    validations:
+      required: true
+  - type: dropdown
+    id: outcome
+    attributes:
+      label: Overall outcome
+      options:
+        - Completed all applicable installation and persistence checks
+        - Installation works; some checks not tested
+        - Partially working or required a workaround
+        - Could not install or start
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Relevant evidence and follow-up issues (optional)
+      description: Paste only short, reviewed excerpts or redacted screenshots. Include errors and links to existing bugs; omit credentials, identifying media names and private paths. No logs are required for a successful report.

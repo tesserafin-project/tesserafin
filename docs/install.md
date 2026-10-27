@@ -118,6 +118,11 @@ and first library. [The user guide](user-guide.md) describes the next steps.
 Metadata providers require your own optional credentials; see
 [provider configuration](metadata-provider-keys.md).
 
+[Share your installation results](installation-reports.md), whether the setup
+worked, failed or remains incomplete. Independent native ARM64 and NAS reports
+help verify the guides; the form records onboarding and state persistence
+separately.
+
 | Symptom | Check |
 | --- | --- |
 | Connection refused | Process/service/container status, configured address/port and host network policy. |

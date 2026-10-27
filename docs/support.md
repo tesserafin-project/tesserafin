@@ -18,6 +18,12 @@ There are exactly two, and they are not interchangeable.
 Server, container, packaging, API: [tesserafin issues](https://github.com/tesserafin-project/tesserafin/issues).
 Browser client and UI: [tesserafin-web issues](https://github.com/tesserafin-project/tesserafin-web/issues).
 
+Successful, partial and failed installation runs can use the
+[installation report form and guide](installation-reports.md). These remain
+public server issues, collected under
+[#117](https://github.com/tesserafin-project/tesserafin/issues/117); no bug is
+required to share a result.
+
 If you are unsure whether something has security impact, **use the private form**. A maintainer
 will move it to a public issue if it turns out not to.
 

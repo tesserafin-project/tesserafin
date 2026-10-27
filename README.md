@@ -78,6 +78,11 @@ The public container package is `ghcr.io/tesserafin-project/server`. Private
 build packages and inherited development images are not installation fallbacks.
 No mutable public image channel is published.
 
+**Tried an installation on your own machine?**
+[Share an installation report](docs/installation-reports.md), including successful
+or incomplete runs. Native ARM64, Unraid and Synology DSM reports are especially
+useful for checking the published guides on independent hardware.
+
 ## Product principles
 
 - **The essential self-hosted server core is Free Software**, licensed
