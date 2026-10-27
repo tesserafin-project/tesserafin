@@ -284,6 +284,7 @@ public sealed class MixedListingVisibilityEndToEndTests : IDisposable
             (s.PrivateList, "mix private list"), (s.SharedList, "mix shared list"), (s.PublicList, "mix public list"),
         };
         var refused = new List<(Guid Id, string Name)>();
+        var unseen = new HashSet<Guid>();
         foreach (var item in guarded)
         {
             using var response = await client.GetAsync(FormattableString.Invariant($"Items/{item.Id}?userId={userId}"), TestContext.Current.CancellationToken);
@@ -291,12 +292,18 @@ public sealed class MixedListingVisibilityEndToEndTests : IDisposable
             {
                 refused.Add(item);
             }
+            else
+            {
+                unseen.Add(item.Id);
+            }
         }
 
         if (refused.Count == 0)
         {
             _wrong.Add(state + ": the oracle refuses nothing, so the listings below prove nothing");
         }
+
+        var answered = 0;
 
         foreach (var parent in parents)
         {
@@ -311,9 +318,11 @@ public sealed class MixedListingVisibilityEndToEndTests : IDisposable
                         continue;
                     }
 
+                    answered++;
                     var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
                     using var document = JsonDocument.Parse(body);
                     var ids = document.RootElement.GetProperty("Items").EnumerateArray().Select(i => Guid.Parse(i.GetProperty("Id").GetString()!)).ToList();
+                    unseen.ExceptWith(ids);
                     foreach (var (id, name) in refused)
                     {
                         if (ids.Contains(id) || body.Contains(name, StringComparison.Ordinal))
@@ -323,6 +332,18 @@ public sealed class MixedListingVisibilityEndToEndTests : IDisposable
                     }
                 }
             }
+        }
+
+        // A refused listing proves nothing: some must answer, and together they must still list
+        // every box set or playlist access by id admits.
+        if (answered == 0)
+        {
+            _wrong.Add(state + ": no parent-scoped listing answered, so none was checked");
+        }
+
+        foreach (var id in unseen)
+        {
+            _wrong.Add(FormattableString.Invariant($"{state}: no parent-scoped listing holds {id}, admitted by id"));
         }
     }
 
