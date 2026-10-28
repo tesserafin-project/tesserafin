@@ -120,20 +120,21 @@ public sealed class DisplayPreferencesManager : IDisplayPreferencesManager
         // Replace the whole set atomically: without the transaction the delete commits on its own,
         // so concurrent saves interleave into a mix of both sets (or fail on the unique index), and a
         // failed insert loses every stored preference.
-        using var transaction = dbContext.Database.BeginTransaction();
-        dbContext.CustomItemDisplayPreferences.Where(prefs => prefs.UserId.Equals(userId)
-                            && prefs.ItemId.Equals(itemId)
-                            && prefs.Client == client)
-                            .ExecuteDelete();
-
-        foreach (var (key, value) in customPreferences)
+        InTransaction(dbContext, () =>
         {
-            dbContext.CustomItemDisplayPreferences
-                .Add(new CustomItemDisplayPreferences(userId, itemId, client, key, value));
-        }
+            dbContext.CustomItemDisplayPreferences.Where(prefs => prefs.UserId.Equals(userId)
+                                && prefs.ItemId.Equals(itemId)
+                                && prefs.Client == client)
+                                .ExecuteDelete();
 
-        dbContext.SaveChanges();
-        transaction.Commit();
+            foreach (var (key, value) in customPreferences)
+            {
+                dbContext.CustomItemDisplayPreferences
+                    .Add(new CustomItemDisplayPreferences(userId, itemId, client, key, value));
+            }
+
+            dbContext.SaveChanges();
+        });
     }
 
     /// <inheritdoc/>
@@ -145,23 +146,24 @@ public sealed class DisplayPreferencesManager : IDisplayPreferencesManager
         // sections removed from the collection would stay in the database, and edits to loaded ones would
         // be ignored. Delete the removed ones explicitly and save the loaded ones as modified, in one
         // transaction so a concurrent save cannot interleave with it.
-        using var transaction = dbContext.Database.BeginTransaction();
-        var keptSectionIds = displayPreferences.HomeSections
-            .Where(section => section.Id != 0)
-            .Select(section => section.Id)
-            .ToList();
-        dbContext.Set<HomeSection>()
-            .Where(section => section.DisplayPreferencesId == displayPreferences.Id && !keptSectionIds.Contains(section.Id))
-            .ExecuteDelete();
-
-        dbContext.DisplayPreferences.Attach(displayPreferences).State = EntityState.Modified;
-        foreach (var section in displayPreferences.HomeSections.Where(section => section.Id != 0))
+        InTransaction(dbContext, () =>
         {
-            dbContext.Entry(section).State = EntityState.Modified;
-        }
+            var keptSectionIds = displayPreferences.HomeSections
+                .Where(section => section.Id != 0)
+                .Select(section => section.Id)
+                .ToList();
+            dbContext.Set<HomeSection>()
+                .Where(section => section.DisplayPreferencesId == displayPreferences.Id && !keptSectionIds.Contains(section.Id))
+                .ExecuteDelete();
 
-        dbContext.SaveChanges();
-        transaction.Commit();
+            dbContext.DisplayPreferences.Attach(displayPreferences).State = EntityState.Modified;
+            foreach (var section in displayPreferences.HomeSections.Where(section => section.Id != 0))
+            {
+                dbContext.Entry(section).State = EntityState.Modified;
+            }
+
+            dbContext.SaveChanges();
+        });
     }
 
     /// <inheritdoc/>
@@ -170,5 +172,22 @@ public sealed class DisplayPreferencesManager : IDisplayPreferencesManager
         using var dbContext = _dbContextFactory.CreateDbContext();
         dbContext.ItemDisplayPreferences.Attach(itemDisplayPreferences).State = EntityState.Modified;
         dbContext.SaveChanges();
+    }
+
+    private static void InTransaction(TesserafinDbContext dbContext, Action write)
+    {
+        using var transaction = dbContext.Database.BeginTransaction();
+        try
+        {
+            write();
+            transaction.Commit();
+        }
+        catch
+        {
+            // Roll back explicitly: disposing an uncommitted transaction does not reach the transaction
+            // interceptors, so the pessimistic locking mode would never release its database write lock.
+            transaction.Rollback();
+            throw;
+        }
     }
 }

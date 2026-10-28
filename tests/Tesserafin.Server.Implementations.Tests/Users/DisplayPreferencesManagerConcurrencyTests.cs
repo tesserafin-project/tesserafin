@@ -11,6 +11,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Tesserafin.Common.Extensions;
 using Tesserafin.Database.Implementations;
+using Tesserafin.Database.Implementations.DbConfiguration;
 using Tesserafin.Database.Implementations.Entities;
 using Tesserafin.Database.Implementations.Enums;
 using Tesserafin.Database.Implementations.Locking;
@@ -21,32 +22,43 @@ using Xunit;
 namespace Tesserafin.Server.Implementations.Tests.Users;
 
 /// <summary>
-/// Display preference writes against a migrated SQLite file, one connection per context as in
-/// production, so that concurrent requests really interleave at the database.
+/// Display preference writes against a migrated SQLite file, configured by the production provider
+/// (pooled connections, WAL, one connection per context), so that concurrent requests really
+/// interleave at the database. Runs once per database locking mode an administrator can select.
 /// </summary>
-public sealed class DisplayPreferencesManagerConcurrencyTests : IDisposable
+public abstract class DisplayPreferencesManagerConcurrencyTests : IDisposable
 {
     private const int Writers = 8;
     private const int Rounds = 10;
 
     private readonly string _directory;
+    private readonly IEntityFrameworkCoreLockingBehavior _locking;
     private readonly DbContextOptions<TesserafinDbContext> _dbOptions;
     private readonly IDbContextFactory<TesserafinDbContext> _factory;
     private readonly Guid _userId;
 
-    public DisplayPreferencesManagerConcurrencyTests()
+    protected DisplayPreferencesManagerConcurrencyTests(IEntityFrameworkCoreLockingBehavior locking)
     {
+        _locking = locking;
         _directory = Path.Combine(Path.GetTempPath(), "tesserafin-prefs-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_directory);
-        var connectionString = new SqliteConnectionStringBuilder
-        {
-            DataSource = Path.Combine(_directory, "tesserafin.db"),
-            Pooling = false,
-            DefaultTimeout = 30
-        }.ToString();
-        _dbOptions = new DbContextOptionsBuilder<TesserafinDbContext>()
-            .UseSqlite(connectionString, options => options.MigrationsAssembly(typeof(SqliteDatabaseProvider).Assembly))
-            .Options;
+        var builder = new DbContextOptionsBuilder<TesserafinDbContext>();
+        new SqliteDatabaseProvider(null!, NullLogger<SqliteDatabaseProvider>.Instance).Initialise(
+            builder,
+            new DatabaseConfigurationOptions
+            {
+                DatabaseType = "Tesserafin-SQLite",
+                LockingBehavior = DatabaseLockingBehaviorTypes.NoLock,
+                CustomProviderOptions = new CustomDatabaseOptions
+                {
+                    PluginName = "Tesserafin-SQLite",
+                    PluginAssembly = string.Empty,
+                    ConnectionString = string.Empty,
+                    Options = { new CustomDatabaseOption { Key = "path", Value = Path.Combine(_directory, "tesserafin.db") } },
+                },
+            });
+        locking.Initialise(builder);
+        _dbOptions = builder.Options;
 
         using var context = CreateDbContext();
         context.Database.Migrate();
@@ -62,8 +74,17 @@ public sealed class DisplayPreferencesManagerConcurrencyTests : IDisposable
 
     public void Dispose()
     {
-        SqliteConnection.ClearAllPools();
-        Directory.Delete(_directory, true);
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            SqliteConnection.ClearAllPools();
+            Directory.Delete(_directory, true);
+        }
     }
 
     [Fact]
@@ -283,8 +304,8 @@ public sealed class DisplayPreferencesManagerConcurrencyTests : IDisposable
             return self;
         });
 
-        // Nothing stays open between the writes and this read: pooling is off, so this is a new
-        // connection to the database file, through a new manager.
+        // Close every pooled connection: this read opens a new connection to the database file,
+        // through a new manager.
         SqliteConnection.ClearAllPools();
         var reopened = new DisplayPreferencesManager(_factory);
         for (var index = 0; index < scopes.Length; index++)
@@ -303,6 +324,7 @@ public sealed class DisplayPreferencesManagerConcurrencyTests : IDisposable
     [Fact]
     public void SetCustomItemDisplayPreferences_FailedSaveKeepsThePreviousSet()
     {
+        SkipWhenSaveFailuresAreSwallowed();
         var itemId = Guid.NewGuid();
         new DisplayPreferencesManager(_factory).SetCustomItemDisplayPreferences(
             _userId,
@@ -325,6 +347,7 @@ public sealed class DisplayPreferencesManagerConcurrencyTests : IDisposable
     [Fact]
     public void UpdateDisplayPreferences_FailedSaveKeepsThePreviousHomeSections()
     {
+        SkipWhenSaveFailuresAreSwallowed();
         var manager = new DisplayPreferencesManager(_factory);
         var itemId = Guid.NewGuid();
         var preferences = manager.GetDisplayPreferences(_userId, itemId, "web");
@@ -451,6 +474,14 @@ public sealed class DisplayPreferencesManagerConcurrencyTests : IDisposable
             .ToArray();
     }
 
+    private void SkipWhenSaveFailuresAreSwallowed()
+    {
+        // OptimisticLockBehavior.OnSaveChanges runs the save through ExecuteAndCapture and discards the
+        // result: a failed save returns normally, so the caller commits whatever ran before it. That
+        // affects every write in this mode, not only display preferences, and is tracked separately.
+        Assert.SkipWhen(_locking is OptimisticLockBehavior, "The optimistic locking mode swallows save failures.");
+    }
+
     private Guid AddUser()
     {
         using var context = CreateDbContext();
@@ -489,13 +520,46 @@ public sealed class DisplayPreferencesManagerConcurrencyTests : IDisposable
 
     private TesserafinDbContext CreateDbContext() => CreateDbContext(_dbOptions);
 
-    private static TesserafinDbContext CreateDbContext(DbContextOptions<TesserafinDbContext> options)
+    private TesserafinDbContext CreateDbContext(DbContextOptions<TesserafinDbContext> options)
     {
         return new TesserafinDbContext(
             options,
             NullLogger<TesserafinDbContext>.Instance,
             new SqliteDatabaseProvider(null!, NullLogger<SqliteDatabaseProvider>.Instance),
-            new NoLockBehavior(NullLogger<NoLockBehavior>.Instance));
+            _locking);
+    }
+
+    /// <summary>
+    /// The default mode.
+    /// </summary>
+    public sealed class NoLock : DisplayPreferencesManagerConcurrencyTests
+    {
+        public NoLock()
+            : base(new NoLockBehavior(NullLogger<NoLockBehavior>.Instance))
+        {
+        }
+    }
+
+    /// <summary>
+    /// A process-wide reader/writer lock around commands and transactions.
+    /// </summary>
+    public sealed class Pessimistic : DisplayPreferencesManagerConcurrencyTests
+    {
+        public Pessimistic()
+            : base(new PessimisticLockBehavior(NullLogger<PessimisticLockBehavior>.Instance, NullLoggerFactory.Instance))
+        {
+        }
+    }
+
+    /// <summary>
+    /// Retries of commands and transactions that find the database locked.
+    /// </summary>
+    public sealed class Optimistic : DisplayPreferencesManagerConcurrencyTests
+    {
+        public Optimistic()
+            : base(new OptimisticLockBehavior(NullLogger<OptimisticLockBehavior>.Instance))
+        {
+        }
     }
 
     /// <summary>
