@@ -30,12 +30,11 @@
 # stable; it cannot catch an order that differs between hosts. Running the
 # same test on a hosted runner can, and that is what caught this one.
 #
-# NOT restored by this: required status checks. GET .../branches/master/protection
-# and GET .../rulesets both return 403 "Upgrade to GitHub Pro or make this
-# repository public to enable this feature" (private repository, free
-# organisation plan). This workflow reports a status automatically; nothing can
-# make that status mandatory. #94 stays open for that reason, and ./ci/run.sh
-# remains the authoritative merge gate.
+# Required status checks: since branch protection became available on master,
+# `run-tests (ubuntu-latest)` and `integration-tests (ubuntu-latest)` are both
+# required contexts (see "What runs in CI" in BUILDING.md). A job skipped by its
+# own `if:` reports under its bare name, before matrix expansion, so the
+# required context stays missing and blocks the merge rather than passing.
 #
 # ── Parking stamp (historical, 2026-07-19 allocation outage) ───────────────
 # PARKED — manual trigger only (issue #62). GitHub refuses to allocate a
@@ -164,13 +163,54 @@ jobs:
       # Integration tests for exactly that reason. libfontconfig1 is what
       # SkiaSharp.NativeAssets.Linux needs. This is what makes the hosted job
       # equivalent to ./ci/run.sh rather than a weaker approximation of it.
-      - name: Install native test dependencies
+      #
+      # The Azure Ubuntu mirror answers `apt-get update` in seconds but can stall
+      # on individual .deb downloads: on 2026-10-27 this step took 213 s, 251 s
+      # and over 313 s (runs 40563807559, 40567555335, 40576004694) against a
+      # usual 15-30 s, and on 2026-10-22 it took 19 and 30 minutes. Keep the
+      # downloaded archives between runs so a normal run fetches nothing, and
+      # bound the step so a stalled mirror fails fast and visibly instead of
+      # eating the job's 30-minute ceiling. Key on the runner image: a new image
+      # restores the previous archives and downloads only what changed. The
+      # cache only spares downloads; versions are still resolved against fresh
+      # package lists. Caches written by a pull request are visible to that
+      # pull request only; master pushes seed the shared one.
+      - name: Native package cache key
+        id: native-key
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ffmpeg libfontconfig1
+          echo "prefix=native-debs-${ImageOS}-" >> "$GITHUB_OUTPUT"
+          echo "key=native-debs-${ImageOS}-${ImageVersion}" >> "$GITHUB_OUTPUT"
+
+      - name: Cache native test packages
+        if: runner.os == 'Linux'
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/native-test-debs
+          key: ${{ steps.native-key.outputs.key }}
+          restore-keys: ${{ steps.native-key.outputs.prefix }}
+
+      - name: Install native test dependencies
+        if: runner.os == 'Linux'
+        # integration-tests needs up to ~21 minutes besides this step, so 8
+        # minutes is the most apt can take without the job timing out anyway.
+        timeout-minutes: 8
+        run: ci/install-native-test-deps.sh
+
+      # Tests in the Tesserafin.Server.Integration.Tests namespace are excluded
+      # here by name and run in integration-tests, which runs only that project.
+      # One declared in any other project would therefore run in neither job.
+      - name: Check the unit/integration partition
+        shell: bash
+        run: |
+          if grep -rlE --include='*.cs' '^[[:space:]]*namespace[[:space:]]+Tesserafin\.Server\.Integration\.Tests([.;{[:space:]]|$)' . \
+            | grep -v '^\./tests/Tesserafin\.Server\.Integration\.Tests/'; then
+            echo "::error::The files above declare the Tesserafin.Server.Integration.Tests namespace outside that project, so neither run-tests nor integration-tests would run their tests."
+            exit 1
+          fi
 
       - name: Run DotNet CLI Tests
+        id: tests
         # --filter matches ci/run.sh exactly: Category=Smoke is the optional,
         # explicitly non-blocking stage (PR115d), invoked by ./ci/smoke.sh.
         # Tesserafin.Server.Integration.Tests runs in the integration-tests job
@@ -188,7 +228,16 @@ jobs:
           --configuration Release
           --filter 'Category!=Smoke&FullyQualifiedName!~Tesserafin.Server.Integration.Tests.'
           ${{ github.event_name == 'push' && '--collect:"XPlat Code Coverage" --settings tests/coverletArgs.runsettings' || '' }}
+          --logger trx
+          --results-directory artifacts/test-results/unit
           --verbosity minimal
+
+      # `dotnet test` exits 0 when the filter matches nothing, so without this a
+      # broken filter or target would report a green check that ran no test.
+      - name: Check test results
+        if: ${{ !cancelled() && steps.tests.outcome != 'skipped' }}
+        shell: bash
+        run: '"$(command -v python3 || command -v python)" ci/summarize-test-results.py artifacts/test-results/unit'
 
       - name: Merge code coverage results
         if: ${{ github.event_name == 'push' }}
@@ -230,20 +279,49 @@ jobs:
           key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/Directory.Packages.props') }}
           restore-keys: ${{ runner.os }}-nuget-
 
-      - name: Install native test dependencies
+      - name: Native package cache key
+        id: native-key
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ffmpeg libfontconfig1
+          echo "prefix=native-debs-${ImageOS}-" >> "$GITHUB_OUTPUT"
+          echo "key=native-debs-${ImageOS}-${ImageVersion}" >> "$GITHUB_OUTPUT"
+
+      - name: Cache native test packages
+        if: runner.os == 'Linux'
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/native-test-debs
+          key: ${{ steps.native-key.outputs.key }}
+          restore-keys: ${{ steps.native-key.outputs.prefix }}
+
+      - name: Install native test dependencies
+        if: runner.os == 'Linux'
+        timeout-minutes: 8
+        run: ci/install-native-test-deps.sh
 
       - name: Run integration tests
+        id: tests
         # Same Category filter and coverage switch as run-tests.
         run: >
           dotnet test tests/Tesserafin.Server.Integration.Tests/Tesserafin.Server.Integration.Tests.csproj
           --configuration Release
           --filter 'Category!=Smoke'
           ${{ github.event_name == 'push' && '--collect:"XPlat Code Coverage" --settings tests/coverletArgs.runsettings' || '' }}
+          --logger trx
+          --results-directory artifacts/test-results/integration
           --verbosity minimal
+
+      # Besides rejecting a run that executed nothing, require the two OpenAPI
+      # contract tests this job exists to run on a second machine: renaming,
+      # skipping or filtering them out must turn this check red, not leave it
+      # green with the cross-machine half of the contract guard gone.
+      - name: Check test results
+        if: ${{ !cancelled() && steps.tests.outcome != 'skipped' }}
+        shell: bash
+        run: >
+          "$(command -v python3 || command -v python)" ci/summarize-test-results.py artifacts/test-results/integration
+          --require Tesserafin.Server.Integration.Tests.OpenApiContractTests.CommittedContract_MatchesRunningServer
+          --require Tesserafin.Server.Integration.Tests.OpenApiContractTests.Contract_IsByteIdentical_AcrossColdGenerations
 
       # Diagnosis, not enforcement. The OpenAPI equality assertion is unchanged and still
       # fails the job; this only stops a cross-machine divergence from being unreproducible.
