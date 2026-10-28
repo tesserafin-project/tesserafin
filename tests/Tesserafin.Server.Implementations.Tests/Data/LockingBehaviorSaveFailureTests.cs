@@ -332,6 +332,11 @@ public abstract class LockingBehaviorSaveFailureTests : IDisposable
             _locking);
     }
 
+    // The three modes are nested deliberately: each one only passes its locking behavior to the base
+    // class, and SA1402 forbids a second type in this file. xUnit needs test classes public, so the
+    // accessibility escape hatch CA1034 offers is closed; suppressed as in PlaybackSessionsControllerTests.
+#pragma warning disable CA1034 // Nested types should not be visible
+
     /// <summary>
     /// The default mode.
     /// </summary>
@@ -374,6 +379,8 @@ public abstract class LockingBehaviorSaveFailureTests : IDisposable
             Assert.Equal("while-locked", ReadSet()["added"]);
         }
     }
+
+#pragma warning restore CA1034
 
     /// <summary>
     /// Fails the first save of the context, after any statement the caller ran before it.
