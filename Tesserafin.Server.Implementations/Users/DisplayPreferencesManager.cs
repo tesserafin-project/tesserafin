@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using Microsoft.EntityFrameworkCore;
 using Tesserafin.Controller;
 using Tesserafin.Database.Implementations;
@@ -15,6 +16,12 @@ public sealed class DisplayPreferencesManager : IDisplayPreferencesManager
 {
     private readonly IDbContextFactory<TesserafinDbContext> _dbContextFactory;
 
+    // Serializes find-or-create. ItemDisplayPreferences has no unique index on (UserId, ItemId, Client),
+    // and legacy duplicates of the global scope must be kept, so the database cannot reject a second
+    // row; DisplayPreferences does have one, which turns the same race into a failed request instead.
+    // Creation only happens once per scope, so the lock is taken on a cache miss only.
+    private readonly Lock _createLock = new();
+
     /// <summary>
     /// Initializes a new instance of the <see cref="DisplayPreferencesManager"/> class.
     /// </summary>
@@ -28,36 +35,61 @@ public sealed class DisplayPreferencesManager : IDisplayPreferencesManager
     public DisplayPreferences GetDisplayPreferences(Guid userId, Guid itemId, string client)
     {
         using var dbContext = _dbContextFactory.CreateDbContext();
-        var prefs = dbContext.DisplayPreferences
+        DisplayPreferences? Find() => dbContext.DisplayPreferences
             .Include(pref => pref.HomeSections)
             .FirstOrDefault(pref =>
                 pref.UserId.Equals(userId) && pref.Client == client && pref.ItemId.Equals(itemId));
 
-        if (prefs is null)
+        var prefs = Find();
+        if (prefs is not null)
         {
-            prefs = new DisplayPreferences(userId, itemId, client);
-            dbContext.DisplayPreferences.Add(prefs);
-            dbContext.SaveChanges();
+            return prefs;
         }
 
-        return prefs;
+        lock (_createLock)
+        {
+            prefs = Find();
+            if (prefs is null)
+            {
+                prefs = new DisplayPreferences(userId, itemId, client);
+                dbContext.DisplayPreferences.Add(prefs);
+                dbContext.SaveChanges();
+            }
+
+            return prefs;
+        }
     }
 
     /// <inheritdoc />
     public ItemDisplayPreferences GetItemDisplayPreferences(Guid userId, Guid itemId, string client)
     {
         using var dbContext = _dbContextFactory.CreateDbContext();
-        var prefs = dbContext.ItemDisplayPreferences
-            .FirstOrDefault(pref => pref.UserId.Equals(userId) && pref.ItemId.Equals(itemId) && pref.Client == client);
 
-        if (prefs is null)
+        // Legacy databases can hold several rows for one scope. Always read the oldest one, so that
+        // reads and the update that follows them keep targeting the same row.
+        ItemDisplayPreferences? Find() => dbContext.ItemDisplayPreferences
+            .Where(pref => pref.UserId.Equals(userId) && pref.ItemId.Equals(itemId) && pref.Client == client)
+            .OrderBy(pref => pref.Id)
+            .FirstOrDefault();
+
+        var prefs = Find();
+        if (prefs is not null)
         {
-            prefs = new ItemDisplayPreferences(userId, itemId, client);
-            dbContext.ItemDisplayPreferences.Add(prefs);
-            dbContext.SaveChanges();
+            return prefs;
         }
 
-        return prefs;
+        lock (_createLock)
+        {
+            prefs = Find();
+            if (prefs is null)
+            {
+                prefs = new ItemDisplayPreferences(userId, itemId, client);
+                dbContext.ItemDisplayPreferences.Add(prefs);
+                dbContext.SaveChanges();
+            }
+
+            return prefs;
+        }
     }
 
     /// <inheritdoc />
@@ -84,6 +116,11 @@ public sealed class DisplayPreferencesManager : IDisplayPreferencesManager
     public void SetCustomItemDisplayPreferences(Guid userId, Guid itemId, string client, Dictionary<string, string?> customPreferences)
     {
         using var dbContext = _dbContextFactory.CreateDbContext();
+
+        // Replace the whole set atomically: without the transaction the delete commits on its own,
+        // so concurrent saves interleave into a mix of both sets (or fail on the unique index), and a
+        // failed insert loses every stored preference.
+        using var transaction = dbContext.Database.BeginTransaction();
         dbContext.CustomItemDisplayPreferences.Where(prefs => prefs.UserId.Equals(userId)
                             && prefs.ItemId.Equals(itemId)
                             && prefs.Client == client)
@@ -96,14 +133,35 @@ public sealed class DisplayPreferencesManager : IDisplayPreferencesManager
         }
 
         dbContext.SaveChanges();
+        transaction.Commit();
     }
 
     /// <inheritdoc/>
     public void UpdateDisplayPreferences(DisplayPreferences displayPreferences)
     {
         using var dbContext = _dbContextFactory.CreateDbContext();
+
+        // The entity was loaded by another context. Attaching it only marks new home sections as added:
+        // sections removed from the collection would stay in the database, and edits to loaded ones would
+        // be ignored. Delete the removed ones explicitly and save the loaded ones as modified, in one
+        // transaction so a concurrent save cannot interleave with it.
+        using var transaction = dbContext.Database.BeginTransaction();
+        var keptSectionIds = displayPreferences.HomeSections
+            .Where(section => section.Id != 0)
+            .Select(section => section.Id)
+            .ToList();
+        dbContext.Set<HomeSection>()
+            .Where(section => section.DisplayPreferencesId == displayPreferences.Id && !keptSectionIds.Contains(section.Id))
+            .ExecuteDelete();
+
         dbContext.DisplayPreferences.Attach(displayPreferences).State = EntityState.Modified;
+        foreach (var section in displayPreferences.HomeSections.Where(section => section.Id != 0))
+        {
+            dbContext.Entry(section).State = EntityState.Modified;
+        }
+
         dbContext.SaveChanges();
+        transaction.Commit();
     }
 
     /// <inheritdoc/>
