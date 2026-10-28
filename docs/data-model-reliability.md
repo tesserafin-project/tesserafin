@@ -38,7 +38,9 @@ preservation of ambiguous legacy global rows.
 ## Display preferences: concurrent writes
 
 Contract, enforced by `DisplayPreferencesManagerConcurrencyTests` on a migrated
-SQLite file with one connection per context:
+SQLite file configured by the production provider (pooled connections, WAL, one
+connection per context), under each database locking mode, and over HTTP by
+`DisplayPreferencesControllerTests`:
 
 - Concurrent first reads of one `(UserId, ItemId, Client)` scope create exactly
   one `DisplayPreferences` row and one `ItemDisplayPreferences` row, and every
@@ -52,6 +54,25 @@ SQLite file with one connection per context:
   set intact.
 - Concurrent saves of one scope end with one writer's complete set (last write
   wins), never a mix.
+- Over HTTP, a save followed by a read returns what was saved, a later save with
+  fewer home sections or other custom keys removes the previous ones, and each
+  user keeps their own preferences for the same scope.
+
+A failed transactional save is rolled back explicitly. Disposing the transaction
+alone does not reach the transaction interceptors, so in the `Pessimistic`
+locking mode the process-wide database write lock would never be released and
+every later write would block.
+
+Limits:
+
+- In the `Optimistic` locking mode, `OptimisticLockBehavior.OnSaveChanges`
+  discards the result of `ExecuteAndCapture`: a failed save returns normally and
+  the transaction commits the delete that preceded it. This affects every write
+  in that mode and needs its own fix; the rollback tests are skipped there.
+- `POST /DisplayPreferences/{id}` performs three separate saves (custom
+  preferences, item preferences, display preferences with home sections). Each is
+  atomic, but two concurrent requests can leave one request's custom preferences
+  next to the other's home sections.
 
 Before the fix, every home screen save added its sections without deleting the
 previous ones. Existing databases may hold those accumulated `HomeSections` rows;
