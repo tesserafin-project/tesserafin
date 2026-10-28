@@ -88,13 +88,16 @@ public class OptimisticLockBehavior : IEntityFrameworkCoreLockingBehavior
     /// <inheritdoc/>
     public void OnSaveChanges(TesserafinDbContext context, Action saveChanges)
     {
-        _writePolicy.ExecuteAndCapture(saveChanges);
+        // Execute, not ExecuteAndCapture: a save that still fails after the retries, or fails for any
+        // other reason, must reach the caller, or the caller commits whatever its transaction ran
+        // before the save.
+        _writePolicy.Execute(saveChanges);
     }
 
     /// <inheritdoc/>
     public async Task OnSaveChangesAsync(TesserafinDbContext context, Func<Task> saveChanges)
     {
-        await _writeAsyncPolicy.ExecuteAndCaptureAsync(saveChanges).ConfigureAwait(false);
+        await _writeAsyncPolicy.ExecuteAsync(saveChanges).ConfigureAwait(false);
     }
 
     private sealed class TransactionLockingInterceptor : DbTransactionInterceptor
