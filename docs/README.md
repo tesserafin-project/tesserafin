@@ -22,6 +22,7 @@ define what is published.
 | Configure provider credentials | [Provider keys](metadata-provider-keys.md), [secret configuration](secret-configuration.md) |
 | Configure XMLTV input | [XMLTV path](xmltv-listings-path.md) |
 | Report an ordinary problem | [Support](support.md) |
+| Share an independent installation result | [Installation reports](installation-reports.md) |
 | Report a suspected vulnerability privately | [Security policy](../SECURITY.md) |
 
 The Linux guide distinguishes architecture-native package lifecycle evidence
