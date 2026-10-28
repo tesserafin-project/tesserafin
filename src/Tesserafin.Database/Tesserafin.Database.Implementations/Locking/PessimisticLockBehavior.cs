@@ -3,6 +3,7 @@
 #pragma warning disable CA1873
 
 using System;
+using System.Collections.Concurrent;
 using System.Data;
 using System.Data.Common;
 using System.Runtime.CompilerServices;
@@ -50,6 +51,7 @@ public class PessimisticLockBehavior : IEntityFrameworkCoreLockingBehavior
         _logger.LogInformation("The database locking mode has been set to: Pessimistic.");
         optionsBuilder.AddInterceptors(new CommandLockingInterceptor(_loggerFactory.CreateLogger<CommandLockingInterceptor>()));
         optionsBuilder.AddInterceptors(new TransactionLockingInterceptor(_loggerFactory.CreateLogger<TransactionLockingInterceptor>()));
+        optionsBuilder.AddInterceptors(new ConnectionLockReleasingInterceptor(_loggerFactory.CreateLogger<ConnectionLockReleasingInterceptor>()));
     }
 
     /// <inheritdoc/>
@@ -63,6 +65,11 @@ public class PessimisticLockBehavior : IEntityFrameworkCoreLockingBehavior
 
     private sealed class TransactionLockingInterceptor : DbTransactionInterceptor
     {
+        // Connections whose transaction holds the write lock. A transaction that is disposed without a
+        // commit or a rollback raises no transaction event, so the lock is also released when its
+        // connection closes or is disposed (see ConnectionLockReleasingInterceptor).
+        private static readonly ConcurrentDictionary<Guid, byte> _lockHolders = new();
+
         private readonly ILogger _logger;
 
         public TransactionLockingInterceptor(ILogger logger)
@@ -70,66 +77,115 @@ public class PessimisticLockBehavior : IEntityFrameworkCoreLockingBehavior
             _logger = logger;
         }
 
+        public static void Release(ILogger logger, Guid connectionId, [CallerMemberName] string? callerMemberName = null)
+        {
+            if (_lockHolders.TryRemove(connectionId, out _))
+            {
+                DbLock.EndWriteLock(logger, callerMemberName);
+            }
+        }
+
         public override InterceptionResult<DbTransaction> TransactionStarting(DbConnection connection, TransactionStartingEventData eventData, InterceptionResult<DbTransaction> result)
         {
-            DbLock.BeginWriteLock(_logger);
+            Acquire(eventData.ConnectionId);
 
             return base.TransactionStarting(connection, eventData, result);
         }
 
         public override ValueTask<InterceptionResult<DbTransaction>> TransactionStartingAsync(DbConnection connection, TransactionStartingEventData eventData, InterceptionResult<DbTransaction> result, CancellationToken cancellationToken = default)
         {
-            DbLock.BeginWriteLock(_logger);
+            Acquire(eventData.ConnectionId);
 
             return base.TransactionStartingAsync(connection, eventData, result, cancellationToken);
         }
 
         public override void TransactionCommitted(DbTransaction transaction, TransactionEndEventData eventData)
         {
-            DbLock.EndWriteLock(_logger);
+            Release(_logger, eventData.ConnectionId);
 
             base.TransactionCommitted(transaction, eventData);
         }
 
         public override Task TransactionCommittedAsync(DbTransaction transaction, TransactionEndEventData eventData, CancellationToken cancellationToken = default)
         {
-            DbLock.EndWriteLock(_logger);
+            Release(_logger, eventData.ConnectionId);
 
             return base.TransactionCommittedAsync(transaction, eventData, cancellationToken);
         }
 
         public override void TransactionFailed(DbTransaction transaction, TransactionErrorEventData eventData)
         {
-            DbLock.EndWriteLock(_logger);
+            Release(_logger, eventData.ConnectionId);
 
             base.TransactionFailed(transaction, eventData);
         }
 
         public override Task TransactionFailedAsync(DbTransaction transaction, TransactionErrorEventData eventData, CancellationToken cancellationToken = default)
         {
-            DbLock.EndWriteLock(_logger);
+            Release(_logger, eventData.ConnectionId);
 
             return base.TransactionFailedAsync(transaction, eventData, cancellationToken);
         }
 
         public override void TransactionRolledBack(DbTransaction transaction, TransactionEndEventData eventData)
         {
-            DbLock.EndWriteLock(_logger);
+            Release(_logger, eventData.ConnectionId);
 
             base.TransactionRolledBack(transaction, eventData);
         }
 
         public override Task TransactionRolledBackAsync(DbTransaction transaction, TransactionEndEventData eventData, CancellationToken cancellationToken = default)
         {
-            DbLock.EndWriteLock(_logger);
+            Release(_logger, eventData.ConnectionId);
 
             return base.TransactionRolledBackAsync(transaction, eventData, cancellationToken);
         }
+
+        private void Acquire(Guid connectionId)
+        {
+            DbLock.BeginWriteLock(_logger);
+            _lockHolders[connectionId] = 0;
+        }
     }
 
-    /// <summary>
-    /// Adds strict read/write locking.
-    /// </summary>
+    private sealed class ConnectionLockReleasingInterceptor : DbConnectionInterceptor
+    {
+        private readonly ILogger _logger;
+
+        public ConnectionLockReleasingInterceptor(ILogger logger)
+        {
+            _logger = logger;
+        }
+
+        public override InterceptionResult ConnectionClosing(DbConnection connection, ConnectionEventData eventData, InterceptionResult result)
+        {
+            TransactionLockingInterceptor.Release(_logger, eventData.ConnectionId);
+
+            return base.ConnectionClosing(connection, eventData, result);
+        }
+
+        public override ValueTask<InterceptionResult> ConnectionClosingAsync(DbConnection connection, ConnectionEventData eventData, InterceptionResult result)
+        {
+            TransactionLockingInterceptor.Release(_logger, eventData.ConnectionId);
+
+            return base.ConnectionClosingAsync(connection, eventData, result);
+        }
+
+        public override InterceptionResult ConnectionDisposing(DbConnection connection, ConnectionEventData eventData, InterceptionResult result)
+        {
+            TransactionLockingInterceptor.Release(_logger, eventData.ConnectionId);
+
+            return base.ConnectionDisposing(connection, eventData, result);
+        }
+
+        public override ValueTask<InterceptionResult> ConnectionDisposingAsync(DbConnection connection, ConnectionEventData eventData, InterceptionResult result)
+        {
+            TransactionLockingInterceptor.Release(_logger, eventData.ConnectionId);
+
+            return base.ConnectionDisposingAsync(connection, eventData, result);
+        }
+    }
+
     private sealed class CommandLockingInterceptor : DbCommandInterceptor
     {
         private readonly ILogger _logger;

@@ -152,10 +152,9 @@ public abstract class LockingBehaviorSaveFailureTests : IDisposable
     public void SaveChanges_FailureInADisposedTransaction_LeavesNoLockBehind()
     {
         // The shape of MediaStreamRepository.SaveMediaStreams and ChapterRepository.SaveChapters: the
-        // transaction is only disposed when the save throws, never rolled back explicitly.
-        Assert.SkipWhen(
-            _locking is PessimisticLockBehavior,
-            "The pessimistic mode releases its process-wide write lock on commit or rollback only; disposing the transaction keeps it held, and every other thread then waits for it forever.");
+        // transaction is only disposed when the save throws, never rolled back explicitly. Disposing it
+        // raises no transaction event: the pessimistic mode must still release its process-wide write
+        // lock, or every other thread waits for it forever.
         var failing = new FailingSaveInterceptor();
         Exception? error;
         using (var context = CreateDbContext(failing))
@@ -167,6 +166,32 @@ public abstract class LockingBehaviorSaveFailureTests : IDisposable
                 context.CustomItemDisplayPreferences.Add(NewRow(("new", "after")));
                 context.SaveChanges();
                 transaction.Commit();
+            });
+        }
+
+        AssertPreviousSetKept();
+        Assert.IsType<InvalidOperationException>(error);
+        AssertLaterWriteSucceeds();
+    }
+
+    [Fact]
+    public async Task SaveChangesAsync_FailureInADisposedTransaction_LeavesNoLockBehind()
+    {
+        var failing = new FailingSaveInterceptor();
+        var context = CreateDbContext(failing);
+        Exception? error;
+        await using (context.ConfigureAwait(false))
+        {
+            error = await Record.ExceptionAsync(async () =>
+            {
+                var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken).ConfigureAwait(false);
+                await using (transaction.ConfigureAwait(false))
+                {
+                    await Scope(context).ExecuteDeleteAsync(TestContext.Current.CancellationToken).ConfigureAwait(false);
+                    context.CustomItemDisplayPreferences.Add(NewRow(("new", "after")));
+                    await context.SaveChangesAsync(TestContext.Current.CancellationToken).ConfigureAwait(false);
+                    await transaction.CommitAsync(TestContext.Current.CancellationToken).ConfigureAwait(false);
+                }
             });
         }
 
@@ -226,9 +251,8 @@ public abstract class LockingBehaviorSaveFailureTests : IDisposable
             .ToDictionary(row => row.Key, row => row.Value);
     }
 
-    // Rolls back explicitly on failure: disposing an uncommitted transaction reaches no transaction
-    // interceptor, so the pessimistic mode would keep its write lock (see
-    // SaveChanges_FailureInADisposedTransaction_LeavesNoLockBehind).
+    // Rolls back explicitly on failure, as DisplayPreferencesManager does; the repositories that only
+    // dispose the transaction are covered by SaveChanges_FailureInADisposedTransaction_LeavesNoLockBehind.
     private void ReplaceSet(TesserafinDbContext context, params (string Key, string Value)[] rows)
     {
         using var transaction = context.Database.BeginTransaction();
