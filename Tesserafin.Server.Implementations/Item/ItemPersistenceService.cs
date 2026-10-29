@@ -98,16 +98,23 @@ public class ItemPersistenceService : IItemPersistenceService
                 return;
             }
 
-            await context.BaseItemImageInfos
-                .Where(e => e.ItemId == item.Id)
-                .ExecuteDeleteAsync(cancellationToken)
-                .ConfigureAwait(false);
+            // The delete runs at once; without the transaction, a failed save of the new images would
+            // leave the item with none.
+            var transaction = await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            await using (transaction.ConfigureAwait(false))
+            {
+                await context.BaseItemImageInfos
+                    .Where(e => e.ItemId == item.Id)
+                    .ExecuteDeleteAsync(cancellationToken)
+                    .ConfigureAwait(false);
 
-            await context.BaseItemImageInfos
-                .AddRangeAsync(images, cancellationToken)
-                .ConfigureAwait(false);
+                await context.BaseItemImageInfos
+                    .AddRangeAsync(images, cancellationToken)
+                    .ConfigureAwait(false);
 
-            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            }
         }
     }
 
