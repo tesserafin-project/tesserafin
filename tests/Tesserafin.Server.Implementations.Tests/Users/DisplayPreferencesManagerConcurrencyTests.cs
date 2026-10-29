@@ -324,7 +324,6 @@ public abstract class DisplayPreferencesManagerConcurrencyTests : IDisposable
     [Fact]
     public void SetCustomItemDisplayPreferences_FailedSaveKeepsThePreviousSet()
     {
-        SkipWhenSaveFailuresAreSwallowed();
         var itemId = Guid.NewGuid();
         new DisplayPreferencesManager(_factory).SetCustomItemDisplayPreferences(
             _userId,
@@ -347,7 +346,6 @@ public abstract class DisplayPreferencesManagerConcurrencyTests : IDisposable
     [Fact]
     public void UpdateDisplayPreferences_FailedSaveKeepsThePreviousHomeSections()
     {
-        SkipWhenSaveFailuresAreSwallowed();
         var manager = new DisplayPreferencesManager(_factory);
         var itemId = Guid.NewGuid();
         var preferences = manager.GetDisplayPreferences(_userId, itemId, "web");
@@ -474,14 +472,6 @@ public abstract class DisplayPreferencesManagerConcurrencyTests : IDisposable
             .ToArray();
     }
 
-    private void SkipWhenSaveFailuresAreSwallowed()
-    {
-        // OptimisticLockBehavior.OnSaveChanges runs the save through ExecuteAndCapture and discards the
-        // result: a failed save returns normally, so the caller commits whatever ran before it. That
-        // affects every write in this mode, not only display preferences, and is tracked separately.
-        Assert.SkipWhen(_locking is OptimisticLockBehavior, "The optimistic locking mode swallows save failures.");
-    }
-
     private Guid AddUser()
     {
         using var context = CreateDbContext();
@@ -529,6 +519,9 @@ public abstract class DisplayPreferencesManagerConcurrencyTests : IDisposable
             _locking);
     }
 
+    // Nested as in LockingBehaviorSaveFailureTests: each mode only passes its locking behavior.
+#pragma warning disable CA1034 // Nested types should not be visible
+
     /// <summary>
     /// The default mode.
     /// </summary>
@@ -561,6 +554,8 @@ public abstract class DisplayPreferencesManagerConcurrencyTests : IDisposable
         {
         }
     }
+
+#pragma warning restore CA1034
 
     /// <summary>
     /// Fails the first save of the context, after any statement the caller ran before it.

@@ -58,17 +58,11 @@ connection per context), under each database locking mode, and over HTTP by
   fewer home sections or other custom keys removes the previous ones, and each
   user keeps their own preferences for the same scope.
 
-A failed transactional save is rolled back explicitly. Disposing the transaction
-alone does not reach the transaction interceptors, so in the `Pessimistic`
-locking mode the process-wide database write lock would never be released and
-every later write would block.
+A failed transactional save is rolled back explicitly. The rollback tests run in
+every locking mode (see the locking modes section below).
 
 Limits:
 
-- In the `Optimistic` locking mode, `OptimisticLockBehavior.OnSaveChanges`
-  discards the result of `ExecuteAndCapture`: a failed save returns normally and
-  the transaction commits the delete that preceded it. This affects every write
-  in that mode and needs its own fix; the rollback tests are skipped there.
 - `POST /DisplayPreferences/{id}` performs three separate saves (custom
   preferences, item preferences, display preferences with home sections). Each is
   atomic, but two concurrent requests can leave one request's custom preferences
