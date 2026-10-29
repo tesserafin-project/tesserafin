@@ -4,13 +4,13 @@
 
 using System;
 using System.Collections.Concurrent;
-using System.Data;
 using System.Data.Common;
-using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 
 namespace Tesserafin.Database.Implementations.Locking;
@@ -18,6 +18,12 @@ namespace Tesserafin.Database.Implementations.Locking;
 /// <summary>
 /// A locking behavior that will always block any operation while a write is requested. Mimicks the old SqliteRepository behavior.
 /// </summary>
+/// <remarks>
+/// The process-wide lock is owned by an EF Core connection, never by a thread: a transaction holds the
+/// write lock from <c>BeginTransaction</c> until it is committed, rolled back or disposed, whichever
+/// thread its asynchronous flow resumes on, and the commands and saves of the connection that owns
+/// the write lock run inside it. Commands of every other connection wait for it.
+/// </remarks>
 public class PessimisticLockBehavior : IEntityFrameworkCoreLockingBehavior
 {
     private readonly ILogger<PessimisticLockBehavior> _logger;
@@ -34,14 +40,18 @@ public class PessimisticLockBehavior : IEntityFrameworkCoreLockingBehavior
         _loggerFactory = loggerFactory;
     }
 
-    private static ReaderWriterLockSlim DatabaseLock { get; } = new(LockRecursionPolicy.SupportsRecursion);
-
     /// <inheritdoc/>
     public void OnSaveChanges(TesserafinDbContext context, Action saveChanges)
     {
-        using (DbLock.EnterWrite(_logger))
+        var owner = context.GetService<IRelationalConnection>().ConnectionId;
+        DatabaseLock.EnterWrite(_logger, owner, "SaveChanges");
+        try
         {
             saveChanges();
+        }
+        finally
+        {
+            DatabaseLock.ExitWrite(_logger, owner);
         }
     }
 
@@ -52,24 +62,88 @@ public class PessimisticLockBehavior : IEntityFrameworkCoreLockingBehavior
         optionsBuilder.AddInterceptors(new CommandLockingInterceptor(_loggerFactory.CreateLogger<CommandLockingInterceptor>()));
         optionsBuilder.AddInterceptors(new TransactionLockingInterceptor(_loggerFactory.CreateLogger<TransactionLockingInterceptor>()));
         optionsBuilder.AddInterceptors(new ConnectionLockReleasingInterceptor(_loggerFactory.CreateLogger<ConnectionLockReleasingInterceptor>()));
+
+        // EF Core raises no interceptor event when a transaction is disposed without a commit or a
+        // rollback; its transaction object is the only place that knows.
+        optionsBuilder.ReplaceService<IRelationalTransactionFactory, LockReleasingTransactionFactory>();
     }
 
     /// <inheritdoc/>
     public async Task OnSaveChangesAsync(TesserafinDbContext context, Func<Task> saveChanges)
     {
-        using (DbLock.EnterWrite(_logger))
+        var owner = context.GetService<IRelationalConnection>().ConnectionId;
+        DatabaseLock.EnterWrite(_logger, owner, "SaveChanges");
+        try
         {
             await saveChanges().ConfigureAwait(false);
+        }
+        finally
+        {
+            DatabaseLock.ExitWrite(_logger, owner);
+        }
+    }
+
+    /// <summary>
+    /// The write locks held by transactions, by EF Core connection.
+    /// </summary>
+    private static class TransactionLocks
+    {
+        private static readonly ConcurrentDictionary<Guid, byte> _holders = new();
+
+        public static DbTransaction Begin(ILogger logger, DbConnection connection, TransactionStartingEventData eventData)
+        {
+            Acquire(logger, eventData.ConnectionId);
+            try
+            {
+                return connection.BeginTransaction(eventData.IsolationLevel);
+            }
+            catch
+            {
+                Release(logger, eventData.ConnectionId);
+                throw;
+            }
+        }
+
+        public static async ValueTask<DbTransaction> BeginAsync(ILogger logger, DbConnection connection, TransactionStartingEventData eventData, CancellationToken cancellationToken)
+        {
+            Acquire(logger, eventData.ConnectionId);
+            try
+            {
+                return await connection.BeginTransactionAsync(eventData.IsolationLevel, cancellationToken).ConfigureAwait(false);
+            }
+            catch
+            {
+                Release(logger, eventData.ConnectionId);
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Releases the write lock of the transaction of a connection, if it still holds one; every way a
+        /// transaction ends calls this, so only the first call releases.
+        /// </summary>
+        public static void Release(ILogger logger, Guid connectionId)
+        {
+            if (_holders.TryRemove(connectionId, out _))
+            {
+                DatabaseLock.ExitWrite(logger, connectionId);
+            }
+        }
+
+        private static void Acquire(ILogger logger, Guid connectionId)
+        {
+            DatabaseLock.EnterWrite(logger, connectionId, "Transaction");
+            if (!_holders.TryAdd(connectionId, 0))
+            {
+                // EF Core refuses a second transaction on a connection before raising the event; keep
+                // the count balanced if that ever changes.
+                DatabaseLock.ExitWrite(logger, connectionId);
+            }
         }
     }
 
     private sealed class TransactionLockingInterceptor : DbTransactionInterceptor
     {
-        // Connections whose transaction holds the write lock. A transaction that is disposed without a
-        // commit or a rollback raises no transaction event, so the lock is also released when its
-        // connection closes or is disposed (see ConnectionLockReleasingInterceptor).
-        private static readonly ConcurrentDictionary<Guid, byte> _lockHolders = new();
-
         private readonly ILogger _logger;
 
         public TransactionLockingInterceptor(ILogger logger)
@@ -77,74 +151,110 @@ public class PessimisticLockBehavior : IEntityFrameworkCoreLockingBehavior
             _logger = logger;
         }
 
-        public static void Release(ILogger logger, Guid connectionId, [CallerMemberName] string? callerMemberName = null)
-        {
-            if (_lockHolders.TryRemove(connectionId, out _))
-            {
-                DbLock.EndWriteLock(logger, callerMemberName);
-            }
-        }
-
         public override InterceptionResult<DbTransaction> TransactionStarting(DbConnection connection, TransactionStartingEventData eventData, InterceptionResult<DbTransaction> result)
         {
-            Acquire(eventData.ConnectionId);
-
-            return base.TransactionStarting(connection, eventData, result);
+            return InterceptionResult<DbTransaction>.SuppressWithResult(TransactionLocks.Begin(_logger, connection, eventData));
         }
 
-        public override ValueTask<InterceptionResult<DbTransaction>> TransactionStartingAsync(DbConnection connection, TransactionStartingEventData eventData, InterceptionResult<DbTransaction> result, CancellationToken cancellationToken = default)
+        public override async ValueTask<InterceptionResult<DbTransaction>> TransactionStartingAsync(DbConnection connection, TransactionStartingEventData eventData, InterceptionResult<DbTransaction> result, CancellationToken cancellationToken = default)
         {
-            Acquire(eventData.ConnectionId);
-
-            return base.TransactionStartingAsync(connection, eventData, result, cancellationToken);
+            return InterceptionResult<DbTransaction>.SuppressWithResult(await TransactionLocks.BeginAsync(_logger, connection, eventData, cancellationToken).ConfigureAwait(false));
         }
 
         public override void TransactionCommitted(DbTransaction transaction, TransactionEndEventData eventData)
         {
-            Release(_logger, eventData.ConnectionId);
+            TransactionLocks.Release(_logger, eventData.ConnectionId);
 
             base.TransactionCommitted(transaction, eventData);
         }
 
         public override Task TransactionCommittedAsync(DbTransaction transaction, TransactionEndEventData eventData, CancellationToken cancellationToken = default)
         {
-            Release(_logger, eventData.ConnectionId);
+            TransactionLocks.Release(_logger, eventData.ConnectionId);
 
             return base.TransactionCommittedAsync(transaction, eventData, cancellationToken);
         }
 
         public override void TransactionFailed(DbTransaction transaction, TransactionErrorEventData eventData)
         {
-            Release(_logger, eventData.ConnectionId);
+            TransactionLocks.Release(_logger, eventData.ConnectionId);
 
             base.TransactionFailed(transaction, eventData);
         }
 
         public override Task TransactionFailedAsync(DbTransaction transaction, TransactionErrorEventData eventData, CancellationToken cancellationToken = default)
         {
-            Release(_logger, eventData.ConnectionId);
+            TransactionLocks.Release(_logger, eventData.ConnectionId);
 
             return base.TransactionFailedAsync(transaction, eventData, cancellationToken);
         }
 
         public override void TransactionRolledBack(DbTransaction transaction, TransactionEndEventData eventData)
         {
-            Release(_logger, eventData.ConnectionId);
+            TransactionLocks.Release(_logger, eventData.ConnectionId);
 
             base.TransactionRolledBack(transaction, eventData);
         }
 
         public override Task TransactionRolledBackAsync(DbTransaction transaction, TransactionEndEventData eventData, CancellationToken cancellationToken = default)
         {
-            Release(_logger, eventData.ConnectionId);
+            TransactionLocks.Release(_logger, eventData.ConnectionId);
 
             return base.TransactionRolledBackAsync(transaction, eventData, cancellationToken);
         }
+    }
 
-        private void Acquire(Guid connectionId)
+    /// <summary>
+    /// Creates the EF Core transactions that release their write lock when they are disposed, after
+    /// the underlying transaction rolled back.
+    /// </summary>
+    private sealed class LockReleasingTransactionFactory : RelationalTransactionFactory
+    {
+        public LockReleasingTransactionFactory(RelationalTransactionFactoryDependencies dependencies)
+            : base(dependencies)
         {
-            DbLock.BeginWriteLock(_logger);
-            _lockHolders[connectionId] = 0;
+        }
+
+        public override RelationalTransaction Create(IRelationalConnection connection, DbTransaction transaction, Guid transactionId, IDiagnosticsLogger<DbLoggerCategory.Database.Transaction> logger, bool transactionOwned)
+        {
+            return new LockReleasingTransaction(connection, transaction, transactionId, logger, transactionOwned, Dependencies.SqlGenerationHelper);
+        }
+    }
+
+    private sealed class LockReleasingTransaction : RelationalTransaction
+    {
+        private readonly Guid _connectionId;
+        private readonly ILogger _logger;
+
+        public LockReleasingTransaction(IRelationalConnection connection, DbTransaction transaction, Guid transactionId, IDiagnosticsLogger<DbLoggerCategory.Database.Transaction> logger, bool transactionOwned, ISqlGenerationHelper sqlGenerationHelper)
+            : base(connection, transaction, transactionId, logger, transactionOwned, sqlGenerationHelper)
+        {
+            _connectionId = connection.ConnectionId;
+            _logger = logger.Logger;
+        }
+
+        public override void Dispose()
+        {
+            try
+            {
+                base.Dispose();
+            }
+            finally
+            {
+                TransactionLocks.Release(_logger, _connectionId);
+            }
+        }
+
+        public override async ValueTask DisposeAsync()
+        {
+            try
+            {
+                await base.DisposeAsync().ConfigureAwait(false);
+            }
+            finally
+            {
+                TransactionLocks.Release(_logger, _connectionId);
+            }
         }
     }
 
@@ -159,28 +269,28 @@ public class PessimisticLockBehavior : IEntityFrameworkCoreLockingBehavior
 
         public override InterceptionResult ConnectionClosing(DbConnection connection, ConnectionEventData eventData, InterceptionResult result)
         {
-            TransactionLockingInterceptor.Release(_logger, eventData.ConnectionId);
+            TransactionLocks.Release(_logger, eventData.ConnectionId);
 
             return base.ConnectionClosing(connection, eventData, result);
         }
 
         public override ValueTask<InterceptionResult> ConnectionClosingAsync(DbConnection connection, ConnectionEventData eventData, InterceptionResult result)
         {
-            TransactionLockingInterceptor.Release(_logger, eventData.ConnectionId);
+            TransactionLocks.Release(_logger, eventData.ConnectionId);
 
             return base.ConnectionClosingAsync(connection, eventData, result);
         }
 
         public override InterceptionResult ConnectionDisposing(DbConnection connection, ConnectionEventData eventData, InterceptionResult result)
         {
-            TransactionLockingInterceptor.Release(_logger, eventData.ConnectionId);
+            TransactionLocks.Release(_logger, eventData.ConnectionId);
 
             return base.ConnectionDisposing(connection, eventData, result);
         }
 
         public override ValueTask<InterceptionResult> ConnectionDisposingAsync(DbConnection connection, ConnectionEventData eventData, InterceptionResult result)
         {
-            TransactionLockingInterceptor.Release(_logger, eventData.ConnectionId);
+            TransactionLocks.Release(_logger, eventData.ConnectionId);
 
             return base.ConnectionDisposingAsync(connection, eventData, result);
         }
@@ -197,156 +307,203 @@ public class PessimisticLockBehavior : IEntityFrameworkCoreLockingBehavior
 
         public override InterceptionResult<int> NonQueryExecuting(DbCommand command, CommandEventData eventData, InterceptionResult<int> result)
         {
-            using (DbLock.EnterWrite(_logger, command))
+            DatabaseLock.EnterWrite(_logger, eventData.ConnectionId, command.CommandText);
+            try
             {
                 return InterceptionResult<int>.SuppressWithResult(command.ExecuteNonQuery());
+            }
+            finally
+            {
+                DatabaseLock.ExitWrite(_logger, eventData.ConnectionId);
             }
         }
 
         public override async ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command, CommandEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
         {
-            using (DbLock.EnterWrite(_logger, command))
+            DatabaseLock.EnterWrite(_logger, eventData.ConnectionId, command.CommandText);
+            try
             {
                 return InterceptionResult<int>.SuppressWithResult(await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false));
+            }
+            finally
+            {
+                DatabaseLock.ExitWrite(_logger, eventData.ConnectionId);
             }
         }
 
         public override InterceptionResult<object> ScalarExecuting(DbCommand command, CommandEventData eventData, InterceptionResult<object> result)
         {
-            using (DbLock.EnterRead(_logger))
+            var read = DatabaseLock.EnterRead(_logger, eventData.ConnectionId);
+            try
             {
                 return InterceptionResult<object>.SuppressWithResult(command.ExecuteScalar()!);
+            }
+            finally
+            {
+                DatabaseLock.ExitRead(_logger, read);
             }
         }
 
         public override async ValueTask<InterceptionResult<object>> ScalarExecutingAsync(DbCommand command, CommandEventData eventData, InterceptionResult<object> result, CancellationToken cancellationToken = default)
         {
-            using (DbLock.EnterRead(_logger))
+            var read = DatabaseLock.EnterRead(_logger, eventData.ConnectionId);
+            try
             {
                 return InterceptionResult<object>.SuppressWithResult((await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!);
+            }
+            finally
+            {
+                DatabaseLock.ExitRead(_logger, read);
             }
         }
 
         public override InterceptionResult<DbDataReader> ReaderExecuting(DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result)
         {
-            using (DbLock.EnterRead(_logger))
+            var read = DatabaseLock.EnterRead(_logger, eventData.ConnectionId);
+            try
             {
                 return InterceptionResult<DbDataReader>.SuppressWithResult(command.ExecuteReader()!);
+            }
+            finally
+            {
+                DatabaseLock.ExitRead(_logger, read);
             }
         }
 
         public override async ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
         {
-            using (DbLock.EnterRead(_logger))
+            var read = DatabaseLock.EnterRead(_logger, eventData.ConnectionId);
+            try
             {
                 return InterceptionResult<DbDataReader>.SuppressWithResult(await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false));
+            }
+            finally
+            {
+                DatabaseLock.ExitRead(_logger, read);
             }
         }
     }
 
-    private sealed class DbLock : IDisposable
+    /// <summary>
+    /// A process-wide reader/writer lock owned by EF Core connections instead of threads. The connection
+    /// that holds the write lock can take it again (its transaction, then its saves and commands) and
+    /// reads without waiting; every other connection waits for the write lock to be free, and writers
+    /// waiting for the readers to finish keep new readers out.
+    /// </summary>
+    private static class DatabaseLock
     {
-        private readonly Action? _action;
-        private bool _disposed;
+        private static readonly object _gate = new();
+        private static Guid _writer;
+        private static int _writerDepth;
+        private static int _readers;
+        private static int _waitingWriters;
+        private static (string Operation, Guid Owner, DateTimeOffset Since) _holder;
 
-        private static readonly IDisposable _noLock = new DbLock(null) { _disposed = true };
-        private static (string Command, Guid Id, DateTimeOffset QueryDate, bool Printed) _blockQuery;
-
-        public DbLock(Action? action = null)
+        public static void EnterWrite(ILogger logger, Guid owner, string operation)
         {
-            _action = action;
-        }
-
-#pragma warning disable IDISP015 // Member should not return created and cached instance
-        public static IDisposable EnterWrite(ILogger logger, IDbCommand? command = null, [CallerMemberName] string? callerMemberName = null, [CallerLineNumber] int? callerNo = null)
-#pragma warning restore IDISP015 // Member should not return created and cached instance
-        {
-            logger.LogTrace("Enter Write for {Caller}:{Line}", callerMemberName, callerNo);
-            if (DatabaseLock.IsWriteLockHeld)
+            lock (_gate)
             {
-                logger.LogTrace("Write Held {Caller}:{Line}", callerMemberName, callerNo);
-                return _noLock;
-            }
-
-            BeginWriteLock(logger, command, callerMemberName, callerNo);
-            return new DbLock(() =>
-            {
-                EndWriteLock(logger, callerMemberName, callerNo);
-            });
-        }
-
-#pragma warning disable IDISP015 // Member should not return created and cached instance
-        public static IDisposable EnterRead(ILogger logger, [CallerMemberName] string? callerMemberName = null, [CallerLineNumber] int? callerNo = null)
-#pragma warning restore IDISP015 // Member should not return created and cached instance
-        {
-            logger.LogTrace("Enter Read {Caller}:{Line}", callerMemberName, callerNo);
-            if (DatabaseLock.IsWriteLockHeld)
-            {
-                logger.LogTrace("Write Held {Caller}:{Line}", callerMemberName, callerNo);
-                return _noLock;
-            }
-
-            BeginReadLock(logger, callerMemberName, callerNo);
-            return new DbLock(() =>
-            {
-                ExitReadLock(logger, callerMemberName, callerNo);
-            });
-        }
-
-        public static void BeginWriteLock(ILogger logger, IDbCommand? command = null, [CallerMemberName] string? callerMemberName = null, [CallerLineNumber] int? callerNo = null)
-        {
-            logger.LogTrace("Aquire Write {Caller}:{Line}", callerMemberName, callerNo);
-            if (!DatabaseLock.TryEnterWriteLock(TimeSpan.FromMilliseconds(1000)))
-            {
-                var blockingQuery = _blockQuery;
-                if (!blockingQuery.Printed)
+                if (_writerDepth > 0 && _writer.Equals(owner))
                 {
-                    _blockQuery = (blockingQuery.Command, blockingQuery.Id, blockingQuery.QueryDate, true);
-                    logger.LogInformation("QueryLock: {Id} --- {Query}", blockingQuery.Id, blockingQuery.Command);
+                    _writerDepth++;
+                    return;
                 }
 
-                logger.LogInformation("Query congestion detected: '{Id}' since '{Date}'", blockingQuery.Id, blockingQuery.QueryDate);
+                _waitingWriters++;
+                try
+                {
+                    var congested = false;
+                    while (_writerDepth > 0 || _readers > 0)
+                    {
+                        if (!Monitor.Wait(_gate, TimeSpan.FromSeconds(1)) && !congested)
+                        {
+                            congested = true;
+                            logger.LogInformation("Query congestion detected: '{Owner}' since '{Date}' --- {Query}", _holder.Owner, _holder.Since, _holder.Operation);
+                        }
+                    }
 
-                DatabaseLock.EnterWriteLock();
+                    if (congested)
+                    {
+                        logger.LogInformation("Query congestion cleared after {Duration}", DateTimeOffset.Now - _holder.Since);
+                    }
+                }
+                finally
+                {
+                    _waitingWriters--;
+                }
 
-                logger.LogInformation("Query congestion cleared: '{Id}' for '{Date}'", blockingQuery.Id, DateTimeOffset.Now - blockingQuery.QueryDate);
+                _writer = owner;
+                _writerDepth = 1;
+                _holder = (operation, owner, DateTimeOffset.Now);
             }
-
-            _blockQuery = (command?.CommandText ?? "Transaction", Guid.NewGuid(), DateTimeOffset.Now, false);
-
-            logger.LogTrace("Write Aquired {Caller}:{Line}", callerMemberName, callerNo);
         }
 
-        public static void BeginReadLock(ILogger logger, [CallerMemberName] string? callerMemberName = null, [CallerLineNumber] int? callerNo = null)
+        public static void ExitWrite(ILogger logger, Guid owner)
         {
-            logger.LogTrace("Aquire Write {Caller}:{Line}", callerMemberName, callerNo);
-            DatabaseLock.EnterReadLock();
-            logger.LogTrace("Read Aquired {Caller}:{Line}", callerMemberName, callerNo);
+            lock (_gate)
+            {
+                if (_writerDepth == 0 || !_writer.Equals(owner))
+                {
+                    // A release by a connection that does not hold the lock would hand it to nobody.
+                    logger.LogError("Database write lock released by connection {Owner}, which does not hold it.", owner);
+                    throw new SynchronizationLockException("The database write lock is not held by connection " + owner + ".");
+                }
+
+                if (--_writerDepth == 0)
+                {
+                    _writer = Guid.Empty;
+                    Monitor.PulseAll(_gate);
+                }
+            }
         }
 
-        public static void EndWriteLock(ILogger logger, [CallerMemberName] string? callerMemberName = null, [CallerLineNumber] int? callerNo = null)
+        /// <summary>
+        /// Waits for the write lock of every other connection to be free.
+        /// </summary>
+        /// <returns><c>false</c> when the connection holds the write lock, so no read lock was taken.</returns>
+        public static bool EnterRead(ILogger logger, Guid owner)
         {
-            logger.LogTrace("Release Write {Caller}:{Line}", callerMemberName, callerNo);
-            DatabaseLock.ExitWriteLock();
+            lock (_gate)
+            {
+                if (_writerDepth > 0 && _writer.Equals(owner))
+                {
+                    return false;
+                }
+
+                var congested = false;
+                while (_writerDepth > 0 || _waitingWriters > 0)
+                {
+                    if (!Monitor.Wait(_gate, TimeSpan.FromSeconds(1)) && !congested)
+                    {
+                        congested = true;
+                        logger.LogInformation("Read congestion detected: '{Owner}' since '{Date}' --- {Query}", _holder.Owner, _holder.Since, _holder.Operation);
+                    }
+                }
+
+                _readers++;
+                return true;
+            }
         }
 
-        public static void ExitReadLock(ILogger logger, [CallerMemberName] string? callerMemberName = null, [CallerLineNumber] int? callerNo = null)
+        public static void ExitRead(ILogger logger, bool taken)
         {
-            logger.LogTrace("Release Read {Caller}:{Line}", callerMemberName, callerNo);
-            DatabaseLock.ExitReadLock();
-        }
-
-        public void Dispose()
-        {
-            if (_disposed)
+            if (!taken)
             {
                 return;
             }
 
-            _disposed = true;
-            if (_action is not null)
+            lock (_gate)
             {
-                _action();
+                if (_readers == 0)
+                {
+                    logger.LogError("Database read lock released while no read lock is held.");
+                    throw new SynchronizationLockException("The database read lock is not held.");
+                }
+
+                if (--_readers == 0)
+                {
+                    Monitor.PulseAll(_gate);
+                }
             }
         }
     }
