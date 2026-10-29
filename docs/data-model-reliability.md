@@ -92,8 +92,11 @@ SQLite file configured by the production provider:
   `BeginTransaction` and released exactly once, by the first of: commit,
   rollback, a failed commit or rollback, the disposal of the transaction (with or
   without an exception, synchronous or `DisposeAsync`), and the closing or
-  disposal of the connection. Saves and commands of the owning connection run
-  inside the lock; those of every other connection wait for it.
+  disposal of the connection. Each acquisition is identified by the id of its
+  transaction: an earlier transaction of the same context that is disposed again
+  after the next one began releases nothing, and the next transaction keeps
+  every other connection out until it ends. Saves and commands of the owning
+  connection run inside the lock; those of every other connection wait for it.
   (`LockingBehaviorLifecycleTests`).
 - The flow that holds the lock may resume on any thread between
   `BeginTransactionAsync` and the commit: the tests force a real thread change
