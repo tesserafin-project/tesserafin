@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Microsoft.Data.Sqlite;
 using Tesserafin.Api.Models.UserDtos;
 using Tesserafin.Extensions.Json;
 using Tesserafin.Model.Dto;
@@ -123,6 +125,66 @@ public sealed class DisplayPreferencesControllerTests : IClassFixture<Tesserafin
         Assert.Equal(Array.IndexOf(kinds, winner) + 1, sections.Length);
     }
 
+    [Fact]
+    public async Task SavedPreferences_SurviveAServerRestart()
+    {
+        // A server of its own, stopped and started again on the same data directory: what a client
+        // reads after the restart comes from the SQLite file, not from a cache of the first process.
+        var root = Path.Combine(Path.GetTempPath(), "tesserafin-prefs-restart-" + Guid.NewGuid().ToString("N"));
+        string[] scopes = ["usersettings-" + Guid.NewGuid().ToString("N"), "usersettings-" + Guid.NewGuid().ToString("N")];
+        try
+        {
+            string token;
+            DisplayPreferencesDto[] before;
+            using (var first = new FixedRootFactory(root))
+            {
+                var client = first.CreateClient();
+                token = await AuthHelper.CompleteStartupAsync(client);
+                client.DefaultRequestHeaders.AddAuthHeader(token);
+                await SaveAsync(client, scopes[0], "DateCreated", ["latestmedia", "resume"], new() { ["theme"] = "dark" });
+
+                // The last save before the stop is a replacement, concurrent with a save of another scope.
+                await Task.WhenAll(
+                    SaveAsync(client, scopes[0], "PremiereDate", ["nextup"], new() { ["layout"] = "list" }),
+                    SaveAsync(client, scopes[1], "Random", ["livetv", "resume"], new() { ["owner"] = "second" }));
+                before = await Task.WhenAll(scopes.Select(scope => GetAsync(client, scope)));
+            }
+
+            SqliteConnection.ClearAllPools();
+            using (var second = new FixedRootFactory(root))
+            {
+                var client = second.CreateClient();
+                client.DefaultRequestHeaders.AddAuthHeader(token);
+                var after = await Task.WhenAll(scopes.Select(scope => GetAsync(client, scope)));
+
+                Assert.Equal("PremiereDate", after[0].SortBy);
+                Assert.Equal(["nextup"], HomeSections(after[0]));
+                Assert.Equal("list", after[0].CustomPrefs["layout"]);
+                Assert.DoesNotContain("theme", after[0].CustomPrefs.Keys);
+                Assert.Equal(["livetv", "resume"], HomeSections(after[1]));
+                for (var index = 0; index < scopes.Length; index++)
+                {
+                    Assert.Equal(before[index].SortBy, after[index].SortBy);
+                    Assert.Equal(before[index].CustomPrefs, after[index].CustomPrefs);
+                }
+
+                // The restarted server still writes: a save and a read back on the reopened file.
+                await SaveAsync(client, scopes[0], "SortName", ["resume"], new() { ["after"] = "restart" });
+                var saved = await GetAsync(client, scopes[0]);
+                Assert.Equal(["resume"], HomeSections(saved));
+                Assert.Equal("restart", saved.CustomPrefs["after"]);
+            }
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
     private static string[] HomeSections(DisplayPreferencesDto preferences)
         => preferences.CustomPrefs
             .Where(pref => pref.Key.StartsWith("homesection", StringComparison.Ordinal))
@@ -184,5 +246,20 @@ public sealed class DisplayPreferencesControllerTests : IClassFixture<Tesserafin
         var token = auth.RootElement.GetProperty("AccessToken").GetString();
         client.DefaultRequestHeaders.Add(AuthHelper.AuthHeaderName, authorization + $", Token={token}");
         return client;
+    }
+
+    /// <summary>
+    /// A server whose data directory is chosen by the test, so that a second one can reopen it.
+    /// </summary>
+    private sealed class FixedRootFactory : TesserafinApplicationFactory
+    {
+        private readonly string _root;
+
+        public FixedRootFactory(string root)
+        {
+            _root = root;
+        }
+
+        protected override string CreateWebHostPathRoot() => _root;
     }
 }

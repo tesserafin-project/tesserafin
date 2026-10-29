@@ -57,7 +57,7 @@ namespace Tesserafin.Server.Integration.Tests
             var commandLineOpts = new StartupOptions();
 
             // Use a temporary directory for the application paths
-            var webHostPathRoot = Path.Combine(_testPathRoot, "test-host-" + Path.GetFileNameWithoutExtension(Path.GetRandomFileName()));
+            var webHostPathRoot = CreateWebHostPathRoot();
             Directory.CreateDirectory(Path.Combine(webHostPathRoot, "logs"));
             Directory.CreateDirectory(Path.Combine(webHostPathRoot, "config"));
             Directory.CreateDirectory(Path.Combine(webHostPathRoot, "cache"));
@@ -121,6 +121,14 @@ namespace Tesserafin.Server.Integration.Tests
 
             return host;
         }
+
+        /// <summary>
+        /// Gets the directory that holds the data of the server: a new one for each factory, unless a
+        /// test restarts a server on the data of a previous one.
+        /// </summary>
+        /// <returns>The directory.</returns>
+        protected virtual string CreateWebHostPathRoot()
+            => Path.Combine(_testPathRoot, "test-host-" + Path.GetFileNameWithoutExtension(Path.GetRandomFileName()));
 
         /// <inheritdoc/>
         protected override void Dispose(bool disposing)
