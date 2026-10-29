@@ -4,6 +4,7 @@
 
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Data.Common;
 using System.Threading;
 using System.Threading.Tasks;
@@ -84,45 +85,59 @@ public class PessimisticLockBehavior : IEntityFrameworkCoreLockingBehavior
     }
 
     /// <summary>
-    /// The write locks held by transactions, by EF Core connection.
+    /// The write locks held by transactions: for each EF Core connection, the id of the transaction that
+    /// holds its write lock. A transaction only ever releases its own, so an earlier transaction of the
+    /// same connection that is disposed again cannot release the lock of the next one.
     /// </summary>
     private static class TransactionLocks
     {
-        private static readonly ConcurrentDictionary<Guid, byte> _holders = new();
+        private static readonly ConcurrentDictionary<Guid, Guid> _holders = new();
 
         public static DbTransaction Begin(ILogger logger, DbConnection connection, TransactionStartingEventData eventData)
         {
-            Acquire(logger, eventData.ConnectionId);
+            Acquire(logger, eventData.ConnectionId, eventData.TransactionId);
             try
             {
                 return connection.BeginTransaction(eventData.IsolationLevel);
             }
             catch
             {
-                Release(logger, eventData.ConnectionId);
+                Release(logger, eventData.ConnectionId, eventData.TransactionId);
                 throw;
             }
         }
 
         public static async ValueTask<DbTransaction> BeginAsync(ILogger logger, DbConnection connection, TransactionStartingEventData eventData, CancellationToken cancellationToken)
         {
-            Acquire(logger, eventData.ConnectionId);
+            Acquire(logger, eventData.ConnectionId, eventData.TransactionId);
             try
             {
                 return await connection.BeginTransactionAsync(eventData.IsolationLevel, cancellationToken).ConfigureAwait(false);
             }
             catch
             {
-                Release(logger, eventData.ConnectionId);
+                Release(logger, eventData.ConnectionId, eventData.TransactionId);
                 throw;
             }
         }
 
         /// <summary>
-        /// Releases the write lock of the transaction of a connection, if it still holds one; every way a
-        /// transaction ends calls this, so only the first call releases.
+        /// Releases the write lock of a transaction, if it still holds it; every way a transaction ends
+        /// calls this, so only the first call releases.
         /// </summary>
-        public static void Release(ILogger logger, Guid connectionId)
+        public static void Release(ILogger logger, Guid connectionId, Guid transactionId)
+        {
+            if (_holders.TryRemove(new KeyValuePair<Guid, Guid>(connectionId, transactionId)))
+            {
+                DatabaseLock.ExitWrite(logger, connectionId);
+            }
+        }
+
+        /// <summary>
+        /// Releases the write lock of whichever transaction of a connection holds one: the transaction
+        /// of a connection that closes ends with it.
+        /// </summary>
+        public static void ReleaseConnection(ILogger logger, Guid connectionId)
         {
             if (_holders.TryRemove(connectionId, out _))
             {
@@ -130,10 +145,10 @@ public class PessimisticLockBehavior : IEntityFrameworkCoreLockingBehavior
             }
         }
 
-        private static void Acquire(ILogger logger, Guid connectionId)
+        private static void Acquire(ILogger logger, Guid connectionId, Guid transactionId)
         {
             DatabaseLock.EnterWrite(logger, connectionId, "Transaction");
-            if (!_holders.TryAdd(connectionId, 0))
+            if (!_holders.TryAdd(connectionId, transactionId))
             {
                 // EF Core refuses a second transaction on a connection before raising the event; keep
                 // the count balanced if that ever changes.
@@ -163,42 +178,42 @@ public class PessimisticLockBehavior : IEntityFrameworkCoreLockingBehavior
 
         public override void TransactionCommitted(DbTransaction transaction, TransactionEndEventData eventData)
         {
-            TransactionLocks.Release(_logger, eventData.ConnectionId);
+            TransactionLocks.Release(_logger, eventData.ConnectionId, eventData.TransactionId);
 
             base.TransactionCommitted(transaction, eventData);
         }
 
         public override Task TransactionCommittedAsync(DbTransaction transaction, TransactionEndEventData eventData, CancellationToken cancellationToken = default)
         {
-            TransactionLocks.Release(_logger, eventData.ConnectionId);
+            TransactionLocks.Release(_logger, eventData.ConnectionId, eventData.TransactionId);
 
             return base.TransactionCommittedAsync(transaction, eventData, cancellationToken);
         }
 
         public override void TransactionFailed(DbTransaction transaction, TransactionErrorEventData eventData)
         {
-            TransactionLocks.Release(_logger, eventData.ConnectionId);
+            TransactionLocks.Release(_logger, eventData.ConnectionId, eventData.TransactionId);
 
             base.TransactionFailed(transaction, eventData);
         }
 
         public override Task TransactionFailedAsync(DbTransaction transaction, TransactionErrorEventData eventData, CancellationToken cancellationToken = default)
         {
-            TransactionLocks.Release(_logger, eventData.ConnectionId);
+            TransactionLocks.Release(_logger, eventData.ConnectionId, eventData.TransactionId);
 
             return base.TransactionFailedAsync(transaction, eventData, cancellationToken);
         }
 
         public override void TransactionRolledBack(DbTransaction transaction, TransactionEndEventData eventData)
         {
-            TransactionLocks.Release(_logger, eventData.ConnectionId);
+            TransactionLocks.Release(_logger, eventData.ConnectionId, eventData.TransactionId);
 
             base.TransactionRolledBack(transaction, eventData);
         }
 
         public override Task TransactionRolledBackAsync(DbTransaction transaction, TransactionEndEventData eventData, CancellationToken cancellationToken = default)
         {
-            TransactionLocks.Release(_logger, eventData.ConnectionId);
+            TransactionLocks.Release(_logger, eventData.ConnectionId, eventData.TransactionId);
 
             return base.TransactionRolledBackAsync(transaction, eventData, cancellationToken);
         }
@@ -241,7 +256,7 @@ public class PessimisticLockBehavior : IEntityFrameworkCoreLockingBehavior
             }
             finally
             {
-                TransactionLocks.Release(_logger, _connectionId);
+                TransactionLocks.Release(_logger, _connectionId, TransactionId);
             }
         }
 
@@ -253,7 +268,7 @@ public class PessimisticLockBehavior : IEntityFrameworkCoreLockingBehavior
             }
             finally
             {
-                TransactionLocks.Release(_logger, _connectionId);
+                TransactionLocks.Release(_logger, _connectionId, TransactionId);
             }
         }
     }
@@ -269,28 +284,28 @@ public class PessimisticLockBehavior : IEntityFrameworkCoreLockingBehavior
 
         public override InterceptionResult ConnectionClosing(DbConnection connection, ConnectionEventData eventData, InterceptionResult result)
         {
-            TransactionLocks.Release(_logger, eventData.ConnectionId);
+            TransactionLocks.ReleaseConnection(_logger, eventData.ConnectionId);
 
             return base.ConnectionClosing(connection, eventData, result);
         }
 
         public override ValueTask<InterceptionResult> ConnectionClosingAsync(DbConnection connection, ConnectionEventData eventData, InterceptionResult result)
         {
-            TransactionLocks.Release(_logger, eventData.ConnectionId);
+            TransactionLocks.ReleaseConnection(_logger, eventData.ConnectionId);
 
             return base.ConnectionClosingAsync(connection, eventData, result);
         }
 
         public override InterceptionResult ConnectionDisposing(DbConnection connection, ConnectionEventData eventData, InterceptionResult result)
         {
-            TransactionLocks.Release(_logger, eventData.ConnectionId);
+            TransactionLocks.ReleaseConnection(_logger, eventData.ConnectionId);
 
             return base.ConnectionDisposing(connection, eventData, result);
         }
 
         public override ValueTask<InterceptionResult> ConnectionDisposingAsync(DbConnection connection, ConnectionEventData eventData, InterceptionResult result)
         {
-            TransactionLocks.Release(_logger, eventData.ConnectionId);
+            TransactionLocks.ReleaseConnection(_logger, eventData.ConnectionId);
 
             return base.ConnectionDisposingAsync(connection, eventData, result);
         }

@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
 using Tesserafin.Database.Implementations;
 using Tesserafin.Database.Implementations.DbConfiguration;
@@ -277,6 +278,33 @@ public abstract class LockingBehaviorLifecycleTests : IDisposable
         });
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public Task DisposingAnEndedTransactionAgain_LeavesTheNextTransactionItsLock(bool firstDisposeAsync, bool secondDisposeAsync)
+    {
+        return RunAsync(async threads =>
+        {
+            var context = CreateDbContext();
+            await using (context.ConfigureAwait(false))
+            {
+                var earlier = await context.Database.BeginTransactionAsync().ConfigureAwait(false);
+                await earlier.CommitAsync().ConfigureAwait(false);
+                await DisposeTransaction(earlier, firstDisposeAsync).ConfigureAwait(false);
+
+                var next = await context.Database.BeginTransactionAsync().ConfigureAwait(false);
+                await using (next.ConfigureAwait(false))
+                {
+                    await threads.SwitchThread();
+                    await DisposeTransaction(earlier, secondDisposeAsync).ConfigureAwait(false);
+                    await AssertNextTransactionKeepsOthersOut(context, next).ConfigureAwait(false);
+                }
+            }
+        });
+    }
+
     [Fact]
     public async Task ConcurrentTransactions_FromDistinctThreads_AllCommit()
     {
@@ -385,36 +413,57 @@ public abstract class LockingBehaviorLifecycleTests : IDisposable
 
     private void AssertWriteFromAnotherThreadSucceeds(string key)
     {
+        StartWriteFromAnotherThread(key).AssertSucceeded();
+        Assert.Contains(key, ReadSet(_itemId));
+    }
+
+    /// <summary>
+    /// The transaction a context began after an earlier one ended must keep every other connection out
+    /// until it ends, whatever happened to the earlier transaction since.
+    /// </summary>
+    private async Task AssertNextTransactionKeepsOthersOut(TesserafinDbContext context, IDbContextTransaction next)
+    {
+        var writer = StartWriteFromAnotherThread("concurrent");
+
+        // Time for the writer to reach the lock: it must still be waiting once the transaction is done.
+        await Task.Delay(TimeSpan.FromMilliseconds(500), TestContext.Current.CancellationToken).ConfigureAwait(false);
+        await ReplaceSetAsync(context, "new").ConfigureAwait(false);
+        Assert.False(writer.IsCompleted, "A write from another connection ran inside the next transaction.");
+        await next.CommitAsync().ConfigureAwait(false);
+
+        writer.AssertSucceeded();
+        Assert.Equal(["concurrent", "concurrent-bare", "new"], ReadSet(_itemId));
+    }
+
+    private BackgroundWrite StartWriteFromAnotherThread(string key)
+    {
         // A lock that is reentrant for the thread holding it hides a leak from that thread, so the
         // write runs on a thread of its own, both through a transaction and through a bare save.
-        Exception? error = null;
-        var writer = new Thread(() =>
+        return new BackgroundWrite(() =>
         {
-            try
+            using var context = CreateDbContext();
+            using (var transaction = context.Database.BeginTransaction())
             {
-                using var context = CreateDbContext();
-                using (var transaction = context.Database.BeginTransaction())
-                {
-                    context.CustomItemDisplayPreferences.Add(NewRow(_itemId, key));
-                    context.SaveChanges();
-                    transaction.Commit();
-                }
-
-                context.CustomItemDisplayPreferences.Add(NewRow(_itemId, key + "-bare"));
+                context.CustomItemDisplayPreferences.Add(NewRow(_itemId, key));
                 context.SaveChanges();
+                transaction.Commit();
             }
-            catch (Exception e)
-            {
-                error = e;
-            }
-        })
+
+            context.CustomItemDisplayPreferences.Add(NewRow(_itemId, key + "-bare"));
+            context.SaveChanges();
+        });
+    }
+
+    private static async Task DisposeTransaction(IDbContextTransaction transaction, bool disposeAsync)
+    {
+        if (disposeAsync)
         {
-            IsBackground = true,
-        };
-        writer.Start();
-        Assert.True(writer.Join(_deadline), "A write from another thread is still blocked.");
-        Assert.Null(error);
-        Assert.Contains(key, ReadSet(_itemId));
+            await transaction.DisposeAsync().ConfigureAwait(false);
+        }
+        else
+        {
+            transaction.Dispose();
+        }
     }
 
     private void ReplaceSet(TesserafinDbContext context, string key)
@@ -494,6 +543,47 @@ public abstract class LockingBehaviorLifecycleTests : IDisposable
     }
 
 #pragma warning restore CA1034
+
+    /// <summary>
+    /// A write that runs on a thread of its own, joined under the deadline.
+    /// </summary>
+    private sealed class BackgroundWrite
+    {
+        private readonly Thread _thread;
+        private Exception? _error;
+        private volatile bool _completed;
+
+        public BackgroundWrite(Action write)
+        {
+            _thread = new Thread(() =>
+            {
+                try
+                {
+                    write();
+                }
+                catch (Exception e)
+                {
+                    _error = e;
+                }
+                finally
+                {
+                    _completed = true;
+                }
+            })
+            {
+                IsBackground = true,
+            };
+            _thread.Start();
+        }
+
+        public bool IsCompleted => _completed;
+
+        public void AssertSucceeded()
+        {
+            Assert.True(_thread.Join(_deadline), "A write from another thread is still blocked.");
+            Assert.Null(_error);
+        }
+    }
 
     /// <summary>
     /// Resumes the awaiting flow on a thread created for it, so that the flow really changes thread
