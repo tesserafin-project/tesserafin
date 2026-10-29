@@ -64,6 +64,11 @@ public class TesserafinDbContext(DbContextOptions<TesserafinDbContext> options, 
     public DbSet<ItemDisplayPreferences> ItemDisplayPreferences => Set<ItemDisplayPreferences>();
 
     /// <summary>
+    /// Gets the <see cref="DbSet{TEntity}"/> containing the item display preferences archived as duplicates.
+    /// </summary>
+    public DbSet<ItemDisplayPreferencesArchive> ItemDisplayPreferencesArchive => Set<ItemDisplayPreferencesArchive>();
+
+    /// <summary>
     /// Gets the <see cref="DbSet{TEntity}"/> containing the custom item display preferences.
     /// </summary>
     public DbSet<CustomItemDisplayPreferences> CustomItemDisplayPreferences => Set<CustomItemDisplayPreferences>();

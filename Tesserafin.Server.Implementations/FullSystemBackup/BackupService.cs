@@ -18,6 +18,7 @@ using Tesserafin.Controller;
 using Tesserafin.Controller.Library;
 using Tesserafin.Controller.SystemBackupService;
 using Tesserafin.Database.Implementations;
+using Tesserafin.Database.Implementations.Entities;
 using Tesserafin.Extensions;
 using Tesserafin.Server.Implementations.StorageHelpers;
 using Tesserafin.Server.Implementations.SystemBackupService;
@@ -236,12 +237,25 @@ public class BackupService : IBackupService
                         {
                             _logger.LogInformation("Restore backup of {Table}", entityType.Type.Name);
                             var records = 0;
+
+                            // A backup taken before the scope of item display preferences was unique
+                            // can hold duplicates, which are archived as the migration does.
+                            var itemDisplayPreferences = entityType.Type.PropertyType.GetGenericArguments()[0] == typeof(ItemDisplayPreferences)
+                                ? new ItemDisplayPreferencesScopes()
+                                : null;
                             await foreach (var item in JsonSerializer.DeserializeAsyncEnumerable<JsonObject>(zipEntryStream, _serializerSettings).ConfigureAwait(false))
                             {
                                 var entity = item.Deserialize(entityType.Type.PropertyType.GetGenericArguments()[0]);
                                 if (entity is null)
                                 {
                                     throw new InvalidOperationException($"Cannot deserialize entity '{item}'");
+                                }
+
+                                if (itemDisplayPreferences is not null)
+                                {
+                                    records++;
+                                    itemDisplayPreferences.Add((ItemDisplayPreferences)entity, item!["Id"]?.GetValue<int>() ?? int.MaxValue);
+                                    continue;
                                 }
 
                                 try
@@ -252,6 +266,17 @@ public class BackupService : IBackupService
                                 catch (Exception ex)
                                 {
                                     _logger.LogError(ex, "Could not store entity {Entity}, continuing anyway", item);
+                                }
+                            }
+
+                            if (itemDisplayPreferences is not null)
+                            {
+                                var (active, archived) = itemDisplayPreferences.Resolve(DateTime.UtcNow);
+                                dbContext.AddRange(active);
+                                dbContext.AddRange(archived);
+                                if (archived.Count > 0)
+                                {
+                                    _logger.LogWarning("Archived {Number} duplicate item display preferences of the backup in {Table}", archived.Count, nameof(TesserafinDbContext.ItemDisplayPreferencesArchive));
                                 }
                             }
 

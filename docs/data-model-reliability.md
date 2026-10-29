@@ -74,8 +74,8 @@ they are replaced on the next save of that scope, and no migration removes them.
 
 Creation is serialized by a lock in the singleton manager, taken on a cache miss
 only. It covers one server process per database, the supported SQLite setup.
-`ItemDisplayPreferences` still has no unique index: nothing in the database
-rejects a second row written by another process or by an older server.
+`ItemDisplayPreferences` has a unique index on its scope since the
+`DeduplicateItemDisplayPreferences` migration.
 
 ## Database locking modes: transactions and the write lock
 
@@ -138,13 +138,41 @@ Inventory of the writes that delete or modify rows before `SaveChanges`:
 
 ## Item display preferences: pre-existing duplicates
 
-Databases written before the fix can hold several `ItemDisplayPreferences` rows
-for one scope. The server now reads and updates the oldest row (lowest `Id`) of
-such a scope and leaves the others unchanged. It never merges, reassigns or
-deletes them.
+Databases written before #369 can hold several `ItemDisplayPreferences` rows for
+one scope `(UserId, ItemId, Client)`. The `DeduplicateItemDisplayPreferences`
+migration applies the maintainer decision on #360, in its transaction:
 
-Read-only diagnostic (the same query is run by
-`LegacyDuplicateScopes_AreClassifiedAndLeftUntouchedByConcurrentReads`):
+| Class | Test | Kept active | Other rows |
+|---|---|---|---|
+| Identical | `GlobalScope = 0`, `DistinctSettings = 1` | lowest `Id` | archived in full, removed |
+| Contradictory | `GlobalScope = 0`, `DistinctSettings > 1` | lowest `Id` (the row the server already read) | archived in full, removed |
+| Global, origin unknown | `GlobalScope = 1` | lowest `Id` | archived in full, removed; no attempt to recover their scope |
+
+No field is merged and no "most recent" row is chosen: nothing records when a row
+changed. A lone global row is not a duplicate and is left in place. Then the
+unique index `IX_ItemDisplayPreferences_UserId_ItemId_Client` replaces the index
+on `UserId`. Every statement can run again on a migrated database (a full-system
+restore writes back an earlier migration history), and `Down` puts every
+archived row back with its id. A full-system restore of a backup taken before
+the migration applies the same rule (`ItemDisplayPreferencesScopes`).
+
+`ItemDisplayPreferencesArchive` holds every column of each removed row, its
+original `Id`, `KeptId` (the active row of its scope), `DuplicateClass`
+(0 identical, 1 contradictory, 2 global) and `ArchivedAt` (UTC). It is part of
+full-system backups. To bring an archived row's settings back onto the active
+row of its scope:
+
+```sql
+UPDATE ItemDisplayPreferences
+SET (ViewType, RememberIndexing, IndexBy, RememberSorting, SortBy, SortOrder) =
+    (SELECT ViewType, RememberIndexing, IndexBy, RememberSorting, SortBy, SortOrder
+     FROM ItemDisplayPreferencesArchive WHERE Id = :archivedId)
+WHERE Id = (SELECT KeptId FROM ItemDisplayPreferencesArchive WHERE Id = :archivedId);
+```
+
+Read-only diagnostic of the duplicates (run by
+`ItemDisplayPreferencesDeduplicationMigrationTests` before and after the
+migration; it returns nothing on a migrated database):
 
 ```sql
 SELECT UserId, ItemId, Client,
@@ -161,29 +189,6 @@ HAVING COUNT(*) > 1
 ORDER BY UserId, ItemId, Client;
 ```
 
-Each group falls into one of these classes:
-
-| Class | Test | Example | Information lost by keeping one row |
-|---|---|---|---|
-| Identical | `GlobalScope = 0`, `DistinctSettings = 1` | two default rows for one item, from the creation race | none |
-| Contradictory | `GlobalScope = 0`, `DistinctSettings > 1` | `SortName` ascending and `DateCreated` descending, remembered, for one item | the settings of every row but the kept one |
-| Global, origin unknown | `GlobalScope = 1` | two default rows, or a default row and a remembered `PremiereDate` row, for `Guid.Empty` | possibly the preference of an item whose id was never stored |
-
-`DefaultRows` counts rows still at the creation defaults: they were created by a
-read and never saved with a user choice. Global rows were created with
-`Guid.Empty` for any requested scope before #362, so even a single global row may
-belong to an item; the diagnostic lists only the duplicated ones.
-
-**Decision needed before any unique index on `(UserId, ItemId, Client)`.** For
-each class, choose between keeping every row (no index), keeping one row (and
-which: the oldest, which the server already reads, or the most recently changed,
-which nothing records today), or keeping one row and exporting the others. For
-the global class, also decide whether rows with user choices may be dropped at
-all, given their scope cannot be recovered. Until that decision exists, no
-migration adds the index or touches these rows. If a repair migration is chosen,
-it must apply the rule in the same transaction as the index creation and prove
-both preservation and rollback on a migrated copy.
-
 ## Next bounded work
 
 1. Together with #351, reproduce deletion through `ItemPersistenceService` when
@@ -194,8 +199,7 @@ both preservation and rollback on a migrated copy.
    service paths, not a reduced SQL schema.
 2. Diagnose incompatible rows before adding `MediaSegments.ItemId` and
    `CustomItemDisplayPreferences.UserId` foreign keys. Record targeted repair
-   choices and prove migration preservation. Preference uniqueness waits for the
-   decision above.
+   choices and prove migration preservation.
 3. Define authoritative hierarchy and metadata representations, then address
    identity and playlist cardinality through explicit decisions. Optimize
    retrieval only after representative query measurements.

@@ -130,59 +130,51 @@ public sealed class DisplayPreferencesManagerTests : IDisposable
     }
 
     [Fact]
-    public void GetItemDisplayPreferences_DoesNotReassignOrDeleteAmbiguousLegacyGlobalRows()
+    public void GetItemDisplayPreferences_DoesNotReassignOrDeleteALegacyGlobalRow()
     {
+        // A global row written before #362 for an unknown item: the migration that made the scope
+        // unique leaves a lone one in place, and reading another item must not claim it.
         using (var context = CreateDbContext())
         {
-            context.ItemDisplayPreferences.AddRange(
-                new ItemDisplayPreferences(_userId, Guid.Empty, "web") { SortBy = "DateCreated" },
-                new ItemDisplayPreferences(_userId, Guid.Empty, "web") { SortBy = "CommunityRating" });
+            context.ItemDisplayPreferences.Add(new ItemDisplayPreferences(_userId, Guid.Empty, "web") { SortBy = "DateCreated" });
             context.SaveChanges();
         }
 
         using var verificationContext = CreateDbContext();
-        var originalRows = verificationContext.ItemDisplayPreferences.AsNoTracking().OrderBy(row => row.Id).ToArray();
+        var originalRow = verificationContext.ItemDisplayPreferences.AsNoTracking().Single();
         var itemId = Guid.NewGuid();
         var manager = new DisplayPreferencesManager(_factory);
         var preferences = manager.GetItemDisplayPreferences(_userId, itemId, "web");
         Assert.Equal(itemId, preferences.ItemId);
         Assert.Equal(preferences.Id, manager.GetItemDisplayPreferences(_userId, itemId, "web").Id);
 
-        var remainingGlobalRows = verificationContext.ItemDisplayPreferences.AsNoTracking()
-            .Where(row => row.ItemId.Equals(Guid.Empty)).OrderBy(row => row.Id).ToArray();
-        Assert.Equal(originalRows.Select(row => row.Id), remainingGlobalRows.Select(row => row.Id));
-        Assert.Equal(originalRows.Select(row => row.SortBy), remainingGlobalRows.Select(row => row.SortBy));
-        Assert.Equal(3, verificationContext.ItemDisplayPreferences.Count());
+        var globalRow = verificationContext.ItemDisplayPreferences.AsNoTracking().Single(row => row.ItemId.Equals(Guid.Empty));
+        Assert.Equal(originalRow.Id, globalRow.Id);
+        Assert.Equal("DateCreated", globalRow.SortBy);
+        Assert.Equal(2, verificationContext.ItemDisplayPreferences.Count());
         Assert.Equal(itemId, Assert.Single(manager.ListItemDisplayPreferences(_userId, "web")).ItemId);
     }
 
     [Fact]
-    public void GetItemDisplayPreferences_ReadsAndUpdatesTheOldestOfLegacyDuplicates()
+    public void ItemDisplayPreferences_TheDatabaseRefusesASecondRowForAScope()
     {
         var itemId = Guid.NewGuid();
+        var manager = new DisplayPreferencesManager(_factory);
+        var preferences = manager.GetItemDisplayPreferences(_userId, itemId, "web");
+        preferences.SortBy = "Saved";
+        manager.UpdateItemDisplayPreferences(preferences);
+
         using (var context = CreateDbContext())
         {
-            context.ItemDisplayPreferences.AddRange(
-                new ItemDisplayPreferences(_userId, itemId, "web") { SortBy = "Oldest" },
-                new ItemDisplayPreferences(_userId, itemId, "web") { SortBy = "Newer" },
-                new ItemDisplayPreferences(_userId, itemId, "web") { SortBy = "Newest" });
-            context.SaveChanges();
+            context.ItemDisplayPreferences.Add(new ItemDisplayPreferences(_userId, itemId, "web") { SortBy = "Second" });
+            var refused = Assert.Throws<DbUpdateException>(() => context.SaveChanges());
+            Assert.Contains("UNIQUE", refused.InnerException!.Message, StringComparison.Ordinal);
         }
 
         using var verificationContext = CreateDbContext();
-        var originalRows = verificationContext.ItemDisplayPreferences.AsNoTracking().OrderBy(row => row.Id).ToArray();
-        var manager = new DisplayPreferencesManager(_factory);
-        var preferences = manager.GetItemDisplayPreferences(_userId, itemId, "web");
-        Assert.Equal(originalRows[0].Id, preferences.Id);
-
-        preferences.SortBy = "Saved";
-        manager.UpdateItemDisplayPreferences(preferences);
+        var row = Assert.Single(verificationContext.ItemDisplayPreferences.AsNoTracking());
+        Assert.Equal(preferences.Id, row.Id);
         Assert.Equal("Saved", new DisplayPreferencesManager(_factory).GetItemDisplayPreferences(_userId, itemId, "web").SortBy);
-
-        // The other duplicates are neither merged nor deleted.
-        var rows = verificationContext.ItemDisplayPreferences.AsNoTracking().OrderBy(row => row.Id).ToArray();
-        Assert.Equal(originalRows.Select(row => row.Id), rows.Select(row => row.Id));
-        Assert.Equal(new[] { "Saved", "Newer", "Newest" }, rows.Select(row => row.SortBy));
     }
 
     private TesserafinDbContext CreateDbContext()

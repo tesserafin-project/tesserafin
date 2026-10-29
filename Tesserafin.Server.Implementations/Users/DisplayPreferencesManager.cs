@@ -16,10 +16,10 @@ public sealed class DisplayPreferencesManager : IDisplayPreferencesManager
 {
     private readonly IDbContextFactory<TesserafinDbContext> _dbContextFactory;
 
-    // Serializes find-or-create. ItemDisplayPreferences has no unique index on (UserId, ItemId, Client),
-    // and legacy duplicates of the global scope must be kept, so the database cannot reject a second
-    // row; DisplayPreferences does have one, which turns the same race into a failed request instead.
-    // Creation only happens once per scope, so the lock is taken on a cache miss only.
+    // Serializes find-or-create. ItemDisplayPreferences and DisplayPreferences both have a unique index
+    // on their scope, which would turn the race into a failed request; the lock makes the second reader
+    // find the row the first one created instead. Creation only happens once per scope, so the lock is
+    // taken on a cache miss only.
     private readonly Lock _createLock = new();
 
     /// <summary>
@@ -65,8 +65,8 @@ public sealed class DisplayPreferencesManager : IDisplayPreferencesManager
     {
         using var dbContext = _dbContextFactory.CreateDbContext();
 
-        // Legacy databases can hold several rows for one scope. Always read the oldest one, so that
-        // reads and the update that follows them keep targeting the same row.
+        // The scope is unique since the DeduplicateItemDisplayPreferences migration, which kept the
+        // oldest row of each scope; ordering by id keeps reading that row.
         ItemDisplayPreferences? Find() => dbContext.ItemDisplayPreferences
             .Where(pref => pref.UserId.Equals(userId) && pref.ItemId.Equals(itemId) && pref.Client == client)
             .OrderBy(pref => pref.Id)
