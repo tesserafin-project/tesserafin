@@ -77,6 +77,62 @@ only. It covers one server process per database, the supported SQLite setup.
 `ItemDisplayPreferences` still has no unique index: nothing in the database
 rejects a second row written by another process or by an older server.
 
+## Database locking modes: transactions and the write lock
+
+Contract, enforced under `NoLock`, `Optimistic` and `Pessimistic` on a migrated
+SQLite file configured by the production provider:
+
+- A save that fails reaches the caller in every mode, whether SQLite refuses it
+  (a unique key) or anything else does; the transaction that ran a delete before
+  it is rolled back, as a new connection reads it
+  (`LockingBehaviorSaveFailureTests`). `Optimistic` still retries a save that
+  finds the database locked, and only that (`IsRetriedAndSucceeds`).
+- In `Pessimistic`, the process-wide write lock is owned by the EF Core
+  connection of the transaction, never by a thread. It is taken by
+  `BeginTransaction` and released exactly once, by the first of: commit,
+  rollback, a failed commit or rollback, the disposal of the transaction (with or
+  without an exception, synchronous or `DisposeAsync`), and the closing or
+  disposal of the connection. Saves and commands of the owning connection run
+  inside the lock; those of every other connection wait for it.
+  (`LockingBehaviorLifecycleTests`).
+- The flow that holds the lock may resume on any thread between
+  `BeginTransactionAsync` and the commit: the tests force a real thread change
+  between every step, and check commit, explicit rollback, disposal after an
+  exception, cancellation before the commit, a connection opened by the caller
+  (released while it stays open), a context reused after its transaction, and
+  concurrent transactions from distinct threads, synchronous and asynchronous.
+- Every scenario runs under a deadline and is followed by a write from another
+  thread under a deadline, so a leaked lock fails the test instead of suspending
+  the suite; the seed of each test does not go through the mode under test.
+
+Before this change `Pessimistic` used a static, thread-affine
+`ReaderWriterLockSlim`. An asynchronous transaction that resumed on another
+thread either deadlocked (the new thread waited for the lock its own flow held)
+or threw `SynchronizationLockException` at commit, leaving the lock held by a
+thread that no longer exists, so every later database access of the process
+waited forever. `ContentPackManager`, `BackupService`, `KeyframeRepository`,
+`ItemPersistenceService.ReattachUserDataAsync`/`SaveImagesAsync` and
+`CleanDatabaseScheduledTask` run such transactions.
+
+Limits:
+
+- Ownership by connection means a flow that holds a transaction on one context
+  and then writes or reads through a second context waits for itself. No
+  current transaction does that; a congestion line is logged after one second.
+- The lock covers one server process; other processes only meet SQLite's own
+  busy timeout.
+
+## Replace-a-set writes
+
+Inventory of the writes that delete or modify rows before `SaveChanges`:
+
+| Shape | Writes | State |
+| --- | --- | --- |
+| Transaction, delete, save, commit | `MediaStreamRepository.SaveMediaStreams`, `ChapterRepository.SaveChapters`, `MediaAttachmentRepository.SaveMediaAttachments`, `KeyframeRepository.SaveKeyframeDataAsync`, `DisplayPreferencesManager` | Atomic in every mode (`ReplaceSetRepositoryTests`, `DisplayPreferencesManagerConcurrencyTests`) |
+| Delete committed alone, then save | `ItemPersistenceService.SaveImagesAsync` | Was not atomic: a failed save left the item without images in every mode. Now one transaction |
+| Item deletion and user data reattachment | `ItemPersistenceService.DeleteItem`, `ReattachUserDataAsync` | Atomic in every mode (`UserDataLockingModeTests`; policies in `ItemPersistenceConservationTests`) |
+| Separate statements, convergent on retry | `LinkedChildrenService.RerouteLinkedChildren`, `PeopleValidationTask` merge, `MediaSegmentManager`, `TrickplayManager` | Not changed: a failure leaves derived data that the next scan or run regenerates or completes |
+
 ## Item display preferences: pre-existing duplicates
 
 Databases written before the fix can hold several `ItemDisplayPreferences` rows
