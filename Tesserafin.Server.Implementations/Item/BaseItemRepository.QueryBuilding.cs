@@ -274,6 +274,13 @@ public sealed partial class BaseItemRepository
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Except under <see cref="ItemSortBy.Random"/>, every exit ends on the item's Id, always ascending
+    /// whatever the direction of the requested criteria, so the order is total and Skip/Take read one
+    /// sequence at any page size. A descending sort is therefore not the exact mirror of its ascending
+    /// sort among tied rows. This fixes the order of a given set of rows; it is not a snapshot between
+    /// requests, so a row added or removed while pages are read still shifts the rows after it.
+    /// </remarks>
     public IQueryable<BaseItemEntity> ApplyOrder(IQueryable<BaseItemEntity> query, InternalItemsQuery filter, TesserafinDbContext context)
     {
         var orderBy = filter.OrderBy.Where(e => e.OrderBy != ItemSortBy.Default).ToArray();
@@ -331,7 +338,7 @@ public sealed partial class BaseItemRepository
 
         if (orderedQuery is null)
         {
-            return query.OrderBy(e => e.SortName);
+            return query.OrderBy(e => e.SortName).ThenBy(e => e.Id);
         }
 
         // Add SortName as final tiebreaker
@@ -340,7 +347,8 @@ public sealed partial class BaseItemRepository
             orderedQuery = orderedQuery.ThenBy(e => e.SortName);
         }
 
-        return orderedQuery;
+        // A random order redraws per request: a final key would add nothing but a longer ORDER BY.
+        return orderBy.Any(o => o.OrderBy == ItemSortBy.Random) ? orderedQuery : orderedQuery.ThenBy(e => e.Id);
     }
 
     private IQueryable<BaseItemEntity> ApplySeriesDatePlayedOrder(
@@ -375,8 +383,8 @@ public sealed partial class BaseItemRepository
         var seriesSort = orderBy.First(o => o.OrderBy == ItemSortBy.SeriesDatePlayed);
 
         return seriesSort.SortOrder == SortOrder.Ascending
-            ? joined.OrderBy(x => x.MaxDate).ThenBy(x => x.Item.SortName).Select(x => x.Item)
-            : joined.OrderByDescending(x => x.MaxDate).ThenBy(x => x.Item.SortName).Select(x => x.Item);
+            ? joined.OrderBy(x => x.MaxDate).ThenBy(x => x.Item.SortName).ThenBy(x => x.Item.Id).Select(x => x.Item)
+            : joined.OrderByDescending(x => x.MaxDate).ThenBy(x => x.Item.SortName).ThenBy(x => x.Item.Id).Select(x => x.Item);
     }
 
     /// <summary>
