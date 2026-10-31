@@ -43,6 +43,12 @@ The two differ on purpose, and only within one user. A stop report speaks for it
 
 A client that disappears without stopping is covered by the existing ping timeout: 60 s for HLS.
 
+## Known limits
+
+- The session manager keeps one current session per play session id. After a second user plans under an id, job and lifecycle signals for that id are attributed to the newer session. Ownership, stop and revocation do not read that mapping.
+- Minting a capability under an id whose running job belongs to another device answers 404, whoever owns that job. Two users sharing an id therefore fail closed if the second mints after the first's job started.
+- A session the legacy pipeline tracked by itself has no request, so an administrator's delete removes it without stopping or revoking anything.
+
 ## #302: a Stop report that regresses
 
 **Keep the current semantics.** `SessionManager.OnPlaybackStopped` writes the position the client reports, and no maximum is kept.

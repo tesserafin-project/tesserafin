@@ -34,10 +34,12 @@ public static class OwnedPlaySessionRevocationExtensions
     /// <param name="playSessionId">The play session that ended.</param>
     /// <param name="userId">The user whose capabilities end.</param>
     /// <param name="deviceId">The device whose capabilities end, or <see langword="null"/> for all of the user's.</param>
-    /// <returns>How many capabilities were removed.</returns>
-    /// <exception cref="NotSupportedException">The service cannot scope a revocation: falling back to the whole play session would end other users' capabilities.</exception>
+    /// <returns>
+    /// How many capabilities were removed. A service that cannot scope a revocation revokes nothing:
+    /// its capabilities expire by themselves, whereas the whole play session would end other users'.
+    /// </returns>
     public static int RevokePlaySession(this IPlaybackCredentialService service, string playSessionId, Guid userId, string? deviceId)
         => service is IOwnedPlaySessionRevocation owned
             ? owned.RevokePlaySession(playSessionId, userId, deviceId)
-            : throw new NotSupportedException("This credential service cannot revoke a play session by its owner.");
+            : 0;
 }

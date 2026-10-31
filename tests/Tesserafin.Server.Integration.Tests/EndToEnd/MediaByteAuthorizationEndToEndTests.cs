@@ -357,6 +357,31 @@ public sealed class MediaByteAuthorizationEndToEndTests : IClassFixture<HlsIsola
     }
 
     /// <summary>
+    /// #301: an API key names no user, so beside a capability it contradicts it like any other
+    /// durable credential, though alone it is served.
+    /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
+    [Fact(Timeout = 120_000)]
+    public async Task CapabilityBesideAnApiKey_IsRefused()
+    {
+        var app = "pc301-key-" + _suffix;
+        using (var created = await _admin.PostAsync("Auth/Keys?app=" + app, null, TestContext.Current.CancellationToken))
+        {
+            created.EnsureSuccessStatusCode();
+        }
+
+        using var keys = JsonDocument.Parse(await _admin.GetStringAsync("Auth/Keys", TestContext.Current.CancellationToken));
+        var key = keys.RootElement.GetProperty("Items").EnumerateArray().Single(k => k.GetProperty("AppName").GetString() == app).GetProperty("AccessToken").GetString();
+        var playSession = "pc301-key-" + Guid.NewGuid().ToString("N");
+        var url = await CapabilityUrlAsync(_allowed, playSession);
+        using var anonymous = _factory.CreateClient();
+
+        var contradicted = await SendAsync(anonymous, "GET", url + "&ApiKey=" + key, string.Empty);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, contradicted.Status);
+    }
+
+    /// <summary>
     /// #301: two users on one client-chosen play session id each hold a session and a capability.
     /// Ending one ends only that user's, by deleting the session or by the stop report.
     /// </summary>
