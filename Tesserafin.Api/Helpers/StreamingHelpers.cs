@@ -247,7 +247,8 @@ public static class StreamingHelpers
 
             encodingHelper.TryStreamCopy(state, encodingOptions);
 
-            if (!EncodingHelper.IsCopyCodec(state.OutputVideoCodec) && state.OutputVideoBitrate.HasValue)
+            // No bitrate limit requested means no reason to reduce the resolution either.
+            if (!EncodingHelper.IsCopyCodec(state.OutputVideoCodec) && state.OutputVideoBitrate.HasValue && state.VideoRequest.VideoBitRate.HasValue)
             {
                 var isVideoResolutionNotRequested = !state.VideoRequest.Width.HasValue
                     && !state.VideoRequest.Height.HasValue

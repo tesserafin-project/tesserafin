@@ -148,6 +148,28 @@ public class EncodingHelperVaapiBitrateTests
         Assert.True(process.ExitCode == 0, $"Real ffmpeg rejected the generated h264_vaapi arguments '{param}':\n{stdErr}");
     }
 
+    [Fact]
+    public void GetVideoBitrateParamValue_NoLimitRequested_AimsAtTheSourceQuality()
+    {
+        var source = new MediaStream { Codec = "mpeg2video", BitRate = 4_000_000 };
+
+        Assert.True(CreateHelper().GetVideoBitrateParamValue(new VideoRequestDto(), source, "h264") >= source.BitRate);
+    }
+
+    [Fact]
+    public void GetVideoBitrateParamValue_RequestedLimit_StillWins()
+    {
+        var source = new MediaStream { Codec = "mpeg2video", BitRate = 40_000_000 };
+
+        Assert.Equal(3_000_000, CreateHelper().GetVideoBitrateParamValue(new VideoRequestDto { VideoBitRate = 3_000_000 }, source, "h264"));
+    }
+
+    [Fact]
+    public void GetVideoBitrateParamValue_NothingKnown_StaysZero()
+    {
+        Assert.Equal(0, CreateHelper().GetVideoBitrateParamValue(new VideoRequestDto(), new MediaStream { Codec = "mpeg2video" }, "h264"));
+    }
+
     private static string BuildQualityParam(
         string encoder,
         int outputVideoBitrate,

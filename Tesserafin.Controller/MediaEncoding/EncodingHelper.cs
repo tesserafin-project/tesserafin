@@ -2756,7 +2756,9 @@ namespace Tesserafin.Controller.MediaEncoding
 
         public int GetVideoBitrateParamValue(BaseEncodingJobOptions request, MediaStream videoStream, string outputVideoCodec)
         {
-            var bitrate = request.VideoBitRate;
+            // A client that names no limit asks for no reduction: aim at the source's quality. Left at
+            // zero, the output read as "the lowest bitrate there is" (416 pixels wide, whatever the source).
+            var bitrate = request.VideoBitRate ?? videoStream?.BitRate;
 
             if (videoStream is not null)
             {
@@ -2768,7 +2770,7 @@ namespace Tesserafin.Controller.MediaEncoding
                     && request.Width.Value > videoStream.Width.Value;
 
                 // Don't allow bitrate increases unless upscaling
-                if (!isUpscaling && bitrate.HasValue && videoStream.BitRate.HasValue)
+                if (!isUpscaling && request.VideoBitRate.HasValue && bitrate.HasValue && videoStream.BitRate.HasValue)
                 {
                     bitrate = GetMinBitrate(videoStream.BitRate.Value, bitrate.Value);
                 }
