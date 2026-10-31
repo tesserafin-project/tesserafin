@@ -47,12 +47,15 @@ public class PlaybackSessionPlanner : IPlaybackSessionPlanner
         // a container or audio codec the client just declared unplayable.
         if (streamInfo.PlayMethod == PlayMethod.DirectStream && streamInfo.TranscodeReasons != 0)
         {
-            return PlanRealOutput(streamBuilder, options);
+            var realOutput = PlanRealOutput(streamBuilder, options);
+            return realOutput is not null || !options.LegacyPlanIsFallbackOnly
+                ? realOutput
+                : new PlaybackPlan(streamInfo.PlayMethod, streamInfo.TranscodeReasons, streamInfo);
         }
 
         // StreamBuilder leaves PlayMethod at its Transcode default when no profile applied, with
         // nothing to produce: a descriptor for that would point at an output nobody declared.
-        if (streamInfo.PlayMethod == PlayMethod.Transcode && !HasOutput(streamInfo))
+        if (streamInfo.PlayMethod == PlayMethod.Transcode && !HasOutput(streamInfo) && !options.LegacyPlanIsFallbackOnly)
         {
             return null;
         }

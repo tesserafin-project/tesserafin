@@ -144,6 +144,15 @@ public class PlaybackSessionPlannerTests
         Assert.Null(GetPlanner().PlanVideo(options));
     }
 
+    [Fact]
+    public void PlanVideo_WhenAnotherEngineDecides_ALegacyRefusalDoesNotRefuseTheSession_Issue374()
+    {
+        var options = Options("mkv", isAvc: true, audioIsDefault: true, ["webm"], withHlsOutput: false);
+        options.LegacyPlanIsFallbackOnly = true;
+
+        Assert.NotNull(GetPlanner().PlanVideo(options));
+    }
+
     private static MediaOptions Options(string container, bool isAvc, bool audioIsDefault, string[] directPlayContainers, bool withHlsOutput)
     {
         var source = new MediaSourceInfo

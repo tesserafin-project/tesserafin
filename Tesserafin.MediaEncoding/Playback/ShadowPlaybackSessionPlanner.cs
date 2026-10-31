@@ -167,6 +167,7 @@ public sealed class ShadowPlaybackSessionPlanner : IPlaybackSessionPlanner
         var mode = shadowOptions.GetEffectiveMode();
         if (mode == PlaybackEngineMode.Legacy)
         {
+            options.LegacyPlanIsFallbackOnly = false;
             return null;
         }
 
@@ -179,6 +180,7 @@ public sealed class ShadowPlaybackSessionPlanner : IPlaybackSessionPlanner
             PlaybackEngineMode.Canary => CanaryCohort.IsInCohort(options.UserId, options.DeviceId, shadowOptions.CanaryPercentage),
             _ => false,
         };
+        options.LegacyPlanIsFallbackOnly = authoritative;
 
         // Sampling only ever gates pure observability runs: an authoritative run must happen for
         // every planning call it is authoritative for, or the session would silently flip between

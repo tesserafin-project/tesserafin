@@ -30,6 +30,12 @@ namespace Tesserafin.Model.Dlna
         public bool EnableDirectStream { get; set; }
 
         /// <summary>
+        /// Gets or sets a value indicating whether another engine decides this session, leaving the
+        /// legacy plan as the fallback only. A legacy refusal then does not refuse the session (#374).
+        /// </summary>
+        public bool LegacyPlanIsFallbackOnly { get; set; }
+
+        /// <summary>
         /// Gets or sets a value indicating whether direct playback is forced.
         /// </summary>
         public bool ForceDirectPlay { get; set; }
