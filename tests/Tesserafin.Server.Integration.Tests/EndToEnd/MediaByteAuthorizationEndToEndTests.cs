@@ -335,6 +335,28 @@ public sealed class MediaByteAuthorizationEndToEndTests : IClassFixture<HlsIsola
     }
 
     /// <summary>
+    /// #301: a capability beside another user's token is a contradiction, whoever that user is. Beside
+    /// its own user's token, or alone, it is served.
+    /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
+    [Fact(Timeout = 120_000)]
+    public async Task CapabilityBesideADurableToken_IsServedOnlyForItsOwnUser()
+    {
+        var playSession = "pc301-" + Guid.NewGuid().ToString("N");
+        var capability = await MediaBoundaryFixture.MintWithAsync(_allowed, [PlaybackCapabilityScope.Media], _item, _item.ToString("N", CultureInfo.InvariantCulture), playSession);
+        var url = FormattableString.Invariant($"Videos/{_item}/stream?static=true&mediaSourceId={_item:N}&playSessionId={playSession}&playbackCapability={Uri.EscapeDataString(capability.Value)}");
+        using var anonymous = _factory.CreateClient();
+
+        Assert.True((await SendAsync(anonymous, "GET", url, string.Empty)).Body.AsSpan().SequenceEqual(_itemBytes));
+        Assert.True((await SendAsync(_allowed, "GET", url, string.Empty)).Body.AsSpan().SequenceEqual(_itemBytes));
+
+        var contradicted = await SendAsync(_admin, "GET", url, string.Empty);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, contradicted.Status);
+        Assert.False(contradicted.Body.AsSpan().SequenceEqual(_itemBytes));
+    }
+
+    /// <summary>
     /// A subtitle capability is validated against the item and media source in the route; the
     /// obsolete query parameters name another item afterwards.
     /// </summary>

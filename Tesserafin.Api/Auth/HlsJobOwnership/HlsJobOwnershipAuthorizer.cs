@@ -244,7 +244,7 @@ public sealed class HlsJobOwnershipAuthorizer : IHlsJobOwnershipAuthorizer
         // has none and is resolved through its session. Deriving it differently on the two sides
         // would make a job unreachable by the client that started it.
         var callerDeviceId = HlsJobOwnerDevice.Resolve(
-            user.GetDeviceId(),
+            capability is null ? user.GetDeviceId() : null,
             capability?.Validation.SessionId,
             _sessionManager);
 

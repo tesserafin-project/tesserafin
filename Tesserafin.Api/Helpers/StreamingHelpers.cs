@@ -93,7 +93,11 @@ public static class StreamingHelpers
             // #153-LTV-R3. The one place a transcode's owning device is read, and it is read from
             // the validated token, not from `streamingRequest.DeviceId`, which is a query
             // parameter the caller controls.
-            OwnerDeviceId = httpContext.User.GetDeviceId(),
+            //
+            // #301. A capability decides alone: its device is its session's, even beside a token of
+            // the same user on another device. Never the user of one credential and the device of
+            // the other.
+            OwnerDeviceId = ValidatedPlaybackCapability.From(httpContext) is null ? httpContext.User.GetDeviceId() : null,
             OwnerCapabilitySessionId = ValidatedPlaybackCapability.From(httpContext)?.Validation.SessionId
         };
 

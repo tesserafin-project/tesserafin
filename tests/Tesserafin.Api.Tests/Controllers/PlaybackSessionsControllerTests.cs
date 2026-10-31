@@ -17,6 +17,7 @@ using Tesserafin.Controller.Entities;
 using Tesserafin.Controller.Entities.Movies;
 using Tesserafin.Controller.Library;
 using Tesserafin.Controller.MediaEncoding;
+using Tesserafin.Controller.Net.PlaybackCredentials;
 using Tesserafin.Data.Enums;
 using Tesserafin.Database.Implementations.Entities;
 using Tesserafin.MediaEncoding.Playback;
@@ -214,7 +215,7 @@ public class PlaybackSessionsControllerTests
         // session id, no request to contribute.
         realManager.Track(PlaybackMediaKind.Video, plan, "play-session-1");
 
-        var deleted = controller.DeletePlaybackSession(new PlaybackSessionId(response.Id));
+        var deleted = await controller.DeletePlaybackSession(new PlaybackSessionId(response.Id));
 
         Assert.IsType<NoContentResult>(deleted);
     }
@@ -375,24 +376,64 @@ public class PlaybackSessionsControllerTests
     }
 
     [Fact]
-    public void DeletePlaybackSession_ExistingSession_ReturnsNoContent()
+    public async Task DeletePlaybackSession_ExistingSession_ReturnsNoContent()
     {
         var id = PlaybackSessionId.NewId();
         _playbackSessionManager.Setup(m => m.Get(id)).Returns(BuildExistingSessionForAuth(id, _userId));
         _playbackSessionManager.Setup(m => m.Delete(id)).Returns(true);
 
-        var result = CreateController().DeletePlaybackSession(id);
+        var result = await CreateController().DeletePlaybackSession(id);
 
         Assert.IsType<NoContentResult>(result);
     }
 
     [Fact]
-    public void DeletePlaybackSession_UnknownSession_ReturnsNotFound()
+    public async Task DeletePlaybackSession_EndsOnlyTheOwnersJobs_AndRevokesTheCapabilities_Issue301()
+    {
+        var id = PlaybackSessionId.NewId();
+        var options = new MediaOptions { ItemId = _itemId, UserId = _userId, Profile = new DeviceProfile() };
+        var session = new PlaybackSession(id, PlaybackMediaKind.Video, "play-301", new PlaybackSessionRequest(PlaybackMediaKind.Video, options), new PlaybackPlan(PlayMethod.Transcode, default), default, default);
+        _playbackSessionManager.Setup(m => m.Get(id)).Returns(session);
+        _playbackSessionManager.Setup(m => m.Delete(id)).Returns(true);
+
+        Func<TranscodingJob, bool>? selected = null;
+        var transcodeManager = new Mock<ITranscodeManager>();
+        transcodeManager.As<ITranscodeOwnedStop>()
+            .Setup(m => m.StopTranscodingJobs("play-301", It.IsAny<Func<TranscodingJob, bool>>()))
+            .Callback<string, Func<TranscodingJob, bool>>((_, isOwn) => selected = isOwn)
+            .Returns(Task.CompletedTask);
+        var credentials = new Mock<IPlaybackCredentialService>();
+
+        var controller = new PlaybackSessionsController(
+            _playbackSessionManager.Object,
+            _itemLookupService.Object,
+            _userManager.Object,
+            _mediaSourceManager.Object,
+            _v2PlanStore.Object,
+            _liveStreamResolver.Object,
+            _liveWiringDiagnosticsStore.Object,
+            _mediaEncoder.Object,
+            transcodeManager: transcodeManager.Object,
+            credentialService: credentials.Object);
+        SetIdentity(controller, _userId);
+
+        Assert.IsType<NoContentResult>(await controller.DeletePlaybackSession(id));
+
+        credentials.Verify(c => c.RevokePlaySession("play-301"), Times.Once);
+        Assert.NotNull(selected);
+        Assert.True(selected(JobOf(_userId)));
+        Assert.False(selected(JobOf(Guid.NewGuid())));
+
+        static TranscodingJob JobOf(Guid user) => new(Mock.Of<ILogger<TranscodingJob>>()) { UserId = user };
+    }
+
+    [Fact]
+    public async Task DeletePlaybackSession_UnknownSession_ReturnsNotFound()
     {
         var id = PlaybackSessionId.NewId();
         _playbackSessionManager.Setup(m => m.Get(id)).Returns((PlaybackSession?)null);
 
-        var result = CreateController().DeletePlaybackSession(id);
+        var result = await CreateController().DeletePlaybackSession(id);
 
         Assert.IsType<NotFoundResult>(result);
         _playbackSessionManager.Verify(m => m.Delete(It.IsAny<PlaybackSessionId>()), Times.Never);
@@ -404,12 +445,12 @@ public class PlaybackSessionsControllerTests
     /// <c>GetPlaybackSessionStream</c>.
     /// </summary>
     [Fact]
-    public void DeletePlaybackSession_OtherUser_ReturnsForbidden()
+    public async Task DeletePlaybackSession_OtherUser_ReturnsForbidden()
     {
         var id = PlaybackSessionId.NewId();
         _playbackSessionManager.Setup(m => m.Get(id)).Returns(BuildExistingSessionForAuth(id, Guid.NewGuid()));
 
-        var result = CreateController().DeletePlaybackSession(id);
+        var result = await CreateController().DeletePlaybackSession(id);
 
         Assert.IsType<ForbidResult>(result);
         _playbackSessionManager.Verify(m => m.Delete(It.IsAny<PlaybackSessionId>()), Times.Never);
@@ -420,7 +461,7 @@ public class PlaybackSessionsControllerTests
     /// <c>GetPlaybackSessionStream</c> already grants.
     /// </summary>
     [Fact]
-    public void DeletePlaybackSession_Admin_ReturnsNoContentForOtherUsersSession()
+    public async Task DeletePlaybackSession_Admin_ReturnsNoContentForOtherUsersSession()
     {
         var id = PlaybackSessionId.NewId();
         _playbackSessionManager.Setup(m => m.Get(id)).Returns(BuildExistingSessionForAuth(id, Guid.NewGuid()));
@@ -429,7 +470,7 @@ public class PlaybackSessionsControllerTests
         var controller = CreateController();
         SetIdentity(controller, Guid.NewGuid(), isAdmin: true);
 
-        var result = controller.DeletePlaybackSession(id);
+        var result = await controller.DeletePlaybackSession(id);
 
         Assert.IsType<NoContentResult>(result);
     }
@@ -458,7 +499,7 @@ public class PlaybackSessionsControllerTests
         Assert.NotNull(manager.Get(id));
         logger.Entries.Clear();
 
-        var deleted = controller.DeletePlaybackSession(id);
+        var deleted = await controller.DeletePlaybackSession(id);
 
         Assert.IsType<NoContentResult>(deleted);
         var entry = Assert.Single(logger.Entries, e => e.Message.Contains("deleted", StringComparison.Ordinal));
@@ -494,7 +535,7 @@ public class PlaybackSessionsControllerTests
         Assert.True(manager.DeleteByPlaySessionId("play-session-1"));
         logger.Entries.Clear();
 
-        var deleted = controller.DeletePlaybackSession(id);
+        var deleted = await controller.DeletePlaybackSession(id);
 
         Assert.IsType<NotFoundResult>(deleted);
         var entry = Assert.Single(logger.Entries, e => e.Message.Contains("already gone", StringComparison.Ordinal));
@@ -1501,14 +1542,14 @@ public class PlaybackSessionsControllerTests
     /// query correlates on.
     /// </summary>
     [Fact]
-    public void DeletePlaybackSession_ExistingSession_LogsDeletedUnderStoredAttemptScope()
+    public async Task DeletePlaybackSession_ExistingSession_LogsDeletedUnderStoredAttemptScope()
     {
         var id = PlaybackSessionId.NewId();
         _playbackSessionManager.Setup(m => m.Get(id)).Returns(BuildExistingSessionForAuth(id, _userId) with { PlaybackAttemptId = AttemptId });
         _playbackSessionManager.Setup(m => m.Delete(id)).Returns(true);
         var logger = new RecordingLogger();
 
-        var result = CreateController(logger).DeletePlaybackSession(id);
+        var result = await CreateController(logger).DeletePlaybackSession(id);
 
         Assert.IsType<NoContentResult>(result);
         var entry = Assert.Single(logger.Entries);
@@ -1528,13 +1569,13 @@ public class PlaybackSessionsControllerTests
     /// scope: a missing session has no stored attempt id, and inventing one would be worse.
     /// </summary>
     [Fact]
-    public void DeletePlaybackSession_UnknownSession_LogsAlreadyGoneAndReturnsNotFound()
+    public async Task DeletePlaybackSession_UnknownSession_LogsAlreadyGoneAndReturnsNotFound()
     {
         var id = PlaybackSessionId.NewId();
         _playbackSessionManager.Setup(m => m.Get(id)).Returns((PlaybackSession?)null);
         var logger = new RecordingLogger();
 
-        var result = CreateController(logger).DeletePlaybackSession(id);
+        var result = await CreateController(logger).DeletePlaybackSession(id);
 
         Assert.IsType<NotFoundResult>(result);
         _playbackSessionManager.Verify(m => m.Delete(It.IsAny<PlaybackSessionId>()), Times.Never);
@@ -1552,14 +1593,14 @@ public class PlaybackSessionsControllerTests
     /// as already gone.
     /// </summary>
     [Fact]
-    public void DeletePlaybackSession_RacedAwayBetweenGetAndDelete_LogsAlreadyGoneAndReturnsNotFound()
+    public async Task DeletePlaybackSession_RacedAwayBetweenGetAndDelete_LogsAlreadyGoneAndReturnsNotFound()
     {
         var id = PlaybackSessionId.NewId();
         _playbackSessionManager.Setup(m => m.Get(id)).Returns(BuildExistingSessionForAuth(id, _userId) with { PlaybackAttemptId = AttemptId });
         _playbackSessionManager.Setup(m => m.Delete(id)).Returns(false);
         var logger = new RecordingLogger();
 
-        var result = CreateController(logger).DeletePlaybackSession(id);
+        var result = await CreateController(logger).DeletePlaybackSession(id);
 
         Assert.IsType<NotFoundResult>(result);
         var entry = Assert.Single(logger.Entries);

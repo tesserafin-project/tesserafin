@@ -17,6 +17,7 @@ using Tesserafin.Common.Extensions;
 using Tesserafin.Controller.Entities;
 using Tesserafin.Controller.Library;
 using Tesserafin.Controller.MediaEncoding;
+using Tesserafin.Controller.Net.PlaybackCredentials;
 using Tesserafin.Data.Enums;
 using Tesserafin.Extensions;
 using Tesserafin.MediaEncoding.Playback;
@@ -52,6 +53,8 @@ public class PlaybackSessionsController : BaseTesserafinApiController
     private readonly IMediaEncoder _mediaEncoder;
     private readonly IShadowDiagnosticsStore _shadowDiagnosticsStore;
     private readonly ILogger<PlaybackSessionsController> _logger;
+    private readonly ITranscodeManager? _transcodeManager;
+    private readonly IPlaybackCredentialService? _credentialService;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PlaybackSessionsController"/> class.
@@ -88,6 +91,8 @@ public class PlaybackSessionsController : BaseTesserafinApiController
     /// defaulting to the no-op store, so every existing test construction keeps compiling and simply
     /// produces no contract-mapping diagnostic.
     /// </param>
+    /// <param name="transcodeManager">#301: ends the session's own jobs when the session is deleted.</param>
+    /// <param name="credentialService">#301: revokes the session's capabilities when the session is deleted.</param>
     public PlaybackSessionsController(
         IPlaybackSessionManager playbackSessionManager,
         IItemAccessService itemAccessService,
@@ -98,8 +103,12 @@ public class PlaybackSessionsController : BaseTesserafinApiController
         IPlaybackLiveWiringDiagnosticsStore liveWiringDiagnosticsStore,
         IMediaEncoder mediaEncoder,
         ILogger<PlaybackSessionsController>? logger = null,
-        IShadowDiagnosticsStore? shadowDiagnosticsStore = null)
+        IShadowDiagnosticsStore? shadowDiagnosticsStore = null,
+        ITranscodeManager? transcodeManager = null,
+        IPlaybackCredentialService? credentialService = null)
     {
+        _transcodeManager = transcodeManager;
+        _credentialService = credentialService;
         _logger = logger ?? NullLogger<PlaybackSessionsController>.Instance;
         _shadowDiagnosticsStore = shadowDiagnosticsStore ?? NoOpShadowDiagnosticsStore.Instance;
         _playbackSessionManager = playbackSessionManager;
@@ -265,7 +274,7 @@ public class PlaybackSessionsController : BaseTesserafinApiController
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public ActionResult DeletePlaybackSession([FromRoute] PlaybackSessionId id)
+    public async Task<ActionResult> DeletePlaybackSession([FromRoute] PlaybackSessionId id)
     {
         // PR118: same pre-existing gap as PUT (§4.2) - any authenticated caller who knew an id could
         // end someone else's session. Same owner-or-admin semantics as GetPlaybackSessionStream.
@@ -298,6 +307,19 @@ public class PlaybackSessionsController : BaseTesserafinApiController
             // #203: same projection as the deleted line below - same bytes, visible to the analysis.
             _logger.LogInformation("Playback session {SessionId} delete requested, but the session was already gone.", id.Value.ToString("N"));
             return NotFound();
+        }
+
+        // #301: deleting the session is the client's stop, so it has to end what the session
+        // started. Only its owner's jobs: a play session id is the client's to send, and another
+        // user's job under the same one survives. Old capability links die with them.
+        if (!string.IsNullOrEmpty(session.PlaySessionId))
+        {
+            var owner = session.Request?.Options.UserId;
+            _credentialService?.RevokePlaySession(session.PlaySessionId);
+            if (_transcodeManager is not null && owner is { } ownerId)
+            {
+                await _transcodeManager.StopTranscodingJobs(session.PlaySessionId, job => ownerId.Equals(job.UserId)).ConfigureAwait(false);
+            }
         }
 
         // #203: `id.Value.ToString("N")` is the body of PlaybackSessionId.ToString() written out at

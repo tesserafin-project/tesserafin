@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.Extensions.DependencyInjection;
@@ -107,6 +108,16 @@ public sealed class RequiresPlaybackCapabilityAttribute : Attribute, IAsyncAutho
             return System.Threading.Tasks.Task.CompletedTask;
         }
 
+        // #301. A capability beside a durable credential of anyone else is a contradiction, not a
+        // merge: answering it used to start a job owned by the capability's user and the token's
+        // device, which neither of them could stop. Same undifferentiated refusal, no exemption for
+        // a role. The capability alone is still honoured, as the bearer value it is.
+        if (ContradictsDurableCredential(context.HttpContext.User, validation.UserId))
+        {
+            context.Result = new UnauthorizedResult();
+            return System.Threading.Tasks.Task.CompletedTask;
+        }
+
         // ONLY on the accepted branch, and only after the check (#153-LTV-S1). A response that has
         // to carry this capability onward — the Live TV HLS playlist — reads it from here rather
         // than re-reading the query, so "this value was validated" is a fact the propagation path
@@ -124,6 +135,36 @@ public sealed class RequiresPlaybackCapabilityAttribute : Attribute, IAsyncAutho
             validation));
 
         return System.Threading.Tasks.Task.CompletedTask;
+    }
+
+    private static bool ContradictsDurableCredential(ClaimsPrincipal? user, Guid capabilityUserId)
+    {
+        if (user is null)
+        {
+            return false;
+        }
+
+        foreach (var identity in user.Identities)
+        {
+            if (identity.HasClaim(c => string.Equals(c.Type, InternalClaimTypes.PlaybackCapabilityId, StringComparison.Ordinal)))
+            {
+                continue;
+            }
+
+            if (identity.HasClaim(c => string.Equals(c.Type, InternalClaimTypes.IsApiKey, StringComparison.Ordinal)
+                                       && bool.TryParse(c.Value, out var isApiKey) && isApiKey))
+            {
+                return true;
+            }
+
+            var durableUser = identity.FindFirst(InternalClaimTypes.UserId)?.Value;
+            if (Guid.TryParse(durableUser, out var durableUserId) && !durableUserId.Equals(capabilityUserId))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static string? ReadString(AuthorizationFilterContext context, string? key)
