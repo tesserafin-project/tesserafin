@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using Microsoft.Extensions.Logging;
 using Tesserafin.Controller.MediaEncoding;
@@ -45,7 +46,7 @@ public class PlaybackSessionPlanner : IPlaybackSessionPlanner
         // #374: StreamBuilder's DirectStream is the source file, served verbatim (Static=true). That
         // only answers the client when no direct-stream reason was recorded; with one, it hands over
         // a container or audio codec the client just declared unplayable.
-        if (streamInfo.PlayMethod == PlayMethod.DirectStream && streamInfo.TranscodeReasons != 0)
+        if (streamInfo.PlayMethod == PlayMethod.DirectStream && IsUnservableVideoPlan(streamInfo))
         {
             var realOutput = PlanRealOutput(streamBuilder, options);
             return realOutput is not null || !options.LegacyPlanIsFallbackOnly
@@ -55,12 +56,30 @@ public class PlaybackSessionPlanner : IPlaybackSessionPlanner
 
         // StreamBuilder leaves PlayMethod at its Transcode default when no profile applied, with
         // nothing to produce: a descriptor for that would point at an output nobody declared.
-        if (streamInfo.PlayMethod == PlayMethod.Transcode && !HasOutput(streamInfo) && !options.LegacyPlanIsFallbackOnly)
+        if (IsUnservableVideoPlan(streamInfo) && !options.LegacyPlanIsFallbackOnly)
         {
             return null;
         }
 
         return new PlaybackPlan(streamInfo.PlayMethod, streamInfo.TranscodeReasons, streamInfo);
+    }
+
+    /// <summary>
+    /// Determines whether a legacy video plan serves nothing the client declared: the source file
+    /// with a direct-stream reason on record, or a transcode with no output. Such a plan only exists
+    /// as the fallback of a session another engine decides, and must not be served when it falls back.
+    /// </summary>
+    /// <param name="streamInfo">The legacy video plan.</param>
+    /// <returns><see langword="true"/> if the plan must not be served.</returns>
+    public static bool IsUnservableVideoPlan(StreamInfo streamInfo)
+    {
+        ArgumentNullException.ThrowIfNull(streamInfo);
+        return streamInfo.PlayMethod switch
+        {
+            PlayMethod.DirectStream => streamInfo.TranscodeReasons != 0,
+            PlayMethod.Transcode => !HasOutput(streamInfo),
+            _ => false,
+        };
     }
 
     /// <summary>

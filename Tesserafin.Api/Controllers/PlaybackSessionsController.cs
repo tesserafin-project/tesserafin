@@ -432,6 +432,16 @@ public class PlaybackSessionsController : BaseTesserafinApiController
             servedBy = v2Record.Decision.EngineVersion;
         }
 
+        // #374: a session v2 decides keeps a legacy plan as its fallback even when that plan serves
+        // nothing the client declared. A real fallback (kill switch, stop threshold, unexecutable
+        // plan) refuses rather than hand over the file the client said it cannot open.
+        if (outcome is not { ServedByV2: true }
+            && session.Kind == PlaybackMediaKind.Video
+            && PlaybackSessionPlanner.IsUnservableVideoPlan(resolvedStreamInfo))
+        {
+            return NoViablePlan();
+        }
+
         // Issue #57: a Remux decision (domain PlaybackMethod.Remux, mapped by
         // PlaybackExecutionPlanAdapter to legacy PlayMethod.DirectStream) announced a container the
         // source file does not have - Container=mp4/MimeType=video/mp4 for a Matroska source - and

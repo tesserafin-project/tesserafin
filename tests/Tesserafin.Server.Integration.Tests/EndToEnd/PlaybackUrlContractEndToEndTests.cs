@@ -419,6 +419,46 @@ public sealed class PlaybackUrlContractEndToEndTests : IClassFixture<E2eApplicat
     }
 
     /// <summary>
+    /// #374: a session v2 decided, falling back to legacy for real. With a compatible legacy output
+    /// the fallback serves it; without one it refuses, and never the undeclared source file.
+    /// </summary>
+    /// <param name="mode">The engine mode the session is planned under.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
+    [Theory(Timeout = 90_000)]
+    [InlineData(PlaybackEngineMode.V2)]
+    [InlineData(PlaybackEngineMode.Canary)]
+    public async Task RealFallbackFromV2_NeverServesTheUndeclaredSourceFile(PlaybackEngineMode mode)
+    {
+        var mkvPath = await EndToEndMediaFixtures.CreateH264AacMkvAsync(_workDir);
+        var itemId = LibraryItemSeeder.SeedVideo(_libraryManager, _mediaStreamRepository, mkvPath, "mkv", _baseStreams, $"Issue 374 fallback {Guid.NewGuid()}");
+        var shadow = _configManager.Configuration.PlaybackShadow;
+        shadow.Mode = mode;
+        shadow.CanaryPercentage = 100;
+
+        var (mp4Declared, constraints) = EndToEndCapabilityPresets.RemuxMatroskaToMp4();
+        var withOutput = await CreateSessionAsync(itemId, mp4Declared, constraints, $"e2e-374-fallback-{mode}-ok");
+        var noOutput = mp4Declared with
+        {
+            Decode = mp4Declared.Decode with { DirectPlayProfiles = [new DecodeProfile(MediaKind.Video, ["webm"], [EndToEndCapabilityPresets.FixtureVideoCodec], [EndToEndCapabilityPresets.FixtureAudioCodec])] },
+        };
+        var withoutOutput = await CreateSessionAsync(itemId, noOutput, constraints, $"e2e-374-fallback-{mode}-none");
+
+        // The kill switch is the operator's real, live path back to legacy.
+        shadow.Mode = PlaybackEngineMode.Legacy;
+
+        var descriptor = await GetStreamDescriptorAsync(withOutput.Id);
+        Assert.Equal(PlaybackLiveFallbackReason.KillSwitch, descriptor.FallbackReason);
+        Assert.Equal("mp4", descriptor.Container);
+        Assert.DoesNotContain("Static=true", descriptor.Url, StringComparison.OrdinalIgnoreCase);
+        var served = await GetBytesAsync(descriptor.Url, "#374 fallback");
+        Assert.False(IsMatroska(served), $"The fallback served the source Matroska. Head: {Head(served)}");
+        Assert.True(IsIsoBaseMediaFile(served), $"The fallback did not serve mp4. Head: {Head(served)}");
+
+        using var refused = await _client.GetAsync($"Playback/Sessions/{withoutOutput.Id}/Stream", TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, refused.StatusCode);
+    }
+
+    /// <summary>
     /// #374: with no output the client can open, the refusal says so instead of handing over a file.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
