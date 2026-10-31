@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Passes through to the real encoder; a job start fails once while FAILFLAG exists (retry row).
+FLAG="$PCR_ROOT/FAILNEXT"
+for a in "$@"; do if [ "$a" = "-i" ] && [ -e "$FLAG" ]; then rm -f "$FLAG"; echo "rig: injected encoder failure" >&2; exit 1; fi; done
+# Real-time pacing, so a job lives long enough to be stopped and timed out (the fixtures are 15 min).
+case " $* " in *" -hls_time "*) exec "$PCR_REAL_FFMPEG" -readrate 1 "$@";; esac
+exec "$PCR_REAL_FFMPEG" "$@"
