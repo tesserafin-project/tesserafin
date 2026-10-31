@@ -844,7 +844,7 @@ namespace Tesserafin.Model.Dlna
                     BuildStreamVideoItem(playlistItem, options, item, videoStream, audioStream, candidateAudioStreams, transcodingProfile.Container, transcodingProfile.VideoCodec, transcodingProfile.AudioCodec);
 
                     playlistItem.PlayMethod = PlayMethod.Transcode;
-                    playlistItem.CopiesEveryStream = copiesEveryStream && subtitleStream is null;
+                    playlistItem.CopiesEveryStream = copiesEveryStream;
 
                     // #374: execution re-encodes this video whatever the profile says; the decision
                     // has to name that, or the only reason left reads as a plain container change.
@@ -859,6 +859,9 @@ namespace Tesserafin.Model.Dlna
                         playlistItem.SubtitleDeliveryMethod = subtitleProfile.Method;
                         playlistItem.SubtitleFormat = subtitleProfile.Format;
                         playlistItem.SubtitleCodecs = [subtitleProfile.Format];
+
+                        // Burning a subtitle in re-encodes the video; delivering it beside the stream does not.
+                        playlistItem.CopiesEveryStream &= subtitleProfile.Method != SubtitleDeliveryMethod.Encode;
                     }
 
                     if ((playlistItem.TranscodeReasons & (VideoReasons | TranscodeReason.ContainerBitrateExceedsLimit)) != 0)

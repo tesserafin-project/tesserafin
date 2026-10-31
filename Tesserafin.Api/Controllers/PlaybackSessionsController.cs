@@ -547,6 +547,7 @@ public class PlaybackSessionsController : BaseTesserafinApiController
         {
             MediaSources = mediaSources.ToArray(),
             Context = EncodingContext.Streaming,
+            RequireDeclaredDelivery = true,
             ItemId = item.Id,
             UserId = userId,
             Profile = ReverseDlnaAdapter.ToDeviceProfile(request.Capabilities),

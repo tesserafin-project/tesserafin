@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Extensions.Logging;
 using Tesserafin.Controller.MediaEncoding;
@@ -41,6 +42,11 @@ public class PlaybackSessionPlanner : IPlaybackSessionPlanner
         if (streamInfo is null)
         {
             return null;
+        }
+
+        if (!options.RequireDeclaredDelivery)
+        {
+            return new PlaybackPlan(streamInfo.PlayMethod, streamInfo.TranscodeReasons, streamInfo);
         }
 
         // #374: StreamBuilder's DirectStream is the source file, served verbatim (Static=true). That
@@ -96,14 +102,19 @@ public class PlaybackSessionPlanner : IPlaybackSessionPlanner
         try
         {
             var streamInfo = streamBuilder.GetOptimalVideoStream(options);
-            if (!HasOutput(streamInfo) && DeclaredMp4Output(options.Profile) is { } mp4Output)
+            if (!HasOutput(streamInfo))
             {
-                options.Profile.TranscodingProfiles = [mp4Output];
-                streamInfo = streamBuilder.GetOptimalVideoStream(options);
-                if (streamInfo is { CopiesEveryStream: false })
+                // Each declaration on its own: it vouches for a copy, not for anything re-encoded.
+                streamInfo = null;
+                foreach (var mp4Output in DeclaredMp4Outputs(options.Profile))
                 {
-                    // The direct-play declaration vouches for a copy, not for anything re-encoded.
-                    return null;
+                    options.Profile.TranscodingProfiles = [mp4Output];
+                    var copy = streamBuilder.GetOptimalVideoStream(options);
+                    if (copy is { CopiesEveryStream: true } && HasOutput(copy))
+                    {
+                        streamInfo = copy;
+                        break;
+                    }
                 }
             }
 
@@ -121,19 +132,16 @@ public class PlaybackSessionPlanner : IPlaybackSessionPlanner
     private static bool HasOutput(StreamInfo? streamInfo)
         => streamInfo is { PlayMethod: PlayMethod.Transcode, VideoCodecs.Count: > 0 };
 
-    private static TranscodingProfile? DeclaredMp4Output(DeviceProfile profile)
-    {
-        var directPlay = profile.DirectPlayProfiles.FirstOrDefault(p => p.Type == DlnaProfileType.Video && p.SupportsContainer("mp4"));
-        return directPlay is null
-            ? null
-            : new TranscodingProfile
+    private static IEnumerable<TranscodingProfile> DeclaredMp4Outputs(DeviceProfile profile)
+        => profile.DirectPlayProfiles
+            .Where(p => p.Type == DlnaProfileType.Video && p.SupportsContainer("mp4"))
+            .Select(p => new TranscodingProfile
             {
                 Type = DlnaProfileType.Video,
                 Context = EncodingContext.Streaming,
                 Protocol = MediaStreamProtocol.http,
                 Container = "mp4",
-                VideoCodec = directPlay.VideoCodec ?? string.Empty,
-                AudioCodec = directPlay.AudioCodec ?? string.Empty,
-            };
-    }
+                VideoCodec = p.VideoCodec ?? string.Empty,
+                AudioCodec = p.AudioCodec ?? string.Empty,
+            });
 }

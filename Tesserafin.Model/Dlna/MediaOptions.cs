@@ -30,6 +30,13 @@ namespace Tesserafin.Model.Dlna
         public bool EnableDirectStream { get; set; }
 
         /// <summary>
+        /// Gets or sets a value indicating whether the plan has to be a delivery the client declared,
+        /// or no plan at all. Set by <c>Playback/Sessions</c>; <c>PlaybackInfo</c> reads capability
+        /// flags off whatever plan it gets and keeps its own contract (#374).
+        /// </summary>
+        public bool RequireDeclaredDelivery { get; set; }
+
+        /// <summary>
         /// Gets or sets a value indicating whether another engine decides this session, leaving the
         /// legacy plan as the fallback only. A legacy refusal then does not refuse the session (#374).
         /// </summary>

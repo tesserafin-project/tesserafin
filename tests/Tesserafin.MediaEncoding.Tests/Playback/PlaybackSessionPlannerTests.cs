@@ -153,6 +153,50 @@ public class PlaybackSessionPlannerTests
         Assert.NotNull(GetPlanner().PlanVideo(options));
     }
 
+    [Fact]
+    public void PlanVideo_PlaybackInfoCaller_KeepsThePlanItsFlagsAreReadFrom_Issue374()
+    {
+        var options = Options("mkv", isAvc: true, audioIsDefault: true, ["webm"], withHlsOutput: false);
+        options.RequireDeclaredDelivery = false;
+        options.EnableDirectStream = false;
+
+        Assert.NotNull(GetPlanner().PlanVideo(options));
+    }
+
+    [Fact]
+    public void PlanVideo_LaterMp4Declaration_IsTheOneThatVouchesForTheCopy_Issue374()
+    {
+        var options = Options("mkv", isAvc: true, audioIsDefault: true, ["mp4"], withHlsOutput: false);
+        options.Profile.DirectPlayProfiles =
+        [
+            new DirectPlayProfile { Type = DlnaProfileType.Video, Container = "mp4", VideoCodec = "hevc", AudioCodec = "aac" },
+            .. options.Profile.DirectPlayProfiles,
+        ];
+
+        var plan = GetPlanner().PlanVideo(options);
+
+        Assert.NotNull(plan);
+        Assert.Equal(PlayMethod.DirectStream, plan.PlayMethod);
+    }
+
+    [Theory]
+    [InlineData(SubtitleDeliveryMethod.External, PlayMethod.DirectStream)]
+    [InlineData(SubtitleDeliveryMethod.Encode, PlayMethod.Transcode)]
+    public void PlanVideo_SelectedSubtitle_OnlyBurningInStopsACopy_Issue374(SubtitleDeliveryMethod delivery, PlayMethod expected)
+    {
+        var options = Options("mkv", isAvc: true, audioIsDefault: true, ["mp4"], withHlsOutput: true);
+        var source = options.MediaSources[0];
+        source.MediaStreams = [.. source.MediaStreams, new MediaStream { Index = 2, Type = MediaStreamType.Subtitle, Codec = "srt", IsExternal = true, Path = "/media/source.srt", SupportsExternalStream = true }];
+        options.SubtitleStreamIndex = 2;
+        options.MediaSourceId = source.Id;
+        options.Profile.SubtitleProfiles = [new SubtitleProfile { Format = "srt", Method = delivery }];
+
+        var plan = GetPlanner().PlanVideo(options);
+
+        Assert.NotNull(plan);
+        Assert.Equal(expected, plan.PlayMethod);
+    }
+
     private static MediaOptions Options(string container, bool isAvc, bool audioIsDefault, string[] directPlayContainers, bool withHlsOutput)
     {
         var source = new MediaSourceInfo
@@ -178,6 +222,7 @@ public class PlaybackSessionPlannerTests
             ItemId = Guid.NewGuid(),
             MediaSources = [source],
             DeviceId = "device",
+            RequireDeclaredDelivery = true,
             AllowVideoStreamCopy = true,
             AllowAudioStreamCopy = true,
             Profile = new DeviceProfile
