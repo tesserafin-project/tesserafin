@@ -277,6 +277,12 @@ public class StreamInfo
     public bool AlwaysBurnInSubtitleWhenTranscoding { get; set; }
 
     /// <summary>
+    /// Gets or sets a value indicating whether a planned transcoding job copies every selected
+    /// stream, changing only the container (#374).
+    /// </summary>
+    public bool CopiesEveryStream { get; set; }
+
+    /// <summary>
     /// Gets a value indicating whether the stream is direct.
     /// </summary>
     public bool IsDirectStream => MediaSource?.VideoType is not (VideoType.Dvd or VideoType.BluRay)

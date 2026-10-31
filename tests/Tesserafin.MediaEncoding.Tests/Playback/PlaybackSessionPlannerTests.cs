@@ -7,10 +7,13 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Tesserafin.Controller.MediaEncoding;
+using Tesserafin.Data.Enums;
 using Tesserafin.Extensions.Json;
 using Tesserafin.MediaEncoding.Playback;
 using Tesserafin.Model.Dlna;
 using Tesserafin.Model.Dto;
+using Tesserafin.Model.Entities;
+using Tesserafin.Model.MediaInfo;
 using Tesserafin.Model.Session;
 using Xunit;
 
@@ -55,6 +58,127 @@ public class PlaybackSessionPlannerTests
         Assert.Equal(TranscodeReason.AudioCodecNotSupported, plan.TranscodeReasons);
         Assert.NotNull(plan.StreamInfo);
         Assert.Equal(expected.Container, plan.StreamInfo.Container);
+    }
+
+    [Fact]
+    public void PlanVideo_UndeclaredContainer_RemuxesThroughTheDeclaredOutput_Issue374()
+    {
+        var options = Options("mkv", isAvc: true, audioIsDefault: true, ["mp4"], withHlsOutput: true);
+
+        var plan = GetPlanner().PlanVideo(options);
+
+        Assert.NotNull(plan);
+        Assert.Equal(PlayMethod.DirectStream, plan.PlayMethod);
+        Assert.Equal(TranscodeReason.ContainerNotSupported, plan.TranscodeReasons);
+        Assert.Equal(PlayMethod.Transcode, plan.StreamInfo!.PlayMethod);
+        Assert.Equal(MediaStreamProtocol.hls, plan.StreamInfo.SubProtocol);
+        Assert.Equal("ts", plan.StreamInfo.Container);
+        Assert.DoesNotContain("Static=true", plan.StreamInfo.ToUrl(string.Empty, "t", null), StringComparison.OrdinalIgnoreCase);
+        Assert.True(options.EnableDirectStream, "The stored request must keep what the client asked for.");
+    }
+
+    [Fact]
+    public void PlanVideo_AnnexBH264InAvi_ReportsTheVideoReencodeExecutionPerforms_Issue374()
+    {
+        var plan = GetPlanner().PlanVideo(Options("avi", isAvc: false, audioIsDefault: false, ["mp4"], withHlsOutput: true));
+
+        Assert.NotNull(plan);
+        Assert.Equal(PlayMethod.Transcode, plan.PlayMethod);
+        Assert.Equal(TranscodeReason.ContainerNotSupported | TranscodeReason.VideoCodecTagNotSupported, plan.TranscodeReasons);
+    }
+
+    [Fact]
+    public void PlanVideo_AnnexBH264InAvi_TranscodingForbidden_IsRefused_Issue374()
+    {
+        var options = Options("avi", isAvc: false, audioIsDefault: false, ["mp4"], withHlsOutput: true);
+        options.MediaSources[0].SupportsTranscoding = false;
+
+        Assert.Null(GetPlanner().PlanVideo(options));
+    }
+
+    [Fact]
+    public void PlanVideo_NoOutputProfile_CopiesIntoDeclaredMp4_Issue374()
+    {
+        var options = Options("mkv", isAvc: true, audioIsDefault: true, ["mp4"], withHlsOutput: false);
+
+        var plan = GetPlanner().PlanVideo(options);
+
+        Assert.NotNull(plan);
+        Assert.Equal(PlayMethod.DirectStream, plan.PlayMethod);
+        Assert.Equal(MediaStreamProtocol.http, plan.StreamInfo!.SubProtocol);
+        Assert.Equal("mp4", plan.StreamInfo.Container);
+        Assert.Empty(options.Profile.TranscodingProfiles);
+    }
+
+    [Fact]
+    public void PlanVideo_NoOutputProfile_NeverReencodesOnTheStrengthOfADirectPlayDeclaration_Issue374()
+    {
+        Assert.Null(GetPlanner().PlanVideo(Options("avi", isAvc: false, audioIsDefault: false, ["mp4"], withHlsOutput: false)));
+    }
+
+    [Fact]
+    public void PlanVideo_NothingDeclaredIsProducible_IsRefused_Issue374()
+    {
+        Assert.Null(GetPlanner().PlanVideo(Options("mkv", isAvc: true, audioIsDefault: true, ["webm"], withHlsOutput: false)));
+    }
+
+    [Fact]
+    public void PlanVideo_DeclaredContainerWithDirectPlayOff_KeepsTheSourceFile_Issue374()
+    {
+        var options = Options("mkv", isAvc: true, audioIsDefault: true, ["mkv"], withHlsOutput: true);
+        options.EnableDirectPlay = false;
+
+        var plan = GetPlanner().PlanVideo(options);
+
+        Assert.NotNull(plan);
+        Assert.Equal(PlayMethod.DirectStream, plan.StreamInfo!.PlayMethod);
+        Assert.Equal((TranscodeReason)0, plan.TranscodeReasons);
+    }
+
+    [Fact]
+    public void PlanVideo_NoDirectDeliveryAndNoOutput_IsRefusedNotAHollowTranscode_Issue374()
+    {
+        var options = Options("mkv", isAvc: true, audioIsDefault: true, ["webm"], withHlsOutput: false);
+        options.EnableDirectStream = false;
+
+        Assert.Null(GetPlanner().PlanVideo(options));
+    }
+
+    private static MediaOptions Options(string container, bool isAvc, bool audioIsDefault, string[] directPlayContainers, bool withHlsOutput)
+    {
+        var source = new MediaSourceInfo
+        {
+            Id = "0123456789abcdef0123456789abcdef",
+            Path = "/media/source." + container,
+            Container = container,
+            Bitrate = 1_000_000,
+            SupportsDirectPlay = true,
+            SupportsDirectStream = true,
+            SupportsTranscoding = true,
+            DefaultAudioStreamIndex = 1,
+            DefaultAudioIndexSource = AudioIndexSource.Default,
+            MediaStreams =
+            [
+                new MediaStream { Index = 0, Type = MediaStreamType.Video, Codec = "h264", IsAVC = isAvc, Width = 640, Height = 360 },
+                new MediaStream { Index = 1, Type = MediaStreamType.Audio, Codec = "aac", Channels = 2, IsDefault = audioIsDefault },
+            ],
+        };
+
+        return new MediaOptions
+        {
+            ItemId = Guid.NewGuid(),
+            MediaSources = [source],
+            DeviceId = "device",
+            AllowVideoStreamCopy = true,
+            AllowAudioStreamCopy = true,
+            Profile = new DeviceProfile
+            {
+                DirectPlayProfiles = [new DirectPlayProfile { Type = DlnaProfileType.Video, Container = string.Join(',', directPlayContainers), VideoCodec = "h264", AudioCodec = "aac" }],
+                TranscodingProfiles = withHlsOutput
+                    ? [new TranscodingProfile { Type = DlnaProfileType.Video, Protocol = MediaStreamProtocol.hls, Container = "ts", VideoCodec = "h264", AudioCodec = "aac", Context = EncodingContext.Streaming }]
+                    : [],
+            },
+        };
     }
 
     private static PlaybackSessionPlanner GetPlanner()

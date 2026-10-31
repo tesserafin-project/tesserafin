@@ -59,7 +59,8 @@ public static class EndToEndCapabilityPresets
             SupportsHls: true,
             SupportsDash: false);
 
-        var capabilities = new ClientCapabilities(decode, OutputProfiles: []);
+        // #374: a remux needs an output the client declared; without one this is a refusal.
+        var capabilities = new ClientCapabilities(decode, OutputProfiles: [HlsOutputProfile()]);
         var constraints = BaseConstraints(allowDirectPlay: false, allowDirectStream: true, allowTranscoding: false);
 
         return (capabilities, constraints);
@@ -227,6 +228,9 @@ public static class EndToEndCapabilityPresets
 
         return (capabilities, constraints);
     }
+
+    private static PlaybackOutputProfile HlsOutputProfile() =>
+        new(MediaKind.Video, StreamingProtocol.Hls, "ts", [FixtureVideoCodec], [FixtureAudioCodec], null, null, null);
 
     private static PlaybackConstraints BaseConstraints(bool allowDirectPlay, bool allowDirectStream, bool allowTranscoding) => new(
         AllowDirectPlay: allowDirectPlay,

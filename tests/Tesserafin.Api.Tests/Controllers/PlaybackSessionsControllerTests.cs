@@ -275,7 +275,7 @@ public class PlaybackSessionsControllerTests
 
         var result = await CreateController().CreatePlaybackSession(CreateRequest());
 
-        Assert.IsType<UnprocessableEntityResult>(result.Result);
+        Assert.IsType<UnprocessableEntityObjectResult>(result.Result);
     }
 
     [Fact]
@@ -824,7 +824,7 @@ public class PlaybackSessionsControllerTests
 
         var result = await CreateController().ReplacePlaybackSession(id, CreateReplaceRequest());
 
-        Assert.IsType<UnprocessableEntityResult>(result.Result);
+        Assert.IsType<UnprocessableEntityObjectResult>(result.Result);
     }
 
     /// <summary>

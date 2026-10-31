@@ -723,6 +723,15 @@ namespace Tesserafin.Model.Dlna
                 }
             }
 
+            // #374: the IsDefault filters above assume a container that records a default disposition.
+            // AVI does not, so every stream reads IsDefault=false and the filter leaves nothing -
+            // reported as AudioCodecNotSupported for a codec the client declared, and skipping the
+            // direct-play audio check altogether. The stream already selected stays the candidate.
+            if (audioStream is not null && candidateAudioStreams.Count == 0)
+            {
+                candidateAudioStreams = [audioStream];
+            }
+
             var videoStream = item.VideoStream;
 
             var bitrateLimitExceeded = IsBitrateLimitExceeded(item, options.GetMaxBitrate(false) ?? 0);
@@ -813,7 +822,7 @@ namespace Tesserafin.Model.Dlna
             {
                 // Can't direct play, find the transcoding profile
                 // If we do this for direct-stream we will overwrite the info
-                var (transcodingProfile, playMethod, noPermittedMethod) = GetVideoTranscodeProfile(item, options, videoStream, audioStream, playlistItem);
+                var (transcodingProfile, playMethod, noPermittedMethod, copiesEveryStream) = GetVideoTranscodeProfile(item, options, videoStream, audioStream, playlistItem);
 
                 // Issue #59: the only plan left for this source would re-encode, and this request
                 // forbids that (AllowTranscoding:false). PlayMethod is a non-nullable enum whose
@@ -835,6 +844,14 @@ namespace Tesserafin.Model.Dlna
                     BuildStreamVideoItem(playlistItem, options, item, videoStream, audioStream, candidateAudioStreams, transcodingProfile.Container, transcodingProfile.VideoCodec, transcodingProfile.AudioCodec);
 
                     playlistItem.PlayMethod = PlayMethod.Transcode;
+                    playlistItem.CopiesEveryStream = copiesEveryStream && subtitleStream is null;
+
+                    // #374: execution re-encodes this video whatever the profile says; the decision
+                    // has to name that, or the only reason left reads as a plain container change.
+                    if (StreamCopyRules.IsAnnexBH264InAvi(item.Container, videoStream?.Codec, videoStream?.IsAVC))
+                    {
+                        playlistItem.TranscodeReasons |= TranscodeReason.VideoCodecTagNotSupported;
+                    }
 
                     if (subtitleStream is not null)
                     {
@@ -865,7 +882,7 @@ namespace Tesserafin.Model.Dlna
             return playlistItem;
         }
 
-        private (TranscodingProfile? Profile, PlayMethod? PlayMethod, bool NoPermittedMethod) GetVideoTranscodeProfile(
+        private (TranscodingProfile? Profile, PlayMethod? PlayMethod, bool NoPermittedMethod, bool CopiesEveryStream) GetVideoTranscodeProfile(
             MediaSourceInfo item,
             MediaOptions options,
             MediaStream? videoStream,
@@ -883,7 +900,7 @@ namespace Tesserafin.Model.Dlna
             // profile would otherwise hand back a StreamInfo claiming Transcode with empty codecs.
             if (!(item.SupportsTranscoding || item.SupportsDirectStream))
             {
-                return (null, null, NoPermittedMethod: true);
+                return (null, null, NoPermittedMethod: true, CopiesEveryStream: false);
             }
 
             var transcodingProfiles = options.Profile.TranscodingProfiles
@@ -906,6 +923,7 @@ namespace Tesserafin.Model.Dlna
 
                     if (videoStream is not null
                         && options.AllowVideoStreamCopy
+                        && !StreamCopyRules.IsAnnexBH264InAvi(mediaSource.Container, videoCodec, videoStream.IsAVC)
                         && ContainerHelper.ContainsContainer(transcodingProfile.VideoCodec, videoCodec))
                     {
                         var failures = GetCompatibilityVideoCodec(options, mediaSource, container, videoStream);
@@ -973,10 +991,10 @@ namespace Tesserafin.Model.Dlna
 
             if (profileMatch.Profile is not null && !copiesEveryStream && !item.SupportsTranscoding)
             {
-                return (null, null, NoPermittedMethod: true);
+                return (null, null, NoPermittedMethod: true, CopiesEveryStream: false);
             }
 
-            return (profileMatch.Profile, profileMatch.PlayMethod, NoPermittedMethod: false);
+            return (profileMatch.Profile, profileMatch.PlayMethod, NoPermittedMethod: false, CopiesEveryStream: profileMatch.Profile is not null && copiesEveryStream);
         }
 
         private void BuildStreamVideoItem(

@@ -384,6 +384,61 @@ public sealed class PlaybackUrlContractEndToEndTests : IClassFixture<E2eApplicat
     }
 
     /// <summary>
+    /// #374: the default (legacy) path must not answer a Remux with the source container the client
+    /// declared unplayable. Asserted down to what a demuxer says the served segment is.
+    /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
+    [Fact(Timeout = 90_000)]
+    public async Task Remux_LegacyPath_UndeclaredSourceContainer_ServesDeclaredOutputNotSourceFile()
+    {
+        var mkvPath = await EndToEndMediaFixtures.CreateH264AacMkvAsync(_workDir);
+        var itemId = LibraryItemSeeder.SeedVideo(_libraryManager, _mediaStreamRepository, mkvPath, "mkv", _baseStreams, $"Issue 374 fixture {Guid.NewGuid()}");
+
+        var (capabilities, constraints) = EndToEndCapabilityPresets.Remux();
+        var session = await CreateSessionAsync(itemId, capabilities, constraints, "e2e-374-remux");
+        Assert.Equal(PlaybackMethod.Remux, session.Method);
+
+        var descriptor = await GetStreamDescriptorAsync(session.Id);
+        Assert.Equal(PlaybackLiveFallbackReason.KillSwitch, descriptor.FallbackReason);
+        Assert.Equal(StreamingProtocol.Hls, descriptor.Protocol);
+        Assert.Equal("ts", descriptor.Container);
+        Assert.DoesNotContain("Static=true", descriptor.Url, StringComparison.OrdinalIgnoreCase);
+
+        var master = await GetTextAsync(descriptor.Url, "#374 master");
+        var variantUrl = FirstUriLine(master, descriptor.Url);
+        Assert.NotNull(variantUrl);
+        var variant = await GetTextWithRetryAsync(variantUrl, "#374 variant", TimeSpan.FromSeconds(60));
+        var segmentUrl = FirstUriLine(variant, variantUrl);
+        Assert.NotNull(segmentUrl);
+
+        var served = await GetBytesAsync(segmentUrl, "#374 segment");
+        Assert.False(IsMatroska(served), $"Served bytes are still the source Matroska. Head: {Head(served)}");
+        var probedPath = Path.Combine(_workDir, $"served-374-{Guid.NewGuid():N}.ts");
+        await File.WriteAllBytesAsync(probedPath, served, TestContext.Current.CancellationToken);
+        Assert.Equal("mpegts", await EndToEndMediaFixtures.ProbeFormatNameAsync(probedPath));
+    }
+
+    /// <summary>
+    /// #374: with no output the client can open, the refusal says so instead of handing over a file.
+    /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
+    [Fact(Timeout = 90_000)]
+    public async Task Remux_LegacyPath_NoOutputAvailable_IsAnExplainedRefusal()
+    {
+        var mkvPath = await EndToEndMediaFixtures.CreateH264AacMkvAsync(_workDir);
+        var itemId = LibraryItemSeeder.SeedVideo(_libraryManager, _mediaStreamRepository, mkvPath, "mkv", _baseStreams, $"Issue 374 refusal {Guid.NewGuid()}");
+
+        var (capabilities, constraints) = EndToEndCapabilityPresets.Remux();
+        var noOutput = capabilities with { OutputProfiles = [] };
+
+        var request = new CreatePlaybackSessionRequest(itemId, _userId, noOutput, constraints, MediaSourceId: null, PlaySessionId: "e2e-374-refused");
+        using var response = await _client.PostAsJsonAsync("Playback/Sessions", request, JsonDefaults.Options, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        Assert.Contains("No playable output", await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken), StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Issue #59, matrix row 2 - the STOP condition, with byte proof. A Matroska source, a client
     /// that decodes mp4 only, and transcoding explicitly FORBIDDEN: both codecs are copyable, so this
     /// is a genuine remux and <c>AllowDirectStream:true</c> must keep permitting it. The fix keys the

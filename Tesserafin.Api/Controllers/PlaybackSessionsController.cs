@@ -154,7 +154,7 @@ public class PlaybackSessionsController : BaseTesserafinApiController
 
         if (session is null)
         {
-            return UnprocessableEntity();
+            return NoViablePlan();
         }
 
         // Issue #43: the lifecycle line a browser e2e joins against X-Request-Id (the ambient
@@ -234,7 +234,7 @@ public class PlaybackSessionsController : BaseTesserafinApiController
 
         if (session is null)
         {
-            return UnprocessableEntity();
+            return NoViablePlan();
         }
 
         // Issue #43: the re-plan transition, with the decision bits that actually change on a track/
@@ -454,13 +454,9 @@ public class PlaybackSessionsController : BaseTesserafinApiController
         // DirectPlay is deliberately NOT normalized: there Static=true is correct - the announced
         // container IS the source's, so serving the file verbatim is the honest answer.
         //
-        // Gated on ServedByV2, so the fix is confined to the v2 path exactly as the defect is. A
-        // LEGACY-fallback DirectStream resolved through this same endpoint announces the SOURCE
-        // container (measured: the same Matroska session that reports Container=mp4 under v2 reports
-        // Container=mkv on legacy fallback), so announced container and served bytes already agree
-        // there - it is not this defect, and normalizing it would be an unrequested behaviour change
-        // to a path that is not broken. Only the v2 adapter produces the mismatching pair
-        // (Container=mp4 for an mkv source) that makes Static=true a lie.
+        // Gated on ServedByV2. A legacy plan still reaching here as DirectStream is one the planner
+        // kept because the client can open the source as it is; a legacy plan it could not open was
+        // re-planned onto a declared output profile (#374, PlaybackSessionPlanner.PlanVideo).
         //
         // Mutating here is safe and deliberately scoped: resolvedStreamInfo is the per-request
         // MemberwiseClone WithRequestContext just produced (see the PR118 note above), never the
@@ -502,6 +498,16 @@ public class PlaybackSessionsController : BaseTesserafinApiController
 
         return null;
     }
+
+    /// <summary>
+    /// #374: the refusal a client can act on when no delivery the request permits exists.
+    /// </summary>
+    private ObjectResult NoViablePlan() => UnprocessableEntity(new ProblemDetails
+    {
+        Status = StatusCodes.Status422UnprocessableEntity,
+        Title = "No playable output",
+        Detail = "No permitted delivery matches the declared capabilities. Declare a compatible output profile, or allow transcoding.",
+    });
 
     /// <summary>
     /// Issue #75 slice 75b: reads back the bounded structural scan the
