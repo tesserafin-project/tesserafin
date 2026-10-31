@@ -1100,7 +1100,9 @@ namespace Tesserafin.Server.Core.Session
             // rather than to a user.
             if (!string.IsNullOrEmpty(info.PlaySessionId))
             {
-                _credentialService.RevokePlaySession(info.PlaySessionId);
+                // #301: the id is the reporter's to name. Only what this session's user and device
+                // were issued ends with its report, the same owner its transcodes are compared with.
+                _credentialService.RevokePlaySession(info.PlaySessionId, session.UserId, session.DeviceId);
             }
 
             session.StopAutomaticProgress();

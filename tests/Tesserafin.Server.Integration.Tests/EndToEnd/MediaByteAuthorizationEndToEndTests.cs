@@ -357,6 +357,85 @@ public sealed class MediaByteAuthorizationEndToEndTests : IClassFixture<HlsIsola
     }
 
     /// <summary>
+    /// #301: two users on one client-chosen play session id each hold a session and a capability.
+    /// Ending one ends only that user's, by deleting the session or by the stop report.
+    /// </summary>
+    /// <param name="byStopReport">Whether Alice ends with the stop report rather than the delete.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
+    [Theory(Timeout = 120_000)]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TwoUsersOnOnePlaySessionId_EndingOneLeavesTheOthersCapabilityServing(bool byStopReport)
+    {
+        var playSession = "pc301-shared-" + Guid.NewGuid().ToString("N");
+        var aliceSession = await CreatePlaybackSessionAsync(_allowed, _allowedId, playSession);
+        var bobSession = await CreatePlaybackSessionAsync(_second, _secondId, playSession);
+        Assert.NotEqual(aliceSession, bobSession);
+
+        var aliceUrl = await CapabilityUrlAsync(_allowed, playSession);
+        var bobUrl = await CapabilityUrlAsync(_second, playSession);
+        using var anonymous = _factory.CreateClient();
+        Assert.True((await SendAsync(anonymous, "GET", aliceUrl, string.Empty)).Body.AsSpan().SequenceEqual(_itemBytes));
+        Assert.True((await SendAsync(anonymous, "GET", bobUrl, string.Empty)).Body.AsSpan().SequenceEqual(_itemBytes));
+
+        await EndAsync(_allowed, aliceSession, playSession, byStopReport);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(anonymous, "GET", aliceUrl, string.Empty)).Status);
+        Assert.True((await SendAsync(anonymous, "GET", bobUrl, string.Empty)).Body.AsSpan().SequenceEqual(_itemBytes));
+        Assert.Equal(HttpStatusCode.OK, (await SendAsync(_second, "GET", FormattableString.Invariant($"Playback/Sessions/{bobSession}/Stream"), string.Empty)).Status);
+    }
+
+    /// <summary>
+    /// #301, device half: the stop report ends what its own device was issued; a delete names the
+    /// user's session and ends what that user holds under the id, on any device.
+    /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
+    [Fact(Timeout = 120_000)]
+    public async Task TwoDevicesOfOneUser_OnePlaySessionId_StopReportEndsOnlyItsDevice_DeleteEndsBoth()
+    {
+        var playSession = "pc301-devices-" + Guid.NewGuid().ToString("N");
+        using var otherDevice = await SignInAgainAsync("smr1-allowed-" + _suffix, "pc301-other-device");
+        var firstUrl = await CapabilityUrlAsync(_allowed, playSession);
+        var otherUrl = await CapabilityUrlAsync(otherDevice, playSession);
+        using var anonymous = _factory.CreateClient();
+
+        await EndAsync(otherDevice, Guid.Empty, playSession, byStopReport: true);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(anonymous, "GET", otherUrl, string.Empty)).Status);
+        Assert.True((await SendAsync(anonymous, "GET", firstUrl, string.Empty)).Body.AsSpan().SequenceEqual(_itemBytes));
+
+        var otherAgain = await CapabilityUrlAsync(otherDevice, playSession);
+        var session = await CreatePlaybackSessionAsync(_allowed, _allowedId, playSession);
+        await EndAsync(_allowed, session, playSession, byStopReport: false);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(anonymous, "GET", firstUrl, string.Empty)).Status);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(anonymous, "GET", otherAgain, string.Empty)).Status);
+    }
+
+    /// <summary>
+    /// #301: the owner stamped on a job started under a capability is the capability's user and the
+    /// device of its session, even beside a token of the same user on another device.
+    /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
+    [Fact(Timeout = 120_000)]
+    public async Task JobStartedUnderACapabilityBesideAnotherDevicesToken_IsStampedWithTheCapabilitysDevice()
+    {
+        var name = "smr1-allowed-" + _suffix;
+        var playSession = "pc301-stamp-" + Guid.NewGuid().ToString("N");
+        using var otherDevice = await SignInAgainAsync(name, "pc301-stamp-device");
+        var capability = await MediaBoundaryFixture.MintWithAsync(_allowed, [PlaybackCapabilityScope.Media], _item, _item.ToString("N", CultureInfo.InvariantCulture), playSession);
+        var url = FormattableString.Invariant($"Videos/{_item}/stream.ts?{Transcode}&mediaSourceId={_item:N}&deviceId={playSession}&playSessionId={playSession}&playbackCapability={Uri.EscapeDataString(capability.Value)}");
+
+        using var request = Request("GET", url);
+        using var playing = await otherDevice.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, playing.StatusCode);
+        var job = Assert.Single(_started, j => j.PlaySessionId == playSession);
+        Assert.Equal(_allowedId, job.UserId);
+        Assert.Equal(name + "-device", job.OwnerDeviceId);
+    }
+
+    /// <summary>
     /// A subtitle capability is validated against the item and media source in the route; the
     /// obsolete query parameters name another item afterwards.
     /// </summary>
@@ -740,6 +819,46 @@ public sealed class MediaByteAuthorizationEndToEndTests : IClassFixture<HlsIsola
         user.Policy!.BlockedTags = withheld ? [WithheldTag] : [];
         using var applied = await _admin.PostAsJsonAsync(FormattableString.Invariant($"Users/{userId}/Policy"), user.Policy, JsonDefaults.Options, TestContext.Current.CancellationToken);
         applied.EnsureSuccessStatusCode();
+    }
+
+    private async Task<string> CapabilityUrlAsync(HttpClient client, string playSession)
+    {
+        var capability = await MediaBoundaryFixture.MintWithAsync(client, [PlaybackCapabilityScope.Media], _item, _item.ToString("N", CultureInfo.InvariantCulture), playSession);
+        return FormattableString.Invariant($"Videos/{_item}/stream?static=true&mediaSourceId={_item:N}&playSessionId={playSession}&playbackCapability={Uri.EscapeDataString(capability.Value)}");
+    }
+
+    private async Task<Guid> CreatePlaybackSessionAsync(HttpClient client, Guid userId, string playSession)
+    {
+        var (capabilities, constraints) = EndToEndCapabilityPresets.Remux();
+        var body = new CreatePlaybackSessionRequest(_item, userId, capabilities, constraints, MediaSourceId: null, PlaySessionId: playSession);
+        using var response = await client.PostAsJsonAsync("Playback/Sessions", body, JsonDefaults.Options, TestContext.Current.CancellationToken);
+        response.EnsureSuccessStatusCode();
+        return (await response.Content.ReadFromJsonAsync<PlaybackSessionResponse>(JsonDefaults.Options, TestContext.Current.CancellationToken))!.Id;
+    }
+
+    private async Task EndAsync(HttpClient client, Guid session, string playSession, bool byStopReport)
+    {
+        using var response = byStopReport
+            ? await client.PostAsJsonAsync("Sessions/Playing/Stopped", new { ItemId = _item, PlaySessionId = playSession, PositionTicks = 0L }, JsonDefaults.Options, TestContext.Current.CancellationToken)
+            : await client.DeleteAsync(FormattableString.Invariant($"Playback/Sessions/{session}"), TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+    }
+
+    private async Task<HttpClient> SignInAgainAsync(string name, string device)
+    {
+        using var anonymous = _factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/Users/AuthenticateByName");
+        request.Headers.TryAddWithoutValidation(AuthHelper.AuthHeaderName, MediaBoundaryFixture.AuthorizationHeader(device, null));
+        request.Content = JsonContent.Create(new { Username = name, Pw = "smr1-password" }, options: JsonDefaults.Options);
+        using var authenticated = await anonymous.SendAsync(request, TestContext.Current.CancellationToken);
+        authenticated.EnsureSuccessStatusCode();
+        using var document = JsonDocument.Parse(await authenticated.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.TryAddWithoutValidation(
+            AuthHelper.AuthHeaderName,
+            MediaBoundaryFixture.AuthorizationHeader(device, document.RootElement.GetProperty("AccessToken").GetString()));
+        return client;
     }
 
     private async Task<(HttpClient Client, Guid UserId)> SignInAsync(string name, bool withheld)

@@ -311,14 +311,17 @@ public class PlaybackSessionsController : BaseTesserafinApiController
 
         // #301: deleting the session is the client's stop, so it has to end what the session
         // started. Only its owner's jobs: a play session id is the client's to send, and another
-        // user's job under the same one survives. Old capability links die with them.
+        // user's job, and its capabilities, under the same one survive. Old capability links die with them.
         if (!string.IsNullOrEmpty(session.PlaySessionId))
         {
             var owner = session.Request?.Options.UserId;
-            _credentialService?.RevokePlaySession(session.PlaySessionId);
-            if (_transcodeManager is not null && owner is { } ownerId)
+            if (owner is { } ownerId)
             {
-                await _transcodeManager.StopTranscodingJobs(session.PlaySessionId, job => ownerId.Equals(job.UserId)).ConfigureAwait(false);
+                _credentialService?.RevokePlaySession(session.PlaySessionId, ownerId, null);
+                if (_transcodeManager is not null)
+                {
+                    await _transcodeManager.StopTranscodingJobs(session.PlaySessionId, job => ownerId.Equals(job.UserId)).ConfigureAwait(false);
+                }
             }
         }
 

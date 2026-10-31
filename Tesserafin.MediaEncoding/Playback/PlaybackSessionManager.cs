@@ -495,6 +495,13 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
         }
     }
 
+    /// <summary>
+    /// #301: a play session id is the client's to choose, so a second user naming it plans a session
+    /// of its own rather than taking over the first user's.
+    /// </summary>
+    private static bool BelongToDifferentUsers(PlaybackSessionRequest? existing, PlaybackSessionRequest? incoming)
+        => existing is not null && incoming is not null && !existing.Options.UserId.Equals(incoming.Options.UserId);
+
     private PlaybackSession StoreOrReplace(PlaybackMediaKind kind, string? playSessionId, PlaybackSessionRequest? request, PlaybackPlan plan, string? playbackAttemptId = null)
     {
         var now = _timeProvider.GetUtcNow();
@@ -502,7 +509,8 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
         {
             if (!string.IsNullOrEmpty(playSessionId)
                 && _byPlaySessionId.TryGetValue(playSessionId, out var existingId)
-                && _sessions.TryGetValue(existingId, out var existing))
+                && _sessions.TryGetValue(existingId, out var existing)
+                && !BelongToDifferentUsers(existing.Request, request))
             {
                 // Issue #43: same "null does not erase" rule as Patch - and it now actually applies
                 // to Request too. `Request = request` was unconditional here, which this comment
@@ -627,7 +635,10 @@ public sealed class PlaybackSessionManager : IPlaybackSessionManager, IDisposabl
             session.UpdatedAt,
             (_timeProvider.GetUtcNow() - session.CreatedAt).TotalSeconds);
 
-        if (!string.IsNullOrEmpty(session.PlaySessionId))
+        // #301: another user's session can hold this id by now; its lifecycle state stays its own.
+        if (!string.IsNullOrEmpty(session.PlaySessionId)
+            && _byPlaySessionId.TryGetValue(session.PlaySessionId, out var mapped)
+            && mapped.Equals(id))
         {
             _byPlaySessionId.Remove(session.PlaySessionId);
 

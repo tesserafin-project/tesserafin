@@ -109,6 +109,8 @@ public interface IPlaybackCredentialService
     /// Revokes only the capabilities of one play session. Other concurrent play sessions of the
     /// same user and the same device are untouched, which is the whole point of binding to a play
     /// session rather than to a user.
+    /// A play session id is client-chosen, so this also ends other users' capabilities under the same
+    /// one: a request's own stop goes through <see cref="IOwnedPlaySessionRevocation"/>.
     /// </summary>
     /// <param name="playSessionId">The play session that ended.</param>
     /// <returns>How many capabilities were removed.</returns>

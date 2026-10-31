@@ -31,7 +31,7 @@ namespace Tesserafin.Server.Implementations.Security.PlaybackCredentials;
 /// credential would have lived, and every caller-visible response is identical either way, so
 /// nothing leaks to a prober.
 /// </remarks>
-public sealed class PlaybackCredentialService : IPlaybackCredentialService
+public sealed class PlaybackCredentialService : IPlaybackCredentialService, IOwnedPlaySessionRevocation
 {
     /// <summary>
     /// Secret size. 256 bits, against a contract minimum of 128.
@@ -338,6 +338,12 @@ public sealed class PlaybackCredentialService : IPlaybackCredentialService
     /// <inheritdoc />
     public int RevokePlaySession(string playSessionId)
         => RevokeCapabilities(e => string.Equals(e.PlaySessionId, playSessionId, StringComparison.Ordinal));
+
+    /// <inheritdoc />
+    public int RevokePlaySession(string playSessionId, Guid userId, string? deviceId)
+        => RevokeCapabilities(e => string.Equals(e.PlaySessionId, playSessionId, StringComparison.Ordinal)
+                                   && e.UserId.Equals(userId)
+                                   && (deviceId is null || string.Equals(e.DeviceId, deviceId, StringComparison.Ordinal)));
 
     /// <inheritdoc />
     public IReadOnlyList<Guid> GetCapabilityIds(string sessionId)

@@ -403,6 +403,7 @@ public class PlaybackSessionsControllerTests
             .Callback<string, Func<TranscodingJob, bool>>((_, isOwn) => selected = isOwn)
             .Returns(Task.CompletedTask);
         var credentials = new Mock<IPlaybackCredentialService>();
+        var revocation = credentials.As<IOwnedPlaySessionRevocation>();
 
         var controller = new PlaybackSessionsController(
             _playbackSessionManager.Object,
@@ -419,7 +420,8 @@ public class PlaybackSessionsControllerTests
 
         Assert.IsType<NoContentResult>(await controller.DeletePlaybackSession(id));
 
-        credentials.Verify(c => c.RevokePlaySession("play-301"), Times.Once);
+        revocation.Verify(c => c.RevokePlaySession("play-301", _userId, null), Times.Once);
+        credentials.Verify(c => c.RevokePlaySession(It.IsAny<string>()), Times.Never);
         Assert.NotNull(selected);
         Assert.True(selected(JobOf(_userId)));
         Assert.False(selected(JobOf(Guid.NewGuid())));

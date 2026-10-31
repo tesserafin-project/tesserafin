@@ -30,7 +30,16 @@ The capability stays a bearer value: alone, it is honoured for whoever holds the
 | `DELETE Videos/ActiveEncodings`, `POST Sessions/Playing/Stopped` | the jobs of that play session the caller owns, user and device |
 | `DELETE Playback/Sessions/{id}`, by the session's owner or an administrator | the jobs of that play session belonging to the session's user |
 
-Another user's job under the same client-chosen play session id survives all of them. `Sessions/Playing/Stopped` and `DELETE Playback/Sessions/{id}` revoke the play session's capabilities, so an old capability link answers 401 and starts nothing. A link carrying a durable token stays valid as long as that token: fetching it again is a new playback.
+A play session id is client-chosen, so two users can use the same one: each plans a session of their own, and another user's job and capabilities under that id survive all of these routes.
+
+## What a stop revokes
+
+| Route | Capabilities of that play session revoked |
+| --- | --- |
+| `POST Sessions/Playing/Stopped` | the reporting session's user, on its device |
+| `DELETE Playback/Sessions/{id}` | the session owner's, on all of that user's devices |
+
+The two differ on purpose, and only within one user. A stop report speaks for its device, as it does for jobs. A delete names the user's session, which any of that user's devices or an administrator may end. Between users there is no difference: nothing of another user ends. A revoked capability link answers 401 and starts nothing. A link carrying a durable token stays valid as long as that token: fetching it again is a new playback.
 
 A client that disappears without stopping is covered by the existing ping timeout: 60 s for HLS.
 
