@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Reflection;
 using System.Security.Claims;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -54,11 +55,11 @@ namespace Tesserafin.Server.Tests.LogForging
         [InlineData("attempt\n7")]
         [InlineData("attempt\r\n7")]
         [InlineData("attempt-7\r\n" + RealFormatterLogProbe.ForgedRecordPrefix)]
-        public void Delete_HostileStoredAttemptId_WritesExactlyOnePhysicalRecord(string attemptId)
+        public async Task Delete_HostileStoredAttemptId_WritesExactlyOnePhysicalRecord(string attemptId)
         {
             using var probe = RealFormatterLogProbe.Text();
 
-            Delete(probe, attemptId);
+            await Delete(probe, attemptId);
 
             Assert.Equal(1, probe.TextRecordCount());
             Assert.Single(probe.Lines());
@@ -66,11 +67,11 @@ namespace Tesserafin.Server.Tests.LogForging
         }
 
         [Fact]
-        public void Delete_ForgedRecordPrefix_StaysInsideTheRealRecord()
+        public async Task Delete_ForgedRecordPrefix_StaysInsideTheRealRecord()
         {
             using var probe = RealFormatterLogProbe.Text();
 
-            Delete(probe, OrdinaryAttempt + "\r\n" + RealFormatterLogProbe.ForgedRecordPrefix);
+            await Delete(probe, OrdinaryAttempt + "\r\n" + RealFormatterLogProbe.ForgedRecordPrefix);
 
             var record = Assert.Single(probe.Lines());
             Assert.Contains("[INF] [1] Tesserafin.Api.Controllers.PlaybackSessionsController:", record, StringComparison.Ordinal);
@@ -79,22 +80,22 @@ namespace Tesserafin.Server.Tests.LogForging
         }
 
         [Fact]
-        public void Delete_OrdinaryAttemptId_LogsTheSameLineItLoggedBefore()
+        public async Task Delete_OrdinaryAttemptId_LogsTheSameLineItLoggedBefore()
         {
             using var probe = RealFormatterLogProbe.Text();
 
-            Delete(probe, OrdinaryAttempt);
+            await Delete(probe, OrdinaryAttempt);
 
             var record = Assert.Single(probe.Lines());
             Assert.EndsWith("deleted (attempt attempt-7).", record.TrimEnd('\r'), StringComparison.Ordinal);
         }
 
         [Fact]
-        public void Delete_NoStoredAttemptId_LogsTheSameLineItLoggedBefore()
+        public async Task Delete_NoStoredAttemptId_LogsTheSameLineItLoggedBefore()
         {
             using var probe = RealFormatterLogProbe.Text();
 
-            Delete(probe, attemptId: null);
+            await Delete(probe, attemptId: null);
 
             var record = Assert.Single(probe.Lines());
             // Serilog renders an absent scalar as the literal "null"; unchanged by this tranche.
@@ -102,7 +103,7 @@ namespace Tesserafin.Server.Tests.LogForging
         }
 
         [Fact]
-        public void Delete_RendersTheSessionIdExactlyAsItAlwaysDid()
+        public async Task Delete_RendersTheSessionIdExactlyAsItAlwaysDid()
         {
             // #203: the statement now hands the logger `id.Value.ToString("N")` rather than the
             // PlaybackSessionId itself. This is the production-path half of that equivalence -
@@ -112,7 +113,7 @@ namespace Tesserafin.Server.Tests.LogForging
             using var probe = RealFormatterLogProbe.Text();
 
             var fixture = new Fixture(probe, OrdinaryAttempt);
-            Assert.IsType<NoContentResult>(fixture.DeleteAsOwner());
+            Assert.IsType<NoContentResult>(await fixture.DeleteAsOwner());
 
             var record = Assert.Single(probe.Lines());
             Assert.Equal(1, probe.TextRecordCount());
@@ -123,34 +124,34 @@ namespace Tesserafin.Server.Tests.LogForging
         }
 
         [Fact]
-        public void Delete_PassesTheUnprojectedIdToBusinessLogic()
+        public async Task Delete_PassesTheUnprojectedIdToBusinessLogic()
         {
             // The projection belongs to the logging boundary and nowhere else: lookup, deletion and
             // the ownership check must still receive the bound PlaybackSessionId itself.
             using var probe = RealFormatterLogProbe.Text();
 
             var fixture = new Fixture(probe, OrdinaryAttempt);
-            Assert.IsType<NoContentResult>(fixture.DeleteAsOwner());
+            Assert.IsType<NoContentResult>(await fixture.DeleteAsOwner());
 
             fixture.VerifyManagerSawTheBoundId();
         }
 
         [Fact]
-        public void Delete_ByANonOwner_IsStillForbiddenAndLogsNothing()
+        public async Task Delete_ByANonOwner_IsStillForbiddenAndLogsNothing()
         {
             using var probe = RealFormatterLogProbe.Text();
 
             var fixture = new Fixture(probe, OrdinaryAttempt);
-            var result = fixture.DeleteAs(Guid.NewGuid(), isAdministrator: false);
+            var result = await fixture.DeleteAs(Guid.NewGuid(), isAdministrator: false);
 
             Assert.IsType<ForbidResult>(result);
             Assert.Equal(string.Empty, probe.Raw);
         }
 
-        private static void Delete(RealFormatterLogProbe probe, string? attemptId)
+        private static async Task Delete(RealFormatterLogProbe probe, string? attemptId)
         {
             var fixture = new Fixture(probe, attemptId);
-            Assert.IsType<NoContentResult>(fixture.DeleteAsOwner());
+            Assert.IsType<NoContentResult>(await fixture.DeleteAsOwner());
         }
 
         private sealed class Fixture
@@ -191,7 +192,7 @@ namespace Tesserafin.Server.Tests.LogForging
 
             public PlaybackSessionId SessionId => _session.Id;
 
-            public ActionResult DeleteAsOwner() => DeleteAs(_ownerId, isAdministrator: false);
+            public Task<ActionResult> DeleteAsOwner() => DeleteAs(_ownerId, isAdministrator: false);
 
             public void VerifyManagerSawTheBoundId()
             {
@@ -199,7 +200,7 @@ namespace Tesserafin.Server.Tests.LogForging
                 _manager.Verify(m => m.Delete(_session.Id), Times.Once);
             }
 
-            public ActionResult DeleteAs(Guid userId, bool isAdministrator)
+            public Task<ActionResult> DeleteAs(Guid userId, bool isAdministrator)
             {
                 var claims = new System.Collections.Generic.List<Claim>
                 {
