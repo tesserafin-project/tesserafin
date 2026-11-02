@@ -446,6 +446,7 @@ public class PlaybackSessionsControllerTests
     /// id could end someone else's session. Same owner-or-admin semantics as
     /// <c>GetPlaybackSessionStream</c>.
     /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
     [Fact]
     public async Task DeletePlaybackSession_OtherUser_ReturnsForbidden()
     {
@@ -462,6 +463,7 @@ public class PlaybackSessionsControllerTests
     /// PR118: an administrator may delete a session it does not own - same elevated allowance
     /// <c>GetPlaybackSessionStream</c> already grants.
     /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
     [Fact]
     public async Task DeletePlaybackSession_Admin_ReturnsNoContentForOtherUsersSession()
     {
@@ -1543,6 +1545,7 @@ public class PlaybackSessionsControllerTests
     /// carry one) and logs the deletion inside that attempt scope, with the named properties a log
     /// query correlates on.
     /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
     [Fact]
     public async Task DeletePlaybackSession_ExistingSession_LogsDeletedUnderStoredAttemptScope()
     {
@@ -1570,6 +1573,7 @@ public class PlaybackSessionsControllerTests
     /// can tell "teardown raced the TTL sweep" from "teardown never reached the server". No attempt
     /// scope: a missing session has no stored attempt id, and inventing one would be worse.
     /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
     [Fact]
     public async Task DeletePlaybackSession_UnknownSession_LogsAlreadyGoneAndReturnsNotFound()
     {
@@ -1594,6 +1598,7 @@ public class PlaybackSessionsControllerTests
     /// TTL sweep, a concurrent DELETE) - same observable outcome as the not-found path: 404, logged
     /// as already gone.
     /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous test.</returns>
     [Fact]
     public async Task DeletePlaybackSession_RacedAwayBetweenGetAndDelete_LogsAlreadyGoneAndReturnsNotFound()
     {
