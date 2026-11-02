@@ -358,7 +358,9 @@ public sealed class ItemDisplayPreferencesDeduplicationMigrationTests : IDisposa
     {
         using var connection = Open();
         using var command = connection.CreateCommand();
+#pragma warning disable CA2100 // Statements are written in this class; the only interpolated value is a migration id from this test's database.
         command.CommandText = sql;
+#pragma warning restore CA2100
         command.ExecuteNonQuery();
     }
 
