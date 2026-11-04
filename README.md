@@ -17,11 +17,11 @@ fork attribution.
 
 Two public releases exist. Read this section before deciding what to install.
 
-- **[`1.0.0` — Foundation](https://github.com/tesserafin-project/tesserafin/releases/tag/1.0.0)**,
+- **[`1.0.0` — Foundation](https://github.com/tesserafin/tesserafin/releases/tag/1.0.0)**,
   released 2026-08-05 (tag `1.0.0`). The Linux container
-  `ghcr.io/tesserafin-project/server`, installed by digest. It is still the 1.0
+  `ghcr.io/tesserafin/server`, installed by digest. It is still the 1.0
   install path.
-- **[`1.1.0`](https://github.com/tesserafin-project/tesserafin/releases/tag/v1.1.0)**,
+- **[`1.1.0`](https://github.com/tesserafin/tesserafin/releases/tag/v1.1.0)**,
   released 2026-09-13 (tag `v1.1.0`). It keeps the container unchanged and adds
   native Linux packages and a native `win-x64` portable ZIP. Nothing in it is
   Authenticode-signed. The MSI is documented but **not attached** to the
@@ -32,7 +32,7 @@ Two public releases exist. Read this section before deciding what to install.
   `34766464798`). A rebuild from the `v1.1.0` tag is a different ZIP.
 - `1.0.0` is the first public version epoch. The server and the web client share
   that number.
-- The build package `ghcr.io/tesserafin-project/tesserafin-server` and the
+- The build package `ghcr.io/tesserafin/tesserafin-server` and the
   web-assets package are **private build provenance**, not a supported product.
 - The inherited `12.x` server images and `13.x` web-assets images describe
   upstream lineage, not a Tesserafin release history. They are retained as
@@ -74,7 +74,7 @@ verification steps and the limitations of each path; building from source is
 | Find a guide or an engineering reference | [Documentation index](docs/README.md) |
 | Report a problem | [Support](docs/support.md) |
 
-The public container package is `ghcr.io/tesserafin-project/server`. Private
+The public container package is `ghcr.io/tesserafin/server`. Private
 build packages and inherited development images are not installation fallbacks.
 No mutable public image channel is published.
 
@@ -102,11 +102,11 @@ useful for checking the published guides on independent hardware.
 
 | Repository | Contents |
 | --- | --- |
-| [tesserafin-project/tesserafin](https://github.com/tesserafin-project/tesserafin) | This repository: the server, its container packaging, and the server-owned contracts (OpenAPI document, version contract, release-pair gate). |
-| [tesserafin-project/tesserafin-web](https://github.com/tesserafin-project/tesserafin-web) | Tesserafin Web — the browser and desktop reference client, bundled into the server image. |
+| [tesserafin/tesserafin](https://github.com/tesserafin/tesserafin) | This repository: the server, its container packaging, and the server-owned contracts (OpenAPI document, version contract, release-pair gate). |
+| [tesserafin/tesserafin-web](https://github.com/tesserafin/tesserafin-web) | Tesserafin Web — the browser and desktop reference client, bundled into the server image. |
 
 Native Android foundations live in the separately developed mobile repository.
-They are not a shipped client: [the native tracker](https://github.com/tesserafin-project/tesserafin/issues/221)
+They are not a shipped client: [the native tracker](https://github.com/tesserafin/tesserafin/issues/221)
 distinguishes the incomplete phone vertical from later Android TV delivery.
 
 ## Development
@@ -132,7 +132,7 @@ Supported on all major operating systems except FreeBSD.
 **Clone, build, test**
 
 ```bash
-git clone https://github.com/tesserafin-project/tesserafin.git
+git clone https://github.com/tesserafin/tesserafin.git
 cd tesserafin
 dotnet build Tesserafin.sln
 dotnet test Tesserafin.sln
@@ -146,7 +146,7 @@ output can skip analyzers.
 
 The server hosts the web client's static files as well as the API. Get those
 files by building
-[tesserafin-web](https://github.com/tesserafin-project/tesserafin-web) (`npm
+[tesserafin-web](https://github.com/tesserafin/tesserafin-web) (`npm
 install`, then `npm run build:development`), then point the server at its `dist`
 directory:
 
@@ -197,9 +197,9 @@ can merge. A broader contribution guide (coding conventions, review process) is
 not written yet.
 
 **Ordinary bugs and feature requests** —
-[open an issue](https://github.com/tesserafin-project/tesserafin/issues) in this
+[open an issue](https://github.com/tesserafin/tesserafin/issues) in this
 repository. Browser and UI problems belong in
-[tesserafin-project/tesserafin-web](https://github.com/tesserafin-project/tesserafin-web/issues).
+[tesserafin/tesserafin-web](https://github.com/tesserafin/tesserafin-web/issues).
 [`docs/support.md`](docs/support.md) covers where a problem goes, what to include,
 and what this project does and does not promise in return.
 

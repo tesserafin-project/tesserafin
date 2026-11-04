@@ -245,7 +245,7 @@ jobs:
           cd ci/windows/runtime-retention
           ./registry-controls.sh \
             --oci  "${RUNNER_TEMP}/oci" \
-            --repo localhost:5000/tesserafin-project/windows-ffmpeg-runtime \
+            --repo localhost:5000/tesserafin/windows-ffmpeg-runtime \
             --work "${RUNNER_TEMP}/registry" | tee -a "${GITHUB_STEP_SUMMARY}"
 
   # A structural refusal, stated as a job rather than as a comment. If a future

@@ -22,12 +22,12 @@ enforced, off-laptop CI is #94 / [C1], and the hosted contract gate is
 | | |
 |---|---|
 | `SERVER_SOURCE_SHA` | `a39f28c6406ab4e444ad5bd1837f447faeafdb96` |
-| `SERVER_IMAGE` | `ghcr.io/tesserafin-project/tesserafin@sha256:032afb13a54b50823a2acbf30465f4e1f63efa26dacd041cbf50ba11df44994a` |
+| `SERVER_IMAGE` | `ghcr.io/tesserafin/tesserafin@sha256:032afb13a54b50823a2acbf30465f4e1f63efa26dacd041cbf50ba11df44994a` |
 | `SERVER_IMAGE_ARCH_DIGEST` (`linux/amd64`, the one executed) | `sha256:6ec5eb211b6cb24ef4a6853deaec0f5f69b1d8aa1e6c25c3ef81c355e4a177d9` |
 | `linux/arm64` child (built and label-checked, **never booted**) | `sha256:21e2bb908138e4d4a1a794413084716ed14ad6906baabbee84aa4f10a0b9fed9` |
 | readable tags for the same manifest | `12.0.0-dev.a39f28c6406a`, `sha-a39f28c6406ab4e444ad5bd1837f447faeafdb96` |
 | `WEB_SOURCE_SHA` | `855e2e3c25de42cec292192149947309678f5250` |
-| `WEB_ASSETS_IMAGE` | `ghcr.io/tesserafin-project/tesserafin-web-assets@sha256:8ff18f389ab1d0f8fbc3a311a080c377fda9bad766167becbd4855a75207b5dd` |
+| `WEB_ASSETS_IMAGE` | `ghcr.io/tesserafin/tesserafin-web-assets@sha256:8ff18f389ab1d0f8fbc3a311a080c377fda9bad766167becbd4855a75207b5dd` |
 | `OPENAPI_HASH` (generated == committed) | `0700633b3c12ff04df694ea3d5e81be72cc07dc66b70a8e3048cae8363fabf66` |
 | `WEB_PINNED_OPENAPI_HASH` | `49e4eb87735f9c69791d1962823b29f49cc6ec500ca71f8898cf4255e85d7482` |
 
@@ -75,7 +75,7 @@ tests/Tesserafin.MediaEncoding.Tests/Playback/PlaybackSessionManagerRequestCorre
 
 ### Web disposition
 
-`tesserafin-project/tesserafin-web` PR **#47** ("re-plan the v2 session on retry
+`tesserafin/tesserafin-web` PR **#47** ("re-plan the v2 session on retry
 via PUT") merged as `a32acbb10cb4ef5de548db8ac07e6118865bbeca`, an ancestor of
 `main`. Its implementation is present on `main`:
 
@@ -135,7 +135,7 @@ clean checkout at `99783b2a74`, with the tags derived by
 ### Version surfaces — `docker/version-verify.sh`, invoked by the validator
 
 ```
-== image under test: ghcr.io/tesserafin-project/tesserafin@sha256:e7551ac8… ==
+== image under test: ghcr.io/tesserafin/tesserafin@sha256:e7551ac8… ==
   canonical version (SharedVersion.cs) : 12.0.0
   PASS  resolves to an immutable digest
   architecture : amd64
@@ -156,7 +156,7 @@ clean checkout at `99783b2a74`, with the tags derived by
 ```
 label  org.tesserafin.web.revision     : fa47bab7f09d635f0b79b0814ddff2a1a1108400
 label  org.tesserafin.web.version      : 13.0.0
-label  org.tesserafin.web.assets.image : ghcr.io/tesserafin-project/tesserafin-web-assets@sha256:357afd28…
+label  org.tesserafin.web.assets.image : ghcr.io/tesserafin/tesserafin-web-assets@sha256:357afd28…
 image  /opt/tesserafin-web.revision.json revision : fa47bab7f09d635f0b79b0814ddff2a1a1108400
 PASS  the OCI web revision label equals the in-image revision file
 PASS  the bundled web revision equals the named --web-source
@@ -236,7 +236,7 @@ source change was required, so no web PR was opened.
 
 ```
 ci/verify-release-pair.sh \
-    --server-image ghcr.io/tesserafin-project/tesserafin@sha256:e7551ac881bab01c10f290103ca3905e2779fbc1da5110aa11a26b0364a9f1f8 \
+    --server-image ghcr.io/tesserafin/tesserafin@sha256:e7551ac881bab01c10f290103ca3905e2779fbc1da5110aa11a26b0364a9f1f8 \
     --server-source 99783b2a743ee62617c77ffb12046f788c229e1c \
     --web-repo ../tesserafin-web \
     --web-source fa47bab7f09d635f0b79b0814ddff2a1a1108400 \
@@ -274,7 +274,7 @@ instead.
 
 ```
 ci/verify-release-pair.sh \
-    --server-image ghcr.io/tesserafin-project/tesserafin@sha256:e7551ac881bab01c10f290103ca3905e2779fbc1da5110aa11a26b0364a9f1f8 \
+    --server-image ghcr.io/tesserafin/tesserafin@sha256:e7551ac881bab01c10f290103ca3905e2779fbc1da5110aa11a26b0364a9f1f8 \
     --server-source 99783b2a743ee62617c77ffb12046f788c229e1c \
     --web-repo ../tesserafin-web \
     --web-source fa47bab7f09d635f0b79b0814ddff2a1a1108400 \
@@ -365,7 +365,7 @@ this is evidence about the same client code, not about a different subject. The
 server behaved correctly throughout (it retained the client-owned session across
 `TranscodingJobEnded` and waited for an explicit `DELETE`, exactly as #72/#74
 require); the request was never sent. Filed as
-`tesserafin-project/tesserafin-web#60`.
+`tesserafin/tesserafin-web#60`.
 
 > **Correction, established when #60 was fixed.** This paragraph originally read
 > that `playbackSessionTeardown.ts` issued the request "as a `keepalive` `fetch`
@@ -418,7 +418,7 @@ failed this gate. It is recorded here rather than dropped.
 ### The failed candidate
 
 ```
-ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.965fadf37e20
+ghcr.io/tesserafin/tesserafin-server:1.0.0-dev.965fadf37e20
 sha256:fffb46a41919dfedf0d5bacc68b9c37ebbca0400df74b487ba5858b395440e5c
 web source 0ac33356d1325fc7c38952798d416f79cb0c8722
 ```
@@ -433,8 +433,8 @@ image is internally consistent: every version label, revision label and embedded
 provenance record agrees. The defect was in the bundled web bundle, which took its
 minimum server version from `@jellyfin/sdk/lib/versions` (`10.10.0`), so a
 Tesserafin server reporting `1.0.0` resolved to `ConnectionState.ServerUpdateNeeded`.
-See tesserafin-project/tesserafin-web#65 and its fix
-tesserafin-project/tesserafin-web#66.
+See tesserafin/tesserafin-web#65 and its fix
+tesserafin/tesserafin-web#66.
 
 That image remains published, immutable and private. It is not deleted, retagged,
 moved or overwritten, and it is never an installation default. It is **not** the v1
@@ -444,7 +444,7 @@ baseline.
 
 ```
 ci/verify-release-pair.sh \
-    --server-image ghcr.io/tesserafin-project/tesserafin-server@sha256:fd1fa9e0f5a2… \
+    --server-image ghcr.io/tesserafin/tesserafin-server@sha256:fd1fa9e0f5a2… \
     --server-source 44f5ab62b522684b4fa58ed10de80b8c6a7bb392 \
     --web-repo <tesserafin-web checkout> \
     --web-source 489a90be0dbe80aede3dbbc028b140756211d43c \
@@ -535,7 +535,7 @@ conclusion was drawn from it.
 > its promotion gates are
 > [`A6-versioning-and-upgrades.md`](./A6-versioning-and-upgrades.md) §5c, and the
 > B2 acceptance evidence is on
-> [tesserafin-web#55](https://github.com/tesserafin-project/tesserafin-web/issues/55).
+> [tesserafin-web#55](https://github.com/tesserafin/tesserafin-web/issues/55).
 > The image
 > below remains published and immutable; it was not deleted, retagged or moved.
 >
@@ -549,10 +549,10 @@ conclusion was drawn from it.
 > Both digests stay published and immutable. This section keeps its own digests
 > deliberately: it is a historical record of a pair as it was run, and rewriting
 > it would falsify the evidence. See A6 §5c for the live default and
-> [tesserafin#174](https://github.com/tesserafin-project/tesserafin/issues/174).
+> [tesserafin#174](https://github.com/tesserafin/tesserafin/issues/174).
 
 The pair in §6b was superseded because the web client it bundles fails
-tesserafin-project/tesserafin-web#67: a terminal playback failure was silent. The
+tesserafin/tesserafin-web#67: a terminal playback failure was silent. The
 fix (tesserafin-web#69) changes shipped runtime bytes, so it forced a new
 web-assets publication, a `Dockerfile` re-pin and a new server candidate. This is
 that candidate, and it was what `docker-compose.yml`, `.env.example`, the Unraid
@@ -560,8 +560,8 @@ template and A3 named until the B2 candidate was promoted — see
 [`A6-versioning-and-upgrades.md`](./A6-versioning-and-upgrades.md) §5c.
 
 ```
-ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.a8ac09f3ff5a
-ghcr.io/tesserafin-project/tesserafin-server:sha-a8ac09f3ff5a715b35b9dc31d1b23c5865a6d34e
+ghcr.io/tesserafin/tesserafin-server:1.0.0-dev.a8ac09f3ff5a
+ghcr.io/tesserafin/tesserafin-server:sha-a8ac09f3ff5a715b35b9dc31d1b23c5865a6d34e
 ```
 
 Both immutable tags resolve to the same manifest index. The image was published
@@ -578,7 +578,7 @@ retagged, moved or deleted an artifact.
 |---|---|
 | server source | `a8ac09f3ff5a715b35b9dc31d1b23c5865a6d34e` |
 | bundled web source | `a63cb11e8e9cfa137b6c3f739e8881a6dfb39dfb` |
-| bundled web assets | `ghcr.io/tesserafin-project/tesserafin-web-assets@sha256:2585fc7e1e06cee0be1bb0bcac735ed783b6e8c3ea2ff346561e7f62c0a75daf` |
+| bundled web assets | `ghcr.io/tesserafin/tesserafin-web-assets@sha256:2585fc7e1e06cee0be1bb0bcac735ed783b6e8c3ea2ff346561e7f62c0a75daf` |
 | web test checkout | `9b7debbf33c92e05f40aa06a091de91faebf44ea` |
 | package visibility | private, unchanged |
 
@@ -591,7 +591,7 @@ Both platform manifests carry the same provenance labels: `image.revision`
 
 ```
 ci/verify-release-pair.sh \
-    --server-image ghcr.io/tesserafin-project/tesserafin-server@sha256:89dd01add7cb… \
+    --server-image ghcr.io/tesserafin/tesserafin-server@sha256:89dd01add7cb… \
     --server-source a8ac09f3ff5a715b35b9dc31d1b23c5865a6d34e \
     --web-repo <tesserafin-web checkout at 9b7debbf33c9…> \
     --web-source a63cb11e8e9cfa137b6c3f739e8881a6dfb39dfb \
@@ -715,7 +715,7 @@ rebuilt nor republished. All three accepted rounds above were then run from roun
    not be described as CI.
 
 2. ~~**The teardown `DELETE` is racy**~~ — **RESOLVED.**
-   `tesserafin-project/tesserafin-web#60` is closed by `tesserafin-web` PR #61,
+   `tesserafin/tesserafin-web#60` is closed by `tesserafin-web` PR #61,
    merged as `855e2e3c25de42cec292192149947309678f5250`. Every teardown now uses
    the unload-survivable transport and a dispatch that never happened no longer
    consumes the session's one release. 25 consecutive targeted teardown runs and
@@ -814,7 +814,7 @@ published pair is proven by the validator rounds below, not by the stress.
 
 ```
 ci/verify-release-pair.sh \
-    --server-image ghcr.io/tesserafin-project/tesserafin@sha256:032afb13a54b… \
+    --server-image ghcr.io/tesserafin/tesserafin@sha256:032afb13a54b… \
     --server-source a39f28c6406ab4e444ad5bd1837f447faeafdb96 \
     --web-repo <tesserafin-web checkout> \
     --web-source 855e2e3c25de42cec292192149947309678f5250 \

@@ -1,7 +1,7 @@
 # Changelog
 
 All notable changes to the Tesserafin server are recorded here. The browser client has its
-own changelog in [`tesserafin-project/tesserafin-web`](https://github.com/tesserafin-project/tesserafin-web).
+own changelog in [`tesserafin/tesserafin-web`](https://github.com/tesserafin/tesserafin-web).
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning
 follows [`docs/versioning-policy.md`](./docs/versioning-policy.md), which is authoritative:
@@ -12,7 +12,7 @@ follows [`docs/versioning-policy.md`](./docs/versioning-policy.md), which is aut
 ### Fixed
 
 - **A hardware transcode that fails no longer ends the playback or the server's ability to
-  transcode** ([#119](https://github.com/tesserafin-project/tesserafin/issues/119)). When
+  transcode** ([#119](https://github.com/tesserafin/tesserafin/issues/119)). When
   ffmpeg's own output positively identifies a hardware failure, the playback continues in
   software and the backend is withheld from new transcodes until the server restarts; the stored
   configuration is not changed. Failures that are not hardware ones (unreadable input, an
@@ -43,10 +43,10 @@ follows [`docs/versioning-policy.md`](./docs/versioning-policy.md), which is aut
 ## [1.1.0] - 2026-09-13
 
 1.1.0 adds native distribution surfaces to the contents of [1.0.0](#100---2026-08-05), below.
-Git tag `v1.1.0`; [GitHub Release](https://github.com/tesserafin-project/tesserafin/releases/tag/v1.1.0).
+Git tag `v1.1.0`; [GitHub Release](https://github.com/tesserafin/tesserafin/releases/tag/v1.1.0).
 The acceptance contract is
 [`docs/distribution/W5-A0-acceptance-contract.md`](./docs/distribution/W5-A0-acceptance-contract.md);
-tracker [#276](https://github.com/tesserafin-project/tesserafin/issues/276).
+tracker [#276](https://github.com/tesserafin/tesserafin/issues/276).
 
 **Unsigned.** Nothing in 1.1.0 is Authenticode-signed. **The MSI is not attached** to the GitHub
 Release. On the release date the one attached asset was the unsigned `win-x64` ZIP pinned below;
@@ -58,7 +58,7 @@ still `1.0.0`, which is why that ZIP is named `tesserafin-server_1.0.0_win-x64.z
 - **Linux container**, unchanged: the 1.0 path, still pinned by immutable digest.
 - **Native Linux packages**: `.deb`, `.rpm` and a portable `.tar.gz`, for `linux-x64` and
   `linux-arm64`, accepted on architecture-native runners
-  ([#225](https://github.com/tesserafin-project/tesserafin/issues/225)).
+  ([#225](https://github.com/tesserafin/tesserafin/issues/225)).
   See [`docs/distribution/L0-linux-packages.md`](./docs/distribution/L0-linux-packages.md).
 - **Native `win-x64` portable ZIP** (W2, W5-A1), unsigned, attached to the GitHub Release as
   `tesserafin-server_1.0.0_win-x64.zip`: a self-contained, relocatable server that ships
@@ -66,7 +66,7 @@ still `1.0.0`, which is why that ZIP is named `tesserafin-server_1.0.0_win-x64.z
   [`ci/windows/w5/accepted-unsigned-zip.json`](./ci/windows/w5/accepted-unsigned-zip.json):
   SHA-256 `c1f6261cb770bd3dcbf255f4dd15b287a7289adad5a619d31725c158cd20e2d8`, assembled at
   `41d3411c9838feec6650dd10ec89a1f198aafdeb`, identical on two independent allocations in run
-  [34766464798](https://github.com/tesserafin-project/tesserafin/actions/runs/34766464798).
+  [34766464798](https://github.com/tesserafin/tesserafin/actions/runs/34766464798).
   That digest identifies the ZIP built from that commit; a ZIP built from any other commit has a
   different one. A rebuild from the `v1.1.0` tag commit is not this ZIP.
 - **Native `win-x64` MSI and Windows Service** (W3, W4), documented and measured but **not
@@ -96,7 +96,7 @@ Stated rather than omitted:
 - **No native client.**
 - **No advertised MSI repair.** Repair is not exercised by any slice.
 - **No Secure Remote Access or managed HTTPS.**
-  [#241](https://github.com/tesserafin-project/tesserafin/issues/241) is post-1.1.
+  [#241](https://github.com/tesserafin/tesserafin/issues/241) is post-1.1.
 - **No auto-updater.**
 - **No Jellyfin client or plugin compatibility.**
 - **No D3D11VA, DXVA2, QSV, NVENC or AMF runtime claim on Windows.** The runners that measured the
@@ -105,13 +105,13 @@ Stated rather than omitted:
 ## [1.0.0] - 2026-08-05
 
 The first public release, **1.0.0 — Foundation**. Git tag `1.0.0`;
-[GitHub Release](https://github.com/tesserafin-project/tesserafin/releases/tag/1.0.0).
+[GitHub Release](https://github.com/tesserafin/tesserafin/releases/tag/1.0.0).
 
 Tesserafin is a fork of [Jellyfin](https://github.com/jellyfin/jellyfin). It inherited a
 `12.x` server line and a `13.x` web line from upstream history; those numbers describe a
 lineage, not a Tesserafin release history. Every existing
-`ghcr.io/tesserafin-project/tesserafin:12.0.0-dev.*` and
-`ghcr.io/tesserafin-project/tesserafin-web-assets:13.0.0-dev.*` image is an internal,
+`ghcr.io/tesserafin/tesserafin:12.0.0-dev.*` and
+`ghcr.io/tesserafin/tesserafin-web-assets:13.0.0-dev.*` image is an internal,
 unsupported development artifact, is retained as the reproducibility record, and is **not**
 a release. Moving from one of those to the `1.x` line is a change of version epoch, not a
 supported upgrade.
@@ -208,16 +208,16 @@ Stated rather than omitted:
 - **No forward-migration boundary has been crossed yet.** The upgrade round trip is proven,
   but no published image pair has a pending migration between it, so *"runs forward
   migrations"* is unproven. Tracked as
-  [#127](https://github.com/tesserafin-project/tesserafin/issues/127).
+  [#127](https://github.com/tesserafin/tesserafin/issues/127).
 - **Hardware acceleration is validated for VAAPI and software only.** QSV, NVENC, AMF,
   VideoToolbox, RKMPP and V4L2M2M are probe-gated but not hardware-validated. MJPEG VAAPI is
-  tracked as [#76](https://github.com/tesserafin-project/tesserafin/issues/76).
+  tracked as [#76](https://github.com/tesserafin/tesserafin/issues/76).
 - **A live mid-session retry after a hardware transcode failure is out of scope.** Selection is
   re-probed at start, not mid-playback. Tracked as
-  [#119](https://github.com/tesserafin-project/tesserafin/issues/119).
+  [#119](https://github.com/tesserafin/tesserafin/issues/119).
 - **The CodeQL inventory is being worked through in the open**, not dismissed. Open findings
-  are classified in [#185](https://github.com/tesserafin-project/tesserafin/issues/185) and
-  [#188](https://github.com/tesserafin-project/tesserafin/issues/188); one finding is handled
+  are classified in [#185](https://github.com/tesserafin/tesserafin/issues/185) and
+  [#188](https://github.com/tesserafin/tesserafin/issues/188); one finding is handled
   under coordinated disclosure and is deliberately not described publicly.
 - **The Linux container is the first release's deployment surface.**
   [1.1.0](#110---2026-09-13), above, adds native Linux `.deb`, `.rpm` and `.tar.gz` forms,
@@ -228,6 +228,6 @@ Stated rather than omitted:
   The full server test suite is not green on native Windows; see
   [`docs/distribution/W0-windows-server.md`](./docs/distribution/W0-windows-server.md) §2.7.
 
-[Unreleased]: https://github.com/tesserafin-project/tesserafin/compare/v1.1.0...master
-[1.1.0]: https://github.com/tesserafin-project/tesserafin/releases/tag/v1.1.0
-[1.0.0]: https://github.com/tesserafin-project/tesserafin/releases/tag/1.0.0
+[Unreleased]: https://github.com/tesserafin/tesserafin/compare/v1.1.0...master
+[1.1.0]: https://github.com/tesserafin/tesserafin/releases/tag/v1.1.0
+[1.0.0]: https://github.com/tesserafin/tesserafin/releases/tag/1.0.0

@@ -1,7 +1,7 @@
 # W2 — the accepted portable Windows server ZIP surface
 
-Tracker: [#256](https://github.com/tesserafin-project/tesserafin/issues/256).
-Umbrella: [#234](https://github.com/tesserafin-project/tesserafin/issues/234).
+Tracker: [#256](https://github.com/tesserafin/tesserafin/issues/256).
+Umbrella: [#234](https://github.com/tesserafin/tesserafin/issues/234).
 Accepted master at this closeout:
 `fb43b1627f1f77abf88777344670c33a7464ecbd`, which is W2-A7 as accepted.
 Frozen W2 starting master: `aac506ed751af520cc7ba459341cd8abf22be6cf`, which is
@@ -27,14 +27,14 @@ rewritten.
 
 | Slice | What it proved | Base | Accepted head | PR | Commits | Slice document |
 | --- | --- | --- | --- | --- | --- | --- |
-| **A0** | web payload pin / consume | `aac506ed751af520cc7ba459341cd8abf22be6cf` | `3d0c80047ce418ec4255ff3d788fe8d48a3da3e3` | [#257](https://github.com/tesserafin-project/tesserafin/pull/257) | 5 | [`W2-A0-web-payload.md`](W2-A0-web-payload.md) |
-| **A1** | FFmpeg runtime consume | `3d0c80047ce418ec4255ff3d788fe8d48a3da3e3` | `d04689277c61e59e9b15815cb6de92ee67ef458e` | [#258](https://github.com/tesserafin-project/tesserafin/pull/258) | 2 | [`W2-A1-ffmpeg-runtime.md`](W2-A1-ffmpeg-runtime.md) |
-| **A2** | deterministic ZIP | `d04689277c61e59e9b15815cb6de92ee67ef458e` | `5ba584383c7381bea1c23708a2e3781bb428326b` | [#259](https://github.com/tesserafin-project/tesserafin/pull/259) | 4 | [`W2-A2-server-zip.md`](W2-A2-server-zip.md) |
-| **A3** | relocate and start (exe, not SCM) | `5ba584383c7381bea1c23708a2e3781bb428326b` | `8718096aa5f56d33a5b4fad91935ae89037a6e7b` | [#260](https://github.com/tesserafin-project/tesserafin/pull/260) | 4 | [`W2-A3-relocate-start.md`](W2-A3-relocate-start.md) |
-| **A4** | two-runner IDENTICAL | `8718096aa5f56d33a5b4fad91935ae89037a6e7b` | `5e307ce36e5baa4192f178f0fb8de2e58efe2afb` | [#261](https://github.com/tesserafin-project/tesserafin/pull/261) | 4 | [`W2-A4-two-runner.md`](W2-A4-two-runner.md) |
-| **A5** | service script in the ZIP | `5e307ce36e5baa4192f178f0fb8de2e58efe2afb` | `147687f323cdc77f545520a095abf2f7c2a5df1e` | [#262](https://github.com/tesserafin-project/tesserafin/pull/262) | 16 | [`W2-A5-service-script.md`](W2-A5-service-script.md) |
-| **A6** | `.reefin-` → `.tesserafin-` markers | `147687f323cdc77f545520a095abf2f7c2a5df1e` | `e572db1f7fd27aa3987e183b7d96834a928866ea` | [#263](https://github.com/tesserafin-project/tesserafin/pull/263) | 3 | [`W2-A6-reefin.md`](W2-A6-reefin.md) |
-| **A7** | `tesserafin-backup-{ts}.zip` | `e572db1f7fd27aa3987e183b7d96834a928866ea` | `fb43b1627f1f77abf88777344670c33a7464ecbd` | [#264](https://github.com/tesserafin-project/tesserafin/pull/264) | 2 | [`W2-A7-backupservice.md`](W2-A7-backupservice.md) |
+| **A0** | web payload pin / consume | `aac506ed751af520cc7ba459341cd8abf22be6cf` | `3d0c80047ce418ec4255ff3d788fe8d48a3da3e3` | [#257](https://github.com/tesserafin/tesserafin/pull/257) | 5 | [`W2-A0-web-payload.md`](W2-A0-web-payload.md) |
+| **A1** | FFmpeg runtime consume | `3d0c80047ce418ec4255ff3d788fe8d48a3da3e3` | `d04689277c61e59e9b15815cb6de92ee67ef458e` | [#258](https://github.com/tesserafin/tesserafin/pull/258) | 2 | [`W2-A1-ffmpeg-runtime.md`](W2-A1-ffmpeg-runtime.md) |
+| **A2** | deterministic ZIP | `d04689277c61e59e9b15815cb6de92ee67ef458e` | `5ba584383c7381bea1c23708a2e3781bb428326b` | [#259](https://github.com/tesserafin/tesserafin/pull/259) | 4 | [`W2-A2-server-zip.md`](W2-A2-server-zip.md) |
+| **A3** | relocate and start (exe, not SCM) | `5ba584383c7381bea1c23708a2e3781bb428326b` | `8718096aa5f56d33a5b4fad91935ae89037a6e7b` | [#260](https://github.com/tesserafin/tesserafin/pull/260) | 4 | [`W2-A3-relocate-start.md`](W2-A3-relocate-start.md) |
+| **A4** | two-runner IDENTICAL | `8718096aa5f56d33a5b4fad91935ae89037a6e7b` | `5e307ce36e5baa4192f178f0fb8de2e58efe2afb` | [#261](https://github.com/tesserafin/tesserafin/pull/261) | 4 | [`W2-A4-two-runner.md`](W2-A4-two-runner.md) |
+| **A5** | service script in the ZIP | `5e307ce36e5baa4192f178f0fb8de2e58efe2afb` | `147687f323cdc77f545520a095abf2f7c2a5df1e` | [#262](https://github.com/tesserafin/tesserafin/pull/262) | 16 | [`W2-A5-service-script.md`](W2-A5-service-script.md) |
+| **A6** | `.reefin-` → `.tesserafin-` markers | `147687f323cdc77f545520a095abf2f7c2a5df1e` | `e572db1f7fd27aa3987e183b7d96834a928866ea` | [#263](https://github.com/tesserafin/tesserafin/pull/263) | 3 | [`W2-A6-reefin.md`](W2-A6-reefin.md) |
+| **A7** | `tesserafin-backup-{ts}.zip` | `e572db1f7fd27aa3987e183b7d96834a928866ea` | `fb43b1627f1f77abf88777344670c33a7464ecbd` | [#264](https://github.com/tesserafin/tesserafin/pull/264) | 2 | [`W2-A7-backupservice.md`](W2-A7-backupservice.md) |
 
 Forty commits, zero merge commits: `git rev-list --merges --count
 aac506ed751af520cc7ba459341cd8abf22be6cf..fb43b1627f1f77abf88777344670c33a7464ecbd`

@@ -181,7 +181,7 @@ def build_oci_layout(
             ),
             "org.opencontainers.image.licenses": "see licenses/licenses.json in the layer",
             "org.opencontainers.image.source": (
-                "https://github.com/tesserafin-project/tesserafin"
+                "https://github.com/tesserafin/tesserafin"
             ),
             "dev.tesserafin.buildinputs.ffmpegUpstreamCommit": lock["ffmpeg"][
                 "upstreamCommit"

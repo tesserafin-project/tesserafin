@@ -39,7 +39,7 @@ if args[0] == 'manifest':
 elif args[0] == 'pull':
     pass
 elif args[:2] == ['image', 'inspect']:
-    repo = 'ghcr.io/tesserafin-project/tesserafin-server@sha256:'
+    repo = 'ghcr.io/tesserafin/tesserafin-server@sha256:'
     images = []
     for revision, digest in [
         ('44f5ab62b522684b4fa58ed10de80b8c6a7bb392', 'f' * 64),
@@ -91,8 +91,8 @@ else:
         proc, args, report = self.run_fixture("valid")
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(args, ["--baseline",
-            "ghcr.io/tesserafin-project/tesserafin-server@sha256:fd1fa9e0f5a28a07e5872cc5ff13257a92d988717a33519f62c4b26c6ab36249",
-            "--candidate", "ghcr.io/tesserafin-project/tesserafin-server@sha256:" + "a" * 64,
+            "ghcr.io/tesserafin/tesserafin-server@sha256:fd1fa9e0f5a28a07e5872cc5ff13257a92d988717a33519f62c4b26c6ab36249",
+            "--candidate", "ghcr.io/tesserafin/tesserafin-server@sha256:" + "a" * 64,
             "--require-migration"])
         self.assertEqual(report["candidate"]["architecture"], "linux/amd64")
 

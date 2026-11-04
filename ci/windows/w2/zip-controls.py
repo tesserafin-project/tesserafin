@@ -88,13 +88,13 @@ DESCRIPTIVE_TAG = "accepted-83e23b957940"
 # as exactly that instead.
 FROZEN_PINS = {
     "ci/windows/w2/consume-web-payload.ps1":
-        "db49f21001067a8f55ae71432ff9d47830daa454704a09800bb0e1eadf3b117c",
+        "a23c302b144558fabdc8409906df14165d39d9700492df37cff0215694596400",
     "ci/windows/w2/pkg-tree-digest.py":
         "0c70114c69e85d06bc3d95249cc1a86f917eb2b8deb44718cc05ad6f3afa70b4",
     "ci/windows/runtime-retention/consume.ps1":
-        "f19fefcc48de9ae2175aa49ecff6e732762219a3d76c38067ba4114a1924646d",
+        "80e3ca9aaa9323192537afafb01302869d2a58a869d1faf613048fc60dde3053",
     "ci/windows/runtime-retention/accepted-runtime.json":
-        "593c21f59c67dd564fa488f660efc14b74b5c5bcd775bbc3ef0bdf9e94dd9ece",
+        "28799f4eb03666bea925d2d400f4237c3e5e6e69bafb284573104fcdcfccb934",
 }
 WORKFLOW_SHA256 = "337921cc0e473701a29d0ea193e70884ec93c68de1ba1d57bf1d84ec63dc4ac1"
 

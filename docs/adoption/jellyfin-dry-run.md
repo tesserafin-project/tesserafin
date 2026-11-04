@@ -1,7 +1,7 @@
 # Jellyfin adoption: read-only capture and offline simulation
 
 This is the first bounded discovery/tooling slice under
-[tracker #144](https://github.com/tesserafin-project/tesserafin/issues/144).
+[tracker #144](https://github.com/tesserafin/tesserafin/issues/144).
 It inventories visible media references, users, watched/favourite state and resume
 positions and produces a reviewable simulation. It does not create accounts,
 copy/move media, transfer policy, write user state, change passwords or provide

@@ -119,19 +119,19 @@ STATE_PARAMETERS = ("-DataDir", "-ConfigDir", "-CacheDir", "-LogDir")
 # a pin over a file this slice edits could only ever be a pin over its own work.
 FROZEN_PINS = {
     "ci/windows/w2/consume-web-payload.ps1":
-        "db49f21001067a8f55ae71432ff9d47830daa454704a09800bb0e1eadf3b117c",
+        "a23c302b144558fabdc8409906df14165d39d9700492df37cff0215694596400",
     "ci/windows/w2/relocate-and-start.ps1":
         "637095a09ae2e845f5359bbe57e960727cb30bf7d198efc731ba07463cae6b94",
     "ci/windows/w2/pkg-tree-digest.py":
         "0c70114c69e85d06bc3d95249cc1a86f917eb2b8deb44718cc05ad6f3afa70b4",
     "ci/windows/w2/zip-controls.py":
-        "1cdd22612db0ae34b2234c73e57aa6b345fec931266fd94868a0bb37a94353c2",
+        "b1ea373a0bb3a3b15529ecb10475da3341be6f36405c014d64a9620884a79c46",
     "ci/windows/w2/web-payload-controls.py":
-        "60466ae4da90d9ed876e709c29c90fef025dc287ad8ffbaf5d64d1f053b6e9ea",
+        "6ccc80158e1194a5ede42b6925f7305c31b6c1a0ddc00e3e3a47d2d819fd2f17",
     "ci/windows/runtime-retention/consume.ps1":
-        "f19fefcc48de9ae2175aa49ecff6e732762219a3d76c38067ba4114a1924646d",
+        "80e3ca9aaa9323192537afafb01302869d2a58a869d1faf613048fc60dde3053",
     "ci/windows/runtime-retention/accepted-runtime.json":
-        "593c21f59c67dd564fa488f660efc14b74b5c5bcd775bbc3ef0bdf9e94dd9ece",
+        "28799f4eb03666bea925d2d400f4237c3e5e6e69bafb284573104fcdcfccb934",
 }
 
 # Every control this suite is required to report. A control that is deleted,

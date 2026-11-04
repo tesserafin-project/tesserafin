@@ -33,7 +33,7 @@
       "expect": "registry.login",
       "caller": "name: Caller\non:\n  pull_request:\npermissions:\n  contents: read\njobs:\n  delegate:\n    uses: ./.github/workflows/called.yml\n",
       "files": {
-        ".github/workflows/called.yml": "name: Called\non:\n  workflow_call:\npermissions:\n  contents: read\njobs:\n  work:\n    runs-on: ubuntu-latest\n    steps:\n      - name: Publish\n        shell: bash\n        run: |\n          oras login ghcr.io --password-stdin\n          oras manifest push ghcr.io/tesserafin-project/windows-ffmpeg-runtime@sha256:0 manifest.json\n"
+        ".github/workflows/called.yml": "name: Called\non:\n  workflow_call:\npermissions:\n  contents: read\njobs:\n  work:\n    runs-on: ubuntu-latest\n    steps:\n      - name: Publish\n        shell: bash\n        run: |\n          oras login ghcr.io --password-stdin\n          oras manifest push ghcr.io/tesserafin/windows-ffmpeg-runtime@sha256:0 manifest.json\n"
       }
     },
     {

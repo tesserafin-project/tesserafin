@@ -1,9 +1,9 @@
 # Security policy — Tesserafin Server
 
-This policy covers the **`tesserafin-project/tesserafin`** repository: the Tesserafin
+This policy covers the **`tesserafin/tesserafin`** repository: the Tesserafin
 server. Tesserafin Web, the browser client, has its own policy with the same contract
 and a different scope — see
-[`tesserafin-project/tesserafin-web/SECURITY.md`](https://github.com/tesserafin-project/tesserafin-web/blob/main/SECURITY.md).
+[`tesserafin/tesserafin-web/SECURITY.md`](https://github.com/tesserafin/tesserafin-web/blob/main/SECURITY.md).
 
 ## 1. Supported versions
 
@@ -104,17 +104,17 @@ Tesserafin's diagnostics posture is a published decision, not an implicit one. R
 it before attaching diagnostic output to a report:
 
 * **Policy decision:**
-  [#80 — historical diagnostic surfaces and the scope of the #75 closure test](https://github.com/tesserafin-project/tesserafin/issues/80)
+  [#80 — historical diagnostic surfaces and the scope of the #75 closure test](https://github.com/tesserafin/tesserafin/issues/80)
   (closed as completed; the decision and its per-surface rulings are in its closure
   comments).
 * **Implementation:**
-  [PR #85 — slice 75a, closed contract-mapping diagnostic behind the existing shadow gate](https://github.com/tesserafin-project/tesserafin/pull/85)
+  [PR #85 — slice 75a, closed contract-mapping diagnostic behind the existing shadow gate](https://github.com/tesserafin/tesserafin/pull/85)
   and
-  [PR #86 — slice 75b, bounded single-pass structural scan of the request body](https://github.com/tesserafin-project/tesserafin/pull/86).
+  [PR #86 — slice 75b, bounded single-pass structural scan of the request body](https://github.com/tesserafin/tesserafin/pull/86).
 * **Open follow-ups:**
-  [#82 — strict UUID type for `PlaybackAttemptId` (future contract)](https://github.com/tesserafin-project/tesserafin/issues/82),
-  [#83 — structured `DivergenceSummary` codes (future, conditional)](https://github.com/tesserafin-project/tesserafin/issues/83),
-  [#84 — shareable redacted fixture export (future)](https://github.com/tesserafin-project/tesserafin/issues/84).
+  [#82 — strict UUID type for `PlaybackAttemptId` (future contract)](https://github.com/tesserafin/tesserafin/issues/82),
+  [#83 — structured `DivergenceSummary` codes (future, conditional)](https://github.com/tesserafin/tesserafin/issues/83),
+  [#84 — shareable redacted fixture export (future)](https://github.com/tesserafin/tesserafin/issues/84).
 
 What that means in practice:
 
@@ -149,7 +149,7 @@ What that means in practice:
 **Out of scope here** (report against the correct repository instead):
 
 * the browser client, its session handling and its bundled assets — see
-  [Tesserafin Web's policy](https://github.com/tesserafin-project/tesserafin-web/blob/main/SECURITY.md);
+  [Tesserafin Web's policy](https://github.com/tesserafin/tesserafin-web/blob/main/SECURITY.md);
 * upstream Jellyfin code as shipped by upstream, and upstream infrastructure;
 * findings that require a privilege level the attacker is already assumed to hold
   legitimately, unless the report shows a privilege boundary being crossed;
@@ -164,6 +164,6 @@ weekly — and `master` is a protected branch whose required status checks inclu
 What is **not** finished is the finding inventory those analyses produced. Alerts
 remain open, they are classified by owner rather than dismissed, and some of them need
 a product-level security decision this project has not yet taken. That work is tracked
-in [#94](https://github.com/tesserafin-project/tesserafin/issues/94) and
-[#185](https://github.com/tesserafin-project/tesserafin/issues/185). Do not read a
+in [#94](https://github.com/tesserafin/tesserafin/issues/94) and
+[#185](https://github.com/tesserafin/tesserafin/issues/185). Do not read a
 green pipeline as "no known issues".

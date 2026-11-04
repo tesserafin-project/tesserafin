@@ -23,7 +23,7 @@ them stops rather than substituting something close.
 | Proof head | the head of #253; the exact SHA every run built is recorded in the pull-request body, because a document cannot name a commit it is itself part of |
 | jellyfin-ffmpeg | `d4590e12452f94d40e413caecb34b08de608353b` (`v7.1.4-3`) |
 | Build revision | `7.1.4-tesserafin.1` |
-| Build inputs | `ghcr.io/tesserafin-project/windows-ffmpeg-build-inputs@sha256:cff23b74…c04f0a` |
+| Build inputs | `ghcr.io/tesserafin/windows-ffmpeg-build-inputs@sha256:cff23b74…c04f0a` |
 | Layer | `sha256:03b43119…de271e` |
 | Lock | `602510cd…5abcb8`, 246 packages, 246 valid signatures |
 | Trust root | `1c32ec73…16a49c` |
@@ -410,4 +410,4 @@ as an identity, or permission to begin W2. Consumption is by exact manifest
 digest only, and the accepted digest belongs on [#236] before anything downstream
 reads it.
 
-[#236]: https://github.com/tesserafin-project/tesserafin/issues/236
+[#236]: https://github.com/tesserafin/tesserafin/issues/236

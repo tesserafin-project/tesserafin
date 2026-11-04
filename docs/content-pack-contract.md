@@ -1,9 +1,9 @@
 # The ContentPack contract
 
-Issues [#129](https://github.com/tesserafin-project/tesserafin/issues/129)
+Issues [#129](https://github.com/tesserafin/tesserafin/issues/129)
 (post-release product sequencing),
-[#142](https://github.com/tesserafin-project/tesserafin/issues/142) (idea
-registry), [#146](https://github.com/tesserafin-project/tesserafin/issues/146)
+[#142](https://github.com/tesserafin/tesserafin/issues/142) (idea
+registry), [#146](https://github.com/tesserafin/tesserafin/issues/146)
 (core / official-module / plugin boundary).
 
 This document is **normative** for what a content pack is, what owns it, what it
@@ -419,9 +419,9 @@ never says which of the two happened.
 
 | Milestone | Issue | Scope |
 | --- | --- | --- |
-| **M1** | [`tesserafin#216`](https://github.com/tesserafin-project/tesserafin/issues/216) | Core model, persistence, migration and API. No Web UI. |
-| **M2** | [`tesserafin-web#138`](https://github.com/tesserafin-project/tesserafin-web/issues/138) | Content-pack management and mosaic browsing. Depends on M1. |
-| **M3** | [`tesserafin-web#139`](https://github.com/tesserafin-project/tesserafin-web/issues/139) | First-run seeding and the browsing-preference choice. Depends on M1 and M2. |
+| **M1** | [`tesserafin#216`](https://github.com/tesserafin/tesserafin/issues/216) | Core model, persistence, migration and API. No Web UI. |
+| **M2** | [`tesserafin-web#138`](https://github.com/tesserafin/tesserafin-web/issues/138) | Content-pack management and mosaic browsing. Depends on M1. |
+| **M3** | [`tesserafin-web#139`](https://github.com/tesserafin/tesserafin-web/issues/139) | First-run seeding and the browsing-preference choice. Depends on M1 and M2. |
 
 M3 lands in `tesserafin-web` because the wizard steps live there
 (`src/apps/wizard/`); the server's `StartupController` exposes only

@@ -1,11 +1,11 @@
 # W5-A3 — 1.1 documentation integration
 
-Tracker: [#276](https://github.com/tesserafin-project/tesserafin/issues/276).
+Tracker: [#276](https://github.com/tesserafin/tesserafin/issues/276).
 Ruling: **OWNER RULING — W5-A3 1.1 DOCUMENTATION**, authorising this slice from
 master `5f6378ecb177031649ff51b523bdf8cfcafaaa76` (W5-A1 as accepted).
 Contract: [`W5-A0-acceptance-contract.md`](W5-A0-acceptance-contract.md) §B, §C, §E.
-Refs [#129](https://github.com/tesserafin-project/tesserafin/issues/129),
-[#225](https://github.com/tesserafin-project/tesserafin/issues/225).
+Refs [#129](https://github.com/tesserafin/tesserafin/issues/129),
+[#225](https://github.com/tesserafin/tesserafin/issues/225).
 
 W5-A3 is documentation only. It signs nothing, tags nothing, releases nothing,
 publishes nothing to GHCR, deploys nothing to tesserafin.org, does not bump

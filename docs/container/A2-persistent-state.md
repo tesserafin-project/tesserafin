@@ -1,6 +1,6 @@
 # [A2] Volumes, permissions, migrations & backup/restore — operator note
 
-Issue: tesserafin-project/tesserafin #88. Builds on the production image from #87
+Issue: tesserafin/tesserafin #88. Builds on the production image from #87
 ([A1]). This note defines the container's persistent-state contract and the scripts
 that verify and protect it. It changes no server code and no image layer: the tooling
 here (`docker/backup.sh`, `docker/restore.sh`, `docker/state-roundtrip.sh`) drives the

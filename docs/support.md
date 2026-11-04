@@ -15,13 +15,13 @@ There are exactly two, and they are not interchangeable.
 | A suspected **security vulnerability** | The repository's **Security** tab → *Report a vulnerability*. Never a public issue. See [`SECURITY.md`](../SECURITY.md). |
 | Anything else — a crash, a rendering defect, a broken playback path, a documentation error, a feature request | A **public issue** in the repository the problem belongs to |
 
-Server, container, packaging, API: [tesserafin issues](https://github.com/tesserafin-project/tesserafin/issues).
-Browser client and UI: [tesserafin-web issues](https://github.com/tesserafin-project/tesserafin-web/issues).
+Server, container, packaging, API: [tesserafin issues](https://github.com/tesserafin/tesserafin/issues).
+Browser client and UI: [tesserafin-web issues](https://github.com/tesserafin/tesserafin-web/issues).
 
 Successful, partial and failed installation runs can use the
 [installation report form and guide](installation-reports.md). These remain
 public server issues, collected under
-[#117](https://github.com/tesserafin-project/tesserafin/issues/117); no bug is
+[#117](https://github.com/tesserafin/tesserafin/issues/117); no bug is
 required to share a result.
 
 If you are unsure whether something has security impact, **use the private form**. A maintainer
@@ -54,10 +54,10 @@ Most reports that stall do so because one of these is missing:
 
 **Redact before you paste.** Logs and diagnostics can carry paths, file names and identifiers
 from your own library. The project's diagnostics posture is a published decision — see
-[#80](https://github.com/tesserafin-project/tesserafin/issues/80) and its trackers
-[#82](https://github.com/tesserafin-project/tesserafin/issues/82),
-[#83](https://github.com/tesserafin-project/tesserafin/issues/83),
-[#84](https://github.com/tesserafin-project/tesserafin/issues/84) — and nothing in it obliges
+[#80](https://github.com/tesserafin/tesserafin/issues/80) and its trackers
+[#82](https://github.com/tesserafin/tesserafin/issues/82),
+[#83](https://github.com/tesserafin/tesserafin/issues/83),
+[#84](https://github.com/tesserafin/tesserafin/issues/84) — and nothing in it obliges
 you to share more than you want to.
 
 ## What to expect

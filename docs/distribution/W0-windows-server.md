@@ -221,7 +221,7 @@ it.
 
 The payload itself is the pinned one. `ci/package/assemble-payload.sh` obtains
 it with `docker create` + `docker cp` from the Linux OCI image
-`ghcr.io/tesserafin-project/tesserafin-web-assets@sha256:6150380052c8…`
+`ghcr.io/tesserafin/tesserafin-web-assets@sha256:6150380052c8…`
 (web commit `a9a362eec764a9fe3fa6ba9b4a7dd7473677e35a`) and verifies it against
 `WEB_PAYLOAD_SHA256`
 =`4148c4bc6e0c7c2d6b35ed9992e874a06dcc11d2b6d9e0aad06719e36567be4f`.

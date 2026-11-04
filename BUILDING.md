@@ -40,7 +40,7 @@ The build is reproducible because every input is pinned:
 From a clean checkout:
 
 ```bash
-git clone https://github.com/tesserafin-project/tesserafin.git
+git clone https://github.com/tesserafin/tesserafin.git
 cd tesserafin
 dotnet restore Tesserafin.sln     # resolves every project from the pinned sources
 dotnet build Tesserafin.sln       # warnings are errors; analyzers armed in Debug

@@ -52,7 +52,7 @@ W1-A stopped on this and reported it rather than weakening the requirement. The
 owner authorised **one** repository-controlled GHCR package:
 
 ```
-ghcr.io/tesserafin-project/windows-ffmpeg-build-inputs
+ghcr.io/tesserafin/windows-ffmpeg-build-inputs
 ```
 
 limited to immutable FFmpeg-for-Windows build inputs: MSYS2 package archives and
@@ -166,7 +166,7 @@ mechanism exists to remove.
 ## 7. Digest-only consumption
 
 ```
-ghcr.io/tesserafin-project/windows-ffmpeg-build-inputs@sha256:<digest>
+ghcr.io/tesserafin/windows-ffmpeg-build-inputs@sha256:<digest>
 ```
 
 A tag may exist for discovery and is **never** an accepted identity. `contract.py`
@@ -442,4 +442,4 @@ provenance already names.
 | **W1-R-B** (this) | repairs provider ambiguity, signature authentication, exact installed-set equality and the forced runtime replacement; rehearses the registry protocol locally; creates the protected environment; merges; dispatches the publisher from `master`; verifies the stored digest and records it. |
 | **W1-A2** | resumes the FFmpeg runtime build, consuming that digest and only that digest. |
 
-[#236]: https://github.com/tesserafin-project/tesserafin/issues/236
+[#236]: https://github.com/tesserafin/tesserafin/issues/236

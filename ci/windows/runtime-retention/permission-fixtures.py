@@ -152,7 +152,7 @@ def fixture_08(source, work):
         source,
         "          echo \"validating ${actual}\"\n",
         "          echo \"validating ${actual}\"\n"
-        "          oras manifest push ghcr.io/tesserafin-project/windows-ffmpeg-runtime@sha256:0\n",
+        "          oras manifest push ghcr.io/tesserafin/windows-ffmpeg-runtime@sha256:0\n",
     ), ()
 
 
@@ -463,7 +463,7 @@ def publish_h08(source, work):
         "        run: |\n"
         "          set -euo pipefail\n"
         '          printf %s "${GHCR_TOKEN}" | oras login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin\n'
-        "          oras manifest push ghcr.io/tesserafin-project/windows-ffmpeg-runtime:mirror\n"
+        "          oras manifest push ghcr.io/tesserafin/windows-ffmpeg-runtime:mirror\n"
         '          echo "The package is PUBLIC." >> "${GITHUB_STEP_SUMMARY}"\n'
     )
     return source.rstrip("\n") + "\n" + added, added

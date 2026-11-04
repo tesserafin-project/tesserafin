@@ -1,20 +1,20 @@
 # Published forward-migration evidence (#127)
 
-Status: **green hosted run with a real forward migration, 2026-10-23**, in [run 39944964845](https://github.com/tesserafin-project/tesserafin/actions/runs/39944964845). The baseline is the 1.0.0-era image and the candidate is the post-migration dev build, not a released image (see "Selected candidate"). Earlier blocked runs are kept below. PR: [#316](https://github.com/tesserafin-project/tesserafin/pull/316).
+Status: **green hosted run with a real forward migration, 2026-10-23**, in [run 39944964845](https://github.com/tesserafin/tesserafin/actions/runs/39944964845). The baseline is the 1.0.0-era image and the candidate is the post-migration dev build, not a released image (see "Selected candidate"). Earlier blocked runs are kept below. PR: [#316](https://github.com/tesserafin/tesserafin/pull/316).
 
 ## Selected boundary and outstanding image proof
 
-[#127](https://github.com/tesserafin-project/tesserafin/issues/127) records the canonical baseline:
+[#127](https://github.com/tesserafin/tesserafin/issues/127) records the canonical baseline:
 
-- Build package: `ghcr.io/tesserafin-project/tesserafin-server`.
+- Build package: `ghcr.io/tesserafin/tesserafin-server`.
 - Manifest: `sha256:fd1fa9e0f5a28a07e5872cc5ff13257a92d988717a33519f62c4b26c6ab36249`.
 - Source: `44f5ab62b522684b4fa58ed10de80b8c6a7bb392`.
 
-The source migration boundary exists: content-pack migration `20260807161612_AddContentPacks` is absent from the baseline and present in the source tree tagged `v1.1.0`. The [annotated tag](https://github.com/tesserafin-project/tesserafin/releases/tag/v1.1.0) resolves to `bb2234aebbf0ff2c1cbe291df48f2ffa62beea46`.
+The source migration boundary exists: content-pack migration `20260807161612_AddContentPacks` is absent from the baseline and present in the source tree tagged `v1.1.0`. The [annotated tag](https://github.com/tesserafin/tesserafin/releases/tag/v1.1.0) resolves to `bb2234aebbf0ff2c1cbe291df48f2ffa62beea46`.
 
 That source fact does **not** prove publication of a matching container:
 
-- Anonymous registry tag listing on 2026-10-20 returned only `1.0.0` for `ghcr.io/tesserafin-project/server`.
+- Anonymous registry tag listing on 2026-10-20 returned only `1.0.0` for `ghcr.io/tesserafin/server`.
 - The Compose file at `v1.1.0` still names the public `1.0.0` image, manifest `sha256:bc7587bc7d99b40d77770046d49a2931ff8162b6d1df3da8d3f108b7677d7dc3`, source `6227dbef66c631081e3179a521561b32b94dac59`.
 - The private build package requires authentication. Its published candidates must be checked from a runner with package-read access.
 - The GitHub release contains native packages; these are not interchangeable with a container digest.
@@ -58,7 +58,7 @@ The execution environment used to prepare this PR has no Docker daemon and canno
 
 ### First hosted result
 
-[Run 39423877774, job 118631385687](https://github.com/tesserafin-project/tesserafin/actions/runs/39423877774/job/118631385687) checked out wrapper revision `628c2f1c968af9544e8c218e1d64ba29f1540cc4` on Ubuntu 24.04:
+[Run 39423877774, job 118631385687](https://github.com/tesserafin/tesserafin/actions/runs/39423877774/job/118631385687) checked out wrapper revision `628c2f1c968af9544e8c218e1d64ba29f1540cc4` on Ubuntu 24.04:
 
 | Check | Result |
 | --- | --- |
@@ -75,13 +75,13 @@ A successful image preflight is not a successful upgrade. #127 stays open until 
 
 ### EF migrations were invisible to the counter (resolved 2026-10-23)
 
-[Run 39944442029](https://github.com/tesserafin-project/tesserafin/actions/runs/39944442029) was the first run to execute the full harness, with the dev-build candidate. Every preservation assertion passed, but `--require-migration` failed with "ZERO pending migrations". The cause is in `Tesserafin.Server/Migrations/TesserafinMigrationService.cs`: the line `There are {Pending} migrations for stage {Stage}` logs `pendingCodeMigrations.Length`. EF Core schema migrations are applied in the same loop but are never counted. The one visible trace was that `CoreInitialisation` was swept twice.
+[Run 39944442029](https://github.com/tesserafin/tesserafin/actions/runs/39944442029) was the first run to execute the full harness, with the dev-build candidate. Every preservation assertion passed, but `--require-migration` failed with "ZERO pending migrations". The cause is in `Tesserafin.Server/Migrations/TesserafinMigrationService.cs`: the line `There are {Pending} migrations for stage {Stage}` logs `pendingCodeMigrations.Length`. EF Core schema migrations are applied in the same loop but are never counted. The one visible trace was that `CoreInitialisation` was swept twice.
 
 `docker/upgrade-roundtrip.sh` now also counts the distinct `Migration <id> was successfully applied` lines. The runner emits that line for code and EF migrations alike, and the harness prints each id. `--require-migration` and every preservation assertion are unchanged.
 
 ### Green hosted result
 
-[Run 39944964845, job 120385253265](https://github.com/tesserafin-project/tesserafin/actions/runs/39944964845/job/120385253265), harness source `cc4be41cabe5c05d98f10147e90dfde0c0c94f05`, Ubuntu runner, linux/amd64:
+[Run 39944964845, job 120385253265](https://github.com/tesserafin/tesserafin/actions/runs/39944964845/job/120385253265), harness source `cc4be41cabe5c05d98f10147e90dfde0c0c94f05`, Ubuntu runner, linux/amd64:
 
 | Check | Result |
 | --- | --- |

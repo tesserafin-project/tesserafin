@@ -78,7 +78,7 @@ function Stop-Consumption {
 # The one authorised package. A constant, not a parameter — the same statement
 # `contract.py` makes on the Python side, repeated here because this script is
 # what actually talks to the registry.
-$CanonicalPackage = 'ghcr.io/tesserafin-project/windows-ffmpeg-runtime'
+$CanonicalPackage = 'ghcr.io/tesserafin/windows-ffmpeg-runtime'
 
 function Get-Sha256 {
     param([string] $Path)

@@ -4,7 +4,7 @@
 # not have. This repository is now PUBLIC, and code scanning is free on public
 # repositories.
 #
-#   $ gh api repos/tesserafin-project/tesserafin -q '{visibility,private}'
+#   $ gh api repos/tesserafin/tesserafin -q '{visibility,private}'
 #   {"visibility":"public","private":false}
 #
 # ADVANCED SETUP, NOT DEFAULT SETUP. Default setup runs the `default` query
@@ -54,7 +54,7 @@
 # Second cause, which outlived it: Advanced Security is unavailable on a private
 # repository under a free organisation plan, so the analysis ran and the upload
 # was refused —
-#   $ gh api repos/tesserafin-project/tesserafin/code-scanning/alerts
+#   $ gh api repos/tesserafin/tesserafin/code-scanning/alerts
 #   {"message":"Advanced Security must be enabled for this repository to use
 #    code scanning.","status":"403"}
 # and, in the sibling web repository (run 30230774481), after "Initialize

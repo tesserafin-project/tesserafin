@@ -1,7 +1,7 @@
 # Experimental existing-account state application
 
 This is a bounded follow-up to the [read-only capture and simulation](jellyfin-dry-run.md)
-under [#144](https://github.com/tesserafin-project/tesserafin/issues/144).
+under [#144](https://github.com/tesserafin/tesserafin/issues/144).
 It applies reviewed state to **existing, explicitly mapped accounts and existing,
 unambiguous media**. It creates no account and transfers no password, permission,
 media file or library configuration. The selected adapters remain Jellyfin

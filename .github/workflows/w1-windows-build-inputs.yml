@@ -495,7 +495,7 @@ jobs:
           printf '%s' "${GHCR_TOKEN}" | oras login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
           ./ci/windows/build-inputs/oci-protocol.sh push \
             --oci "${RUNNER_TEMP}/oci" \
-            --repo ghcr.io/tesserafin-project/windows-ffmpeg-build-inputs
+            --repo ghcr.io/tesserafin/windows-ffmpeg-build-inputs
 
       - name: Read it back by digest, compare byte for byte, verify as a consumer
         env:
@@ -505,7 +505,7 @@ jobs:
           export PATH="${RUNNER_TEMP}/bin:${PATH}"
           ./ci/windows/build-inputs/oci-protocol.sh verify \
             --oci "${RUNNER_TEMP}/oci" \
-            --repo ghcr.io/tesserafin-project/windows-ffmpeg-build-inputs \
+            --repo ghcr.io/tesserafin/windows-ffmpeg-build-inputs \
             --out "${RUNNER_TEMP}/published" \
             | tee "${RUNNER_TEMP}/published-verification.txt"
           echo "the registry holds the reviewed manifest, byte for byte"

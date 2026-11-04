@@ -304,7 +304,7 @@ _IDENTITY_TAMPERS: dict[str, tuple[str, dict]] = {
            {"proofHead": "9" * 40, "proofRun": 999999}),
     "10": ("CONTROL-10-SENTINEL-build-inputs-reference",
            {"buildInputsReference":
-            "ghcr.io/tesserafin-project/windows-ffmpeg-build-inputs@sha256:" + "b" * 64}),
+            "ghcr.io/tesserafin/windows-ffmpeg-build-inputs@sha256:" + "b" * 64}),
     "11": ("CONTROL-11-SENTINEL-accepted-server-tree",
            {"acceptedServerTree": "c" * 40}),
 }

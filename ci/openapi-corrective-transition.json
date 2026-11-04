@@ -5,8 +5,8 @@
     "id": "issue-226-playback-session-id-wire-shape",
     "baselineSha256": "c18438eef039007a81d928210a8a1ac95852c092a02f1075a8647981074c823d",
     "candidateSha256": "6af8bd0fd94ef0f7e70ecc14a6db9fb3f3cfa0383ef93284954deb937a79ea80",
-    "issue": "https://github.com/tesserafin-project/tesserafin/issues/226",
-    "pullRequest": "https://github.com/tesserafin-project/tesserafin/pull/227",
+    "issue": "https://github.com/tesserafin/tesserafin/issues/226",
+    "pullRequest": "https://github.com/tesserafin/tesserafin/pull/227",
     "engine": {
       "version": "v1.26.1",
       "digest": "sha256:aae8cfcf7d18d3b0ebce6bdf407623bf8788ca318c7a0440627aaf583ed3e9f4"

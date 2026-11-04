@@ -38,7 +38,7 @@ Summary:        Tesserafin media server
 # Measured against the pinned rpm 4.20.1 builder rather than assumed: the
 # expression is accepted and round-trips through %{LICENSE} byte-identically.
 License:        GPL-2.0-or-later AND GPL-3.0-or-later
-URL:            https://github.com/tesserafin-project/tesserafin
+URL:            https://github.com/tesserafin/tesserafin
 
 # The architecture comes from rpmbuild --target, never from a BuildArch tag.
 # Both architectures are built on one x86_64 machine (the payload is prebuilt, so

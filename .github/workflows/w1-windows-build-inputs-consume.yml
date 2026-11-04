@@ -25,7 +25,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  REPOSITORY: ghcr.io/tesserafin-project/windows-ffmpeg-build-inputs
+  REPOSITORY: ghcr.io/tesserafin/windows-ffmpeg-build-inputs
 
 jobs:
   # ── The real consumer, on a clean hosted Windows runner ─────────────────────

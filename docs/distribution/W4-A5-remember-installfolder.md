@@ -1,6 +1,6 @@
 # W4-A5 — remember `INSTALLFOLDER` across a MajorUpgrade
 
-Tracker: [#234](https://github.com/tesserafin-project/tesserafin/issues/234).
+Tracker: [#234](https://github.com/tesserafin/tesserafin/issues/234).
 Ruling: **W4-A5 REMEMBER INSTALLFOLDER**, authorising this slice from master at
 `397baace26fd172fd0bac971144b0b5ad1a4b3de`.
 

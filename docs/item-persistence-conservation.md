@@ -1,7 +1,7 @@
 # Item deletion and history conservation
 
-Related tracking: [#360](https://github.com/tesserafin-project/tesserafin/issues/360)
-and [#351](https://github.com/tesserafin-project/tesserafin/issues/351).
+Related tracking: [#360](https://github.com/tesserafin/tesserafin/issues/360)
+and [#351](https://github.com/tesserafin/tesserafin/issues/351).
 Reproduction base: `d2fd71e800ce440cfd3438bebc1c2cceb9ca945c`.
 
 ## Scope of a destructive operation

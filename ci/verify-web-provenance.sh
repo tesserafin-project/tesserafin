@@ -48,7 +48,7 @@ SERVER_COMMIT=""
 # The one server repository a pinned SDK may name. Hard-coded rather than derived from whatever
 # remote the checkout happens to have: a gate that asks the artefact under test which repository
 # it belongs to has not checked anything.
-EXPECTED_SERVER_REPOSITORY="tesserafin-project/tesserafin"
+EXPECTED_SERVER_REPOSITORY="tesserafin/tesserafin"
 
 # The transform pipeline versions this script knows how to reason about. A pin produced by an
 # unknown pipeline is refused rather than compared against transforms it was never produced by.

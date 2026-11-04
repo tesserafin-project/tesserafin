@@ -1,6 +1,6 @@
 [Unit]
 Description=Tesserafin Server
-Documentation=https://github.com/tesserafin-project/tesserafin
+Documentation=https://github.com/tesserafin/tesserafin
 After=network-online.target
 Wants=network-online.target
 

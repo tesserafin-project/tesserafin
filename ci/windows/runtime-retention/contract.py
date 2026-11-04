@@ -21,7 +21,7 @@ import re
 from typing import Any, Dict
 
 REGISTRY = "ghcr.io"
-REPOSITORY = "tesserafin-project/windows-ffmpeg-runtime"
+REPOSITORY = "tesserafin/windows-ffmpeg-runtime"
 CANONICAL = f"{REGISTRY}/{REPOSITORY}"
 TRUSTED_REF = "refs/heads/master"
 
@@ -235,7 +235,7 @@ def assert_trusted_ref(github_ref: str) -> None:
 
 
 #: The repository publication is permitted from, and nothing else.
-TRUSTED_REPOSITORY = "tesserafin-project/tesserafin"
+TRUSTED_REPOSITORY = "tesserafin/tesserafin"
 
 #: The accepted W1-A3 merge. Publication must run from a commit that DESCENDS
 #: from this, which is a durable statement about lineage rather than a demand

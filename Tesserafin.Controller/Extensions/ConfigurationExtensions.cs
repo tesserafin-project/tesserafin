@@ -80,7 +80,7 @@ namespace Tesserafin.Controller.Extensions
         /// </summary>
         /// <remarks>
         /// This is the activation switch for secure bootstrap mode (RFC
-        /// tesserafin-project/tesserafin#241, slice R0-B). It is read from the startup
+        /// tesserafin/tesserafin#241, slice R0-B). It is read from the startup
         /// configuration, which is built at <c>Program.StartApp</c> BEFORE the setup server binds
         /// its first socket, so the answer is known before anything can be reached. It is
         /// deliberately NOT part of <c>network.xml</c>: the startup wizard writes that file, and an

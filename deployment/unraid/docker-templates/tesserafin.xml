@@ -20,9 +20,9 @@
     Tesserafin media server (Jellyfin fork). Streams your personal media library.
     Immutable pre-release image; dev tags do not auto-update.
   </Overview>
-  <Support>https://github.com/tesserafin-project/tesserafin/issues</Support>
-  <Project>https://github.com/tesserafin-project/tesserafin</Project>
-  <GitHub>https://github.com/tesserafin-project/tesserafin</GitHub>
+  <Support>https://github.com/tesserafin/tesserafin/issues</Support>
+  <Project>https://github.com/tesserafin/tesserafin</Project>
+  <GitHub>https://github.com/tesserafin/tesserafin</GitHub>
   <!-- The Tesserafin Server 1.0 development baseline, built from commit
        6227dbef66c631081e3179a521561b32b94dac59 and bundling Tesserafin Web
        a9a362eec764a9fe3fa6ba9b4a7dd7473677e35a. Pinned by manifest digest so the
@@ -40,8 +40,8 @@
 
        `tesserafin` is the frozen pre-v1 archive package
        and never receives another tag (docs/versioning-policy.md §2). -->
-  <Registry>https://github.com/orgs/tesserafin-project/packages/container/package/server</Registry>
-  <Repository>ghcr.io/tesserafin-project/server@sha256:bc7587bc7d99b40d77770046d49a2931ff8162b6d1df3da8d3f108b7677d7dc3</Repository>
+  <Registry>https://github.com/orgs/tesserafin/packages/container/package/server</Registry>
+  <Repository>ghcr.io/tesserafin/server@sha256:bc7587bc7d99b40d77770046d49a2931ff8162b6d1df3da8d3f108b7677d7dc3</Repository>
   <BindTime>true</BindTime>
   <Privileged>false</Privileged>
   <Networking>

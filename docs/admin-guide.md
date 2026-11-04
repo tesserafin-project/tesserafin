@@ -172,13 +172,13 @@ Stated rather than omitted:
 
 * **Only VAAPI and software transcoding are hardware-validated.** QSV, NVENC, AMF,
   VideoToolbox, RKMPP and V4L2M2M are probe-gated but not validated on real hardware.
-  MJPEG VAAPI is [#76](https://github.com/tesserafin-project/tesserafin/issues/76).
+  MJPEG VAAPI is [#76](https://github.com/tesserafin/tesserafin/issues/76).
 * **No live mid-session retry** after a hardware transcode failure. Selection is re-probed at
-  start, not mid-playback — [#119](https://github.com/tesserafin-project/tesserafin/issues/119).
+  start, not mid-playback — [#119](https://github.com/tesserafin/tesserafin/issues/119).
 * **The forward-migration boundary is unproven.** The upgrade round trip preserves users,
   libraries, media visibility, playback state and configuration, but no published image pair
   has had a pending migration between it, so *"runs forward migrations"* has not been
-  demonstrated end to end — [#127](https://github.com/tesserafin-project/tesserafin/issues/127).
+  demonstrated end to end — [#127](https://github.com/tesserafin/tesserafin/issues/127).
 * **Tesserafin is not a Jellyfin drop-in.** Client, plugin and protocol compatibility is
   deliberately given up; a plugin declaring an upstream `10.x` or an inherited `12.x`
   `targetAbi` is reported as not supported.

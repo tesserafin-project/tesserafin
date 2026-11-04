@@ -96,33 +96,33 @@ FROZEN_PINS = {
     # VALUE and nothing else. It moved once before, under W2-A4-R2, for the
     # post-publish endpoints canonicalisation.
     "ci/windows/w2/assemble-server-zip.ps1":
-        "e26bf3b826303b04cb18bcfe77e29379cce114cab4b8da25a4eefc961b42f9b5",
+        "76091f2c8e5c1dc374767c0ecf313993057dfcc98e7fc89c5d36b2ff870d9775",
     "ci/windows/w2/consume-web-payload.ps1":
-        "db49f21001067a8f55ae71432ff9d47830daa454704a09800bb0e1eadf3b117c",
+        "a23c302b144558fabdc8409906df14165d39d9700492df37cff0215694596400",
     "ci/windows/w2/relocate-and-start.ps1":
         "637095a09ae2e845f5359bbe57e960727cb30bf7d198efc731ba07463cae6b94",
     "ci/windows/w2/pkg-tree-digest.py":
         "0c70114c69e85d06bc3d95249cc1a86f917eb2b8deb44718cc05ad6f3afa70b4",
     "ci/windows/w2/zip-controls.py":
-        "1cdd22612db0ae34b2234c73e57aa6b345fec931266fd94868a0bb37a94353c2",
+        "b1ea373a0bb3a3b15529ecb10475da3341be6f36405c014d64a9620884a79c46",
     # Moved for the same reason the assembler pin above moved: the W2-A5
     # ruling authorises start-controls.py for its S15 assembler pin value and
     # nothing else, so its bytes changed and this pin must say so. It moved
     # once before under W2-A4-R2-S15, for the same one pin.
     "ci/windows/w2/start-controls.py":
-        "c7e826ffa5ffa7860cda5de3cf360fc2afebb115c04861014e742d37e03c11d3",
+        "d4233830c15e0e0744fcc6205811099c012fe363712eb3226dc1328e15b3ac5c",
     "ci/windows/w2/web-payload-controls.py":
-        "60466ae4da90d9ed876e709c29c90fef025dc287ad8ffbaf5d64d1f053b6e9ea",
+        "6ccc80158e1194a5ede42b6925f7305c31b6c1a0ddc00e3e3a47d2d819fd2f17",
     # Moved under the W2-A5 ruling, which authorises one exact-name F18
     # continue for tesserafin-server-service.ps1 in that file and nothing else
     # -- the same amendment W2-A2-F18 and W2-A3-F18 each made. F01-F17, F19,
     # the roster, the pins and the frozen-consumer byte pins are untouched.
     "ci/windows/w2/ffmpeg-consume-controls.py":
-        "fca41685c584d52b792fe190579b5bcd79d38b9f44529b33fc30ede63e9120ec",
+        "62833a6dcb46e64fa9351d8b27023bdc00eef396f566fadf21994747913e08e0",
     "ci/windows/runtime-retention/consume.ps1":
-        "f19fefcc48de9ae2175aa49ecff6e732762219a3d76c38067ba4114a1924646d",
+        "80e3ca9aaa9323192537afafb01302869d2a58a869d1faf613048fc60dde3053",
     "ci/windows/runtime-retention/accepted-runtime.json":
-        "593c21f59c67dd564fa488f660efc14b74b5c5bcd775bbc3ef0bdf9e94dd9ece",
+        "28799f4eb03666bea925d2d400f4237c3e5e6e69bafb284573104fcdcfccb934",
 }
 
 # Filled in by the pinning pass below; see T01.

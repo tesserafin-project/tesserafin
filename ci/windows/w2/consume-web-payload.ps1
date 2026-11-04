@@ -47,7 +47,7 @@
 [CmdletBinding()]
 param(
     [string] $Registry = 'ghcr.io',
-    [string] $Repository = 'tesserafin-project/tesserafin-web-assets',
+    [string] $Repository = 'tesserafin/tesserafin-web-assets',
     [string] $Reference = 'sha256:6150380052c8a3a154a8a25a9f40a741175a7563afdf89284f9c1f46d3042a6c',
     [string] $ExpectedTreeDigest = '4148c4bc6e0c7c2d6b35ed9992e874a06dcc11d2b6d9e0aad06719e36567be4f',
     [string] $ExpectedRevision = 'a9a362eec764a9fe3fa6ba9b4a7dd7473677e35a',
@@ -75,7 +75,7 @@ $ProgressPreference = 'SilentlyContinue'
 # typo here is a failing control rather than a silently different payload.
 # ---------------------------------------------------------------------------
 $AcceptedRegistry     = 'ghcr.io'
-$AcceptedRepository   = 'tesserafin-project/tesserafin-web-assets'
+$AcceptedRepository   = 'tesserafin/tesserafin-web-assets'
 $AcceptedReference    = 'sha256:6150380052c8a3a154a8a25a9f40a741175a7563afdf89284f9c1f46d3042a6c'
 $AcceptedTreeDigest   = '4148c4bc6e0c7c2d6b35ed9992e874a06dcc11d2b6d9e0aad06719e36567be4f'
 $AcceptedRevision     = 'a9a362eec764a9fe3fa6ba9b4a7dd7473677e35a'

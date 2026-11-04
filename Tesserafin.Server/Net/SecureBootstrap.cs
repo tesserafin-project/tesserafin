@@ -18,7 +18,7 @@ namespace Tesserafin.Server.Net;
 /// The mode exists so that a server on a host with a public address can be brought up, claimed and
 /// configured without its unfinished setup wizard ever being reachable from outside. It is a
 /// binding constraint and nothing more: it opens no port, publishes nothing, and is not evidence
-/// that public access is safe. See tesserafin-project/tesserafin#241 §1.4 and §5.
+/// that public access is safe. See tesserafin/tesserafin#241 §1.4 and §5.
 /// </para>
 /// <para>
 /// Both listeners the server ever opens — the pre-startup setup server and the main Kestrel host —

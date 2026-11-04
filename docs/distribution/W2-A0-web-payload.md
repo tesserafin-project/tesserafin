@@ -1,6 +1,6 @@
 # W2-A0 — acquiring the Windows Web payload daemonlessly, by digest
 
-Tracks [#256](https://github.com/tesserafin-project/tesserafin/issues/256).
+Tracks [#256](https://github.com/tesserafin/tesserafin/issues/256).
 Authorised from master `aac506ed751af520cc7ba459341cd8abf22be6cf`.
 
 The Windows server distribution has to ship the same Tesserafin Web bundle the
@@ -22,7 +22,7 @@ publish anything, or touch any package. Those are later W2 work.
 
 | Input | Value |
 | --- | --- |
-| Image | `ghcr.io/tesserafin-project/tesserafin-web-assets@sha256:6150380052c8a3a154a8a25a9f40a741175a7563afdf89284f9c1f46d3042a6c` |
+| Image | `ghcr.io/tesserafin/tesserafin-web-assets@sha256:6150380052c8a3a154a8a25a9f40a741175a7563afdf89284f9c1f46d3042a6c` |
 | Canonical tree digest | `4148c4bc6e0c7c2d6b35ed9992e874a06dcc11d2b6d9e0aad06719e36567be4f` |
 | Web revision | `a9a362eec764a9fe3fa6ba9b4a7dd7473677e35a` |
 | Payload root in the image | `/web` |

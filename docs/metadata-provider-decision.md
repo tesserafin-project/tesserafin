@@ -1,7 +1,7 @@
 # Metadata provider access — decision proposal
 
 Status: **proposed, owner decision pending**. Evidence checked 2026-10-21.
-Refs [#175](https://github.com/tesserafin-project/tesserafin/issues/175).
+Refs [#175](https://github.com/tesserafin/tesserafin/issues/175).
 This records public-source findings and an engineering recommendation; it does
 not grant usage rights or change provider configuration.
 

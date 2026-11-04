@@ -1,6 +1,6 @@
 # W4-A0 — the WiX MSI skeleton
 
-**Tracker:** [#234](https://github.com/tesserafin-project/tesserafin/issues/234).
+**Tracker:** [#234](https://github.com/tesserafin/tesserafin/issues/234).
 **Authorising ruling:** *OWNER RULING — W4-A0 WIX SKELETON*, 2026-09-09, from
 master `fd8187f15ed7aa99552971305d5ac3f414c4d958`.
 **Design this implements:** `docs/distribution/W0-windows-server.md` §4 (the

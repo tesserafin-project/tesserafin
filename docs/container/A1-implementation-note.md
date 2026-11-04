@@ -1,6 +1,6 @@
 # [A1] Reproducible distributable server image — implementation note
 
-Issue: tesserafin-project/tesserafin #87. Foundational production server image.
+Issue: tesserafin/tesserafin #87. Foundational production server image.
 Deliberately excludes #88–#92 (see Deferred).
 
 For installing this image, see the guided-install guide
@@ -55,8 +55,8 @@ Set explicitly so the container never depends on `$HOME`/XDG:
 - Canonical version source: `SharedVersion.cs` → `12.0.0` (what the server logs
   at startup). No `build.yaml`/`version.json` exists; `bump_version` is stale.
 - Pre-release tags (never `latest` this loop):
-  - `ghcr.io/tesserafin-project/tesserafin:<version>-dev.<short-sha>`
-  - `ghcr.io/tesserafin-project/tesserafin:sha-<full-sha>`
+  - `ghcr.io/tesserafin/tesserafin:<version>-dev.<short-sha>`
+  - `ghcr.io/tesserafin/tesserafin:sha-<full-sha>`
 
 ## Reproducibility method
 - Deterministic publish: `-p:Deterministic=true -p:ContinuousIntegrationBuild=true`,
@@ -107,8 +107,8 @@ browser. Those tags are **not** deleted or overwritten; they are recorded here a
 
 The distributable image is therefore **no longer API-only**.
 
-- **Build input.** `ghcr.io/tesserafin-project/tesserafin-web-assets`, produced by
-  `Dockerfile.web-assets` in `tesserafin-project/tesserafin-web`: a `FROM
+- **Build input.** `ghcr.io/tesserafin/tesserafin-web-assets`, produced by
+  `Dockerfile.web-assets` in `tesserafin/tesserafin-web`: a `FROM
   scratch` image containing only the production `dist` tree (`/web`), the licence
   and attribution (`/licenses`) and a deterministic revision manifest
   (`/metadata/web-revision.json`). No Node.js, no source, no build tools, no

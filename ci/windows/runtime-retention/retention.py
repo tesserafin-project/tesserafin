@@ -274,7 +274,7 @@ def build_manifest(
             ),
             "org.opencontainers.image.licenses": accepted["licence"],
             "org.opencontainers.image.source": (
-                "https://github.com/tesserafin-project/tesserafin"
+                "https://github.com/tesserafin/tesserafin"
             ),
             "org.opencontainers.image.revision": accepted["acceptedServerCommit"],
             "dev.tesserafin.runtime.proofHead": accepted["proofHead"],

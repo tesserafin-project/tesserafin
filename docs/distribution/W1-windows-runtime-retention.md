@@ -29,7 +29,7 @@ The original owner ruling is recorded on [#236][ruling]. It authorises exactly
 one repository-controlled package:
 
 ```
-ghcr.io/tesserafin-project/windows-ffmpeg-runtime
+ghcr.io/tesserafin/windows-ffmpeg-runtime
 ```
 
 consumed only through an exact `sha256:` manifest digest, published only from
@@ -610,7 +610,7 @@ of retention.
 
 ### Package absence is no longer a load-bearing premise
 
-The author observed that `ghcr.io/tesserafin-project/windows-ffmpeg-runtime` did
+The author observed that `ghcr.io/tesserafin/windows-ffmpeg-runtime` did
 not exist, with a suitably scoped token. The independent reviewer could not
 reproduce that observation with theirs — `GET /orgs/.../packages` answers `403`
 without `read:packages`, and the per-package route answers `404` for both
@@ -1184,7 +1184,7 @@ Two further limits are part of the record:
   head's own exact-head runs* are evidence **for their own heads only**. They
   say nothing about the R3 head or the R4 head; each head that needs a
   dual-runner result gets its own run.
-* Package absence at `ghcr.io/tesserafin-project/windows-ffmpeg-runtime`
+* Package absence at `ghcr.io/tesserafin/windows-ffmpeg-runtime`
   remains a **W1-A5 check** with authorised `read:packages` access. From
   outside, "absent" and "not visible to this token" are indistinguishable.
 * The dual-runner topology is **same-node**: two runner allocations on one
@@ -1498,7 +1498,7 @@ four non-blocking findings. This section is the durable record of the repair.
 R4's BL-1 was **undisclosed scope**: the R4 commit changed nine paths where six
 were governed, and no ruling covered the other three. The owner ruling of
 2026-08-31 —
-[#236 comment 5477730710](https://github.com/tesserafin-project/tesserafin/issues/236#issuecomment-5477730710)
+[#236 comment 5477730710](https://github.com/tesserafin/tesserafin/issues/236#issuecomment-5477730710)
 — ratifies exactly those three, by name:
 
 | ratified path | what R4 changed there | class |
@@ -1699,8 +1699,8 @@ and both are **completed / success**:
 | [32877243939] | W1 Windows FFmpeg Runtime — Dual-runner proof | 17:19:51Z → 18:06:00Z | success |
 | [32877243948] | W1 Windows Runtime Retention | 17:19:51Z → 17:21:00Z | success |
 
-[32877243939]: https://github.com/tesserafin-project/tesserafin/actions/runs/32877243939
-[32877243948]: https://github.com/tesserafin-project/tesserafin/actions/runs/32877243948
+[32877243939]: https://github.com/tesserafin/tesserafin/actions/runs/32877243939
+[32877243948]: https://github.com/tesserafin/tesserafin/actions/runs/32877243948
 
 Three required checks at that head are **SKIPPED, not PASS**, because heavy CI
 in this repository is draft-gated and #254 is a draft: `Tests`,
@@ -1709,7 +1709,7 @@ than counted as green; a draft pull request cannot satisfy them, and readying
 #254 is not part of W1-A4. `CodeQL`, `SDK Provenance` and `Dependency Audit`
 all succeeded at that head.
 
-Package absence at `ghcr.io/tesserafin-project/windows-ffmpeg-runtime` remains
+Package absence at `ghcr.io/tesserafin/windows-ffmpeg-runtime` remains
 a **W1-A5 check** with authorised `read:packages` access, for the reason given
 in section 9b: from outside, "absent" and "not visible to this token" are
 indistinguishable.
@@ -1747,11 +1747,11 @@ then, and the statements elsewhere in this document that the retention gate
 does not depend on them ([§7](#7-the-gate-does-not-expire)) remain the reason
 the gate keeps working afterwards.
 
-[#236]: https://github.com/tesserafin-project/tesserafin/issues/236
-[ruling]: https://github.com/tesserafin-project/tesserafin/issues/236#issuecomment-5409680727
-[visibility-ruling]: https://github.com/tesserafin-project/tesserafin/issues/236#issuecomment-5454747674
-[a5-record]: https://github.com/tesserafin-project/tesserafin/issues/236#issuecomment-5454486781
-[evidence-correction]: https://github.com/tesserafin-project/tesserafin/issues/236#issuecomment-5455807718
-[33178349029]: https://github.com/tesserafin-project/tesserafin/actions/runs/33178349029
-[32750491696]: https://github.com/tesserafin-project/tesserafin/actions/runs/32750491696
-[32864950596]: https://github.com/tesserafin-project/tesserafin/actions/runs/32864950596
+[#236]: https://github.com/tesserafin/tesserafin/issues/236
+[ruling]: https://github.com/tesserafin/tesserafin/issues/236#issuecomment-5409680727
+[visibility-ruling]: https://github.com/tesserafin/tesserafin/issues/236#issuecomment-5454747674
+[a5-record]: https://github.com/tesserafin/tesserafin/issues/236#issuecomment-5454486781
+[evidence-correction]: https://github.com/tesserafin/tesserafin/issues/236#issuecomment-5455807718
+[33178349029]: https://github.com/tesserafin/tesserafin/actions/runs/33178349029
+[32750491696]: https://github.com/tesserafin/tesserafin/actions/runs/32750491696
+[32864950596]: https://github.com/tesserafin/tesserafin/actions/runs/32864950596

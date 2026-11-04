@@ -71,6 +71,6 @@ as evidence. No archive or removal is implied by a filename.
   treating every historical plan as current product behavior.
 
 For current work and sequencing use
-[the roadmap](https://github.com/tesserafin-project/tesserafin/issues/129), not
+[the roadmap](https://github.com/tesserafin/tesserafin/issues/129), not
 an old acceptance packet. No new platform, release, migration compatibility or
 hardware support is established by this index.

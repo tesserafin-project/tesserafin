@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/tesserafin-project/tesserafin/ci/package/provenance.schema.json",
+  "$id": "https://github.com/tesserafin/tesserafin/ci/package/provenance.schema.json",
   "title": "Tesserafin native Linux package provenance",
   "description": "The machine-readable record emitted beside every .deb, .rpm and portable archive. Strict: unknown keys are rejected, because a field nobody declared is a field nobody validates. Version 2 replaced the upstream-release-asset fields (ffmpegVersion / ffmpegAsset / ffmpegSha256) with the F0-native ffmpegRuntime object; the ambiguous 'ffmpegVersion' string could not distinguish the upstream baseline 7.1.4-3 from the Tesserafin build revision 7.1.4-tesserafin.1.",
   "type": "object",

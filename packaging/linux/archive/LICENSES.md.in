@@ -13,7 +13,7 @@ one licence for the whole archive would misdescribe both.
 
 ## The server — GPL-2.0-or-later
 
-Built from `https://github.com/tesserafin-project/tesserafin.git` at commit
+Built from `https://github.com/tesserafin/tesserafin.git` at commit
 `@VCS_REF@`. The complete text is in `LICENSE` at the root of this archive.
 
 ## The FFmpeg runtime — GPL-3.0-or-later
@@ -38,6 +38,6 @@ SHA-256.
 
 ## The web client
 
-Built from `https://github.com/tesserafin-project/tesserafin-web.git` at commit
+Built from `https://github.com/tesserafin/tesserafin-web.git` at commit
 `@WEB_VCS_REF@`. Its own third-party dependency licences are reproduced verbatim
 under `share/tesserafin/web-licenses/` and are not restated here.

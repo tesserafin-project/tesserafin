@@ -1,6 +1,6 @@
 # W4 — the accepted `win-x64` MSI surface
 
-Tracker: [#234](https://github.com/tesserafin-project/tesserafin/issues/234).
+Tracker: [#234](https://github.com/tesserafin/tesserafin/issues/234).
 Ruling: **OWNER RULING — W4-CLOSEOUT**, 2026-09-12, authorising this document
 from master at `295c5f2792ff2422e082b386b8c138674029d0b7`.
 
@@ -33,13 +33,13 @@ its own head — not copied from any pull request body.
 
 | Slice | What it proved | Base | Accepted head | PR | Commits | Slice document |
 | --- | --- | --- | --- | --- | --- | --- |
-| **A0** | WiX MSI skeleton installs the accepted `win-x64` layout and registers, then removes, the service | `fd8187f15ed7aa99552971305d5ac3f414c4d958` | `051699200423c0b055ba9599e62ab8041bdcfd3e` | [#268](https://github.com/tesserafin-project/tesserafin/pull/268) | 4 | [`W4-A0-wix-skeleton.md`](W4-A0-wix-skeleton.md) |
-| **A1** | the 1.1 MSI `UpgradeCode` is frozen to one string, mechanically | `051699200423c0b055ba9599e62ab8041bdcfd3e` | `b279d76ac0e5079b16a6979a1e43bfde74b1531c` | [#269](https://github.com/tesserafin-project/tesserafin/pull/269) | 2 | [`W4-A1-upgradecode.md`](W4-A1-upgradecode.md) |
-| **A2** | the installed service carries the W0 §4 recovery policy, read back out of the SCM | `b279d76ac0e5079b16a6979a1e43bfde74b1531c` | `fc31d06a093e3c4f072a29be124b7c7edf1848d5` | [#270](https://github.com/tesserafin-project/tesserafin/pull/270) | 4 | [`W4-A2-service-recovery.md`](W4-A2-service-recovery.md) |
-| **A3** | the live ACLs after install match W0 §9.3, by SID and access mask, with inheritance broken | `fc31d06a093e3c4f072a29be124b7c7edf1848d5` | `779e9fec23e285cc3a1ba4aeede8d24835b3ce45` | [#271](https://github.com/tesserafin-project/tesserafin/pull/271) | 5 | [`W4-A3-programdata-acls.md`](W4-A3-programdata-acls.md) |
-| **A4** | a real `MajorUpgrade` replaces the binaries and keeps the state | `779e9fec23e285cc3a1ba4aeede8d24835b3ce45` | `397baace26fd172fd0bac971144b0b5ad1a4b3de` | [#272](https://github.com/tesserafin-project/tesserafin/pull/272) | 8 | [`W4-A4-major-upgrade.md`](W4-A4-major-upgrade.md) |
-| **A5** | `INSTALLFOLDER` is remembered across a `MajorUpgrade`, and the omission is measured | `397baace26fd172fd0bac971144b0b5ad1a4b3de` | `9f351f594d7abfb0bb4420acea16a96698afc48f` | [#273](https://github.com/tesserafin-project/tesserafin/pull/273) | 2 | [`W4-A5-remember-installfolder.md`](W4-A5-remember-installfolder.md) |
-| **A6** | the installer creates the Windows Event Log source for service lifecycle, and uninstall removes it | `9f351f594d7abfb0bb4420acea16a96698afc48f` | `295c5f2792ff2422e082b386b8c138674029d0b7` | [#274](https://github.com/tesserafin-project/tesserafin/pull/274) | 2 | [`W4-A6-eventlog-source.md`](W4-A6-eventlog-source.md) |
+| **A0** | WiX MSI skeleton installs the accepted `win-x64` layout and registers, then removes, the service | `fd8187f15ed7aa99552971305d5ac3f414c4d958` | `051699200423c0b055ba9599e62ab8041bdcfd3e` | [#268](https://github.com/tesserafin/tesserafin/pull/268) | 4 | [`W4-A0-wix-skeleton.md`](W4-A0-wix-skeleton.md) |
+| **A1** | the 1.1 MSI `UpgradeCode` is frozen to one string, mechanically | `051699200423c0b055ba9599e62ab8041bdcfd3e` | `b279d76ac0e5079b16a6979a1e43bfde74b1531c` | [#269](https://github.com/tesserafin/tesserafin/pull/269) | 2 | [`W4-A1-upgradecode.md`](W4-A1-upgradecode.md) |
+| **A2** | the installed service carries the W0 §4 recovery policy, read back out of the SCM | `b279d76ac0e5079b16a6979a1e43bfde74b1531c` | `fc31d06a093e3c4f072a29be124b7c7edf1848d5` | [#270](https://github.com/tesserafin/tesserafin/pull/270) | 4 | [`W4-A2-service-recovery.md`](W4-A2-service-recovery.md) |
+| **A3** | the live ACLs after install match W0 §9.3, by SID and access mask, with inheritance broken | `fc31d06a093e3c4f072a29be124b7c7edf1848d5` | `779e9fec23e285cc3a1ba4aeede8d24835b3ce45` | [#271](https://github.com/tesserafin/tesserafin/pull/271) | 5 | [`W4-A3-programdata-acls.md`](W4-A3-programdata-acls.md) |
+| **A4** | a real `MajorUpgrade` replaces the binaries and keeps the state | `779e9fec23e285cc3a1ba4aeede8d24835b3ce45` | `397baace26fd172fd0bac971144b0b5ad1a4b3de` | [#272](https://github.com/tesserafin/tesserafin/pull/272) | 8 | [`W4-A4-major-upgrade.md`](W4-A4-major-upgrade.md) |
+| **A5** | `INSTALLFOLDER` is remembered across a `MajorUpgrade`, and the omission is measured | `397baace26fd172fd0bac971144b0b5ad1a4b3de` | `9f351f594d7abfb0bb4420acea16a96698afc48f` | [#273](https://github.com/tesserafin/tesserafin/pull/273) | 2 | [`W4-A5-remember-installfolder.md`](W4-A5-remember-installfolder.md) |
+| **A6** | the installer creates the Windows Event Log source for service lifecycle, and uninstall removes it | `9f351f594d7abfb0bb4420acea16a96698afc48f` | `295c5f2792ff2422e082b386b8c138674029d0b7` | [#274](https://github.com/tesserafin/tesserafin/pull/274) | 2 | [`W4-A6-eventlog-source.md`](W4-A6-eventlog-source.md) |
 
 Twenty-seven commits, zero merge commits: `git rev-list --merges --count
 fd8187f15ed7aa99552971305d5ac3f414c4d958..295c5f2792ff2422e082b386b8c138674029d0b7`

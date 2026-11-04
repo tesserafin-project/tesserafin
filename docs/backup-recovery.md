@@ -3,7 +3,7 @@
 This baseline separates the recovery paths that already exist and the evidence
 needed before extending them. It is not an import assistant or a promise of
 cross-platform recovery. It implements a bounded part of
-[tracker #144](https://github.com/tesserafin-project/tesserafin/issues/144).
+[tracker #144](https://github.com/tesserafin/tesserafin/issues/144).
 
 ## Choose the right archive
 
@@ -86,7 +86,7 @@ these names.
 For a failed upgrade, restore the **pre-upgrade** snapshot with its recorded old
 image. Starting an old image on a database already migrated by a newer one is
 not a rollback. A forward upgrade that crosses a real pending migration remains
-[separate acceptance #127](https://github.com/tesserafin-project/tesserafin/issues/127).
+[separate acceptance #127](https://github.com/tesserafin/tesserafin/issues/127).
 There is no new backport or release in this procedure.
 
 ## Native Linux `.deb` recovery procedure
@@ -161,7 +161,7 @@ rollback. The Docker scripts (`docker/backup.sh`, `docker/restore.sh`) are not u
 | Restore | Checksum and archive layout verified; same package reinstalled; data directory empty before extraction; every restored entry identical in content, owner, group and mode to the pre-backup listing; directories `tesserafin:tesserafin 0750`, `tesserafin.conf` `root:tesserafin 0640`. |
 | Restored state | Server runs as `tesserafin`; byte-identical oracle snapshot using the original tokens; member password and fresh administrator login; users, libraries and watched state equal. |
 
-Green run: [39973087073](https://github.com/tesserafin-project/tesserafin/actions/runs/39973087073)
+Green run: [39973087073](https://github.com/tesserafin/tesserafin/actions/runs/39973087073)
 at `1c4ab9f236150c856c6828cf5df23678a2365eed`, 27 assertions passed, 0 failed.
 Retained artifact `native-recovery-deb-1c4ab9f2…` (`sha256:644eab9e788e7317ca5796b873a8ff47a4d1f5d0425867b70717993f07889564`,
 expires 2026-11-06) holds only allowlisted JSON: source provenance, package

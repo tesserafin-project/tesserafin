@@ -147,7 +147,7 @@ test.describe.serial('first-run onboarding through the browser', () => {
     });
 
     test('the onboarding path is reached and no Update Required surface is rendered', async ({ page, baseURL }) => {
-        // Regression guard for tesserafin-project/tesserafin-web#65. The web client used to take
+        // Regression guard for tesserafin/tesserafin-web#65. The web client used to take
         // its minimum server version from `@jellyfin/sdk/lib/versions` ('10.10.0'), so a Tesserafin
         // server reporting 1.0.0 resolved to `ConnectionState.ServerUpdateNeeded` and
         // `ConnectionErrorPage` rendered `#connectionErrorPage` with the `Update Required` heading

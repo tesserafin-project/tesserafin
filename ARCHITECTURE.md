@@ -34,7 +34,7 @@ deliberate design freedom, not an accident — it is what lets the internals bel
 be rewritten without preserving upstream wire formats.
 
 The whole product today is **server + bundled browser client** ([Tesserafin
-Web](https://github.com/tesserafin-project/tesserafin-web), a separate repo,
+Web](https://github.com/tesserafin/tesserafin-web), a separate repo,
 served on the same origin/port). Native mobile and TV clients are roadmap items.
 
 ### Tech stack at a glance

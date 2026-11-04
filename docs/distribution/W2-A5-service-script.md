@@ -1,6 +1,6 @@
 # W2-A5 — First-party ZIP service script
 
-Tracker: [#256](https://github.com/tesserafin-project/tesserafin/issues/256).
+Tracker: [#256](https://github.com/tesserafin/tesserafin/issues/256).
 Umbrella: #234. Base master:
 `5e307ce36e5baa4192f178f0fb8de2e58efe2afb`, which is W2-A4 as accepted.
 

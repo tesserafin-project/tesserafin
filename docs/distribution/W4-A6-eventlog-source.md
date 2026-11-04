@@ -1,6 +1,6 @@
 # W4-A6 — the Windows Event Log source for service lifecycle
 
-Tracker: [#234](https://github.com/tesserafin-project/tesserafin/issues/234).
+Tracker: [#234](https://github.com/tesserafin/tesserafin/issues/234).
 Ruling: **W4-A6 EVENT LOG SOURCE**, authorising this slice from master at
 `9f351f594d7abfb0bb4420acea16a96698afc48f`.
 

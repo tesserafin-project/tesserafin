@@ -6,7 +6,7 @@ foundations are tracked separately and are not a released app.
 
 | Your environment | Published path | Instructions and limits |
 | --- | --- | --- |
-| Linux host or NAS with Docker | Public `1.0.0` container, `linux/amd64` and `linux/arm64`, pinned by digest in Compose | [Docker/NAS guide](container/A3-guided-install.md). Unraid/DSM guidance does not certify every NAS model; [independent reports](https://github.com/tesserafin-project/tesserafin/issues/117) remain incomplete. |
+| Linux host or NAS with Docker | Public `1.0.0` container, `linux/amd64` and `linux/arm64`, pinned by digest in Compose | [Docker/NAS guide](container/A3-guided-install.md). Unraid/DSM guidance does not certify every NAS model; [independent reports](https://github.com/tesserafin/tesserafin/issues/117) remain incomplete. |
 | Native Linux | `.deb`, `.rpm`, `.tar.gz` for x64 and arm64 on `v1.1.0` | [Native Linux below](#native-linux), then the [L0 platform contract](distribution/L0-linux-packages.md). Unsigned downloads, no APT/DNF repository. |
 | Windows x64 | Portable ZIP attached to `v1.1.0` | [Windows install guide](distribution/install-windows.md). Unsigned, no published MSI or Windows arm64 artifact; Windows hardware acceleration is not validated. |
 
@@ -22,7 +22,7 @@ repository's [Compose file](../docker-compose.yml) and copy
 [`.env.example`](../.env.example) to configure media paths. The default image is:
 
 ```text
-ghcr.io/tesserafin-project/server@sha256:bc7587bc7d99b40d77770046d49a2931ff8162b6d1df3da8d3f108b7677d7dc3
+ghcr.io/tesserafin/server@sha256:bc7587bc7d99b40d77770046d49a2931ff8162b6d1df3da8d3f108b7677d7dc3
 ```
 
 The release package is public; no GHCR login or GitHub token is required. The
@@ -39,7 +39,7 @@ setting does not configure HTTPS, a firewall or a router for public access.
 ## Native Linux
 
 Download the matching file from the
-[`v1.1.0` release](https://github.com/tesserafin-project/tesserafin/releases/tag/v1.1.0).
+[`v1.1.0` release](https://github.com/tesserafin/tesserafin/releases/tag/v1.1.0).
 The lifecycle environments recorded in L0 are Ubuntu 24.04 (DEB), Rocky Linux 9
 (RPM), and Debian 12 (portable), on architecture-native x64/arm64 runners. Other
 distributions are not implied by the architecture name alone.

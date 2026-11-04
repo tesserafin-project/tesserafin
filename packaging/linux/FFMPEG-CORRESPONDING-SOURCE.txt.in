@@ -44,9 +44,9 @@ It is the corresponding source for the FFmpeg RUNTIME only. It does not contain
 the Tesserafin server source or the Tesserafin Web source, and it does not claim
 to. Those are separate works with their own repositories and their own licences:
 
-  server : https://github.com/tesserafin-project/tesserafin.git
+  server : https://github.com/tesserafin/tesserafin.git
            at commit @SERVER_COMMIT@, GPL-2.0-or-later
-  web    : https://github.com/tesserafin-project/tesserafin-web.git
+  web    : https://github.com/tesserafin/tesserafin-web.git
            at commit @WEB_VCS_REF@
 
 Both are public at the commits named above; see

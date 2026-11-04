@@ -46,8 +46,8 @@ the `/config` volume.
 
 **Where they are NOT:** the server ships none of its own. This was not always true — three
 inherited upstream credentials were compiled into `Tesserafin.Providers.dll` until
-[#173](https://github.com/tesserafin-project/tesserafin/pull/173) and
-[#176](https://github.com/tesserafin-project/tesserafin/pull/176) removed them. Their absence
+[#173](https://github.com/tesserafin/tesserafin/pull/173) and
+[#176](https://github.com/tesserafin/tesserafin/pull/176) removed them. Their absence
 is now enforced on every `./ci/run.sh` by the provider-authentication structural audit, which
 reads the **compiled** assembly rather than the source, because the compiler folds
 concatenation, interpolation and fragment-splitting into a single literal that a source scan
@@ -161,8 +161,8 @@ It **detects**. It does not **prevent**. By the time it runs, GitHub has already
 push and the object already exists in the repository. Preventing the push requires GitHub-
 native push protection, which requires GitHub Secret Protection, which a private repository on
 a free organisation plan does not have. That gap is tracked by
-[#96](https://github.com/tesserafin-project/tesserafin/issues/96) and
-[#94](https://github.com/tesserafin-project/tesserafin/issues/94), and nothing in this
+[#96](https://github.com/tesserafin/tesserafin/issues/96) and
+[#94](https://github.com/tesserafin/tesserafin/issues/94), and nothing in this
 repository closes it.
 
 It is also blind to two classes this project has actually encountered — short provider

@@ -24,7 +24,7 @@
     that nothing upstream was consulted.
 
 .PARAMETER Reference
-    ghcr.io/tesserafin-project/windows-ffmpeg-build-inputs@sha256:<digest>
+    ghcr.io/tesserafin/windows-ffmpeg-build-inputs@sha256:<digest>
 
 .PARAMETER MsysRoot
     The MSYS2 installation root (for example D:\a\_temp\msys64).
@@ -56,7 +56,7 @@ function Stop-Hard {
 }
 
 # ── 1. The reference contract, enforced here as well as in the caller ────────
-$canonical = 'ghcr.io/tesserafin-project/windows-ffmpeg-build-inputs'
+$canonical = 'ghcr.io/tesserafin/windows-ffmpeg-build-inputs'
 if ($Reference -notmatch '^(?<name>[^@]+)@(?<digest>sha256:[0-9a-f]{64})$') {
     Stop-Hard "'$Reference' is not digest-pinned. A tag is never an accepted identity; use $canonical@sha256:<digest>"
 }

@@ -1,7 +1,7 @@
 # Installation and administration documentation inventory
 
 Scope: the entry points requested by
-[#199](https://github.com/tesserafin-project/tesserafin/issues/199), at server
+[#199](https://github.com/tesserafin/tesserafin/issues/199), at server
 baseline `5e1cc8515cafcb61ecdbc48ab66cfb67211b2ea4`. This is a selected navigation
 and contradiction cleanup, not a rewrite of all engineering documentation.
 
@@ -34,8 +34,8 @@ A6's current operator sections, L0's download distinction, and the new selector,
 index and this inventory. Historical acceptance sections stay at their linked
 paths; git retains the previous operator text.
 
-The separate diagnostics [PR #323](https://github.com/tesserafin-project/tesserafin/pull/323)
-and recovery [PR #324](https://github.com/tesserafin-project/tesserafin/pull/324)
+The separate diagnostics [PR #323](https://github.com/tesserafin/tesserafin/pull/323)
+and recovery [PR #324](https://github.com/tesserafin/tesserafin/pull/324)
 add their own references through the administrator guide and A2. This cleanup
 does not copy their changes or require their files to exist before it merges.
 Their review/acceptance remains separate.

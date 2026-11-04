@@ -115,7 +115,7 @@ waiver() {
     jq -n --arg p "$1" --arg a "$2" --arg s "$3" --arg e "$4" --arg c "${5:-2026-01-01}" \
         '{ecosystem: "nuget", package: $p, advisory: $a, severity: $s,
           justification: "control fixture", owner: "tesserafin-maintainer",
-          issue: "https://github.com/tesserafin-project/tesserafin/issues/1",
+          issue: "https://github.com/tesserafin/tesserafin/issues/1",
           created: $c, expires: $e}'
 }
 

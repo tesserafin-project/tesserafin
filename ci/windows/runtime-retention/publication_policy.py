@@ -975,7 +975,7 @@ def check_summary_identity(
 #:     python3 -c "import publication_policy as p, boundary; \
 #:                 print(p.approved_workflow_sha256(boundary.repo_root()))"
 APPROVED_WORKFLOW_SHA256 = (
-    "892fdcc7badb429adcd821294421faee9995c4ac8161d2972e9062de7de7b526"
+    "6d0d482952cae8a6a3b2bb9640d58351298d495cda8ca1989ed4030d8f73da38"
 )
 
 

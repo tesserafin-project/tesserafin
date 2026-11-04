@@ -13,7 +13,7 @@ namespace Tesserafin.Server.Tests.Net;
 /// Secure bootstrap mode: how the mode is turned on, and what it refuses to be turned on by.
 /// </summary>
 /// <remarks>
-/// Gates for tesserafin-project/tesserafin#242. Each exists because a specific controlled defect
+/// Gates for tesserafin/tesserafin#242. Each exists because a specific controlled defect
 /// must make it red — see the break-control table in the pull request.
 /// </remarks>
 public sealed class SecureBootstrapActivationTests

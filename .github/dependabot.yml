@@ -28,7 +28,7 @@
 #
 # `.github/renovate.json` is inherited from the upstream Jellyfin tree and is
 # inert: it extends a preset from a `tesserafin` org that is not this one, and
-# the Renovate app is not installed on `tesserafin-project`. It is left
+# the Renovate app is not installed on `tesserafin`. It is left
 # untouched here rather than deleted, which is a separate decision.
 version: 2
 

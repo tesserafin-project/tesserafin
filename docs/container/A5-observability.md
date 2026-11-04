@@ -1,6 +1,6 @@
 # [A5] Health endpoint and structured logs — operator guide
 
-Issue: tesserafin-project/tesserafin #91. Depends on #87 [A1] (the prebuilt image).
+Issue: tesserafin/tesserafin #91. Depends on #87 [A1] (the prebuilt image).
 Consumed by [A4]'s startup decision logging and by the release go/no-go checks.
 
 This is the whole of Tesserafin's production observability surface today: **one
@@ -188,7 +188,7 @@ canonical `docker-compose.yml`, `.env.example`, Unraid template and
 [`A3-guided-install.md`](./A3-guided-install.md) point at.
 
 ```
-ghcr.io/tesserafin-project/tesserafin:12.0.0-dev.700c499f3e19
+ghcr.io/tesserafin/tesserafin:12.0.0-dev.700c499f3e19
 ```
 
 | | Digest |
@@ -209,7 +209,7 @@ the same manifest.
 Pull it by digest rather than by tag if you want the guarantee in writing:
 
 ```console
-$ docker pull ghcr.io/tesserafin-project/tesserafin@sha256:6e3dbaab6eeaef163e81f9cc5ffb03f5a05bb9d8165e3f6487b2bb3003bc7608
+$ docker pull ghcr.io/tesserafin/tesserafin@sha256:6e3dbaab6eeaef163e81f9cc5ffb03f5a05bb9d8165e3f6487b2bb3003bc7608
 ```
 
 Gates run against that digest, on `linux/amd64`: `docker/smoke.sh`,

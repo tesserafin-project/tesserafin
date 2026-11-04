@@ -56,7 +56,7 @@ _spec.loader.exec_module(pkg_tree_digest)
 # PowerShell consumer's own constants still say exactly this.
 # ---------------------------------------------------------------------------
 ACCEPTED_REGISTRY = "ghcr.io"
-ACCEPTED_REPOSITORY = "tesserafin-project/tesserafin-web-assets"
+ACCEPTED_REPOSITORY = "tesserafin/tesserafin-web-assets"
 ACCEPTED_REFERENCE = "sha256:6150380052c8a3a154a8a25a9f40a741175a7563afdf89284f9c1f46d3042a6c"
 ACCEPTED_TREE_DIGEST = "4148c4bc6e0c7c2d6b35ed9992e874a06dcc11d2b6d9e0aad06719e36567be4f"
 ACCEPTED_REVISION = "a9a362eec764a9fe3fa6ba9b4a7dd7473677e35a"
@@ -92,7 +92,7 @@ DOCKER_LAYER_GZIP = "application/vnd.docker.image.rootfs.diff.tar.gzip"
 # universal newlines, so C22 would have called it byte-identical. A file whose
 # line endings alone differ is reported as exactly that, not as an unexplained
 # digest mismatch.
-WORKFLOW_SHA256 = "c27fb4f9b768be1401fb143990402b7efd214ca9838e7784236231e13cd878ca"
+WORKFLOW_SHA256 = "4347e06bfd33ed0ad0c431959ac4301f2e8c19bd8d438327e14e2b3ce6ed98ef"
 
 # The workflow's whole authorised shape, asserted by name rather than inferred.
 WORKFLOW_ALLOWED_TRIGGERS = ("pull_request",)

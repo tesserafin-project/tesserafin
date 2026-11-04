@@ -1,6 +1,6 @@
 # DSP-2: bounded Web stereo-music demonstrator
 
-Status: proposed implementation scope following [DSP-1 / #308](https://github.com/tesserafin-project/tesserafin/issues/308), tracked in [tesserafin-web #211](https://github.com/tesserafin-project/tesserafin-web/issues/211). Implementation begins after review of the [audit](oneamp-dsp-1-audit.md) and [host contract](oneamp-host-contract.md). This document does not activate processing.
+Status: proposed implementation scope following [DSP-1 / #308](https://github.com/tesserafin/tesserafin/issues/308), tracked in [tesserafin-web #211](https://github.com/tesserafin/tesserafin-web/issues/211). Implementation begins after review of the [audit](oneamp-dsp-1-audit.md) and [host contract](oneamp-host-contract.md). This document does not activate processing.
 
 ## User outcome and boundary
 

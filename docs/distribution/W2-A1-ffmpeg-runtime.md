@@ -1,6 +1,6 @@
 # W2-A1 — consuming the accepted Windows FFmpeg runtime by digest
 
-Tracker: [#256](https://github.com/tesserafin-project/tesserafin/issues/256).
+Tracker: [#256](https://github.com/tesserafin/tesserafin/issues/256).
 Base: `3d0c80047ce418ec4255ff3d788fe8d48a3da3e3` (W2-A0 accepted on master).
 Umbrella: #234.
 
@@ -47,7 +47,7 @@ with `-AcceptedManifest` naming the committed acceptance manifest literally.
 
 | Fact | Value |
 | --- | --- |
-| accepted runtime reference | `ghcr.io/tesserafin-project/windows-ffmpeg-runtime@sha256:99e45f154a5d72aba4185eb19b6671aa1a11c30be837deac9dd26f473593c0b9` |
+| accepted runtime reference | `ghcr.io/tesserafin/windows-ffmpeg-runtime@sha256:99e45f154a5d72aba4185eb19b6671aa1a11c30be837deac9dd26f473593c0b9` |
 | inner runtime archive | `delivered/runtime/tesserafin-ffmpeg-7.1.4-tesserafin.1-win-x64.zip` |
 | inner runtime archive SHA-256 | `f28cc9186aad757491a6f44e7950d39bc39354dfe9505e278af91d7619811c9e` |
 | descriptive tag (never a trust boundary) | `accepted-83e23b957940` |

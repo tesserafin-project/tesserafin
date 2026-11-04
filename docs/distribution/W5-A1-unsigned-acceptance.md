@@ -1,11 +1,11 @@
 # W5-A1 — unsigned `win-x64` portable ZIP acceptance
 
-Tracker: [#276](https://github.com/tesserafin-project/tesserafin/issues/276).
+Tracker: [#276](https://github.com/tesserafin/tesserafin/issues/276).
 Ruling: **OWNER RULING — W5-A1 UNSIGNED ZIP ACCEPTANCE**, authorising this slice
 from master `f90fd18862a79d4f08cb4a52223bc852a3ffd541` (W5-A0 as accepted).
 Contract: [`W5-A0-acceptance-contract.md`](W5-A0-acceptance-contract.md).
-Refs [#129](https://github.com/tesserafin-project/tesserafin/issues/129),
-[#256](https://github.com/tesserafin-project/tesserafin/issues/256) (historical W2).
+Refs [#129](https://github.com/tesserafin/tesserafin/issues/129),
+[#256](https://github.com/tesserafin/tesserafin/issues/256) (historical W2).
 
 W5-A1 is the unsigned acceptance harness. It measures
 `tesserafin-server_1.0.0_win-x64.zip` as a function of the commit built and the
@@ -25,7 +25,7 @@ document.
 | `webPayloadSha256` | `4148c4bc6e0c7c2d6b35ed9992e874a06dcc11d2b6d9e0aad06719e36567be4f` |
 | `ffmpegRuntimeSha256` | `f28cc9186aad757491a6f44e7950d39bc39354dfe9505e278af91d7619811c9e` |
 | `sourceDateEpoch` | `1789314188` |
-| `evidenceRunId` | [`34766464798`](https://github.com/tesserafin-project/tesserafin/actions/runs/34766464798), `pull_request`, conclusion `success` |
+| `evidenceRunId` | [`34766464798`](https://github.com/tesserafin/tesserafin/actions/runs/34766464798), `pull_request`, conclusion `success` |
 | allocation A (`GitHub Actions 1000010527`) | `c1f6261cb770bd3dcbf255f4dd15b287a7289adad5a619d31725c158cd20e2d8` |
 | allocation B (`GitHub Actions 1000010528`) | `c1f6261cb770bd3dcbf255f4dd15b287a7289adad5a619d31725c158cd20e2d8` |
 

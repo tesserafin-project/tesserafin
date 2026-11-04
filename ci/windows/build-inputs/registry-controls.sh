@@ -70,7 +70,7 @@ accepts() {
   fi
 }
 
-repo="${REGISTRY}/tesserafin-project/windows-ffmpeg-build-inputs"
+repo="${REGISTRY}/tesserafin/windows-ffmpeg-build-inputs"
 digest="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["manifestDigest"])' "${OCI}/descriptor.json")"
 
 # ── The protocol itself, end to end ─────────────────────────────────────────

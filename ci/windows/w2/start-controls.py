@@ -106,15 +106,15 @@ FROZEN_PINS = {
     # post-publish endpoints canonicalisation. Every other pin below is
     # unchanged.
     "ci/windows/w2/assemble-server-zip.ps1":
-        "e26bf3b826303b04cb18bcfe77e29379cce114cab4b8da25a4eefc961b42f9b5",
+        "76091f2c8e5c1dc374767c0ecf313993057dfcc98e7fc89c5d36b2ff870d9775",
     "ci/windows/w2/consume-web-payload.ps1":
-        "db49f21001067a8f55ae71432ff9d47830daa454704a09800bb0e1eadf3b117c",
+        "a23c302b144558fabdc8409906df14165d39d9700492df37cff0215694596400",
     "ci/windows/w2/pkg-tree-digest.py":
         "0c70114c69e85d06bc3d95249cc1a86f917eb2b8deb44718cc05ad6f3afa70b4",
     "ci/windows/runtime-retention/consume.ps1":
-        "f19fefcc48de9ae2175aa49ecff6e732762219a3d76c38067ba4114a1924646d",
+        "80e3ca9aaa9323192537afafb01302869d2a58a869d1faf613048fc60dde3053",
     "ci/windows/runtime-retention/accepted-runtime.json":
-        "593c21f59c67dd564fa488f660efc14b74b5c5bcd775bbc3ef0bdf9e94dd9ece",
+        "28799f4eb03666bea925d2d400f4237c3e5e6e69bafb284573104fcdcfccb934",
 }
 WORKFLOW_SHA256 = "d493f1f25cdc94fecf33649fdbfe6bd401795b6db14c410fe9f1ac123ba07ce9"
 

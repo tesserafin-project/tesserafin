@@ -185,7 +185,7 @@ make_web() {
         '{provenanceSchema:2, title:"Fixture API", version:"1.0.0", xTesserafinVersion:"1.0.0",
           serverVersion:"1.0.0", webAppVersion:"1.0.0", versionSkewNote:null, openapi:"3.0.4",
           pathCount:1, schemaCount:0, source:"fixture",
-          sourceRepository:"tesserafin-project/tesserafin", sourceCommit:$sc, sourceRef:null,
+          sourceRepository:"tesserafin/tesserafin", sourceCommit:$sc, sourceRef:null,
           canonicalSpecSha256:$cs, specSha256:$ss, transformVersion:1,
           generator:{name:"typescript-axios", cliVersion:"2.40.1", generatorVersion:"7.11.0"},
           generatedManifestSha256:"", generatedFileCount:0,

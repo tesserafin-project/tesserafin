@@ -1,12 +1,12 @@
 Package: tesserafin-server
 Version: @DEB_VERSION@
 Architecture: @DEB_ARCH@
-Maintainer: Tesserafin Project <https://github.com/tesserafin-project/tesserafin>
+Maintainer: Tesserafin Project <https://github.com/tesserafin/tesserafin>
 Installed-Size: @INSTALLED_SIZE_KB@
 Depends: libc6, libstdc++6, libgcc-s1, libfontconfig1, fonts-dejavu-core, libicu76 | libicu74 | libicu72 | libicu71 | libicu70 | libicu67, libssl3t64 | libssl3 | libssl1.1
 Section: video
 Priority: optional
-Homepage: https://github.com/tesserafin-project/tesserafin
+Homepage: https://github.com/tesserafin/tesserafin
 Description: Tesserafin media server
  Tesserafin is a self-hosted media server. This package installs the server
  application, the bundled Tesserafin Web client and a systemd service that runs

@@ -74,7 +74,7 @@ WORKFLOW = os.path.join(REPO_ROOT, ".github", "workflows", "w2-windows-ffmpeg-co
 # three independent statements of one identity, rather than one statement read
 # twice.
 # ---------------------------------------------------------------------------
-CANONICAL_PACKAGE = "ghcr.io/tesserafin-project/windows-ffmpeg-runtime"
+CANONICAL_PACKAGE = "ghcr.io/tesserafin/windows-ffmpeg-runtime"
 ACCEPTED_MANIFEST_DIGEST = \
     "sha256:99e45f154a5d72aba4185eb19b6671aa1a11c30be837deac9dd26f473593c0b9"
 ACCEPTED_REFERENCE = CANONICAL_PACKAGE + "@" + ACCEPTED_MANIFEST_DIGEST
@@ -90,9 +90,9 @@ DESCRIPTIVE_TAG = "accepted-83e23b957940"
 # true: a CRLF copy hashes identically under universal newlines, so a file
 # differing only in line endings would be called byte-identical. It is reported
 # as exactly that instead.
-CONSUMER_SHA256 = "f19fefcc48de9ae2175aa49ecff6e732762219a3d76c38067ba4114a1924646d"
-ACCEPTED_JSON_SHA256 = "593c21f59c67dd564fa488f660efc14b74b5c5bcd775bbc3ef0bdf9e94dd9ece"
-WORKFLOW_SHA256 = "82ce2aa5c2a4b2b832a49cfe2ca8390be4feb663b12bcaf0c7aaea43040df4e6"
+CONSUMER_SHA256 = "80e3ca9aaa9323192537afafb01302869d2a58a869d1faf613048fc60dde3053"
+ACCEPTED_JSON_SHA256 = "28799f4eb03666bea925d2d400f4237c3e5e6e69bafb284573104fcdcfccb934"
+WORKFLOW_SHA256 = "78f2ea7f9cc5c5282edb577c9132e00d69b6c26b261df48fc006edf93a908996"
 
 # The new workflow's whole authorised shape, asserted by name rather than
 # inferred from the pin.

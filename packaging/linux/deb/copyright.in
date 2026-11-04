@@ -1,6 +1,6 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: Tesserafin
-Source: https://github.com/tesserafin-project/tesserafin
+Source: https://github.com/tesserafin/tesserafin
 
 Comment: This package bundles three separately licensed works. They are listed
  here as separate stanzas because they are separate: bundling a GPL-3.0-or-later

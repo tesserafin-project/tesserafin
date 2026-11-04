@@ -1,6 +1,6 @@
 # W3-A1 — no linger on a pre-configuration service failure
 
-Tracker: [#234](https://github.com/tesserafin-project/tesserafin/issues/234).
+Tracker: [#234](https://github.com/tesserafin/tesserafin/issues/234).
 Ruling: `OWNER RULING — W3-A1 PRE-CONFIG FAILURE UNDER SCM`, 2026-09-09, on #234.
 Contract: [`W3-A0-service-host.md`](W3-A0-service-host.md) §3, first residual.
 Frozen starting master: `e463d92650efc2c0ebfc15d6d321db543954f361`, which is

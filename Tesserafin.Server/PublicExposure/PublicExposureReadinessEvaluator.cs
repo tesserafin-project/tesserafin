@@ -20,7 +20,7 @@ namespace Tesserafin.Server.PublicExposure;
 /// them appears in <see cref="PublicExposureEvidence"/>, so none of them can be mistaken for it.
 /// </para>
 /// <para>
-/// Every unestablished fact blocks. See tesserafin-project/tesserafin#242.
+/// Every unestablished fact blocks. See tesserafin/tesserafin#242.
 /// </para>
 /// </remarks>
 public static class PublicExposureReadinessEvaluator

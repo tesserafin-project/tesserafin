@@ -111,7 +111,7 @@ public enum RemoteAccessDiagnosticCode
 
     /// <summary>
     /// A same-host proxy could make every remote visitor arrive as loopback and be classified as
-    /// local. See tesserafin-project/tesserafin#241 §1.5.
+    /// local. See tesserafin/tesserafin#241 §1.5.
     /// </summary>
     SameHostProxyLoopbackTrustTrapPossible = 36,
 

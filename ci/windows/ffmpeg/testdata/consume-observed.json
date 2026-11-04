@@ -1,6 +1,6 @@
 {
   "probe": "w1r-consume",
-  "reference": "ghcr.io/tesserafin-project/windows-ffmpeg-build-inputs@sha256:cff23b74dbf9707ad7150c21a2985e320320b86d3c72656b2bf2b58ac1c04f0a",
+  "reference": "ghcr.io/tesserafin/windows-ffmpeg-build-inputs@sha256:cff23b74dbf9707ad7150c21a2985e320320b86d3c72656b2bf2b58ac1c04f0a",
   "manifestDigest": "sha256:cff23b74dbf9707ad7150c21a2985e320320b86d3c72656b2bf2b58ac1c04f0a",
   "layerDigest": "sha256:03b43119e59f84e993e5ff0be0f3dceba913d41d2db40638530b5e8a72de271e",
   "lockSha256": "602510cd80de472e206d35c5ca753be5745fe4d739c40521c50471178d5abcb8",

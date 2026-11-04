@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 
 REGISTRY = "ghcr.io"
-REPOSITORY = "tesserafin-project/windows-ffmpeg-build-inputs"
+REPOSITORY = "tesserafin/windows-ffmpeg-build-inputs"
 CANONICAL = f"{REGISTRY}/{REPOSITORY}"
 TRUSTED_REF = "refs/heads/master"
 

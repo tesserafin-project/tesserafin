@@ -1,11 +1,11 @@
 # W5-A0 — the acceptance contract for Tesserafin 1.1
 
-Tracker: [#276](https://github.com/tesserafin-project/tesserafin/issues/276).
+Tracker: [#276](https://github.com/tesserafin/tesserafin/issues/276).
 Ruling: **OWNER RULING — W5-A0 ACCEPTANCE CONTRACT**, authorising this document
 from master `331b220522d7acfa2eb62447640af2091f7949a9` (W4-CLOSEOUT).
-Refs [#129](https://github.com/tesserafin-project/tesserafin/issues/129),
-[#234](https://github.com/tesserafin-project/tesserafin/issues/234) (historical),
-[#225](https://github.com/tesserafin-project/tesserafin/issues/225).
+Refs [#129](https://github.com/tesserafin/tesserafin/issues/129),
+[#234](https://github.com/tesserafin/tesserafin/issues/234) (historical),
+[#225](https://github.com/tesserafin/tesserafin/issues/225).
 
 This document decides. It does not implement. It creates no certificate, no key,
 no secret, no signing job, no Git tag, no GitHub Release, no GHCR publication and
@@ -28,9 +28,9 @@ compared against its own head — not copied from any pull request body.
 | W1 accepted FFmpeg runtime — corresponding source SHA-256 | `d753268c14d8e312bdd8ccd5ce8af90d495d185e807b77621e229eb8f71cc76d` (decompressed stream `5158221a246c7e7d0d843d649571625ad0277152a093361419414195a8afee8e`) | same document §3; `accepted-runtime.json` `correspondingSourceSha256`, `correspondingSourceStreamSha256` |
 | W2 accepted portable ZIP digest | **UNKNOWN** | see below |
 | W2 accepted Web payload — canonical tree digest | `4148c4bc6e0c7c2d6b35ed9992e874a06dcc11d2b6d9e0aad06719e36567be4f` | [`W2-A0-web-payload.md`](W2-A0-web-payload.md), "The accepted contract"; `ci/package/pins.env` `WEB_PAYLOAD_SHA256` |
-| W2 accepted Web payload — image manifest digest | `ghcr.io/tesserafin-project/tesserafin-web-assets@sha256:6150380052c8a3a154a8a25a9f40a741175a7563afdf89284f9c1f46d3042a6c` (Web revision `a9a362eec764a9fe3fa6ba9b4a7dd7473677e35a`) | [`W2-A0-web-payload.md`](W2-A0-web-payload.md), "The accepted contract" |
-| W3 accepted service-host head | `fd8187f15ed7aa99552971305d5ac3f414c4d958` — W3-A1 as accepted, [#267](https://github.com/tesserafin-project/tesserafin/pull/267) | [`W4-accepted.md`](W4-accepted.md) header, "Frozen W4 starting master"; [`W3-A1-preconfig-failure.md`](W3-A1-preconfig-failure.md) |
-| W4 accepted MSI surface head | `295c5f2792ff2422e082b386b8c138674029d0b7` — W4-A6 as accepted, [#274](https://github.com/tesserafin-project/tesserafin/pull/274) | [`W4-accepted.md`](W4-accepted.md) §1 and §4 |
+| W2 accepted Web payload — image manifest digest | `ghcr.io/tesserafin/tesserafin-web-assets@sha256:6150380052c8a3a154a8a25a9f40a741175a7563afdf89284f9c1f46d3042a6c` (Web revision `a9a362eec764a9fe3fa6ba9b4a7dd7473677e35a`) | [`W2-A0-web-payload.md`](W2-A0-web-payload.md), "The accepted contract" |
+| W3 accepted service-host head | `fd8187f15ed7aa99552971305d5ac3f414c4d958` — W3-A1 as accepted, [#267](https://github.com/tesserafin/tesserafin/pull/267) | [`W4-accepted.md`](W4-accepted.md) header, "Frozen W4 starting master"; [`W3-A1-preconfig-failure.md`](W3-A1-preconfig-failure.md) |
+| W4 accepted MSI surface head | `295c5f2792ff2422e082b386b8c138674029d0b7` — W4-A6 as accepted, [#274](https://github.com/tesserafin/tesserafin/pull/274) | [`W4-accepted.md`](W4-accepted.md) §1 and §4 |
 | W4 closeout head | `331b220522d7acfa2eb62447640af2091f7949a9` — W4-CLOSEOUT, parent `295c5f2792ff2422e082b386b8c138674029d0b7` | [`W4-accepted.md`](W4-accepted.md) is the document this commit adds |
 | MSI `UpgradeCode` | `0f0c9f4e-1c5a-4b8e-9a3d-6d1f2b7c8e05` | [`W4-A1-upgradecode.md`](W4-A1-upgradecode.md); `ci/windows/w4/msi-controls.py` `FROZEN_UPGRADE_CODE` |
 
@@ -40,7 +40,7 @@ compared against its own head — not copied from any pull request body.
   `docs/distribution/`. The W3 head above is the one `W4-accepted.md` names as
   W4's frozen starting master. W3-A0 as accepted is
   `e463d92650efc2c0ebfc15d6d321db543954f361`
-  ([#266](https://github.com/tesserafin-project/tesserafin/pull/266)); each pull
+  ([#266](https://github.com/tesserafin/tesserafin/pull/266)); each pull
   request's merge commit equals its head.
 * **The W2 portable ZIP digest is UNKNOWN, and this document stops there.**
   - No accepted document records it. `W2-A2-server-zip.md` states that no
@@ -70,7 +70,7 @@ Deliverables, not intentions:
 * **Linux container** — the existing 1.0 path, still digest-pinned.
 * **Native Linux packages** — `.deb`, `.rpm` and portable `.tar.gz` for
   `linux-x64` and `linux-arm64`, as accepted in
-  [#225](https://github.com/tesserafin-project/tesserafin/issues/225) /
+  [#225](https://github.com/tesserafin/tesserafin/issues/225) /
   [`L0-linux-packages.md`](L0-linux-packages.md).
 * **Native `win-x64` portable ZIP** — W2.
 * **Native `win-x64` MSI and Windows Service** — W3 and W4.
@@ -108,7 +108,7 @@ Added by this contract:
 * **No D3D11VA, DXVA2, QSV, NVENC or AMF runtime claim.** Hosted runners have no
   GPU; compiled capability is not a runtime claim.
 * **No Secure Remote Access or managed HTTPS.**
-  [#241](https://github.com/tesserafin-project/tesserafin/issues/241) is
+  [#241](https://github.com/tesserafin/tesserafin/issues/241) is
   post-1.1.
 * **No native client.**
 * **No Jellyfin client or plugin compatibility.**

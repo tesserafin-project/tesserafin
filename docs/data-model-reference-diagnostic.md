@@ -1,6 +1,6 @@
 # Prospective reference diagnostic
 
-Part of [#360](https://github.com/tesserafin-project/tesserafin/issues/360).
+Part of [#360](https://github.com/tesserafin/tesserafin/issues/360).
 Schema inspected at `00e8c5ae807549b1ffc146c3e7505015f7d20121`:
 the active SQLite snapshot has no foreign key for `MediaSegments.ItemId`
 or `CustomItemDisplayPreferences.UserId`. `PRAGMA foreign_key_check` alone

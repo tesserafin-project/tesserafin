@@ -1,6 +1,6 @@
 # OneAmp DSP-1: source audit and adapter decision
 
-Status: proposed decision, 2026-10-20. Tracks [DSP-1 / #308](https://github.com/tesserafin-project/tesserafin/issues/308), under [#307](https://github.com/tesserafin-project/tesserafin/issues/307). This change adds documentation and an isolated audit probe; it adds no runtime dependency or processing.
+Status: proposed decision, 2026-10-20. Tracks [DSP-1 / #308](https://github.com/tesserafin/tesserafin/issues/308), under [#307](https://github.com/tesserafin/tesserafin/issues/307). This change adds documentation and an isolated audit probe; it adds no runtime dependency or processing.
 
 ## Decision
 
@@ -8,15 +8,15 @@ Use OneAmp's standalone PCM `dsp::Processor` as an optional client capability. K
 
 Select **Web, local stereo music, opt-in and off by default** as the first demonstrator. The existing Web audio element and normalization graph provide a concrete integration point. Android Media3 remains a later adapter: the native client has no established playback pipeline yet, and the JNI package currently includes OneAmp's player and HTTP dependencies.
 
-This follows [#146](https://github.com/tesserafin-project/tesserafin/issues/146): playback semantics belong to core; substantial DSP dependencies remain optional client implementation. No public plugin SDK or marketplace is a prerequisite. The capability must work locally without a Tesserafin account or hosted service. Themes own presentation, never the audio graph, credentials or playback state. OneDrop, casting, scene recognition and adaptive processing (#304) are excluded.
+This follows [#146](https://github.com/tesserafin/tesserafin/issues/146): playback semantics belong to core; substantial DSP dependencies remain optional client implementation. No public plugin SDK or marketplace is a prerequisite. The capability must work locally without a Tesserafin account or hosted service. Themes own presentation, never the audio graph, credentials or playback state. OneDrop, casting, scene recognition and adaptive processing (#304) are excluded.
 
 ## Audited revisions and evidence
 
 | Repository | Revision | Evidence |
 | --- | --- | --- |
 | [OneAmp](https://github.com/all3f0r1/oneamp/tree/cbf04e7ba97f000676c829257ce215e41281dd84) | `cbf04e7ba97f000676c829257ce215e41281dd84`, version 1.4.0 | Merged embedding work from [PR #3](https://github.com/all3f0r1/oneamp/pull/3); not an unmerged proposal |
-| [Tesserafin server](https://github.com/tesserafin-project/tesserafin/tree/0f7cce7532a4f155e93f292cf9a04d3bf679772c) | `0f7cce7532a4f155e93f292cf9a04d3bf679772c` | Normalization scanner, encoding filters and playback contracts |
-| [Tesserafin Web](https://github.com/tesserafin-project/tesserafin-web/tree/c370d07fa994cff3b7a8bae8766034f3690d6582) | `c370d07fa994cff3b7a8bae8766034f3690d6582` | Audio element, gain graph, HLS setup and playback manager |
+| [Tesserafin server](https://github.com/tesserafin/tesserafin/tree/0f7cce7532a4f155e93f292cf9a04d3bf679772c) | `0f7cce7532a4f155e93f292cf9a04d3bf679772c` | Normalization scanner, encoding filters and playback contracts |
+| [Tesserafin Web](https://github.com/tesserafin/tesserafin-web/tree/c370d07fa994cff3b7a8bae8766034f3690d6582) | `c370d07fa994cff3b7a8bae8766034f3690d6582` | Audio element, gain graph, HLS setup and playback manager |
 
 Evidence levels must remain separate:
 
@@ -49,13 +49,13 @@ The limiter caps sample peaks at 1.0. Its source does not establish an oversampl
 
 ## Existing Tesserafin processing
 
-The [Web audio player](https://github.com/tesserafin-project/tesserafin-web/blob/c370d07fa994cff3b7a8bae8766034f3690d6582/src/plugins/htmlAudioPlayer/plugin.js) already creates `MediaElementAudioSourceNode → GainNode → destination` when normalization is used. TrackGain selects track metadata with album fallback; AlbumGain reverses that preference. It converts dB using `10^(gain/20)`. Safari also incorporates element volume in this gain path. Creating a second media-element source is not a valid integration strategy: introduce one graph owner and reuse the existing source/context/gain. Preserve the established volume behavior exactly once.
+The [Web audio player](https://github.com/tesserafin/tesserafin-web/blob/c370d07fa994cff3b7a8bae8766034f3690d6582/src/plugins/htmlAudioPlayer/plugin.js) already creates `MediaElementAudioSourceNode → GainNode → destination` when normalization is used. TrackGain selects track metadata with album fallback; AlbumGain reverses that preference. It converts dB using `10^(gain/20)`. Safari also incorporates element volume in this gain path. Creating a second media-element source is not a valid integration strategy: introduce one graph owner and reuse the existing source/context/gain. Preserve the established volume behavior exactly once.
 
-The [playback manager](https://github.com/tesserafin-project/tesserafin-web/blob/c370d07fa994cff3b7a8bae8766034f3690d6582/src/components/playback/playbackmanager.js) supplies album normalization metadata. The existing element time remains the basis of progress; processed sample counts must not replace session time.
+The [playback manager](https://github.com/tesserafin/tesserafin-web/blob/c370d07fa994cff3b7a8bae8766034f3690d6582/src/components/playback/playbackmanager.js) supplies album normalization metadata. The existing element time remains the basis of progress; processed sample counts must not replace session time.
 
-The [server scan](https://github.com/tesserafin-project/tesserafin/blob/0f7cce7532a4f155e93f292cf9a04d3bf679772c/Tesserafin.Server.Core/ScheduledTasks/Tasks/AudioNormalizationTask.cs) runs FFmpeg `ebur128` into a null output and records measurements. A scan does **not** mean delivered audio has already been normalized.
+The [server scan](https://github.com/tesserafin/tesserafin/blob/0f7cce7532a4f155e93f292cf9a04d3bf679772c/Tesserafin.Server.Core/ScheduledTasks/Tasks/AudioNormalizationTask.cs) runs FFmpeg `ebur128` into a null output and records measurements. A scan does **not** mean delivered audio has already been normalized.
 
-The inspected [encoding filter path](https://github.com/tesserafin-project/tesserafin/blob/0f7cce7532a4f155e93f292cf9a04d3bf679772c/Tesserafin.Controller/MediaEncoding/EncodingHelper.cs) can downmix wider input to stereo and add `DownMixAudioBoost`. Its [configuration default](https://github.com/tesserafin-project/tesserafin/blob/0f7cce7532a4f155e93f292cf9a04d3bf679772c/Tesserafin.Model/Configuration/EncodingOptions.cs) is amplitude 2, approximately +6.02 dB. Thus delivered PCM may already have different channels and gain from the original media. This is not a global claim about every server encoding path.
+The inspected [encoding filter path](https://github.com/tesserafin/tesserafin/blob/0f7cce7532a4f155e93f292cf9a04d3bf679772c/Tesserafin.Controller/MediaEncoding/EncodingHelper.cs) can downmix wider input to stereo and add `DownMixAudioBoost`. Its [configuration default](https://github.com/tesserafin/tesserafin/blob/0f7cce7532a4f155e93f292cf9a04d3bf679772c/Tesserafin.Model/Configuration/EncodingOptions.cs) is amplitude 2, approximately +6.02 dB. Thus delivered PCM may already have different channels and gain from the original media. This is not a global claim about every server encoding path.
 
 | Delivery/output path | DSP eligibility and duplicate-processing rule |
 | --- | --- |
@@ -98,7 +98,7 @@ The probe rejects any other Git blob. Success means the documented limitation wa
 
 **Web:** self-host a pinned, reproducibly built WASM and wrapper with content hashes and retained notices. Compile/fetch before enabling; serve WASM correctly and validate CSP/worklet loading. No CDN, account, new media fetcher or credential storage is needed. Scalar WASM does not itself require SharedArrayBuffer/cross-origin isolation.
 
-[Web Audio 1.1](https://www.w3.org/TR/webaudio-1.1/) describes configurable render quantum sizes and silence for media-element sources whose media is CORS-cross-origin. AudioWorklet requires a secure context. The [current helper](https://github.com/tesserafin-project/tesserafin-web/blob/c370d07fa994cff3b7a8bae8766034f3690d6582/src/components/htmlMediaHelper.js) uses no crossOrigin value for remote media and anonymous for other media, with further credential handling in the player. Ability to play an element does not prove ability to process it. Start with verified same-origin media on HTTPS/localhost; keep ordinary playback available on unsupported origins, insecure LAN HTTP, CORS failure or worklet failure. Do not alter playback-credential routing to make DSP work.
+[Web Audio 1.1](https://www.w3.org/TR/webaudio-1.1/) describes configurable render quantum sizes and silence for media-element sources whose media is CORS-cross-origin. AudioWorklet requires a secure context. The [current helper](https://github.com/tesserafin/tesserafin-web/blob/c370d07fa994cff3b7a8bae8766034f3690d6582/src/components/htmlMediaHelper.js) uses no crossOrigin value for remote media and anonymous for other media, with further credential handling in the player. Ability to play an element does not prove ability to process it. Start with verified same-origin media on HTTPS/localhost; keep ordinary playback available on unsupported origins, insecure LAN HTTP, CORS failure or worklet failure. Do not alter playback-credential routing to make DSP work.
 
 **Android:** an eventual Media3 audio-processor adapter is plausible, not implemented. The [official sink builder reference](https://developer.android.com/reference/androidx/media3/exoplayer/audio/DefaultAudioSink.Builder) says processing chains are for PCM, not passthrough/offload, and float output disables audio processing in that documented path (consulted 2026-10-20; not a pinned Media3 selection). Do not assume `setEnableFloatOutput(true)` plus a custom processor works. Pin a Media3 version and prove the actual sink route; likely need deliberate PCM16↔f32 conversion or a separately validated float-capable route. Preserve position/limit semantics, EOS, flush/reset and output counts. Cross-compilation and desktop JVM execution are not ART, AudioTrack, Media3 or device tests.
 
@@ -108,4 +108,4 @@ Upstream CI builds aarch64 and x86_64 JNI with NDK API 24; this does not establi
 
 ## Follow-up
 
-The proposed [host contract](oneamp-host-contract.md) and [DSP-2 Web demonstrator](oneamp-dsp-2-web-demonstrator.md) define the next bounded slice, tracked separately in [tesserafin-web #211](https://github.com/tesserafin-project/tesserafin-web/issues/211). No runtime support is claimed until that slice passes its gates. Re-pin and recheck these findings when the upstream revision or client playback path changes.
+The proposed [host contract](oneamp-host-contract.md) and [DSP-2 Web demonstrator](oneamp-dsp-2-web-demonstrator.md) define the next bounded slice, tracked separately in [tesserafin-web #211](https://github.com/tesserafin/tesserafin-web/issues/211). No runtime support is claimed until that slice passes its gates. Re-pin and recheck these findings when the upstream revision or client playback path changes.

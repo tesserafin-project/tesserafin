@@ -5,9 +5,9 @@ remote-access problem. It **does not enable remote access** or prove that a serv
 is reachable or safe to publish.
 
 This documents the endpoint already present on `master`, delivered in
-[server PR #249](https://github.com/tesserafin-project/tesserafin/pull/249)
+[server PR #249](https://github.com/tesserafin/tesserafin/pull/249)
 with its generated Web SDK. Issue
-[#309](https://github.com/tesserafin-project/tesserafin/issues/309) describes that
+[#309](https://github.com/tesserafin/tesserafin/issues/309) describes that
 same work as not implemented; it does not require a second endpoint. This guide
 adds no server capability and does not certify a particular downloaded release.
 Check the API document served by your installed build when its surface differs.
@@ -133,4 +133,4 @@ clone the locked Web commit and verify the generated SDK; a missing prerequisite
 or an incomplete verification is not a pass. Prior acceptance is recorded in
 PR #249. A documentation edit does not re-run that historical acceptance or
 certify public exposure. Managed publication remains separate work under
-[#241](https://github.com/tesserafin-project/tesserafin/issues/241).
+[#241](https://github.com/tesserafin/tesserafin/issues/241).

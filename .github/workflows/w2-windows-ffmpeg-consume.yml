@@ -61,7 +61,7 @@ env:
   # anything else, and the steps below assert that the manifest agrees with
   # these two values rather than the other way round.
   # `ci/windows/w2/ffmpeg-consume-controls.py` (F12) asserts all three agree.
-  ACCEPTED_REFERENCE: ghcr.io/tesserafin-project/windows-ffmpeg-runtime@sha256:99e45f154a5d72aba4185eb19b6671aa1a11c30be837deac9dd26f473593c0b9
+  ACCEPTED_REFERENCE: ghcr.io/tesserafin/windows-ffmpeg-runtime@sha256:99e45f154a5d72aba4185eb19b6671aa1a11c30be837deac9dd26f473593c0b9
   ACCEPTED_RUNTIME_SHA256: f28cc9186aad757491a6f44e7950d39bc39354dfe9505e278af91d7619811c9e
 
 jobs:

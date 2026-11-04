@@ -131,7 +131,7 @@ every artifact derives from it.
 | Input | Value |
 | --- | --- |
 | Tesserafin Web commit | `a9a362eec764a9fe3fa6ba9b4a7dd7473677e35a` |
-| Tesserafin Web assets image | `ghcr.io/tesserafin-project/tesserafin-web-assets@sha256:6150380052c8a3a154a8a25a9f40a741175a7563afdf89284f9c1f46d3042a6c` |
+| Tesserafin Web assets image | `ghcr.io/tesserafin/tesserafin-web-assets@sha256:6150380052c8a3a154a8a25a9f40a741175a7563afdf89284f9c1f46d3042a6c` |
 | Tesserafin Web payload SHA-256 | `4148c4bc6e0c7c2d6b35ed9992e874a06dcc11d2b6d9e0aad06719e36567be4f` |
 | FFmpeg runtime revision | `7.1.4-tesserafin.1` |
 | FFmpeg upstream commit | `d4590e12452f94d40e413caecb34b08de608353b` |
@@ -197,10 +197,10 @@ that fails closed on any JSON Schema keyword it does not implement.
   "architecture": "amd64",
   "runtimeIdentifier": "linux-x64",
   "serverCommit": "...",
-  "serverRepository": "https://github.com/tesserafin-project/tesserafin.git",
+  "serverRepository": "https://github.com/tesserafin/tesserafin.git",
   "webCommit": "...",
   "webVersion": "1.0.0",
-  "webRepository": "https://github.com/tesserafin-project/tesserafin-web.git",
+  "webRepository": "https://github.com/tesserafin/tesserafin-web.git",
   "webAssetsImage": "ghcr.io/...@sha256:...",
   "webPayloadSha256": "...",
   "ffmpegRuntime": {
@@ -631,7 +631,7 @@ workflow artifacts.
 That paragraph describes this work, and is still true of it. Separately, on
 2026-09-17 the `.deb`, `.rpm` and `.tar.gz` files for
 both architectures were attached to the
-[1.1.0 GitHub Release](https://github.com/tesserafin-project/tesserafin/releases/tag/v1.1.0),
+[1.1.0 GitHub Release](https://github.com/tesserafin/tesserafin/releases/tag/v1.1.0),
 with `SHA256SUMS-linux-x64.txt`. They are unsigned, there is still no APT or DNF
 repository, and no checksum file is attached for `linux-arm64`. The acceptance
 described in this document was made on the workflow's own outputs, and the

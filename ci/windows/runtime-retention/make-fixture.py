@@ -41,7 +41,7 @@ FIXTURE_PROOF_HEAD = "3" * 40
 FIXTURE_FFMPEG = "4" * 40
 FIXTURE_RUN = 1
 FIXTURE_BUILD_INPUTS = (
-    "ghcr.io/tesserafin-project/windows-ffmpeg-build-inputs@sha256:" + "5" * 64
+    "ghcr.io/tesserafin/windows-ffmpeg-build-inputs@sha256:" + "5" * 64
 )
 
 LICENCE_NAMES = [f"fixture-{index:02d}-COPYING" for index in range(22)]

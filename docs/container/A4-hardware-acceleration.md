@@ -279,6 +279,6 @@ MJPEG VAAPI transcoding quality ([#76]) is also out of scope and unchanged;
 `mjpeg_vaapi` remains unavailable for transcode jobs. VAAPI image extraction is
 unchanged.
 
-[#90]: https://github.com/tesserafin-project/tesserafin/issues/90
-[#76]: https://github.com/tesserafin-project/tesserafin/issues/76
-[#91]: https://github.com/tesserafin-project/tesserafin/issues/91
+[#90]: https://github.com/tesserafin/tesserafin/issues/90
+[#76]: https://github.com/tesserafin/tesserafin/issues/76
+[#91]: https://github.com/tesserafin/tesserafin/issues/91

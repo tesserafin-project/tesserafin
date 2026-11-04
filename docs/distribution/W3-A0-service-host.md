@@ -1,6 +1,6 @@
 # W3-A0 — the Generic Host service boundary and the non-zero fatal exit
 
-Tracker: [#234](https://github.com/tesserafin-project/tesserafin/issues/234).
+Tracker: [#234](https://github.com/tesserafin/tesserafin/issues/234).
 Ruling: `OWNER RULING — W3-A0 SERVICE HOST BOUNDARY`, 2026-09-09, on #234.
 Contract: [`W0-windows-server.md`](W0-windows-server.md) §2.5 and §4.
 Frozen starting master: `81ee1b00d659109aefe46cf862edcd45ee0e46be`, which is

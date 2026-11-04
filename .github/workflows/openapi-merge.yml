@@ -5,7 +5,7 @@
 # repository server over SCP/SSH, needs `REPO_HOST`, `REPO_USER` and `REPO_KEY`
 # secrets that do not exist on this repository or organisation, and both jobs
 # are guarded by `contains(github.repository_owner, 'reefin')` — so even
-# dispatched by hand under `tesserafin-project` they would be skipped. There is
+# dispatched by hand under `tesserafin` they would be skipped. There is
 # no verified Tesserafin publication destination, and inventing one would mean
 # creating infrastructure and secrets, which is out of scope for #162.
 #

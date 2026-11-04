@@ -230,7 +230,7 @@ jobs:
           ./ci/windows/runtime-retention/oci-protocol.sh push \
             --allow-remote \
             --oci  "${RUNNER_TEMP}/oci" \
-            --repo ghcr.io/tesserafin-project/windows-ffmpeg-runtime
+            --repo ghcr.io/tesserafin/windows-ffmpeg-runtime
 
       # The immutable convenience tag. Never repointed: if it already resolves
       # elsewhere this refuses, and if it already resolves to this digest the
@@ -247,7 +247,7 @@ jobs:
           ./ci/windows/runtime-retention/oci-protocol.sh tag \
             --allow-remote \
             --oci  "${RUNNER_TEMP}/oci" \
-            --repo ghcr.io/tesserafin-project/windows-ffmpeg-runtime \
+            --repo ghcr.io/tesserafin/windows-ffmpeg-runtime \
             --tag  "${tag}"
 
       # What the registry STORED, compared byte for byte against what was
@@ -260,7 +260,7 @@ jobs:
           export PATH="${RUNNER_TEMP}/bin:${PATH}"
           ./ci/windows/runtime-retention/oci-protocol.sh verify \
             --oci  "${RUNNER_TEMP}/oci" \
-            --repo ghcr.io/tesserafin-project/windows-ffmpeg-runtime \
+            --repo ghcr.io/tesserafin/windows-ffmpeg-runtime \
             --out  "${RUNNER_TEMP}/pulled" | tee -a "${GITHUB_STEP_SUMMARY}"
 
       - name: Record what was published

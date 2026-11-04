@@ -1,7 +1,7 @@
 # Installing Tesserafin on Windows (`win-x64`)
 
-Tracker: [#276](https://github.com/tesserafin-project/tesserafin/issues/276).
-Refs [#129](https://github.com/tesserafin-project/tesserafin/issues/129).
+Tracker: [#276](https://github.com/tesserafin/tesserafin/issues/276).
+Refs [#129](https://github.com/tesserafin/tesserafin/issues/129).
 
 Tesserafin 1.1 names two native Windows forms of the same server:
 
@@ -20,7 +20,7 @@ This document describes only what the W2, W3 and W4 slices measured on
 describing how it ought to behave.
 
 **Download.** The unsigned portable ZIP is attached to the GitHub Release
-[`v1.1.0`](https://github.com/tesserafin-project/tesserafin/releases/tag/v1.1.0)
+[`v1.1.0`](https://github.com/tesserafin/tesserafin/releases/tag/v1.1.0)
 as `tesserafin-server_1.0.0_win-x64.zip`, SHA-256
 `c1f6261cb770bd3dcbf255f4dd15b287a7289adad5a619d31725c158cd20e2d8` (the W5-A1
 pin, §1). It is not Authenticode-signed. The MSI is not attached to that

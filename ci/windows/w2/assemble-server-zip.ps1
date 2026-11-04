@@ -991,7 +991,7 @@ try {
         runtimeIdentifier = $RID
         selfContained = $true
         serverCommit = $commit
-        serverRepository = 'https://github.com/tesserafin-project/tesserafin'
+        serverRepository = 'https://github.com/tesserafin/tesserafin'
         sourceDateEpoch = $SourceDateEpoch
         buildTimestamp = [System.DateTimeOffset]::FromUnixTimeSeconds($SourceDateEpoch).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
         web = [ordered]@{

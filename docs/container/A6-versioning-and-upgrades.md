@@ -1,6 +1,6 @@
 # A6 — Image versioning, channels and the upgrade contract
 
-Issue [#92](https://github.com/tesserafin-project/tesserafin/issues/92). This is
+Issue [#92](https://github.com/tesserafin/tesserafin/issues/92). This is
 both the operator-facing upgrade contract and the A6 implementation note: the
 audit that preceded the change is recorded in the last section.
 
@@ -9,14 +9,14 @@ Prerequisites: [A1](./A1-implementation-note.md) (the image),
 [A3](./A3-guided-install.md) (installation).
 
 > **Current operator scope.** Use the public release package
-> `ghcr.io/tesserafin-project/server` and the immutable reference selected in
+> `ghcr.io/tesserafin/server` and the immutable reference selected in
 > [the installation guide](../install.md). The development/audit evidence in the
 > later sections is retained at its original paths and identities; it is not a
 > source of supported installation defaults. No mutable public channel exists.
 >
 > The historical harness proves state preservation between its recorded builds.
 > It does not prove a pending forward migration between published `1.x` images;
-> [#127](https://github.com/tesserafin-project/tesserafin/issues/127) remains the
+> [#127](https://github.com/tesserafin/tesserafin/issues/127) remains the
 > separate acceptance gate. No database downgrade or backport is promised here.
 
 ---
@@ -39,7 +39,7 @@ the application version of the artifact they describe.
 ## 2. The tag policy
 
 [The version policy](../versioning-policy.md) is authoritative for publication.
-The existing public container release is `ghcr.io/tesserafin-project/server:1.0.0`;
+The existing public container release is `ghcr.io/tesserafin/server:1.0.0`;
 the checked-in Compose file pins its immutable digest. There is no published
 `latest`, `stable`, `preview`, `1` or `1.0` channel. Do not invent one or use a
 private development package as an installation fallback.
@@ -65,7 +65,7 @@ was not produced by the contract and should not be trusted.
 ```console
 # What the image claims
 $ docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}} {{index .Config.Labels "org.opencontainers.image.revision"}}' \
-    ghcr.io/tesserafin-project/server:1.0.0
+    ghcr.io/tesserafin/server:1.0.0
 
 # Which exact image is running, by digest
 $ docker inspect --format '{{.Image}} {{.Config.Image}}' tesserafin
@@ -84,24 +84,24 @@ the readiness contract, not a fault. Readiness is `200` **and**
 To check everything at once against a real container:
 
 ```console
-$ docker/version-verify.sh ghcr.io/tesserafin-project/server:1.0.0 --require-digest
+$ docker/version-verify.sh ghcr.io/tesserafin/server:1.0.0 --require-digest
 ```
 
 ### Pinning to an exact version or digest
 
 ```dotenv
 # .env — exact immutable version tag
-TESSERAFIN_IMAGE=ghcr.io/tesserafin-project/server:1.0.0
+TESSERAFIN_IMAGE=ghcr.io/tesserafin/server:1.0.0
 
 # .env — digest pin, the strongest form; survives a tag being re-pointed
-TESSERAFIN_IMAGE=ghcr.io/tesserafin-project/server@sha256:bc7587bc7d99b40d77770046d49a2931ff8162b6d1df3da8d3f108b7677d7dc3
+TESSERAFIN_IMAGE=ghcr.io/tesserafin/server@sha256:bc7587bc7d99b40d77770046d49a2931ff8162b6d1df3da8d3f108b7677d7dc3
 ```
 
 Resolve a tag to its digest before pinning:
 
 ```console
-$ docker pull ghcr.io/tesserafin-project/server:1.0.0
-$ docker image inspect --format '{{index .RepoDigests 0}}' ghcr.io/tesserafin-project/server:1.0.0
+$ docker pull ghcr.io/tesserafin/server:1.0.0
+$ docker image inspect --format '{{index .RepoDigests 0}}' ghcr.io/tesserafin/server:1.0.0
 ```
 
 ---
@@ -174,8 +174,8 @@ part of the backup archive.
 
 ```console
 $ docker/upgrade-roundtrip.sh \
-    --baseline  ghcr.io/tesserafin-project/tesserafin@sha256:<baseline digest> \
-    --candidate ghcr.io/tesserafin-project/tesserafin@sha256:<candidate digest>
+    --baseline  ghcr.io/tesserafin/tesserafin@sha256:<baseline digest> \
+    --candidate ghcr.io/tesserafin/tesserafin@sha256:<candidate digest>
 ```
 
 It boots the baseline by digest on fresh volumes, onboards it, creates two user
@@ -236,7 +236,7 @@ the installation default; see §5c for the current baseline.
 
 
 ```
-ghcr.io/tesserafin-project/tesserafin:12.0.0-dev.a8a18bb7c07b
+ghcr.io/tesserafin/tesserafin:12.0.0-dev.a8a18bb7c07b
 ```
 
 | | Digest |
@@ -260,7 +260,7 @@ honest outcome today.
 Pull it by digest rather than by tag if you want the guarantee in writing:
 
 ```console
-$ docker pull ghcr.io/tesserafin-project/tesserafin@sha256:29493c0ecf956a61f06c2b801e7c867d560fb95ab184c09d05fdb6db508a7722
+$ docker pull ghcr.io/tesserafin/tesserafin@sha256:29493c0ecf956a61f06c2b801e7c867d560fb95ab184c09d05fdb6db508a7722
 ```
 
 ---
@@ -271,7 +271,7 @@ This is what `docker-compose.yml`, `.env.example`, the Unraid template and
 [`A3-guided-install.md`](./A3-guided-install.md) name today.
 
 ```
-ghcr.io/tesserafin-project/server:1.0.0
+ghcr.io/tesserafin/server:1.0.0
 ```
 
 | | Digest |
@@ -283,7 +283,7 @@ ghcr.io/tesserafin-project/server:1.0.0
 Built from `6227dbef66c631081e3179a521561b32b94dac59`; reports version `1.0.0`.
 The `1.0.0` tag is immutable and is never re-pointed. The same manifest also exists
 in the private build package as
-`ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.6227dbef66c6` and
+`ghcr.io/tesserafin/tesserafin-server:1.0.0-dev.6227dbef66c6` and
 `…:sha-6227dbef66c631081e3179a521561b32b94dac59`; those are build provenance, not
 installation references.
 
@@ -310,22 +310,22 @@ replacement above is the same tree with those credentials removed and nothing
 else changed; the three providers are now operator-supplied only. See
 [`../metadata-provider-keys.md`](../metadata-provider-keys.md),
 [`../provider-auth-audit.md`](../provider-auth-audit.md) and
-[tesserafin#174](https://github.com/tesserafin-project/tesserafin/issues/174). `docker-compose.yml` pins the manifest digest; the dev tag is
+[tesserafin#174](https://github.com/tesserafin/tesserafin/issues/174). `docker-compose.yml` pins the manifest digest; the dev tag is
 provenance and an alternative spelling, never a moving channel. `1.0.0`, `1.0`,
 `1`, `latest`, `stable` and `preview` are **not** published.
 
 Bundled Tesserafin Web `1.0.0` at commit
 `a9a362eec764a9fe3fa6ba9b4a7dd7473677e35a`
-(`ghcr.io/tesserafin-project/tesserafin-web-assets@sha256:6150380052c8a3a154a8a25a9f40a741175a7563afdf89284f9c1f46d3042a6c`,
+(`ghcr.io/tesserafin/tesserafin-web-assets@sha256:6150380052c8a3a154a8a25a9f40a741175a7563afdf89284f9c1f46d3042a6c`,
 tag `1.0.0-dev.a9a362eec764`).
 
 This is the accepted **B2** presentation/responsive/a11y release candidate
-([tesserafin-web#55](https://github.com/tesserafin-project/tesserafin-web/issues/55),
+([tesserafin-web#55](https://github.com/tesserafin/tesserafin-web/issues/55),
 closed as completed). Its B2 evidence — three consecutive rounds of the complete
 127-test tesserafin-web browser suite, three separate pristine-instance onboarding
 rounds, `npm run validate:full` (901 tests) and the bundle budget — is
-[on that issue](https://github.com/tesserafin-project/tesserafin-web/issues/55#issuecomment-5119431103),
-with [maintainer visual acceptance](https://github.com/tesserafin-project/tesserafin-web/issues/55#issuecomment-5122635858)
+[on that issue](https://github.com/tesserafin/tesserafin-web/issues/55#issuecomment-5119431103),
+with [maintainer visual acceptance](https://github.com/tesserafin/tesserafin-web/issues/55#issuecomment-5122635858)
 across desktop, mobile and TV.
 
 Gates re-run against that digest when it was promoted to the installation
@@ -363,7 +363,7 @@ candidate. It is no longer an installation default.
 (tag `1.0.0-dev.44f5ab62b522`, server `44f5ab62b522684b4fa58ed10de80b8c6a7bb392`,
 bundled web `489a90be0dbe80aede3dbbc028b140756211d43c`) was the baseline named here
 before. It is **not** deleted, retagged or moved, and it did **not** pass
-tesserafin-project/tesserafin-web#67: it shipped the web client in which a
+tesserafin/tesserafin-web#67: it shipped the web client in which a
 terminal playback failure was silent. Its own record, including that failure, is
 [`A7-server-web-release-pair.md`](./A7-server-web-release-pair.md) §6b. It is no
 longer an installation default.
@@ -375,7 +375,7 @@ remains open and A6 remains unchecked in #104.
 ### The superseded candidate
 
 ```
-ghcr.io/tesserafin-project/tesserafin-server:1.0.0-dev.965fadf37e20
+ghcr.io/tesserafin/tesserafin-server:1.0.0-dev.965fadf37e20
 sha256:fffb46a41919dfedf0d5bacc68b9c37ebbca0400df74b487ba5858b395440e5c
 ```
 

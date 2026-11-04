@@ -1,6 +1,6 @@
 # W2-A6 — The directory sanity marker rename
 
-Tracker: [#256](https://github.com/tesserafin-project/tesserafin/issues/256).
+Tracker: [#256](https://github.com/tesserafin/tesserafin/issues/256).
 Umbrella: #234. Base master:
 `147687f323cdc77f545520a095abf2f7c2a5df1e`, which is W2-A5 as accepted.
 

@@ -1,6 +1,6 @@
 # W4-A4 — MajorUpgrade replaces the binaries and keeps the state
 
-Tracker: [#234](https://github.com/tesserafin-project/tesserafin/issues/234).
+Tracker: [#234](https://github.com/tesserafin/tesserafin/issues/234).
 Ruling: **W4-A4 MAJOR UPGRADE**, authorising this slice from master at
 `779e9fec23e285cc3a1ba4aeede8d24835b3ce45`.
 

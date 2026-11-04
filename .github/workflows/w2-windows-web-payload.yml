@@ -44,7 +44,7 @@ env:
   # open the script to know what was consumed. The script holds the same values
   # and refuses anything else; ci/windows/w2/web-payload-controls.py (C21)
   # asserts the two agree.
-  ACCEPTED_IMAGE: ghcr.io/tesserafin-project/tesserafin-web-assets@sha256:6150380052c8a3a154a8a25a9f40a741175a7563afdf89284f9c1f46d3042a6c
+  ACCEPTED_IMAGE: ghcr.io/tesserafin/tesserafin-web-assets@sha256:6150380052c8a3a154a8a25a9f40a741175a7563afdf89284f9c1f46d3042a6c
   ACCEPTED_TREE_DIGEST: 4148c4bc6e0c7c2d6b35ed9992e874a06dcc11d2b6d9e0aad06719e36567be4f
   ACCEPTED_WEB_REVISION: a9a362eec764a9fe3fa6ba9b4a7dd7473677e35a
 

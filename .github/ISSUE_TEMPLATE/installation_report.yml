@@ -6,7 +6,7 @@ body:
     attributes:
       value: |
         Help us verify the published installation guides on independent machines.
-        Successful and unsuccessful runs both help. See the [report guide](https://github.com/tesserafin-project/tesserafin/blob/master/docs/installation-reports.md) and [collection tracker #117](https://github.com/tesserafin-project/tesserafin/issues/117).
+        Successful and unsuccessful runs both help. See the [report guide](https://github.com/tesserafin/tesserafin/blob/master/docs/installation-reports.md) and [collection tracker #117](https://github.com/tesserafin/tesserafin/issues/117).
         This is public: remove passwords, tokens, personal paths and addresses. Do not attach a database, backup, complete configuration or unreviewed logs.
         Suspected vulnerabilities belong in the repository's Security tab → Report a vulnerability, not here.
   - type: dropdown

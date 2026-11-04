@@ -7,7 +7,7 @@ cd "${REPO_ROOT}"
 EVIDENCE="${REPO_ROOT}/artifacts/forward-migration"
 mkdir -p "${EVIDENCE}"
 
-BASELINE='ghcr.io/tesserafin-project/tesserafin-server@sha256:fd1fa9e0f5a28a07e5872cc5ff13257a92d988717a33519f62c4b26c6ab36249'
+BASELINE='ghcr.io/tesserafin/tesserafin-server@sha256:fd1fa9e0f5a28a07e5872cc5ff13257a92d988717a33519f62c4b26c6ab36249'
 BASE_REVISION='44f5ab62b522684b4fa58ed10de80b8c6a7bb392'
 # No container was ever published for v1.1.0 (bb2234ae). The candidate is the
 # owner-approved immutable dev build of master 60f7a9c9bf, pushed 2026-10-23 as
@@ -15,7 +15,7 @@ BASE_REVISION='44f5ab62b522684b4fa58ed10de80b8c6a7bb392'
 # It contains migration 20260807161612_AddContentPacks; the baseline does not.
 # Preflight still proves the tag is readable and its OCI revision matches.
 CAND_REVISION='60f7a9c9bfd22e9fa8714248998a51a1ef26e88b'
-CANDIDATE_TAG="ghcr.io/tesserafin-project/tesserafin-server:sha-${CAND_REVISION}"
+CANDIDATE_TAG="ghcr.io/tesserafin/tesserafin-server:sha-${CAND_REVISION}"
 
 HARNESS_SOURCE="$(git rev-parse HEAD)"
 printf 'Harness source: %s\n' "${HARNESS_SOURCE}"
@@ -55,7 +55,7 @@ for role, image, revision in zip(("baseline", "candidate"), images, sys.argv[2:]
     if image.get("Architecture") != "amd64" or image.get("Os") != "linux":
         raise SystemExit(role + ": expected linux/amd64")
     refs = [r for r in image.get("RepoDigests", []) if re.fullmatch(
-        r"ghcr\.io/tesserafin-project/tesserafin-server@sha256:[0-9a-f]{64}", r)]
+        r"ghcr\.io/tesserafin/tesserafin-server@sha256:[0-9a-f]{64}", r)]
     if len(set(refs)) != 1:
         raise SystemExit(role + ": expected one unambiguous registry digest")
     result[role] = {

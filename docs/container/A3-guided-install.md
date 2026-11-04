@@ -1,6 +1,6 @@
 # [A3] Guided NAS / Docker install — operator guide
 
-Issue: tesserafin-project/tesserafin #89. Depends on #87 [A1] (the prebuilt image)
+Issue: tesserafin/tesserafin #89. Depends on #87 [A1] (the prebuilt image)
 and #88 [A2] (the persistent-state contract). This guide gets a first-time
 self-hoster from nothing to a running, onboarded Tesserafin server **without
 building anything from source**.
@@ -17,16 +17,16 @@ Related docs:
 ## The image
 
 > **Epoch note.** Tesserafin public SemVer begins at `1.0.0`, published to the
-> public release package `ghcr.io/tesserafin-project/server` — see
+> public release package `ghcr.io/tesserafin/server` — see
 > [`../versioning-policy.md`](../versioning-policy.md).
-> `ghcr.io/tesserafin-project/tesserafin` is the frozen pre-v1 archive and never
+> `ghcr.io/tesserafin/tesserafin` is the frozen pre-v1 archive and never
 > receives another tag. This guide names the published `1.0.0` release, and no
 > moving channel (`latest`, `preview`, `1`, `1.0`) exists.
 
 All paths here use the immutable image published to GHCR:
 
 ```
-ghcr.io/tesserafin-project/server:1.0.0
+ghcr.io/tesserafin/server:1.0.0
 ```
 
 - Multi-arch manifest digest: `sha256:bc7587bc7d99b40d77770046d49a2931ff8162b6d1df3da8d3f108b7677d7dc3`
@@ -39,7 +39,7 @@ ghcr.io/tesserafin-project/server:1.0.0
   re-pointed, so it is not a moving channel.
 - It supersedes `1.0.0-dev.28ace1b74f42`
   (`sha256:636c3038a7eb…`), the accepted B2 presentation/responsive/a11y release
-  candidate ([tesserafin-web#55](https://github.com/tesserafin-project/tesserafin-web/issues/55)).
+  candidate ([tesserafin-web#55](https://github.com/tesserafin/tesserafin-web/issues/55)).
   That image's presentation evidence still stands, but it carried three
   third-party metadata provider credentials inherited from upstream and compiled
   into `Tesserafin.Providers.dll`:
@@ -47,10 +47,10 @@ ghcr.io/tesserafin-project/server:1.0.0
   It stays published and immutable — it is not deleted — but it is no longer an
   installation default. The image above is the same tree with those credentials
   removed; nothing else about the build changed. See
-  [tesserafin#174](https://github.com/tesserafin-project/tesserafin/issues/174)
+  [tesserafin#174](https://github.com/tesserafin/tesserafin/issues/174)
   and [`metadata-provider-keys.md`](../metadata-provider-keys.md).
 - Bundled Tesserafin Web `1.0.0` at commit `a9a362eec764a9fe3fa6ba9b4a7dd7473677e35a`
-  (`ghcr.io/tesserafin-project/tesserafin-web-assets@sha256:6150380052c8a3a154a8a25a9f40a741175a7563afdf89284f9c1f46d3042a6c`),
+  (`ghcr.io/tesserafin/tesserafin-web-assets@sha256:6150380052c8a3a154a8a25a9f40a741175a7563afdf89284f9c1f46d3042a6c`),
   recorded in the image's `org.tesserafin.web.revision` label and in
   `/opt/tesserafin-web.revision.json` inside the image.
 
@@ -76,7 +76,7 @@ ghcr.io/tesserafin-project/server:1.0.0
 > browser rendered `Update Required` instead of the onboarding wizard; never
 > pinned as an installation default; superseded by the validated replacement named
 > above. It remains published, immutable and private, and is not deleted, retagged,
-> moved or overwritten. See tesserafin-project/tesserafin-web#65.
+> moved or overwritten. See tesserafin/tesserafin-web#65.
 
 ## Prerequisites
 
@@ -190,7 +190,7 @@ Use the repository’s [Unraid template](../../deployment/unraid/docker-template
 this does not claim a published Community Applications catalogue listing:
 
 1. Docker tab → Template Repositories →
-   `https://github.com/tesserafin-project/tesserafin/tree/master/deployment/unraid/docker-templates`
+   `https://github.com/tesserafin/tesserafin/tree/master/deployment/unraid/docker-templates`
 2. Add Container → select **Tesserafin** from the template, if your Unraid version
    supports adding template repositories; otherwise import the linked template
    using its supported custom-template mechanism.
@@ -207,7 +207,7 @@ DSM 7.2+ with **Container Manager** installed.
 
 1. **Download the image.** Container Manager → *Registry*. If your DSM registry is
    not configured for GHCR, the reliable path is SSH +
-   `docker pull ghcr.io/tesserafin-project/server:1.0.0`. The release package is
+   `docker pull ghcr.io/tesserafin/server:1.0.0`. The release package is
    public, so no `docker login` is required.
 2. **Create folders.** In *File Station*, under a `docker` shared folder create
    `tesserafin/config`, `tesserafin/data`, `tesserafin/cache`, and note your media

@@ -123,7 +123,7 @@
 > exécutés**, runner `GitHub Actions 1000000000`, label `ubuntu-latest` —
 > l'exact opposé de la signature de panne (échec en 3-4 s, zéro step, aucun
 > runner). Le dépôt appartient désormais à l'organisation
-> `tesserafin-project` ; l'allocation personnelle `all3f0r1` citée plus bas
+> `tesserafin` ; l'allocation personnelle `all3f0r1` citée plus bas
 > n'est plus le pool facturé. **Tout le diagnostic de juillet ci-dessous est
 > conservé comme archive, il ne décrit plus l'état courant.**
 >

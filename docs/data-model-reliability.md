@@ -1,6 +1,6 @@
 # Data model reliability
 
-Tracking issue: [#360](https://github.com/tesserafin-project/tesserafin/issues/360).
+Tracking issue: [#360](https://github.com/tesserafin/tesserafin/issues/360).
 The initial audit targets `d2fd71e800ce440cfd3438bebc1c2cceb9ca945c`.
 This document records bounded implementation contracts; it does not declare the
 whole data model validated.

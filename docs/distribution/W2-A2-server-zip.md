@@ -1,7 +1,7 @@
 # W2-A2 — a deterministic `win-x64` server ZIP
 
-Tracker: [#256](https://github.com/tesserafin-project/tesserafin/issues/256) ·
-umbrella [#234](https://github.com/tesserafin-project/tesserafin/issues/234) ·
+Tracker: [#256](https://github.com/tesserafin/tesserafin/issues/256) ·
+umbrella [#234](https://github.com/tesserafin/tesserafin/issues/234) ·
 base `d04689277c61e59e9b15815cb6de92ee67ef458e`
 
 W2-A2 adds a packer and a proof. It does not start a server, does not relocate

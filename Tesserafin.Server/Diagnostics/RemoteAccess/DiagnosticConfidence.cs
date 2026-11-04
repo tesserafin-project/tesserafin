@@ -6,7 +6,7 @@ namespace Tesserafin.Server.Diagnostics.RemoteAccess;
 /// <remarks>
 /// This is the whole point of the R1 layer. A networking diagnostic that reports one flat
 /// "status" invites the reader to treat a local socket check as proof of Internet reachability,
-/// which is the mistake tesserafin-project/tesserafin#241 exists to prevent. Every finding
+/// which is the mistake tesserafin/tesserafin#241 exists to prevent. Every finding
 /// therefore says how it was arrived at, and two of the five values are ways of saying
 /// "not known" — deliberately, because missing evidence must never round up to success.
 /// </remarks>

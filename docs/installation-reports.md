@@ -5,8 +5,8 @@ what worked and where you got stuck. Successful, partial and failed runs all
 help improve the instructions. Native ARM64 hardware, Unraid and Synology DSM
 Container Manager are particularly useful gaps to cover.
 
-[Open an installation report](https://github.com/tesserafin-project/tesserafin/issues/new?template=installation_report.yml).
-The reports are collected under [#117](https://github.com/tesserafin-project/tesserafin/issues/117).
+[Open an installation report](https://github.com/tesserafin/tesserafin/issues/new?template=installation_report.yml).
+The reports are collected under [#117](https://github.com/tesserafin/tesserafin/issues/117).
 Search that tracker and existing reports first; add another run to an existing
 report if it is the same host, artifact and procedure.
 

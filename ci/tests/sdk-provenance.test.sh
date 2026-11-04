@@ -185,7 +185,7 @@ run_control nonexistent-commit 1 "does not exist in" \
     --server-repo "$REPO_ROOT" --lock "$CONTROLS_DIR/ghost.json" --server-commit "$SERVER_COMMIT"
 
 # 4. Nonexistent repository — the access failure must be red, not skipped.
-jq '.webRepository = "tesserafin-project/tesserafin-web-does-not-exist"' "$REAL_LOCK" \
+jq '.webRepository = "tesserafin/tesserafin-web-does-not-exist"' "$REAL_LOCK" \
     > "$CONTROLS_DIR/norepo.json"
 run_control missing-repository 1 "cannot clone" \
     --server-repo "$REPO_ROOT" --lock "$CONTROLS_DIR/norepo.json" --server-commit "$SERVER_COMMIT"

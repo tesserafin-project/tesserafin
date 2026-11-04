@@ -170,11 +170,11 @@ refuses control.push-refuses-tag-reference "REFERENCE-REJECTED:tag-and-digest" \
 # before ORAS is invoked, so nothing here reaches the network.
 refuses control.write-refuses-non-loopback "without --allow-remote" \
   "${PROTOCOL}" push --oci "${OCI}" \
-  --repo ghcr.io/tesserafin-project/windows-ffmpeg-runtime --plain-http
+  --repo ghcr.io/tesserafin/windows-ffmpeg-runtime --plain-http
 
 refuses control.tag-refuses-non-loopback "without --allow-remote" \
   "${PROTOCOL}" tag --oci "${OCI}" \
-  --repo ghcr.io/tesserafin-project/windows-ffmpeg-runtime --tag "${tag}" --plain-http
+  --repo ghcr.io/tesserafin/windows-ffmpeg-runtime --tag "${tag}" --plain-http
 
 # ── the authority is parsed, so the shapes that used to slip past are refused ─
 # Until W1-A4-R2 the guard did `host="${host%%:*}"` and compared the result to a

@@ -1,8 +1,8 @@
 # Tesserafin versioning policy
 
-Issues [#92](https://github.com/tesserafin-project/tesserafin/issues/92) ([A6]),
-[#101](https://github.com/tesserafin-project/tesserafin/issues/101) ([E1]),
-[#127](https://github.com/tesserafin-project/tesserafin/issues/127).
+Issues [#92](https://github.com/tesserafin/tesserafin/issues/92) ([A6]),
+[#101](https://github.com/tesserafin/tesserafin/issues/101) ([E1]),
+[#127](https://github.com/tesserafin/tesserafin/issues/127).
 
 This document is authoritative for **which numbers Tesserafin publishes, where it
 publishes them, and how a consumer is allowed to resolve a release**. It sits
@@ -28,8 +28,8 @@ server and the web client share that number.
 
 ### 1.1 What the inherited artifacts are
 
-Every `ghcr.io/tesserafin-project/tesserafin:12.0.0-dev.*` server image and every
-`ghcr.io/tesserafin-project/tesserafin-web-assets:13.0.0-dev.*` web-assets image
+Every `ghcr.io/tesserafin/tesserafin:12.0.0-dev.*` server image and every
+`ghcr.io/tesserafin/tesserafin-web-assets:13.0.0-dev.*` web-assets image
 that already exists:
 
 * **is retained.** None is deleted, retagged, moved or rewritten. They are the
@@ -78,10 +78,10 @@ claim over upstream plugin binaries, and it does not silently accept them either
 
 | Package | Role | Visibility |
 |---|---|---|
-| `ghcr.io/tesserafin-project/server` | **public release package** — the only thing a user installs from; contains released manifests and nothing else | public |
-| `ghcr.io/tesserafin-project/tesserafin` | **pre-v1 server archive** — every inherited `12.0.0-dev.*` image | private |
-| `ghcr.io/tesserafin-project/tesserafin-server` | **canonical v1+ build package** — every immutable CI build, including the ones that are never released | private |
-| `ghcr.io/tesserafin-project/tesserafin-web-assets` | web-assets package, spanning both epochs | private |
+| `ghcr.io/tesserafin/server` | **public release package** — the only thing a user installs from; contains released manifests and nothing else | public |
+| `ghcr.io/tesserafin/tesserafin` | **pre-v1 server archive** — every inherited `12.0.0-dev.*` image | private |
+| `ghcr.io/tesserafin/tesserafin-server` | **canonical v1+ build package** — every immutable CI build, including the ones that are never released | private |
+| `ghcr.io/tesserafin/tesserafin-web-assets` | web-assets package, spanning both epochs | private |
 
 A release is a **copy, by digest, from the build package into the release
 package**. The manifest is never rebuilt, so a released image and its build-package
@@ -162,7 +162,7 @@ at the time of writing.
 `stable` channel, and `docker/version-contract.test.sh` asserts it.
 
 No mutable tag has been published in either package. The first public release is
-gated on [#103](https://github.com/tesserafin-project/tesserafin/issues/103) [E3].
+gated on [#103](https://github.com/tesserafin/tesserafin/issues/103) [E3].
 
 ---
 
@@ -171,7 +171,7 @@ gated on [#103](https://github.com/tesserafin-project/tesserafin/issues/103) [E3
 Two promises are deliberately distinct.
 
 **Before v1 — prove one real forward migration inside the `1.x` epoch.**
-[#127](https://github.com/tesserafin-project/tesserafin/issues/127) is satisfied
+[#127](https://github.com/tesserafin/tesserafin/issues/127) is satisfied
 only by a run of
 
 ```
@@ -216,7 +216,7 @@ re-implement the derivation.
 
 ## 7. Publication rules for 1.1
 
-Tracker [#276](https://github.com/tesserafin-project/tesserafin/issues/276).
+Tracker [#276](https://github.com/tesserafin/tesserafin/issues/276).
 Contract: [W5-A0](./distribution/W5-A0-acceptance-contract.md).
 
 1.1 adds native artifacts beside the container: Linux `.deb`, `.rpm` and
@@ -226,7 +226,7 @@ container. For 1.1, additionally:
 * **The Git tag and the GitHub Release are W5-A4, and owner-only.** No agent
   slice, workflow or pull request creates either. W5-A4 has created both: Git
   tag `v1.1.0` at `bb2234aebbf0ff2c1cbe291df48f2ffa62beea46`, and the
-  [GitHub Release](https://github.com/tesserafin-project/tesserafin/releases/tag/v1.1.0)
+  [GitHub Release](https://github.com/tesserafin/tesserafin/releases/tag/v1.1.0)
   published 13 September 2026.
 * **The unsigned `win-x64` ZIP digest is the W5-A1 pin**,
   [`ci/windows/w5/accepted-unsigned-zip.json`](../ci/windows/w5/accepted-unsigned-zip.json):
