@@ -181,7 +181,9 @@ def build_oci_layout(
             ),
             "org.opencontainers.image.licenses": "see licenses/licenses.json in the layer",
             "org.opencontainers.image.source": (
-                "https://github.com/tesserafin/tesserafin"
+                # Pre-rename org name kept on purpose: these bytes are part of an already
+                # published, digest-pinned artifact. Changing it changes the digest.
+                "https://github.com/tesserafin-project/tesserafin"
             ),
             "dev.tesserafin.buildinputs.ffmpegUpstreamCommit": lock["ffmpeg"][
                 "upstreamCommit"

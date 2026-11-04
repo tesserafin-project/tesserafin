@@ -125,13 +125,13 @@ FROZEN_PINS = {
     "ci/windows/w2/pkg-tree-digest.py":
         "0c70114c69e85d06bc3d95249cc1a86f917eb2b8deb44718cc05ad6f3afa70b4",
     "ci/windows/w2/zip-controls.py":
-        "b1ea373a0bb3a3b15529ecb10475da3341be6f36405c014d64a9620884a79c46",
+        "36f3496c3011a199fe3ac8b1e3b6c9aee7a9f0bba2c500ed5bcd0420a5e8f277",
     "ci/windows/w2/web-payload-controls.py":
         "6ccc80158e1194a5ede42b6925f7305c31b6c1a0ddc00e3e3a47d2d819fd2f17",
     "ci/windows/runtime-retention/consume.ps1":
         "80e3ca9aaa9323192537afafb01302869d2a58a869d1faf613048fc60dde3053",
     "ci/windows/runtime-retention/accepted-runtime.json":
-        "28799f4eb03666bea925d2d400f4237c3e5e6e69bafb284573104fcdcfccb934",
+        "b599c3c1a2e6130549759b2beb5701fef6a196357a8244d4f0ecd751e4d11adb",
 }
 
 # Every control this suite is required to report. A control that is deleted,

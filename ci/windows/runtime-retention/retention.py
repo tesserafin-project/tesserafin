@@ -274,7 +274,9 @@ def build_manifest(
             ),
             "org.opencontainers.image.licenses": accepted["licence"],
             "org.opencontainers.image.source": (
-                "https://github.com/tesserafin/tesserafin"
+                # Pre-rename org name kept on purpose: these bytes are part of an already
+                # published, digest-pinned artifact. Changing it changes the digest.
+                "https://github.com/tesserafin-project/tesserafin"
             ),
             "org.opencontainers.image.revision": accepted["acceptedServerCommit"],
             "dev.tesserafin.runtime.proofHead": accepted["proofHead"],

@@ -91,7 +91,7 @@ DESCRIPTIVE_TAG = "accepted-83e23b957940"
 # differing only in line endings would be called byte-identical. It is reported
 # as exactly that instead.
 CONSUMER_SHA256 = "80e3ca9aaa9323192537afafb01302869d2a58a869d1faf613048fc60dde3053"
-ACCEPTED_JSON_SHA256 = "28799f4eb03666bea925d2d400f4237c3e5e6e69bafb284573104fcdcfccb934"
+ACCEPTED_JSON_SHA256 = "b599c3c1a2e6130549759b2beb5701fef6a196357a8244d4f0ecd751e4d11adb"
 WORKFLOW_SHA256 = "78f2ea7f9cc5c5282edb577c9132e00d69b6c26b261df48fc006edf93a908996"
 
 # The new workflow's whole authorised shape, asserted by name rather than

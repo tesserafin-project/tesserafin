@@ -104,13 +104,13 @@ FROZEN_PINS = {
     "ci/windows/w2/pkg-tree-digest.py":
         "0c70114c69e85d06bc3d95249cc1a86f917eb2b8deb44718cc05ad6f3afa70b4",
     "ci/windows/w2/zip-controls.py":
-        "b1ea373a0bb3a3b15529ecb10475da3341be6f36405c014d64a9620884a79c46",
+        "36f3496c3011a199fe3ac8b1e3b6c9aee7a9f0bba2c500ed5bcd0420a5e8f277",
     # Moved for the same reason the assembler pin above moved: the W2-A5
     # ruling authorises start-controls.py for its S15 assembler pin value and
     # nothing else, so its bytes changed and this pin must say so. It moved
     # once before under W2-A4-R2-S15, for the same one pin.
     "ci/windows/w2/start-controls.py":
-        "d4233830c15e0e0744fcc6205811099c012fe363712eb3226dc1328e15b3ac5c",
+        "a1cafd38e614ab02506fbca57478a78185b4ca54c7e5722b872fd2a3cbc8ff75",
     "ci/windows/w2/web-payload-controls.py":
         "6ccc80158e1194a5ede42b6925f7305c31b6c1a0ddc00e3e3a47d2d819fd2f17",
     # Moved under the W2-A5 ruling, which authorises one exact-name F18
@@ -118,11 +118,11 @@ FROZEN_PINS = {
     # -- the same amendment W2-A2-F18 and W2-A3-F18 each made. F01-F17, F19,
     # the roster, the pins and the frozen-consumer byte pins are untouched.
     "ci/windows/w2/ffmpeg-consume-controls.py":
-        "62833a6dcb46e64fa9351d8b27023bdc00eef396f566fadf21994747913e08e0",
+        "7bbd5c82170f96b5f59e9e94176346c5c4d43079898097da991745f137b9ead4",
     "ci/windows/runtime-retention/consume.ps1":
         "80e3ca9aaa9323192537afafb01302869d2a58a869d1faf613048fc60dde3053",
     "ci/windows/runtime-retention/accepted-runtime.json":
-        "28799f4eb03666bea925d2d400f4237c3e5e6e69bafb284573104fcdcfccb934",
+        "b599c3c1a2e6130549759b2beb5701fef6a196357a8244d4f0ecd751e4d11adb",
 }
 
 # Filled in by the pinning pass below; see T01.

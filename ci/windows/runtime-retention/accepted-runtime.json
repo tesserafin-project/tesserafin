@@ -3,7 +3,7 @@
   "acceptedServerTree": "d66351490d0af8a8b4a31538d96bbd9eb58cb691",
   "artifactType": "application/vnd.tesserafin.windows-ffmpeg-runtime.v1+json",
   "buildConfigurationSha256": "f93ae55c1b98af9f4212932a560afc08b1f0c2d463cacad2f0c4ca1a66965521",
-  "buildInputsReference": "ghcr.io/tesserafin/windows-ffmpeg-build-inputs@sha256:cff23b74dbf9707ad7150c21a2985e320320b86d3c72656b2bf2b58ac1c04f0a",
+  "buildInputsReference": "ghcr.io/tesserafin-project/windows-ffmpeg-build-inputs@sha256:cff23b74dbf9707ad7150c21a2985e320320b86d3c72656b2bf2b58ac1c04f0a",
   "capabilitySha256": "754d44ea67f94dafef11f2e1ed9d2cd0864a65bed013e8d45a0690dda31106c8",
   "checksumManifestPath": "delivered/SHA256SUMS",
   "checksumManifestSha256": "7cdbab51a00abaed0615204a32117ad7c6ee568ef31f033fbb97e302165eda5b",

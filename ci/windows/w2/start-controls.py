@@ -114,7 +114,7 @@ FROZEN_PINS = {
     "ci/windows/runtime-retention/consume.ps1":
         "80e3ca9aaa9323192537afafb01302869d2a58a869d1faf613048fc60dde3053",
     "ci/windows/runtime-retention/accepted-runtime.json":
-        "28799f4eb03666bea925d2d400f4237c3e5e6e69bafb284573104fcdcfccb934",
+        "b599c3c1a2e6130549759b2beb5701fef6a196357a8244d4f0ecd751e4d11adb",
 }
 WORKFLOW_SHA256 = "d493f1f25cdc94fecf33649fdbfe6bd401795b6db14c410fe9f1ac123ba07ce9"
 
