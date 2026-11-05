@@ -40,6 +40,12 @@
 #     --port <n>                host port for the instance (default 19196)
 #     --require-migration       fail if the runner found zero pending migrations
 #     --allow-local-candidate   permit a candidate that has no registry digest
+#     --source-revision <sha>   read the expected candidate version from SharedVersion.cs AT this
+#                               commit instead of from this tree. Must equal the candidate's
+#                               org.opencontainers.image.revision. For a HISTORICAL published
+#                               candidate (ci/upgrade/published-forward-migration.sh): the image
+#                               carries the version of the source it was built from, which is not
+#                               necessarily this tree's (pre-launch renumbering, tesserafin#386).
 #                               (development iteration only — never for evidence)
 #     --keep                    DEBUG: leave containers and volumes behind
 set -euo pipefail
@@ -64,6 +70,7 @@ CANDIDATE=""
 PORT=19196
 REQUIRE_MIGRATION=0
 ALLOW_LOCAL_CANDIDATE=0
+SOURCE_REVISION=""
 KEEP=0
 
 while [[ $# -gt 0 ]]; do
@@ -73,6 +80,7 @@ while [[ $# -gt 0 ]]; do
     --port)      PORT="$2"; shift 2 ;;
     --require-migration)     REQUIRE_MIGRATION=1; shift ;;
     --allow-local-candidate) ALLOW_LOCAL_CANDIDATE=1; shift ;;
+    --source-revision)       SOURCE_REVISION="$2"; shift 2 ;;
     --keep)      KEEP=1; shift ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
@@ -486,10 +494,27 @@ echo "  candidate /health version : ${HEALTH_VERSION}"
 [[ "${HEALTH_VERSION}" == "${CAND_VERSION}" ]] \
   && pass "candidate /health version == org.opencontainers.image.version (${HEALTH_VERSION})" \
   || fail "candidate /health version '${HEALTH_VERSION}' != OCI label '${CAND_VERSION}'"
-SRC_VERSION="$("${CONTRACT}" version)"
-[[ "${CAND_VERSION}" == "${SRC_VERSION}" ]] \
-  && pass "candidate OCI version == SharedVersion.cs (${SRC_VERSION})" \
-  || fail "candidate OCI version '${CAND_VERSION}' != SharedVersion.cs '${SRC_VERSION}'"
+if [[ -z "${SOURCE_REVISION}" ]]; then
+  SRC_VERSION="$("${CONTRACT}" version)"
+  SRC_LABEL="SharedVersion.cs"
+else
+  # Same extraction and SemVer-core rule as docker/version-contract.sh, applied to the
+  # file as committed at the candidate's own source revision. Fail closed on every gap.
+  SRC_LABEL="SharedVersion.cs@${SOURCE_REVISION:0:10}"
+  SRC_VERSION=""
+  if [[ "${SOURCE_REVISION}" != "${CAND_REVISION}" ]]; then
+    fail "--source-revision ${SOURCE_REVISION} is not the candidate's OCI revision ${CAND_REVISION}"
+  elif ! SRC_TEXT="$(git -C "${REPO_ROOT}" show "${SOURCE_REVISION}:SharedVersion.cs" 2>/dev/null)"; then
+    fail "SharedVersion.cs is not readable at ${SOURCE_REVISION} (commit not fetched?)"
+  else
+    SRC_VERSION="$(sed -nE 's/^\[assembly: ?AssemblyVersion\("([^"]*)"\)\].*/\1/p' <<<"${SRC_TEXT}" | head -1)"
+    [[ "${SRC_VERSION}" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] \
+      || fail "${SRC_LABEL} has no MAJOR.MINOR.PATCH AssemblyVersion ('${SRC_VERSION}')"
+  fi
+fi
+[[ -n "${SRC_VERSION}" && "${CAND_VERSION}" == "${SRC_VERSION}" ]] \
+  && pass "candidate OCI version == ${SRC_LABEL} (${SRC_VERSION})" \
+  || fail "candidate OCI version '${CAND_VERSION}' != ${SRC_LABEL} '${SRC_VERSION}'"
 [[ "${CAND_REVISION}" =~ ^[0-9a-f]{40}$ ]] \
   && pass "candidate OCI revision is a full source commit (${CAND_REVISION})" \
   || fail "candidate OCI revision '${CAND_REVISION}' is not a 40-char commit sha"

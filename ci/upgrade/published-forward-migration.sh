@@ -67,8 +67,14 @@ print(json.dumps(result, indent=2))
 ' "${EVIDENCE}/images.json" "${BASE_REVISION}" "${CAND_REVISION}"
 
 CANDIDATE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["candidate"]["ref"])' "${EVIDENCE}/images.json")"
+# The candidate is a HISTORICAL image: its version must match SharedVersion.cs at the
+# commit it was built from, not this tree's (which moved to 0.3.0, tesserafin#386).
+# A shallow checkout lacks that commit; fetch exactly it, fail closed if unavailable.
+git cat-file -e "${CAND_REVISION}^{commit}" 2>/dev/null \
+  || git fetch --quiet --no-tags --depth=1 origin "${CAND_REVISION}"
 # Keep the original harness assertions and --require-migration intact.
 bash docker/upgrade-roundtrip.sh \
   --baseline "${BASELINE}" \
   --candidate "${CANDIDATE}" \
+  --source-revision "${CAND_REVISION}" \
   --require-migration

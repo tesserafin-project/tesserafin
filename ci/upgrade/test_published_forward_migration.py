@@ -93,6 +93,8 @@ else:
         self.assertEqual(args, ["--baseline",
             "ghcr.io/tesserafin/tesserafin-server@sha256:fd1fa9e0f5a28a07e5872cc5ff13257a92d988717a33519f62c4b26c6ab36249",
             "--candidate", "ghcr.io/tesserafin/tesserafin-server@sha256:" + "a" * 64,
+            # The expected version is read at the candidate's own source commit, not this tree.
+            "--source-revision", "60f7a9c9bfd22e9fa8714248998a51a1ef26e88b",
             "--require-migration"])
         self.assertEqual(report["candidate"]["architecture"], "linux/amd64")
 
