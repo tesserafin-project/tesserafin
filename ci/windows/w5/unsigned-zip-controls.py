@@ -67,7 +67,10 @@ FROZEN_PINS = {
     ".github/workflows/w0-windows-probe.yml": "e092e3c3a6af555e2b3c2f0675c19adb81b563cf4d763d1d2d441041768136e3",
     ".github/workflows/w1-windows-build-inputs-consume.yml": "61c1434b722c34068609b98f61f6065039b2e641bd826185b69f1e28c9d67125",
     ".github/workflows/w1-windows-build-inputs.yml": "c2e4785b9e0183fe00c72abf5331e5d3a62e918298c0d1e8d46514374f3bd527",
-    ".github/workflows/w1-windows-ffmpeg-runtime.yml": "803cc465bb7d38c33a86cec28cc043d2199fbb2851279c01a2f804e820c12b0d",
+    # Re-pinned: one step added before the source fetch, ensure-tls-trust.sh
+    # (runner image 20261103 left the pinned CLANG64 CA bundle empty, curl 77).
+    # The build, package and comparison steps are byte-identical.
+    ".github/workflows/w1-windows-ffmpeg-runtime.yml": "3fddfb3ce5303dd63f094403ab0400e88b968b5237cbfdf0aac721999dd3b03d",
     ".github/workflows/w1-windows-runtime-publish.yml": "6d0d482952cae8a6a3b2bb9640d58351298d495cda8ca1989ed4030d8f73da38",
     ".github/workflows/w1-windows-runtime-retention.yml": "c3eb3cdc6a05c5890164affa2c581b9ea2fcc9990278b54ae7aeb89032b30e32",
     ".github/workflows/w2-windows-ffmpeg-consume.yml": "78f2ea7f9cc5c5282edb577c9132e00d69b6c26b261df48fc006edf93a908996",

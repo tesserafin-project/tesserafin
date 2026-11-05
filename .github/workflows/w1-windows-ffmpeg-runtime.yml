@@ -219,6 +219,14 @@ jobs:
           command -v python3 >/dev/null 2>&1 || ln -sf "$(command -v python)" /usr/bin/python3
           ./ci/windows/ffmpeg/install-python-shim.sh /c/tf-shims
 
+      # The pinned ca-certificates package fills its (shipped-empty) PEM bundle in
+      # post_install; on image 20261103 that left it empty and every fetch died
+      # with curl (77). Re-run that same pinned extraction if needed and require a
+      # populated bundle. Verification is never disabled.
+      - name: Ensure the pinned CLANG64 trust bundle is populated
+        shell: msys2 {0}
+        run: ./ci/windows/ffmpeg/ensure-tls-trust.sh
+
       - name: Fetch every pinned source
         shell: msys2 {0}
         run: |
