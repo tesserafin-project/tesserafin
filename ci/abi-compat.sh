@@ -24,6 +24,8 @@
 # Environment
 #   ABI_NEW_ASSEMBLIES_MANIFEST  path to the newly-introduced-assembly list
 #                                (default ci/abi-new-assemblies.txt)
+#   ABI_VERSION_EPOCH_FILE       path to the declared version-epoch reset
+#                                (default ci/abi-version-epoch.txt; absent = none)
 #   ABI_EXPECTED_ASSEMBLY_COUNT  override the protected-assembly count assertion
 #   ABI_REPORT_FILE              also write the Markdown report to this path
 #   ABI_APICOMPAT_CMD            TEST ONLY — replaces the ApiCompat invocation.
@@ -117,6 +119,48 @@ for entry in ${NEW_ASSEMBLIES[@]+"${NEW_ASSEMBLIES[@]}"}; do
         || die "$NEW_MANIFEST lists '$entry', which is not in $MANIFEST"
 done
 
+# ── Declared version-epoch reset ───────────────────────────────────────────
+# ApiCompat rule CP0003 fails whenever head's assembly version is LOWER than
+# base's. That is right for a release line, and wrong exactly once: the owner
+# renumbered the pre-launch builds (1.0.0 -> 0.x, tesserafin#386), so the
+# pull request that moves SharedVersion from 1.0.0.0 to 0.3.0.0 lowers every
+# protected assembly's version on purpose.
+#
+# The reset is declared in a file as ONE line "<base-version> <head-version>",
+# both four-part, base strictly greater than head. An assembly whose ApiCompat
+# output consists SOLELY of CP0003 diagnostics naming exactly that pair is
+# compatible; any other CP code (a real API break) in the same output still
+# fails, and so does a CP0003 naming any other pair. Once master carries the
+# head version the declaration is inert (no CP0003 is emitted) and the file
+# should be deleted.
+EPOCH_FILE="${ABI_VERSION_EPOCH_FILE:-$REPO_ROOT/ci/abi-version-epoch.txt}"
+EPOCH_BASE=""
+EPOCH_HEAD=""
+if [ -f "$EPOCH_FILE" ]; then
+    mapfile -t epoch_lines < <(grep -vE '^[[:space:]]*(#|$)' "$EPOCH_FILE" || true)
+    [ "${#epoch_lines[@]}" -eq 1 ] \
+        || die "$EPOCH_FILE must declare exactly one '<base> <head>' line, found ${#epoch_lines[@]}"
+    read -r EPOCH_BASE EPOCH_HEAD epoch_extra <<<"${epoch_lines[0]}"
+    v4='^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'
+    [[ "$EPOCH_BASE" =~ $v4 && "$EPOCH_HEAD" =~ $v4 && -z "${epoch_extra:-}" ]] \
+        || die "$EPOCH_FILE: expected '<base> <head>' as four-part versions, got '${epoch_lines[0]}'"
+    lowest="$(printf '%s\n%s\n' "$EPOCH_BASE" "$EPOCH_HEAD" | sort -t. -k1,1n -k2,2n -k3,3n -k4,4n | head -1)"
+    if [ "$lowest" != "$EPOCH_HEAD" ] || [ "$EPOCH_BASE" = "$EPOCH_HEAD" ]; then
+        die "$EPOCH_FILE: an epoch reset must lower the version ($EPOCH_BASE -> $EPOCH_HEAD does not)"
+    fi
+fi
+
+# True when every CP diagnostic in $1 is a CP0003 naming exactly the declared pair.
+epoch_reset_only() {
+    [ -n "$EPOCH_BASE" ] || return 1
+    local all matching b h
+    b="${EPOCH_BASE//./\\.}"
+    h="${EPOCH_HEAD//./\\.}"
+    all="$(printf '%s\n' "$1" | grep -cE '^[[:space:]]*CP[0-9]{4}:' || true)"
+    matching="$(printf '%s\n' "$1" | grep -cE "^[[:space:]]*CP0003: .* assembly version '$h' should be equal to or higher than .* version '$b'\.\$" || true)"
+    [ "$all" -ge 1 ] && [ "$all" -eq "$matching" ]
+}
+
 run_apicompat() {
     if [ -n "${ABI_APICOMPAT_CMD:-}" ]; then
         # Word splitting is intended: this is a test-only command override.
@@ -150,6 +194,7 @@ missing_head=0
 missing_base=0
 tool_failure=0
 introduced=0
+epoch_reset=0
 unresolved=0
 details=""
 
@@ -206,6 +251,13 @@ for assembly in "${ASSEMBLIES[@]}"; do
     # own failures. The CP#### diagnostic codes are the reliable, unlocalised
     # marker of a real API verdict; anything else is infrastructure and is
     # just as fatal, only reported differently.
+    if epoch_reset_only "$output"; then
+        compatible=$((compatible + 1))
+        epoch_reset=$((epoch_reset + 1))
+        details+=$'\n'"### ✅ $assembly — compatible (declared version epoch reset $EPOCH_BASE → $EPOCH_HEAD)"$'\n\n'"ApiCompat's only finding was CP0003 for exactly the pair declared in \`${EPOCH_FILE#"$REPO_ROOT/"}\`."$'\n'
+        continue
+    fi
+
     if printf '%s' "$output" | grep -qE '^[[:space:]]*CP[0-9]{4}:'; then
         breaking=$((breaking + 1))
         details+=$'\n'"### ❌ $assembly — breaking change (exit $rc)"$'\n\n'"\`\`\`"$'\n'"$output"$'\n'"\`\`\`"$'\n'
@@ -234,6 +286,7 @@ indeterminate=$((missing_base + tool_failure + zero_compared))
 emit "| outcome | assemblies |"
 emit "| --- | ---: |"
 emit "| compatible | $compatible |"
+emit "| of which: declared version epoch reset only | $epoch_reset |"
 emit "| breaking change | $breaking |"
 emit "| missing from head (breaking, not compared) | $missing_head |"
 emit "| missing from base (indeterminate, not compared) | $missing_base |"

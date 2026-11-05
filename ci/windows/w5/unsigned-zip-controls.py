@@ -48,6 +48,7 @@ REPO_ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 VERIFIER = os.path.join(HERE, "verify-unsigned-zip.py")
 WORKFLOW = os.path.join(REPO_ROOT, ".github", "workflows", "w5-unsigned-zip.yml")
 TREE_DIGEST = os.path.join(REPO_ROOT, "ci", "windows", "w2", "pkg-tree-digest.py")
+SHARED_VERSION_PATH = os.path.join(REPO_ROOT, "SharedVersion.cs")
 
 # Bytes at W5-A0's master f90fd18862a79d4f08cb4a52223bc852a3ffd541. W5-A1 edits
 # none of these; a pin is the only thing that can say so about a file it never
@@ -85,7 +86,6 @@ FROZEN_PINS = {
     # Re-pinned for #342: only F0_ACCEPTED_CI_TREE moved (Linux F0 baseline);
     # WEB_PAYLOAD_SHA256, which P02 reads, is unchanged.
     "ci/package/pins.env": "7239360f3f2d1299db4282a465c46446ff9e5694221f138f88667141e0a6cfa7",
-    "SharedVersion.cs": "beeb301584718715830f5302bb483df461238388060fd821d7711c785df03fd4",
     "packaging/windows/msi/Tesserafin.wxs": "097bb7c68f62a3b15d64af0c58d947ce28377810752681407afd99f0d4b983dc",
 }
 
@@ -141,7 +141,10 @@ def run_verify(module, fx, **overrides):
 # Fixtures
 # ===========================================================================
 
-PACKAGE = "tesserafin-server_1.0.0_win-x64"
+# The verifier's own derivation, so fixtures, audit and verifier can never
+# disagree about the name (see verify-unsigned-zip.py declared_package()).
+PACKAGE = load_verifier().PACKAGE
+ARCHIVE = PACKAGE + ".zip"
 HEAD = "0123456789abcdef0123456789abcdef01234567"
 EPOCH = 1789000000
 WEB_EPOCH = 1785852822
@@ -450,7 +453,7 @@ def audit(text, work):
         if "-SourceDateEpoch ${{ needs.prepare.outputs.epoch }}" not in job:
             findings.append("EPOCH: %s is not given prepare's single epoch" % name)
         uploads = re.findall(r"^\s+path: (.+)$", job, re.M)
-        if len(uploads) != 1 or not uploads[0].endswith("\\out\\tesserafin-server_1.0.0_win-x64.zip"):
+        if len(uploads) != 1 or not uploads[0].endswith("\\out\\" + ARCHIVE):
             findings.append("UPLOAD: %s uploads %s, not the ZIP alone" % (name, uploads))
         retention = re.findall(r"retention-days: (\d+)", job)
         if not retention or any(int(r) < 14 for r in retention):
@@ -503,7 +506,7 @@ def workflow_controls(work):
          "    name: Assemble the win-x64 ZIP on allocation B\n    needs: [prepare]\n",
          "    name: Assemble the win-x64 ZIP on allocation B\n    needs: [prepare, assemble-a]\n", "ALLOCATION"),
         ("W09", "assemble A uploads a hash file beside the ZIP",
-         "          path: ${{ runner.temp }}\\w5a1-a\\out\\tesserafin-server_1.0.0_win-x64.zip\n",
+         "          path: ${{ runner.temp }}\\w5a1-a\\out\\" + ARCHIVE + "\n",
          "          path: ${{ runner.temp }}\\w5a1-a\\out\\sha256.txt\n", "UPLOAD"),
         ("W10", "the verify job can be skipped",
          "    if: ${{ always() }}\n", "", "VERIFY-SKIPPABLE"),
@@ -550,8 +553,35 @@ def pin_controls():
     w2 = sorted("ci/windows/w2/" + n for n in os.listdir(os.path.join(REPO_ROOT, "ci", "windows", "w2")))
     added = [n for n in w2 if n not in FROZEN_PINS]
     record(not drift and not added, "P01",
-           "frozen W2 inputs, W0-W4 workflows, SharedVersion.cs and Tesserafin.wxs keep their "
+           "frozen W2 inputs, W0-W4 workflows and Tesserafin.wxs keep their "
            "W5-A0 master bytes (drift %s, added under w2/ %s)" % (drift or "none", added or "none"))
+
+    # SharedVersion.cs is deliberately NOT frozen: the version must be able to
+    # move (pre-launch renumbering, tesserafin#386). What stays fixed is that
+    # the name has one source. P03 proves the verifier follows it, P04 that the
+    # workflow uploads exactly that name, P05 that a malformed source is refused.
+    text = open(SHARED_VERSION_PATH, encoding="utf-8").read()
+    declared = re.search(r'\[assembly: ?AssemblyVersion\("([^"]*)"\)\]', text).group(1)
+    record(PACKAGE == "tesserafin-server_%s_win-x64" % declared, "P03",
+           "the verifier's package name %s follows SharedVersion.cs AssemblyVersion %s"
+           % (PACKAGE, declared))
+    workflow = open(WORKFLOW, encoding="utf-8").read()
+    names = sorted(set(re.findall(r"tesserafin-server_[^\s\\/\"']*_win-x64\.zip", "\n".join(code_lines(workflow)))))
+    record(names == [ARCHIVE], "P04",
+           "w5-unsigned-zip.yml names exactly %s (found %s)" % (ARCHIVE, names))
+    with tempfile.TemporaryDirectory(prefix="w5-version-") as tmp:
+        refused = []
+        for bad in ('[assembly: AssemblyVersion("1.0")]', '[assembly: AssemblyVersion("1.0.0.0")]',
+                    '[assembly: AssemblyVersion("01.0.0")]', "// no version"):
+            probe = os.path.join(tmp, "SharedVersion.cs")
+            with open(probe, "w", encoding="utf-8") as handle:
+                handle.write(bad + "\n")
+            try:
+                load_verifier().declared_package(probe)
+            except SystemExit:
+                refused.append(bad)
+        record(len(refused) == 4, "P05",
+               "a SharedVersion.cs the assembler would refuse is refused (%d of 4)" % len(refused))
 
     verifier = load_verifier()
     pins_env = open(os.path.join(REPO_ROOT, "ci", "package", "pins.env"), encoding="utf-8").read()

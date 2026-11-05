@@ -1,6 +1,6 @@
 # W5-A1 (#276): unsigned win-x64 portable ZIP acceptance.
 #
-# Measures tesserafin-server_1.0.0_win-x64.zip as a function of this commit and
+# Measures tesserafin-server_<version>_win-x64.zip (name derived from SharedVersion.cs) as a function of this commit and
 # the frozen W1 FFmpeg / W2 Web pins. It proves three facts and only these:
 #
 #   1. two independent windows-latest allocations assemble the ZIP from the same
@@ -190,7 +190,7 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: w5a1-zip-a
-          path: ${{ runner.temp }}\w5a1-a\out\tesserafin-server_1.0.0_win-x64.zip
+          path: ${{ runner.temp }}\w5a1-a\out\tesserafin-server_0.3.0_win-x64.zip
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
@@ -257,7 +257,7 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: w5a1-zip-b
-          path: ${{ runner.temp }}\w5a1-b\out\tesserafin-server_1.0.0_win-x64.zip
+          path: ${{ runner.temp }}\w5a1-b\out\tesserafin-server_0.3.0_win-x64.zip
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
@@ -332,8 +332,8 @@ jobs:
           set -o pipefail
           status=0
           python3 ci/windows/w5/verify-unsigned-zip.py \
-            --zip-a "${RUNNER_TEMP}/zip-a/tesserafin-server_1.0.0_win-x64.zip" \
-            --zip-b "${RUNNER_TEMP}/zip-b/tesserafin-server_1.0.0_win-x64.zip" \
+            --zip-a "${RUNNER_TEMP}/zip-a/tesserafin-server_0.3.0_win-x64.zip" \
+            --zip-b "${RUNNER_TEMP}/zip-b/tesserafin-server_0.3.0_win-x64.zip" \
             --runtime-archive '${{ steps.runtime.outputs.archive }}' \
             --head '${{ steps.epoch.outputs.head }}' \
             --epoch '${{ steps.epoch.outputs.epoch }}' \

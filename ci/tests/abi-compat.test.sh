@@ -64,8 +64,8 @@ EOF
 }
 
 build_variant() {
-    local dir="$1" out="$2"
-    ( cd "$dir" && dotnet build -c Release -o "$out" --nologo -v q ) > "$WORK/build.log" 2>&1 || {
+    local dir="$1" out="$2"; shift 2
+    ( cd "$dir" && dotnet build -c Release -o "$out" --nologo -v q "$@" ) > "$WORK/build.log" 2>&1 || {
         echo "fixture build failed for $dir; see $WORK/build.log" >&2
         cat "$WORK/build.log" >&2
         exit 1
@@ -143,6 +143,20 @@ build_variant "$WORK/alpha" "$WORK/out/alpha-signature"
 
 alpha_source_baseline
 
+# Version epoch: the baseline API at a LOWER assembly version (base is the SDK
+# default 1.0.0.0), and the same downgrade combined with a real API break.
+build_variant "$WORK/alpha" "$WORK/out/alpha-downgrade" -p:AssemblyVersion=0.3.0.0
+cat > "$WORK/alpha/Api.cs" <<'EOF2'
+namespace Alpha;
+
+public class Thing
+{
+    public int Keep() => 1;
+}
+EOF2
+build_variant "$WORK/alpha" "$WORK/out/alpha-downgrade-removed" -p:AssemblyVersion=0.3.0.0
+alpha_source_baseline
+
 # Directories holding only the two protected DLLs, as the workflow stages them.
 stage_pair() {
     local dest="$1" alpha_src="$2" beta="$3"
@@ -158,6 +172,8 @@ stage_pair "$WORK/head-removed"   alpha-removed   yes
 stage_pair "$WORK/head-signature" alpha-signature yes
 stage_pair "$WORK/head-partial"   alpha-base      -
 stage_pair "$WORK/base-partial"   -               yes
+stage_pair "$WORK/head-downgrade" alpha-downgrade yes
+stage_pair "$WORK/head-downgrade-removed" alpha-downgrade-removed yes
 mkdir -p "$WORK/empty-base"
 
 MANIFEST="$WORK/manifest.txt"
@@ -183,6 +199,18 @@ printf '# normally empty\n' > "$NEW_NONE"
 
 NEW_ALPHA="$WORK/new-alpha.txt"
 printf 'Alpha.dll\n' > "$NEW_ALPHA"
+
+EPOCH_NONE="$WORK/epoch-none.txt"   # deliberately never created
+EPOCH_OK="$WORK/epoch-ok.txt"
+printf '# reset\n1.0.0.0 0.3.0.0\n' > "$EPOCH_OK"
+EPOCH_OTHER="$WORK/epoch-other.txt"
+printf '1.0.0.0 0.2.0.0\n' > "$EPOCH_OTHER"
+EPOCH_UP="$WORK/epoch-up.txt"
+printf '0.3.0.0 1.0.0.0\n' > "$EPOCH_UP"
+EPOCH_TWO="$WORK/epoch-two.txt"
+printf '1.0.0.0 0.3.0.0\n2.0.0.0 0.3.0.0\n' > "$EPOCH_TWO"
+EPOCH_SHORT="$WORK/epoch-short.txt"
+printf '1.0.0 0.3.0\n' > "$EPOCH_SHORT"
 
 NEW_BOTH="$WORK/new-both.txt"
 printf 'Alpha.dll\nBeta.dll\n' > "$NEW_BOTH"
@@ -215,6 +243,7 @@ run_compat() {
     local rc=0
     LAST_OUTPUT="$(ABI_EXPECTED_ASSEMBLY_COUNT="${EXPECT_COUNT:-2}" \
                    ABI_NEW_ASSEMBLIES_MANIFEST="${NEW_MANIFEST:-$NEW_NONE}" \
+                   ABI_VERSION_EPOCH_FILE="${EPOCH:-$EPOCH_NONE}" \
                    "$ABI_COMPAT" "$@" 2>&1)" || rc=$?
     return "$rc"
 }
@@ -279,8 +308,40 @@ else
     bad "GREEN unresolved references were swallowed"
 fi
 
+EPOCH="$EPOCH_OK" \
+    expect_green "declared version epoch reset (CP0003 only, declared pair)" \
+    "$WORK/base" "$WORK/head-downgrade" "$MANIFEST"
+if printf '%s' "$LAST_OUTPUT" | grep -qF "declared version epoch reset 1.0.0.0 → 0.3.0.0"; then
+    ok "GREEN epoch reset is named in the report"
+else
+    bad "GREEN epoch reset was accepted silently"
+fi
+
 echo
 echo "-- expected red --"
+
+expect_red "assembly version lowered without a declared epoch" "CP0003" \
+    "$WORK/base" "$WORK/head-downgrade" "$MANIFEST"
+
+EPOCH="$EPOCH_OK" \
+    expect_red "declared epoch does not hide a real break" "CP0002" \
+    "$WORK/base" "$WORK/head-downgrade-removed" "$MANIFEST"
+
+EPOCH="$EPOCH_OTHER" \
+    expect_red "epoch declared for a different pair" "CP0003" \
+    "$WORK/base" "$WORK/head-downgrade" "$MANIFEST"
+
+EPOCH="$EPOCH_UP" \
+    expect_red "epoch that raises the version" "must lower the version" \
+    "$WORK/base" "$WORK/head-downgrade" "$MANIFEST"
+
+EPOCH="$EPOCH_TWO" \
+    expect_red "epoch file with two declarations" "exactly one" \
+    "$WORK/base" "$WORK/head-downgrade" "$MANIFEST"
+
+EPOCH="$EPOCH_SHORT" \
+    expect_red "epoch file with three-part versions" "four-part versions" \
+    "$WORK/base" "$WORK/head-downgrade" "$MANIFEST"
 
 expect_red "removed public member" "CP0002" \
     "$WORK/base" "$WORK/head-removed" "$MANIFEST"

@@ -25,8 +25,8 @@ from its command line: the two accepted identities are constants here, and
 drive this exact implementation against synthetic fixtures.
 
     python3 ci/windows/w5/verify-unsigned-zip.py \\
-        --zip-a a/tesserafin-server_1.0.0_win-x64.zip \\
-        --zip-b b/tesserafin-server_1.0.0_win-x64.zip \\
+        --zip-a a/tesserafin-server_<version>_win-x64.zip \\
+        --zip-b b/tesserafin-server_<version>_win-x64.zip \\
         --runtime-archive runtime/tesserafin-ffmpeg-...-win-x64.zip \\
         --head <40-hex commit> --epoch <SOURCE_DATE_EPOCH>
 """
@@ -49,8 +49,31 @@ WEB_PAYLOAD_SHA256 = "4148c4bc6e0c7c2d6b35ed9992e874a06dcc11d2b6d9e0aad06719e365
 FFMPEG_RUNTIME_SHA256 = "f28cc9186aad757491a6f44e7950d39bc39354dfe9505e278af91d7619811c9e"
 PINS = {"web": WEB_PAYLOAD_SHA256, "ffmpeg": FFMPEG_RUNTIME_SHA256}
 
-# SharedVersion stays 1.0.0 in W5-A1; the 1.1 number is W5-A3 / W5-A4.
-PACKAGE = "tesserafin-server_1.0.0_win-x64"
+SHARED_VERSION = os.path.join(HERE, "..", "..", "..", "SharedVersion.cs")
+_VERSION_RE = re.compile(r'\[assembly: ?AssemblyVersion\("([^"]*)"\)\]')
+_SEMVER_CORE = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
+
+
+def declared_package(shared_version_path=SHARED_VERSION):
+    """The package name the assembler derives for this commit.
+
+    Same source and same rule as the W2 assembler's `Get-DeclaredVersion`:
+    the `AssemblyVersion` in
+    SharedVersion.cs, refused unless it is a MAJOR.MINOR.PATCH core. The name is
+    therefore never a literal here; a version change moves the expected archive
+    with it, and a source the assembler would refuse makes this verifier refuse
+    too. (W5-A1 measured `tesserafin-server_1.0.0_win-x64.zip` at 1.0.0; that
+    accepted archive stays recorded in ci/windows/w5/accepted-unsigned-zip.json.)
+    """
+    with open(shared_version_path, encoding="utf-8") as handle:
+        match = _VERSION_RE.search(handle.read())
+    if not match or not _SEMVER_CORE.match(match.group(1)):
+        raise SystemExit("verify-unsigned-zip: no MAJOR.MINOR.PATCH AssemblyVersion in %s"
+                         % shared_version_path)
+    return "tesserafin-server_%s_win-x64" % match.group(1)
+
+
+PACKAGE = declared_package()
 ARCHIVE_NAME = PACKAGE + ".zip"
 HOST_COMPONENTS = ("hostfxr.dll", "hostpolicy.dll", "coreclr.dll", "System.Private.CoreLib.dll")
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
