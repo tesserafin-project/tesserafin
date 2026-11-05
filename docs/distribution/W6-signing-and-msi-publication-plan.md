@@ -1,7 +1,7 @@
 # Windows signing and MSI publication — state and plan
 
-Status: **plan for owner review**. It creates no certificate, no key, no secret and
-no signing job, and changes no workflow. The signing decision of
+Status: **plan, owner decisions recorded 2026-11-05** (§6). It creates no
+certificate, no key, no secret and no signing job, and changes no workflow. The signing decision of
 [W0 §11](W0-windows-server.md) and [W5-A0 §D](W5-A0-acceptance-contract.md) stands
 and is not reopened here; this document only turns it into an executable sequence
 and lists the decisions it is waiting on.
@@ -75,18 +75,23 @@ provenance is recorded. Proposed, in order:
 
 Until then the release must keep saying the MSI is not attached.
 
+**Owner ruling (2026-11-05): rule accepted.** The MSI's identity is the one retained
+build plus its payload/table manifest; the published MSI is that retained file,
+never a rebuild.
+
 ## 3. Checksum completion checklist (x64 + arm64)
 
-- [ ] `SHA256SUMS-linux-arm64.txt` for the three arm64 assets. The digests must be
+**Owner ruling (2026-11-05):** repairing the existing `v1.1.0` release is not a
+priority; the next release comes first. The items below therefore apply to the
+**next** release, and the `v1.1.0` gaps in §1.1 stay as recorded.
+
+- [ ] `SHA256SUMS-linux-arm64.txt` for the arm64 assets. The digests must be
       taken from the **build run's own output** (or recomputed from a fresh
       download and cross-checked with GitHub's `digest` field), not copied from
       this document.
-- [ ] `SHA256SUMS-win-x64.txt` containing the ZIP line `c1f6261c…  tesserafin-server_1.0.0_win-x64.zip`
-      (equal to `accepted-unsigned-zip.json`), and later the MSI line.
-- [ ] Decide what to do about the two `-2` lines in `SHA256SUMS-linux-x64.txt`:
-      attach the `-2` packages, or replace the file with one that lists only the
-      attached assets. Replacing a published checksum file is visible to anyone
-      who already downloaded it — state the change in the release notes.
+- [ ] `SHA256SUMS-win-x64.txt` containing the ZIP line (equal to the accepted
+      ZIP manifest) and the MSI line.
+- [ ] Every sums file lists exactly the attached assets (no `-2`-style leftovers).
 - [ ] Gate future releases with
       `verify_release_checksums.py --repo … --tag … --require-complete --strict-absent`
       after upload; exit 0 is the release's "checksums complete" evidence.
@@ -111,13 +116,24 @@ key in HSM/token or cloud service, no key material in Actions, CI-usable.
 EV certificates no longer give instant SmartScreen reputation (Microsoft removed
 that in 2024), so OV is sufficient.
 
-**Recommendation.** Decide first whether Tesserafin will sign as a legal entity.
+**Owner ruling (2026-11-05): no paid option for now → SignPath Foundation.**
+Azure Artifact Signing is a paid subscription and needs an eligible legal entity;
+it stays the upgrade path if Tesserafin later has both. The SignPath Foundation
+application is prepared in
+[`signpath-foundation-application.md`](signpath-foundation-application.md).
+Consequences of this choice:
 
-* If yes and the entity qualifies: **Azure Artifact Signing** — lowest cost, best
-  custody, OIDC-federated (no stored secret), which satisfies W0 §11 most directly.
-* If no entity: **SignPath Foundation** OSS programme.
-* In both cases, land the **self-signed test pipeline first** (§5), so the
-  vendor choice only swaps the signing step.
+* the Windows publisher shown to users is **"SignPath Foundation"**, not Tesserafin;
+* signing runs through SignPath's GitHub integration, which verifies that each
+  artifact is an automated build of this repository — this satisfies W0 §11
+  custody (no key material anywhere in the project);
+* every signing request needs manual approval in SignPath, which doubles the
+  `release-signing` environment gate;
+* SignPath requires the project to be **already released in the form to be
+  signed** — an unsigned public release must exist before the application.
+
+Land the **self-signed test pipeline first** (§5), so the vendor step is the only
+thing that changes when SignPath accepts the project.
 
 ## 5. Prepared workflow shape (not wired)
 
@@ -156,23 +172,28 @@ digest in `signed-provenance.json` (W0 §8). The unsigned ZIP stays published.
 A PR-side variant with a throwaway self-signed certificate (no `environment`, no
 `id-token`) can run the same steps 2–4 to keep the pipeline tested.
 
-## 6. Decisions needed from the owner
+## 6. Owner decisions (2026-11-05)
 
-1. **Signing identity:** legal entity (→ Azure Artifact Signing) or OSS programme
-   (→ SignPath Foundation)? This decides the vendor.
-2. **MSI identity rule** (§2.1): accept "one retained build + payload manifest" as
-   the MSI's identity, given the container is not byte-reproducible?
-3. **`v1.1.0` checksum repair:** add `SHA256SUMS-linux-arm64.txt` and
-   `SHA256SUMS-win-x64.txt` to the existing release, and how to handle the two
-   `-2` lines — or leave `v1.1.0` as is and fix from the next release?
-4. **Sign the existing 1.1 ZIP** retroactively, or sign from the next release on?
-5. **`release-signing` environment** with the owner as required reviewer —
-   acceptable as the gate for the signing job?
+1. **Signing identity:** no paid option for now → **SignPath Foundation** (§4).
+2. **MSI identity rule** (§2.1): **accepted**.
+3. **`v1.1.0` checksum repair:** not a priority; the checklist (§3) applies from
+   the next release.
+4. **Signing starts with the next release.** The current `1.0.0` / `v1.1.0`
+   releases are not considered usable and will not be signed.
+5. **`release-signing` environment** with the owner as required reviewer:
+   **accepted**.
+
+Versioning: the owner wants the public, presentable launch to be **1.0**, and the
+current `1.0.0` / `v1.1.0` releases to be treated as **0.1** / **0.2**. How the
+existing tags and releases are renamed or removed is a separate, not yet executed
+decision (see #386). Signing therefore targets the official 1.0 launch, and the
+SignPath "already released" condition is met by an unsigned 0.x pre-release.
 
 ## 7. Next concrete actions
 
-1. Owner answers §6.1–6.3.
+1. SignPath Foundation application (checklist in
+   [`signpath-foundation-application.md`](signpath-foundation-application.md)).
 2. Self-signed test pipeline PR (§5 variant), no secrets.
 3. `w6` MSI producing workflow + `accepted-msi.json` (§2).
-4. Vendor onboarding (identity validation can take days to weeks — start early).
+4. SignPath onboarding once accepted (review can take weeks — apply well before 1.0).
 5. Release checksum gate (§3, last item) added to the release procedure.
