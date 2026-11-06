@@ -108,8 +108,15 @@ def run(args):
             media.chmod(0o755)
             movie_dir.chmod(0o755)
             movie = movie_dir / "Fixture Movie (2020).mp4"
+            # The fixture is written by the ffmpeg the target image's CMD hands the
+            # server, not by a hard-coded path: the runtime moved to
+            # /opt/tesserafin-ffmpeg in #342 and may move again.
+            target_cmd = json.loads(docker("image", "inspect", args.target_image))[0]["Config"].get("Cmd") or []
+            if "--ffmpeg" not in target_cmd[:-1]:
+                raise RuntimeError("target image CMD passes no --ffmpeg")
+            target_ffmpeg = target_cmd[target_cmd.index("--ffmpeg") + 1]
             docker("run", "--rm", "--user", f"{os.getuid()}:{os.getgid()}",
-                   "--entrypoint", "/usr/lib/jellyfin-ffmpeg/ffmpeg", "-v", f"{media}:/m", args.target_image,
+                   "--entrypoint", target_ffmpeg, "-v", f"{media}:/m", args.target_image,
                    "-y", "-f", "lavfi", "-i", "testsrc=duration=30:size=160x120:rate=2", "-pix_fmt", "yuv420p",
                    "/m/Fixture Movie (2020)/Fixture Movie (2020).mp4")
             movie.chmod(0o644)
