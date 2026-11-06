@@ -119,11 +119,10 @@ path.
 - The [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet).
   [`global.json`](global.json) pins SDK `10.0.0` with `rollForward: latestMinor`.
 - `ffmpeg` on `PATH` for the media-encoding and playback tests. The container
-  image instead pins a specific
-  [jellyfin-ffmpeg](https://github.com/jellyfin/jellyfin-ffmpeg) build by version
-  and per-architecture checksum, and points the server at it with `--ffmpeg`. That
-  upstream dependency name is deliberate and accurate — it is the genuine
-  encoder Tesserafin ships.
+  image and the native Linux packages instead carry the same Tesserafin FFmpeg
+  runtime, built from pinned source by [`ci/ffmpeg`](ci/ffmpeg) (FFmpeg with the
+  jellyfin-ffmpeg patch series, GPL-3.0-or-later, no non-free components), and
+  point the server at it with `--ffmpeg`.
 - Optionally an IDE for debugging: Visual Studio 2022 or later, or Visual Studio
   Code with the workspace-recommended extensions.
 

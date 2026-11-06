@@ -152,11 +152,11 @@ pkg_load_pins() {
     WEB_VCS_REF="$(pkg_dockerfile_arg WEB_VCS_REF)"
     WEB_VERSION="$(pkg_dockerfile_arg WEB_VERSION)"
 
-    # The FFmpeg runtime is deliberately NOT read from the Dockerfile. The
-    # container installs an upstream jellyfin-ffmpeg .deb; the packages build the
-    # accepted Tesserafin runtime from source. They are different artifacts under
-    # different terms, and coupling the two pins is what previously made the
-    # packages inherit a binary nobody in this project built.
+    # The FFmpeg runtime is deliberately NOT read from the Dockerfile. Since #342
+    # the container carries the same accepted F0 archive as the packages, but the
+    # authority for it is ci/ffmpeg/** and its accepted digests — never a
+    # Dockerfile ARG. Coupling a package pin to the container is what once made
+    # the packages inherit a binary nobody in this project built.
     pkg_load_f0_manifest
 
     [[ "${F0_ACCEPTED_CI_TREE}" =~ ^[0-9a-f]{40}$ ]] || pkg_die \

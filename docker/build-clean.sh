@@ -9,6 +9,12 @@
 # Usage:
 #   docker/build-clean.sh [--target server|amd64|arm64] [--output MODE] [--builder NAME]
 #                         [--channel dev|prerelease|stable] [--release-tag TAG] [--allow-dirty]
+#                         --ffmpeg-runtime DIR
+#
+#   --ffmpeg-runtime DIR   the `ffmpeg-runtime` build context: a directory with the
+#                          accepted F0 runtime archive(s), as printed by
+#                          docker/f0-runtime-context.sh (#342). Required. The
+#                          multi-arch `server` target needs both architectures.
 #
 #   --output load          load a single-arch image into the local docker (default)
 #   --output oci:PATH      write a reproducible OCI layout tarball to PATH
@@ -30,17 +36,24 @@ TARGET="amd64"
 OUTPUT="load"
 BUILDER="${BUILDX_BUILDER:-tf-builder}"
 CONTRACT_ARGS=()
+FFMPEG_RUNTIME_CONTEXT=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --target)  TARGET="$2"; shift 2 ;;
     --output)  OUTPUT="$2"; shift 2 ;;
     --builder) BUILDER="$2"; shift 2 ;;
+    --ffmpeg-runtime) FFMPEG_RUNTIME_CONTEXT="$2"; shift 2 ;;
     --channel|--release-tag|--registry) CONTRACT_ARGS+=("$1" "$2"); shift 2 ;;
     --allow-dirty) CONTRACT_ARGS+=("$1"); shift ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
+
+[[ -n "${FFMPEG_RUNTIME_CONTEXT}" && -d "${FFMPEG_RUNTIME_CONTEXT}" ]] || {
+  echo "--ffmpeg-runtime DIR is required (prepare it with docker/f0-runtime-context.sh)" >&2; exit 2; }
+FFMPEG_RUNTIME_CONTEXT="$(cd "${FFMPEG_RUNTIME_CONTEXT}" && pwd)"
+export FFMPEG_RUNTIME_CONTEXT
 
 # --- Derive deterministic inputs from the version contract -------------------
 # A contract violation (malformed version, tag/source mismatch, dirty release,
@@ -66,6 +79,8 @@ echo "  target            : ${TARGET}"
 echo "  output            : ${OUTPUT}"
 echo "  builder           : ${BUILDER}"
 echo "  registry          : ${REGISTRY}"
+echo "  ffmpeg runtime    : ${FFMPEG_RUNTIME_CONTEXT}"
+ls -1 "${FFMPEG_RUNTIME_CONTEXT}" | sed 's/^/                      /' 
 
 COMMON=( bake --builder "${BUILDER}" --no-cache
          --set "*.attest=type=provenance,disabled=true"

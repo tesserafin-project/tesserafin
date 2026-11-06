@@ -18,7 +18,7 @@ jobs:
   artifact-rehearsal:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 75
     permissions:
       contents: read
       packages: read
@@ -40,13 +40,22 @@ jobs:
         env:
           REGISTRY_TOKEN: ${{ github.token }}
         run: printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+      - name: Provide the accepted F0 FFmpeg runtime (#342)
+        id: f0
+        uses: ./.github/actions/f0-runtime-context
+        with:
+          rid: linux-x64
       - name: Build the exact target candidate without publishing
+        env:
+          F0_CONTEXT: ${{ steps.f0.outputs.context }}
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
           epoch="$(git show -s --format=%ct HEAD)"
-          docker build --platform linux/amd64 --build-arg VCS_REF="$CANDIDATE_SHA" \
+          docker build --platform linux/amd64 --build-context ffmpeg-runtime="$F0_CONTEXT" \
+            --build-arg VCS_REF="$CANDIDATE_SHA" \
             --build-arg SOURCE_DATE_EPOCH="$epoch" --iidfile "$RUNNER_TEMP/adoption-image-id" .
+          bash docker/assert-ffmpeg-licence.sh "$(cat "$RUNNER_TEMP/adoption-image-id")"
       - name: Capture, apply, restart and conditionally roll back across real images
         run: |
           python3 tools/adoption/rehearse_state_apply.py \

@@ -27,6 +27,10 @@ docker/
 # --- CI harnesses (hosted + local); not needed to publish the server ---
 .github/
 ci/
+# ...except the accepted F0 digest oracle, which the Dockerfile's FFmpeg stage
+# checks the `ffmpeg-runtime` build context against (#342). It is a list of
+# SHA-256 lines, never an input to the server build.
+!ci/package/f0-accepted-digests.txt
 .devcontainer/
 
 # --- IDE / editor cruft ---

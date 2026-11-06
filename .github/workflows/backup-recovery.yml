@@ -4,6 +4,11 @@ on:
   pull_request:
     paths:
       - 'Dockerfile'
+      - '.dockerignore'
+      - '.github/actions/f0-runtime-context/**'
+      - 'docker/f0-runtime-context.sh'
+      - 'docker/assert-ffmpeg-licence.sh'
+      - 'ci/package/f0-accepted-digests.txt'
       - 'docker/backup.sh'
       - 'docker/restore.sh'
       - 'docker/state-roundtrip.sh'
@@ -25,7 +30,7 @@ jobs:
     name: Exact-image independent-volume recovery
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 90
     permissions:
       contents: read
       packages: read
@@ -53,14 +58,23 @@ jobs:
         run: |
           set -euo pipefail
           printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+      - name: Provide the accepted F0 FFmpeg runtime (#342)
+        id: f0
+        uses: ./.github/actions/f0-runtime-context
+        with:
+          rid: linux-x64
       - name: Build the exact server candidate without publishing
+        env:
+          F0_CONTEXT: ${{ steps.f0.outputs.context }}
         run: |
           set -euo pipefail
           epoch="$(git show -s --format=%ct HEAD)"
           docker build --platform linux/amd64 \
+            --build-context ffmpeg-runtime="$F0_CONTEXT" \
             --build-arg VCS_REF="$CANDIDATE_SHA" \
             --build-arg SOURCE_DATE_EPOCH="$epoch" \
             --iidfile "$RUNNER_TEMP/recovery-image-id" .
+          bash docker/assert-ffmpeg-licence.sh "$(cat "$RUNNER_TEMP/recovery-image-id")"
           image_id="$(cat "$RUNNER_TEMP/recovery-image-id")"
           python3 ci/recovery-evidence.py image --image-id "$image_id" \
             --expected-source "$CANDIDATE_SHA" --out "$EVIDENCE_DIR/image.json"
@@ -95,7 +109,7 @@ jobs:
     name: Disk-loss recovery - source host
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 90
     permissions:
       contents: read
       packages: read
@@ -131,12 +145,20 @@ jobs:
         run: |
           set -euo pipefail
           printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+      - name: Provide the accepted F0 FFmpeg runtime (#342)
+        id: f0
+        uses: ./.github/actions/f0-runtime-context
+        with:
+          rid: linux-x64
       - name: Build the exact server candidate without publishing
         id: build
+        env:
+          F0_CONTEXT: ${{ steps.f0.outputs.context }}
         run: |
           set -euo pipefail
           epoch="$(git show -s --format=%ct HEAD)"
           docker build --platform linux/amd64 \
+            --build-context ffmpeg-runtime="$F0_CONTEXT" \
             --build-arg VCS_REF="$CANDIDATE_SHA" \
             --build-arg SOURCE_DATE_EPOCH="$epoch" \
             --iidfile "$RUNNER_TEMP/recovery-image-id" .

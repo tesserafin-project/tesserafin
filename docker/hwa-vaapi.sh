@@ -54,15 +54,19 @@ if command -v lspci >/dev/null 2>&1; then
   info "gpu         : $(lspci -nn 2>/dev/null | grep -iE 'vga|display|3d' | head -1)"
 fi
 
-# Can the pinned ffmpeg in THIS image drive the device as the non-root user?
-VAINFO="$(docker run --rm --device "${DEVICE}" --group-add "${RENDER_GID}" \
-            --entrypoint /usr/lib/jellyfin-ffmpeg/vainfo "${IMAGE}" \
-            --display drm --device "${DEVICE}" 2>&1 || true)"
-info "driver      : $(grep -m1 'Driver version' <<<"${VAINFO}" || echo 'unavailable')"
-if grep -q 'VAProfileH264.*VAEntrypointEncSlice' <<<"${VAINFO}"; then
-  pass "device exposes an H.264 encode entrypoint to the container"
+# Can the F0 ffmpeg in THIS image drive the device as the non-root user? The F0
+# runtime ships no vainfo, so the probe is a real one-second h264_vaapi encode by
+# the very binary the server runs; libavutil names the VA driver it loaded.
+VAINFO="$(docker run --rm --network none --device "${DEVICE}" --group-add "${RENDER_GID}" \
+            --entrypoint /opt/tesserafin-ffmpeg/bin/ffmpeg "${IMAGE}" \
+            -hide_banner -v verbose -init_hw_device "vaapi=va:${DEVICE}" -filter_hw_device va \
+            -f lavfi -i testsrc2=duration=1:size=640x360:rate=25 \
+            -vf format=nv12,hwupload -c:v h264_vaapi -f null - 2>&1 || true)"
+info "driver      : $(grep -m1 -oE 'VAAPI driver: .*' <<<"${VAINFO}" || echo 'unavailable')"
+if grep -qE 'VAAPI driver: ' <<<"${VAINFO}" && grep -qE 'frame=[[:space:]]*25' <<<"${VAINFO}"; then
+  pass "device encodes H.264 through VAAPI inside the container"
 else
-  fail "device does not expose an H.264 encode entrypoint (VAAPI transcoding cannot work here)"
+  fail "device does not encode H.264 through VAAPI (VAAPI transcoding cannot work here)"
   echo "${VAINFO}" | tail -20
   exit 1
 fi
@@ -135,7 +139,7 @@ BYTES="${RESULT##*bytes=}"
 [[ "${HTTP_CODE}" == "200" ]] && pass "playback request returned HTTP 200" || fail "playback request returned HTTP ${HTTP_CODE}"
 [[ "${BYTES}" -gt 100000 ]] && pass "received ${BYTES} bytes of media" || fail "received only ${BYTES} bytes"
 
-PROBE="$(docker run --rm --user 0:0 --entrypoint /usr/lib/jellyfin-ffmpeg/ffprobe \
+PROBE="$(docker run --rm --user 0:0 --entrypoint /opt/tesserafin-ffmpeg/bin/ffprobe \
           -v "${WORK}:/w" "${IMAGE}" -v error -select_streams v:0 \
           -show_entries stream=codec_name,width,height -of default=nw=1 /w/vaapi.mp4 2>&1 || true)"
 info "ffprobe: $(echo "${PROBE}" | tr '\n' ' ')"

@@ -96,7 +96,7 @@ BYTES="${RESULT##*bytes=}"
 [[ "${BYTES}" -gt 100000 ]] && pass "received ${BYTES} bytes of media" || fail "received only ${BYTES} bytes"
 
 # The bytes must be a real decodable H.264 elementary stream, not just a container header.
-PROBE="$(docker run --rm --user 0:0 --entrypoint /usr/lib/jellyfin-ffmpeg/ffprobe \
+PROBE="$(docker run --rm --user 0:0 --entrypoint /opt/tesserafin-ffmpeg/bin/ffprobe \
           -v "${WORK}:/w" "${IMAGE}" -v error \
           -select_streams v:0 -show_entries stream=codec_name,width,height \
           -of default=nw=1 /w/out.mp4 2>&1 || true)"
