@@ -89,6 +89,11 @@ else
     fail "runtime archive '${ARCHIVE_LINE}' is not in ci/package/f0-accepted-digests.txt"
   fi
 fi
+if in_image test -e "${RT}/COMPRESSOR-DRIFT"; then
+  fail "image was built with FFMPEG_ALLOW_COMPRESSOR_DRIFT=1 (local validation only): $(in_image cat "${RT}/COMPRESSOR-DRIFT")"
+else
+  pass "no compressor-drift marker"
+fi
 for f in LICENSES THIRD_PARTY_NOTICES.md SOURCE.json sbom.cdx.json; do
   in_image test -e "${RT}/${f}" && pass "${RT}/${f} shipped" || fail "${RT}/${f} missing"
 done

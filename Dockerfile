@@ -98,8 +98,19 @@ RUN find /app -exec touch --no-dereference --date=@${SOURCE_DATE_EPOCH} {} +
 # `ffmpeg-runtime` context is byte-identical to the accepted one, then unpacks
 # it. A ci/ffmpeg/** change therefore cannot reach an image until the oracle is
 # rebaselined in the same reviewed change — which is already the F0 rule.
+#
+# FFMPEG_ALLOW_COMPRESSOR_DRIFT=1 is the image-side twin of the packages'
+# PKG_ALLOW_COMPRESSOR_DRIFT: zstd does not promise identical compressed bytes
+# across library builds, so a workstation reproduces bin/ffmpeg, bin/ffprobe and
+# capability.json byte-for-byte but not the corresponding-source container, nor
+# the archive and three manifests that quote its digest. With the flag those
+# four are not compared; the binaries always are. The image is marked
+# (COMPRESSOR-DRIFT, and ARCHIVE.sha256 names a non-accepted archive), so
+# docker/assert-ffmpeg-licence.sh refuses it: a drift image is for local
+# validation only and can never pass the gate a published image goes through.
 FROM ${RUNTIME_IMAGE} AS ffmpeg-runtime-unpack
 ARG TARGETARCH
+ARG FFMPEG_ALLOW_COMPRESSOR_DRIFT=0
 RUN apt-get update \
  && apt-get install -y --no-install-recommends xz-utils \
  && rm -rf /var/lib/apt/lists/*
@@ -119,16 +130,25 @@ RUN set -eu; \
     accepted() { awk -v f="$1" '$2 == f { print $1 }' /f0/accepted-digests.txt; }; \
     want="$(accepted "${archive}")"; \
     [ -n "${want}" ] || die "${archive} is not an accepted F0 archive name (ci/package/f0-accepted-digests.txt)"; \
-    echo "${want}  ${archive}" | sha256sum -c - || die "${archive} is not the accepted F0 archive"; \
+    drift=0; \
+    if ! echo "${want}  ${archive}" | sha256sum -c - ; then \
+      [ "${FFMPEG_ALLOW_COMPRESSOR_DRIFT}" = "1" ] || die "${archive} is not the accepted F0 archive"; \
+      drift=1; echo "ffmpeg-runtime: COMPRESSOR DRIFT accepted for ${archive}: binaries still compared" >&2; \
+    fi; \
     mkdir -p /f0/x; \
     tar -xJf "${archive}" -C /f0/x --no-same-owner; \
     [ -d "/f0/x/${dir}" ] || die "archive does not unpack to ${dir}/"; \
-    for f in bin/ffmpeg bin/ffprobe SOURCE.json capability.json THIRD_PARTY_NOTICES.md sbom.cdx.json; do \
+    files="bin/ffmpeg bin/ffprobe capability.json"; \
+    [ "${drift}" = "1" ] || files="${files} SOURCE.json THIRD_PARTY_NOTICES.md sbom.cdx.json"; \
+    for f in ${files}; do \
       w="$(accepted "${dir}/${f}")"; [ -n "${w}" ] || die "no accepted digest for ${dir}/${f}"; \
       echo "${w}  /f0/x/${dir}/${f}" | sha256sum -c - || die "${dir}/${f} differs from the accepted runtime"; \
     done; \
     mv "/f0/x/${dir}" /opt/tesserafin-ffmpeg; \
-    printf '%s  %s\n' "${want}" "${archive}" > /opt/tesserafin-ffmpeg/ARCHIVE.sha256
+    sha256sum "${archive}" > /opt/tesserafin-ffmpeg/ARCHIVE.sha256; \
+    if [ "${drift}" = "1" ]; then \
+      echo "compressor drift: archive is not the accepted ${want}; local validation only" > /opt/tesserafin-ffmpeg/COMPRESSOR-DRIFT; \
+    fi
 
 # =====================================================================
 # Stage 2b — the pinned Tesserafin Web production bundle (#115 / [A1.2])

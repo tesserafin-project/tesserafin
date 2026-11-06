@@ -46,6 +46,18 @@ provenance. `global.json` pins the SDK to `10.0.0` (`rollForward: latestMinor`).
   GPL-2.0-or-later + FFmpeg GPL-3.0-or-later). `docker/assert-ffmpeg-licence.sh`
   checks the label against the binary's own `-buildconf`, refuses `nonfree` and
   `libfdk_aac`, a second FFmpeg, or a runtime that is not the accepted archive.
+- Local builds: a workstation reproduces `bin/ffmpeg`, `bin/ffprobe` and
+  `capability.json` byte-for-byte, but zstd may emit a different
+  corresponding-source container, which moves the archive digest and the three
+  manifests that quote it. `--build-arg FFMPEG_ALLOW_COMPRESSOR_DRIFT=1` (twin of
+  the packages' `PKG_ALLOW_COMPRESSOR_DRIFT`) skips those four, still compares the
+  binaries, and marks the image `COMPRESSOR-DRIFT`; the licence gate refuses such
+  an image, so it can only ever serve local validation.
+- Known F0 capability gap, unchanged by this switch and shared with the native
+  packages: libx265 is built 8-bit only (no 10/12-bit multilib), so a software
+  HEVC Main10 encode silently drops to 8 bits. The jellyfin `.deb` had Main10.
+  The media bench records it as `ffmpeg.x265-main10` (FAIL); fixing it is a
+  `ci/ffmpeg` change with its own rebaseline.
 - arm64: F0 is never cross-built or emulated, so the arm64 archive must come from
   a native arm64 machine (`--from`); the emulated multi-arch bake can no longer
   build it by itself.
