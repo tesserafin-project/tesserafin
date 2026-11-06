@@ -5,7 +5,7 @@ under [#144](https://github.com/tesserafin/tesserafin/issues/144).
 It applies reviewed state to **existing, explicitly mapped accounts and existing,
 unambiguous media**. It creates no account and transfers no password, permission,
 media file or library configuration. The selected adapters remain Jellyfin
-10.10.7 and the current-contract Tesserafin server reporting application 1.0.0.
+10.10.7 and the current-contract Tesserafin server reporting application 0.3.0 (1.0.0 before the pre-launch renumbering, c206867206).
 
 ## Selected rules
 

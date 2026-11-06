@@ -67,7 +67,7 @@ class ApplyTests(unittest.TestCase):
                     self.end_headers()
                 elif url.path == "/System/Info/Public":
                     self.reply({"ProductName": "Wrong" if owner.fault == "product" else "Tesserafin Server",
-                                "Version": "1.0.0", "Id": "wrong" if owner.fault == "server" else owner.target["serverId"]})
+                                "Version": "0.3.0", "Id": "wrong" if owner.fault == "server" else owner.target["serverId"]})
                 elif url.path == "/Users":
                     users = copy.deepcopy(owner.target["users"])
                     if owner.fault == "user":
