@@ -1,0 +1,51 @@
+name: 'F0 FFmpeg runtime build context'
+description: >-
+  Provides the `ffmpeg-runtime` named build context the server Dockerfile needs
+  (#342): the accepted Tesserafin FFmpeg runtime archive for one architecture.
+  Restored from the Actions cache when this exact ci/ffmpeg tree was already
+  built, otherwise built from pinned source on this (native) runner. The cache
+  is not trusted: the Dockerfile accepts the archive only if its SHA-256 is in
+  ci/package/f0-accepted-digests.txt, so a cached and a fresh archive can only
+  produce the same image or no image.
+inputs:
+  rid:
+    description: 'linux-x64 or linux-arm64; must match the runner architecture'
+    required: true
+outputs:
+  context:
+    description: 'Directory to pass as --build-context ffmpeg-runtime=<dir>'
+    value: ${{ steps.context.outputs.dir }}
+  cache-hit:
+    description: 'true when the archive came from the cache'
+    value: ${{ steps.cache.outputs.cache-hit }}
+runs:
+  using: composite
+  steps:
+    - name: Restore the F0 archive for this ci/ffmpeg tree
+      id: cache
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: ${{ runner.temp }}/f0-cache/${{ inputs.rid }}
+        key: f0-runtime-${{ inputs.rid }}-${{ hashFiles('ci/ffmpeg/**', 'ci/package/ffmpeg-runtime.sh', 'ci/package/lib.sh', 'ci/package/pins.env') }}
+
+    - name: Build the accepted F0 runtime from pinned source (cache miss)
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        RID: ${{ inputs.rid }}
+      run: |
+        set -euo pipefail
+        ./ci/package/ffmpeg-runtime.sh --rid "${RID}" --out "${RUNNER_TEMP}/f0-build"
+        mkdir -p "${RUNNER_TEMP}/f0-cache/${RID}"
+        cp "${RUNNER_TEMP}"/f0-build/pkg/tesserafin-ffmpeg-*-"${RID}".tar.xz "${RUNNER_TEMP}/f0-cache/${RID}/"
+        rm -rf "${RUNNER_TEMP}/f0-build"
+
+    - name: Assemble the build context
+      id: context
+      shell: bash
+      env:
+        RID: ${{ inputs.rid }}
+      run: |
+        set -euo pipefail
+        dir="$(./docker/f0-runtime-context.sh --out "${RUNNER_TEMP}/f0-context-${RID}" --from "${RUNNER_TEMP}/f0-cache/${RID}" | tail -1)"
+        echo "dir=${dir}" >> "${GITHUB_OUTPUT}"

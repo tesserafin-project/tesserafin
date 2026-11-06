@@ -24,9 +24,9 @@
 # grep quiet would be the dishonest fix. The gate targets the DOWNLOAD, not the
 # ancestry.
 #
-# The Dockerfile is out of scope by construction: the container legitimately
-# installs the upstream .deb, that is a separate distribution channel, and this
-# loop does not change it.
+# The container build is IN scope since #342: the image now carries the same
+# accepted runtime as the packages, so the upstream noble .deb it used to install
+# (its filename and its two checksums) is refused there too.
 
 set -euo pipefail
 
@@ -41,8 +41,14 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# The package surface. Docker and the server tree are not part of it.
+# The package surface and, since #342, the container build. The server tree is
+# not part of it.
 SURFACE=(
+    "Dockerfile"
+    "docker-bake.hcl"
+    "docker/build-clean.sh"
+    "docker/f0-runtime-context.sh"
+    ".github/actions/f0-runtime-context"
     "ci/package"
     "ci/tests/package.test.sh"
     "packaging/linux"
@@ -57,6 +63,9 @@ PATTERNS=(
     'cab9ff40a47e4232d231e4eb7e4e85fabfeec56c6905266bc94291fc0881f83f'$'\t''the obsolete linux-x64 portable checksum'
     '77e4b5d044ab73e1f26c9aadaa5d6014d1782500bf2c29afb3ab81f5bea98b1f'$'\t''the obsolete linux-arm64 portable checksum'
     'FFMPEG_PORTABLE_SHA256'$'\t''a portable-asset checksum pin'
+    'jellyfin-ffmpeg7_'$'\t''the upstream noble .deb the container used to install'
+    'bbaa1a5fea4fe0a23df1bfd9050af6a4a5f7fc934ebbca997d687e528a0931a6'$'\t''the obsolete amd64 .deb checksum'
+    '51128c354d27db969ed9fd0d0d0cf3124444e72625237c0c4beffee4531846f6'$'\t''the obsolete arm64 .deb checksum'
     'pkg_ffmpeg_(asset|sha256)'$'\t''the removed release-asset helpers'
     '"ffmpegAsset"'$'\t''a provenance field describing an upstream release download'
 )

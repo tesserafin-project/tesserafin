@@ -194,7 +194,7 @@ echo "== runtime identity & tooling (inside container) =="
 UID_IN="$(docker exec "${CNAME}" id -u)"
 [[ "${UID_IN}" == "10000" ]] && pass "runs as non-root uid 10000" || fail "uid is ${UID_IN}"
 
-FFOUT="$(docker exec "${CNAME}" /usr/lib/jellyfin-ffmpeg/ffmpeg -version 2>&1 | head -1 || true)"
+FFOUT="$(docker exec "${CNAME}" /opt/tesserafin-ffmpeg/bin/ffmpeg -version 2>&1 | head -1 || true)"
 echo "  ${FFOUT}"
 echo "${FFOUT}" | grep -q "${FFMPEG_EXPECT}" && pass "ffmpeg reports pinned ${FFMPEG_EXPECT}" || fail "ffmpeg version mismatch (expected ${FFMPEG_EXPECT})"
 

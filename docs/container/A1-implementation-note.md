@@ -19,16 +19,51 @@ Both are the official .NET 10 images, Ubuntu 24.04 (noble), multi-arch
 No floating tags are the source of truth; the tags above are recorded only for
 provenance. `global.json` pins the SDK to `10.0.0` (`rollForward: latestMinor`).
 
-## ffmpeg (real jellyfin-ffmpeg, not renamed)
-- Distribution: `jellyfin-ffmpeg7`, upstream `github.com/jellyfin/jellyfin-ffmpeg`
-  (GPL). Pinned version **`7.1.4-3`**, noble build, per architecture.
-- Fetched by immutable release URL and verified by per-arch SHA-256 during the
-  build (`ffmpeg-fetch` stage, `sha256sum -c`):
-  - amd64 `bbaa1a5fea4fe0a23df1bfd9050af6a4a5f7fc934ebbca997d687e528a0931a6`
-  - arm64 `51128c354d27db969ed9fd0d0d0cf3124444e72625237c0c4beffee4531846f6`
-- Installs to `/usr/lib/jellyfin-ffmpeg/ffmpeg` (+ `ffprobe`); its own license and
-  attribution ship under `/usr/share/doc/jellyfin-ffmpeg7/`. The server is pointed
-  at it explicitly with `--ffmpeg /usr/lib/jellyfin-ffmpeg/ffmpeg`.
+## ffmpeg (the accepted Tesserafin FFmpeg runtime, F0 — #342)
+- The image carries the **same archive** as the native Linux packages:
+  `tesserafin-ffmpeg-<revision>-linux-x64.tar.xz` (amd64) or `-linux-arm64.tar.xz`
+  (arm64), built from pinned source by `ci/ffmpeg/**` (FFmpeg 7.1.4 + the
+  jellyfin-ffmpeg v7.1.4-3 patch series, `--enable-gpl --enable-version3`, never
+  `--enable-nonfree`, never `libfdk_aac`; Vulkan + libplacebo since #354).
+- It reaches the build through the named context `ffmpeg-runtime`
+  (`docker/f0-runtime-context.sh`), and the `ffmpeg-runtime-unpack` stage accepts
+  it only if its SHA-256 — and those of `bin/ffmpeg`, `bin/ffprobe` and the four
+  manifests inside it — are the ones in `ci/package/f0-accepted-digests.txt`.
+  A fresh build, a CI cache or another runner's archive therefore yields the same
+  image or no image. A bare `docker build .` fails on purpose.
+- Unpacked whole to `/opt/tesserafin-ffmpeg/` (`bin/`, `lib/`, `LICENSES/`,
+  `THIRD_PARTY_NOTICES.md`, `SOURCE.json` naming the corresponding-source
+  archive and its digest, `sbom.cdx.json`, `capability.json`, plus
+  `ARCHIVE.sha256`). The server is pointed at it with
+  `--ffmpeg /opt/tesserafin-ffmpeg/bin/ffmpeg`.
+- GPU user space the runtime `dlopen`s but does not ship comes from the base
+  distribution: `mesa-va-drivers` (radeonsi — the validated path),
+  `mesa-vulkan-drivers` + `libvulkan1` (libplacebo and the `*_vulkan` filters),
+  and on amd64 `intel-media-va-driver` and `libmfx-gen1.2` (present, **not
+  validated**). F0 bundles libva 2.24, whose driver search path starts at
+  `/usr/lib/<triplet>/dri`.
+- Licence: label `org.opencontainers.image.licenses="GPL-3.0-or-later"` (server
+  GPL-2.0-or-later + FFmpeg GPL-3.0-or-later). `docker/assert-ffmpeg-licence.sh`
+  checks the label against the binary's own `-buildconf`, refuses `nonfree` and
+  `libfdk_aac`, a second FFmpeg, or a runtime that is not the accepted archive.
+- Local builds: a workstation reproduces `bin/ffmpeg`, `bin/ffprobe` and
+  `capability.json` byte-for-byte, but zstd may emit a different
+  corresponding-source container, which moves the archive digest and the three
+  manifests that quote it. `--build-arg FFMPEG_ALLOW_COMPRESSOR_DRIFT=1` (twin of
+  the packages' `PKG_ALLOW_COMPRESSOR_DRIFT`) skips those four, still compares the
+  binaries, and marks the image `COMPRESSOR-DRIFT`; the licence gate refuses such
+  an image, so it can only ever serve local validation.
+- Known F0 capability gap, unchanged by this switch and shared with the native
+  packages: libx265 is built 8-bit only (no 10/12-bit multilib), so a software
+  HEVC Main10 encode silently drops to 8 bits. The jellyfin `.deb` had Main10.
+  The media bench records it as `ffmpeg.x265-main10` (FAIL); fixing it is a
+  `ci/ffmpeg` change with its own rebaseline.
+- arm64: F0 is never cross-built or emulated, so the arm64 archive must come from
+  a native arm64 machine (`--from`); the emulated multi-arch bake can no longer
+  build it by itself.
+- Images published before this change (`1.0.0-dev.*` on GHCR) contain the
+  jellyfin `.deb` with `libfdk_aac` and a wrong `GPL-2.0-or-later` label; see #342
+  for their disposition.
 
 ## Non-root runtime identity
 - Fixed numeric `UID:GID = 10000:10000`, user `tesserafin`, `nologin` shell, no

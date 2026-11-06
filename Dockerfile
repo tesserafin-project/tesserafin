@@ -9,7 +9,8 @@
 #
 # Multi-stage, multi-architecture (linux/amd64, linux/arm64), non-root,
 # framework-dependent .NET 10 publish over a pinned ASP.NET runtime, with the
-# real jellyfin-ffmpeg build pinned by version and per-architecture checksum.
+# accepted Tesserafin FFmpeg runtime (F0) — the SAME archive the native Linux
+# packages carry, verified against ci/package/f0-accepted-digests.txt (#342).
 #
 # Build inputs are pinned by immutable digest / checksum so two builds of the
 # same commit produce the same application payload. See docker/ for the build,
@@ -32,11 +33,17 @@ ARG WEB_ASSETS_TAG=ghcr.io/tesserafin/tesserafin-web-assets:1.0.0-dev.a9a362eec7
 ARG WEB_VCS_REF=a9a362eec764a9fe3fa6ba9b4a7dd7473677e35a
 ARG WEB_VERSION=1.0.0
 
-# ---- Pinned jellyfin-ffmpeg (the genuine upstream media encoder) ----
-# GPL build; not renamed for branding. github.com/jellyfin/jellyfin-ffmpeg
-ARG FFMPEG_VERSION=7.1.4-3
-ARG FFMPEG_SHA256_AMD64=bbaa1a5fea4fe0a23df1bfd9050af6a4a5f7fc934ebbca997d687e528a0931a6
-ARG FFMPEG_SHA256_ARM64=51128c354d27db969ed9fd0d0d0cf3124444e72625237c0c4beffee4531846f6
+# ---- FFmpeg: the accepted Tesserafin runtime (F0), never a downloaded binary ----
+# The image carries the runtime that ci/ffmpeg/** builds from pinned source and
+# that the .deb/.rpm/.tar.gz packages carry (#342). It arrives through the NAMED
+# build context `ffmpeg-runtime`: a directory holding the F0 archive(s)
+#   tesserafin-ffmpeg-<revision>-linux-x64.tar.xz     (linux/amd64)
+#   tesserafin-ffmpeg-<revision>-linux-arm64.tar.xz   (linux/arm64)
+# exactly as ci/package/ffmpeg-runtime.sh writes them under <out>/pkg/. Stage 2
+# refuses any archive whose SHA-256 is not the accepted one, so the bytes the
+# image unpacks are the bytes the native packages ship — whoever built them.
+# docker/f0-runtime-context.sh prepares the context; a bare `docker build .`
+# without `--build-context ffmpeg-runtime=<dir>` fails on purpose.
 
 # =====================================================================
 # Stage 1 — build & publish the server (native per target platform)
@@ -84,25 +91,64 @@ RUN set -eux; \
 RUN find /app -exec touch --no-dereference --date=@${SOURCE_DATE_EPOCH} {} +
 
 # =====================================================================
-# Stage 2 — fetch & verify the pinned ffmpeg .deb for the target arch
+# Stage 2 — verify & unpack the accepted F0 runtime for the target arch
 # =====================================================================
-FROM ${RUNTIME_IMAGE} AS ffmpeg-fetch
+# The accepted-digest list is a COMPARISON ORACLE (see its header): nothing is
+# fetched by it. This stage only checks that the archive handed in through the
+# `ffmpeg-runtime` context is byte-identical to the accepted one, then unpacks
+# it. A ci/ffmpeg/** change therefore cannot reach an image until the oracle is
+# rebaselined in the same reviewed change — which is already the F0 rule.
+#
+# FFMPEG_ALLOW_COMPRESSOR_DRIFT=1 is the image-side twin of the packages'
+# PKG_ALLOW_COMPRESSOR_DRIFT: zstd does not promise identical compressed bytes
+# across library builds, so a workstation reproduces bin/ffmpeg, bin/ffprobe and
+# capability.json byte-for-byte but not the corresponding-source container, nor
+# the archive and three manifests that quote its digest. With the flag those
+# four are not compared; the binaries always are. The image is marked
+# (COMPRESSOR-DRIFT, and ARCHIVE.sha256 names a non-accepted archive), so
+# docker/assert-ffmpeg-licence.sh refuses it: a drift image is for local
+# validation only and can never pass the gate a published image goes through.
+FROM ${RUNTIME_IMAGE} AS ffmpeg-runtime-unpack
 ARG TARGETARCH
-ARG FFMPEG_VERSION
-ARG FFMPEG_SHA256_AMD64
-ARG FFMPEG_SHA256_ARM64
+ARG FFMPEG_ALLOW_COMPRESSOR_DRIFT=0
 RUN apt-get update \
- && apt-get install -y --no-install-recommends curl ca-certificates \
+ && apt-get install -y --no-install-recommends xz-utils \
  && rm -rf /var/lib/apt/lists/*
-RUN set -eux; \
+COPY ci/package/f0-accepted-digests.txt /f0/accepted-digests.txt
+COPY --from=ffmpeg-runtime . /f0/in/
+RUN set -eu; \
+    die() { echo "ffmpeg-runtime: $*" >&2; exit 1; }; \
     case "${TARGETARCH}" in \
-      amd64) sha="${FFMPEG_SHA256_AMD64}" ;; \
-      arm64) sha="${FFMPEG_SHA256_ARM64}" ;; \
-      *) echo "unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
+      amd64) rid=linux-x64 ;; \
+      arm64) rid=linux-arm64 ;; \
+      *) die "unsupported TARGETARCH: ${TARGETARCH}" ;; \
     esac; \
-    url="https://github.com/jellyfin/jellyfin-ffmpeg/releases/download/v${FFMPEG_VERSION}/jellyfin-ffmpeg7_${FFMPEG_VERSION}-noble_${TARGETARCH}.deb"; \
-    curl -fsSL -o /tmp/ffmpeg.deb "${url}"; \
-    echo "${sha}  /tmp/ffmpeg.deb" | sha256sum -c -
+    cd /f0/in; \
+    set -- tesserafin-ffmpeg-*-"${rid}".tar.xz; \
+    [ "$#" -eq 1 ] && [ -f "$1" ] || die "expected exactly one tesserafin-ffmpeg-*-${rid}.tar.xz in the ffmpeg-runtime context, found: $*"; \
+    archive="$1"; dir="${archive%.tar.xz}"; \
+    accepted() { awk -v f="$1" '$2 == f { print $1 }' /f0/accepted-digests.txt; }; \
+    want="$(accepted "${archive}")"; \
+    [ -n "${want}" ] || die "${archive} is not an accepted F0 archive name (ci/package/f0-accepted-digests.txt)"; \
+    drift=0; \
+    if ! echo "${want}  ${archive}" | sha256sum -c - ; then \
+      [ "${FFMPEG_ALLOW_COMPRESSOR_DRIFT}" = "1" ] || die "${archive} is not the accepted F0 archive"; \
+      drift=1; echo "ffmpeg-runtime: COMPRESSOR DRIFT accepted for ${archive}: binaries still compared" >&2; \
+    fi; \
+    mkdir -p /f0/x; \
+    tar -xJf "${archive}" -C /f0/x --no-same-owner; \
+    [ -d "/f0/x/${dir}" ] || die "archive does not unpack to ${dir}/"; \
+    files="bin/ffmpeg bin/ffprobe capability.json"; \
+    [ "${drift}" = "1" ] || files="${files} SOURCE.json THIRD_PARTY_NOTICES.md sbom.cdx.json"; \
+    for f in ${files}; do \
+      w="$(accepted "${dir}/${f}")"; [ -n "${w}" ] || die "no accepted digest for ${dir}/${f}"; \
+      echo "${w}  /f0/x/${dir}/${f}" | sha256sum -c - || die "${dir}/${f} differs from the accepted runtime"; \
+    done; \
+    mv "/f0/x/${dir}" /opt/tesserafin-ffmpeg; \
+    sha256sum "${archive}" > /opt/tesserafin-ffmpeg/ARCHIVE.sha256; \
+    if [ "${drift}" = "1" ]; then \
+      echo "compressor drift: archive is not the accepted ${want}; local validation only" > /opt/tesserafin-ffmpeg/COMPRESSOR-DRIFT; \
+    fi
 
 # =====================================================================
 # Stage 2b — the pinned Tesserafin Web production bundle (#115 / [A1.2])
@@ -132,19 +178,36 @@ ARG WEB_VCS_REF
 ARG WEB_VERSION
 
 # Runtime native dependencies:
-#   - the pinned jellyfin-ffmpeg .deb (pulls its own libs)
+#   - the GPU user-space the F0 runtime dlopen()s but deliberately does not ship
+#     (#342). F0 bundles libva 2.24 + libdrm and links no Vulkan loader; the VA
+#     drivers, the Vulkan loader and the Vulkan ICDs are properties of the
+#     machine, so the image supplies them from the base distribution:
+#       mesa-va-drivers       radeonsi (AMD) VA driver — the validated path
+#       mesa-vulkan-drivers   RADV/ANV ICDs for libplacebo + the *_vulkan filters
+#       libvulkan1            the Vulkan loader
+#       intel-media-va-driver iHD (Intel), amd64 only — present, NOT validated
+#       libmfx-gen1.2         Intel oneVPL GPU runtime for QSV, amd64 only —
+#                             present, NOT validated
+#     F0's libva searches /usr/lib/<triplet>/dri first (ci/ffmpeg build), which
+#     is where these drivers land.
 #   - libfontconfig1 + a base font: SkiaSharp image rendering
 #   - curl: the HEALTHCHECK below runs INSIDE the container, so the image has to
 #     carry one HTTP client of its own (#91 / [A5]). Nothing else uses it.
 #   - ICU is already present in the .NET runtime image (globalization on)
-COPY --from=ffmpeg-fetch /tmp/ffmpeg.deb /tmp/ffmpeg.deb
-RUN apt-get update \
+ARG TARGETARCH
+RUN case "${TARGETARCH}" in \
+      amd64) arch_pkgs="intel-media-va-driver libmfx-gen1.2" ;; \
+      *)     arch_pkgs="" ;; \
+    esac \
+ && apt-get update \
  && apt-get install -y --no-install-recommends \
-        /tmp/ffmpeg.deb \
+        mesa-va-drivers \
+        mesa-vulkan-drivers \
+        libvulkan1 \
+        ${arch_pkgs} \
         libfontconfig1 \
         fonts-dejavu-core \
         curl \
- && rm -f /tmp/ffmpeg.deb \
  # Strip apt/dpkg artefacts that embed wall-clock timestamps, so the layer
  # content is reproducible across builds (mtimes are separately clamped by
  # buildx rewrite-timestamp).
@@ -166,6 +229,12 @@ RUN groupadd --gid ${GID} tesserafin \
 # Application payload only — no SDK, compiler, source tree or package cache.
 COPY --from=build /app /opt/tesserafin
 COPY LICENSE /opt/tesserafin/LICENSE
+
+# The accepted F0 runtime, unpacked whole: bin/, lib/, LICENSES/,
+# THIRD_PARTY_NOTICES.md, SOURCE.json (names the corresponding-source archive and
+# its digest), sbom.cdx.json, capability.json, plus ARCHIVE.sha256 recording the
+# exact archive it came from. Same RUNPATH ($ORIGIN/../lib) as the native packages.
+COPY --from=ffmpeg-runtime-unpack /opt/tesserafin-ffmpeg /opt/tesserafin-ffmpeg
 
 # The pinned Tesserafin Web production bundle (#115 / [A1.2]). Read-only for the
 # runtime user: it is application content, never writable state. The server is
@@ -208,8 +277,14 @@ LABEL org.opencontainers.image.title="Tesserafin Server" \
       org.opencontainers.image.url="https://github.com/tesserafin/tesserafin" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${VCS_REF}" \
-      org.opencontainers.image.licenses="GPL-2.0-or-later" \
+      org.opencontainers.image.licenses="GPL-3.0-or-later" \
       org.opencontainers.image.vendor="Tesserafin"
+
+# Licence (#342): the server is GPL-2.0-or-later and the bundled F0 FFmpeg is
+# GPL-3.0-or-later (--enable-gpl --enable-version3, never nonfree, never
+# libfdk_aac). The image as distributed is therefore offered under
+# GPL-3.0-or-later. docker/assert-ffmpeg-licence.sh checks this label against
+# the binary's own -buildconf.
 
 # Paired Tesserafin Web provenance (#115 / [A1.2]).
 LABEL org.tesserafin.web.revision="${WEB_VCS_REF}" \
@@ -229,7 +304,8 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
     CMD curl -fsS http://127.0.0.1:8096/health >/dev/null || exit 1
 
 # The apphost runs as PID 1 so .NET's ConsoleLifetime receives SIGTERM directly
-# and shuts the server down gracefully. ffmpeg is pinned by absolute path.
+# and shuts the server down gracefully. ffmpeg is pinned by absolute path, to
+# the F0 runtime (ffprobe is found beside it).
 #
 # `--webdir` (NOT `--nowebclient`, see #115) hosts the bundled web client. With
 # the web client hosted, Program.cs leaves DefaultRedirectPath at its `web/`
@@ -237,4 +313,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
 # Swagger UI stays on its own `/api-docs/swagger` route and no longer captures
 # `/`. docker/smoke.sh asserts both halves of that.
 ENTRYPOINT ["/opt/tesserafin/tesserafin"]
-CMD ["--webdir", "/opt/tesserafin-web", "--ffmpeg", "/usr/lib/jellyfin-ffmpeg/ffmpeg"]
+CMD ["--webdir", "/opt/tesserafin-web", "--ffmpeg", "/opt/tesserafin-ffmpeg/bin/ffmpeg"]

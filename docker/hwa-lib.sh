@@ -73,7 +73,7 @@ wait_ready() { # $1=port
 # proving a transcode. Nothing can serve this file as H.264 without re-encoding.
 hwa_make_fixture() { # $1=image $2=host media dir
   mkdir -p "${2}/Sample Movie (2021)"
-  docker run --rm --user 0:0 --entrypoint /usr/lib/jellyfin-ffmpeg/ffmpeg \
+  docker run --rm --user 0:0 --entrypoint /opt/tesserafin-ffmpeg/bin/ffmpeg \
     -v "${2}:/m" "${1}" \
     -y -f lavfi -i "testsrc=duration=20:size=640x480:rate=25" \
        -f lavfi -i "sine=frequency=440:duration=20" \
@@ -129,7 +129,7 @@ hwa_transcode() { # $1=port $2=token $3=itemId $4=outfile -> prints "http=<code>
 # that simply finds nothing would abort the whole gate instead of letting the
 # caller report a clean, specific failure.
 hwa_ffmpeg_command() { # $1=container
-  docker logs "${1}" 2>&1 | grep -F 'jellyfin-ffmpeg/ffmpeg' | grep -E '\-codec:v:0|\-c:v:0' | tail -1 || true
+  docker logs "${1}" 2>&1 | grep -F 'tesserafin-ffmpeg/bin/ffmpeg' | grep -E '\-codec:v:0|\-c:v:0' | tail -1 || true
 }
 
 # The one conclusive startup decision event.

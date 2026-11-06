@@ -16,7 +16,7 @@ from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_ope
 
 MAX_BYTES = 64 * 1024 * 1024
 MAX_ROWS = 100_000
-VERSIONS = {"jellyfin": ("Jellyfin Server", "10.10.7"), "tesserafin": ("Tesserafin Server", "1.0.0")}
+VERSIONS = {"jellyfin": ("Jellyfin Server", "10.10.7"), "tesserafin": ("Tesserafin Server", "0.3.0")}
 STATE_FIELDS = ("IsFavorite", "Played", "PlayCount", "PlaybackPositionTicks")
 ITEM_FIELDS = ("Id", "Name", "Type", "Path", "ProviderIds", "RunTimeTicks")
 LEAF_TYPES = {"Movie", "Episode", "Audio"}

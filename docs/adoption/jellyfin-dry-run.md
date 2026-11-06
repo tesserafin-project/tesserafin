@@ -17,7 +17,7 @@ command remains GET-only/offline and never applies its candidate records itself.
 | Input | Selected adapter | Evidence / limitation |
 | --- | --- | --- |
 | Jellyfin | **10.10.7 only**, product `Jellyfin Server` | The tagged source was inspected at `aefb9b2cffca3ccb7a95d89af0d9fb2040de6ed3`. Tests use synthetic real-HTTP responses matching the selected surface, not a live household or an artifact-based Jellyfin→Tesserafin migration. |
-| Tesserafin | Application version **1.0.0**, product `Tesserafin Server`, current server contract | The GET surface was checked against canonical OpenAPI at `5d4fcf2d65d7ee4ef4f35c0ae0422cd95d22742b`. The version alone cannot identify every historical build; this does not qualify every released artifact reporting 1.0.0. |
+| Tesserafin | Application version **0.3.0** (was 1.0.0 before the pre-launch renumbering), product `Tesserafin Server`, current server contract | The GET surface was checked against canonical OpenAPI at `5d4fcf2d65d7ee4ef4f35c0ae0422cd95d22742b`. The version alone cannot identify every historical build; this does not qualify every released artifact reporting 1.0.0. |
 | Another Jellyfin version, unknown product/schema | Refused | Needs a separately inspected adapter and evidence. Do not downgrade an installation to use this prototype. |
 | Jellyfin SQLite/config/backup files | Not read | No assumption that old/new database layouts or password formats are interchangeable. |
 

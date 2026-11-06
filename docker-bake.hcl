@@ -43,11 +43,26 @@ variable "TAGS" {
   default = ""
 }
 
+# Directory holding the accepted F0 FFmpeg runtime archive(s), prepared by
+# docker/f0-runtime-context.sh (#342). It feeds the Dockerfile's named
+# `ffmpeg-runtime` context; the Dockerfile refuses any archive whose digest is not
+# in ci/package/f0-accepted-digests.txt. The multi-arch `server` target needs
+# both the linux-x64 and the linux-arm64 archive in it. The default names a
+# directory that does not exist, so a build that bypassed the context script
+# fails instead of silently producing an image without FFmpeg.
+variable "FFMPEG_RUNTIME_CONTEXT" {
+  default = "./.ffmpeg-runtime-context-not-prepared"
+}
+
 # Default target: both supported architectures from the same source commit.
 target "server" {
   context    = "."
   dockerfile = "Dockerfile"
   platforms  = ["linux/amd64", "linux/arm64"]
+
+  contexts = {
+    ffmpeg-runtime = FFMPEG_RUNTIME_CONTEXT
+  }
 
   args = {
     VERSION           = VERSION

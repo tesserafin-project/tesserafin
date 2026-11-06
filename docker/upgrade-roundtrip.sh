@@ -272,6 +272,8 @@ echo "  candidate version=${CAND_VERSION} revision=${CAND_REVISION}"
 echo "== 1. baseline on fresh named volumes =="
 mkdir -p "${MEDIA}/Upgrade Fixture (2021)"
 for v in "${V_CFG}" "${V_DATA}" "${V_CACHE}"; do docker volume create "$v" >/dev/null; done
+# The BASELINE is a previously published image, which still carries the jellyfin
+# .deb at its old path; the candidate uses /opt/tesserafin-ffmpeg (#342).
 docker run --rm --user 0:0 --entrypoint /usr/lib/jellyfin-ffmpeg/ffmpeg \
   -v "${MEDIA}:/m" "${BASELINE_REF}" \
   -y -f lavfi -i testsrc=duration=30:size=160x120:rate=5 \
