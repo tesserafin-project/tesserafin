@@ -946,9 +946,11 @@ namespace Tesserafin.Controller.Entities
 
         public static IEnumerable<BaseItem> FilterForAdjacency(List<BaseItem> list, Guid adjacentTo)
         {
-            var adjacentToItem = list.FirstOrDefault(i => i.Id.Equals(adjacentTo));
-
-            var index = list.IndexOf(adjacentToItem);
+            var index = list.FindIndex(i => i.Id.Equals(adjacentTo));
+            if (index < 0)
+            {
+                return [];
+            }
 
             var previousId = Guid.Empty;
             var nextId = Guid.Empty;
